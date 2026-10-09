@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-09 (v0.10 — GitHub source publication checkpoint)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.12 — core Docker deployment files)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -167,7 +167,9 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-048 | **Store literal capability patterns and honour wildcard suffixes.** A terminal `*` covers the remaining path; an interior `*` consumes exactly one segment, then matching continues. | Real-browser onboarding exposed a seed conversion of every leading-wildcard pattern into `SYSTEM.WILDCARD`, which granted the first administrator no usable permissions and discarded the auditor's display-only suffix. Standard roles now retain their literal patterns; migration 9004 repairs the two known roles without widening custom roles. The matcher also now checks suffixes after interior wildcards, so `*.*.DISPLAY` cannot grant posting or configuration writes. | 2026-10-09 |
 | D-049 | **Material master first slice is view-scoped and staged.** Basic data, purchasing, MRP settings and plant valuation use separate save contracts, tenant scope, change evidence and optimistic version checks. Quantities/prices validate stored precision before exact-decimal conversion; stock quantity/value remain read-only. Financial valuation read/write authorities are separate from inventory maintenance. | Records the material code already written before the interrupted stage, not a new feature in this checkpoint. Basic/organisational view completion and blocking are checked through a shared operational gate; relevant plant changes flag the planning file. Full planning execution and the other master views remain pending. Source/backend verification is complete; the new material browser walkthrough and production build are not. | 2026-10-09 |
 | D-050 | **Hard execution budget: 15 minutes per batch, one small outcome.** Plan at most 10 minutes of implementation, reserve 2 minutes for focused verification and 3 for recording/checkpointing. Default to one batch per reply. Stop adding scope at the 10-minute mark; split unfinished work instead of continuing into a timeout. | The owner interrupted the previous oversized stage after multiple timeout errors. No cross-module feature bundling, no unrelated refactors hidden in a page change, and no resetting current data to recover from a timeout. A newly discovered unrelated defect is recorded for its own batch; only a small blocking correction that fits the remaining budget belongs in the current one. | 2026-10-09 |
-| D-051 | **Publish source, not runtime credentials or business backups.** Repository: `https://github.com/deepakpt2/cairn-erp`, branch `main`. Preserve existing repository history and license; exclude actual environment files, database dumps, checkpoint archives, screenshots, dependencies and generated builds. A one-time credential is used only in process memory, never in Git URLs/configuration, source or this log. | The owner requested publication to this repository. Its existing GPL v3 license is retained unchanged; the repository is public. `.env.example` contains explicitly development-only values and a replace-before-use session-secret placeholder. This request does not change ERP scope or authorise deleting/resetting current data. | 2026-10-09 |
+| D-051 | **Publish source, not runtime credentials or business backups.** Repository: `https://github.com/deepakpt2/cairn-erp`, branch `main`. Preserve existing repository history and license; exclude actual environment files, database dumps, checkpoint archives, screenshots, dependencies and generated builds. ~~A one-time credential is used only in process memory, never in Git URLs/configuration, source or this log.~~ **Local persistence superseded by D-052; credentials remain excluded from Git, public source and this log.** | The owner requested publication to this repository. Its existing GPL v3 license is retained unchanged; the repository is public. `.env.example` contains explicitly development-only values and a replace-before-use session-secret placeholder. This request does not change ERP scope or authorise deleting/resetting current data. | 2026-10-09 |
+| D-052 | **Owner-approved private local credential persistence.** Store repository URL and the owner-supplied token in `.env.local` as `GITHUB_REPO_URL` and `GITHUB_PAT`, with owner-only `0600` permissions. Keep the file ignored/untracked; no `NEXT_PUBLIC_` prefix, token in Git URLs/configuration, public source, project log or source archives. | Explicit owner instruction on 2026-10-10: rotation will be done later; save these values locally and exclude them from Git. Supersedes only D-051's memory-only credential clause, not its public-source boundary. Existing local configuration is preserved; no GitHub operation or token rotation is performed in this batch. | 2026-10-10 |
+| D-053 | **Ship real deployment slices, not nonexistent services.** The first Docker batch includes app, PostgreSQL 17 and a one-shot migration/reference job. Next standalone output runs as non-root; app uses restricted `cairn_app`, while only migration tools receive the owner URL. Existing Traefik `proxy`/`web` integration is retained without a Traefik service or certresolver. | The owner found Docker files missing from the published checkpoint. The full §22 target stack remains required, but worker, PgBouncer, Dragonfly, scheduled/WAL backups and restore verification get separate tested batches rather than fake commands or an oversized phase. Configuration/build checks are not represented as a successful Docker-host deployment. | 2026-10-10 |
 
 ---
 
@@ -1759,6 +1761,11 @@ jobs hold no HTTP request and survive a web container restart.
 **Volumes:** database data, backup archives, output artefacts (generated documents), Dragonfly
 persistence.
 
+**Implementation status (v0.12):** `Dockerfile`, `.dockerignore`, `docker-compose.yml`,
+`.env.docker.example` and `docker/postgres/10-app-role.sh` now implement the **core app/db/migrate
+slice only**. The table above is the target stack, not a claim that worker, pooling/cache or scheduled
+backup services already exist. Current setup and exact verification are in §26.13.
+
 ### 22.2 Traefik integration (external, not in our compose)
 
 Labels on the `app` service:
@@ -2360,6 +2367,94 @@ changed. Source-only backup is saved under `checkpoints/2026-10-09_1541_UTC/`; p
 remain private and unchanged. The application is still IN BUILD with Basic Data verified and the
 remaining material browser targets/P2P/manufacturing flow pending. **Next: B-003 Purchasing only.**
 
+
+### 26.12 Private local repository credentials `COMPLETE · D-052`
+
+The owner explicitly requested local persistence while deferring token rotation. `.env.local` now
+contains **`GITHUB_REPO_URL`** and **`GITHUB_PAT`**; the value of the credential is intentionally not
+included here. Existing local variables, if any, are preserved. The file was written atomically with
+owner-only **0600** permissions. It uses server/private names, never the client-exposed `NEXT_PUBLIC_`
+prefix. This is a plaintext local environment file protected by permissions, not an encrypted vault.
+
+Verified: `.gitignore` already excludes the file via `.env.*` (and the explicit local-env rule);
+`git check-ignore` confirms it, `git ls-files` confirms it is untracked, and a check of committed source
+found no copy of the credential. No token was printed, committed or pushed; no GitHub API/push,
+credential rotation, application change, migration or database operation was performed. The secret
+must stay out of source archives and future screenshots/logging. No copy is added to `.env.example`.
+This private setup updates the local project log only; the public repository remains at the previous
+verified publication commit until another explicitly requested source push. **B-003 Purchasing remains
+next**; this is a separate short configuration batch, not continuation into ERP development.
+
+
+### 26.13 Core Docker packaging `COMPLETE — host deployment unverified`
+
+**Owner finding:** Docker/Compose files were missing from the published checkpoint. They had been
+planned in §22 but not implemented. This bounded batch adds the **current working app's core**:
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Node 22 multi-stage dependencies, one-shot operations and non-root standalone app targets |
+| `.dockerignore` | Excludes actual environment files (including `.env.local` and its Git credential), checkpoints, captures, dependencies, generated builds and private data |
+| `docker-compose.yml` | PostgreSQL 17 → healthy DB → migration/reference job → app; persistent DB volume, private DB network and existing external Traefik network |
+| `.env.docker.example` | Empty required secret fields and the agreed hostname; copy to ignored `.env.docker`, never put Git credentials in it |
+| `docker/postgres/10-app-role.sh` | Initializes restricted `cairn_app` only for an empty PostgreSQL volume; SQL-bound password input, no schema/data reset |
+| `next.config.ts` | Adds standalone output and explicit current-project tracing root, preventing nested-workspace output paths/outside-context tracing |
+
+**Traefik:** no Traefik container, network **`proxy`**, entrypoint **`web`**, host
+**`cairn.deepakpt.com`**, backend port 3000, no certresolver (upstream TLS). Database has no published
+host port. App receives only the restricted database URL; migration receives the separate elevated
+owner URL and runs existing immutable migrations plus global/reference seeds. It does **not** run
+`bootstrap:reset`, `dev:tenant`, opening-stock seeding or automatic customer configuration. The named
+PostgreSQL volume is retained across normal redeploys. Initialization scripts run only on an empty
+volume; changing `.env.docker` passwords later does not update passwords inside an existing database.
+The official PostgreSQL owner is elevated; the web role explicitly cannot be superuser or bypass RLS.
+
+**Setup on the Docker host:**
+
+```sh
+cp .env.docker.example .env.docker
+chmod 600 .env.docker
+# Run this THREE times; put different results in the two DB password and session-secret fields:
+openssl rand -hex 32
+# Keep CAIRN_HOST=cairn.deepakpt.com; the existing action-origin configuration matches that host.
+docker network inspect proxy
+# Quiet validation avoids printing expanded secrets:
+docker compose --env-file .env.docker config --quiet
+docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker ps
+docker compose --env-file .env.docker logs migrate app
+```
+
+Use current Docker Compose (v2+ syntax); the `proxy` network must already belong to the existing
+Traefik setup. Do not add a certresolver or a second proxy container. Do not delete the database volume
+to repair configuration; backup/restore is a separate deliberate recovery operation. Database passwords
+must be URL-safe (letters/digits/underscore/hyphen; generated hex is recommended), since Compose embeds
+them in connection URLs. Templates have empty values, so missing required secrets fail configuration.
+A different hostname also needs the action-origin configuration changed; it is not just a label edit.
+
+**Verified here:** Compose `config --quiet` passed using checksum-verified official CLI **v5.6.0**
+and dummy validation values; YAML/security/startup invariants and shell syntax pass. The standalone
+production build passed in a secret-free Docker-equivalent context, including TypeScript/framework
+checks, and produced `server.js` at the required path. Its sign-in page returned HTTP 200 and expected
+content; the temporary packaging-check process was stopped. No environment files or backups appeared
+in the standalone artifact. The 23 pure harness tests and IP lint pass. The first nested-context build
+exposed an inferred tracing-root path; explicit `outputFileTracingRoot` fixes it.
+
+**Not verified:** this sandbox has **no Docker engine**, so no image-layer build, fresh PostgreSQL
+container/role initialization, full Compose boot, database-backed request, or actual Traefik-host/TLS
+reachability is claimed. The temporary standalone check had no PostgreSQL; database-dependent preview
+requests reported connection refusal, as expected. The present image health check covers web-server
+sign-in response; deeper database-backed readiness/hardening belongs in the Docker-host validation.
+Last full ERP suite remains B-002's **133/133**; it was not rerun against a database in this packaging
+batch. Worker, PgBouncer, Dragonfly, scheduled encrypted dumps/WAL/retention and restore rehearsal are
+still pending §22 requirements. This is **not** final production/M1 sign-off.
+
+**Data/security:** no live database was reset, migrated, seeded or edited in this sandbox. Prior private
+backups remain untouched. `.env.local` stays ignored and outside image context; only the safe Docker
+template is published. **Publication result:** Pending normal source push/remote verification. The
+ERP queue remains **B-003 Purchasing**; the next deployment slice should validate this core stack on
+a Docker-capable host before adding other services. Source checkpoint: `checkpoints/2026-10-09_2204_UTC/`.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2490,6 +2585,8 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.8 | 2026-10-09 | **B-001 complete within the 15-minute batch budget.** Split the monolithic browser acceptance into five independently runnable targets, with foundation-only default, fresh per-target guarded fixtures, pure argument/ownership validation, 120-second work deadline and bounded diagnostics/cleanup. Material cases no longer require other plant views first. Added explicit npm commands and a pure Vitest harness configuration with no database setup/purge. TypeScript/IP lint clean, **23 focused harness tests passing**, and the existing foundation browser flow passes in about 4 seconds; only its own temporary fixture was touched and preserved database counts match before/after. Saved a new database/source checkpoint without replacing B-000. No ERP feature, page, schema, migration or seed change; material targets still unexecuted pending B-002 publication. §25.4 queue updated and §26.9 records commands, boundaries and verification. | Agent |
 | 0.9 | 2026-10-09 | **B-002 complete: Material Basic Data published and browser-verified within the 15-minute cap.** Rebuilt/restarted the production preview to publish retained material pages and session/launchpad changes. Expanded only the Basic target to test incomplete save, completion, unchanged resave, exact weight maintenance, actor/tenant forgery refusal, visible history/footer, search and basic-only copy. Found and fixed FND-001: action reset restored stale uncontrolled select defaults and could remove the saved unit; inner form now remounts from the committed view version. FND-002/FND-003 fix description metadata collision and SPA navigation synchronisation in the test, without arbitrary waits. Corrected production build, TypeScript/IP lint, **133 automated tests** and Basic-only browser acceptance pass. Preserved database counts match before/after, no reset/reseed/migration, fresh backup and review image saved. Other material view walkthroughs remain pending; B-003 Purchasing is next. §26.10 contains the verified contract, findings, live process/build identity and limitations; owner sign-off remains pending. | Agent |
 | 0.10 | 2026-10-09 | **Owner-requested GitHub source publication checkpoint.** D-051 records the public repository/branch and source-only boundary. Repaired local Git metadata, fetched existing `main` history and retained the repository GPL v3 license unchanged. Added private-artifact/credential exclusions and a safe development environment template. No ERP feature, database reset, migration or reseed; B-003 Purchasing remains next. Normal fast-forward source push verified; §26.11 records the source commit and confirmation. No token or private artifacts are committed. | Agent |
+| 0.11 | 2026-10-10 | **Owner-approved private local Git configuration.** D-052 supersedes the memory-only part of D-051: repository URL and supplied token saved in ignored/untracked `.env.local`, owner-only 0600, with server-only variable names. Credential values are absent from this log, committed source and environment examples; no push, token rotation, application/database change or reset. §26.12 records checks and the private-file boundary. B-003 Purchasing remains next. | Agent |
+| 0.12 | 2026-10-10 | **Core Docker deployment files added after the owner found them missing.** D-053 ships app/db/migrate only; worker, pooling/cache and scheduled backups remain separate pending slices. Added multi-stage non-root standalone Dockerfile, build-secret exclusions, Compose with existing Traefik proxy/web/no-certresolver, safe secret template and restricted database-role initialization without resets. Standalone/tracing-root settings correct artifact location. Compose configuration, YAML/security/shell checks, secret-free standalone build, sign-in HTTP smoke, 23 focused tests and IP lint pass; no Docker engine exists here, so full image/container/database/Traefik deployment is explicitly unverified. No current database or private-credential upload. §22 implementation status and §26.13 contain scope, setup, checks and limitations. Publication initially pending the normal source push. | Agent |
 
 ---
 

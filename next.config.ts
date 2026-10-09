@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const development = (process.env.CAIRN_ENV ?? 'development') === 'development';
 const config: NextConfig = {
+  output: 'standalone',
+  outputFileTracingRoot: process.cwd(),
   allowedDevOrigins: development ? ['localhost', '127.0.0.1', '*.e2b.app'] : [],
   experimental: {
     cpus: 1,

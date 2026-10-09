@@ -1,0 +1,79 @@
+# Core deployment slice only; worker/pooling/cache/scheduled backup are separate batches.
+name: cairn
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cairn
+      POSTGRES_USER: cairn
+      POSTGRES_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD in .env.docker}
+      CAIRN_APP_DB_PASSWORD: ${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD in .env.docker}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/10-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    networks:
+      - cairn_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  migrate:
+    image: cairn-operations:local
+    build:
+      context: .
+      target: operations
+    restart: "no"
+    environment:
+      CAIRN_ENV: production
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@db:5432/cairn
+      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@db:5432/cairn
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cairn_internal
+
+  app:
+    image: cairn-app:local
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    environment:
+      CAIRN_ENV: production
+      APP_BASE_URL: https://${CAIRN_HOST:-cairn.deepakpt.com}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env.docker}
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@db:5432/cairn
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - cairn_internal
+      - proxy
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: proxy
+      traefik.http.routers.cairn.rule: Host(`${CAIRN_HOST:-cairn.deepakpt.com}`)
+      traefik.http.routers.cairn.entrypoints: web
+      traefik.http.routers.cairn.service: cairn
+      traefik.http.services.cairn.loadbalancer.server.port: "3000"
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  cairn_internal:
+    internal: true
+  proxy:
+    external: true
+    name: proxy
+
+volumes:
+  postgres_data:
