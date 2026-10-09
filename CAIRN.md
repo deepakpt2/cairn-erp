@@ -2326,7 +2326,7 @@ Batch started at 02:07:39 UTC and completed within the 15-minute cap; no additio
 **Next: B-003 — Purchasing view verification only.**
 
 
-### 26.11 GitHub source publication `IN PROGRESS`
+### 26.11 GitHub source publication `COMPLETE`
 
 **Owner request:** publish the current Cairn source to
 [deepakpt2/cairn-erp](https://github.com/deepakpt2/cairn-erp). This publication-only batch interrupts
@@ -2349,8 +2349,16 @@ included; current database records, captures and restore backups stay private/lo
 license is not replaced. Last application verification remains B-002's **133/133 tests and Basic-only
 browser acceptance**; this publication is not production deployment or verification of pending views.
 
-**Publication result:** Pending authenticated push and remote-ref verification. If credentials or
-branch protections prevent it, stop and record the failure rather than forcing an overwrite.
+**Publication result:** Verified normal fast-forward push to `main`. Source snapshot commit
+`67fd7dbdd9eeb89dba5abd172478becf7e508afb` is based on the existing license commit, preserving repository history.
+The remote branch was checked against that exact source commit. This confirmation is committed as
+an additional documentation-only follow-up; no force push, history rewrite or credential storage.
+The tracked tree contains 118 files including the original license; staged-path and credential-pattern
+checks passed. Existing business data and local backups were not uploaded or modified. One existing
+extra blank line at EOF in the number formatter was removed for clean patch whitespace; no behaviour
+changed. Source-only backup is saved under `checkpoints/2026-10-09_1541_UTC/`; prior database backups
+remain private and unchanged. The application is still IN BUILD with Basic Data verified and the
+remaining material browser targets/P2P/manufacturing flow pending. **Next: B-003 Purchasing only.**
 
 ---
 
@@ -2481,7 +2489,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.7 | 2026-10-09 | **Preservation checkpoint and owner-requested 15-minute batch cap.** Records the interrupted material-master slice without claiming its UI release is complete: eight tenant tables/policies, four view services/forms, staged statuses, exact quantities/prices, versioned edits, operational gating, separate financial price authorities, development sample masters and extended tests. Last completed checks: TypeScript/IP lint clean and **110 automated tests passing**; material browser acceptance and production build/release remain pending. The prior number-range preview is left running. Saved a full readable PostgreSQL dump and a source archive with checksums under `checkpoints/2026-10-09_0127_UTC`; no database mutation, reset, reseed or deletion in this checkpoint. D-049 documents retained material semantics; D-050 and revised R-22 enforce one small batch, ≤10 minutes implementation plus verification/checkpoint time within 15 minutes total. §25.4 replaces broad execution runs with named test/view/backend slices; §26.8 records the exact retained state, backup and safe restore procedure. | Agent |
 | 0.8 | 2026-10-09 | **B-001 complete within the 15-minute batch budget.** Split the monolithic browser acceptance into five independently runnable targets, with foundation-only default, fresh per-target guarded fixtures, pure argument/ownership validation, 120-second work deadline and bounded diagnostics/cleanup. Material cases no longer require other plant views first. Added explicit npm commands and a pure Vitest harness configuration with no database setup/purge. TypeScript/IP lint clean, **23 focused harness tests passing**, and the existing foundation browser flow passes in about 4 seconds; only its own temporary fixture was touched and preserved database counts match before/after. Saved a new database/source checkpoint without replacing B-000. No ERP feature, page, schema, migration or seed change; material targets still unexecuted pending B-002 publication. §25.4 queue updated and §26.9 records commands, boundaries and verification. | Agent |
 | 0.9 | 2026-10-09 | **B-002 complete: Material Basic Data published and browser-verified within the 15-minute cap.** Rebuilt/restarted the production preview to publish retained material pages and session/launchpad changes. Expanded only the Basic target to test incomplete save, completion, unchanged resave, exact weight maintenance, actor/tenant forgery refusal, visible history/footer, search and basic-only copy. Found and fixed FND-001: action reset restored stale uncontrolled select defaults and could remove the saved unit; inner form now remounts from the committed view version. FND-002/FND-003 fix description metadata collision and SPA navigation synchronisation in the test, without arbitrary waits. Corrected production build, TypeScript/IP lint, **133 automated tests** and Basic-only browser acceptance pass. Preserved database counts match before/after, no reset/reseed/migration, fresh backup and review image saved. Other material view walkthroughs remain pending; B-003 Purchasing is next. §26.10 contains the verified contract, findings, live process/build identity and limitations; owner sign-off remains pending. | Agent |
-| 0.10 | 2026-10-09 | **Owner-requested GitHub source publication checkpoint.** D-051 records the public repository/branch and source-only boundary. Repaired local Git metadata, fetched existing `main` history and retained the repository GPL v3 license unchanged. Added private-artifact/credential exclusions and a safe development environment template. No ERP feature, database reset, migration or reseed; B-003 Purchasing remains next. Publication initially pending authenticated push; §26.11 records the verified result when available. | Agent |
+| 0.10 | 2026-10-09 | **Owner-requested GitHub source publication checkpoint.** D-051 records the public repository/branch and source-only boundary. Repaired local Git metadata, fetched existing `main` history and retained the repository GPL v3 license unchanged. Added private-artifact/credential exclusions and a safe development environment template. No ERP feature, database reset, migration or reseed; B-003 Purchasing remains next. Normal fast-forward source push verified; §26.11 records the source commit and confirmation. No token or private artifacts are committed. | Agent |
 
 ---
 
