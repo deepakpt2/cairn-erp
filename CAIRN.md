@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.12 — core Docker deployment files)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.13 — managed database credential synchronization and repair)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -170,6 +170,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-051 | **Publish source, not runtime credentials or business backups.** Repository: `https://github.com/deepakpt2/cairn-erp`, branch `main`. Preserve existing repository history and license; exclude actual environment files, database dumps, checkpoint archives, screenshots, dependencies and generated builds. ~~A one-time credential is used only in process memory, never in Git URLs/configuration, source or this log.~~ **Local persistence superseded by D-052; credentials remain excluded from Git, public source and this log.** | The owner requested publication to this repository. Its existing GPL v3 license is retained unchanged; the repository is public. `.env.example` contains explicitly development-only values and a replace-before-use session-secret placeholder. This request does not change ERP scope or authorise deleting/resetting current data. | 2026-10-09 |
 | D-052 | **Owner-approved private local credential persistence.** Store repository URL and the owner-supplied token in `.env.local` as `GITHUB_REPO_URL` and `GITHUB_PAT`, with owner-only `0600` permissions. Keep the file ignored/untracked; no `NEXT_PUBLIC_` prefix, token in Git URLs/configuration, public source, project log or source archives. | Explicit owner instruction on 2026-10-10: rotation will be done later; save these values locally and exclude them from Git. Supersedes only D-051's memory-only credential clause, not its public-source boundary. Existing local configuration is preserved; no GitHub operation or token rotation is performed in this batch. | 2026-10-10 |
 | D-053 | **Ship real deployment slices, not nonexistent services.** The first Docker batch includes app, PostgreSQL 17 and a one-shot migration/reference job. Next standalone output runs as non-root; app uses restricted `cairn_app`, while only migration tools receive the owner URL. Existing Traefik `proxy`/`web` integration is retained without a Traefik service or certresolver. | The owner found Docker files missing from the published checkpoint. The full §22 target stack remains required, but worker, PgBouncer, Dragonfly, scheduled/WAL backups and restore verification get separate tested batches rather than fake commands or an oversized phase. Configuration/build checks are not represented as a successful Docker-host deployment. | 2026-10-10 |
+| D-054 | **Synchronize the managed runtime role before Docker migrations.** The one-shot operations job reads the actual `DATABASE_URL` password, uses a separate owner connection to create/alter only `cairn_app`, enforces restricted role flags, then verifies runtime authentication before applying schema migrations. Existing-volume recovery is an explicit local-admin credential repair, never deletion/reset. | The owner reported PostgreSQL SQLSTATE 28P01 for `cairn_app`. Persistent volumes retain passwords, and legacy applied migration 9000 creates a missing role with a development fallback. That migration remains immutable; the deployment job now establishes the configured role first. Owner passwords changed on an existing volume require the documented local-socket repair. | 2026-10-10 |
 
 ---
 
@@ -2457,6 +2458,66 @@ credential publication. The
 ERP queue remains **B-003 Purchasing**; the next deployment slice should validate this core stack on
 a Docker-capable host before adding other services. Source checkpoint: `checkpoints/2026-10-09_2204_UTC/`.
 
+
+### 26.14 Database authentication failure — in-place recovery `FIX PREPARED / HOST VERIFICATION PENDING`
+
+**Observed on owner host:** app starts, then PostgreSQL rejects user `cairn_app` with SQLSTATE **28P01**.
+Next.js "Ready" confirms the server process, not successful database authentication. The supplied log
+proves login rejection, not which configuration/initialization path caused it. Likely causes include
+an existing volume retaining a different role password, a differently resolved environment value, or
+the initialization script not creating the role. Source inspection confirmed a relevant legacy path:
+`9000_policies.sql` creates a missing role with `cairn_app_dev`. It does not change an existing role's
+password. That applied migration is **not edited** or replayed destructively.
+
+**Correction:** `scripts/sync-db-app-role.ts` / `npm run db:sync-role` now precedes Docker migrations.
+It requires explicit application/owner URLs, the `cairn_app` runtime username and matching database
+names; reads the password from the runtime URL; connects through the owner; checks role-management
+permission; uses PostgreSQL `format` with bound text values to create/alter the managed role safely;
+enforces NOSUPERUSER/NOBYPASSRLS/NOCREATEDB/NOCREATEROLE/NOINHERIT; closes connections; and verifies
+restricted authentication with the application URL. No tenant, stock, ledger or master-data table
+is written. Owner authentication failure stops startup; raw URLs/passwords are not printed.
+
+**Existing-volume repair:** `docker/postgres/sync-credentials.sh` reads the current database container's
+configured secrets and uses its local admin socket. It aligns owner/app role passwords in a single
+transaction, creating a missing restricted app role if necessary. It never resets/deletes the database,
+volume, schema, tenant or business documents. This recovery assumes the official container's local
+owner socket authentication; custom hardened socket-auth setups need their existing admin connection.
+Changing owner credentials in environment alone cannot authorize the migration job against an old
+stored password, hence the explicit repair step.
+
+**Owner-host commands (use the SAME env file used for deployment):**
+
+```sh
+git pull
+# Recreate if configuration changed; retain the existing PostgreSQL data volume:
+docker compose --env-file .env.docker up -d db
+# Read current container secrets without echoing them or putting a password in shell history:
+docker compose --env-file .env.docker exec -T db sh -s < docker/postgres/sync-credentials.sh
+# Rebuild the new operations entrypoint and recreate app/migration processes:
+docker compose --env-file .env.docker up -d --build --force-recreate migrate app
+docker compose --env-file .env.docker logs --tail=50 migrate app
+```
+
+If deployment uses `.env` instead, substitute that actual file. Do not send secret values or expanded
+Compose/connection configuration. Do not delete the volume or run reset/bootstrap-reset. App recreation
+also clears the cached failed role-check/pool and loads the currently configured password; simple
+`restart` does not update changed container environment. A repaired missing role still receives schema
+permissions through the normal migration path; if roles were manually deleted after migrations,
+additional grant recovery is a distinct reviewed operation, not permission widening in this script.
+
+**Verification:** 12 mocked/pure credential tests + 23 existing harness tests = **35/35 focused tests**
+passed; TypeScript, IP lint and the standalone production build passed. CLI missing-configuration guard
+was exercised: fails non-zero before any connection, with values withheld. Shell syntax passes. Tests
+cover existing/missing roles, no development password fallback, safe formatting, closed connections,
+privilege refusal, runtime elevation refusal, explicit URLs and matching databases. The initial
+incorrect test mutated an owner username instead of database path; the assertion setup was corrected.
+No live host/container database was accessed here; successful owner-host repair remains **unverified**
+until the owner runs these commands. The last complete ERP database suite remains 133/133 from B-002.
+Database-aware application readiness remains a separate follow-up (current image health checks sign-in).
+No private environment/credential files are published. **Publication result:** Pending source push
+and remote-ref verification. Source checkpoint: `checkpoints/2026-10-09_2241_UTC/`. ERP feature queue
+remains B-003 Purchasing; this is a bounded deployment-authentication fix only.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2589,6 +2650,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.10 | 2026-10-09 | **Owner-requested GitHub source publication checkpoint.** D-051 records the public repository/branch and source-only boundary. Repaired local Git metadata, fetched existing `main` history and retained the repository GPL v3 license unchanged. Added private-artifact/credential exclusions and a safe development environment template. No ERP feature, database reset, migration or reseed; B-003 Purchasing remains next. Normal fast-forward source push verified; §26.11 records the source commit and confirmation. No token or private artifacts are committed. | Agent |
 | 0.11 | 2026-10-10 | **Owner-approved private local Git configuration.** D-052 supersedes the memory-only part of D-051: repository URL and supplied token saved in ignored/untracked `.env.local`, owner-only 0600, with server-only variable names. Credential values are absent from this log, committed source and environment examples; no push, token rotation, application/database change or reset. §26.12 records checks and the private-file boundary. B-003 Purchasing remains next. | Agent |
 | 0.12 | 2026-10-10 | **Core Docker deployment files added after the owner found them missing.** D-053 ships app/db/migrate only; worker, pooling/cache and scheduled backups remain separate pending slices. Added multi-stage non-root standalone Dockerfile, build-secret exclusions, Compose with existing Traefik proxy/web/no-certresolver, safe secret template and restricted database-role initialization without resets. Standalone/tracing-root settings correct artifact location. Compose configuration, YAML/security/shell checks, secret-free standalone build, sign-in HTTP smoke, 23 focused tests and IP lint pass; no Docker engine exists here, so full image/container/database/Traefik deployment is explicitly unverified. No current database or private-credential upload. §22 implementation status and §26.13 contain scope, setup, checks and limitations. Normal source push and remote ref verified; deployment commit recorded in §26.13. | Agent |
+| 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Source push initially pending. | Agent |
 
 ---
 

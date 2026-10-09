@@ -9,7 +9,7 @@ RUN npm ci
 FROM dependencies AS operations
 COPY . .
 ENV CAIRN_ENV=production
-CMD ["sh", "-c", "npm run db:migrate && npm run seed && npm run seed:reference"]
+CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run seed && npm run seed:reference"]
 
 FROM dependencies AS builder
 COPY . .
