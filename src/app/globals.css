@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==========================================================================
+   Cairn base layer — CAIRN.md §19.2
+   Our own visual identity. Nothing here imitates the reference product's
+   chrome, palette or component shapes (see the anti-imitation checklist, §19.5).
+   ========================================================================== */
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    /* Logical properties throughout, so right-to-left works when Arabic arrives (R-19). */
+    font-feature-settings: 'tnum' 1, 'cv05' 1;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans text-base antialiased;
+  }
+
+  /* Numbers must align in columns. This is a hard requirement, not a nicety. */
+  .tabular,
+  input[type='number'],
+  .numeric {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A visible, consistent focus ring — accessibility requirement (§19.2). */
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.DEFAULT');
+    outline-offset: 1px;
+  }
+
+  ::selection {
+    background: theme('colors.accent.soft');
+  }
+}
+
+@layer components {
+  /* ---- Structure ---------------------------------------------------------- */
+
+  .ledger-frame {
+    @apply flex min-h-screen flex-col;
+  }
+
+  .panel {
+    @apply bg-surface border border-line;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between border-b border-line bg-sunken px-3 py-1.5;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold tracking-tight text-ink;
+  }
+
+  /* ---- The command bar — the most familiar behaviour we keep (§19.1) ------ */
+
+  .command-bar {
+    @apply flex items-stretch border-b border-line-strong bg-surface;
+  }
+
+  .command-bar input {
+    @apply w-full border-0 bg-transparent px-3 py-2 font-mono text-sm
+           placeholder:text-ink-faint focus:outline-none;
+  }
+
+  /* ---- Dense grids -------------------------------------------------------- */
+
+  .grid-table {
+    @apply w-full border-collapse text-sm;
+  }
+
+  .grid-table thead th {
+    @apply sticky top-0 z-10 border-b border-line-strong bg-sunken px-2 py-1.5
+           text-start text-2xs font-semibold uppercase tracking-wide text-ink-soft;
+  }
+
+  .grid-table tbody td {
+    @apply border-b border-line px-2 py-1 align-top;
+  }
+
+  .grid-table tbody tr:hover {
+    @apply bg-accent-soft/40;
+  }
+
+  .grid-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  /* ---- Fields ------------------------------------------------------------- */
+
+  .field-label {
+    @apply mb-0.5 block text-2xs font-semibold uppercase tracking-wide text-ink-soft;
+  }
+
+  .field-input {
+    @apply w-full border border-line-strong bg-surface px-2 py-1.5 text-base text-ink
+           placeholder:text-ink-faint disabled:bg-sunken disabled:text-ink-faint;
+  }
+
+  .field-hint {
+    @apply mt-0.5 text-2xs text-ink-faint;
+  }
+
+  /* ---- Buttons ------------------------------------------------------------ */
+
+  .btn {
+    @apply inline-flex items-center gap-1.5 border px-2.5 py-1.5 text-sm font-medium
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply border-accent bg-accent text-white hover:bg-accent-hover;
+  }
+
+  .btn-default {
+    @apply border-line-strong bg-surface text-ink hover:bg-sunken;
+  }
+
+  .btn-danger {
+    @apply border-signal-error bg-surface text-signal-error hover:bg-signal-error-soft;
+  }
+
+  /* ---- Status indicators -------------------------------------------------- */
+
+  .chip {
+    @apply inline-flex items-center border px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide;
+  }
+
+  .chip-ok {
+    @apply border-signal-ok/30 bg-signal-ok-soft text-signal-ok;
+  }
+  .chip-warn {
+    @apply border-signal-warn/30 bg-signal-warn-soft text-signal-warn;
+  }
+  .chip-error {
+    @apply border-signal-error/30 bg-signal-error-soft text-signal-error;
+  }
+  .chip-neutral {
+    @apply border-line-strong bg-sunken text-ink-soft;
+  }
+  .chip-info {
+    @apply border-signal-info/30 bg-signal-info-soft text-signal-info;
+  }
+
+  /* ---- The status bar — orientation without decoration -------------------- */
+
+  .status-bar {
+    @apply flex items-center justify-between border-t border-line-strong bg-sunken
+           px-3 py-1 text-2xs text-ink-soft;
+  }
+
+  .status-bar kbd {
+    @apply border border-line-strong bg-surface px-1 font-mono text-2xs text-ink-soft;
+  }
+
+  /* ---- Code, for transaction codes and aliases ---------------------------- */
+
+  .code {
+    @apply font-mono text-xs tracking-tight;
+  }
+}

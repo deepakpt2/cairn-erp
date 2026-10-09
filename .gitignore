@@ -1,0 +1,40 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+*.log
+
+# local env — never commit real secrets
+.env.local
+.env.production
+.env.*.local
+
+# runtime artifacts
+storage/
+
+# Credentials and private/local configuration
+.env
+.env.*
+!.env.example
+.git-credentials
+.netrc
+
+# Private backups, acceptance captures and sandbox scratch files
+checkpoints/
+.arena/
+.cache/
+*.dump
+*.sql.gz
+
+# Other generated dependency/build caches
+.local/
+.npm/
+.venv/
+__pycache__/
+.pytest_cache/
+.playwright/
