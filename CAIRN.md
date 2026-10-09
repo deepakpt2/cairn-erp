@@ -2459,7 +2459,7 @@ ERP queue remains **B-003 Purchasing**; the next deployment slice should validat
 a Docker-capable host before adding other services. Source checkpoint: `checkpoints/2026-10-09_2204_UTC/`.
 
 
-### 26.14 Database authentication failure — in-place recovery `FIX PREPARED / HOST VERIFICATION PENDING`
+### 26.14 Database authentication failure — in-place recovery `FIX PUBLISHED / HOST VERIFICATION PENDING`
 
 **Observed on owner host:** app starts, then PostgreSQL rejects user `cairn_app` with SQLSTATE **28P01**.
 Next.js "Ready" confirms the server process, not successful database authentication. The supplied log
@@ -2514,8 +2514,9 @@ incorrect test mutated an owner username instead of database path; the assertion
 No live host/container database was accessed here; successful owner-host repair remains **unverified**
 until the owner runs these commands. The last complete ERP database suite remains 133/133 from B-002.
 Database-aware application readiness remains a separate follow-up (current image health checks sign-in).
-No private environment/credential files are published. **Publication result:** Pending source push
-and remote-ref verification. Source checkpoint: `checkpoints/2026-10-09_2241_UTC/`. ERP feature queue
+No private environment/credential files are published. **Publication result:** Normal fast-forward source push verified, fix commit
+`eb9df4b000fd2309a6b12e02909da1e1a8956003`; this confirmation is a documentation-only follow-up. Host repair remains
+pending the owner commands. Source checkpoint: `checkpoints/2026-10-09_2241_UTC/`. ERP feature queue
 remains B-003 Purchasing; this is a bounded deployment-authentication fix only.
 
 ---
@@ -2650,7 +2651,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.10 | 2026-10-09 | **Owner-requested GitHub source publication checkpoint.** D-051 records the public repository/branch and source-only boundary. Repaired local Git metadata, fetched existing `main` history and retained the repository GPL v3 license unchanged. Added private-artifact/credential exclusions and a safe development environment template. No ERP feature, database reset, migration or reseed; B-003 Purchasing remains next. Normal fast-forward source push verified; §26.11 records the source commit and confirmation. No token or private artifacts are committed. | Agent |
 | 0.11 | 2026-10-10 | **Owner-approved private local Git configuration.** D-052 supersedes the memory-only part of D-051: repository URL and supplied token saved in ignored/untracked `.env.local`, owner-only 0600, with server-only variable names. Credential values are absent from this log, committed source and environment examples; no push, token rotation, application/database change or reset. §26.12 records checks and the private-file boundary. B-003 Purchasing remains next. | Agent |
 | 0.12 | 2026-10-10 | **Core Docker deployment files added after the owner found them missing.** D-053 ships app/db/migrate only; worker, pooling/cache and scheduled backups remain separate pending slices. Added multi-stage non-root standalone Dockerfile, build-secret exclusions, Compose with existing Traefik proxy/web/no-certresolver, safe secret template and restricted database-role initialization without resets. Standalone/tracing-root settings correct artifact location. Compose configuration, YAML/security/shell checks, secret-free standalone build, sign-in HTTP smoke, 23 focused tests and IP lint pass; no Docker engine exists here, so full image/container/database/Traefik deployment is explicitly unverified. No current database or private-credential upload. §22 implementation status and §26.13 contain scope, setup, checks and limitations. Normal source push and remote ref verified; deployment commit recorded in §26.13. | Agent |
-| 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Source push initially pending. | Agent |
+| 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Normal source push verified; fix commit recorded in §26.14. Owner-host repair remains unverified. | Agent |
 
 ---
 
