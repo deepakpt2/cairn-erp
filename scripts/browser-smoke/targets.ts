@@ -9,6 +9,7 @@ export const TARGETS = [
   { id: 'business-partners', client: 'T992', label: 'General partner identity, roles, blocking and audit' },
   { id: 'supplier-company', client: 'T991', label: 'Supplier company accounting and financial authority' },
   { id: 'supplier-purchasing', client: 'T990', label: 'Supplier buying defaults and procurement authority' },
+  { id: 'customer-company', client: 'T988', label: 'Customer company AR settings and financial authority' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

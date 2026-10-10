@@ -98,6 +98,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.SUPPLIER.COMPANY.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Review supplier company accounting assignments' },
   { code: 'PROC.SUPPLIER.PURCHASING.MAINTAIN', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Maintain supplier purchasing defaults' },
   { code: 'PROC.SUPPLIER.PURCHASING.DISPLAY', module: 'PROC', action: 'DISPLAY', posting: false, description: 'Review supplier purchasing defaults' },
+  { code: 'FIN.CUSTOMER.COMPANY.MAINTAIN', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain customer company accounting assignments' },
+  { code: 'FIN.CUSTOMER.COMPANY.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Review customer company accounting assignments' },
   { code: 'SYSTEM.WILDCARD', module: 'PLT', action: 'EXECUTE', posting: true, description: 'All capabilities — administrators only' },
   { code: 'FIN.CLOSE.PERIOD', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Open or close posting periods' },
   { code: 'CFG.PLT.NUMBERRANGE.DEFINE', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain number range intervals' },
@@ -158,6 +160,7 @@ const REGISTRY: Array<{
   aliases?: string[];
   description?: string;
 }> = [
+  { ourCode: 'FIN.CUSTOMER.COMPANY.MAINTAIN', termType: 'TRANSACTION', module: 'FIN', title: 'Customer company accounting', route: '/foundation/partners?view=CUSTOMER_COMPANY', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Company-scoped AR reconciliation and payment terms; no billing or clearing.' },
   { ourCode: 'PROC.SUPPLIER.PURCHASING.MAINTAIN', termType: 'TRANSACTION', module: 'PROC', title: 'Supplier purchasing defaults', route: '/foundation/partners?view=SUPPLIER_PURCHASING', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Organisation-scoped buying defaults, not purchase order execution.' },
   { ourCode: 'FIN.SUPPLIER.COMPANY.MAINTAIN', termType: 'TRANSACTION', module: 'FIN', title: 'Supplier company accounting', route: '/foundation/partners?view=SUPPLIER_COMPANY', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Company-scoped reconciliation and payment terms; no invoice or payment posting.' },
   { ourCode: 'FND.PARTNER.CREATE', termType: 'TRANSACTION', module: 'FND', title: 'Create business partner', route: '/foundation/partners?new=1', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['BP', 'XK01', 'XD01'], description: 'General identity and stable supplier/customer roles; organisation segments are pending.' },

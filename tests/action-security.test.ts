@@ -27,6 +27,8 @@ import { saveSupplierCompanyAction } from '@/app/foundation/partners/company-act
 import { getSupplierCompany } from '@/modules/foundation/supplier-companies';
 import { saveSupplierPurchasingAction } from '@/app/foundation/partners/purchasing-actions';
 import { getSupplierPurchasing } from '@/modules/foundation/supplier-purchasing';
+import { saveCustomerCompanyAction } from '@/app/foundation/partners/customer-company-actions';
+import { getCustomerCompany } from '@/modules/foundation/customer-companies';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -46,6 +48,23 @@ function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', o
 function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
 
 describe('server action security', () => {
+  it('derives customer accounting tenant/actor and ignores a forged chart',async()=>{
+    signedIn();const general=form({partnerNumber:'SEC-CUSTOMER',category:'ORGANIZATION',name:'Security customer',country:'KW',city:'Kuwait City',roles:'CUSTOMER',expectedVersion:'0',reason:'Customer action setup'});
+    expect((await savePartnerAction({ok:true},general)).ok).toBe(true);
+    const data=form({client:beta.client,changedBy:'FORGED',chartOfAccounts:'WRONG',partnerNumber:'SEC-CUSTOMER',companyCode:'1000',reconciliationAccount:'110000',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Customer company security test'});
+    expect((await saveCustomerCompanyAction({ok:true},data)).ok).toBe(true);
+    expect((await getCustomerCompany(alpha.client,'SEC-CUSTOMER','1000'))?.createdBy).toBe('real.operator');
+    expect((await getCustomerCompany(alpha.client,'SEC-CUSTOMER','1000'))?.chartOfAccounts).toBe('CAIRN');
+    expect(await getCustomerCompany(beta.client,'SEC-CUSTOMER','1000')).toBeNull();
+  });
+  it('refuses customer accounting changes with only supplier-specific authority',async()=>{
+    signedIn(['FIN.SUPPLIER.COMPANY.MAINTAIN']);const data=form({partnerNumber:'SEC-CUSTOMER',companyCode:'1000',expectedVersion:'1',reason:'Denied AR security test'});
+    expect((await saveCustomerCompanyAction({ok:true},data)).message).toContain('FIN.CUSTOMER.COMPANY.MAINTAIN');
+  });
+  it('refuses anonymous customer company action requests',async()=>{
+    request.session=null;await expect(saveCustomerCompanyAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
   it('derives general-partner tenant and audit actor from the session',async()=>{
     signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',category:'ORGANIZATION',name:'Security supplier',name2:'',searchTerm:'SEC',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'DEMO-TAX',email:'test@example.com',phone:'',roles:'SUPPLIER',expectedVersion:'0',reason:'Partner security test'});
     expect((await savePartnerAction({ok:true},data)).ok).toBe(true);

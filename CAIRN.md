@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.29 — B-014 customer company-code backend)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.30 — B-015 customer company-code maintenance UI)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2011,8 +2011,8 @@ when combining them would jeopardise the time budget.
 | B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | **DONE — scoped buying defaults, delivery terms, blocks, references/version/RLS and plant gate tested** |
 | B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | **DONE — scoped buying form/history, status/block/validation and procurement authority passed** |
 | B-014 | Customer **company-code backend** only | ≤10 min | **DONE — scoped AR/terms/staging/blocks/version/history/use controls tested** |
-| B-015 | Customer **company-code UI** only | ≤10 min | **NEXT — protected customer financial form/action** |
-| B-016 | Customer **sales-area backend** only | ≤10 min | Pending; pricing/delivery master defaults, no order posting |
+| B-015 | Customer **company-code UI** only | ≤10 min | **DONE — scoped AR form/history, finance access, status/block/validation lifecycle passed** |
+| B-016 | Customer **sales-area backend** only | ≤10 min | **NEXT — pricing/delivery master defaults only, no order posting** |
 | B-017 | Customer **sales-area UI** only | ≤10 min | Pending; protected master maintenance |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
@@ -3401,6 +3401,58 @@ result:** Normal AR backend push verified, commit `b5195d03eb0f5e19a6448747eb538
 this confirmation is a documentation-only follow-up. Next B-015 customer company UI/action only.
 Owner reviews/sign-off remain pending, not inferred from continuation.
 
+
+### 26.31 B-015 — Customer company-code maintenance UI `COMPLETE`
+
+Active Customer now links **Customer company code** on `/foundation/partners`. Command
+**FIN.CUSTOMER.COMPANY.MAINTAIN** opens partner selection; `view=CUSTOMER_COMPANY`/`company` identify
+the scoped AR view. Company selector, server-derived chart/currency spans, valid unblocked CUSTOMER
+reconciliation accounts, active payment terms, company block/reason/status and scoped control history.
+Independent FIN.CUSTOMER.COMPANY.DISPLAY/MAINTAIN (audit read allowed); Supplier-specific permission
+alone cannot maintain AR. General FND authority alone grants no financial access. Server action derives
+session tenant/actor, ignores posted chart, independently checks authority and delegates validation/
+locking/version to B-014. Customer-only role exposes no active Supplier maintenance; inactive/missing
+Customer direct view is refused. Other general/supplier/purchasing branches remain unchanged.
+
+Catalogue **46 capabilities/23 terms/19 aliases**; 51 activities. New customer-company labels use
+`custco` namespace: an initial reused `cc.title` collided with an existing company-code label and was
+caught by typecheck before deployment, then corrected. No schema migration in this UI slice.
+
+**Verified:** TypeScript/standalone build, IP lint (153 files), **280/280 Vitest tests across 18 files**,
+8 Python deployment tests; real T988 Customer-company browser plus Supplier-company and Supplier-
+purchasing regressions pass. Customer browser creates a Customer-only general identity through UI,
+stages/no-op company view, completes 110000/NET30, maintains NET15, blocks/unblocks, rejects injected
+100000 without changing stored AR/version, shows scoped history and denies warehouse financial
+form/history; anonymous access redirects. Three added action-security tests cover tenant/actor/chart
+forgery, supplier-only authority denial and anonymous requests. Screenshot inspected. Actual owner
+host rollout/reviews remain pending; no sign-off or complete AR/billing workflow is inferred.
+
+Original 1 journal/3 materials/5 terms unchanged; general/supplier/customer/purchasing tables empty
+outside cleaned fixtures; **20 migrations** unchanged. No reset/schema/stock/owner-host mutation.
+Current sandbox process **cairn-330ac069**, 0.0.0.0:3000. Owner update: `git pull` then
+`docker compose up -d --build --force-recreate migrate app`, keep private .env.
+
+**Owner manual test/R-23:** use test tenant; TESTCUST01 general Name/KW/city complete, Customer role
+active. FND.PARTNER.DISPLAY → record → Customer company code, or FIN.CUSTOMER.COMPANY.MAINTAIN → select
+record. Select company 1000. Dummy account **110000 — Trade receivables**, terms **NET30**, company
+block unchecked, reason **Owner customer accounting test**. Derived chart normally CAIRN, currency
+must equal chosen company (readonly). Save blank account/terms with reason → INCOMPLETE; fill valid
+values → CREATED; unchanged save → no version/audit noise. NET15 → MAINTAINED with 30→15 history and
+correct actor/reason. Block/unblock → company flag/history, general and supplier flags unchanged.
+Other existing company → independent view, no silent copy. Partner can be Supplier+Customer without
+AP/AR assignments overwriting one another.
+
+Negative: Cash/AP 100000/200000 must not be offered in AR choices; forged values refused. Inactive
+terms excluded/refused. Empty reason blocks. Category/general role absence disables tab/direct
+maintenance. Two tabs stale B refuses after A save. Supplier-only/general/warehouse authority cannot
+maintain AR; no customer-display authority means no customer accounting history/form. Display-only
+finance may read without Save. Sign-out route redirects. Linked accounting prevents casual recon/chart
+changes. No sales-area, billing/clearing, dunning/interest or credit processing enabled by this master.
+Report tenant/partner/company, inputs/expected/actual and screenshot without credentials.
+
+Private checkpoint `checkpoints/2026-10-10_1708_UTC/` stores DB/source/history/review/hashes. **Publication
+result:** Pending normal source push/remote verification. Next B-016 Customer sales-area backend only.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3550,6 +3602,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.27 | 2026-10-10 | **B-012 complete: supplier purchasing-organisation backend, UI pending.** Added forced-RLS/cascading master plus immutable 0006/9010 additions (18 applied). Validates active org/company/currency/group/optional terms, delivery code/location, stable supplier role, stages/blocks/version/audit and plant assignment; independent org data, no company defaults copied. 19 new tests; 252 total, 8 Python, standalone/typecheck/IP lint pass; original data unchanged. §26.28 gives future 1000/USD/001/FCA/Kuwait City/NET30 form data and negative checks; no PO/stock/payment/partner-function flow implied. User review remains pending and B-013 UI is next. Normal purchasing-backend push verified; commit recorded in §26.28. | Agent |
 | 0.28 | 2026-10-10 | **B-013 complete: procurement-protected supplier purchasing UI.** Added active Supplier tab/org selector and currency/group/delivery/location/optional-term/block/reason/status/history panel; independent server action/tenant-actor/PROC authority, safe filtered choices and unset preservation. 44 caps/22 terms/19 aliases; three action tests plus browser target. 256 tests, 8 Python, build/typecheck/IP lint, Purchasing browser and Company regression pass; original data/schema unchanged. §26.29 keeps later owner review pending and provides dummy/positive/negative/stale checks. Explicit next customer company/sales-area split B-014…17 added; no PO/stock/payment functionality implied. Normal procurement UI push verified; commit recorded in §26.29. | Agent |
 | 0.29 | 2026-10-10 | **B-014 complete: customer company backend, UI pending.** Added tenant/RLS/cascading company AR master and immutable 0007/9011 additions (20 applied), active customer/chart-account/terms validation, staged/block/version/audit/use checks and linked recon/chart protection. Supplier and customer data remain separate on one dual-role identity; no sales/invoice/credit flow implied. 20 new tests; 276 total, 8 Python, standalone/typecheck/IP lint pass. Original data preserved by dump recovery/fixture cleanup. §26.30 gives future 1000/110000/NET30 assignments and positive/negative limitations; B-015 form next. Normal AR backend push verified; commit recorded in §26.30. | Agent |
+| 0.30 | 2026-10-10 | **B-015 complete: Customer company AR maintenance UI.** Added Customer-only tab/company selector/derived chart-currency/valid AR-terms/block/history panel, separate FIN Customer read/write caps and independent session-derived action. 46 caps/23 terms; caught/fixed i18n namespace collision at typecheck. Three action tests and browser target; 280 tests, 8 Python, standalone/typecheck/IP lint, Customer browser and two Supplier regressions pass. Original data/schema preserved, owner reviews/rollout pending. §26.31 includes TESTCUST01/1000/110000/NET30 dummy/checks; no billing/clearing/credit flow implied and B-016 backend next. Source push initially pending. | Agent |
 
 ---
 
