@@ -33,7 +33,8 @@
     "db:sync-role": "tsx scripts/sync-db-app-role.ts",
     "smoke:browser:payment-terms": "tsx scripts/browser-smoke.ts --target payment-terms",
     "smoke:browser:business-partners": "tsx scripts/browser-smoke.ts --target business-partners",
-    "smoke:browser:supplier-company": "tsx scripts/browser-smoke.ts --target supplier-company"
+    "smoke:browser:supplier-company": "tsx scripts/browser-smoke.ts --target supplier-company",
+    "smoke:browser:supplier-purchasing": "tsx scripts/browser-smoke.ts --target supplier-purchasing"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

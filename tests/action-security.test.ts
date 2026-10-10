@@ -25,6 +25,8 @@ import { savePartnerAction } from '@/app/foundation/partners/actions';
 import { getBusinessPartner } from '@/modules/foundation/business-partners';
 import { saveSupplierCompanyAction } from '@/app/foundation/partners/company-actions';
 import { getSupplierCompany } from '@/modules/foundation/supplier-companies';
+import { saveSupplierPurchasingAction } from '@/app/foundation/partners/purchasing-actions';
+import { getSupplierPurchasing } from '@/modules/foundation/supplier-purchasing';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -74,6 +76,20 @@ describe('server action security', () => {
   it('refuses anonymous supplier company action requests',async()=>{
     request.session=null;await expect(saveSupplierCompanyAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
+  it('derives supplier purchasing tenant/actor from session, ignoring forged fields',async()=>{
+    signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',orderCurrency:'USD',purchasingGroup:'001',incotermsCode:'FCA',incotermsLocation:'Kuwait City',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Purchasing action security test'});
+    expect((await saveSupplierPurchasingAction({ok:true},data)).ok).toBe(true);
+    expect((await getSupplierPurchasing(alpha.client,'SEC-PARTNER','1000'))?.createdBy).toBe('real.operator');
+    expect(await getSupplierPurchasing(beta.client,'SEC-PARTNER','1000')).toBeNull();
+  });
+  it('refuses supplier buying changes with only financial authority',async()=>{
+    signedIn(['FIN.*']);const data=form({partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',expectedVersion:'1',reason:'Denied purchasing test'});
+    expect((await saveSupplierPurchasingAction({ok:true},data)).message).toContain('PROC.SUPPLIER.PURCHASING.MAINTAIN');
+  });
+  it('refuses anonymous supplier purchasing action requests',async()=>{
+    request.session=null;await expect(saveSupplierPurchasingAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
 
 
   it('derives payment-term tenant/actor from session, not forged form fields', async () => {

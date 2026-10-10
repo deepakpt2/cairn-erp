@@ -8,6 +8,7 @@ export const TARGETS = [
   { id: 'payment-terms', client: 'T993', label: 'Payment term maintenance and saved due-date preview' },
   { id: 'business-partners', client: 'T992', label: 'General partner identity, roles, blocking and audit' },
   { id: 'supplier-company', client: 'T991', label: 'Supplier company accounting and financial authority' },
+  { id: 'supplier-purchasing', client: 'T990', label: 'Supplier buying defaults and procurement authority' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

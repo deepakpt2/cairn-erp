@@ -10,6 +10,7 @@ import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
 import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { getSupplierCompany } from '../../src/modules/foundation/supplier-companies';
+import { getSupplierPurchasing } from '../../src/modules/foundation/supplier-purchasing';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
@@ -663,11 +664,84 @@ async function supplierCompany(ctx: BrowserContext) {
   console.log('  ✓ non-finance authority cannot read/maintain supplier accounting or its history');
 }
 
+async function supplierPurchasing(ctx: BrowserContext) {
+  const {page,BASE,CLIENT}=scope(ctx);
+  await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="partnerNumber"]').fill('TESTSUPP01');
+  await page.locator('input[name="name"]').fill('Demo Industrial Supply');
+  await page.locator('[name="city"]').fill('Kuwait City');
+  await page.locator('[name="reason"]').fill('Browser purchasing supplier prerequisite');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Partner saved. Status: Created.',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'Open saved business partner',exact:true}).click();
+  await page.getByRole('link',{name:'Purchasing organisation',exact:true}).click();
+  await page.locator('[name="orderCurrency"]').waitFor();
+  assert.equal(await page.locator('[name="orderCurrency"]').inputValue(),'KWD');
+  await page.locator('[name="reason"]').fill('Browser staged supplier purchasing');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Supplier purchasing view saved. Status: Incomplete.',{exact:true}).waitFor();
+  await page.locator('[name="reason"]').fill('Browser unchanged buying defaults');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('No supplier purchasing data changed.',{exact:true}).waitFor();
+  assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.version,1);
+  await page.locator('[name="orderCurrency"]').selectOption('USD');
+  await page.locator('[name="purchasingGroup"]').selectOption('001');
+  await page.locator('[name="incotermsCode"]').selectOption('FCA');
+  await page.locator('[name="incotermsLocation"]').fill('Kuwait City');
+  await page.locator('[name="paymentTermsCode"]').selectOption('NET30');
+  await page.locator('[name="reason"]').fill('Browser buying defaults completion');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Supplier purchasing view saved. Status: Created.',{exact:true}).waitFor();
+  assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.orderCurrency,'USD');
+  await page.locator('[name="incotermsLocation"]').fill('Test receiving site');
+  await page.locator('[name="paymentTermsCode"]').selectOption('NET15');
+  await page.locator('[name="reason"]').fill('Browser buying defaults maintenance');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Supplier purchasing view saved. Status: Maintained.',{exact:true}).waitFor();
+  await page.locator('[name="isBlocked"]').check();
+  await page.locator('[name="reason"]').fill('Browser buying organisation hold');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Blocked',{exact:true}).waitFor();
+  await page.locator('[name="isBlocked"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser buying organisation cleared');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='5');
+  await page.locator('[name="orderCurrency"]').evaluate(select=>{const option=document.createElement('option');option.value='ZZZ';option.text='Invalid test currency';select.appendChild(option);});
+  await page.locator('[name="orderCurrency"]').selectOption('ZZZ');
+  await page.locator('[name="reason"]').fill('Invalid order currency test');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Order currency is missing or inactive.',{exact:true}).waitFor();
+  assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.version,5);
+  assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.orderCurrency,'USD');
+  assert.equal(await getSupplierCompany(CLIENT,'TESTSUPP01','1000'),null);
+  await page.getByRole('link',{name:'Change history',exact:true}).click();
+  await page.getByText('Browser buying defaults completion',{exact:true}).waitFor();
+  await page.getByText('Browser buying organisation hold',{exact:true}).waitFor();
+  await page.screenshot({path:'.arena/supplier-purchasing-history-review.png',fullPage:true});
+  console.log('  ✓ supplier buying defaults stage/complete/maintain/block and reject invalid currency');
+
+  const id=randomUUID();const password=await hashPassword(PASSWORD);
+  await withTenant(CLIENT,async tx=>{
+    await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${id},${CLIENT},'purchasing.viewer','Purchasing Viewer',${password},false,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="client"]').fill(CLIENT);await page.locator('[name="username"]').fill('purchasing.viewer');await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=SUPPLIER_PURCHASING&history=1`,{waitUntil:'domcontentloaded'});
+  await page.getByText(/This screen requires authority PROC.SUPPLIER.PURCHASING.DISPLAY/).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+  assert.equal((await page.content()).includes('Browser buying defaults completion'),false);
+  console.log('  ✓ unrelated warehouse authority cannot read buying defaults or their history');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'payment-terms': paymentTerms,
   'business-partners': businessPartners,
   'supplier-company': supplierCompany,
+  'supplier-purchasing': supplierPurchasing,
   'material-basic': basicLifecycle,
   'material-purchasing': purchasing,
   'material-mrp': mrp,

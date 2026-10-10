@@ -48,7 +48,7 @@ async function run(target: BrowserTarget) {
           await CHECKS[target.id](ctx);
           await page.screenshot({ path: `.arena/${target.id}-review.png`, fullPage: true });
           await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-          const protectedPath = target.id === 'foundation' ? '/finance/journal/new' : target.id === 'payment-terms' ? '/config/payment-terms' : (target.id === 'business-partners' || target.id === 'supplier-company') ? '/foundation/partners' : '/inventory/materials';
+          const protectedPath = target.id === 'foundation' ? '/finance/journal/new' : target.id === 'payment-terms' ? '/config/payment-terms' : (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing') ? '/foundation/partners' : '/inventory/materials';
           await page.goto(`${BASE}${protectedPath}`, { waitUntil: 'domcontentloaded' });
           await page.waitForURL(/\/signin\?/);
           assert.deepEqual(errors, [], 'No browser runtime errors');
