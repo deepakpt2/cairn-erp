@@ -454,3 +454,5 @@ export const documentType = pgTable(
   },
   (t) => [primaryKey({ columns: [t.client, t.documentType] })],
 );
+
+export * from './payment-terms-schema';

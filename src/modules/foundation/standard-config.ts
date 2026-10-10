@@ -13,6 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../../platform/db/client';
 import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
+import { applyPaymentTermDefaults } from './payment-terms';
 import {
   chartOfAccounts,
   companyCode,
@@ -599,6 +600,7 @@ export async function applyStandardPackage(
 
   const { applyMaterialDefaults } = await import('../inventory/standard-config');
   await applyMaterialDefaults(tx, input.client, input.activatedBy);
+  await applyPaymentTermDefaults(tx, input.client, input.activatedBy);
 
   return {
     version: STANDARD_PACKAGE_VERSION,

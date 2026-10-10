@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.20 — B-005 Material Valuation browser acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.21 — B-006 payment terms backend/defaults)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2001,8 +2001,8 @@ when combining them would jeopardise the time budget.
 | B-003 | Verify the existing material **Purchasing** view and its plant/unit/tolerance rules | ≤10 min | **DONE — staged/completed/maintained purchasing flow, exact tolerances, unchanged save, conversion refusal and read-only authority passed** |
 | B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **DONE — staged/no-op/complete/maintained settings, exact quantities, net-change, validation and read-only authority passed; no planning execution** |
 | B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **DONE — staged/prices/currency/no-op/stock guard, display-only finance and warehouse price denial passed** |
-| B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **NEXT — backend/defaults only; prerequisite for partner company segments** |
-| B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | Pending; backend already available from B-006 |
+| B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **DONE — tenant master, versioned/audited service, due-date calculation and additive defaults tested** |
+| B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **NEXT — UI/action authorization using B-006 backend** |
 | B-008 | Business partner **general data backend** only | ≤10 min | Pending; no company/purchasing/sales segments |
 | B-009 | Business partner **general data UI** only | ≤10 min | Pending |
 | B-010 | Supplier **company-code segment backend** only | ≤10 min | Pending |
@@ -2071,7 +2071,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-032 | Posting period variant assign | `CFG.FIN.PPV.ASSIGN` | OBBP | DRAFT |
 | SCR-033 | Currency and exchange rates | `CFG.FIN.EXRATE.MAINTAIN` | OB08 | DRAFT |
 | SCR-034 | Tax codes | `CFG.FIN.TAXCODE.DEFINE` | FTXP | DRAFT |
-| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | DRAFT |
+| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **IN BUILD — backend/defaults tested; maintenance page pending** |
 | SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | DRAFT |
 | SCR-037 | House banks and accounts | `CFG.FIN.HOUSEBANK.DEFINE` | FI12 | DRAFT |
 | SCR-038 | Document types and number ranges | `CFG.FIN.DOCTYPE.DEFINE` | OBA7 | DRAFT |
@@ -2890,6 +2890,57 @@ repository bundle, counts, valuation-history screenshot and hashes; previous che
 No private credentials/captures are committed. **Publication result:** Normal fast-forward valuation-acceptance push verified, commit
 `d79547512f618cd7be3a9c8319a53c3d01f6acf5`; this confirmation is a documentation-only follow-up. Next: **B-006 Payment terms backend/defaults only**, before partner company data.
 
+
+### 26.22 B-006 — Payment terms backend/defaults `COMPLETE · UI PENDING`
+
+Added tenant-scoped `payment_terms` (64 schema tables total), generated migration
+`0003_payment_terms.sql` and additive forced-RLS/grant migration `9007_payment_terms_policies.sql`.
+Both applied successfully; **12 migrations** total. Existing migration files/checksums are unchanged.
+The new table cascades on tenant deletion, default-denies unscoped application reads and enforces
+baseline, net-day, coherent discount-day/percentage and positive-version constraints in SQL.
+
+**Service/contract:** `payment-terms.ts` creates/maintains/lists/reads definitions with schema validation,
+exact two-decimal percentages, transaction advisory+row locks, expected-version refusal, no-op
+preservation and field-level change evidence. Required change reason; baseline, due/discount settings
+and active state are control-relevant. No public endpoint is added: B-007 must authenticate and derive
+tenant/actor at its action boundary. Inactive terms cannot resolve a new payment schedule.
+
+**Date calculation:** pure `payment-term-dates.ts` explicitly selects DOCUMENT_DATE, POSTING_DATE or
+ENTRY_DATE, validates real ISO dates, adds UTC calendar days across months/leap years, and returns net
+and up to two cash-discount deadlines/percentages with term code/master version/baseline. It never
+silently substitutes another date or uses floating-point discount arithmetic. Future invoice services
+must persist that schedule/version; editing a master must not recalculate posted invoice facts. No
+invoice/subledger/payment execution integration is claimed in this batch.
+
+**Additive international starting defaults:** IMMEDIATE, NET15, NET30, NET60, and D2_10_NET30
+(2.00% within 10 days, net 30). Standard-package activation inserts missing definitions only; existing
+customer definitions are never overwritten. Development 0100 alone received these five definitions
+through a guarded additive call, with configuration audit records. Existing production/customer tenants
+are not silently backfilled. No maintenance page/working registry route or completed UI checklist step
+is claimed yet. Fixed-date/month-end/day-limit variants, installments, payment methods, discount posting
+and calendar-specific processing remain future slices; this is the ordinary day-offset first slice,
+not full payment-term conformance.
+
+**Verification:** **19 new tests** cover defaults, exact/audited writes, no-op/stale/concurrent updates,
+additive preservation, malformed discounts/days, inactive resolution, RLS isolation/unscoped default-deny,
+SQL null/percentage coherence, cascade cleanup, leap/month-end calendars, explicit baselines and
+schedule version. TypeScript and standalone build pass; **187/187 Vitest tests across 14 files** pass;
+IP lint clean (117 files). The table's null checks explicitly reject missing days with a nonzero
+percentage instead of relying on PostgreSQL's nullable CHECK semantics. No browser walkthrough applies
+until the maintenance UI exists.
+
+**Preservation:** original business counts are unchanged: 1 posted journal and 3 material/plant/
+valuation/planning records each; no stock/financial document or original master view edited/reset.
+Expected additive changes are the new empty schema/table/policies, migration history and five audited
+payment configuration rows for the named development fixture. No reset/bootstrap-reset or migration
+rewrite. Current sandbox preview rebuilt and restarted as **`cairn-79c663a0`**, `0.0.0.0:3000`; no owner
+host/database was operated from here. Owner deployment needs `git pull` then
+`docker compose up -d --build --force-recreate migrate app` to apply the additive schema before app.
+
+Checkpoint: `checkpoints/2026-10-10_1314_UTC/` contains current private DB/source/history/count artifacts
+and hashes; prior backups remain. **Publication result:** Pending normal source push/remote verification.
+Next: **B-007 Payment terms maintenance page/action only**, then partner segments.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3030,6 +3081,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.18 | 2026-10-10 | **B-003 complete: material Purchasing UI accepted in a bounded batch.** Extended only its browser target for staged/complete/maintained plant data, exact tolerances/manufacturer part, unchanged-save preservation, unsupported-unit refusal, visible history/footer and warehouse read-only access. No MRP/valuation/PO feature changes or ERP product correction. Recovered discarded sandbox services by restoring the preserved B-002 database dump into a fresh empty DB—not a reset/reseed; original checkpoint counts match before/after. Standalone/typecheck, **163 Vitest tests**, 8 Python regressions, IP lint and real Purchasing-only browser pass. Fresh private DB/source/review checkpoint saved; owner remote data untouched. §26.19 records scope/results/limitations; B-004 planning settings is next. Normal verification-source push verified; commit recorded in §26.19. | Agent |
 | 0.19 | 2026-10-10 | **B-004 complete: Material MRP settings UI accepted within its small-batch scope.** Tested staged/complete/maintained plant settings, exact quantities, unchanged resave, reorder net-change reflag, invalid lot refusal, visible history/footer and warehouse read-only authority. Found FND-004: null saved controller wrongly used a new-record default and auto-completed on resave; browser-safe value helper now distinguishes null/undefined, with five regressions. No existing-record rewrite or MRP engine/valuation/purchasing expansion. Typecheck/standalone build, **168 Vitest tests**, 8 Python tests, MRP acceptance and Purchasing regression pass; private DB counts unchanged. Fresh checkpoint saved; shared UI correction needs owner image rebuild. §26.20 records results/limitations and B-005 valuation is next. Normal correction/acceptance push verified; commit recorded in §26.20. | Agent |
 | 0.20 | 2026-10-10 | **B-005 complete: Material Valuation UI accepted.** Expanded only its browser target for incomplete/complete/maintained/no-op settings, exact moving/standard prices and price unit, company-derived currency, forged/read-only stock-value refusal, positive unit validation, existing-stock change guard, visible financial history and separate finance-display/warehouse denial. Guard stock and auth identities are isolated SQL fixtures, not new postings or owner data. Fixed only a test column-name mismatch, not schema/product code. 168 Vitest tests, 8 Python tests, typecheck/IP lint and real valuation browser pass; data counts unchanged and private checkpoint saved. All four implemented views individually verified, not full material/operational conformance. §26.21 records limitations; B-006 payment-term backend is next. Normal valuation-acceptance push verified; commit recorded in §26.21. | Agent |
+| 0.21 | 2026-10-10 | **B-006 complete: payment-term backend/defaults, UI pending.** Added one tenant-cascading forced-RLS master and additive 0003/9007 migrations (12 applied, existing immutable). Versioned/locked/audited service validates exact discount tiers, no-op/stale concurrency and active status; pure explicit-baseline UTC due/discount-date result carries master version for future document snapshots. Five additive standard defaults wired into fresh package activation and guarded development 0100 only; existing definitions/business records untouched. 19 new tests; 187 total, typecheck/standalone build/IP lint pass. Fixed-date/month-end/instalments and invoice/payment execution remain pending; no fake working UI route. §26.22 records contracts/preservation and B-007 page is next. Source push initially pending. | Agent |
 
 ---
 
