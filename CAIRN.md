@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.15 — read-only split-connection Docker diagnosis)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.16 — confirmed shared-network DB DNS collision fix)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -172,6 +172,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-053 | **Ship real deployment slices, not nonexistent services.** The first Docker batch includes app, PostgreSQL 17 and a one-shot migration/reference job. Next standalone output runs as non-root; app uses restricted `cairn_app`, while only migration tools receive the owner URL. Existing Traefik `proxy`/`web` integration is retained without a Traefik service or certresolver. | The owner found Docker files missing from the published checkpoint. The full §22 target stack remains required, but worker, PgBouncer, Dragonfly, scheduled/WAL backups and restore verification get separate tested batches rather than fake commands or an oversized phase. Configuration/build checks are not represented as a successful Docker-host deployment. | 2026-10-10 |
 | D-054 | **Synchronize the managed runtime role before Docker migrations.** The one-shot operations job reads the actual `DATABASE_URL` password, uses a separate owner connection to create/alter only `cairn_app`, enforces restricted role flags, then verifies runtime authentication before applying schema migrations. Existing-volume recovery is an explicit local-admin credential repair, never deletion/reset. | The owner reported PostgreSQL SQLSTATE 28P01 for `cairn_app`. Persistent volumes retain passwords, and legacy applied migration 9000 creates a missing role with a development fallback. That migration remains immutable; the deployment job now establishes the configured role first. Owner passwords changed on an existing volume require the documented local-socket repair. | 2026-10-10 |
 | D-055 | **Default Compose deployment uses project `.env`, without repeated env-file flags.** `.env.example` is now the deployment template; the old local-Node template moves to `.env.development.example`, and `.env.docker.example` remains a compatibility template only. Keep explicit whitelisted container variables rather than passing the whole file into the app. | Owner clarification: the host was changed to `.env` and the owner does not want `--env-file .env.docker` on every command. Compose already loads project `.env`; the problem is potentially stale containers/stored role passwords, not the supported filename. Existing actual secret files are never overwritten or committed. | 2026-10-10 |
+| D-056 | **Database connection URLs use a Cairn-specific private-network alias.** PostgreSQL stays on `cairn_internal` with alias `cairn-postgres`; app and migration runtime/owner URLs all use that alias, never generic `db` or a hardcoded IP. App remains on the existing external proxy for Traefik. | The owner diagnostic confirmed equal credentials but app-side `db` DNS resolved 172.18.0.9 while the intended database was 172.31.0.2. This is a shared-network wrong-target collision, not a stored-password mismatch. Correct routing and recreate connection pools; no password reset, volume deletion or ERP-data edit is required. | 2026-10-10 |
 
 ---
 
@@ -2611,6 +2612,52 @@ Normal fast-forward source push verified, diagnostic commit `0c09e30ec0307ceabcb
 this confirmation is a documentation-only follow-up. Host diagnostic remains pending. Source checkpoint:
 `checkpoints/2026-10-10_0326_UTC/`. The ERP feature queue remains B-003 Purchasing.
 
+
+### 26.17 Confirmed wrong database DNS target `FIX PREPARED / HOST VERIFICATION PENDING`
+
+**Owner diagnostic evidence:** actual app/migrate URLs and decoded passwords match; app password
+matches the DB container setting; migration exits 0. Intended Cairn DB address is **172.31.0.2**, while
+app-side `db` resolves **172.18.0.9**, and `dns_resolves_only_expected_database` is **false**. The app
+joins both `cairn_cairn_internal` and the shared `proxy` network; migration joins the private network
+only. This confirms the generic hostname reaches the wrong target from the app. The diagnostic's
+direct-login probe is unavailable because the driver is bundled, but the DNS mismatch itself is clear.
+The earlier stored-password hypothesis is superseded for this reported host failure; do not reset
+passwords again or widen permissions.
+
+**Correction:** `docker-compose.yml` adds private DB alias **`cairn-postgres`** and updates all three
+application/migration connection URL hosts to it. Database service name `db`, persistent `postgres_data`
+volume, role names, secrets, Traefik `proxy`/`web`, upstream TLS and app ports remain unchanged. Database
+still has no proxy attachment or public port. No fixed IP is used—container IPs can change normally.
+This changes only routing/container configuration, not images, schema, credentials or business data.
+
+**Owner host:**
+
+```sh
+git pull
+docker compose config --quiet
+# Apply the DB's private alias, retaining the data volume:
+docker compose up -d db
+# Load the new host into both containers and clear previous DNS/connection state:
+docker compose up -d --force-recreate migrate app
+python3 scripts/diagnose-docker-db.py
+# Refresh the site, then inspect fresh application/migration output:
+docker compose logs --since=5m --tail=80 migrate app
+```
+
+No image rebuild is required for this Compose-only change. Do not run the password-repair script,
+reset/bootstrap-reset, delete data volumes or hardcode either diagnostic IP. Expected diagnostic:
+`application_host` is `cairn-postgres`; its `resolved_addresses` correspond to the reported current
+`expected_db_addresses`; `dns_resolves_only_expected_database` is **true**. Verify page access and new
+logs after updating; successful host remediation is not yet claimed.
+
+**Verified here:** official Compose CLI config/quiet and resolved JSON checks pass: private alias exists,
+all three URL hosts match it, app/migration runtime URLs agree, DB remains private, persistent volume
+unchanged and Traefik integration retained. **8/8 pure Python tests** (5 redaction and 3 routing
+regressions) pass, along with patch whitespace checks. No Docker engine exists in this sandbox; no
+actual owner-host database/container was modified here. No ERP code/feature change or credential
+rotation. **Publication result:** Pending normal source push and remote verification. Source checkpoint:
+`checkpoints/2026-10-10_0342_UTC/`. The ERP queue remains B-003 Purchasing.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2746,6 +2793,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Normal source push verified; fix commit recorded in §26.14. Owner-host repair remains unverified. | Agent |
 | 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Normal source push verified; default-env commit recorded in §26.15. Host repair remains unverified. | Agent |
 | 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; normal source push verified and diagnostic commit recorded in §26.16. | Agent |
+| 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Source publication initially pending; host remediation not yet verified. | Agent |
 
 ---
 

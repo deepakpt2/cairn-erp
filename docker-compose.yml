@@ -15,8 +15,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/10-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    # App also joins the shared proxy: avoid resolving another project's generic "db".
     networks:
-      - cairn_internal
+      cairn_internal:
+        aliases:
+          - cairn-postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
@@ -32,8 +35,8 @@ services:
     restart: "no"
     environment:
       CAIRN_ENV: production
-      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@db:5432/cairn
-      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@db:5432/cairn
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
+      MIGRATION_DATABASE_URL: postgresql://cairn:${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD}@cairn-postgres:5432/cairn
     depends_on:
       db:
         condition: service_healthy
@@ -50,7 +53,7 @@ services:
       CAIRN_ENV: production
       APP_BASE_URL: https://${CAIRN_HOST:-cairn.deepakpt.com}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
-      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@db:5432/cairn
+      DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
       HOSTNAME: 0.0.0.0
       PORT: "3000"
     depends_on:
