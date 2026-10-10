@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.25 — B-010 supplier company-code backend)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.26 — B-011 supplier company-code maintenance UI)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2007,8 +2007,8 @@ when combining them would jeopardise the time budget.
 | B-008 | Business partner **general data backend** only | ≤10 min | **DONE — staged/audited general identity and stable supplier/customer role rows; no organisation segments** |
 | B-009 | Business partner **general data UI** only | ≤10 min | **DONE — protected general create/change/search/history, dual-role/block lifecycle and read-only UI passed** |
 | B-010 | Supplier **company-code segment backend** only | ≤10 min | **DONE — company-scoped reconciliation/terms/staging/blocking/version controls tested** |
-| B-011 | Supplier **company-code segment UI** only | ≤10 min | **NEXT — protected accounting-company form/action** |
-| B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | Pending |
+| B-011 | Supplier **company-code segment UI** only | ≤10 min | **DONE — scoped financial form/history, staged/no-op/maintained/block lifecycle and authority checks passed** |
+| B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | **NEXT — purchasing master/backend only** |
 | B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | Pending |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
@@ -3178,6 +3178,69 @@ Private checkpoint: `checkpoints/2026-10-10_1458_UTC/` with DB/source/history/co
 result:** Normal supplier-company backend push verified, commit `29fd94e1c9050f7f90208121a7273641d38839c3`;
 this confirmation is a documentation-only follow-up. Next B-011 supplier company UI/action only.
 
+
+### 26.27 B-011 — Supplier company-code maintenance `COMPLETE`
+
+Partner page now links the active Supplier's **Supplier company code** tab. Working command
+**FIN.SUPPLIER.COMPANY.MAINTAIN** opens partner selection; direct route `/foundation/partners` with
+`partner`, `view=SUPPLIER_COMPANY`, `company` identifies the scoped view. Company selector, derived
+chart/currency spans, unblocked supplier reconciliation dropdown, active payment terms, company-only
+block and required reason; status/version/no-op preservation and company-specific control history.
+Other supplier purchasing/customer/sales/bank tabs remain disabled pending work.
+
+**Authority:** separate FIN.SUPPLIER.COMPANY.MAINTAIN and FIN.SUPPLIER.COMPANY.DISPLAY (or audit read)
+protect financial view/history; general FND authority alone does not grant access. Server action
+independently checks session/maintain, derives tenant/actor and ignores submitted chart/currency.
+Readonly finance renders no Save; non-finance receives missing-display authority, not accounting
+history. Choices are tenant-scoped and based on selected company chart. Global catalogue now **42
+capabilities/21 terms/19 aliases**, 51 configuration activities. No schema migration in this UI batch.
+
+**Verified:** TypeScript/standalone build/IP lint (137 files), **233/233 Vitest tests across 16 files**,
+8 Python deployment regressions and actual isolated T991 browser target passed. Browser covers
+fresh UI general Supplier prerequisite, incomplete/no-op company view, 200000/NET30 completion,
+NET15 maintenance, company block/unblock, injected 100000 cash reconciliation refusal without mutation,
+company history and non-finance form/history denial; anonymous access redirects. Three new real-action
+security regressions cover forged tenant/actor/chart, FND-only denial and anonymous rejection. Browser
+runtime tooling discarded after prior snapshot was reinstalled; no arbitrary waits/timeout inflation.
+No product correction was required. Screenshot inspected; owner sign-off and production-host rollout
+still pending. Two-company independence/linked accounting safeguards remain tested by B-010 backend.
+
+**Preservation:** original 1 journal/3 materials/5 payment terms unchanged; partner and supplier-company
+rows remain zero outside cleaned test fixtures; 16 applied migrations unchanged. No data reset,
+financial posting or owner-host operation. Only scoped UI/service choices, registry/capability seed and
+tests changed. Sandbox process **cairn-b233ba96**, 0.0.0.0:3000. Owner rollout: `git pull` then
+`docker compose up -d --build --force-recreate migrate app`, keep private .env.
+
+**Owner checks/dummy data (R-23):** in a development tenant, general TESTSUPP01 must have Name/country/
+city complete and Supplier role active. Open FND.PARTNER.DISPLAY → partner → Supplier company code;
+or FIN.SUPPLIER.COMPANY.MAINTAIN → select partner. Choose company 1000 and Select company.
+
+| Field | Dummy assignment |
+|---|---|
+| Company code | 1000 |
+| Chart / currency | Read-only, derived from chosen company; CAIRN / its configured local currency |
+| Reconciliation account | 200000 — Trade payables |
+| Payment terms | NET30 |
+| Blocked for company | unchecked |
+| Reason | Owner supplier company test |
+
+First save blank account/terms with a reason: INCOMPLETE. Fill the assignments above/save: CREATED.
+Save unchanged with reason: no change/version/audit noise. Change terms NET15/save: MAINTAINED and
+history NET30→NET15, actor/reason. Toggle company blocking with reasons; general partner/global flag
+must stay unchanged. Selecting another existing company must show its independent view—not copy
+1000 silently. Chart/currency must have no editing control. No supplier/general role: tab unavailable.
+
+Negative checks: Cash 100000/customer 110000 must not appear in reconciliation choices; backend also
+refuses forged values. Inactive terms must not appear/are refused. Empty reason blocks save. Two tabs:
+save A, then stale B must request reload. FND-only/warehouse user cannot view/maintain financial fields
+or company history; FIN display-only can review without Save. Sign-out route redirects. Reconciliation
+change after linked accounting is conservatively refused. No invoice, banking or PO functionality is
+implied by this company master; payment methods/dunning/tolerances/withholding remain later work.
+
+Private checkpoint `checkpoints/2026-10-10_1536_UTC/` includes DB/source/history/review artifacts/hashes.
+**Publication result:** Pending normal source push/remote verification. Next B-012 supplier purchasing
+backend only, not a purchasing form/order workflow in the same batch.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3323,6 +3386,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.23 | 2026-10-10 | **B-008 complete: general business partner backend only.** Added two tenant-cascading forced-RLS tables and additive 0004/9008 migrations (14 applied). Validated/locked/versioned/audited general identity supports staged address, immutable category, supplier/customer dual roles, stable role deactivation, block/use gates and no-op preservation. No bank/company/purchasing/sales/operational capability fabricated. 16 new tests; 207 total, 8 Python regressions, typecheck/standalone/IP lint pass; original business/config rows unchanged, no partner fixtures retained or owner-host edits. §26.24 gives backend checks and future TESTSUPP01 dummy form data; UI is B-009 next. Normal general-backend push verified; commit recorded in §26.24. | Agent |
 | 0.24 | 2026-10-10 | **B-009 complete: protected general partner maintenance UI.** Registered own create/display/maintain commands and capability (40 caps/20 terms/19 aliases), launchpad and general-only form/list/search/status/history with explicit pending segments. Server session/authority/context checks, safe business-only props, immutable category/number, staged saves, roles and blocking supported. Three action regressions plus browser target; 211 tests, 8 Python checks, typecheck/standalone/IP lint and real general lifecycle/read-only browser pass; no owner data or schema change. §26.25 provides TESTSUPP01/TESTCUST01 dummy records, expected/negative/stale checks; B-010 company backend next. Normal general UI push verified; commit recorded in §26.25. | Agent |
 | 0.25 | 2026-10-10 | **B-010 complete: supplier company backend, UI pending.** Added company-scoped forced-RLS/cascading master and immutable 0005/9009 additions (16 migrations). Derives chart and validates active supplier/company, vendor reconciliation and payment terms; stages, blocks, versions, audits and preserves no-ops. General/use gates and linked-accounting recon protection; no invoice/bank/purchasing flow implied. 18 new tests; 229 total, 8 Python, standalone/typecheck/IP lint pass, original data preserved via dump restoration and fixture cleanup. §26.26 documents dummy 1000/200000/NET30 assignments, width/reclassification caveats and B-011 next. Normal backend push verified; commit recorded in §26.26. | Agent |
+| 0.26 | 2026-10-10 | **B-011 complete: supplier company financial UI.** Active Supplier tab/company selector, derived chart/currency, valid reconciliation/terms, stages/version/no-op/block and scoped history; separate financial read/write authority at page/action. Registered command/caps (42/21/19), added three action tests and isolated browser target. 233 tests, 8 Python, standalone/typecheck/IP lint and live scoped form/refusal/history/non-finance browser pass; original data/schema preserved. §26.27 has dummy 1000/200000/NET30 and positive/negative/stale checks, screenshot/private checkpoint. No invoice/bank/purchasing expansion; B-012 backend next. Source push initially pending. | Agent |
 
 ---
 

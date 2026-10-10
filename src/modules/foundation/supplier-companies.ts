@@ -62,3 +62,11 @@ export async function requireSupplierCompany(tx:Tx,client:string,partner:string,
   if(site.chartOfAccounts!==segment.chartOfAccounts)throw new SupplierCompanyError('Company chart assignment changed; review supplier reconciliation settings.');
   return segment;
 }
+
+export async function supplierCompanyChoices(client:string,company:string){return withTenant(client,async tx=>{
+  const companies=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency}).from(companyCode).where(eq(companyCode.isActive,true)).orderBy(asc(companyCode.companyCode));
+  const selected=companies.find(row=>row.code===company);
+  const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'VENDOR'),eq(glAccount.isBlocked,false))).orderBy(asc(glAccount.accountNumber)):[];
+  const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(eq(paymentTerms.isActive,true)).orderBy(asc(paymentTerms.termsCode));
+  return {companies,selected,accounts,terms};
+});}

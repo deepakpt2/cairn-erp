@@ -23,6 +23,8 @@ import { savePaymentTermAction } from '@/app/config/payment-terms/actions';
 import { getPaymentTerms } from '@/modules/foundation/payment-terms';
 import { savePartnerAction } from '@/app/foundation/partners/actions';
 import { getBusinessPartner } from '@/modules/foundation/business-partners';
+import { saveSupplierCompanyAction } from '@/app/foundation/partners/company-actions';
+import { getSupplierCompany } from '@/modules/foundation/supplier-companies';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -56,6 +58,23 @@ describe('server action security', () => {
   it('refuses anonymous general-partner action requests',async()=>{
     request.session=null;await expect(savePartnerAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
+  it('derives supplier company tenant/actor and ignores submitted chart',async()=>{
+    signedIn();
+    const data=form({client:beta.client,changedBy:'FORGED',chartOfAccounts:'WRONG',partnerNumber:'SEC-PARTNER',companyCode:'1000',reconciliationAccount:'200000',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Company security test'});
+    // General partner is created by the earlier real general action security test.
+    expect((await saveSupplierCompanyAction({ok:true},data)).ok).toBe(true);
+    expect((await getSupplierCompany(alpha.client,'SEC-PARTNER','1000'))?.createdBy).toBe('real.operator');
+    expect((await getSupplierCompany(alpha.client,'SEC-PARTNER','1000'))?.chartOfAccounts).toBe('CAIRN');
+    expect(await getSupplierCompany(beta.client,'SEC-PARTNER','1000')).toBeNull();
+  });
+  it('refuses supplier accounting writes with only general master authority',async()=>{
+    signedIn(['FND.*']);const data=form({partnerNumber:'SEC-PARTNER',companyCode:'1000',expectedVersion:'1',reconciliationAccount:'200000',paymentTermsCode:'NET15',reason:'Denied finance test'});
+    expect((await saveSupplierCompanyAction({ok:true},data)).message).toContain('FIN.SUPPLIER.COMPANY.MAINTAIN');
+  });
+  it('refuses anonymous supplier company action requests',async()=>{
+    request.session=null;await expect(saveSupplierCompanyAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
 
   it('derives payment-term tenant/actor from session, not forged form fields', async () => {
     signedIn();
