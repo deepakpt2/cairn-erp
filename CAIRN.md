@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.14 — default .env Docker Compose deployment)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.15 — read-only split-connection Docker diagnosis)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2568,6 +2568,48 @@ Prior credential logic/build/tests remain as §26.14; this is a configuration/do
 authentication/repair remains pending owner execution. Source checkpoint:
 `checkpoints/2026-10-10_0311_UTC/`. No new ERP feature batch has started.
 
+
+### 26.16 Migration login succeeds but app login fails `DIAGNOSIS / HOST EVIDENCE PENDING`
+
+**New owner evidence:** fresh logs show `db:sync-role` successfully authenticating with `cairn_app`,
+then 10 migrations skipped and global/reference seeds completed; the app still reports 28P01. This
+establishes successful runtime-role authentication **from the migration container to its target**.
+It does not establish that the app has the same actual container configuration, resolves the same
+server, or retried after a previously cached failed check. Further password resets are not justified
+without distinguishing these paths. The next step is read-only comparison, not schema/data repair.
+
+**Diagnostic delivered:** `scripts/diagnose-docker-db.py` uses host Python 3 and Docker CLI. It reads
+actual app/migrate/db container inspection into memory only and outputs safe booleans/metadata:
+exact URL/password equality, app password vs current DB-container setting, app user/host/database,
+app start time, migration exit status, expected DB IPs and app-side DNS resolution. If the traced app
+image has a separately requireable PostgreSQL driver, it additionally probes restricted login with
+SELECT-only server identity; otherwise it reports that the direct probe is unavailable. Never prints
+raw environment/inspection, passwords, hashes, connection strings, SQL error detail or private tokens.
+No image/server/database/credential configuration is changed by this diagnostic.
+
+```sh
+git pull
+python3 scripts/diagnose-docker-db.py
+```
+
+Paste only this redacted output. Run in the repo directory with the same plain Compose/default `.env`
+setup. A short `docker compose restart app` may clear a prior process-cached failure, but is not a fix
+for different connection settings or a wrong target; do not rotate passwords again or delete volumes.
+
+**Interpretation:** a URL/password mismatch points to stale or overridden container settings. DNS
+addresses outside the expected Cairn database indicate wrong-target resolution. The generic hostname
+`db` is a possible cross-network collision because app joins the shared `proxy` network while migrate
+joins only the private network; this is a hypothesis, not a confirmed host finding. Equal settings
+and correct DNS with successful direct login would instead focus investigation on app process/cache
+or image behavior. Do not claim a root cause before host results are available.
+
+**Verified here:** five pure Python redaction/comparison tests pass, and Python syntax compilation and
+patch whitespace checks pass. The diagnostic was not run on the owner's Docker host; this sandbox
+has no Docker engine. No ERP feature, database, credential rotation or deployment configuration change
+is performed in this batch. Actual auth resolution remains pending host output. **Publication result:**
+Pending normal source push/remote verification. Source checkpoint:
+`checkpoints/2026-10-10_0326_UTC/`. The ERP feature queue remains B-003 Purchasing.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2702,6 +2744,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.12 | 2026-10-10 | **Core Docker deployment files added after the owner found them missing.** D-053 ships app/db/migrate only; worker, pooling/cache and scheduled backups remain separate pending slices. Added multi-stage non-root standalone Dockerfile, build-secret exclusions, Compose with existing Traefik proxy/web/no-certresolver, safe secret template and restricted database-role initialization without resets. Standalone/tracing-root settings correct artifact location. Compose configuration, YAML/security/shell checks, secret-free standalone build, sign-in HTTP smoke, 23 focused tests and IP lint pass; no Docker engine exists here, so full image/container/database/Traefik deployment is explicitly unverified. No current database or private-credential upload. §22 implementation status and §26.13 contain scope, setup, checks and limitations. Normal source push and remote ref verified; deployment commit recorded in §26.13. | Agent |
 | 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Normal source push verified; fix commit recorded in §26.14. Owner-host repair remains unverified. | Agent |
 | 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Normal source push verified; default-env commit recorded in §26.15. Host repair remains unverified. | Agent |
+| 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; source push initially pending. | Agent |
 
 ---
 
