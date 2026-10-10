@@ -462,3 +462,5 @@ export * from './business-partner-schema';
 export * from './supplier-company-schema';
 
 export * from './supplier-purchasing-schema';
+
+export * from './customer-company-schema';

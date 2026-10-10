@@ -50,6 +50,13 @@
       "when": 1791647838699,
       "tag": "0006_supplier_purchasing",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791650783058,
+      "tag": "0007_customer_company",
+      "breakpoints": true
     }
   ]
 }
