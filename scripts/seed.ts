@@ -91,6 +91,7 @@ const ACTIVITIES: Activity[] = [
 ];
 
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
+  { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
   { code: 'SYSTEM.WILDCARD', module: 'PLT', action: 'EXECUTE', posting: true, description: 'All capabilities — administrators only' },
   { code: 'FIN.CLOSE.PERIOD', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Open or close posting periods' },
   { code: 'CFG.PLT.NUMBERRANGE.DEFINE', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain number range intervals' },

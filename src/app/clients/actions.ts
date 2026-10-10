@@ -10,6 +10,8 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createTenant, TenancyError } from '@/platform/tenancy';
+import { getSession } from '@/platform/auth/current';
+import { assertProvisioningToken, authorizeProvisioning, ProvisioningError } from '@/platform/tenancy/provisioning';
 
 export interface OnboardState {
   ok: boolean;
@@ -26,6 +28,12 @@ export async function createTenantAction(
   const inputUsername = read('username');
 
   try {
+    const environment = process.env.CAIRN_ENV;
+    const configuredToken = process.env.CAIRN_PROVISIONING_TOKEN;
+    const suppliedToken = read('provisioningToken');
+    // Reject arbitrary POSTs before password hashing or any tenant write.
+    assertProvisioningToken(environment, configuredToken, suppliedToken);
+    const session = environment === 'development' ? null : await getSession();
     const result = await createTenant({
       clientKey: read('clientKey'),
       name: read('name'),
@@ -45,8 +53,8 @@ export async function createTenantAction(
         email: read('email') || undefined,
         password: String(formData.get('password') ?? ''),
       },
-      createdBy: 'ONBOARDING',
-    });
+      createdBy: session?.user.username ?? (environment === 'development' ? 'ONBOARDING' : 'OWNER_BOOTSTRAP'),
+    }, (tx) => authorizeProvisioning(tx, { environment, configuredToken, suppliedToken, session }));
 
     revalidatePath('/clients');
 
@@ -62,7 +70,7 @@ export async function createTenantAction(
     });
     redirect(`/signin?${next.toString()}`);
   } catch (error) {
-    if (error instanceof TenancyError) {
+    if (error instanceof TenancyError || error instanceof ProvisioningError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     // Re-throw redirects and anything we do not recognise.

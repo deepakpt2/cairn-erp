@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { listTenants } from '@/platform/tenancy';
+import { requireSession } from '@/platform/auth/current';
 
 export const dynamic = 'force-dynamic';
 
 /** Tenant administration — CAIRN.md §6.3. The entry point to every other screen. */
 export default async function TenantsPage() {
-  const tenants = await listTenants();
+  const session = process.env.CAIRN_ENV === 'development' ? null : await requireSession('/clients');
+  const allTenants = await listTenants();
+  const tenants = session ? allTenants.filter((tenant) => tenant.client === session.user.client) : allTenants;
 
   return (
     <div className="mx-auto max-w-5xl p-6">

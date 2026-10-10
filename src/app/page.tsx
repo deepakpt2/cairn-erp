@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { listTenants } from '@/platform/tenancy';
+import { requireSession } from '@/platform/auth/current';
 
 /**
  * Launchpad — CAIRN.md §19.3.
@@ -9,7 +10,9 @@ import { listTenants } from '@/platform/tenancy';
  * in, and the next step. Honest about scope, which matters more than looking full.
  */
 export default async function LaunchpadPage() {
-  const tenants = await listTenants();
+  const session = process.env.CAIRN_ENV === 'development' ? null : await requireSession('/');
+  const allTenants = await listTenants();
+  const tenants = session ? allTenants.filter((tenant) => tenant.client === session.user.client) : allTenants;
 
   const tiles = [
     {

@@ -53,6 +53,7 @@ services:
       CAIRN_ENV: production
       APP_BASE_URL: https://${CAIRN_HOST:-cairn.deepakpt.com}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      CAIRN_PROVISIONING_TOKEN: ${CAIRN_PROVISIONING_TOKEN:-}
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
       HOSTNAME: 0.0.0.0
       PORT: "3000"

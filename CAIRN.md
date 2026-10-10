@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.16 — confirmed shared-network DB DNS collision fix)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.17 — deployment-owner tenant provisioning security)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -160,7 +160,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-041 | **Every tenant-scoped table cascades from `client`.** A table with a `client` column carries a real foreign key with `ON DELETE CASCADE` (migration `9002`). | Deleting a tenant is a lifecycle operation, not a cosmetic one. Without the constraint, deleting the tenant row left every account, document, number range and configuration row behind as an orphan — invisible in the UI, still in the database, and still held by the row-level security policy for a tenant that no longer exists. Found because test cleanup appeared to work while leaking exhausted number ranges into the next run. The rule is stated once and enforced in the schema so a table added later cannot miss it. | 2026-10-08 |
 | D-042 | **Number ranges resolve year-specific first, then year-independent; the displayed year comes from the document.** | A tenant should be configured once and post in any year; asking an administrator to re-maintain ranges every January is exactly the annual chore the reference model is criticised for. A range defined for a fiscal year wins for that year, and a range defined with sentinel year `0` (D-036) serves every year. The display is `PREFIX-YYYY-NNNNNN` using the **document's** fiscal year, because a year-independent range has no year of its own to print — and a number without its year is ambiguous to a reader, which D-030 exists to prevent. | 2026-10-08 |
 | D-043 | **Standard package delivery excludes FI document number ranges.** `INTL-STD-1` defines accounts, company code, plants and roles; number ranges remain a configuration activity (`CFG.PLT.NUMBERRANGE.DEFINE`) on the workbench. | This matches the reference model rather than diverging from it: FI document number ranges are maintained by the customer per company code, not shipped. A tenant created through the UI therefore cannot post until the checklist step is done, which is the correct instruction to give the user rather than a defect to paper over. MM and SD ranges differ and are revisited when those modules land (M1c). | 2026-10-08 |
-| D-044 | **Authentication and sessions are server-side, and the tenant comes from the session rather than the URL.** Sign-in takes three fields — tenant, user, password — and the session cookie carries `client.token`, opaque and unsigned. Tokens are 256 bits of randomness, stored only as a SHA-256 hash, in `user_session` (D-005); sessions are 12 hours with sliding renewal in the final quarter, and revoking one takes effect immediately. | Two choices here deserve their reasons on the record. (1) **The tenant key is an input rather than a lookup.** A tenant is the partition that row-level security enforces, so finding a user requires knowing the tenant before any row is read — either a cross-tenant lookup function outside RLS, or asking. We ask, and the cookie is deliberately unsigned: tampering with the client half only re-points the lookup at a tenant where that token does not exist, since possession of the token is the whole credential. (2) **Screens take the tenant from the session, never from a query string.** Every page previously accepted `?client=`, which was a fine development convenience and is not acceptable once sessions exist — it would let a signed-in user of one tenant read another's ledgers. The tenant switcher on the workbench is removed for the same reason: switching tenant means signing in as one of its users. Onboarding stays reachable without a session, because it creates the tenant's first administrator and there is no session to have yet. | 2026-10-08 |
+| D-044 | **Authentication and sessions are server-side, and the tenant comes from the session rather than the URL.** Sign-in takes three fields — tenant, user, password — and the session cookie carries `client.token`, opaque and unsigned. Tokens are 256 bits of randomness, stored only as a SHA-256 hash, in `user_session` (D-005); sessions are 12 hours with sliding renewal in the final quarter, and revoking one takes effect immediately. | Two choices here deserve their reasons on the record. (1) **The tenant key is an input rather than a lookup.** A tenant is the partition that row-level security enforces, so finding a user requires knowing the tenant before any row is read — either a cross-tenant lookup function outside RLS, or asking. We ask, and the cookie is deliberately unsigned: tampering with the client half only re-points the lookup at a tenant where that token does not exist, since possession of the token is the whole credential. (2) **Screens take the tenant from the session, never from a query string.** Every page previously accepted `?client=`, which was a fine development convenience and is not acceptable once sessions exist — it would let a signed-in user of one tenant read another's ledgers. The tenant switcher on the workbench is removed for the same reason: switching tenant means signing in as one of its users. ~~Onboarding stays reachable without a session, because it creates the tenant's first administrator and there is no session to have yet.~~ **Superseded by D-057: production first setup requires the private owner token; subsequent setup also requires an authorised session.** | 2026-10-08 |
 | D-045 | **Every write action independently authenticates and authorises.** Tenant and audit actor come only from the verified session; submitted `client`, `changedBy` and `postedBy` fields are ignored. A protected page is not an authorisation boundary. | The two pre-auth write wrappers still trusted a form tenant and recorded `CONFIGURATOR`. Posting and period maintenance now use `requireSession` plus the exact named capability at the action boundary; errors name the missing authority. The posting form is now behind a server page and receives actual company/currency/document-type choices instead of hardcoded development defaults. | 2026-10-09 |
 | D-046 | **Accounting numbering is company-scoped and type-assigned; document identity is separate from presentation.** `number_range` key includes `company_code` (`*` for tenant-wide operational objects). Document types select their configured range; international accounting types share `GENERAL`. New journal keys are `company/year/value`, with `display_number` retaining readable or classic presentation. | Independent identical ranges for each accounting type could issue the same number; different company codes must legitimately be able to issue the same display number. The engine now uses the configured assignment rather than the type code, and stores the full identity in journal lines, flow/index/status records and allocation evidence. Existing document keys are never rewritten. A defined specific year that is blocked, exhausted or external is authoritative and cannot be bypassed with a year-independent fallback. Maintenance is locked, audited, prevents overlapping intervals, reserves blocked numbers, and never resets counters or deletes intervals. | 2026-10-09 |
 | D-047 | **Migration role has BYPASSRLS; application role must not.** The owner/admin role needs elevation for forced-RLS data migrations and the narrow security-definer functions. Runtime defaults to `cairn_app`; both boundaries check actual role privileges and fail closed when misconfigured. | Recreating the sandbox with a non-bypass owner made administrative reads silently empty. Giving the app that privilege would break isolation, so only the separate migration role receives it. A second finding: the code's old no-environment fallback used the owner despite D-040. The runtime fallback is now restricted, and tenant key interpolation rejects invalid keys instead of sanitising them into another scope. | 2026-10-09 |
@@ -173,6 +173,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-054 | **Synchronize the managed runtime role before Docker migrations.** The one-shot operations job reads the actual `DATABASE_URL` password, uses a separate owner connection to create/alter only `cairn_app`, enforces restricted role flags, then verifies runtime authentication before applying schema migrations. Existing-volume recovery is an explicit local-admin credential repair, never deletion/reset. | The owner reported PostgreSQL SQLSTATE 28P01 for `cairn_app`. Persistent volumes retain passwords, and legacy applied migration 9000 creates a missing role with a development fallback. That migration remains immutable; the deployment job now establishes the configured role first. Owner passwords changed on an existing volume require the documented local-socket repair. | 2026-10-10 |
 | D-055 | **Default Compose deployment uses project `.env`, without repeated env-file flags.** `.env.example` is now the deployment template; the old local-Node template moves to `.env.development.example`, and `.env.docker.example` remains a compatibility template only. Keep explicit whitelisted container variables rather than passing the whole file into the app. | Owner clarification: the host was changed to `.env` and the owner does not want `--env-file .env.docker` on every command. Compose already loads project `.env`; the problem is potentially stale containers/stored role passwords, not the supported filename. Existing actual secret files are never overwritten or committed. | 2026-10-10 |
 | D-056 | **Database connection URLs use a Cairn-specific private-network alias.** PostgreSQL stays on `cairn_internal` with alias `cairn-postgres`; app and migration runtime/owner URLs all use that alias, never generic `db` or a hardcoded IP. App remains on the existing external proxy for Traefik. | The owner diagnostic confirmed equal credentials but app-side `db` DNS resolved 172.18.0.9 while the intended database was 172.31.0.2. This is a shared-network wrong-target collision, not a stored-password mismatch. Correct routing and recreate connection pools; no password reset, volume deletion or ERP-data edit is required. | 2026-10-10 |
+| D-057 | **Production web tenant provisioning is deployment-owner controlled, not public registration.** First tenant requires a configured private `CAIRN_PROVISIONING_TOKEN` of at least 32 characters. Once any tenant exists, both that token and a verified session with `CFG.PLT.CLIENT.ONBOARD` are required. Recheck admission under a global transaction advisory lock before the insert; client-side flags cannot authorize it. | Owner correctly identified public onboarding as a security risk. Missing/wrong owner token fails closed, even for administrators. Existing users/data stay unchanged. Anonymous production directory/launchpad access is closed; signed-in directories show only their own tenant. Only an explicitly server-configured development environment retains the isolated fixture path. This supersedes D-044's unrestricted onboarding clause, not its session/tenant isolation rules. | 2026-10-10 |
 
 ---
 
@@ -2660,6 +2661,71 @@ rotation. **Publication result:** Normal fast-forward routing fix push verified,
 Owner-host remediation remains pending the commands above. Source checkpoint:
 `checkpoints/2026-10-10_0342_UTC/`. The ERP queue remains B-003 Purchasing.
 
+
+### 26.18 Production tenant provisioning security `FIX PREPARED / HOST VERIFICATION PENDING`
+
+**Owner finding:** publicly reachable tenant creation is not appropriate for production ERP. The
+previous onboarding action accepted anonymous requests; RLS protects existing tenant rows but does
+not prevent unapproved account creation/resource abuse. This is a real admission-control gap, not
+an acceptable consequence of first-admin setup. Prior advice to use unrestricted `/clients/new` is
+superseded by D-057.
+
+**New production rules:**
+
+1. First setup, with no existing tenant: configured private deployment-owner provisioning token is
+   required; anonymous requests without the exact token are refused before hashing or writes.
+2. After initialization: the same owner token **and** a valid signed-in user with capability
+   `CFG.PLT.CLIENT.ONBOARD` are required. Possessing a tenant's broad administrator role alone is not
+   enough without the server-owner token.
+3. Missing/weak configured token disables web provisioning; unknown/missing environment is not treated
+   as development. Token comparison uses fixed-length SHA-256 digests and timing-safe comparison.
+4. Admission is rechecked in the tenant creation transaction, after acquiring a global advisory lock
+   and reading initialization state through the existing narrow tenant-directory function. A second
+   anonymous request from a stale first-setup page cannot race the first committed setup.
+5. Tenant type/actor/authority submitted by the browser cannot disable production checks. Audit actor
+   is `OWNER_BOOTSTRAP` for first setup or the verified requesting user thereafter.
+
+**Scope:** added `src/platform/tenancy/provisioning.ts`, the independent server-action gate and a
+trusted internal admission callback before tenant inserts. New server page wraps `TenantForm` and
+requires sign-in/authority once initialized. Production `/clients` and `/` now require authentication;
+production tenant directory/launchpad summaries filter to the signed-in tenant rather than expose
+other clients. Existing database tables/migrations/tenant/admin records are not changed. Trusted local
+CLI provisioning remains an operator action, not an HTTP signup endpoint. Explicit development mode
+keeps the existing fixture walkthrough, but must never be exposed as production.
+
+**Owner-host configuration:** add a separate, strong random token to the existing private `.env`:
+
+```sh
+openssl rand -hex 32
+# Save the generated result locally as CAIRN_PROVISIONING_TOKEN in .env; do not share it.
+git pull
+docker compose up -d --build --force-recreate migrate app
+```
+
+Never overwrite existing database/session secrets with an example file. The Compose app alone receives
+`CAIRN_PROVISIONING_TOKEN`; it is server-only, not `NEXT_PUBLIC_`, not passed to DB/migration and never
+returned in UI/status/history. Open `/clients/new` for first setup and enter that private token in the
+masked owner-access field. After the first tenant exists, anonymous access redirects to sign-in; later
+provisioning requires authorized sign-in plus token. Blanking/removing the token and recreating app
+locks all further web provisioning without affecting normal existing-user login or business records.
+The safe example templates show an empty value, never a real token. Global capability metadata is
+seeded by the normal migration job; existing administrator wildcard patterns already resolve it.
+
+**Verification:** **53/53 focused tests** pass (23 target-selection, 12 credential, 12 provisioning
+policy/lock-order checks, 6 actual server-action tests with request/transactional creation mocked).
+Tests cover missing/wrong token, fail-closed unset environment, explicit development fixtures,
+owner first setup, later anonymous/unauthorised refusal, token+capability requirement, audit spoofing
+and stale first-setup recheck. TypeScript, framework/standalone production build and IP lint pass;
+8 Python deployment/redaction regressions pass. Compose production/owner-token YAML invariants pass.
+No live owner-host/database was accessed; the transaction lock/count behavior was mocked, not claimed
+as a live PostgreSQL concurrency demonstration. The full ERP database suite was not rerun. Database
+state/data, users and passwords were not edited/reset; only admission code/config changes.
+This is a focused fix, **not a claim of complete production security sign-off** (rate limits, broader
+permission/SoD coverage and the remaining modules still need their planned verification).
+
+**Publication result:** Pending normal source push and remote verification. Source checkpoint:
+`checkpoints/2026-10-10_0507_UTC/`. No additional ERP feature batch has started.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2796,6 +2862,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Normal source push verified; default-env commit recorded in §26.15. Host repair remains unverified. | Agent |
 | 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; normal source push verified and diagnostic commit recorded in §26.16. | Agent |
 | 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Normal routing fix push verified; commit recorded in §26.17. Host remediation not yet verified. | Agent |
+| 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Source publication initially pending. | Agent |
 
 ---
 

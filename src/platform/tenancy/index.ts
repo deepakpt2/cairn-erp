@@ -166,7 +166,7 @@ export class TenancyError extends Error {
   }
 }
 
-export async function createTenant(input: CreateTenantInput): Promise<CreatedTenant> {
+export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx) => Promise<void>): Promise<CreatedTenant> {
   validateKey(input.clientKey);
   validateKey(input.companyCode, 'Company code');
 
@@ -194,6 +194,7 @@ export async function createTenant(input: CreateTenantInput): Promise<CreatedTen
   // Everything below happens in ONE transaction. A half-created tenant would be
   // worse than no tenant: it would look usable and fail in confusing ways later.
   return withTenant(clientKey, async (tx) => {
+    if (admission) await admission(tx);
     // ── The tenant itself ────────────────────────────────────────────────────
     await tx.insert(clientTable).values({
       client: clientKey,
