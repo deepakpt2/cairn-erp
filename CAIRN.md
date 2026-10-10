@@ -2662,7 +2662,7 @@ Owner-host remediation remains pending the commands above. Source checkpoint:
 `checkpoints/2026-10-10_0342_UTC/`. The ERP queue remains B-003 Purchasing.
 
 
-### 26.18 Production tenant provisioning security `FIX PREPARED / HOST VERIFICATION PENDING`
+### 26.18 Production tenant provisioning security `FIX PUBLISHED / HOST VERIFICATION PENDING`
 
 **Owner finding:** publicly reachable tenant creation is not appropriate for production ERP. The
 previous onboarding action accepted anonymous requests; RLS protects existing tenant rows but does
@@ -2723,7 +2723,9 @@ state/data, users and passwords were not edited/reset; only admission code/confi
 This is a focused fix, **not a claim of complete production security sign-off** (rate limits, broader
 permission/SoD coverage and the remaining modules still need their planned verification).
 
-**Publication result:** Pending normal source push and remote verification. Source checkpoint:
+**Publication result:** Normal fast-forward security push verified, commit
+`2f6902921de9ddb1612972281c9d9288021895c7`; this confirmation is a documentation-only follow-up.
+Production host validation remains pending owner deployment. Source checkpoint:
 `checkpoints/2026-10-10_0507_UTC/`. No additional ERP feature batch has started.
 
 ---
@@ -2862,7 +2864,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Normal source push verified; default-env commit recorded in §26.15. Host repair remains unverified. | Agent |
 | 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; normal source push verified and diagnostic commit recorded in §26.16. | Agent |
 | 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Normal routing fix push verified; commit recorded in §26.17. Host remediation not yet verified. | Agent |
-| 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Source publication initially pending. | Agent |
+| 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Normal security push verified; commit recorded in §26.18. Host validation remains pending. | Agent |
 
 ---
 
