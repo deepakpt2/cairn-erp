@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.23 — B-008 general business partner backend)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.24 — B-009 general business partner maintenance UI)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2005,8 +2005,8 @@ when combining them would jeopardise the time budget.
 | B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **DONE — tenant master, versioned/audited service, due-date calculation and additive defaults tested** |
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **DONE — protected list/create/change/history and saved-date preview browser passed** |
 | B-008 | Business partner **general data backend** only | ≤10 min | **DONE — staged/audited general identity and stable supplier/customer role rows; no organisation segments** |
-| B-009 | Business partner **general data UI** only | ≤10 min | **NEXT — protected general-data form/action only** |
-| B-010 | Supplier **company-code segment backend** only | ≤10 min | Pending |
+| B-009 | Business partner **general data UI** only | ≤10 min | **DONE — protected general create/change/search/history, dual-role/block lifecycle and read-only UI passed** |
+| B-010 | Supplier **company-code segment backend** only | ≤10 min | **NEXT — company reconciliation/payment fields only** |
 | B-011 | Supplier **company-code segment UI** only | ≤10 min | Pending |
 | B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | Pending |
 | B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | Pending |
@@ -2091,7 +2091,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
 | SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
-| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general backend tested; UI and role organisation segments pending** |
+| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general backend/UI verified; company/purchasing/sales/bank segments and owner sign-off pending** |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
 | SCR-052 | Routing create and change | `PROD.ROUTING.CREATE` | CA01 | DRAFT |
@@ -3067,6 +3067,66 @@ and hashes. **Publication result:** Normal fast-forward general-backend push ver
 `283f6d754ce413d946730ad9bc223792783d204b`; this confirmation is a documentation-only follow-up. Next: **B-009
 Business partner general maintenance page/action**, with company/purchasing/sales segments still separate.
 
+
+### 26.25 B-009 — General business partner maintenance `COMPLETE`
+
+Working page **`/foundation/partners`**; commands **`FND.PARTNER.CREATE`** (new form),
+**`FND.PARTNER.DISPLAY`** / **`FND.PARTNER.MAINTAIN`** (list/maintenance). New independent write capability
+FND.PARTNER.MAINTAIN; global catalogue now **40 capabilities, 20 terms, 19 aliases**, 51 config activities
+unchanged. General partner launchpad tile added. Supplier company, purchasing, customer company, sales
+and bank segments are explicit disabled/pending tabs; no working-looking placeholder link.
+
+Form: number, immutable category after creation, two names/search term, supplier/customer roles,
+configured country, region/street/city/postal code, tax/email/phone, global blocking and required reason.
+Staged saves allowed; name/country/city complete the current slice. Search by number/name/search term,
+summary/status, read-only fallback and field-level control history. Only business primitives are sent
+to the client form, not tenant/audit metadata. Server action independently authenticates/authorizes and
+derives tenant/actor; posted client/changedBy fields are ignored. No company or organisation segments
+are created by selecting a general role. No bank/operational payment/PO/sales capability implied.
+
+**Verification:** TypeScript/standalone build/IP lint (129 files), **211/211 automated Vitest tests**
+across 15 files, 8 Python deployment regressions, and fresh T992 real-browser target pass. Browser
+covers missing-city INCOMPLETE, city completion CREATED, no-op version preservation, dual roles,
+supplier deactivation/reactivation with stable role rows, reasoned block/unblock, invalid injected ZZ
+country refused, search/control history, pending tabs and warehouse read-only behavior; anonymous
+route redirects. Commit-version waits avoid typing/reading stale SPA forms. Added action tests for
+forged tenant/actor, INV-only write denial and anonymous action refusal. No product correction needed
+following the first focused browser run. Screenshot inspected, owner sign-off still pending.
+
+**Preservation:** partner/role tables remain **empty outside cleaned test fixtures**; original 1 journal,
+3 materials and 5 payment terms unchanged; 14 applied migrations unchanged. No new migration/reset,
+stock/customer-row edits or remote-host operation. Only global command/capability seed is additive.
+Current sandbox process **`cairn-4b14b0d5`**, `0.0.0.0:3000`. Owner deployment:
+`git pull` then `docker compose up -d --build --force-recreate migrate app` (keep private .env).
+
+**Owner test data (R-23):** use a development tenant; fresh TESTSUPP01 and optional TESTCUST01 numbers.
+
+| Field | TESTSUPP01 | TESTCUST01 |
+|---|---|---|
+| Category / Name | Organization / Demo Industrial Supply | Organization / Demo Retail Customer |
+| Search term | DEMOSUPP | DEMOCUST |
+| Country / region | KW / Farwaniya | KW / Hawalli |
+| Street / city / postal | Test Street 10 / Kuwait City / 80000 | Test Street 20 / Hawalli / 30000 |
+| Tax number | DEMO-TAX-001 | DEMO-TAX-002 |
+| Email / phone | orders@example.com / +965 5550 0100 | buyer@example.com / +965 5550 0200 |
+| General roles / Blocked | Supplier / unchecked | Customer / unchecked |
+| Reason | Owner supplier general test | Owner customer general test |
+
+Tax/contact values are fictional. Name2 can be blank. Start TESTSUPP01 with city blank: save should be
+INCOMPLETE; open saved partner, enter city and reason: CREATED. Add Customer role to same record:
+MAINTAINED, one identity/two roles. Untick Supplier/save: role deactivated, not a duplicate/deleted
+partner; recheck restores same identity. Block/unblock with reasons, verify summary and history.
+Unchanged save must preserve version/audit. Search by DEMOSUPP or code. Use two tabs for stale-edit
+refusal. Invalid email, missing reason, malformed/duplicate number or category conversion must be
+blocked/refused (category field is readonly after creation); configured country choices exclude ZZ,
+and the backend also rejects forged ZZ. Ordinary warehouse user gets no Save form; anonymous route
+redirects. Organization segments/bank fields remain pending, so do not expect PO/invoice/sales posting.
+Report tenant, partner code, inputs, expected/actual behavior and a screenshot without credentials.
+
+Private checkpoint `checkpoints/2026-10-10_1429_UTC/` contains DB/source/history/review artifacts/hashes.
+**Publication result:** Pending normal source push/remote verification. Next: **B-010 supplier company
+backend**, with company UI in the following batch.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3210,6 +3270,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.21 | 2026-10-10 | **B-006 complete: payment-term backend/defaults, UI pending.** Added one tenant-cascading forced-RLS master and additive 0003/9007 migrations (12 applied, existing immutable). Versioned/locked/audited service validates exact discount tiers, no-op/stale concurrency and active status; pure explicit-baseline UTC due/discount-date result carries master version for future document snapshots. Five additive standard defaults wired into fresh package activation and guarded development 0100 only; existing definitions/business records untouched. 19 new tests; 187 total, typecheck/standalone build/IP lint pass. Fixed-date/month-end/instalments and invoice/payment execution remain pending; no fake working UI route. §26.22 records contracts/preservation and B-007 page is next. Normal backend push verified; commit recorded in §26.22. | Agent |
 | 0.22 | 2026-10-10 | **B-007 complete: protected payment-term maintenance UI.** Added own-code list/search/create/change/history and saved baseline-date preview, independent session/capability action, safe defaults/version behavior and checklist completion. Registered working screen/capability (39 caps/17 terms/16 aliases). Three new action-security tests and isolated browser case; 191 automated tests, 8 Python regressions, standalone/typecheck/IP lint and real form/date/error/history/search/checklist pass. Original records unchanged, no migrations or invoice/payment execution. R-23 records mandatory owner check instructions/dummy data; §26.23 includes TEST30/TEST2D expected dates and negative/stale/authority checks. B-008 partner general backend next. Normal maintenance UI push verified; commit recorded in §26.23. | Agent |
 | 0.23 | 2026-10-10 | **B-008 complete: general business partner backend only.** Added two tenant-cascading forced-RLS tables and additive 0004/9008 migrations (14 applied). Validated/locked/versioned/audited general identity supports staged address, immutable category, supplier/customer dual roles, stable role deactivation, block/use gates and no-op preservation. No bank/company/purchasing/sales/operational capability fabricated. 16 new tests; 207 total, 8 Python regressions, typecheck/standalone/IP lint pass; original business/config rows unchanged, no partner fixtures retained or owner-host edits. §26.24 gives backend checks and future TESTSUPP01 dummy form data; UI is B-009 next. Normal general-backend push verified; commit recorded in §26.24. | Agent |
+| 0.24 | 2026-10-10 | **B-009 complete: protected general partner maintenance UI.** Registered own create/display/maintain commands and capability (40 caps/20 terms/19 aliases), launchpad and general-only form/list/search/status/history with explicit pending segments. Server session/authority/context checks, safe business-only props, immutable category/number, staged saves, roles and blocking supported. Three action regressions plus browser target; 211 tests, 8 Python checks, typecheck/standalone/IP lint and real general lifecycle/read-only browser pass; no owner data or schema change. §26.25 provides TESTSUPP01/TESTCUST01 dummy records, expected/negative/stale checks; B-010 company backend next. Source push initially pending. | Agent |
 
 ---
 

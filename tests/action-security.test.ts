@@ -21,6 +21,8 @@ import { saveMaterialAction } from '@/app/inventory/materials/actions';
 import { getMaterialDetail } from '@/modules/inventory/materials';
 import { savePaymentTermAction } from '@/app/config/payment-terms/actions';
 import { getPaymentTerms } from '@/modules/foundation/payment-terms';
+import { savePartnerAction } from '@/app/foundation/partners/actions';
+import { getBusinessPartner } from '@/modules/foundation/business-partners';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -40,6 +42,21 @@ function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', o
 function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
 
 describe('server action security', () => {
+  it('derives general-partner tenant and audit actor from the session',async()=>{
+    signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',category:'ORGANIZATION',name:'Security supplier',name2:'',searchTerm:'SEC',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'DEMO-TAX',email:'test@example.com',phone:'',roles:'SUPPLIER',expectedVersion:'0',reason:'Partner security test'});
+    expect((await savePartnerAction({ok:true},data)).ok).toBe(true);
+    expect((await getBusinessPartner(alpha.client,'SEC-PARTNER'))?.general.createdBy).toBe('real.operator');
+    expect(await getBusinessPartner(beta.client,'SEC-PARTNER')).toBeNull();
+  });
+  it('refuses general-partner writes without its master-data authority',async()=>{
+    signedIn(['INV.*']);const data=form({partnerNumber:'DENIED-PARTNER',category:'ORGANIZATION',name:'Denied supplier',country:'KW',city:'Kuwait City',expectedVersion:'0',reason:'Denied partner test'});
+    expect((await savePartnerAction({ok:true},data)).message).toContain('FND.PARTNER.MAINTAIN');
+    expect(await getBusinessPartner(alpha.client,'DENIED-PARTNER')).toBeNull();
+  });
+  it('refuses anonymous general-partner action requests',async()=>{
+    request.session=null;await expect(savePartnerAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
   it('derives payment-term tenant/actor from session, not forged form fields', async () => {
     signedIn();
     const data=form({client:beta.client,changedBy:'FORGED',termsCode:'SECACT',description:'Security test',baselineSource:'DOCUMENT_DATE',netDays:'30',discount1Days:'',discount1Percent:'0.00',discount2Days:'',discount2Percent:'0.00',isActive:'on',expectedVersion:'0',reason:'Action security test'});

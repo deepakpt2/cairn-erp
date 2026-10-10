@@ -15,6 +15,7 @@ export default async function LaunchpadPage() {
   const tenants = session ? allTenants.filter((tenant) => tenant.client === session.user.client) : allTenants;
 
   const tiles = [
+    { href: '/foundation/partners', code: 'FND.PARTNER.DISPLAY', title: t('bp.title'), body: t('bp.subtitle'), meta: t('bp.general') },
     {
       href: '/clients',
       code: 'CFG.PLT.CLIENT.DEFINE',

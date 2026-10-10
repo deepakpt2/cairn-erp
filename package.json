@@ -31,7 +31,8 @@
     "smoke:browser:material-valuation": "tsx scripts/browser-smoke.ts --target material-valuation",
     "test:browser-harness": "vitest run --config vitest.browser-harness.config.ts",
     "db:sync-role": "tsx scripts/sync-db-app-role.ts",
-    "smoke:browser:payment-terms": "tsx scripts/browser-smoke.ts --target payment-terms"
+    "smoke:browser:payment-terms": "tsx scripts/browser-smoke.ts --target payment-terms",
+    "smoke:browser:business-partners": "tsx scripts/browser-smoke.ts --target business-partners"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

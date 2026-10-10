@@ -6,6 +6,7 @@ export const TARGETS = [
   { id: 'material-mrp', client: 'T996', label: 'Material planning settings only, with basic-data prerequisite' },
   { id: 'material-valuation', client: 'T997', label: 'Material valuation and price authorities only, with basic-data prerequisite' },
   { id: 'payment-terms', client: 'T993', label: 'Payment term maintenance and saved due-date preview' },
+  { id: 'business-partners', client: 'T992', label: 'General partner identity, roles, blocking and audit' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

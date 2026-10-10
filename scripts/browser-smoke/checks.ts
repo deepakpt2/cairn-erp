@@ -8,6 +8,7 @@ import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
+import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
@@ -511,9 +512,93 @@ async function paymentTerms(ctx: BrowserContext) {
   console.log('  ✓ term search and define/assign checklist are consistent');
 }
 
+async function businessPartners(ctx: BrowserContext) {
+  const {page,BASE,CLIENT}=scope(ctx);
+  await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="partnerNumber"]').fill('TESTSUPP01');
+  await page.locator('input[name="name"]').fill('Demo Industrial Supply');
+  await page.locator('[name="searchTerm"]').fill('DEMOSUPP');
+  await page.locator('[name="street"]').fill('Test Street 10');
+  await page.locator('[name="email"]').fill('orders@example.com');
+  await page.locator('[name="reason"]').fill('Browser incomplete partner');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Partner saved. Status: Incomplete.',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'Open saved business partner',exact:true}).click();
+  await page.locator('input[name="partnerNumber"][readonly]').waitFor();
+  await page.locator('[name="city"]').fill('Kuwait City');
+  await page.locator('[name="reason"]').fill('Browser partner completion');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Partner saved. Status: Created.',{exact:true}).waitFor();
+  await page.locator('[name="reason"]').fill('Browser unchanged partner');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('No partner data changed.',{exact:true}).waitFor();
+  assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.general.version,2);
+  console.log('  ✓ general partner stages/completes; unchanged save preserves version');
+
+  await page.locator('[name="roles"][value="CUSTOMER"]').check();
+  await page.locator('[name="reason"]').fill('Browser dual partner role');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Partner saved. Status: Maintained.',{exact:true}).waitFor();
+  assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.roles.filter(r=>r.isActive).length,2);
+  await page.locator('[name="roles"][value="SUPPLIER"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser supplier role hold');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='4');
+  const roleHold=await getBusinessPartner(CLIENT,'TESTSUPP01');
+  assert.equal(roleHold?.roles.length,2);assert.equal(roleHold?.roles.find(r=>r.roleCode==='SUPPLIER')?.isActive,false);
+  await page.locator('[name="roles"][value="SUPPLIER"]').check();
+  await page.locator('[name="reason"]').fill('Browser supplier role restore');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='5');
+  await page.locator('[name="isBlocked"]').check();
+  await page.locator('[name="reason"]').fill('Browser compliance hold');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Blocked',{exact:true}).waitFor();
+  assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.general.isBlocked,true);
+  await page.locator('[name="isBlocked"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser compliance cleared');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='7');
+  assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.general.isBlocked,false);
+  const version=(await getBusinessPartner(CLIENT,'TESTSUPP01'))!.general.version;
+  await page.locator('[name="country"]').evaluate((select)=>{const option=document.createElement('option');option.value='ZZ';option.text='Invalid test country';select.appendChild(option);});
+  await page.locator('[name="country"]').selectOption('ZZ');
+  await page.locator('[name="reason"]').fill('Invalid country test');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Country code is not configured.',{exact:true}).waitFor();
+  assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.general.version,version);
+  console.log('  ✓ dual roles stay stable, block/unblock works and invalid country cannot overwrite');
+
+  await page.getByRole('link',{name:'Change history',exact:true}).click();
+  await page.getByText('Browser partner completion',{exact:true}).waitFor();
+  await page.getByText('Browser dual partner role',{exact:true}).waitFor();
+  await page.getByText('Browser compliance hold',{exact:true}).waitFor();
+  await page.screenshot({path:'.arena/business-partners-history-review.png',fullPage:true});
+  await page.goto(`${BASE}/foundation/partners`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="q"]').fill('DEMOSUPP');
+  await page.getByRole('button',{name:'Search',exact:true}).click();
+  await page.getByRole('link',{name:'TESTSUPP01',exact:true}).waitFor();
+  console.log('  ✓ general partner search/history and explicit pending segments are visible');
+
+  const id=randomUUID();const password=await hashPassword(PASSWORD);
+  await withTenant(CLIENT,async tx=>{
+    await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${id},${CLIENT},'partner.viewer','Partner Viewer',${password},false,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="client"]').fill(CLIENT);await page.locator('[name="username"]').fill('partner.viewer');await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01`,{waitUntil:'domcontentloaded'});
+  await page.getByText(/FND.PARTNER.MAINTAIN/).last().waitFor();
+  assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+  console.log('  ✓ warehouse authority can review but cannot maintain general partner data');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'payment-terms': paymentTerms,
+  'business-partners': businessPartners,
   'material-basic': basicLifecycle,
   'material-purchasing': purchasing,
   'material-mrp': mrp,
