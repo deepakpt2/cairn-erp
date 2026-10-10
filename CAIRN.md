@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.17 — deployment-owner tenant provisioning security)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.18 — B-003 Purchasing view browser acceptance)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -1998,8 +1998,8 @@ when combining them would jeopardise the time budget.
 | B-000 | Preserve the current database/source and record this smaller execution plan | ≤5 min | **DONE — this checkpoint; no feature/database mutation** |
 | B-001 | Split the existing browser acceptance script into independently runnable targets | ≤10 min | **DONE — 23 pure harness tests and foundation browser target passed; no ERP feature/schema change** |
 | B-002 | Publish/verify the already-written material **Basic data** view, including staged saves | ≤10 min | **DONE — production preview rebuilt; staged/basic/copy/history browser flow passed; one form-reset defect fixed** |
-| B-003 | Verify the existing material **Purchasing** view and its plant/unit/tolerance rules | ≤10 min | **NEXT — purchasing only** |
-| B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | Pending; no executable planning run in this batch |
+| B-003 | Verify the existing material **Purchasing** view and its plant/unit/tolerance rules | ≤10 min | **DONE — staged/completed/maintained purchasing flow, exact tolerances, unchanged save, conversion refusal and read-only authority passed** |
+| B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **NEXT — planning settings only, no executable planning run** |
 | B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | Pending; stock/value remain read-only |
 | B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | Pending; prerequisite for partner company segments |
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | Pending; backend already available from B-006 |
@@ -2089,7 +2089,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 |---|---|---|---|---|
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
-| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — Basic Data published/UI verified; Purchasing/MRP/Valuation walkthroughs and owner sign-off pending** |
+| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — Basic/Purchasing UI verified; MRP/Valuation walkthroughs and owner sign-off pending** |
 | SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | DRAFT |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
@@ -2728,6 +2728,57 @@ permission/SoD coverage and the remaining modules still need their planned verif
 Production host validation remains pending owner deployment. Source checkpoint:
 `checkpoints/2026-10-10_0507_UTC/`. No additional ERP feature batch has started.
 
+
+### 26.19 B-003 — Material Purchasing browser acceptance `COMPLETE`
+
+**Scope:** Purchasing view only, using its existing Basic prerequisite. No MRP/valuation/PO feature
+expansion, ERP form/schema/service change, or owner-host deployment was performed. Extended only
+`scripts/browser-smoke/checks.ts`; `npm run smoke:browser:material-purchasing` passed in ~7 seconds.
+
+**Verified via actual UI/server action:**
+
+- Fresh isolated T995 tenant/admin through development-mode onboarding, then Basic material through UI.
+- Order unit defaults to the material base unit KG. Purchasing can stage with a missing group:
+  **INCOMPLETE**, plant-segment version 1, scope plant 1000.
+- Group 001, exact over/under tolerances **5.25 / 1.75**, manufacturer part MFG-PURCH-001 complete it:
+  **CREATED**, version 2. An unchanged resave preserves values/status/version.
+- Group 002 and revised manufacturer part produce **MAINTAINED**, version 3.
+- Alternative order unit LB is refused with the explicit missing material-conversion remedy, without
+  changing stored KG/version. Conversion maintenance remains pending; no fake conversion is applied.
+- Global Basic version stays 1; MRP remains NOT_CREATED; no valuation record is fabricated.
+- Purchasing creation/completion/maintenance reasons, before/after fields, actor and session-derived
+  footer are visible in history. Full-page history/error screenshot was inspected.
+- A warehouse-only role can read the Purchasing view but has no purchasing Save form. Only that
+  authorization user/role is a direct SQL fixture (user-admin screen remains pending); all business
+  records were created through UI. Anonymous access redirects to sign-in; no browser runtime errors.
+
+**Environment recovery/data preservation:** sandbox system services/dependencies had been discarded
+between turns. Installed PostgreSQL 17 and browser/runtime tooling, confirmed no existing Cairn DB/roles,
+and restored **the preserved B-002 custom dump** into a newly created database using the existing
+private local connection settings. No reset/bootstrap-reset or seed reconstruction. This demonstrates
+readability/full restore and checkpoint row-count agreement, not the planned scheduled restore/tie-out
+service. Before/after browser/full-suite counts match exactly: **1 tenant, 1 user, 74 GL accounts,
+11 ranges, 1 posted journal, 3 material/plant/valuation/planning rows each, 15 change documents and
+10 applied migrations**. Only identified development fixtures were created/cleaned; original dev
+business records and prior backups remain unchanged. The owner's remote host/database was not touched.
+
+**Verification:** TypeScript and standalone build pass; **163/163 Vitest tests across 12 files pass**
+(including provisioning/server-action/credential tests), **8/8 Python deployment tests pass**, IP lint
+clean (108 files). Browser acceptance uses explicit development environment for disposable fixtures;
+production owner-token protections remain in source and are covered by the same full test suite. This
+is not an independent live production bootstrap/concurrency security sign-off or owner sign-off.
+The existing Purchasing UI/service required no product correction in this batch.
+
+**Sandbox preview:** current standalone source runs as process **`cairn-dbbb8691`**, `0.0.0.0:3000`;
+`/signin` HTTP 200 rechecked. MRP/valuation views remain scheduled for their own browser acceptance.
+Latest source/testing metadata is retained in this log; no claim of full material/master conformance,
+P2P, MRP execution, billing/clearing or full manufacturing flow.
+
+**Checkpoint:** `checkpoints/2026-10-10_1221_UTC/` includes current `database.dump`, `source.tar.gz`,
+`repository.bundle`, `data-counts.csv`, `material-purchasing-history-review.png` and integrity hashes.
+No real environment file/GitHub credential is put in source archives or public commits. **Publication
+result:** Pending normal source push/remote verification. Next is **B-004 MRP settings only**.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2865,6 +2916,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; normal source push verified and diagnostic commit recorded in §26.16. | Agent |
 | 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Normal routing fix push verified; commit recorded in §26.17. Host remediation not yet verified. | Agent |
 | 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Normal security push verified; commit recorded in §26.18. Host validation remains pending. | Agent |
+| 0.18 | 2026-10-10 | **B-003 complete: material Purchasing UI accepted in a bounded batch.** Extended only its browser target for staged/complete/maintained plant data, exact tolerances/manufacturer part, unchanged-save preservation, unsupported-unit refusal, visible history/footer and warehouse read-only access. No MRP/valuation/PO feature changes or ERP product correction. Recovered discarded sandbox services by restoring the preserved B-002 database dump into a fresh empty DB—not a reset/reseed; original checkpoint counts match before/after. Standalone/typecheck, **163 Vitest tests**, 8 Python regressions, IP lint and real Purchasing-only browser pass. Fresh private DB/source/review checkpoint saved; owner remote data untouched. §26.19 records scope/results/limitations; B-004 planning settings is next. Source push initially pending. | Agent |
 
 ---
 

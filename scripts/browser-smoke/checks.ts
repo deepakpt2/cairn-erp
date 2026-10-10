@@ -183,19 +183,81 @@ async function basicLifecycle(ctx: BrowserContext) {
 }
 
 async function purchasing(ctx: BrowserContext) {
-  const { page, CLIENT } = scope(ctx);
+  const { page, BASE, CLIENT } = scope(ctx);
   await basic(ctx);
   await page.getByRole('link', { name: /^Purchasing/ }).click();
+  await page.locator('[name="orderUnit"]').waitFor();
+  assert.equal(await page.locator('[name="orderUnit"]').inputValue(), 'KG');
+  await page.locator('[name="purchasingGroup"]').selectOption('');
+  await page.locator('[name="reason"]').fill('Browser staged purchasing creation');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
+  const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(staged?.plants[0].purchasingStatus, 'INCOMPLETE');
+  assert.equal(staged?.plants[0].version, 1);
+  console.log('  ✓ purchasing stages an incomplete view under plant 1000');
+
+  await page.locator('[name="purchasingGroup"]').selectOption('001');
+  await page.locator('[name="orderUnit"]').selectOption('KG');
   await page.locator('[name="overdeliveryTolerance"]').fill('5.25');
+  await page.locator('[name="underdeliveryTolerance"]').fill('1.75');
+  await page.locator('[name="manufacturerPartNumber"]').fill('MFG-PURCH-001');
+  await page.locator('[name="reason"]').fill('Browser purchasing completion');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
-  await page.getByRole('link', { name: 'Open material and its views', exact: true }).click();
-  console.log('  ✓ purchasing extends the existing plant segment');
-  const master = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
-  assert.equal(master?.plants[0].purchasingStatus, 'CREATED');
-  assert.equal(master?.plants[0].overdeliveryTolerance, '5.25');
-  assert.equal(master?.plants[0].mrpStatus, 'NOT_CREATED');
-  assert.equal(master?.valuations.length, 0);
+  const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(completed?.plants[0].version, 2);
+  assert.equal(completed?.plants[0].purchasingGroup, '001');
+  assert.equal(completed?.plants[0].overdeliveryTolerance, '5.25');
+  assert.equal(completed?.plants[0].underdeliveryTolerance, '1.75');
+  assert.equal(completed?.plants[0].manufacturerPartNumber, 'MFG-PURCH-001');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 2);
+  console.log('  ✓ completion stores exact tolerances; unchanged resave preserves values/version');
+
+  await page.locator('[name="purchasingGroup"]').selectOption('002');
+  await page.locator('[name="manufacturerPartNumber"]').fill('MFG-PURCH-002');
+  await page.locator('[name="reason"]').fill('Browser purchasing maintenance');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
+  await page.locator('[name="orderUnit"]').selectOption('LB');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('A different order unit requires a material-specific conversion.', { exact: true }).waitFor();
+  const maintained = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(maintained?.base.version, 1, 'Plant editing must not alter global basic data');
+  assert.equal(maintained?.plants[0].version, 3);
+  assert.equal(maintained?.plants[0].orderUnit, 'KG');
+  assert.equal(maintained?.plants[0].purchasingStatus, 'MAINTAINED');
+  assert.equal(maintained?.plants[0].mrpStatus, 'NOT_CREATED');
+  assert.equal(maintained?.valuations.length, 0);
+  console.log('  ✓ unsupported alternative unit is refused without changing data/version');
+
+  await page.getByRole('link', { name: 'Change history', exact: true }).click();
+  await page.getByText('Browser purchasing completion', { exact: true }).waitFor();
+  await page.getByText('Browser purchasing maintenance', { exact: true }).waitFor();
+  assert.match(await page.locator('footer').innerText(), new RegExp(`${CLIENT}.*browser.admin`));
+  await page.screenshot({ path: '.arena/material-purchasing-history-review.png', fullPage: true });
+  console.log('  ✓ purchasing change history and correct session footer are visible');
+
+  // Authorisation identity fixture only; every material record above was UI-created.
+  const userId = randomUUID();
+  const password = await hashPassword(PASSWORD);
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into app_user (id, client, username, full_name, password_hash, must_change_password, created_by) values (${userId}, ${CLIENT}, 'warehouse.viewer', 'Warehouse Viewer', ${password}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by) values (${CLIENT}, ${userId}, 'WAREHOUSE_CLERK', 'BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="client"]').fill(CLIENT);
+  await page.locator('[name="username"]').fill('warehouse.viewer');
+  await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=PURCHASING`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/PROC.MATERIAL.PURCHASING.MAINTAIN/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  console.log('  ✓ warehouse-only authority can read, but has no purchasing save form');
 }
 
 async function mrp(ctx: BrowserContext) {
