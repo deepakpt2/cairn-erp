@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.21 — B-006 payment terms backend/defaults)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.22 — B-007 payment terms maintenance UI)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -97,6 +97,7 @@ Numbered so future discussions can cite `R-06` rather than re-explaining intent.
 | R-20 | Documentation | This single file is the master project log (§0). |
 | R-21 | Document output | Business documents must be producible: purchase order, delivery note, invoice, payment advice, dunning letter, goods label, financial statements (§17). |
 | R-22 | Execution batches capped at 15 minutes | Explicit owner correction on 2026-10-09: preserve all work/data so far; no large combined stages. One bounded change per batch, with time reserved for verification and a checkpoint. Split rather than overrun; do not reset preserved data. |
+| R-23 | Owner-test guidance after each batch | Owner requests the screen/function to check, dummy form records, expected results and negative/error checks after completion, so manual bug testing can proceed. |
 
 ### 1.3 Explicitly out of scope (agreed)
 
@@ -2002,8 +2003,8 @@ when combining them would jeopardise the time budget.
 | B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **DONE — staged/no-op/complete/maintained settings, exact quantities, net-change, validation and read-only authority passed; no planning execution** |
 | B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **DONE — staged/prices/currency/no-op/stock guard, display-only finance and warehouse price denial passed** |
 | B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **DONE — tenant master, versioned/audited service, due-date calculation and additive defaults tested** |
-| B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **NEXT — UI/action authorization using B-006 backend** |
-| B-008 | Business partner **general data backend** only | ≤10 min | Pending; no company/purchasing/sales segments |
+| B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **DONE — protected list/create/change/history and saved-date preview browser passed** |
+| B-008 | Business partner **general data backend** only | ≤10 min | **NEXT — no company/purchasing/sales segments** |
 | B-009 | Business partner **general data UI** only | ≤10 min | Pending |
 | B-010 | Supplier **company-code segment backend** only | ≤10 min | Pending |
 | B-011 | Supplier **company-code segment UI** only | ≤10 min | Pending |
@@ -2071,7 +2072,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-032 | Posting period variant assign | `CFG.FIN.PPV.ASSIGN` | OBBP | DRAFT |
 | SCR-033 | Currency and exchange rates | `CFG.FIN.EXRATE.MAINTAIN` | OB08 | DRAFT |
 | SCR-034 | Tax codes | `CFG.FIN.TAXCODE.DEFINE` | FTXP | DRAFT |
-| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **IN BUILD — backend/defaults tested; maintenance page pending** |
+| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **BUILT — backend and maintenance UI tested; owner sign-off pending** |
 | SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | DRAFT |
 | SCR-037 | House banks and accounts | `CFG.FIN.HOUSEBANK.DEFINE` | FI12 | DRAFT |
 | SCR-038 | Document types and number ranges | `CFG.FIN.DOCTYPE.DEFINE` | OBA7 | DRAFT |
@@ -2942,6 +2943,68 @@ and hashes; prior backups remain. **Publication result:** Normal fast-forward ba
 `2ae2423d2204d7251c842e6922ca30dd6c1729de`; this confirmation is a documentation-only follow-up.
 Next: **B-007 Payment terms maintenance page/action only**, then partner segments.
 
+
+### 26.23 B-007 — Payment terms maintenance and owner test plan `COMPLETE`
+
+Working route **`/config/payment-terms`**, command **`CFG.FIN.PAYTERMS.DEFINE`**. Added protected
+list/search, create/change form, active flag, required reason, saved-version due-date preview and
+field-level audit history. Command/Workbench route and capability seeded; catalogue now **39
+capabilities, 17 terms, 16 aliases** (51 config activities unchanged). A successful/no-op authorized
+save marks the define/assign activity complete. Read-only logged-in users can inspect definitions and
+preview; maintenance requires the configuration capability. No invoice/payment posting is performed.
+
+**Security:** server action independently requires session/capability; derives client and audit actor
+from session, ignores forged fields and validates through the locked/versioned backend. The client
+form receives only business values/version, never technical tenant/audit fields. Persisted committed
+version remounts uncontrolled fields; optional discount days remain blank, percentages exact strings.
+Create mode always sends version 0; duplicate code cannot reset/update an existing master. Preview is
+explicitly saved data/version, not unsaved edits. Editing does not recalculate posted schedules.
+
+**Verified:** fresh T993 owner UI creates TESTPAY, 2.00% at 10 days/1.00% at 20/net 30; baseline
+2026-10-10 gives discount dates **2026-10-20/2026-10-30** and net **2026-11-09**. No-op keeps version 1;
+net 5 is refused, net 45 updates version 2; history/search/checklist/anonymous refusal pass. Screenshot
+inspected. Added three action-security regressions for forged actor/tenant, FIN-only write denial and
+anonymous calls. **191/191 Vitest tests**, 8 Python regressions, TypeScript/production standalone build,
+IP lint (120 files) and focused browser acceptance pass. No product correction needed after first
+browser run. No live owner-host security/bootstrap or complete invoice conformance claim.
+
+**Preservation:** original journal/material/plant/valuation/planning counts unchanged; five development
+payment definitions unchanged; temporary test definitions/identities cleanly removed. No migration,
+reset or stock/document edits. Only global command/capability seed and completion metadata behavior
+are added. Sandbox standalone process **`cairn-1c10ede3`**, `0.0.0.0:3000`. Deployment:
+`git pull` then `docker compose up -d --build --force-recreate migrate app` (keep private `.env`).
+
+**Owner manual check (R-23):** use a development tenant, not live payment policy. Open the command
+above; Create payment terms, add these fresh codes, and enter a reason for every save:
+
+| Field | TEST30 | TEST2D |
+|---|---|---|
+| Description | Test net 30 | Test two discounts |
+| Baseline source | Document date | Document date |
+| Net days | 30 | 30 |
+| Discount 1 days / percent | blank / 0.00 | 10 / 2.00 |
+| Discount 2 days / percent | blank / 0.00 | 20 / 1.00 |
+| Active | checked | checked |
+| Reason | Owner UI test | Owner UI discount test |
+
+Open saved record, Preview dates with **2026-10-10**. TEST30 net due **2026-11-09**, no discount
+lines. TEST2D same net due plus **2026-10-20 (2.00%)** and **2026-10-30 (1.00%)**. Change net days to
+45 and save with reason: net due **2026-11-24**, discount dates unchanged; history shows actor and
+30→45. Save unchanged with a reason: no data change/version/audit noise. Search by code/description.
+
+Negative tests: net days 5 with discount day 10; discount 2 before discount 1; second percent 3.00 above
+first 2.00; percentage 2.001/101; negative days; blank description/reason; duplicate code creation.
+Each must be blocked/refused without overwriting saved values. Two tabs: save in A then edit stale B;
+B must refuse and request reload. Toggle inactive and verify list/history; inactive terms are unusable
+by runtime schedule services (invoice integration pending). A FIN-only/ordinary user must have no
+maintenance authority; direct forged action is also refused. Sign out and open the route: redirect.
+Do not expect deletion, invoice posting, fixed/month-end variants or installments in this slice.
+
+Checkpoint `checkpoints/2026-10-10_1336_UTC/`: private database/source/repository/review artifacts and
+checksums. **Publication result:** Pending normal source push/remote verification. Next: B-008 partner
+general backend only. Owner walkthrough feedback should include tenant/code, inputs, expected/actual
+result and screenshot without passwords/provisioning tokens.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3083,6 +3146,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.19 | 2026-10-10 | **B-004 complete: Material MRP settings UI accepted within its small-batch scope.** Tested staged/complete/maintained plant settings, exact quantities, unchanged resave, reorder net-change reflag, invalid lot refusal, visible history/footer and warehouse read-only authority. Found FND-004: null saved controller wrongly used a new-record default and auto-completed on resave; browser-safe value helper now distinguishes null/undefined, with five regressions. No existing-record rewrite or MRP engine/valuation/purchasing expansion. Typecheck/standalone build, **168 Vitest tests**, 8 Python tests, MRP acceptance and Purchasing regression pass; private DB counts unchanged. Fresh checkpoint saved; shared UI correction needs owner image rebuild. §26.20 records results/limitations and B-005 valuation is next. Normal correction/acceptance push verified; commit recorded in §26.20. | Agent |
 | 0.20 | 2026-10-10 | **B-005 complete: Material Valuation UI accepted.** Expanded only its browser target for incomplete/complete/maintained/no-op settings, exact moving/standard prices and price unit, company-derived currency, forged/read-only stock-value refusal, positive unit validation, existing-stock change guard, visible financial history and separate finance-display/warehouse denial. Guard stock and auth identities are isolated SQL fixtures, not new postings or owner data. Fixed only a test column-name mismatch, not schema/product code. 168 Vitest tests, 8 Python tests, typecheck/IP lint and real valuation browser pass; data counts unchanged and private checkpoint saved. All four implemented views individually verified, not full material/operational conformance. §26.21 records limitations; B-006 payment-term backend is next. Normal valuation-acceptance push verified; commit recorded in §26.21. | Agent |
 | 0.21 | 2026-10-10 | **B-006 complete: payment-term backend/defaults, UI pending.** Added one tenant-cascading forced-RLS master and additive 0003/9007 migrations (12 applied, existing immutable). Versioned/locked/audited service validates exact discount tiers, no-op/stale concurrency and active status; pure explicit-baseline UTC due/discount-date result carries master version for future document snapshots. Five additive standard defaults wired into fresh package activation and guarded development 0100 only; existing definitions/business records untouched. 19 new tests; 187 total, typecheck/standalone build/IP lint pass. Fixed-date/month-end/instalments and invoice/payment execution remain pending; no fake working UI route. §26.22 records contracts/preservation and B-007 page is next. Normal backend push verified; commit recorded in §26.22. | Agent |
+| 0.22 | 2026-10-10 | **B-007 complete: protected payment-term maintenance UI.** Added own-code list/search/create/change/history and saved baseline-date preview, independent session/capability action, safe defaults/version behavior and checklist completion. Registered working screen/capability (39 caps/17 terms/16 aliases). Three new action-security tests and isolated browser case; 191 automated tests, 8 Python regressions, standalone/typecheck/IP lint and real form/date/error/history/search/checklist pass. Original records unchanged, no migrations or invoice/payment execution. R-23 records mandatory owner check instructions/dummy data; §26.23 includes TEST30/TEST2D expected dates and negative/stale/authority checks. B-008 partner general backend next. Source push initially pending. | Agent |
 
 ---
 

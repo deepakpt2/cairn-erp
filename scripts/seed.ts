@@ -92,6 +92,7 @@ const ACTIVITIES: Activity[] = [
 
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
+  { code: 'CFG.FIN.PAYTERMS.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain payment-term definitions' },
   { code: 'SYSTEM.WILDCARD', module: 'PLT', action: 'EXECUTE', posting: true, description: 'All capabilities — administrators only' },
   { code: 'FIN.CLOSE.PERIOD', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Open or close posting periods' },
   { code: 'CFG.PLT.NUMBERRANGE.DEFINE', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain number range intervals' },
@@ -152,6 +153,7 @@ const REGISTRY: Array<{
   aliases?: string[];
   description?: string;
 }> = [
+  { ourCode: 'CFG.FIN.PAYTERMS.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'Payment terms', route: '/config/payment-terms', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OBB8'], description: 'Due-date offsets and exact cash-discount deadlines with audit history.' },
   { ourCode: 'INV.MATERIAL.CREATE', termType: 'TRANSACTION', module: 'INV', title: 'Create material', route: '/inventory/materials?new=1', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['MM01'], description: 'Basic, purchasing, MRP and valuation views. Other views are still pending.' },
   { ourCode: 'INV.MATERIAL.DISPLAY', termType: 'TRANSACTION', module: 'INV', title: 'Material master list', route: '/inventory/materials', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['MM02', 'MM03'], description: 'Find a material and maintain its organisational views.' },
   { ourCode: 'PROD.MRP.SETTINGS', termType: 'TRANSACTION', module: 'PROD', title: 'Material planning settings', route: '/inventory/materials?view=MRP', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Planning parameters and net-change file, not yet an executable planning run.' },

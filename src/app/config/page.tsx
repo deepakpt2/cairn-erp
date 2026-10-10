@@ -64,6 +64,7 @@ export default async function WorkbenchPage({
     '/config',
     '/config/company-codes',
     '/config/gl-accounts',
+    '/config/payment-terms',
     '/config/posting-periods',
     '/config/plants',
     '/config/number-ranges',

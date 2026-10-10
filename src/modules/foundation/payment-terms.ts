@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, eq, asc, sql } from 'drizzle-orm';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
+import { markActivityComplete } from '../../platform/tenancy';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { paymentTerms } from './payment-terms-schema';
 import { BASELINE_SOURCES, calculatePaymentSchedule, type BaselineSource } from './payment-term-dates';
@@ -40,7 +41,7 @@ export async function savePaymentTerms(raw:PaymentTermInput) {
     const [before]=await tx.select().from(paymentTerms).where(key(client,values.termsCode)).for('update');
     if ((before?.version??0)!==expectedVersion) throw new PaymentTermsError('Payment terms changed after they were opened.','Reload the current version before saving.');
     const {termsCode,...fields}=values;
-    if (before && Object.entries(fields).every(([k,v])=>(before as Record<string,unknown>)[k]===v)) return {changed:false,version:before.version};
+    if (before && Object.entries(fields).every(([k,v])=>(before as Record<string,unknown>)[k]===v)) { await markActivityComplete(tx,client,'CFG.FIN.PAYTERMS.DEFINE',changedBy); return {changed:false,version:before.version}; }
     const version=(before?.version??0)+1;
     if(before) await tx.update(paymentTerms).set({...fields,version,changedBy,changedAt:new Date()}).where(key(client,termsCode));
     else await tx.insert(paymentTerms).values({...values,client,version,createdBy:changedBy});
@@ -48,6 +49,7 @@ export async function savePaymentTerms(raw:PaymentTermInput) {
     await recordChange(tx,{client,objectClass:'payment_terms',objectKey:termsCode,changeType:before?'CHANGE':'CREATE',changedBy,reason,
       transactionCode:'CFG.FIN.PAYTERMS.DEFINE',before:before?snapshot(before):undefined,after:fields,
       securityRelevantFields:['baselineSource','netDays','discount1Days','discount1Percent','discount2Days','discount2Percent','isActive']});
+    await markActivityComplete(tx,client,'CFG.FIN.PAYTERMS.DEFINE',changedBy);
     return {changed:true,version};
   });
 }

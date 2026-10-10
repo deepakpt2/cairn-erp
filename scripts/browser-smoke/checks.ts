@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
+import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
@@ -460,8 +461,59 @@ async function valuation(ctx: BrowserContext) {
   console.log('  ✓ warehouse authority cannot read valuation prices or their history');
 }
 
+async function paymentTerms(ctx: BrowserContext) {
+  const {page,BASE,CLIENT}=scope(ctx);
+  await page.goto(`${BASE}/config/payment-terms?new=1`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="termsCode"]').fill('TESTPAY');
+  await page.locator('input[name="description"]').fill('Test 2 percent 10, 1 percent 20, net 30');
+  await page.locator('[name="discount1Days"]').fill('10');
+  await page.locator('[name="discount1Percent"]').fill('2.00');
+  await page.locator('[name="discount2Days"]').fill('20');
+  await page.locator('[name="discount2Percent"]').fill('1.00');
+  await page.locator('[name="reason"]').fill('Browser payment term creation');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Payment terms saved and change evidence recorded.',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'Open saved payment terms',exact:true}).click();
+  await page.locator('input[name="termsCode"][readonly]').waitFor();
+  const term=await getPaymentTerms(CLIENT,'TESTPAY');
+  assert.equal(term?.createdBy,'browser.admin');assert.equal(term?.discount1Percent,'2.00');
+  await page.locator('[name="baseline"]').fill('2026-10-10');
+  await page.getByRole('button',{name:'Preview dates',exact:true}).click();
+  await page.getByText('2026-11-09',{exact:true}).waitFor();
+  assert.match(await page.locator('body').innerText(),/2026-10-20.*2.00%/);
+  assert.match(await page.locator('body').innerText(),/2026-10-30.*1.00%/);
+  console.log('  ✓ payment terms create with exact discounts and expected due-date preview');
+  await page.locator('[name="reason"]').fill('Browser unchanged resave');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('No payment-term data changed.',{exact:true}).waitFor();
+  assert.equal((await getPaymentTerms(CLIENT,'TESTPAY'))?.version,1);
+  await page.locator('[name="netDays"]').fill('5');
+  await page.locator('[name="reason"]').fill('Invalid payment window');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('First discount deadline must not exceed net days.',{exact:true}).waitFor();
+  assert.equal((await getPaymentTerms(CLIENT,'TESTPAY'))?.netDays,30);
+  await page.locator('[name="netDays"]').fill('45');
+  await page.locator('[name="reason"]').fill('Browser payment term maintenance');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Payment terms saved and change evidence recorded.',{exact:true}).waitFor();
+  assert.equal((await getPaymentTerms(CLIENT,'TESTPAY'))?.version,2);
+  await page.getByRole('link',{name:'Change history',exact:true}).click();
+  await page.getByText('Browser payment term maintenance',{exact:true}).waitFor();
+  await page.getByText('Browser payment term creation',{exact:true}).waitFor();
+  await page.screenshot({path:'.arena/payment-terms-history-review.png',fullPage:true});
+  console.log('  ✓ no-op/version preservation, invalid windows and audit history verified');
+  await page.goto(`${BASE}/config`,{waitUntil:'domcontentloaded'});
+  assert.match(await page.locator('tr').filter({hasText:'CFG.FIN.PAYTERMS.DEFINE'}).innerText(),/Completed/i);
+  await page.goto(`${BASE}/config/payment-terms`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="q"]').fill('TESTPAY');
+  await page.getByRole('button',{name:'Search',exact:true}).click();
+  await page.getByRole('link',{name:'TESTPAY',exact:true}).waitFor();
+  console.log('  ✓ term search and define/assign checklist are consistent');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
+  'payment-terms': paymentTerms,
   'material-basic': basicLifecycle,
   'material-purchasing': purchasing,
   'material-mrp': mrp,

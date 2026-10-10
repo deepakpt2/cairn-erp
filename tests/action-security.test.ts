@@ -19,6 +19,8 @@ import { saveNumberRange } from '@/app/config/number-ranges/actions';
 import { postJournalAction } from '@/app/finance/journal/new/actions';
 import { saveMaterialAction } from '@/app/inventory/materials/actions';
 import { getMaterialDetail } from '@/modules/inventory/materials';
+import { savePaymentTermAction } from '@/app/config/payment-terms/actions';
+import { getPaymentTerms } from '@/modules/foundation/payment-terms';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -38,6 +40,24 @@ function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', o
 function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
 
 describe('server action security', () => {
+  it('derives payment-term tenant/actor from session, not forged form fields', async () => {
+    signedIn();
+    const data=form({client:beta.client,changedBy:'FORGED',termsCode:'SECACT',description:'Security test',baselineSource:'DOCUMENT_DATE',netDays:'30',discount1Days:'',discount1Percent:'0.00',discount2Days:'',discount2Percent:'0.00',isActive:'on',expectedVersion:'0',reason:'Action security test'});
+    expect((await savePaymentTermAction({ok:true},data)).ok).toBe(true);
+    expect((await getPaymentTerms(alpha.client,'SECACT'))?.createdBy).toBe('real.operator');
+    expect(await getPaymentTerms(beta.client,'SECACT')).toBeNull();
+  });
+  it('refuses payment-term changes without the configuration authority', async () => {
+    signedIn(['FIN.*']);
+    const data=form({termsCode:'DENIED',description:'Denied',baselineSource:'DOCUMENT_DATE',netDays:'30',discount1Days:'',discount1Percent:'0.00',discount2Days:'',discount2Percent:'0.00',isActive:'on',expectedVersion:'0',reason:'Denied authority test'});
+    expect((await savePaymentTermAction({ok:true},data)).message).toContain('CFG.FIN.PAYTERMS.DEFINE');
+    expect(await getPaymentTerms(alpha.client,'DENIED')).toBeNull();
+  });
+  it('refuses anonymous payment-term server-action calls', async () => {
+    request.session=null;
+    await expect(savePaymentTermAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
   it('ignores a forged tenant/actor when changing posting controls', async () => {
     signedIn();
     expect((await savePeriodRule(periodForm())).ok).toBe(true);
