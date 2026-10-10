@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.19 — B-004 MRP settings browser acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.20 — B-005 Material Valuation browser acceptance)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2000,8 +2000,8 @@ when combining them would jeopardise the time budget.
 | B-002 | Publish/verify the already-written material **Basic data** view, including staged saves | ≤10 min | **DONE — production preview rebuilt; staged/basic/copy/history browser flow passed; one form-reset defect fixed** |
 | B-003 | Verify the existing material **Purchasing** view and its plant/unit/tolerance rules | ≤10 min | **DONE — staged/completed/maintained purchasing flow, exact tolerances, unchanged save, conversion refusal and read-only authority passed** |
 | B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **DONE — staged/no-op/complete/maintained settings, exact quantities, net-change, validation and read-only authority passed; no planning execution** |
-| B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **NEXT — valuation only; stock/value remain read-only** |
-| B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | Pending; prerequisite for partner company segments |
+| B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **DONE — staged/prices/currency/no-op/stock guard, display-only finance and warehouse price denial passed** |
+| B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **NEXT — backend/defaults only; prerequisite for partner company segments** |
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | Pending; backend already available from B-006 |
 | B-008 | Business partner **general data backend** only | ≤10 min | Pending; no company/purchasing/sales segments |
 | B-009 | Business partner **general data UI** only | ≤10 min | Pending |
@@ -2089,7 +2089,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 |---|---|---|---|---|
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
-| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — Basic/Purchasing/MRP settings UI verified; Valuation walkthrough and owner sign-off pending** |
+| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
 | SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | DRAFT |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
@@ -2835,6 +2835,61 @@ captures enter Git. **Publication result:** Normal fast-forward correction/accep
 `46082e8904bac075c0760e3a719e5e2c43750714`; this confirmation is a documentation-only follow-up. Next:
 **B-005 Material Valuation only**. Full MRP execution remains its later M1d milestone.
 
+
+### 26.21 B-005 — Material Valuation browser acceptance `COMPLETE`
+
+**Scope:** existing Accounting/Costing **valuation settings**, not goods postings, standard-cost
+estimation, stock revaluation documents or the full inventory/costing flow. Extended its browser
+harness only; no ERP page/service/schema change was needed.
+
+**Actual UI/server-action acceptance** (`npm run smoke:browser:material-valuation`, ~7.8 seconds):
+
+- Fresh T997 fixture and Basic material through explicit development onboarding/UI.
+- RAW type defaults to MOVING_AVERAGE. Blank valuation class stages **INCOMPLETE**, version 1;
+  unchanged resave preserves the intentionally unset class/status/version.
+- Currency is company-derived **KWD**. Currency/book quantity/book value are spans, not editable
+  inputs. Deliberately forged USD, quantity 999 and value 999999 submitted to the action are ignored;
+  initial stored book quantity/value remain zero.
+- RAW_INVENTORY, moving price **12.3456**, price unit **10.000** complete **CREATED**, version 2.
+  Unchanged resave preserves exact values/version.
+- With zero stock, switching to STANDARD and price **25.6789** maintains the view, version 3.
+  Zero price unit is refused without changing version.
+- **Isolated guard fixture only:** SQL represents pre-existing book stock of 10.000/value 25.6789
+  inside T997, because goods posting is not implemented. This is not an inventory posting or owner
+  opening stock. A subsequent attempted price 30.0000 is refused; version 3, stored price, quantity
+  and book value are preserved. Global Basic version stays 1 and no plant purchasing/MRP segments
+  are fabricated. The entire fixture is safely cleaned after the test.
+- Valuation/control-change reasons, before/after audit fields and real session footer are visible;
+  full-page history/refusal screenshot inspected.
+- A finance reviewer with **FIN.MATERIAL.VALUATION.DISPLAY only** can read valuation/history but has
+  no Save form. A warehouse-only user cannot see prices/history or maintain valuation; serialized
+  HTML was checked for both known test price values and neither is present. Anonymous access
+  redirects; no browser runtime errors. Identity/role fixtures are direct SQL because user admin UI
+  remains pending; all actual master/business setup above uses UI.
+
+**Test fixture correction:** initial attempt used nonexistent role-capability column
+`capability_pattern`; the actual schema column is `capability_code` (stores literal patterns). The
+fixture was corrected, not the schema/migration/product permissions. All valuation/business checks
+had already passed before that fixture error. No product defect was found in the completed target.
+
+**Verification:** TypeScript, **168/168 Vitest tests across 13 files**, **8/8 Python deployment tests**,
+IP lint (110 files) and focused valuation browser acceptance pass. Current product build remains the
+B-004 corrected standalone build; this test/log-only batch does not require an owner-host image rebuild.
+Basic, Purchasing, MRP settings and Valuation now each have successful isolated browser walkthroughs.
+This does not imply full material conformance: Production/Sales/Storage/Forecast/Quality/Warehouse
+views, unit conversions, revaluation/costing, imports and operational flows remain pending. Owner
+sign-off is still pending.
+
+**Preservation:** before/after DB counts match: 1 tenant/user/journal, 74 GL accounts, 11 ranges,
+3 material/plant/valuation/planning rows each, 15 change documents, 10 applied migrations. No original
+stock/book values, users, documents, private env files or owner-host data changed. No reset, migration
+or seed reconstruction. The owner environment is not used for the fixture stock/identity simulations.
+
+**Checkpoint:** `checkpoints/2026-10-10_1259_UTC/` includes current custom DB dump, source archive,
+repository bundle, counts, valuation-history screenshot and hashes; previous checkpoints retained.
+No private credentials/captures are committed. **Publication result:** Pending normal source push and
+remote verification. Next: **B-006 Payment terms backend/defaults only**, before partner company data.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2974,6 +3029,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Normal security push verified; commit recorded in §26.18. Host validation remains pending. | Agent |
 | 0.18 | 2026-10-10 | **B-003 complete: material Purchasing UI accepted in a bounded batch.** Extended only its browser target for staged/complete/maintained plant data, exact tolerances/manufacturer part, unchanged-save preservation, unsupported-unit refusal, visible history/footer and warehouse read-only access. No MRP/valuation/PO feature changes or ERP product correction. Recovered discarded sandbox services by restoring the preserved B-002 database dump into a fresh empty DB—not a reset/reseed; original checkpoint counts match before/after. Standalone/typecheck, **163 Vitest tests**, 8 Python regressions, IP lint and real Purchasing-only browser pass. Fresh private DB/source/review checkpoint saved; owner remote data untouched. §26.19 records scope/results/limitations; B-004 planning settings is next. Normal verification-source push verified; commit recorded in §26.19. | Agent |
 | 0.19 | 2026-10-10 | **B-004 complete: Material MRP settings UI accepted within its small-batch scope.** Tested staged/complete/maintained plant settings, exact quantities, unchanged resave, reorder net-change reflag, invalid lot refusal, visible history/footer and warehouse read-only authority. Found FND-004: null saved controller wrongly used a new-record default and auto-completed on resave; browser-safe value helper now distinguishes null/undefined, with five regressions. No existing-record rewrite or MRP engine/valuation/purchasing expansion. Typecheck/standalone build, **168 Vitest tests**, 8 Python tests, MRP acceptance and Purchasing regression pass; private DB counts unchanged. Fresh checkpoint saved; shared UI correction needs owner image rebuild. §26.20 records results/limitations and B-005 valuation is next. Normal correction/acceptance push verified; commit recorded in §26.20. | Agent |
+| 0.20 | 2026-10-10 | **B-005 complete: Material Valuation UI accepted.** Expanded only its browser target for incomplete/complete/maintained/no-op settings, exact moving/standard prices and price unit, company-derived currency, forged/read-only stock-value refusal, positive unit validation, existing-stock change guard, visible financial history and separate finance-display/warehouse denial. Guard stock and auth identities are isolated SQL fixtures, not new postings or owner data. Fixed only a test column-name mismatch, not schema/product code. 168 Vitest tests, 8 Python tests, typecheck/IP lint and real valuation browser pass; data counts unchanged and private checkpoint saved. All four implemented views individually verified, not full material/operational conformance. §26.21 records limitations; B-006 payment-term backend is next. Source push initially pending. | Agent |
 
 ---
 

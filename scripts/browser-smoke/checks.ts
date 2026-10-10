@@ -354,42 +354,110 @@ async function valuation(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   await basic(ctx);
   await page.getByRole('link', { name: /^Accounting/ }).click();
+  await page.locator('[name="valuationClass"]').waitFor();
+  assert.equal(await page.locator('[name="priceControl"]').inputValue(), 'MOVING_AVERAGE');
+  for (const key of ['currency', 'totalStockQuantity', 'stockValue']) assert.equal(await page.locator(`input[name="${key}"]`).count(), 0);
+  const form = page.locator('form').filter({ has: page.locator('[name="expectedVersion"]') });
+  await form.evaluate((element) => {
+    for (const [name, value] of [['currency','USD'], ['totalStockQuantity','999'], ['stockValue','999999']]) {
+      const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; element.appendChild(input);
+    }
+  });
+  await page.locator('[name="reason"]').fill('Browser incomplete valuation setup');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
+  const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(staged?.valuations[0].currency, 'KWD');
+  assert.equal(staged?.valuations[0].totalStockQuantity, '0.000');
+  assert.equal(staged?.valuations[0].stockValue, '0.0000');
+  assert.equal(staged?.valuations[0].valuationClass, null);
+  assert.equal(staged?.valuations[0].version, 1);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('No data changed. Status: Incomplete.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 1);
+  console.log('  ✓ incomplete valuation preserves unset class; forged currency/stock values are ignored');
+
   await page.locator('[name="valuationClass"]').selectOption('RAW_INVENTORY');
   await page.locator('[name="movingAveragePrice"]').fill('12.3456');
   await page.locator('[name="priceUnit"]').fill('10');
-  await page.locator('[name="reason"]').fill('Browser valuation parameters');
+  await page.locator('[name="reason"]').fill('Browser valuation completion');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
-  await page.getByRole('link', { name: 'Open material and its views', exact: true }).click();
-  const master = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
-  assert.equal(master?.base.createdBy, 'browser.admin');
-  assert.equal(master?.valuations[0].currency, 'KWD');
-  assert.equal(master?.valuations[0].movingAveragePrice, '12.3456');
-  assert.equal(master?.valuations[0].priceUnit, '10.000');
-  assert.equal(master?.valuations[0].stockValue, '0.0000');
-  console.log('  ✓ valuation derives KWD and never fabricates stock or inventory value');
+  const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(completed?.valuations[0].version, 2);
+  assert.equal(completed?.valuations[0].movingAveragePrice, '12.3456');
+  assert.equal(completed?.valuations[0].priceUnit, '10.000');
+  assert.equal(completed?.valuations[0].currency, 'KWD');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 2);
+  console.log('  ✓ exact moving-average price/unit complete and survive an unchanged resave');
+
+  await page.locator('[name="priceControl"]').selectOption('STANDARD');
+  await page.locator('[name="standardPrice"]').fill('25.6789');
+  await page.locator('[name="reason"]').fill('Browser valuation maintenance');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
+  await page.locator('[name="priceUnit"]').fill('0');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('priceUnit: Price unit must be positive.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 3);
+
+  // Isolated guard fixture only: represent existing book stock; this is not a goods posting.
+  await withTenant(CLIENT, (tx) => tx.execute(sql`update material_valuation set total_stock_quantity = '10.000', stock_value = '25.6789' where material_number = 'RAW-BROWSER' and valuation_area = '1000'`));
+  await page.locator('[name="standardPrice"]').fill('30.0000');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Valuation settings cannot be changed here while stock exists.', { exact: true }).waitFor();
+  const preserved = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(preserved?.valuations[0].version, 3);
+  assert.equal(preserved?.valuations[0].standardPrice, '25.6789');
+  assert.equal(preserved?.valuations[0].totalStockQuantity, '10.000');
+  assert.equal(preserved?.valuations[0].stockValue, '25.6789');
+  assert.equal(preserved?.base.version, 1);
+  assert.equal(preserved?.plants.length, 0);
+  console.log('  ✓ positive price unit enforced; stock-bearing price change refused without altering book value');
+
   await page.getByRole('link', { name: 'Change history', exact: true }).click();
-  await page.getByText('Browser valuation parameters', { exact: true }).waitFor();
+  await page.getByText('Browser valuation completion', { exact: true }).waitFor();
+  await page.getByText('Browser valuation maintenance', { exact: true }).waitFor();
+  assert.match(await page.locator('footer').innerText(), new RegExp(`${CLIENT}.*browser.admin`));
   await page.screenshot({ path: '.arena/material-valuation-history-review.png', fullPage: true });
-  console.log('  ✓ material change evidence is visible in the application');
-  // Only this authorisation fixture is seeded: the user-admin screen is pending.
-  // Every tenant/master/business document above was still created through UI.
-  const warehouseId = randomUUID();
+  console.log('  ✓ valuation/control-change evidence and session-derived footer are visible');
+
+  // Authorization identities only: the user-admin UI is not built yet.
+  const warehouseId = randomUUID(); const reviewerId = randomUUID();
+  const password = await hashPassword(PASSWORD);
   await withTenant(CLIENT, async (tx) => {
-    await tx.execute(sql`insert into app_user (id, client, username, full_name, password_hash, must_change_password, created_by) values (${warehouseId}, ${CLIENT}, 'warehouse.viewer', 'Warehouse Viewer', ${await hashPassword(PASSWORD)}, false, 'BROWSER_FIXTURE')`);
-    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by) values (${CLIENT}, ${warehouseId}, 'WAREHOUSE_CLERK', 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by) values (${CLIENT}, 'PRICE_REVIEWER', 'Price reviewer', true, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code) values (${CLIENT}, 'PRICE_REVIEWER', 'FIN.MATERIAL.VALUATION.DISPLAY')`);
+    for (const [id, username, roleCode] of [[warehouseId,'warehouse.viewer','WAREHOUSE_CLERK'],[reviewerId,'finance.viewer','PRICE_REVIEWER']]) {
+      await tx.execute(sql`insert into app_user (id, client, username, full_name, password_hash, must_change_password, created_by) values (${id}, ${CLIENT}, ${username}, ${username}, ${password}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by) values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
   });
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
-  await page.locator('[name="client"]').fill(CLIENT);
-  await page.locator('[name="username"]').fill('warehouse.viewer');
-  await page.locator('[name="password"]').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.waitForURL(/\/$/);
-  await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&view=ACCOUNTING&history=1`, { waitUntil: 'domcontentloaded' });
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL(/\/$/);
+    await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=ACCOUNTING&history=1`, { waitUntil: 'domcontentloaded' });
+  }
+  await signInAs('finance.viewer');
+  await page.getByText(/FIN.MATERIAL.VALUATION.MAINTAIN/).waitFor();
+  await page.getByText('Browser valuation maintenance', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.match(await page.locator('body').innerText(), /25\.6789/);
+  console.log('  ✓ finance display authority can review valuation/history but cannot maintain');
+
+  await signInAs('warehouse.viewer');
   await page.getByText(/This screen requires authority FIN.MATERIAL.VALUATION.DISPLAY/).waitFor();
-  assert.equal((await page.content()).includes('12.3456'), false, 'Valuation and price history must not leak in rendered or serialised content');
-  console.log('  ✓ warehouse authority cannot read valuation prices or their change history');
+  const html = await page.content();
+  for (const price of ['12.3456','25.6789']) assert.equal(html.includes(price), false, 'Financial values must not leak in rendered or serialized content');
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  console.log('  ✓ warehouse authority cannot read valuation prices or their history');
 }
 
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
