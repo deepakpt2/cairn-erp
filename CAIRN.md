@@ -2613,7 +2613,7 @@ this confirmation is a documentation-only follow-up. Host diagnostic remains pen
 `checkpoints/2026-10-10_0326_UTC/`. The ERP feature queue remains B-003 Purchasing.
 
 
-### 26.17 Confirmed wrong database DNS target `FIX PREPARED / HOST VERIFICATION PENDING`
+### 26.17 Confirmed wrong database DNS target `FIX PUBLISHED / HOST VERIFICATION PENDING`
 
 **Owner diagnostic evidence:** actual app/migrate URLs and decoded passwords match; app password
 matches the DB container setting; migration exits 0. Intended Cairn DB address is **172.31.0.2**, while
@@ -2655,7 +2655,9 @@ all three URL hosts match it, app/migration runtime URLs agree, DB remains priva
 unchanged and Traefik integration retained. **8/8 pure Python tests** (5 redaction and 3 routing
 regressions) pass, along with patch whitespace checks. No Docker engine exists in this sandbox; no
 actual owner-host database/container was modified here. No ERP code/feature change or credential
-rotation. **Publication result:** Pending normal source push and remote verification. Source checkpoint:
+rotation. **Publication result:** Normal fast-forward routing fix push verified, commit
+`ab7776b2b70ddd5d59a5f516fd868571598d9b32`; this confirmation is a documentation-only follow-up.
+Owner-host remediation remains pending the commands above. Source checkpoint:
 `checkpoints/2026-10-10_0342_UTC/`. The ERP queue remains B-003 Purchasing.
 
 ---
@@ -2793,7 +2795,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Normal source push verified; fix commit recorded in §26.14. Owner-host repair remains unverified. | Agent |
 | 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Normal source push verified; default-env commit recorded in §26.15. Host repair remains unverified. | Agent |
 | 0.15 | 2026-10-10 | **Read-only split-connection diagnosis after fresh migration/app logs.** Migration verifies app-role login and seeds succeed while app still gets 28P01, so further password resets are stopped. Added a safe Docker inspection/DNS/optional login diagnostic plus five passing pure redaction tests. No secrets/connection strings printed, no database or deployment changes, no root-cause claim without host output. §26.16 records evidence, commands, possible shared-network `db` collision and interpretation. Host diagnosis/resolution remains pending; normal source push verified and diagnostic commit recorded in §26.16. | Agent |
-| 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Source publication initially pending; host remediation not yet verified. | Agent |
+| 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Normal routing fix push verified; commit recorded in §26.17. Host remediation not yet verified. | Agent |
 
 ---
 
