@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.30 — B-015 customer company-code maintenance UI)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.31 — B-016 customer sales-area backend)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2012,8 +2012,8 @@ when combining them would jeopardise the time budget.
 | B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | **DONE — scoped buying form/history, status/block/validation and procurement authority passed** |
 | B-014 | Customer **company-code backend** only | ≤10 min | **DONE — scoped AR/terms/staging/blocks/version/history/use controls tested** |
 | B-015 | Customer **company-code UI** only | ≤10 min | **DONE — scoped AR form/history, finance access, status/block/validation lifecycle passed** |
-| B-016 | Customer **sales-area backend** only | ≤10 min | **NEXT — pricing/delivery master defaults only, no order posting** |
-| B-017 | Customer **sales-area UI** only | ≤10 min | Pending; protected master maintenance |
+| B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
+| B-017 | Customer **sales-area UI** only | ≤10 min | **NEXT — protected sales-area maintenance on the partner Customer tab; no order posting** |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
 imports, P2P, production/MRP execution, O2C, banking, closing, audit and deployment) follows the same
@@ -3454,6 +3454,72 @@ Private checkpoint `checkpoints/2026-10-10_1708_UTC/` stores DB/source/history/r
 result:** Normal AR UI push verified, commit `b8fcd33d68f4d0cddfd797c7cd8e01a2a9048b9e`;
 this confirmation is a documentation-only follow-up. Next B-016 Customer sales-area backend only.
 
+### 26.32 B-016 — Customer sales-area backend `COMPLETE · UI PENDING`
+
+Added `customer_sales_area` (**70 tables**), generated immutable `0008_customer_sales_area.sql` plus
+additive `9012_customer_sales_area_policies.sql`; **22 applied migrations**. Forced/default-deny RLS,
+tenant cascade, and composite references to the stable CUSTOMER role, the existing `sales_area`
+(sales org / distribution channel / division), and the delivering `plant`. Primary key is
+partner + sales org + distribution channel + division, so one customer keeps independent sales areas.
+
+Fields: optional sales district, delivering plant, pricing procedure code, complete-delivery flag,
+order-combination flag, block, staged `sales_status` INCOMPLETE/CREATED/MAINTAINED, version and audit.
+A view is **CREATED** only when a delivering plant and a pricing procedure are both set; the two flags
+and sales district are optional defaults. Sales district and pricing procedure accept up to six
+capital letters or digits and are stored as codes only: no sales-district master exists, and no
+pricing-procedure master or condition engine (E8) exists yet, so these codes are not validated
+against any reference. They must gain a master-data foreign key when those masters are built.
+
+Save requires an existing active general CUSTOMER role; the sales area, its sales organisation and
+that organisation's company code must be active. A delivering plant must be active and belong to the
+sales organisation's company code. Saves take the same partner advisory lock as other partner segments
+and a row lock, check expected version (stale views refused), preserve no-ops, require a reason, and
+record change history under transaction `SALES.CUSTOMER.SALESAREA.MAINTAIN` with security-relevant fields
+`deliveringPlant`, `pricingProcedure`, `completeDelivery`, `orderCombination`, `isBlocked`. The B-014
+company settings and supplier segments are not modified; Supplier and Customer roles remain independent.
+
+Operational gate `requireCustomerSalesArea` (for future order/delivery services) re-checks general
+Customer usability (general data complete and unblocked, role active), segment complete and unblocked,
+and the sales-area/organisation/company/plant references at each use. Sales-area blocks affect only that
+area; a general partner block affects all areas. Derived sales organisation/company are never copied
+onto the segment. No sales order, quotation, delivery, pricing condition, billing, credit or open-item
+data is created or enabled.
+
+Catalogue unchanged at **46 capabilities/23 terms/19 aliases; 51 activities**. The transaction code
+`SALES.CUSTOMER.SALESAREA.MAINTAIN` is recorded in change history but **is not yet a registered
+capability**; B-017 must register it, with its own DISPLAY/MAINTAIN authority, before the screen is
+exposed. No registry or navigation change was made in this batch.
+
+**Verified:** `npm run typecheck` clean; `npm run build` passes; IP lint clean (159 files scanned);
+**302/302 Vitest tests across 19 files** (22 new in `tests/customer-sales-areas.test.ts`: staging and
+completion, derived validation, supplier-only/unknown partner refusal, 9 invalid or inactive-reference
+cases without writes, inactive organisation/company at use, no-op/stale history, concurrent version race,
+sibling-area block independence, multi-area listing order, general-block and removed-role gates, inactive
+plant at use, dual-role company-segment preservation, tenant isolation with default-deny, cascade);
+8 Python deployment regressions pass. The Customer company (B-014) suite still passes unchanged.
+
+Verification ran in a new local PostgreSQL 18 cluster created inside this sandbox for this batch (test-only
+tenants, reference data seeded; no owner or previously checkpointed database was touched). Preservation
+counts for owner data therefore cannot be evidenced from this batch. Nothing was reset, reseeded or
+mutated outside the test fixtures, and no owner-host operation was performed.
+
+**Owner update (R-23):** `git pull`, then `docker compose up -d --build --force-recreate migrate app`,
+keeping the private `.env`. Confirm additive migrations `0008`/`9012` apply (22 total) and that the
+existing general, supplier and customer company screens still work. There is no new screen to check
+yet; do not add sales-area rows through SQL.
+
+**Future B-017 test data (reserved, not created):** TESTCUST01 active Customer; sales area **1000 / 01 / 01**
+(standard "Direct sales — manufactured products"); delivering plant **1000**; pricing procedure **RVAA01**
+(dummy code); sales district **KW01** (optional); complete-delivery and order-combination off; reason
+**Owner customer sales-area test**. Expected: blank plant or pricing procedure → INCOMPLETE; both set →
+CREATED; plant from another company, inactive plant, unknown sales area or sales district/procedure
+longer than six characters → refused; stale and unchanged saves behave as in §26.31; block affects only
+this sales area. Sales-area change guards for linked order/delivery documents are not built and must be
+added before those documents exist.
+
+Private checkpoint not created in this batch. Next **B-017 customer sales-area UI** only.
+
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3604,6 +3670,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.28 | 2026-10-10 | **B-013 complete: procurement-protected supplier purchasing UI.** Added active Supplier tab/org selector and currency/group/delivery/location/optional-term/block/reason/status/history panel; independent server action/tenant-actor/PROC authority, safe filtered choices and unset preservation. 44 caps/22 terms/19 aliases; three action tests plus browser target. 256 tests, 8 Python, build/typecheck/IP lint, Purchasing browser and Company regression pass; original data/schema unchanged. §26.29 keeps later owner review pending and provides dummy/positive/negative/stale checks. Explicit next customer company/sales-area split B-014…17 added; no PO/stock/payment functionality implied. Normal procurement UI push verified; commit recorded in §26.29. | Agent |
 | 0.29 | 2026-10-10 | **B-014 complete: customer company backend, UI pending.** Added tenant/RLS/cascading company AR master and immutable 0007/9011 additions (20 applied), active customer/chart-account/terms validation, staged/block/version/audit/use checks and linked recon/chart protection. Supplier and customer data remain separate on one dual-role identity; no sales/invoice/credit flow implied. 20 new tests; 276 total, 8 Python, standalone/typecheck/IP lint pass. Original data preserved by dump recovery/fixture cleanup. §26.30 gives future 1000/110000/NET30 assignments and positive/negative limitations; B-015 form next. Normal AR backend push verified; commit recorded in §26.30. | Agent |
 | 0.30 | 2026-10-10 | **B-015 complete: Customer company AR maintenance UI.** Added Customer-only tab/company selector/derived chart-currency/valid AR-terms/block/history panel, separate FIN Customer read/write caps and independent session-derived action. 46 caps/23 terms; caught/fixed i18n namespace collision at typecheck. Three action tests and browser target; 280 tests, 8 Python, standalone/typecheck/IP lint, Customer browser and two Supplier regressions pass. Original data/schema preserved, owner reviews/rollout pending. §26.31 includes TESTCUST01/1000/110000/NET30 dummy/checks; no billing/clearing/credit flow implied and B-016 backend next. Normal AR UI push verified; commit recorded in §26.31. | Agent |
+| 0.31 | 2026-10-10 | **B-016 complete: customer sales-area backend, UI pending.** Added forced-RLS/cascading `customer_sales_area` master plus immutable 0008/9012 additions (22 applied, 70 tables). Validates active customer role, sales area/organisation/company and same-company delivering plant; delivery/pricing defaults, flags, blocks, staging, version, audit and operational gate. Pricing procedure and sales district are code-only until their masters exist. 22 new tests; 302 total, 8 Python, typecheck/build/IP lint pass; Customer company regression unchanged. §26.32 gives dummy TESTCUST01/1000/01/01/RVAA01 future data and limitations; B-017 sales-area UI is next. Next B-017 sales-area UI. | Agent |
 
 ---
 
