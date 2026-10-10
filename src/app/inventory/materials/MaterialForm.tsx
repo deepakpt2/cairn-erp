@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { t } from '@/platform/i18n';
+import { materialFormValue } from '@/modules/inventory/form-values';
 import type { materialChoices } from '@/modules/inventory/materials';
 import { type MaterialView, MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from '@/modules/inventory/constants';
 import { saveMaterialAction } from './actions';
@@ -13,7 +14,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
   choices: Awaited<ReturnType<typeof materialChoices>>; creating: boolean;
 }) {
   const [state, action, pending] = useActionState(saveMaterialAction, { ok: true });
-  const value = (name: string, fallback = '') => String(initial[name] ?? fallback);
+  const value = (name: string, fallback = '') => materialFormValue(initial, name, fallback);
   const currentType = choices.types.find((t) => t.materialType === value('materialType', 'RAW'));
   const decimal = (name: string, label: string, fallback = '0') => <Field label={t(label)}><input name={name} defaultValue={value(name, fallback)} inputMode="decimal" className="field-input tabular" required /></Field>;
   const options = (name: string, label: string, rows: Array<{ key: string; text: string }>, fallback = '', blank = true, immutable = false) => <Field label={t(label)}>

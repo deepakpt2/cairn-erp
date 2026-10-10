@@ -261,25 +261,93 @@ async function purchasing(ctx: BrowserContext) {
 }
 
 async function mrp(ctx: BrowserContext) {
-  const { page, CLIENT } = scope(ctx);
+  const { page, BASE, CLIENT } = scope(ctx);
   await basic(ctx);
   await page.getByRole('link', { name: /^MRP/ }).click();
+  await page.locator('[name="mrpController"]').waitFor();
+  await page.locator('[name="mrpController"]').selectOption('');
+  await page.locator('[name="reason"]').fill('Browser incomplete planning setup');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
+  const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(staged?.plants[0].mrpController, null);
+  assert.equal(staged?.plants[0].mrpStatus, 'INCOMPLETE');
+  assert.equal(staged?.plants[0].version, 1);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('No data changed. Status: Incomplete.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 1);
+  console.log('  ✓ missing controller stages correctly; untouched resave cannot auto-complete it');
+
+  await page.locator('[name="mrpController"]').selectOption('001');
   await page.locator('[name="lotSizing"]').selectOption('FIXED');
   await page.locator('[name="fixedLotSize"]').fill('100');
+  await page.locator('[name="minimumLotSize"]').fill('10');
+  await page.locator('[name="maximumLotSize"]').fill('200');
   await page.locator('[name="safetyStock"]').fill('12.375');
   await page.locator('[name="plannedDeliveryDays"]').fill('7');
+  await page.locator('[name="reason"]').fill('Browser planning completion');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
-  await page.getByRole('link', { name: 'Open material and its views', exact: true }).click();
-  console.log('  ✓ planning view saved with exact quantities and a net-change flag');
-  const master = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
-  assert.equal(master?.plants[0].mrpStatus, 'CREATED');
-  assert.equal(master?.plants[0].safetyStock, '12.375');
-  assert.equal(master?.plants[0].fixedLotSize, '100.000');
-  assert.equal(master?.plants[0].purchasingStatus, 'NOT_CREATED');
-  const flags = await withTenant(CLIENT, (tx) => tx.execute(sql`select net_change from planning_file where material_number = 'RAW-BROWSER' and plant = '1000'`));
+  const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(completed?.plants[0].version, 2);
+  assert.equal(completed?.plants[0].safetyStock, '12.375');
+  assert.equal(completed?.plants[0].fixedLotSize, '100.000');
+  assert.equal(completed?.plants[0].plannedDeliveryDays, 7);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 2);
+  console.log('  ✓ fixed-lot sizing/exact safety stock complete and preserve the committed view');
+
+  // Isolated fixture only: simulate a previously consumed planning-file flag.
+  await withTenant(CLIENT, (tx) => tx.execute(sql`update planning_file set net_change = false where material_number = 'RAW-BROWSER' and plant = '1000'`));
+  await page.locator('[name="mrpType"]').selectOption('REORDER');
+  await page.locator('[name="reorderPoint"]').fill('25.500');
+  await page.locator('[name="safetyStock"]').fill('13.125');
+  await page.locator('[name="reason"]').fill('Browser planning maintenance');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
+  const flags = await withTenant(CLIENT, (tx) => tx.execute(sql`select net_change, last_changed_by from planning_file where material_number = 'RAW-BROWSER' and plant = '1000'`));
   assert.equal((flags as unknown as Array<{ net_change: boolean }>)[0].net_change, true);
-  assert.equal(master?.valuations.length, 0);
+  assert.equal((flags as unknown as Array<{ last_changed_by: string }>)[0].last_changed_by, 'browser.admin');
+  await page.locator('[name="maximumLotSize"]').fill('5');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Maximum lot size must not be below minimum lot size.', { exact: true }).waitFor();
+  const maintained = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(maintained?.plants[0].version, 3);
+  assert.equal(maintained?.plants[0].maximumLotSize, '200.000');
+  assert.equal(maintained?.plants[0].reorderPoint, '25.500');
+  assert.equal(maintained?.plants[0].safetyStock, '13.125');
+  assert.equal(maintained?.plants[0].mrpStatus, 'MAINTAINED');
+  assert.equal(maintained?.plants[0].purchasingStatus, 'NOT_CREATED');
+  assert.equal(maintained?.base.version, 1);
+  assert.equal(maintained?.valuations.length, 0);
+  console.log('  ✓ reorder changes reflag net-change; invalid lot bounds cannot mutate the record');
+
+  await page.getByRole('link', { name: 'Change history', exact: true }).click();
+  await page.getByText('Browser planning completion', { exact: true }).waitFor();
+  await page.getByText('Browser planning maintenance', { exact: true }).waitFor();
+  assert.match(await page.locator('footer').innerText(), new RegExp(`${CLIENT}.*browser.admin`));
+  await page.screenshot({ path: '.arena/material-mrp-history-review.png', fullPage: true });
+  console.log('  ✓ plant-level planning history and signed-in footer are visible');
+
+  // Authorisation identity fixture only; no live tenant/user data is modified.
+  const userId = randomUUID();
+  const password = await hashPassword(PASSWORD);
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into app_user (id, client, username, full_name, password_hash, must_change_password, created_by) values (${userId}, ${CLIENT}, 'warehouse.viewer', 'Warehouse Viewer', ${password}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by) values (${CLIENT}, ${userId}, 'WAREHOUSE_CLERK', 'BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="client"]').fill(CLIENT);
+  await page.locator('[name="username"]').fill('warehouse.viewer');
+  await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=MRP`, { waitUntil: 'domcontentloaded' });
+  await page.getByText(/PROD.MATERIAL.MRP.MAINTAIN/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  console.log('  ✓ warehouse authority cannot edit production-planning fields');
 }
 
 async function valuation(ctx: BrowserContext) {

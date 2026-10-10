@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.18 — B-003 Purchasing view browser acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.19 — B-004 MRP settings browser acceptance)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -1999,8 +1999,8 @@ when combining them would jeopardise the time budget.
 | B-001 | Split the existing browser acceptance script into independently runnable targets | ≤10 min | **DONE — 23 pure harness tests and foundation browser target passed; no ERP feature/schema change** |
 | B-002 | Publish/verify the already-written material **Basic data** view, including staged saves | ≤10 min | **DONE — production preview rebuilt; staged/basic/copy/history browser flow passed; one form-reset defect fixed** |
 | B-003 | Verify the existing material **Purchasing** view and its plant/unit/tolerance rules | ≤10 min | **DONE — staged/completed/maintained purchasing flow, exact tolerances, unchanged save, conversion refusal and read-only authority passed** |
-| B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **NEXT — planning settings only, no executable planning run** |
-| B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | Pending; stock/value remain read-only |
+| B-004 | Verify the existing material **MRP settings** view and net-change flag | ≤10 min | **DONE — staged/no-op/complete/maintained settings, exact quantities, net-change, validation and read-only authority passed; no planning execution** |
+| B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **NEXT — valuation only; stock/value remain read-only** |
 | B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | Pending; prerequisite for partner company segments |
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | Pending; backend already available from B-006 |
 | B-008 | Business partner **general data backend** only | ≤10 min | Pending; no company/purchasing/sales segments |
@@ -2089,7 +2089,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 |---|---|---|---|---|
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
-| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — Basic/Purchasing UI verified; MRP/Valuation walkthroughs and owner sign-off pending** |
+| SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — Basic/Purchasing/MRP settings UI verified; Valuation walkthrough and owner sign-off pending** |
 | SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | DRAFT |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
@@ -2780,6 +2780,60 @@ No real environment file/GitHub credential is put in source archives or public c
 result:** Normal fast-forward verification-source push checked on `main`, commit
 `c7b32ff831c1cfd311b4c683d8c787ce5e496214`; this confirmation is a documentation-only follow-up. Next is **B-004 MRP settings only**.
 
+
+### 26.20 B-004 — Material MRP settings browser acceptance `COMPLETE`
+
+**Scope:** plant-level planning **settings only**. No MRP execution/netting, planned/production orders,
+BOM/routing, purchasing feature expansion or valuation acceptance in this batch. Extended the isolated
+MRP browser target and corrected one demonstrated shared form-default bug.
+
+**Real UI/server-action acceptance** (`npm run smoke:browser:material-mrp`, ~5.5 seconds after fix):
+
+- Fresh T996 fixture through explicit development onboarding; Basic material created through UI.
+- Missing controller stages MRP as **INCOMPLETE**, plant version 1. An untouched resave stays incomplete
+  with no data/version change—it must not silently choose a controller.
+- Controller 001, FIXED lot **100.000**, min/max **10.000 / 200.000**, safety stock **12.375**, delivery
+  time 7 days complete the view as **CREATED**, version 2. Unchanged resave preserves it.
+- REORDER method, reorder point **25.500** and safety stock **13.125** produce **MAINTAINED**, version 3.
+  The relevant save reflags net-change and records browser.admin. For this check only, SQL marks the
+  isolated fixture's previous flag consumed; no owner planning state is touched and no engine run is
+  implied.
+- Invalid maximum lot 5 below minimum 10 is refused; stored max 200/version 3 remain unchanged.
+- Global Basic version stays 1, Purchasing remains NOT_CREATED, no valuation record is fabricated.
+- Planning reasons, field-level audit changes and correct tenant/user footer are visible; full-page
+  history/error screenshot inspected. Warehouse-only authority has read access but no planning Save
+  form. Only the authorization identity is SQL-seeded (user-admin UI pending); business records use UI.
+  Anonymous access redirects, no browser runtime errors.
+
+**FND-004 — persisted unset field was replaced by new-record default:** the original form helper used
+`initial[name] ?? fallback`, so saved null MRP controller was redisplayed as 001. A no-op resave therefore
+changed the record to CREATED. Corrected with browser-safe `materialFormValue`: **undefined** uses a
+new-record default, **null** is intentionally blank, while zero/false/exact strings are preserved.
+The same helper applies consistently to the existing material forms. Five pure regression tests were
+added; the full Purchasing browser target also passed after this shared correction. No existing record
+is rewritten by the fix; it changes how saved unset fields are displayed/submitted.
+
+**Verification:** TypeScript and corrected standalone build pass; **168/168 Vitest tests across 13
+files** pass; **8/8 Python deployment tests** pass; IP lint clean (110 files); MRP-only acceptance and
+Purchasing regression pass. Production provisioning tests remain part of the suite; disposable browser
+fixtures use explicit development mode. This is automated acceptance, not owner sign-off, live
+production bootstrap verification or complete material/MRP conformance. Valuation remains B-005.
+
+**Preservation:** before/after DB counts match: 1 tenant/user/journal, 74 GL accounts, 11 ranges,
+3 material/plant/valuation/planning rows each, 15 change documents, 10 applied migrations. Original
+samples/book quantities/private environment files and prior backups unchanged; no reset, migration,
+seed reconstruction or owner-host database operation. Only named fixtures were created/cleaned.
+
+**Current sandbox preview:** corrected standalone source runs as **`cairn-f778c2c1`**, `0.0.0.0:3000`.
+The previous preview was stopped before build to bound memory. This is not production deployment.
+Owner-host update, if desired, requires an image rebuild because the field-default correction is
+application code: `git pull` then `docker compose up -d --build app` (private `.env` retained).
+
+**Checkpoint:** `checkpoints/2026-10-10_1243_UTC/` includes current `database.dump`, source archive,
+repository bundle, counts, `material-mrp-history-review.png` and checksums. No private credentials or
+captures enter Git. **Publication result:** Pending normal source push/remote verification. Next:
+**B-005 Material Valuation only**. Full MRP execution remains its later M1d milestone.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2918,6 +2972,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.16 | 2026-10-10 | **Confirmed wrong-target database DNS collision fixed in Compose.** Owner diagnostic proves app/migration credentials match but app resolves generic `db` to 172.18.0.9 instead of Cairn DB 172.31.0.2. D-056 adds private alias `cairn-postgres` and points all runtime/owner URLs to it; keeps service/volume, roles/secrets and existing Traefik unchanged. Compose resolved-config checks and 8 Python redaction/routing tests pass. Owner must apply the alias/recreate containers and verify DNS; no password reset, image rebuild, volume removal or ERP-data change. §26.17 records evidence, commands and expected outcomes. Normal routing fix push verified; commit recorded in §26.17. Host remediation not yet verified. | Agent |
 | 0.17 | 2026-10-10 | **Production tenant admission security after owner concern.** D-057 closes anonymous signup: first setup requires deployment-owner token, later setup requires token plus verified provisioning capability; global transaction lock/init recheck before tenant insert prevents stale bootstrap admission. Independent server-action gate, server page wrapper and masked owner field added; production directory/launchpad require sign-in and filter own tenant. Safe optional server-only token configuration added; blank locks web provisioning, existing users/data unchanged. 53 focused tests, TypeScript/standalone build/IP lint and 8 Python regressions pass; no live host/PG concurrency claim or complete security sign-off. §26.18 supersedes public-onboarding advice and documents configuration/limits. Normal security push verified; commit recorded in §26.18. Host validation remains pending. | Agent |
 | 0.18 | 2026-10-10 | **B-003 complete: material Purchasing UI accepted in a bounded batch.** Extended only its browser target for staged/complete/maintained plant data, exact tolerances/manufacturer part, unchanged-save preservation, unsupported-unit refusal, visible history/footer and warehouse read-only access. No MRP/valuation/PO feature changes or ERP product correction. Recovered discarded sandbox services by restoring the preserved B-002 database dump into a fresh empty DB—not a reset/reseed; original checkpoint counts match before/after. Standalone/typecheck, **163 Vitest tests**, 8 Python regressions, IP lint and real Purchasing-only browser pass. Fresh private DB/source/review checkpoint saved; owner remote data untouched. §26.19 records scope/results/limitations; B-004 planning settings is next. Normal verification-source push verified; commit recorded in §26.19. | Agent |
+| 0.19 | 2026-10-10 | **B-004 complete: Material MRP settings UI accepted within its small-batch scope.** Tested staged/complete/maintained plant settings, exact quantities, unchanged resave, reorder net-change reflag, invalid lot refusal, visible history/footer and warehouse read-only authority. Found FND-004: null saved controller wrongly used a new-record default and auto-completed on resave; browser-safe value helper now distinguishes null/undefined, with five regressions. No existing-record rewrite or MRP engine/valuation/purchasing expansion. Typecheck/standalone build, **168 Vitest tests**, 8 Python tests, MRP acceptance and Purchasing regression pass; private DB counts unchanged. Fresh checkpoint saved; shared UI correction needs owner image rebuild. §26.20 records results/limitations and B-005 valuation is next. Source push initially pending. | Agent |
 
 ---
 
