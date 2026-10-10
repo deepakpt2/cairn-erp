@@ -36,6 +36,13 @@
       "when": 1791641122839,
       "tag": "0004_business_partner_general",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791644518021,
+      "tag": "0005_supplier_company",
+      "breakpoints": true
     }
   ]
 }

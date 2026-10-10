@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.24 — B-009 general business partner maintenance UI)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.25 — B-010 supplier company-code backend)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2006,8 +2006,8 @@ when combining them would jeopardise the time budget.
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **DONE — protected list/create/change/history and saved-date preview browser passed** |
 | B-008 | Business partner **general data backend** only | ≤10 min | **DONE — staged/audited general identity and stable supplier/customer role rows; no organisation segments** |
 | B-009 | Business partner **general data UI** only | ≤10 min | **DONE — protected general create/change/search/history, dual-role/block lifecycle and read-only UI passed** |
-| B-010 | Supplier **company-code segment backend** only | ≤10 min | **NEXT — company reconciliation/payment fields only** |
-| B-011 | Supplier **company-code segment UI** only | ≤10 min | Pending |
+| B-010 | Supplier **company-code segment backend** only | ≤10 min | **DONE — company-scoped reconciliation/terms/staging/blocking/version controls tested** |
+| B-011 | Supplier **company-code segment UI** only | ≤10 min | **NEXT — protected accounting-company form/action** |
 | B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | Pending |
 | B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | Pending |
 
@@ -3128,6 +3128,55 @@ Private checkpoint `checkpoints/2026-10-10_1429_UTC/` contains DB/source/history
 `34a0fc0a555b61255860d872d69eedb746a3b8ff`; this confirmation is a documentation-only follow-up. Next: **B-010 supplier company
 backend**, with company UI in the following batch.
 
+
+### 26.26 B-010 — Supplier company-code backend `COMPLETE · UI PENDING`
+
+Added `supplier_company_code` (67 tables), generated immutable `0005_supplier_company.sql` and additive
+`9009_supplier_company_policies.sql`; **16 applied migrations**. Tenant forced-RLS/default-deny/grants,
+client cascade and composite references to stable SUPPLIER role, company, company-chart GL account and
+payment terms. The company chart is server-derived, never trusted from submitted values.
+
+Company settings: partner/company key, supplier role, reconciliation account, payment terms, company
+blocking, staged INCOMPLETE/CREATED/MAINTAINED and version/audit. General supplier must exist with active
+role; company must be active; reconciliation account must belong to that company chart, be unblocked
+and VENDOR reconciliation; payment terms must be active. Blank assignments may stage an incomplete
+view. Shared general-partner advisory lock, row locks, optimistic version, no-op preservation, reasons
+and control-change history. Company usability gate additionally requires complete/unblocked general
+partner, active supplier role, complete/unblocked company settings and still-valid assignments.
+
+No company views are fabricated for other companies; tests show the same supplier's 1000/2000 records
+stay independent. Reconciliation-account changes are conservatively refused once partner-linked
+accounting exists; reviewed migration/zero-balance reclassification workflow is future work, not a
+claim of full reconciliation-master conformance. Posted ledger facts are not rewritten. Future invoice
+services must snapshot assignments/term versions. Journal partner assignment width is currently 20
+versus master 40; align before full AP posting integration, not by editing historical facts here.
+Payment methods, banking, withholding/dunning/tolerances, purchasing/sales segments, open-item/payment
+processing and invoice posting are not implemented by this master slice.
+
+**Verification:** 18 new tests for stage/complete, valid chart/vendor account, wrong/inactive/blocked
+assignments, customer-only refusal, no-op/stale/concurrent edits, company/global blocking, isolation,
+cascade, two-company independence and linked-ledger protection. The linked ledger is an isolated
+balanced posting-engine fixture, not owner financial data. **229/229 Vitest tests across 16 files**,
+8 Python regressions, TypeScript/standalone/IP lint (135 files) pass. No browser test until B-011 UI.
+
+**Preservation:** discarded sandbox services restored from the latest B-009 custom dump into a
+confirmed empty database/roles; no reset/reseed/overwrite. Original journals/materials/partners/payment
+terms unchanged; zero supplier-company rows remain outside cleaned fixtures. Only two additive
+migrations changed schema/history. Owner host not operated from here. Preview process **cairn-033c9f49**,
+0.0.0.0:3000. Apply on owner host with `git pull` then
+`docker compose up -d --build --force-recreate migrate app`, keep private .env.
+
+**Owner check/R-23:** no company form yet. Check additive migration success and existing partner/general
+and payment-term screens. Reserve: general partner **TESTSUPP01**, active Supplier role/general data
+complete; company **1000**; reconciliation **200000** (Trade payables, VENDOR); payment terms **NET30**;
+company block unchecked; reason **Owner supplier accounting test**. Expected future form state CREATED;
+blank account/terms stages INCOMPLETE, customer cash/AR accounts 100000/110000 must be refused, inactive
+terms refused, company blocking only blocks that company, stale tab refuses, audit shows reason/user.
+Do not add assignments by manual SQL or expect invoices/payments in this backend-only batch.
+
+Private checkpoint: `checkpoints/2026-10-10_1458_UTC/` with DB/source/history/count/hashes. **Publication
+result:** Pending normal source push/remote verification. Next B-011 supplier company UI/action only.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3272,6 +3321,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.22 | 2026-10-10 | **B-007 complete: protected payment-term maintenance UI.** Added own-code list/search/create/change/history and saved baseline-date preview, independent session/capability action, safe defaults/version behavior and checklist completion. Registered working screen/capability (39 caps/17 terms/16 aliases). Three new action-security tests and isolated browser case; 191 automated tests, 8 Python regressions, standalone/typecheck/IP lint and real form/date/error/history/search/checklist pass. Original records unchanged, no migrations or invoice/payment execution. R-23 records mandatory owner check instructions/dummy data; §26.23 includes TEST30/TEST2D expected dates and negative/stale/authority checks. B-008 partner general backend next. Normal maintenance UI push verified; commit recorded in §26.23. | Agent |
 | 0.23 | 2026-10-10 | **B-008 complete: general business partner backend only.** Added two tenant-cascading forced-RLS tables and additive 0004/9008 migrations (14 applied). Validated/locked/versioned/audited general identity supports staged address, immutable category, supplier/customer dual roles, stable role deactivation, block/use gates and no-op preservation. No bank/company/purchasing/sales/operational capability fabricated. 16 new tests; 207 total, 8 Python regressions, typecheck/standalone/IP lint pass; original business/config rows unchanged, no partner fixtures retained or owner-host edits. §26.24 gives backend checks and future TESTSUPP01 dummy form data; UI is B-009 next. Normal general-backend push verified; commit recorded in §26.24. | Agent |
 | 0.24 | 2026-10-10 | **B-009 complete: protected general partner maintenance UI.** Registered own create/display/maintain commands and capability (40 caps/20 terms/19 aliases), launchpad and general-only form/list/search/status/history with explicit pending segments. Server session/authority/context checks, safe business-only props, immutable category/number, staged saves, roles and blocking supported. Three action regressions plus browser target; 211 tests, 8 Python checks, typecheck/standalone/IP lint and real general lifecycle/read-only browser pass; no owner data or schema change. §26.25 provides TESTSUPP01/TESTCUST01 dummy records, expected/negative/stale checks; B-010 company backend next. Normal general UI push verified; commit recorded in §26.25. | Agent |
+| 0.25 | 2026-10-10 | **B-010 complete: supplier company backend, UI pending.** Added company-scoped forced-RLS/cascading master and immutable 0005/9009 additions (16 migrations). Derives chart and validates active supplier/company, vendor reconciliation and payment terms; stages, blocks, versions, audits and preserves no-ops. General/use gates and linked-accounting recon protection; no invoice/bank/purchasing flow implied. 18 new tests; 229 total, 8 Python, standalone/typecheck/IP lint pass, original data preserved via dump restoration and fixture cleanup. §26.26 documents dummy 1000/200000/NET30 assignments, width/reclassification caveats and B-011 next. Source push initially pending. | Agent |
 
 ---
 
