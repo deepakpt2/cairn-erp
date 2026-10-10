@@ -77,3 +77,17 @@ export async function requireCustomerSalesArea(tx:Tx,client:string,partner:strin
   await validateSalesArea(tx,client,org,channel,division,segment.deliveringPlant);
   return segment;
 }
+/** Active sales areas (organisation and company must be active), the selected area, and plants of its company code. */
+export async function customerSalesAreaChoices(client:string,selectedKey:string){
+  return withTenant(client,async tx=>{
+    const areas=await tx.select({key:sql<string>`${salesArea.salesOrg} || '/' || ${salesArea.distributionChannel} || '/' || ${salesArea.division}`,
+      org:salesArea.salesOrg,channel:salesArea.distributionChannel,division:salesArea.division,name:salesArea.name,organisation:salesOrg.name,companyCode:salesOrg.companyCode,currency:companyCode.currency})
+      .from(salesArea).innerJoin(salesOrg,and(eq(salesOrg.client,salesArea.client),eq(salesOrg.salesOrg,salesArea.salesOrg)))
+      .innerJoin(companyCode,and(eq(companyCode.client,salesOrg.client),eq(companyCode.companyCode,salesOrg.companyCode)))
+      .where(and(eq(salesArea.isActive,true),eq(salesOrg.isActive,true),eq(companyCode.isActive,true)))
+      .orderBy(asc(salesArea.salesOrg),asc(salesArea.distributionChannel),asc(salesArea.division));
+    const selected=areas.find(row=>row.key===selectedKey)??areas[0]??null;
+    const plants=selected?await tx.select({code:plant.plant,name:plant.name}).from(plant).where(and(eq(plant.isActive,true),eq(plant.companyCode,selected.companyCode))).orderBy(asc(plant.plant)):[];
+    return {areas,selected,plants};
+  });
+}

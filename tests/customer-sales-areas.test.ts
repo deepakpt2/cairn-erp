@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { createTenant,destroyTenant,withTenant,closeDb,type TestTenant } from './helpers';
 import { db } from '../src/platform/db/client';
 import { saveBusinessPartner } from '../src/modules/foundation/business-partners';
-import { saveCustomerSalesArea,getCustomerSalesArea,listCustomerSalesAreas,requireCustomerSalesArea,type CustomerSalesAreaInput } from '../src/modules/foundation/customer-sales-areas';
+import { saveCustomerSalesArea,getCustomerSalesArea,listCustomerSalesAreas,requireCustomerSalesArea,customerSalesAreaChoices,type CustomerSalesAreaInput } from '../src/modules/foundation/customer-sales-areas';
 let alpha:TestTenant;let beta:TestTenant;
 async function partner(tenant:TestTenant,number:string,roles:['CUSTOMER']|['SUPPLIER']=['CUSTOMER']){
   await saveBusinessPartner({client:tenant.client,partnerNumber:number,expectedVersion:0,changedBy:'TEST',reason:'Customer sales-area fixture',category:'ORGANIZATION',name:'Example customer',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles,isBlocked:false});
@@ -111,6 +111,13 @@ describe('customer sales-area defaults',()=>{
     expect(await getCustomerSalesArea(beta.client,'FOREIGN','1000','01','01')).toBeNull();
     expect(await listCustomerSalesAreas(alpha.client,'FOREIGN')).toHaveLength(1);
     expect(await db().execute(sql`select * from customer_sales_area`)).toHaveLength(0);
+  });
+  it('offers only active sales areas and plants of the selected company',async()=>{
+    const choices=await customerSalesAreaChoices(alpha.client,'1000/03/01');
+    expect(choices.areas.map(row=>row.key)).toEqual(['1000/01/01','1000/03/01']);
+    expect(choices.selected?.key).toBe('1000/03/01');
+    expect(choices.plants.map(row=>row.code)).toContain('1000');expect(choices.plants.map(row=>row.code)).not.toContain('2000PL');
+    expect((await customerSalesAreaChoices(alpha.client,'9999/99/99')).selected?.key).toBe('1000/01/01');
   });
   it('cascades new sales-area settings with tenant removal',async()=>{
     const temp=await createTenant('customer-sales-area-cascade');await partner(temp,'TEMP');await saveCustomerSalesArea({...input('TEMP'),client:temp.client});await destroyTenant(temp.client);

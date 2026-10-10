@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.31 — B-016 customer sales-area backend)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.32 — B-017 customer sales-area maintenance UI)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2013,7 +2013,8 @@ when combining them would jeopardise the time budget.
 | B-014 | Customer **company-code backend** only | ≤10 min | **DONE — scoped AR/terms/staging/blocks/version/history/use controls tested** |
 | B-015 | Customer **company-code UI** only | ≤10 min | **DONE — scoped AR form/history, finance access, status/block/validation lifecycle passed** |
 | B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
-| B-017 | Customer **sales-area UI** only | ≤10 min | **NEXT — protected sales-area maintenance on the partner Customer tab; no order posting** |
+| B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
+| B-018 | To be declared at the start of the next batch (§26.33 lists candidates) | ≤10 min | **NEXT — not yet chosen** |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
 imports, P2P, production/MRP execution, O2C, banking, closing, audit and deployment) follows the same
@@ -3520,6 +3521,64 @@ added before those documents exist.
 Private checkpoint not created in this batch. Next **B-017 customer sales-area UI** only.
 
 
+### 26.33 B-017 — Customer sales-area maintenance UI `COMPLETE · BROWSER ACCEPTANCE PENDING`
+
+An active Customer partner now has a **Sales area** tab on `/foundation/partners`, replacing the former
+pending placeholder. Command **SALES.CUSTOMER.SALESAREA.MAINTAIN** opens selection; `view=CUSTOMER_SALES`
+and `area=ORG/DC/DIV` identify the segment. The selector lists only active sales areas whose sales
+organisation and company code are active; an unknown or missing `area` falls back to the first choice.
+
+Fields: sales area and organisation (readonly), company code and currency (readonly, derived), delivering
+plant (active plants of that company code only), pricing procedure code, sales district code, complete-
+delivery and order-combination flags, block, required reason, saved status and version. New records start
+blank. Unchanged saves report "No customer sales-area data changed." Read-only users see the stored values
+without a Save control. Pricing procedure and sales district are normalised to capitals by the server action.
+
+Authority: **SALES.CUSTOMER.SALESAREA.DISPLAY** (audit read allowed) and **…MAINTAIN** are separate capabilities.
+FIN.CUSTOMER.COMPANY authority alone does not expose or change sales-area data, and the reverse is also true.
+Server action derives tenant and actor from the session; posted values are validated by the B-016 service,
+which also owns locking, version and history. Customer role missing
+or inactive hides the segment link, and direct access shows the role-required message; the sales-area history uses the same scoped history panel as other segments.
+
+Registration: the two capabilities and the term-registry entry `SALES.CUSTOMER.SALESAREA.MAINTAIN` (route
+`/foundation/partners?view=CUSTOMER_SALES`, search aliases VD02/VD03 only) were added to the seed catalogue.
+Catalogue is now **48 capabilities / 24 terms / 21 aliases**; 51 activities unchanged. **Existing databases
+must run `npm run seed` once** after the update so the new capabilities and term exist; the role that
+should maintain sales areas needs the capability granted through the normal role administration.
+
+**Verified:** typecheck and IP lint (161 files) clean; `next build` passes; **306/306 Vitest tests across 19
+files** (3 new action-security tests: tenant/actor derivation and code normalisation with forged tenant/
+actor, AR-only authority denial, anonymous redirect; 1 new choice-list test: active areas only, company-
+scoped plants, unknown-key fallback); 8 Python deployment regressions pass; Customer-company (B-014/15)
+suite still passes. **Server-rendered check** against a running dev server with three isolated test users
+in a fresh verification tenant: maintainer sees the form, Save, plant/procedure/district fields and the
+1000/01/01 choice; display-only reader sees the values with the read-only notice and no Save; a user with
+only unrelated stock authority sees the authority message; general, company-code and unknown-area requests
+return 200; the Customer company view still renders. **Not run:** a browser-driven save/history acceptance.
+This sandbox has no Chromium and the Playwright browser download host is outside the allowed network, so
+no browser target was added for this batch. Action-level save behaviour is covered by the Vitest action tests.
+
+Verification data lived only in a throwaway test tenant created for this batch in the sandbox database.
+No owner data was touched, and no migration was added in this batch (still 22 applied migrations).
+
+**Owner update (R-23):** `git pull`, then `docker compose up -d --build --force-recreate migrate app`, keeping
+the private `.env`. Run the seed step (`npm run seed` with the migration connection) once so the two new
+capabilities and the term entry exist. Then, for a test tenant, select customer **TESTCUST01** with
+an active Customer role. Open the Sales area tab, choose **1000 / 01 / 01**, select delivering plant **1000**,
+enter pricing procedure **RVAA01** (dummy code), reason **Owner customer sales-area test**, and save: expected
+Created. Blank plant or procedure: Incomplete. Unchanged save: no new version. Lowercase `rvaa01` is shown
+and stored as RVAA01. Block/unblock affects only that area. Sign in with a display-only user: values visible,
+no Save. Sign in with a user holding only FIN.CUSTOMER.COMPANY authority: the sales-area form is refused.
+Do not create sales-area rows through SQL.
+
+**Limitations:** sales-district and pricing-procedure codes have no master yet; no pricing condition engine,
+sales order, delivery, billing, credit or open-item behaviour is enabled; no sales-area change guard exists
+for linked order/delivery documents because none exist yet.
+
+Private checkpoint not created in this batch. Next: **B-018**, to be declared at the start of the next
+bounded batch. Candidates from the remaining Customer and partner scope: customer company payment-method
+and dunning-procedure segment fields, partner function relationships, or the next Phase 1 master in §25.3.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3671,6 +3730,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.29 | 2026-10-10 | **B-014 complete: customer company backend, UI pending.** Added tenant/RLS/cascading company AR master and immutable 0007/9011 additions (20 applied), active customer/chart-account/terms validation, staged/block/version/audit/use checks and linked recon/chart protection. Supplier and customer data remain separate on one dual-role identity; no sales/invoice/credit flow implied. 20 new tests; 276 total, 8 Python, standalone/typecheck/IP lint pass. Original data preserved by dump recovery/fixture cleanup. §26.30 gives future 1000/110000/NET30 assignments and positive/negative limitations; B-015 form next. Normal AR backend push verified; commit recorded in §26.30. | Agent |
 | 0.30 | 2026-10-10 | **B-015 complete: Customer company AR maintenance UI.** Added Customer-only tab/company selector/derived chart-currency/valid AR-terms/block/history panel, separate FIN Customer read/write caps and independent session-derived action. 46 caps/23 terms; caught/fixed i18n namespace collision at typecheck. Three action tests and browser target; 280 tests, 8 Python, standalone/typecheck/IP lint, Customer browser and two Supplier regressions pass. Original data/schema preserved, owner reviews/rollout pending. §26.31 includes TESTCUST01/1000/110000/NET30 dummy/checks; no billing/clearing/credit flow implied and B-016 backend next. Normal AR UI push verified; commit recorded in §26.31. | Agent |
 | 0.31 | 2026-10-10 | **B-016 complete: customer sales-area backend, UI pending.** Added forced-RLS/cascading `customer_sales_area` master plus immutable 0008/9012 additions (22 applied, 70 tables). Validates active customer role, sales area/organisation/company and same-company delivering plant; delivery/pricing defaults, flags, blocks, staging, version, audit and operational gate. Pricing procedure and sales district are code-only until their masters exist. 22 new tests; 302 total, 8 Python, typecheck/build/IP lint pass; Customer company regression unchanged. §26.32 gives dummy TESTCUST01/1000/01/01/RVAA01 future data and limitations; B-017 sales-area UI is next. Next B-017 sales-area UI. | Agent |
+| 0.32 | 2026-10-10 | **B-017 complete: customer sales-area maintenance UI, browser acceptance pending.** Added Sales area tab on active Customer partners with separate SALES.CUSTOMER.SALESAREA DISPLAY/MAINTAIN authority, scoped area selector, plant/procedure/district/flags/block/reason/status/history and server action. Catalogue now 48/24/21 with seed rerun required. 3 action tests and 1 choice test added; 306 Vitest, 8 Python, typecheck/build/IP lint pass; SSR checks for maintainer/reader/no-authority roles pass. No browser run (no Chromium in sandbox). §26.33 gives owner steps and B-018 selection is next. | Agent |
 
 ---
 
