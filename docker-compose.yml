@@ -1,3 +1,4 @@
+# Reads project .env automatically: use plain docker compose commands.
 # Core deployment slice only; worker/pooling/cache/scheduled backup are separate batches.
 name: cairn
 
@@ -8,8 +9,8 @@ services:
     environment:
       POSTGRES_DB: cairn
       POSTGRES_USER: cairn
-      POSTGRES_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD in .env.docker}
-      CAIRN_APP_DB_PASSWORD: ${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD in .env.docker}
+      POSTGRES_PASSWORD: ${CAIRN_OWNER_DB_PASSWORD:?Set CAIRN_OWNER_DB_PASSWORD in .env}
+      CAIRN_APP_DB_PASSWORD: ${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD in .env}
       POSTGRES_HOST_AUTH_METHOD: scram-sha-256
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -48,7 +49,7 @@ services:
     environment:
       CAIRN_ENV: production
       APP_BASE_URL: https://${CAIRN_HOST:-cairn.deepakpt.com}
-      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env.docker}
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@db:5432/cairn
       HOSTNAME: 0.0.0.0
       PORT: "3000"

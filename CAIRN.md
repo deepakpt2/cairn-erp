@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.13 — managed database credential synchronization and repair)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.14 — default .env Docker Compose deployment)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -171,6 +171,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-052 | **Owner-approved private local credential persistence.** Store repository URL and the owner-supplied token in `.env.local` as `GITHUB_REPO_URL` and `GITHUB_PAT`, with owner-only `0600` permissions. Keep the file ignored/untracked; no `NEXT_PUBLIC_` prefix, token in Git URLs/configuration, public source, project log or source archives. | Explicit owner instruction on 2026-10-10: rotation will be done later; save these values locally and exclude them from Git. Supersedes only D-051's memory-only credential clause, not its public-source boundary. Existing local configuration is preserved; no GitHub operation or token rotation is performed in this batch. | 2026-10-10 |
 | D-053 | **Ship real deployment slices, not nonexistent services.** The first Docker batch includes app, PostgreSQL 17 and a one-shot migration/reference job. Next standalone output runs as non-root; app uses restricted `cairn_app`, while only migration tools receive the owner URL. Existing Traefik `proxy`/`web` integration is retained without a Traefik service or certresolver. | The owner found Docker files missing from the published checkpoint. The full §22 target stack remains required, but worker, PgBouncer, Dragonfly, scheduled/WAL backups and restore verification get separate tested batches rather than fake commands or an oversized phase. Configuration/build checks are not represented as a successful Docker-host deployment. | 2026-10-10 |
 | D-054 | **Synchronize the managed runtime role before Docker migrations.** The one-shot operations job reads the actual `DATABASE_URL` password, uses a separate owner connection to create/alter only `cairn_app`, enforces restricted role flags, then verifies runtime authentication before applying schema migrations. Existing-volume recovery is an explicit local-admin credential repair, never deletion/reset. | The owner reported PostgreSQL SQLSTATE 28P01 for `cairn_app`. Persistent volumes retain passwords, and legacy applied migration 9000 creates a missing role with a development fallback. That migration remains immutable; the deployment job now establishes the configured role first. Owner passwords changed on an existing volume require the documented local-socket repair. | 2026-10-10 |
+| D-055 | **Default Compose deployment uses project `.env`, without repeated env-file flags.** `.env.example` is now the deployment template; the old local-Node template moves to `.env.development.example`, and `.env.docker.example` remains a compatibility template only. Keep explicit whitelisted container variables rather than passing the whole file into the app. | Owner clarification: the host was changed to `.env` and the owner does not want `--env-file .env.docker` on every command. Compose already loads project `.env`; the problem is potentially stale containers/stored role passwords, not the supported filename. Existing actual secret files are never overwritten or committed. | 2026-10-10 |
 
 ---
 
@@ -2397,7 +2398,7 @@ planned in §22 but not implemented. This bounded batch adds the **current worki
 | `Dockerfile` | Node 22 multi-stage dependencies, one-shot operations and non-root standalone app targets |
 | `.dockerignore` | Excludes actual environment files (including `.env.local` and its Git credential), checkpoints, captures, dependencies, generated builds and private data |
 | `docker-compose.yml` | PostgreSQL 17 → healthy DB → migration/reference job → app; persistent DB volume, private DB network and existing external Traefik network |
-| `.env.docker.example` | Empty required secret fields and the agreed hostname; copy to ignored `.env.docker`, never put Git credentials in it |
+| `.env.example` | Default deployment template with empty required secrets; copy to ignored `.env` only for a new installation, never overwrite existing secrets |
 | `docker/postgres/10-app-role.sh` | Initializes restricted `cairn_app` only for an empty PostgreSQL volume; SQL-bound password input, no schema/data reset |
 | `next.config.ts` | Adds standalone output and explicit current-project tracing root, preventing nested-workspace output paths/outside-context tracing |
 
@@ -2407,23 +2408,23 @@ host port. App receives only the restricted database URL; migration receives the
 owner URL and runs existing immutable migrations plus global/reference seeds. It does **not** run
 `bootstrap:reset`, `dev:tenant`, opening-stock seeding or automatic customer configuration. The named
 PostgreSQL volume is retained across normal redeploys. Initialization scripts run only on an empty
-volume; changing `.env.docker` passwords later does not update passwords inside an existing database.
+volume; changing `.env` passwords later does not update passwords inside an existing database.
 The official PostgreSQL owner is elevated; the web role explicitly cannot be superuser or bypass RLS.
 
 **Setup on the Docker host:**
 
 ```sh
-cp .env.docker.example .env.docker
-chmod 600 .env.docker
+if [ ! -f .env ]; then cp .env.example .env; fi
+chmod 600 .env
 # Run this THREE times; put different results in the two DB password and session-secret fields:
 openssl rand -hex 32
 # Keep CAIRN_HOST=cairn.deepakpt.com; the existing action-origin configuration matches that host.
 docker network inspect proxy
 # Quiet validation avoids printing expanded secrets:
-docker compose --env-file .env.docker config --quiet
-docker compose --env-file .env.docker up -d --build
-docker compose --env-file .env.docker ps
-docker compose --env-file .env.docker logs migrate app
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+docker compose logs migrate app
 ```
 
 Use current Docker Compose (v2+ syntax); the `proxy` network must already belong to the existing
@@ -2490,15 +2491,15 @@ stored password, hence the explicit repair step.
 ```sh
 git pull
 # Recreate if configuration changed; retain the existing PostgreSQL data volume:
-docker compose --env-file .env.docker up -d db
+docker compose up -d db
 # Read current container secrets without echoing them or putting a password in shell history:
-docker compose --env-file .env.docker exec -T db sh -s < docker/postgres/sync-credentials.sh
+docker compose exec -T db sh -s < docker/postgres/sync-credentials.sh
 # Rebuild the new operations entrypoint and recreate app/migration processes:
-docker compose --env-file .env.docker up -d --build --force-recreate migrate app
-docker compose --env-file .env.docker logs --tail=50 migrate app
+docker compose up -d --build --force-recreate migrate app
+docker compose logs --tail=50 migrate app
 ```
 
-If deployment uses `.env` instead, substitute that actual file. Do not send secret values or expanded
+Project `.env` is now the default (D-055); an explicitly selected alternate file must be used consistently. Do not send secret values or expanded
 Compose/connection configuration. Do not delete the volume or run reset/bootstrap-reset. App recreation
 also clears the cached failed role-check/pool and loads the currently configured password; simple
 `restart` does not update changed container environment. A repaired missing role still receives schema
@@ -2518,6 +2519,52 @@ No private environment/credential files are published. **Publication result:** N
 `eb9df4b000fd2309a6b12e02909da1e1a8956003`; this confirmation is a documentation-only follow-up. Host repair remains
 pending the owner commands. Source checkpoint: `checkpoints/2026-10-09_2241_UTC/`. ERP feature queue
 remains B-003 Purchasing; this is a bounded deployment-authentication fix only.
+
+
+### 26.15 Default `.env` deployment clarification `COMPLETE / HOST REPAIR PENDING`
+
+The owner clarified that deployment now uses `.env` and requests plain Docker Compose commands.
+**That filename is supported automatically.** Merely renaming a configuration file does not alter
+passwords stored in PostgreSQL or values in an already-created container. The repeated log matches the
+previous error, so fresh failure after rebuilding is not yet independently established. A mismatch can
+remain when repair used one file while app creation used another, or a container was only restarted.
+
+**Changes:** default deployment template is now `.env.example` with the required keys
+`CAIRN_OWNER_DB_PASSWORD`, `CAIRN_APP_DB_PASSWORD`, `SESSION_SECRET` and the agreed hostname. The former
+local development template is retained separately as `.env.development.example`. `.env.docker.example`
+is a legacy optional template, not required. Compose hints/runbooks now refer to `.env` and plain
+commands. No `env_file: .env` block is added: Compose interpolation and explicit service whitelists
+keep owner/Git credentials out of the web container. Existing `.env`/`.env.local` values are untouched;
+private permissions were reasserted as 0600 and tracked shell executable modes restored after workspace
+snapshot reconstruction.
+
+**Owner host — keep current secrets and repair in place:**
+
+```sh
+git pull
+# Keep your configured .env. Do NOT copy a blank example over an existing file.
+chmod 600 .env
+docker compose config --quiet
+docker compose up -d db
+docker compose exec -T db sh -s < docker/postgres/sync-credentials.sh
+docker compose up -d --build --force-recreate migrate app
+# Refresh the application, then inspect fresh logs rather than old startup output:
+docker compose logs --since=5m --tail=80 migrate app
+```
+
+Make sure `.env` has all three nonempty required secret keys above; do not send their values. Database
+passwords must be URL-safe (hex recommended). Shell-exported values can override `.env`; if overriding
+these keys intentionally, use the same effective configuration for every command. No database-volume
+removal, schema reset, stock/ledger edit or actual host connection is part of this clarification.
+
+**Verified:** official checksum-verified Compose CLI v5.6.0 loaded an isolated project `.env` with
+**no `--env-file` flag**; `config --quiet` passed. Its resolved dummy configuration has matching
+DB/application/migration passwords, a restricted application URL, no owner URL/Git credential in the
+app and the same Traefik/private-network rules. Shell syntax and patch whitespace pass. Configuration
+checks use dummy values only; the host's real login remains unverified until the owner runs the repair.
+Prior credential logic/build/tests remain as §26.14; this is a configuration/documentation change only.
+**Publication result:** Pending normal source push and remote verification. Source checkpoint:
+`checkpoints/2026-10-10_0311_UTC/`. No new ERP feature batch has started.
 
 ---
 
@@ -2652,6 +2699,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.11 | 2026-10-10 | **Owner-approved private local Git configuration.** D-052 supersedes the memory-only part of D-051: repository URL and supplied token saved in ignored/untracked `.env.local`, owner-only 0600, with server-only variable names. Credential values are absent from this log, committed source and environment examples; no push, token rotation, application/database change or reset. §26.12 records checks and the private-file boundary. B-003 Purchasing remains next. | Agent |
 | 0.12 | 2026-10-10 | **Core Docker deployment files added after the owner found them missing.** D-053 ships app/db/migrate only; worker, pooling/cache and scheduled backups remain separate pending slices. Added multi-stage non-root standalone Dockerfile, build-secret exclusions, Compose with existing Traefik proxy/web/no-certresolver, safe secret template and restricted database-role initialization without resets. Standalone/tracing-root settings correct artifact location. Compose configuration, YAML/security/shell checks, secret-free standalone build, sign-in HTTP smoke, 23 focused tests and IP lint pass; no Docker engine exists here, so full image/container/database/Traefik deployment is explicitly unverified. No current database or private-credential upload. §22 implementation status and §26.13 contain scope, setup, checks and limitations. Normal source push and remote ref verified; deployment commit recorded in §26.13. | Agent |
 | 0.13 | 2026-10-10 | **Docker database authentication repair after owner-reported 28P01.** D-054 adds a managed runtime credential synchronization/verification step before migrations and an explicit existing-volume local-admin recovery script. Enforces restricted app role, safe server-side password formatting, explicit owner/runtime URLs and no business-table changes. Legacy applied migration 9000 remains unchanged; its missing-role development fallback can no longer override fresh managed deployment credentials. Added 12 credential tests to pure harness; 35 focused tests, TypeScript/IP lint, shell syntax and standalone build pass. Actual host repair is not claimed; owner commands, env-file consistency, volume preservation and restart behavior are documented in §26.14. No database reset/data edits or secret publication. Normal source push verified; fix commit recorded in §26.14. Owner-host repair remains unverified. | Agent |
+| 0.14 | 2026-10-10 | **Default `.env` Docker Compose deployment after owner clarification.** D-055 standardizes the production template and runbooks on automatically loaded `.env`, preserving the local development template separately and legacy Docker template compatibility. No repeated env-file flags or whole-file environment injection; existing real secret values are untouched/ignored. Plain Compose config validated in an isolated dummy project with matching DB/app/migrate credentials; shell/whitespace checks pass. In-place credential repair and fresh-log commands now use plain Compose. Actual host authentication remains pending owner execution; no database reset/edit or feature changes. §26.15 records the filename-versus-stored-password distinction, checks and preservation boundary. Source publication initially pending. | Agent |
 
 ---
 
