@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.22 — B-007 payment terms maintenance UI)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.23 — B-008 general business partner backend)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2004,8 +2004,8 @@ when combining them would jeopardise the time budget.
 | B-005 | Verify the existing material **Valuation** view and financial read/write boundaries | ≤10 min | **DONE — staged/prices/currency/no-op/stock guard, display-only finance and warehouse price denial passed** |
 | B-006 | Payment terms: one lookup/schema/defaults service slice | ≤10 min | **DONE — tenant master, versioned/audited service, due-date calculation and additive defaults tested** |
 | B-007 | Payment terms: one maintenance page and focused tests | ≤10 min | **DONE — protected list/create/change/history and saved-date preview browser passed** |
-| B-008 | Business partner **general data backend** only | ≤10 min | **NEXT — no company/purchasing/sales segments** |
-| B-009 | Business partner **general data UI** only | ≤10 min | Pending |
+| B-008 | Business partner **general data backend** only | ≤10 min | **DONE — staged/audited general identity and stable supplier/customer role rows; no organisation segments** |
+| B-009 | Business partner **general data UI** only | ≤10 min | **NEXT — protected general-data form/action only** |
 | B-010 | Supplier **company-code segment backend** only | ≤10 min | Pending |
 | B-011 | Supplier **company-code segment UI** only | ≤10 min | Pending |
 | B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | Pending |
@@ -2091,7 +2091,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
 | SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
-| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | DRAFT |
+| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general backend tested; UI and role organisation segments pending** |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
 | SCR-052 | Routing create and change | `PROD.ROUTING.CREATE` | CA01 | DRAFT |
@@ -3006,6 +3006,66 @@ checksums. **Publication result:** Normal fast-forward maintenance UI push verif
 general backend only. Owner walkthrough feedback should include tenant/code, inputs, expected/actual
 result and screenshot without passwords/provisioning tokens.
 
+
+### 26.24 B-008 — General business partner backend `COMPLETE · UI PENDING`
+
+Added `business_partner` and stable `bp_role` tables (66 schema tables), generated immutable
+`0004_business_partner_general.sql` plus additive `9008_business_partner_policies.sql`; **14 applied
+migrations** total. Both tables have forced default-deny tenant RLS, restricted runtime grants and
+client cascades; role rows also reference the tenant-composite partner key with cascade.
+
+**General-only contract:** externally entered own-IP partner number, immutable ORGANIZATION/PERSON
+category, display names/search term, one primary country/region/street/city/postal address, tax number,
+email and phone; global blocking flag, version and staged INCOMPLETE/CREATED/MAINTAINED status. Name,
+configured country and city complete this first general slice. One identity may carry SUPPLIER and/or
+CUSTOMER roles. No company-code reconciliation/payment fields, purchasing org/sales area, bank accounts,
+multiple addresses/contacts, credit management or payment behaviour integration are fabricated.
+
+**Service:** validated tenant writes, advisory+row locks, expected versions, no-op preservation, audited
+field/control changes and reason. Country must exist, email must be valid, roles cannot duplicate;
+category cannot change after creation. Role removal is deactivation, never deletion; reactivation keeps
+stable rows/created metadata for future segment references. General operational gate refuses missing,
+incomplete/blocked general data or inactive role. This gate is only a prerequisite—future transactions
+must additionally require completed company/organisation segments. Trusted backend functions are not
+public server actions; B-009 must derive tenant/actor and independently enforce authority.
+
+**Verification:** **16 new tests** cover create/stage/complete, dual roles, stable deactivation/reactivation,
+no-op audit/version, stale/concurrent edits, block/unblock use gate, malformed country/email/key/roles/
+reason, immutable category, isolation/unscoped default-deny, search and cascade. **207/207 Vitest tests
+across 15 files**, 8 Python regressions, TypeScript/standalone build and IP lint (126 files) pass. No
+browser claim until UI exists. Applied migrations unchanged except the two new files; no reset/reseed.
+Original journals/material/plant/valuation/payment-term counts are unchanged; **zero partner/role rows**
+remain outside cleaned test fixtures. No default business partners were inserted into owner/dev data.
+
+**Preview:** rebuilt current standalone as **`cairn-f6964ef5`**, `0.0.0.0:3000`. Owner-host schema update:
+`git pull` then `docker compose up -d --build --force-recreate migrate app` (keep actual private `.env`).
+A working partner command/route is **not yet registered**; do not expect a new Create partner screen.
+
+**Owner checks/dummy data (R-23):** today, verify the migration logs show successful additive 0004/9008
+and existing login/material/payment-term screens still work. No partner form is available to add data
+in this backend-only batch. Reserve these values for B-009, using a development tenant:
+
+| Field | Future dummy value |
+|---|---|
+| Partner number / category | TESTSUPP01 / ORGANIZATION |
+| Name / search term | Demo Industrial Supply / DEMOSUPP |
+| Country / region | KW / Farwaniya |
+| Street / city / postal code | Test Street 10 / Kuwait City / 80000 |
+| Tax number | DEMO-TAX-001 (fictional; not a real tax registration) |
+| Email / phone | orders@example.com / +965 5550 0100 |
+| General role / blocked | SUPPLIER / false |
+| Reason | Owner general-partner test |
+
+Future form tests: save missing city as incomplete; complete city; add CUSTOMER on the same number;
+deactivate/reactivate SUPPLIER without duplicating identity; block/unblock with a reason; no-op/stale
+resave; reject ZZ country, malformed email, duplicate roles and attempted category conversion. These
+are future UI instructions, not a claim that supplier invoices/POs/customer sales are available now.
+No real bank details should be entered in this general-only slice.
+
+Private checkpoint: `checkpoints/2026-10-10_1401_UTC/` includes current DB/source/history/count artifacts
+and hashes. **Publication result:** Pending normal source push/remote verification. Next: **B-009
+Business partner general maintenance page/action**, with company/purchasing/sales segments still separate.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3148,6 +3208,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.20 | 2026-10-10 | **B-005 complete: Material Valuation UI accepted.** Expanded only its browser target for incomplete/complete/maintained/no-op settings, exact moving/standard prices and price unit, company-derived currency, forged/read-only stock-value refusal, positive unit validation, existing-stock change guard, visible financial history and separate finance-display/warehouse denial. Guard stock and auth identities are isolated SQL fixtures, not new postings or owner data. Fixed only a test column-name mismatch, not schema/product code. 168 Vitest tests, 8 Python tests, typecheck/IP lint and real valuation browser pass; data counts unchanged and private checkpoint saved. All four implemented views individually verified, not full material/operational conformance. §26.21 records limitations; B-006 payment-term backend is next. Normal valuation-acceptance push verified; commit recorded in §26.21. | Agent |
 | 0.21 | 2026-10-10 | **B-006 complete: payment-term backend/defaults, UI pending.** Added one tenant-cascading forced-RLS master and additive 0003/9007 migrations (12 applied, existing immutable). Versioned/locked/audited service validates exact discount tiers, no-op/stale concurrency and active status; pure explicit-baseline UTC due/discount-date result carries master version for future document snapshots. Five additive standard defaults wired into fresh package activation and guarded development 0100 only; existing definitions/business records untouched. 19 new tests; 187 total, typecheck/standalone build/IP lint pass. Fixed-date/month-end/instalments and invoice/payment execution remain pending; no fake working UI route. §26.22 records contracts/preservation and B-007 page is next. Normal backend push verified; commit recorded in §26.22. | Agent |
 | 0.22 | 2026-10-10 | **B-007 complete: protected payment-term maintenance UI.** Added own-code list/search/create/change/history and saved baseline-date preview, independent session/capability action, safe defaults/version behavior and checklist completion. Registered working screen/capability (39 caps/17 terms/16 aliases). Three new action-security tests and isolated browser case; 191 automated tests, 8 Python regressions, standalone/typecheck/IP lint and real form/date/error/history/search/checklist pass. Original records unchanged, no migrations or invoice/payment execution. R-23 records mandatory owner check instructions/dummy data; §26.23 includes TEST30/TEST2D expected dates and negative/stale/authority checks. B-008 partner general backend next. Normal maintenance UI push verified; commit recorded in §26.23. | Agent |
+| 0.23 | 2026-10-10 | **B-008 complete: general business partner backend only.** Added two tenant-cascading forced-RLS tables and additive 0004/9008 migrations (14 applied). Validated/locked/versioned/audited general identity supports staged address, immutable category, supplier/customer dual roles, stable role deactivation, block/use gates and no-op preservation. No bank/company/purchasing/sales/operational capability fabricated. 16 new tests; 207 total, 8 Python regressions, typecheck/standalone/IP lint pass; original business/config rows unchanged, no partner fixtures retained or owner-host edits. §26.24 gives backend checks and future TESTSUPP01 dummy form data; UI is B-009 next. Source push initially pending. | Agent |
 
 ---
 
