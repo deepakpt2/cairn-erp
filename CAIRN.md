@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.26 — B-011 supplier company-code maintenance UI)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.27 — B-012 supplier purchasing-organisation backend)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2008,8 +2008,8 @@ when combining them would jeopardise the time budget.
 | B-009 | Business partner **general data UI** only | ≤10 min | **DONE — protected general create/change/search/history, dual-role/block lifecycle and read-only UI passed** |
 | B-010 | Supplier **company-code segment backend** only | ≤10 min | **DONE — company-scoped reconciliation/terms/staging/blocking/version controls tested** |
 | B-011 | Supplier **company-code segment UI** only | ≤10 min | **DONE — scoped financial form/history, staged/no-op/maintained/block lifecycle and authority checks passed** |
-| B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | **NEXT — purchasing master/backend only** |
-| B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | Pending |
+| B-012 | Supplier **purchasing-organisation segment backend** only | ≤10 min | **DONE — scoped buying defaults, delivery terms, blocks, references/version/RLS and plant gate tested** |
+| B-013 | Supplier **purchasing-organisation segment UI** only | ≤10 min | **NEXT — protected procurement form/action** |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
 imports, P2P, production/MRP execution, O2C, banking, closing, audit and deployment) follows the same
@@ -3242,6 +3242,59 @@ Private checkpoint `checkpoints/2026-10-10_1536_UTC/` includes DB/source/history
 `e3aeeade55ec68dd7c146d4f4a3ad57735671a56`; this confirmation is a documentation-only follow-up. Next B-012 supplier purchasing
 backend only, not a purchasing form/order workflow in the same batch.
 
+
+### 26.28 B-012 — Supplier purchasing-organisation backend `COMPLETE · UI PENDING`
+
+Added `supplier_purchasing_org` (68 tables), generated immutable `0006_supplier_purchasing.sql` and
+additive forced-RLS/grant `9010_supplier_purchasing_policies.sql`; **18 applied migrations** total.
+Composite references bind stable Supplier role, purchasing organisation, group and optional payment
+terms; currency uses global reference. Tenant cascade/default-deny remain enforced.
+
+Backend stores order currency, purchasing group, standard delivery-term code/location, optional
+purchasing payment-term override, org-only block, staged status/version and audit. Requires active
+general Supplier role and active purchasing organisation/assigned company; currency must be active,
+group active and either generic or valid for this organisation, payment-term override active. Supported
+delivery codes EXW/FCA/FAS/FOB/CFR/CIF/CPT/CIP/DAP/DPU/DDP; location without code is refused. Selected code
+with missing location may stage INCOMPLETE; currency/group plus coherent optional delivery data completes
+this first slice. No delivery code/term override is also a valid ordinary default.
+
+Shared partner advisory lock, row lock, expected-version refusal, no-op preservation, required reason
+and control-change history. Operational gate requires complete/unblocked general Supplier and current
+usable purchasing defaults; supplied plant must be real/active and explicitly assigned to the org.
+Does not require a fabricated accounting-company segment for purchasing default use; invoice services
+must separately require completed supplier accounting. Company settings/general data are not copied
+or overwritten; two organisation views remain independent. Future PO documents must snapshot defaults.
+No purchase requisition/order/release, goods receipt, pricing/info record, banking, partner-function
+relationships or payment execution is implemented in this slice. Order currency is a default, not a
+claim that foreign-currency financial posting now works.
+
+**Verification:** 19 new tests cover stage/completion/use, optional defaults, missing/customer-only
+role, invalid org/currency/group/terms/delivery/location/reason, no-op audit/version, stale/concurrent
+updates, org blocking/current-reference recheck, multi-org isolation/cross-group refusal, active-plant
+assignment, tenant/unscoped isolation, inactive terms and cascade. **252/252 Vitest tests across 17
+files**, 8 Python deployment tests, TypeScript/standalone build/IP lint (143 files) pass. No purchasing
+browser claim until B-013. Existing migration checksums untouched; only the two additions applied.
+
+**Preservation:** original journal/material/general partner/supplier-company/payment-term counts
+unchanged; zero purchasing rows remain outside cleaned fixtures. No default supplier/company/purchasing
+master was invented for existing users. No reset/reseed/owner-host operation. Preview process
+**cairn-2b8ca286**, 0.0.0.0:3000. Owner update: `git pull` then
+`docker compose up -d --build --force-recreate migrate app`, retain private .env. New Purchasing tab
+is not enabled by this backend batch; Supplier company UI remains available for the owner's later review.
+
+**Owner check/R-23:** confirm additive 0006/9010 migration completion (18 total) and existing general,
+company and payment-term screens still work; do not add purchasing rows through SQL. Reserve for B-013:
+general **TESTSUPP01** active Supplier, purchasing org **1000**, order currency **USD** (or active KWD
+for local testing), purchasing group **001**, delivery term **FCA**, location **Kuwait City**, optional
+terms **NET30**, org block unchecked, reason **Owner supplier purchasing test**. Future form expected
+CREATED; missing currency/group/location stages incomplete; bad/inactive/cross-org group and invalid
+currency/delivery code must be refused; no-op/stale checks preserve data, org block remains independent
+of general/company blocks. No PO/receipt/invoice posting is available yet. User will check forms later;
+no owner sign-off is inferred from continuation.
+
+Private checkpoint `checkpoints/2026-10-10_1554_UTC/` stores DB/source/history/count artifacts and hashes.
+**Publication result:** Pending normal source push/remote verification. Next B-013 supplier purchasing UI.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3388,6 +3441,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.24 | 2026-10-10 | **B-009 complete: protected general partner maintenance UI.** Registered own create/display/maintain commands and capability (40 caps/20 terms/19 aliases), launchpad and general-only form/list/search/status/history with explicit pending segments. Server session/authority/context checks, safe business-only props, immutable category/number, staged saves, roles and blocking supported. Three action regressions plus browser target; 211 tests, 8 Python checks, typecheck/standalone/IP lint and real general lifecycle/read-only browser pass; no owner data or schema change. §26.25 provides TESTSUPP01/TESTCUST01 dummy records, expected/negative/stale checks; B-010 company backend next. Normal general UI push verified; commit recorded in §26.25. | Agent |
 | 0.25 | 2026-10-10 | **B-010 complete: supplier company backend, UI pending.** Added company-scoped forced-RLS/cascading master and immutable 0005/9009 additions (16 migrations). Derives chart and validates active supplier/company, vendor reconciliation and payment terms; stages, blocks, versions, audits and preserves no-ops. General/use gates and linked-accounting recon protection; no invoice/bank/purchasing flow implied. 18 new tests; 229 total, 8 Python, standalone/typecheck/IP lint pass, original data preserved via dump restoration and fixture cleanup. §26.26 documents dummy 1000/200000/NET30 assignments, width/reclassification caveats and B-011 next. Normal backend push verified; commit recorded in §26.26. | Agent |
 | 0.26 | 2026-10-10 | **B-011 complete: supplier company financial UI.** Active Supplier tab/company selector, derived chart/currency, valid reconciliation/terms, stages/version/no-op/block and scoped history; separate financial read/write authority at page/action. Registered command/caps (42/21/19), added three action tests and isolated browser target. 233 tests, 8 Python, standalone/typecheck/IP lint and live scoped form/refusal/history/non-finance browser pass; original data/schema preserved. §26.27 has dummy 1000/200000/NET30 and positive/negative/stale checks, screenshot/private checkpoint. No invoice/bank/purchasing expansion; B-012 backend next. Normal UI push verified; commit recorded in §26.27. | Agent |
+| 0.27 | 2026-10-10 | **B-012 complete: supplier purchasing-organisation backend, UI pending.** Added forced-RLS/cascading master plus immutable 0006/9010 additions (18 applied). Validates active org/company/currency/group/optional terms, delivery code/location, stable supplier role, stages/blocks/version/audit and plant assignment; independent org data, no company defaults copied. 19 new tests; 252 total, 8 Python, standalone/typecheck/IP lint pass; original data unchanged. §26.28 gives future 1000/USD/001/FCA/Kuwait City/NET30 form data and negative checks; no PO/stock/payment/partner-function flow implied. User review remains pending and B-013 UI is next. Source push initially pending. | Agent |
 
 ---
 

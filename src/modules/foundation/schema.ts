@@ -460,3 +460,5 @@ export * from './payment-terms-schema';
 export * from './business-partner-schema';
 
 export * from './supplier-company-schema';
+
+export * from './supplier-purchasing-schema';

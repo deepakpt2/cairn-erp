@@ -43,6 +43,13 @@
       "when": 1791644518021,
       "tag": "0005_supplier_company",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791647838699,
+      "tag": "0006_supplier_purchasing",
+      "breakpoints": true
     }
   ]
 }
