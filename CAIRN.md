@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.39 — B-023 customer-company browser acceptance passed)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.49 — B-033 supplier partner-function editor browser acceptance passed)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -476,7 +476,7 @@ determination → tax codes → payment terms → users and roles → first logi
 
 This wizard is tested as a product feature (R-15), and it *is* the demonstration of R-06.
 
-### 7.3 Standard Configuration Package (`INTL-STD-1`)
+### 7.3 Standard Configuration Package (`INTL-STD-2`)
 
 Shipped, versioned, activatable in one action, and used as the fixture for every automated test.
 
@@ -489,6 +489,7 @@ Shipped, versioned, activatable in one action, and used as the fixture for every
 | Pricing | Condition types, access sequences, pricing procedures for sales (base price, discounts, surcharges, freight, tax) and for purchasing |
 | Tax | Standard VAT, zero-rated, exempt, input tax, reverse charge-capable structure; rates configurable per jurisdiction |
 | Procurement | Material types (finished, semi-finished, raw, trading, service), material groups, purchasing info records, release strategy for purchase orders by value threshold, approval levels |
+| Supplier partner functions | Tenant catalogue entries for `ORDERING_PARTNER`, `DELIVERY_PARTNER`, and `INVOICE_SENDER`; initial cardinality is unique for all three; no supplier assignments are shipped |
 | Production | Work centre, activity types and rates, BOM usage types, routing usage, MRP controllers, lot sizing procedures, scheduling parameters, production scheduling profile |
 | Sales | Customer account groups, sales document types, item categories, delivery types, billing types, output types, delivery and billing blocks |
 | Master data samples | ~60 materials, ~30 vendors, ~40 customers, cost centres, GL accounts, BOMs and routings for manufactured items, opening stock and balances |
@@ -1911,7 +1912,7 @@ Status:        DRAFT → AGREED → IN BUILD → SIGNED OFF
 | Performance | MRP on a realistic material population; financial reports over multi-year data; grid paging | Database-backed |
 
 **Standard configuration as fixture:** every integration, golden-flow and regression test starts
-from `INTL-STD-1` (§7.3) activated into a throwaway schema. Deterministic, reproducible, and it
+from `INTL-STD-2` (§7.3) activated into a throwaway schema. Deterministic, reproducible, and it
 proves the configuration package itself.
 
 ### 24.4 Debugging facilities (built in, not bolted on)
@@ -2020,8 +2021,16 @@ when combining them would jeopardise the time budget.
 | B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **DONE — editable/display-only fields and access behavior; automated browser acceptance passed in B-023; owner walkthrough pending (§26.37, §26.39)** |
 | B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **DONE — isolated PostgreSQL 17.11 test DB; all 24 migrations including 0010 applied; 65/65 DB service/action tests pass (§26.38)** |
 | B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — dev-fixture browser target passed; owner walkthrough pending (§26.39)** |
-| B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **PENDING — target/DB-backed browser acceptance not yet completed (§26.33)** |
-| B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **NEXT FEATURE — agree supported functions, direction, cardinality and default/validity rules (§25.5)** |
+| B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — focused target passed; owner walkthrough pending (§26.40)** |
+| B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **DONE — roles, direction, cardinality/default and validity scope approved (§26.41)** |
+| B-026 | Supplier partner-function catalogue/assignment schema and tenant RLS only | ≤10 min | **DONE — migrations 0011/9013 applied and default-deny verified in isolated PostgreSQL (§26.42)** |
+| B-027 | Supplier partner-function read services only | ≤10 min | **DONE — tenant-scoped catalogue and assignment queries; database read/isolation tests pass (§26.43)** |
+| B-028 | Seed the approved supplier partner-function catalogue in standard tenant configuration only | ≤10 min | **DONE — INTL-STD-2 seeds all three Cairn functions with owner-selected UNIQUE initial settings (§26.44)** |
+| B-029 | Supplier purchasing partner assignment writes and cardinality/default enforcement only | ≤10 min | **DONE — audited create/replace/remove, tenant isolation, optimistic versions, unique/multiple rules and optional default behavior tested (§26.45)** |
+| B-030 | Protected server actions for supplier partner-function reads and writes only | ≤10 min | **DONE — session-derived tenant/actor, purchasing capability gates, display/audit reads and action-security tests (§26.46)** |
+| B-031 | Display-only supplier partner-function panel on Supplier Purchasing view | ≤10 min | **DONE — authority-gated catalogue/assignment cards and empty/default/inactive states (§26.47)** |
+| B-032 | Supplier partner-function assignment editor on Supplier Purchasing view only | ≤10 min | **DONE — unique add/replace, multiple add/default, versioned remove; browser acceptance passed in B-033 (§26.48–49)** |
+| B-033 | Dedicated live-browser acceptance for the supplier partner-function assignment editor | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — dev-fixture lifecycle and authority coverage; fixture cleanup confirmed (§26.49)** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2050,18 +2059,18 @@ with independent development.
 2. **B-023 — B-019/B-021 browser acceptance:** run the customer-company target against the migrated
    database; verify save/reload, canonical no-op, blank clear, history/control-change flags, finance
    display-only read access, and no-authority denial. Record the owner walkthrough result.
-3. **B-024 — B-017 browser acceptance:** add focused customer sales-area browser coverage if missing,
-   run the target in a disposable development tenant, and record owner acceptance.
+3. **B-024 — B-017 browser acceptance:** the focused target now passes in a disposable development tenant
+   (§26.40); product-owner walkthrough/sign-off remains outstanding (see §26.33).
 
 #### 25.5.2 M1b — foundation, configuration, and master data
 
 Execute prerequisites in the define/assign order of §6.2. For every screen, follow §24.1 and split
 schema/service, UI/authority, and test/browser work into separate bounded batches where necessary.
 
-1. **Partner functions:** first capture and approve the supported relationship types, direction,
-   cardinality, and default/validity rules (B-025); then implement the tenant-scoped supplier
-   purchasing-organisation assignments, validation, locking/version/audit, DB tests, protected
-   display/maintenance, and browser acceptance. Do not code an assumed role catalogue.
+1. **Partner functions:** B-025 semantics are approved, B-026–B-032 implement the tenant-scoped catalogue,
+   assignments and protected display/maintenance, and B-033 dedicated live-browser acceptance passed in a
+   disposable development fixture (§26.41–49). PO determination remains a separate future outcome. Do not
+   add unapproved role types, effective dates, plant/sub-range levels, or transaction behavior.
 2. **Supplier company-code completion:** add and verify the §9.2 defaults still missing from the
    vendor segment—payment methods, dunning procedure, cash discount, and tolerance group—after their
    required configuration masters and semantics are confirmed.
@@ -3661,7 +3670,7 @@ added before those documents exist.
 Private checkpoint not created in this batch. Next **B-017 customer sales-area UI** only.
 
 
-### 26.33 B-017 — Customer sales-area maintenance UI `COMPLETE · BROWSER ACCEPTANCE PENDING`
+### 26.33 B-017 — Customer sales-area maintenance UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
 
 An active Customer partner now has a **Sales area** tab on `/foundation/partners`, replacing the former
 pending placeholder. Command **SALES.CUSTOMER.SALESAREA.MAINTAIN** opens selection; `view=CUSTOMER_SALES`
@@ -3694,9 +3703,13 @@ suite still passes. **Server-rendered check** against a running dev server with 
 in a fresh verification tenant: maintainer sees the form, Save, plant/procedure/district fields and the
 1000/01/01 choice; display-only reader sees the values with the read-only notice and no Save; a user with
 only unrelated stock authority sees the authority message; general, company-code and unknown-area requests
-return 200; the Customer company view still renders. **Not run:** a browser-driven save/history acceptance.
-This sandbox has no Chromium and the Playwright browser download host is outside the allowed network, so
-no browser target was added for this batch. Action-level save behaviour is covered by the Vitest action tests.
+return 200; the Customer company view still renders. **Not run at the time:** a browser-driven save/history acceptance.
+At B-017 implementation time, this sandbox had no Chromium and the Playwright browser download host was
+outside the allowed network, so no browser target was added for that batch. Action-level save behaviour
+is covered by the Vitest action tests. The focused B-024 maintainer-flow browser target has since passed
+(§26.40); it does not repeat user switching for display-only or finance-only denial. The original
+server-rendered role checks and accounting-only action denial above remain the recorded automated
+coverage for those boundaries. Product-owner walkthrough remains pending.
 
 Verification data lived only in a throwaway test tenant created for this batch in the sandbox database.
 No owner data was touched, and no migration was added in this batch (still 22 applied migrations).
@@ -3934,9 +3947,8 @@ baseline is current). Do not write values through production SQL.
 tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
 consumes them yet.
 
-The B-023 automated browser target passed (§26.39). The next outstanding acceptance gate is **B-024**
-customer sales-area browser acceptance; the B-019/B-021 owner walkthrough is still pending. Complete
-both acceptance gates and owner walkthroughs before M1 release; B-025 follows the acceptance gates.
+The B-024 focused automated sales-area target has now passed (§26.40). Product-owner walkthroughs for
+B-023 and B-024 remain pending before M1 release; B-025 follows the completed automated acceptance gates.
 
 
 ### 26.38 B-022 — B-020 migration and database acceptance `COMPLETE · ISOLATED TEST DATABASE`
@@ -3982,7 +3994,266 @@ The run also confirmed the fixture had no hidden accounting number ranges.
 
 **Owner walkthrough:** automated acceptance is passed; the product-owner manual review/sign-off remains
 pending. Review the existing steps in §26.35 and §26.37 against a development tenant before marking the
-customer-company acceptance fully signed off. B-024 sales-area browser acceptance also remains pending.
+customer-company acceptance fully signed off. B-024 automated sales-area browser acceptance has since
+passed (§26.40); its owner walkthrough also remains pending.
+
+
+### 26.40 B-024 — B-017 customer sales-area browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH PENDING`
+
+**Environment and fixture:** ran `npm run smoke:browser -- --target customer-sales-area` against the
+isolated B-022 PostgreSQL database and local development app using Playwright Chromium. The harness
+created development fixture `T987` through onboarding, then created customer `TESTCUST01` through the
+UI. The target exited **0** within its 120-second deadline with no browser runtime errors. Harness
+cleanup completed; a follow-up query found **zero** `T987` rows matching the reserved fixture name and
+development flag. Only disposable development data was used; no owner/production tenant or data was touched.
+
+**Browser acceptance:** verified tenant onboarding has no hidden accounting intervals; UI creation and
+opening of an active Customer partner; active sales area `1000/01/01` and delivering-plant choice `1000`;
+staged save as Incomplete (version 1); completed save as Created (version 2) with plant `1000`,
+canonicalised pricing procedure `RVAA01`, sales district `KW01`, and both delivery flags; persisted UI
+readback after submitting the sales-area selector GET; canonical no-op without a version increment;
+area-scoped block/unblock; and security-relevant change history, including the pricing-procedure control
+change. The browser harness also verified signed-out access redirects from `/foundation/partners` and
+reported no page errors.
+
+**Coverage boundary and owner walkthrough:** this target exercises the authorised maintainer lifecycle;
+it does not switch to display-only or finance-only users in the browser. The original B-017
+server-rendered role checks and accounting-only action denial remain documented in §26.33. Complete the
+manual walkthrough in §26.33 before marking B-024 fully signed off or releasing M1, including the
+read-only/no-Save and finance-only denial checks. B-023's separate customer-company owner walkthrough
+also remains pending.
+
+**Verification after the target:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5
+files**) and `git diff --check` passed. No application/schema/migration changes were made for B-024.
+
+
+### 26.41 B-025 — Supplier purchasing partner-function semantics `APPROVED · B-026–B-032 IMPLEMENTED · B-033 BROWSER ACCEPTANCE PASSED · PO DETERMINATION PENDING`
+
+**Scope:** decision capture only. No schema, service, UI, capability, seed, migration or transaction
+behavior is added here. Implementation remains subject to the bounded batch discipline in §25.4.
+
+**Owner-approved semantics:**
+- **Roles:** the supplier being maintained is the implicit primary/fallback partner. The purchasing-
+  organisation assignment set is limited to an ordering address, goods supplier, and invoicing party.
+  Do not add a separate pay-to partner in this slice. Use Cairn-owned product labels and keys; do not
+  copy proprietary reference-system codes or names (§4, R-01).
+- **Direction:** assignments are directed from the focal supplier and purchasing organisation to the
+  related supplier. Do not create a reciprocal relationship automatically; maintain the other supplier's
+  outbound assignment separately if required.
+- **Cardinality/default:** each role has a configured unique-or-multiple rule. A unique role allows at
+  most one assigned partner for the focal supplier and purchasing organisation. A multiple role allows
+  several; at most one may be marked default. If none is default, the user chooses among eligible partners
+  when a consuming transaction is introduced.
+- **Validity and scope:** this M1 slice stores the current purchasing-organisation assignment only. No
+  valid-from/to dates; replacing a current assignment uses the ordinary version/audit history. Defer
+  plant- and supplier-sub-range-specific overrides.
+
+**Reference basis:** SAP Help describes the primary vendor as the fallback plus ordering-address,
+goods-supplier and invoicing-party roles, with purchasing-organisation data and more-specific plant or
+supplier-sub-range variants. [SAP Help — Partner Roles in Purchasing](https://help.sap.com/docs/SAP_ERP/967e1c2a6a8c4183b7e07d28e7574445/c080b65334e6b54ce10000000a174cb4.html).
+SAP Learning describes the configurable unique/multiple behavior, optional default, and selection when
+multiple partners exist without a default. [SAP Learning — Using Partner Functions in Purchasing](https://learning.sap.com/courses/purchasing-in-sap-s-4hana/using-partner-functions-in-purchasing).
+These sources inform workflow semantics only; Cairn keeps its own vocabulary and codes.
+
+**Implementation status:** B-026 added the tenant-scoped schema and forced RLS (§26.42), intentionally
+without catalogue rows. B-028 seeds the approved Cairn-owned functions and explicit initial cardinality settings into
+standard-package tenant activation (§26.44). B-029 adds the audited assignment write service and
+cardinality/default enforcement (§26.45); B-030 adds session-derived protected actions (§26.46), B-031
+the read panel (§26.47), and B-032 the assignment editor (§26.48). B-033 browser acceptance passed (§26.49);
+PO determination remains pending.
+
+
+### 26.42 B-026 — Supplier partner-function schema and tenant RLS `COMPLETE · WRITE SERVICE ADDED IN B-029`
+
+**Scope:** storage only for the B-025-approved directed supplier purchasing-organisation assignments.
+Added `supplier_partner_function` for each tenant's role name, active flag and unique/multiple policy,
+and `supplier_purchasing_partner` for owner supplier, purchasing organisation, function, related Supplier,
+default flag, version and audit columns. Cairn-owned function keys are `ORDERING_PARTNER`,
+`DELIVERY_PARTNER`, and `INVOICE_SENDER`; the SQL constraint rejects unapproved keys. Composite foreign
+keys bind owner, related Supplier and function to the same tenant. A partial unique index guarantees at
+most one default for a supplier/function/organisation. No valid-from/to columns or plant/sub-range scope.
+
+Added immutable `drizzle/0011_supplier_purchasing_partners.sql` and
+`drizzle/9013_supplier_purchasing_partner_policies.sql`; registered the TypeScript schema in the
+Foundation schema root. Both new tables use ENABLE + FORCE RLS with default-deny tenant policies and
+restricted `cairn_app` grants. The app role was verified `NOSUPERUSER NOBYPASSRLS`. Dynamic unique-versus-
+multiple enforcement, tenant catalogue seeding, actor-derived service writes, version locking and change
+history are **not** implemented in this batch. No PO or other transaction behavior was added.
+
+**Database verification:** provisioned a fresh isolated PostgreSQL 17.11 cluster on loopback port 55432
+and dedicated empty `cairn_b026_test`; applied all **26 migrations**, including 0011 and 9013. Confirmed
+both tables have row security and FORCE enabled, the default-only unique index exists, the app role has no
+RLS bypass, an unscoped read sees zero rows and an unscoped write is denied by RLS. No tenant/business
+fixtures, owner/production data, or credentials from outside this disposable environment were used.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5 files**) and
+`git diff --check` passed. At B-026 completion the catalogue had no tenant rows; B-028 later seeds
+standard-package tenants with the approved initial settings (§26.44), and B-029 later adds assignment
+writes (§26.45). Tenant-level configuration UI remains pending.
+
+
+### 26.43 B-027 — Supplier partner-function read services `COMPLETE · WRITE SERVICE ADDED IN §26.45`
+
+**Scope:** added tenant-scoped query functions only in
+`src/modules/foundation/supplier-purchasing-partners.ts`. `listSupplierPartnerFunctions` returns the
+configured catalogue, including inactive rows for maintenance/review. `listSupplierPurchasingPartners`
+returns the chosen supplier/purchasing-organisation assignments with function labels/cardinality,
+default/version, and linked Supplier name/status/block/role-active state. Inactive links remain visible
+for correction rather than being silently hidden. Both queries explicitly scope by tenant; the assignment
+query also filters by focal supplier and purchasing organisation and orders by function, default, and
+related supplier. No writes, UI, action, capability, seed, or cardinality default was added.
+
+**Database acceptance at B-027 completion:** `npm run test -- tests/supplier-purchasing-partners.test.ts`
+passed **2/2 tests** on the isolated B-026 PostgreSQL database. It verified configured and inactive
+function rows, assignment labels/default/order and linked Supplier state, empty results for another
+tenant/organisation, and unscoped default-deny reads. B-028 later extended the same test file (§26.44). Fixtures are development tenants created through the test helpers and are
+removed by teardown.
+
+**Verification:** `npm run typecheck` passed. No schema or migration change was needed. At B-027 completion
+the catalogue was still unseeded; B-028 later adds standard-package initialization (§26.44), and B-029
+later adds mutation/cardinality enforcement (§26.45). Protected UI and browser acceptance remain pending.
+
+
+### 26.44 B-028 — Supplier partner-function catalogue initialization `COMPLETE · ASSIGNMENT WRITES ADDED IN §26.45`
+
+**Scope:** added the three Cairn-owned supplier partner-function definitions to the versioned standard
+tenant configuration package, now `INTL-STD-2`. Initial `allows_multiple` is explicitly `false` for
+`ORDERING_PARTNER`, `DELIVERY_PARTNER`, and `INVOICE_SENDER`, as selected by the owner for all three
+roles. Cairn labels are “Ordering partner”, “Delivery partner”, and “Invoice sender”. The seed is
+idempotent and only inserts missing rows; it does not overwrite existing tenant settings when the package
+is reapplied. It runs in the existing tenant-scoped package transaction and records the catalogue count in
+the package change document.
+
+No partner assignments, default assignments, UI, mutation service, cardinality enforcement, schema
+change, migration, or transaction determination behavior was added. `is_default` remains false unless a
+future assignment is explicitly made default; choosing a cardinality setting does not designate a partner.
+Existing tenants are not globally backfilled by this change; the definitions are inserted when the standard
+package runs or is reapplied for that tenant. B-029 subsequently adds assignment writes (§26.45).
+
+**Verification:** `npm run typecheck`, the supplier partner-function database suite (**4/4**), and the
+full `npm run test` suite (**335/335 across 21 files**) passed. The focused suite checks the three exact
+seeded function keys/labels/initial values, confirms package re-application preserves tenant edits, retains
+a tenant-level multiple-rule fixture for B-027 reads, and verifies scoped assignment queries.
+`npm run test:browser-harness` (**65/65**) and `git diff --check` passed. No migration was needed; testing
+used only disposable development tenants in the isolated B-026 PostgreSQL database.
+
+
+### 26.45 B-029 — Supplier purchasing partner assignment write service `COMPLETE · EDITOR / BROWSER ACCEPTANCE PASSED IN §26.49`
+
+**Scope:** added `src/modules/foundation/supplier-purchasing-partner-writes.ts` with tenant-scoped,
+audited create/update, atomic replacement and removal operations. Writes require an existing focal Supplier
+role and purchasing-organisation segment, an active purchasing organisation and function, and an active
+related Supplier role in the same tenant. The fixed `SUPPLIER` relation remains enforced by the schema.
+There are no effective dates, plant/sub-range overrides, reciprocal links or separate pay-to role.
+
+**Cardinality and defaults:** the service takes the active function's tenant configuration under lock and
+serializes writes per focal supplier / purchasing organisation / function. `allows_multiple=false` permits
+at most one assignment; a second is rejected. `allows_multiple=true` permits several and does not auto-pick
+a default. At most one multiple-role assignment may be default: explicitly choosing another transfers the
+default atomically and versions/audits the previous default. No default is promoted when a default is
+removed. A unique function cannot be marked default; a single unique assignment is the only choice and the
+approved optional-default rule applies to multiple-valued functions.
+
+**Concurrency/audit:** expected version is `0` for create and the current row version for update, replace or
+remove. Stale edits fail with a reload remedy. Replacing is transactional, versions the new row from the
+replaced row, and records removal plus creation history; default transfers version and audit both affected
+rows. No-op saves do not write history. The optional default is never inferred from insertion order.
+
+**Verification:** `npm run typecheck`, `npm run test -- tests/supplier-purchasing-partner-writes.test.ts`
+(**4/4**), the full Vitest suite (**339/339 across 22 files**), the browser harness (**65/65**) and
+`git diff --check` passed. DB tests cover unique rejection, multiple assignment with no default, default
+transfer, version conflicts, atomic replacement/removal, supplier/function/segment validation, concurrent
+unique-role adds, change history and tenant isolation. Testing used only disposable development tenants in
+the isolated B-026 PostgreSQL database. No schema/migration, action, capability, UI, or PO determination
+behavior was added in B-029; B-030 later adds session-derived protected server actions (§26.46). B-031 adds display-only UI (§26.47), and B-032 adds assignment controls (§26.48); browser acceptance and PO determination remain pending.
+
+
+### 26.46 B-030 — Protected supplier partner-function server actions `COMPLETE · BROWSER ACCEPTANCE PASSED IN §26.49`
+
+**Scope:** added `src/app/foundation/partners/partner-function-actions.ts`. The read action returns the
+Cairn-owned catalogue and scoped supplier/purchasing-organisation assignments only when the session has
+`PROC.SUPPLIER.PURCHASING.DISPLAY`, `PROC.SUPPLIER.PURCHASING.MAINTAIN`, or `AUDIT.WORKSPACE`. Save
+and remove actions independently require `PROC.SUPPLIER.PURCHASING.MAINTAIN`. Each action requires a
+verified session; tenant and audit actor come only from that session. Forged `client`/`changedBy` form
+values are ignored. Mutations revalidate `/foundation/partners`. No new capability was needed; the existing
+purchasing authority boundary is reused.
+
+**Verification:** extended `tests/action-security.test.ts` for tenant/actor derivation, a display-only read,
+maintain-only mutation denial, anonymous requests, scoped readback and audit actor. Focused action-security
+tests pass **30/30**; full Vitest passes **342/342 across 22 files**. `npm run typecheck`, `npm run build`,
+browser harness (**65/65**), IP lint (**172 files**) and `git diff --check` passed. No UI,
+capability/schema change, migration or PO determination was added in B-030. B-031 later adds a display-only panel (§26.47), and B-032 adds assignment editing (§26.48); browser acceptance remains pending.
+
+
+### 26.47 B-031 — Supplier partner-function read panel `COMPLETE · EDITOR / BROWSER ACCEPTANCE PASSED IN §§26.48–49`
+
+**Scope:** added `SupplierPartnerFunctionsPanel` to the existing `SUPPLIER_PURCHASING` view. The
+server-rendered panel groups assignments by configured function and shows Cairn label/code, unique or
+multiple setting, inactive-function state, assigned Supplier number/name/status, inactive-role or block
+indicators, and the default marker. It explains the focal Supplier fallback, shows an explicit empty state,
+and, for multiple assignments with no default, states that a consuming transaction must ask the user to
+choose. Text is routed through the i18n catalogue.
+
+The page fetches catalogue and assignment rows only when the selected partner has an active Supplier role
+and the session holds purchasing DISPLAY/MAINTAIN or AUDIT.WORKSPACE authority. Tenant scope comes from
+the server session. The panel is display-only: no add/replace/remove controls were added in this slice.
+
+**Verification:** typecheck, full Vitest (**342/342 across 22 files**), browser harness (**65/65**),
+production build, IP lint (**173 files**) and `git diff --check` passed. No dedicated live-browser acceptance of this panel has run yet. B-032 later adds the assignment editor (§26.48); browser acceptance remains a separate batch. No schema/migration, service, action or PO determination changes were made in B-031.
+
+
+### 26.48 B-032 — Supplier partner-function assignment editor `COMPLETE · BROWSER ACCEPTANCE PASSED IN §26.49`
+
+**Scope:** extended the Supplier Purchasing partner-function panel for maintainers. A unique function with
+no current assignment can add one; with one current row it can atomically replace it. If legacy data has
+multiple rows under a unique function, the UI blocks add/replace and offers row-level removal to resolve
+it. Multiple-valued functions can add distinct Suppliers, optionally set a default, change/unset a default
+on an existing row, and remove assignments. For a multiple-configured function, the no-default reminder
+appears whenever one or more assignments exist and none is default, including the single-assignment case.
+Removal does not promote another row. Each mutation requires a reason and uses the row version; the
+existing server actions derive tenant/actor and enforce maintain authority. Controls remain hidden from
+read-only users.
+
+Supplier choices come from same-tenant active Supplier roles; status/block state is included in option
+labels. The picker shows at most 200 candidates and discloses that limit even when every returned choice is
+already assigned. Assignment controls are not enabled until the focal supplier purchasing-organisation
+segment exists. The standard package still seeds
+all three functions as unique; this batch does not add a cardinality-configuration editor, so multiple/default
+controls appear only for a tenant whose function is already configured as multiple. No assignment is
+created automatically and no default is inferred.
+
+**Verification:** `npm run typecheck`, full Vitest (**343/343 across 22 files**), browser harness (**65/65**),
+production build, IP lint (**173 files**) and `git diff --check` passed. Dedicated live-browser acceptance
+passed in B-033 (§26.49). No schema/migration or PO determination behavior was added in B-032.
+
+
+### 26.49 B-033 — Supplier partner-function editor browser acceptance `AUTOMATED ACCEPTANCE PASSED`
+
+**Scope:** extended the bounded `supplier-purchasing` Playwright target to exercise the assignment editor
+through the actual Supplier Purchasing page and protected server actions. Onboarding created disposable
+development tenant `T990`; focal and related Supplier identities were created through the UI. The target
+confirmed the standard three-function catalogue is unique and empty, and that editor controls remain
+withheld until the focal purchasing-organisation segment exists. After the segment was saved, the unique
+`ORDERING_PARTNER` flow successfully added, replaced and removed an assignment, with persisted readback.
+
+To cover future multiple configuration without adding cardinality UI or changing the standard defaults,
+the test changed only `DELIVERY_PARTNER.allows_multiple` in this disposable fixture. The browser then
+added two distinct related Suppliers, verified the no-default reminder with one assignment, added an
+optional default, unset it, transferred it to the other row, and removed the current default. The remaining
+assignment was not promoted and correctly remained without a default. A read-only `AUDITOR` could see the
+assignment and no-default explanation but received no assignment forms/buttons; a warehouse-only user
+could not read purchasing data/history. The common target also verified signed-out redirect and recorded
+no browser runtime errors.
+
+**Data safety:** `T990` was created through onboarding and cleaned up by the guarded fixture cleanup. A
+post-run query confirmed zero matching development-tenant rows. Only this disposable tenant's multiple
+rule was changed for test coverage; no owner/production data, deployment, PO, receipt, invoice, or other
+transaction behavior was touched. This automated browser acceptance is not an owner walkthrough/sign-off.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5 files**),
+`npm run smoke:browser -- --target supplier-purchasing` (passed; no page errors), and `git diff --check`
+passed. Playwright Chromium and its Linux runtime dependencies were installed in the sandbox for this run.
+No product schema or migration changed.
 
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -4142,6 +4413,16 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.37 | 2026-10-11 | **Owner-approved dependency-ordered completion roadmap.** Added §25.5 from outstanding B-020/B-021/B-017 acceptance through M1b–M1e, M1 release/sign-off, then Phases 2–9. Added pending B-022–B-024 acceptance gates and B-025 partner-function rule capture to the bounded queue. Roadmap packages must still be split into ≤10-minute one-outcome batches; no code, schema, migration or database changes in this update. §25.5 records the M1/Phase-2 scope reconciliation and keeps D-028/D-029 baseline acceptance in M1. | Agent |
 | 0.38 | 2026-10-11 | **B-022 complete: isolated PostgreSQL migration/database acceptance passed.** Provisioned fresh local PostgreSQL 17.11, loopback-only on port 55432, using dedicated `cairn_b022_test`; applied all 24 SQL migrations including 0010 and seeded reference data. Customer-company and action-security DB suites pass, 65/65 tests. B-023 customer-company browser acceptance is next; the test server remains available locally. No owner/production DB or tenant touched. No code or migration-file changes were made; the schema was applied only to the disposable local test database. §26.38 records setup and results. | Agent |
 | 0.39 | 2026-10-11 | **B-023 automated browser acceptance passed for B-019/B-021.** Ran the isolated `customer-company` Playwright target against the B-022 PostgreSQL database using a UI-created, disposable development fixture `T988`; all save/reload/no-op/clear/restore/history, finance display-only, non-finance denial, validation and sign-out checks passed, with no page errors. The harness cleaned up its fixture (zero matching rows afterward). Owner walkthrough/sign-off and B-024 sales-area browser acceptance remain pending. CAIRN updated; no code or migration-file changes in this batch. §26.39 records scope and result. | Agent |
+| 0.40 | 2026-10-11 | **B-024 automated browser acceptance passed for B-017.** Added focused `customer-sales-area` Playwright target using disposable UI-created dev fixture `T987`; verified sales-area staged/completed saves, plant choice, canonical defaults, persisted readback, no-op, scoped block/unblock, history, and signed-out protection. Target passed within deadline with no browser errors; cleanup query confirmed zero matching fixture rows. Display-only/finance-only browser switching is not covered by this target; B-017 SSR/action checks remain documented and the owner walkthrough is pending. Typecheck, 65-test browser harness and diff check pass. §26.40 records scope and boundaries; no schema or migration changes. | Agent |
+| 0.41 | 2026-10-11 | **B-025 supplier partner-function semantics approved; implementation pending.** Owner approved primary supplier as fallback plus ordering-address, goods-supplier and invoicing-party assignments; no separate pay-to role; directed, non-reciprocal relationships; per-role unique/multiple cardinality with one optional default and user selection when absent; current purchasing-organisation scope without effective dates or plant/sub-range overrides. Reference semantics checked against SAP Help and SAP Learning; Cairn codes/labels remain proprietary-safe. No code/schema changes. §26.41 records decisions; partner-function implementation is next in separate bounded batches. | Agent |
+| 0.42 | 2026-10-11 | **B-026 supplier partner-function storage and RLS complete; service pending.** Added tenant-scoped function-rule and purchasing-assignment tables, own function keys, composite same-tenant foreign keys, version/audit fields and one-default partial unique index. Added migrations 0011/9013 and schema registration. Applied all 26 migrations in a fresh isolated PostgreSQL 17.11 `cairn_b026_test`; verified FORCE RLS, default-deny reads/writes and restricted app-role flags. Typecheck, 65-test browser harness and diff check pass. Catalogue not seeded; role cardinality enforcement/service/UI remain future batches. No owner/production data or transaction behavior touched. §26.42 records results. | Agent |
+| 0.43 | 2026-10-11 | **B-027 supplier partner-function read services passed.** Added tenant-scoped catalogue and assignment queries, including function/cardinality labels, defaults, versions and related Supplier status; inactive relationships remain visible for maintenance. Database tests pass 2/2, covering ordering, tenant/scope isolation and unscoped default-deny reads; typecheck passes. No write/service action, UI, seed or schema migration in this batch. §26.43 records behavior; assignment mutation/cardinality enforcement follows in a separate bounded batch. | Agent |
+| 0.44 | 2026-10-11 | **B-028 initializes the owner-approved supplier partner-function catalogue in standard tenants.** Advanced the standard package to `INTL-STD-2`; each tenant package run inserts missing Cairn-owned `ORDERING_PARTNER`, `DELIVERY_PARTNER`, and `INVOICE_SENDER` rows with explicit initial `allowsMultiple=false` and Cairn labels, preserving existing tenant settings on reapplication. Owner selected UNIQUE for all three. Added DB coverage for seeded values, preserving tenant edits on re-application, and B-027 query/isolation coverage (4/4 supplier tests). Typecheck, full Vitest suite, 65-test browser harness and diff check pass. No assignments, defaults, write service, enforcement, UI, schema or migration change. §26.44 records scope; assignment behavior remains pending. | Agent |
+| 0.45 | 2026-10-11 | **B-029 supplier partner assignment write service passed.** Added tenant-scoped audited create/update, atomic replacement and remove; enforced active function/role/scope checks, configured unique/multiple cardinality, no default for unique functions, optional single default for multiple functions, default transfer, optimistic versions and per-slot concurrency locks. No-op writes are silent; removals and default changes are audited. Four focused DB tests, 339 total Vitest tests, typecheck, 65 browser-harness tests and diff check pass in the isolated development database. No UI, action/capability or PO determination. §26.45 records limits; protected UI is next. | Agent |
+| 0.46 | 2026-10-11 | **B-030 protected supplier partner-function server actions passed.** Added scoped catalogue/assignment reads and create/replace/remove actions; read requires purchasing DISPLAY/MAINTAIN or AUDIT.WORKSPACE and writes require purchasing MAINTAIN. Tenant and actor are session-derived; forged client/actor values ignored; anonymous calls redirect. Three action-security regressions added (30/30 action-security tests). Full Vitest (342/342), typecheck/build, browser harness (65/65), IP lint (172 files) and diff check pass. No UI, new capability, migration or PO determination. §26.46 records scope; maintenance UI is next. | Agent |
+| 0.47 | 2026-10-11 | **B-031 display-only supplier partner-function panel added.** Integrated the authority-gated read view into the Supplier Purchasing tab, grouped by function and showing cardinality, active state, related supplier status/blocking, default and empty/no-default states. New UI labels use i18n. Typecheck, full Vitest (342/342), browser harness (65/65), production build, IP lint (173 files) and diff check pass. Dedicated live-browser acceptance and editing controls remain pending. No schema, migration or PO behavior. §26.47 records scope; assignment editor next. | Agent |
+| 0.48 | 2026-10-11 | **B-032 supplier partner-function assignment editor added.** Maintain users can add/replace unique assignments, add multiple assignments, designate/change/unset their optional default, and remove rows with reason/version controls. Pickers query same-tenant active Supplier roles, advertise the 200-row limit, and stay disabled until a purchasing-org segment exists. Existing session-derived actions remain the only write path; no cardinality setting is invented or changed. Typecheck, full Vitest (343/343), browser harness (65/65), production build, IP lint (173 files) and diff check pass. Dedicated editor browser acceptance and PO determination remain pending. §26.48 records limits; browser acceptance next. | Agent |
+| 0.49 | 2026-10-11 | **B-033 dedicated supplier partner-function live-browser acceptance passed.** Extended the disposable `supplier-purchasing` Playwright target with segment-gate, unique add/replace/remove, configured-multiple add/default set/unset/transfer/removal, read-only Auditor and unrelated-authority checks. The multiple rule was altered only in the UI-created T990 dev fixture; guarded cleanup ran and post-run query confirmed no T990 fixture remains. No browser errors. `npm run typecheck`, browser harness (65/65), focused target and diff check pass; no app schema/migration, transaction behavior, owner/production data, commit or deployment. §26.49 records coverage and boundary. | Agent |
 
 ---
 

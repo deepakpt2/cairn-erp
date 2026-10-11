@@ -26,6 +26,8 @@ import { getBusinessPartner } from '@/modules/foundation/business-partners';
 import { saveSupplierCompanyAction } from '@/app/foundation/partners/company-actions';
 import { getSupplierCompany } from '@/modules/foundation/supplier-companies';
 import { saveSupplierPurchasingAction } from '@/app/foundation/partners/purchasing-actions';
+import { readSupplierPurchasingPartnerAssignmentsAction, removeSupplierPurchasingPartnerAction, saveSupplierPurchasingPartnerAction } from '@/app/foundation/partners/partner-function-actions';
+import { listSupplierPurchasingPartners } from '@/modules/foundation/supplier-purchasing-partners';
 import { getSupplierPurchasing } from '@/modules/foundation/supplier-purchasing';
 import { saveCustomerCompanyAction } from '@/app/foundation/partners/customer-company-actions';
 import { getCustomerCompany } from '@/modules/foundation/customer-companies';
@@ -133,7 +135,44 @@ describe('server action security', () => {
     request.session=null;await expect(saveSupplierPurchasingAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
 
+  it('derives supplier partner-assignment tenant/actor and supports authorised reads/removal', async () => {
+    signedIn();
+    const related = form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-RELATED',category:'ORGANIZATION',name:'Security related supplier',country:'KW',city:'Kuwait City',roles:'SUPPLIER',expectedVersion:'0',reason:'Partner function action setup'});
+    expect((await savePartnerAction({ok:true},related)).ok).toBe(true);
+    const data = form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',functionCode:'ORDERING_PARTNER',assignedPartnerNumber:'SEC-RELATED',expectedVersion:'0',isDefault:'false',reason:'Partner function action security test'});
+    expect(await saveSupplierPurchasingPartnerAction({ok:true},data)).toMatchObject({ok:true,changed:true,version:1,isDefault:false});
+    const row = await withTenant(alpha.client,tx=>tx.execute(sql`select created_by from supplier_purchasing_partner where partner_number='SEC-PARTNER' and assigned_partner_number='SEC-RELATED'`));
+    expect((row as unknown as Array<{created_by:string}>)[0].created_by).toBe('real.operator');
+    expect(await withTenant(beta.client,tx=>tx.execute(sql`select * from supplier_purchasing_partner where partner_number='SEC-PARTNER'`))).toHaveLength(0);
 
+    signedIn(['PROC.SUPPLIER.PURCHASING.DISPLAY']);
+    const read = await readSupplierPurchasingPartnerAssignmentsAction('SEC-PARTNER','1000');
+    expect(read).toMatchObject({ok:true,assignments:[{functionCode:'ORDERING_PARTNER',assignedPartnerNumber:'SEC-RELATED'}]});
+
+    signedIn();
+    const removal = form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',functionCode:'ORDERING_PARTNER',assignedPartnerNumber:'SEC-RELATED',expectedVersion:'1',reason:'Remove security fixture'});
+    expect(await removeSupplierPurchasingPartnerAction({ok:true},removal)).toMatchObject({ok:true,changed:true,removedVersion:1});
+    expect(await listSupplierPurchasingPartners(alpha.client,'SEC-PARTNER','1000')).toEqual([]);
+    const audit = await withTenant(alpha.client,tx=>tx.execute(sql`select changed_by from change_document where object_class='supplier_purchasing_partner' and object_key='SEC-PARTNER/1000/ORDERING_PARTNER/SEC-RELATED' order by changed_at desc limit 1`));
+    expect((audit as unknown as Array<{changed_by:string}>)[0].changed_by).toBe('real.operator');
+  });
+
+  it('requires purchasing-maintain authority for assignment writes and display/audit authority for reads', async () => {
+    signedIn(['PROC.SUPPLIER.PURCHASING.DISPLAY']);
+    const data = form({partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',functionCode:'ORDERING_PARTNER',assignedPartnerNumber:'SEC-RELATED',expectedVersion:'0',reason:'Denied partner function write'});
+    expect((await saveSupplierPurchasingPartnerAction({ok:true},data)).message).toContain('PROC.SUPPLIER.PURCHASING.MAINTAIN');
+    signedIn(['FIN.*']);
+    const read = await readSupplierPurchasingPartnerAssignmentsAction('SEC-PARTNER','1000');
+    expect(read).toMatchObject({ok:false});
+    expect((read as {message?:string}).message).toContain('PROC.SUPPLIER.PURCHASING.DISPLAY');
+  });
+
+  it('refuses anonymous supplier partner-function server-action requests', async () => {
+    request.session = null;
+    await expect(readSupplierPurchasingPartnerAssignmentsAction('SEC-PARTNER','1000')).rejects.toThrow('AUTH_REDIRECT');
+    await expect(saveSupplierPurchasingPartnerAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+    await expect(removeSupplierPurchasingPartnerAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
 
   it('derives payment-term tenant/actor from session, not forged form fields', async () => {
     signedIn();

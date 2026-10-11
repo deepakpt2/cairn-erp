@@ -1,5 +1,5 @@
 /**
- * Standard configuration package — CAIRN.md §7.3, `INTL-STD-1`
+ * Standard configuration package — CAIRN.md §7.3, `INTL-STD-2`
  *
  * Activatable in one action, versioned, and used as the fixture for every
  * automated test. Its purpose is not to fill screens with sample data: it is to
@@ -35,10 +35,18 @@ import {
   salesArea,
   salesOrg,
   storageLocation,
+  supplierPartnerFunction,
 } from './schema';
 import { glAccount } from '../finance/schema';
 
-export const STANDARD_PACKAGE_VERSION = 'INTL-STD-1';
+export const STANDARD_PACKAGE_VERSION = 'INTL-STD-2';
+
+/** Tenant-seeded supplier partner functions; cardinality is explicit, not inferred. */
+const SUPPLIER_PARTNER_FUNCTIONS = [
+  { functionCode: 'ORDERING_PARTNER', displayName: 'Ordering partner', allowsMultiple: false },
+  { functionCode: 'DELIVERY_PARTNER', displayName: 'Delivery partner', allowsMultiple: false },
+  { functionCode: 'INVOICE_SENDER', displayName: 'Invoice sender', allowsMultiple: false },
+] as const;
 
 export interface PackageInput {
   client: string;
@@ -580,6 +588,14 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
   }
 
+  /* ── Supplier partner-function catalogue ────────────────────────────────── */
+  for (const spec of SUPPLIER_PARTNER_FUNCTIONS) {
+    await tx
+      .insert(supplierPartnerFunction)
+      .values({ client, ...spec, createdBy: activatedBy })
+      .onConflictDoNothing();
+  }
+
   /* ── Change document ─────────────────────────────────────────────────────── */
   await recordChange(tx, {
     client,
@@ -595,6 +611,7 @@ export async function applyStandardPackage(
       fiscalYearVariant: fyvKey,
       periods: periodRows.length,
       companyCode: input.companyCode,
+      supplierPartnerFunctions: SUPPLIER_PARTNER_FUNCTIONS.length,
     },
   });
 

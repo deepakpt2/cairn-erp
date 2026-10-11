@@ -11,13 +11,28 @@ import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
 import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { getSupplierCompany } from '../../src/modules/foundation/supplier-companies';
 import { getSupplierPurchasing } from '../../src/modules/foundation/supplier-purchasing';
+import { listSupplierPurchasingPartners } from '../../src/modules/foundation/supplier-purchasing-partners';
 import { getCustomerCompany } from '../../src/modules/foundation/customer-companies';
+import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sales-areas';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
 const year = new Date().getUTCFullYear();
 export type BrowserContext = { page: Page; base: string; target: BrowserTarget };
 function scope(ctx: BrowserContext) { return { page: ctx.page, BASE: ctx.base, CLIENT: ctx.target.client }; }
+
+async function createSupplierRoleThroughUi(page: Page, BASE: string, number: string, name: string) {
+  await page.goto(`${BASE}/foundation/partners?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="partnerNumber"]').fill(number);
+  await page.locator('input[name="name"]').fill(name);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="city"]').fill('Kuwait City');
+  await page.locator('[name="roles"][value="SUPPLIER"]').check();
+  await page.locator('[name="roles"][value="CUSTOMER"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser partner-function Supplier prerequisite');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Partner saved. Status: Created.', { exact: true }).waitFor();
+}
 
 export async function onboard(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
@@ -665,6 +680,144 @@ async function supplierCompany(ctx: BrowserContext) {
   console.log('  ✓ non-finance authority cannot read/maintain supplier accounting or its history');
 }
 
+async function supplierPartnerFunctionEditor(ctx: BrowserContext) {
+  const {page,BASE,CLIENT}=scope(ctx);
+  const focal='TESTSUPP01', view=`${BASE}/foundation/partners?partner=${focal}&view=SUPPLIER_PURCHASING&org=1000`;
+  await createSupplierRoleThroughUi(page,BASE,'TESTSUPP02','Browser Related Supplier A');
+  await createSupplierRoleThroughUi(page,BASE,'TESTSUPP03','Browser Related Supplier B');
+
+  // The product has no cardinality editor. This fixture-only rule change exposes the approved multiple-role path.
+  const ruleRows=await withTenant(CLIENT,tx=>tx.execute(sql`update supplier_partner_function set allows_multiple=true where client=${CLIENT} and function_code='DELIVERY_PARTNER' returning function_code`)) as unknown as Array<{function_code:string}>;
+  assert.deepEqual(ruleRows.map(row=>row.function_code),['DELIVERY_PARTNER']);
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  const panel=page.locator('section[aria-labelledby="supplier-partner-functions-title"]');
+  const card=(code:string)=>panel.locator('article').filter({hasText:code});
+  const ordering=card('ORDERING_PARTNER');
+  await ordering.getByText('Unique',{exact:true}).waitFor();
+  for(const number of ['TESTSUPP02','TESTSUPP03']){
+    assert.equal(await ordering.locator('select[name="assignedPartnerNumber"] option').filter({hasText:number}).count(),1);
+  }
+  await ordering.locator('select[name="assignedPartnerNumber"]').selectOption('TESTSUPP02');
+  await ordering.locator('input[name="reason"]').fill('Browser unique partner-function add');
+  const uniqueAddButton=ordering.getByRole('button',{name:'Add assignment',exact:true});
+  await uniqueAddButton.click();
+  await ordering.getByRole('button',{name:'Replace assignment',exact:true}).waitFor();
+  let assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  let orderingRows=assignments.filter(row=>row.functionCode==='ORDERING_PARTNER');
+  assert.equal(orderingRows.length,1);assert.equal(orderingRows[0].assignedPartnerNumber,'TESTSUPP02');
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  const orderingAfterAdd=card('ORDERING_PARTNER');
+  await orderingAfterAdd.getByText('Replace with Supplier',{exact:true}).waitFor();
+  const replaceForm=orderingAfterAdd.locator('form:has(select[name="assignedPartnerNumber"])');
+  await replaceForm.locator('select[name="assignedPartnerNumber"]').selectOption('TESTSUPP03');
+  await replaceForm.locator('input[name="reason"]').fill('Browser unique partner-function replacement');
+  const replaceButton=replaceForm.getByRole('button',{name:'Replace assignment',exact:true});
+  await replaceButton.click();
+  await replaceForm.getByRole('button',{name:'Replace assignment',exact:true}).waitFor();
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  orderingRows=assignments.filter(row=>row.functionCode==='ORDERING_PARTNER');
+  assert.equal(orderingRows.length,1);assert.equal(orderingRows[0].assignedPartnerNumber,'TESTSUPP03');
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  const replacedRow=card('ORDERING_PARTNER').locator('li').filter({hasText:'TESTSUPP03'});
+  assert.equal(await replacedRow.count(),1);
+  await replacedRow.locator('form').last().locator('[name="reason"]').fill('Browser unique partner-function removal');
+  const uniqueRemoveButton=replacedRow.getByRole('button',{name:'Remove assignment',exact:true});
+  await uniqueRemoveButton.click();
+  await uniqueRemoveButton.waitFor({state:'detached'});
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  assert.equal(assignments.filter(row=>row.functionCode==='ORDERING_PARTNER').length,0);
+  console.log('  ✓ unique assignment add, replacement and reasoned removal persist through the UI');
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  let delivery=card('DELIVERY_PARTNER');
+  await delivery.getByText('Multiple',{exact:true}).waitFor();
+  let addForm=delivery.locator('form:has(select[name="assignedPartnerNumber"])');
+  await addForm.locator('select[name="assignedPartnerNumber"]').selectOption('TESTSUPP02');
+  await addForm.locator('input[name="reason"]').fill('Browser multiple partner-function add');
+  const firstMultipleAddButton=addForm.getByRole('button',{name:'Add assignment',exact:true});
+  await firstMultipleAddButton.click();
+  await firstMultipleAddButton.waitFor();
+  await delivery.getByText('No default is set. A purchasing transaction must ask the user to choose.',{exact:true}).waitFor();
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  let deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
+  assert.equal(deliveryRows.length,1);assert.equal(deliveryRows[0].assignedPartnerNumber,'TESTSUPP02');assert.equal(deliveryRows[0].isDefault,false);
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  delivery=card('DELIVERY_PARTNER');
+  addForm=delivery.locator('form:has(select[name="assignedPartnerNumber"])');
+  await addForm.locator('select[name="assignedPartnerNumber"]').selectOption('TESTSUPP03');
+  await addForm.locator('input[name="isDefault"]').check();
+  await addForm.locator('input[name="reason"]').fill('Browser multiple partner-function default add');
+  const secondMultipleAddButton=addForm.getByRole('button',{name:'Add assignment',exact:true});
+  await secondMultipleAddButton.click();
+  await secondMultipleAddButton.waitFor();
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
+  assert.equal(deliveryRows.length,2);assert.equal(deliveryRows.filter(row=>row.isDefault).length,1);
+  assert.equal(deliveryRows.find(row=>row.isDefault)?.assignedPartnerNumber,'TESTSUPP03');
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  delivery=card('DELIVERY_PARTNER');
+  const defaultRow=delivery.locator('li').filter({hasText:'TESTSUPP03'});
+  const defaultForm=defaultRow.locator('form').first();
+  await defaultForm.locator('input[name="isDefault"]').uncheck();
+  await defaultForm.locator('input[name="reason"]').fill('Browser multiple partner-function default unset');
+  const unsetButton=defaultForm.getByRole('button',{name:'Save',exact:true});
+  await unsetButton.click();
+  await unsetButton.waitFor();
+  await delivery.getByText('No default is set. A purchasing transaction must ask the user to choose.',{exact:true}).waitFor();
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
+  assert.equal(deliveryRows.filter(row=>row.isDefault).length,0);
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  delivery=card('DELIVERY_PARTNER');
+  const newDefaultRow=delivery.locator('li').filter({hasText:'TESTSUPP02'});
+  const newDefaultForm=newDefaultRow.locator('form').first();
+  await newDefaultForm.locator('input[name="isDefault"]').check();
+  await newDefaultForm.locator('input[name="reason"]').fill('Browser multiple partner-function default transfer');
+  const transferButton=newDefaultForm.getByRole('button',{name:'Save',exact:true});
+  await transferButton.click();
+  await transferButton.waitFor();
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
+  assert.equal(deliveryRows.filter(row=>row.isDefault).length,1);
+  assert.equal(deliveryRows.find(row=>row.isDefault)?.assignedPartnerNumber,'TESTSUPP02');
+
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  delivery=card('DELIVERY_PARTNER');
+  const promotedRow=delivery.locator('li').filter({hasText:'TESTSUPP02'});
+  await promotedRow.locator('form').last().locator('[name="reason"]').fill('Browser remove current default partner');
+  const currentDefaultRemoveButton=promotedRow.getByRole('button',{name:'Remove assignment',exact:true});
+  await currentDefaultRemoveButton.click();
+  await currentDefaultRemoveButton.waitFor({state:'detached'});
+  assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
+  deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
+  assert.equal(deliveryRows.length,1);assert.equal(deliveryRows[0].assignedPartnerNumber,'TESTSUPP03');assert.equal(deliveryRows[0].isDefault,false);
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  delivery=card('DELIVERY_PARTNER');
+  await delivery.getByText('No default is set. A purchasing transaction must ask the user to choose.',{exact:true}).waitFor();
+
+  const auditorId=randomUUID();const password=await hashPassword(PASSWORD);
+  await withTenant(CLIENT,async tx=>{
+    await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${auditorId},${CLIENT},'partner.auditor','Partner Function Auditor',${password},false,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${auditorId},'AUDITOR','BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="client"]').fill(CLIENT);await page.locator('[name="username"]').fill('partner.auditor');await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(/\/$/);
+  await page.goto(view,{waitUntil:'domcontentloaded'});
+  const auditPanel=page.locator('section[aria-labelledby="supplier-partner-functions-title"]');
+  await auditPanel.getByRole('heading',{name:'Supplier partner functions',exact:true}).waitFor();
+  await auditPanel.getByText('TESTSUPP03',{exact:true}).waitFor();
+  await auditPanel.getByText('No default is set. A purchasing transaction must ask the user to choose.',{exact:true}).waitFor();
+  assert.equal(await auditPanel.locator('form').count(),0,'Display-only readers cannot see assignment forms.');
+  assert.equal(await auditPanel.getByRole('button',{name:/Add assignment|Replace assignment|Remove assignment/}).count(),0);
+  console.log('  ✓ multiple add, default set/unset/transfer and no-promotion-on-remove pass; AUDITOR can read without edit controls');
+}
+
 async function supplierPurchasing(ctx: BrowserContext) {
   const {page,BASE,CLIENT}=scope(ctx);
   await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
@@ -678,10 +831,23 @@ async function supplierPurchasing(ctx: BrowserContext) {
   await page.getByRole('link',{name:'Purchasing organisation',exact:true}).click();
   await page.locator('[name="orderCurrency"]').waitFor();
   assert.equal(await page.locator('[name="orderCurrency"]').inputValue(),'KWD');
-  await page.locator('[name="reason"]').fill('Browser staged supplier purchasing');
+  const partnerFunctionsPanel=page.locator('section[aria-labelledby="supplier-partner-functions-title"]');
+  const purchasingForm=page.locator('form:has([name="orderCurrency"])');
+  await partnerFunctionsPanel.getByRole('heading',{name:'Supplier partner functions',exact:true}).waitFor();
+  await partnerFunctionsPanel.getByText('Save the supplier purchasing-organisation segment before adding partner assignments.',{exact:true}).waitFor();
+  assert.equal(await partnerFunctionsPanel.locator('article').count(),3);
+  assert.equal(await partnerFunctionsPanel.getByText('Unique',{exact:true}).count(),3,'Standard catalogue functions start as unique.');
+  assert.equal(await partnerFunctionsPanel.locator('form').count(),0,'Partner assignments stay disabled before the purchasing segment exists.');
+  for(const functionCode of ['ORDERING_PARTNER','DELIVERY_PARTNER','INVOICE_SENDER']){
+    await partnerFunctionsPanel.getByText(functionCode,{exact:true}).waitFor();
+  }
+  console.log('  ✓ all three unique functions display, with assignment controls gated until the purchasing segment exists');
+  await purchasingForm.locator('[name="reason"]').fill('Browser staged supplier purchasing');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier purchasing view saved. Status: Incomplete.',{exact:true}).waitFor();
-  await page.locator('[name="reason"]').fill('Browser unchanged buying defaults');
+  await partnerFunctionsPanel.getByText('Save the supplier purchasing-organisation segment before adding partner assignments.',{exact:true}).waitFor({state:'hidden'});
+  assert.equal(await partnerFunctionsPanel.locator('form').count(),3,'Maintainers can edit after the purchasing segment exists.');
+  await purchasingForm.locator('[name="reason"]').fill('Browser unchanged buying defaults');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('No supplier purchasing data changed.',{exact:true}).waitFor();
   assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.version,1);
@@ -690,26 +856,26 @@ async function supplierPurchasing(ctx: BrowserContext) {
   await page.locator('[name="incotermsCode"]').selectOption('FCA');
   await page.locator('[name="incotermsLocation"]').fill('Kuwait City');
   await page.locator('[name="paymentTermsCode"]').selectOption('NET30');
-  await page.locator('[name="reason"]').fill('Browser buying defaults completion');
+  await purchasingForm.locator('[name="reason"]').fill('Browser buying defaults completion');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier purchasing view saved. Status: Created.',{exact:true}).waitFor();
   assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.orderCurrency,'USD');
   await page.locator('[name="incotermsLocation"]').fill('Test receiving site');
   await page.locator('[name="paymentTermsCode"]').selectOption('NET15');
-  await page.locator('[name="reason"]').fill('Browser buying defaults maintenance');
+  await purchasingForm.locator('[name="reason"]').fill('Browser buying defaults maintenance');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier purchasing view saved. Status: Maintained.',{exact:true}).waitFor();
   await page.locator('[name="isBlocked"]').check();
-  await page.locator('[name="reason"]').fill('Browser buying organisation hold');
+  await purchasingForm.locator('[name="reason"]').fill('Browser buying organisation hold');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Blocked',{exact:true}).waitFor();
   await page.locator('[name="isBlocked"]').uncheck();
-  await page.locator('[name="reason"]').fill('Browser buying organisation cleared');
+  await purchasingForm.locator('[name="reason"]').fill('Browser buying organisation cleared');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='5');
   await page.locator('[name="orderCurrency"]').evaluate(select=>{const option=document.createElement('option');option.value='ZZZ';option.text='Invalid test currency';select.appendChild(option);});
   await page.locator('[name="orderCurrency"]').selectOption('ZZZ');
-  await page.locator('[name="reason"]').fill('Invalid order currency test');
+  await purchasingForm.locator('[name="reason"]').fill('Invalid order currency test');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Order currency is missing or inactive.',{exact:true}).waitFor();
   assert.equal((await getSupplierPurchasing(CLIENT,'TESTSUPP01','1000'))?.version,5);
@@ -720,6 +886,7 @@ async function supplierPurchasing(ctx: BrowserContext) {
   await page.getByText('Browser buying organisation hold',{exact:true}).waitFor();
   await page.screenshot({path:'.arena/supplier-purchasing-history-review.png',fullPage:true});
   console.log('  ✓ supplier buying defaults stage/complete/maintain/block and reject invalid currency');
+  await supplierPartnerFunctionEditor(ctx);
 
   const id=randomUUID();const password=await hashPassword(PASSWORD);
   await withTenant(CLIENT,async tx=>{
@@ -890,6 +1057,82 @@ async function customerCompany(ctx: BrowserContext) {
   console.log('  ✓ non-finance authority cannot read/maintain customer accounting or its history');
 }
 
+async function customerSalesArea(ctx: BrowserContext) {
+  const {page,BASE,CLIENT}=scope(ctx);
+  await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="partnerNumber"]').fill('TESTCUST01');
+  await page.locator('input[name="name"]').fill('Demo Retail Customer');
+  await page.locator('[name="city"]').fill('Kuwait City');
+  await page.locator('[name="roles"][value="SUPPLIER"]').uncheck();
+  await page.locator('[name="roles"][value="CUSTOMER"]').check();
+  await page.locator('[name="reason"]').fill('Browser sales-area customer prerequisite');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Partner saved. Status: Created.',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'Open saved business partner',exact:true}).click();
+  await page.getByRole('link',{name:'Sales area',exact:true}).click();
+  await page.locator('[name="area"]').waitFor();
+  const areaKey=await page.locator('[name="area"]').inputValue();
+  assert.equal(areaKey,'1000/01/01','Standard development fixture exposes the expected active sales area');
+  const reselectArea=async()=>{
+    const navigation=page.waitForURL(url=>url.searchParams.get('area')===areaKey,{timeout:15_000});
+    await page.getByRole('button',{name:'Select sales area',exact:true}).click();
+    await navigation;
+    await page.locator('[name="pricingProcedure"]').waitFor();
+  };
+  await page.locator('[name="deliveringPlant"]').waitFor();
+  assert.equal(await page.locator('[name="deliveringPlant"] option[value="1000"]').count(),1);
+  await page.locator('[name="reason"]').fill('Browser sales-area staged');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Customer sales area saved. Status: Incomplete.',{exact:true}).waitFor();
+  const staged=await getCustomerSalesArea(CLIENT,'TESTCUST01','1000','01','01');
+  assert.equal(staged?.salesStatus,'INCOMPLETE');assert.equal(staged?.version,1);
+
+  await page.locator('[name="deliveringPlant"]').selectOption('1000');
+  await page.locator('[name="pricingProcedure"]').fill('rvaa01');
+  await page.locator('[name="salesDistrict"]').fill('kw01');
+  await page.locator('[name="completeDelivery"]').check();
+  await page.locator('[name="orderCombination"]').check();
+  await page.locator('[name="reason"]').fill('Browser sales-area complete');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='2');
+  const saved=await getCustomerSalesArea(CLIENT,'TESTCUST01','1000','01','01');
+  assert.equal(saved?.salesStatus,'CREATED');assert.equal(saved?.version,2);
+  assert.equal(saved?.deliveringPlant,'1000');assert.equal(saved?.pricingProcedure,'RVAA01');
+  assert.equal(saved?.salesDistrict,'KW01');assert.equal(saved?.completeDelivery,true);assert.equal(saved?.orderCombination,true);
+  await reselectArea();
+  assert.equal(await page.locator('[name="pricingProcedure"]').inputValue(),'RVAA01');
+  assert.equal(await page.locator('[name="salesDistrict"]').inputValue(),'KW01');
+  assert.equal(await page.locator('[name="completeDelivery"]').isChecked(),true);
+  assert.equal(await page.locator('[name="orderCombination"]').isChecked(),true);
+  await page.screenshot({path:'.arena/customer-sales-area-maintain-review.png',fullPage:true});
+  console.log('  ✓ sales-area stage/complete, same-company plant, canonical codes and persisted flags');
+
+  await page.locator('[name="pricingProcedure"]').fill('rvaa01');
+  await page.locator('[name="salesDistrict"]').fill('kw01');
+  await page.locator('[name="reason"]').fill('Browser sales-area canonical no-op');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('No customer sales-area data changed.',{exact:true}).waitFor();
+  assert.equal((await getCustomerSalesArea(CLIENT,'TESTCUST01','1000','01','01'))?.version,2);
+  await page.locator('[name="isBlocked"]').check();
+  await page.locator('[name="reason"]').fill('Browser sales-area block');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='3');
+  assert.equal((await getCustomerSalesArea(CLIENT,'TESTCUST01','1000','01','01'))?.isBlocked,true);
+  assert.equal(await page.locator('[name="isBlocked"]').isChecked(),true);
+  await page.locator('[name="isBlocked"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser sales-area unblock');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='4');
+  assert.equal((await getCustomerSalesArea(CLIENT,'TESTCUST01','1000','01','01'))?.isBlocked,false);
+  await page.getByRole('link',{name:'Change history',exact:true}).click();
+  await page.getByText('Browser sales-area complete',{exact:true}).waitFor();
+  await page.getByText('Browser sales-area block',{exact:true}).waitFor();
+  assert.match(await page.locator('body').innerText(),/Pricing Procedure: — → RVAA01 · Control change/);
+  console.log('  ✓ no-op, scoped block/unblock and security-relevant history');
+
+  await page.screenshot({path:'.arena/customer-sales-area-history-review.png',fullPage:true});
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'payment-terms': paymentTerms,
@@ -897,6 +1140,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'supplier-company': supplierCompany,
   'supplier-purchasing': supplierPurchasing,
   'customer-company': customerCompany,
+  'customer-sales-area': customerSalesArea,
   'material-basic': basicLifecycle,
   'material-purchasing': purchasing,
   'material-mrp': mrp,
