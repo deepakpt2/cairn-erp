@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.93 — B-078 disposable browser acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.94 — B-079 owner-directed publication)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -5301,6 +5301,11 @@ the cluster used only a private Unix socket with TCP disabled and was removed. `
 identifiers were accessed. B-076's view remains read-only; encryption-key retirement, encrypted writes/reveal, and
 contact UI remain separate gates. No commit or push.
 
+**Status update (v0.94):** After B-078, the owner explicitly instructed a one-time publication of the pending bank-data
+batch to `main`, overriding §25.4's full-system gate for this batch only. The standing no-partial-push rule remains
+for future batches. Commit `9a39286` was pushed successfully; §26.96 records the publication. No credential was
+included in the commit, remote URL, or source.
+
 
 ### 26.87 B-070 — Active-key verification for supplied batches `IMPLEMENTED — NO GLOBAL RETIREMENT PROOF`
 
@@ -5493,6 +5498,20 @@ revealed; its contents were left unchanged and the file was restored. No commit 
 trigger remains authoritative.
 
 
+### 26.96 B-079 — Owner-directed publication of the bank-data batch `PUSHED TO MAIN`
+
+After B-078, on 2026-10-11 the owner explicitly directed a push of the pending bank-data worktree to `main`. This was
+a one-time exception to §25.4's full-system publish gate; the standing no-partial-push instruction remains in force
+for future batches. The 47-file source/test/migration/documentation batch was committed as
+`9a39286 feat: add partner bank-data foundations and read-only view` (4,464 insertions, 39 deletions) and fast-forward
+pushed from `39e3d35` to the documented repository's `main`; `origin/main` now tracks the branch.
+
+The PAT in ignored `.env.local` was used only for authentication through a temporary askpass helper. Its value was
+not staged, committed, placed in the remote URL/Git configuration, or displayed; the helper was removed. A staged-file
+check confirmed none of the 47 paths contained the PAT or recognizable GitHub-token material. `.env.local` remains
+ignored and untracked. No database or bank data was accessed for publication.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -5666,6 +5685,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 0.94 | 2026-10-11 | **Owner-directed one-time publication of the bank-data batch to `main`.** Owner explicitly authorized an exception to the full-system publish gate for this batch only; future no-partial-push restriction remains. Committed 47 source/test/migration/doc paths as `9a39286 feat: add partner bank-data foundations and read-only view` and fast-forward pushed from `39e3d35` to `origin/main`. PAT from ignored `.env.local` used only for authentication through temporary askpass; no credential in source, commit, remote URL/config, or logs; staged-file secret check passed. §26.96 records scope. | Agent |
 | 0.93 | 2026-10-11 | **B-078 reviews the Drizzle metadata gap and passes B-077's live browser target on a disposable PostgreSQL 17.11 database.** Confirms the custom runner ignores metadata and applies 32 lexical SQL migrations; Drizzle Kit metadata reconciliation remains separate. The T992 Business Partner target passes maintainer and display-only Bank Details checks; cleanup verified, private Unix socket only, TCP disabled, temporary cluster/app removed. Smoke onboarding uses only an ephemeral per-run value if its owner field is rendered; the synthetic viewer has `FND.PARTNER.DISPLAY` without maintain. Typecheck, browser-harness (66/66), and diff check pass. No bank records/values, persistent/owner/production DB, `.env.local` content access/change, commit or push. §26.95 records results. | Agent |
 | 0.92 | 2026-10-11 | **B-077 extends Business Partner browser target coverage for the bank metadata tab.** The T992 target asserts the empty state and absence of save/reveal controls for maintainer and display-only users. Typecheck and browser-harness (66/66) pass; selection list confirms the target. Live browser/database acceptance was not run; no DB, bank rows or real identifiers touched. §26.94 records limits; no commit or push. | Agent |
 | 0.91 | 2026-10-11 | **B-076 integrates a display-only Bank Details tab for Business Partners.** It loads B-075 metadata only on explicit selection and renders only allowlisted fields plus D-074's fixed `••••` list mask; no account identifiers, ciphertext, edit or reveal. Two panel and two route tests, typecheck, production build and diff check pass. No live database/browser acceptance, real bank data, commit or push; §26.93 records scope. | Agent |
