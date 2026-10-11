@@ -11,6 +11,7 @@ export const customerCompany=pgTable('customer_company_code',{
   partnerNumber:varchar('partner_number',{length:40}).notNull(),roleCode:varchar('role_code',{length:16}).notNull().default('CUSTOMER'),
   companyCode:varchar('company_code',{length:10}).notNull(),chartOfAccounts:varchar('chart_of_accounts',{length:8}).notNull(),
   reconciliationAccount:varchar('reconciliation_account',{length:20}),paymentTermsCode:varchar('payment_terms_code',{length:12}),
+  paymentMethods:varchar('payment_methods',{length:40}),dunningProcedure:varchar('dunning_procedure',{length:4}),
   companyStatus:varchar('company_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
 },t=>[

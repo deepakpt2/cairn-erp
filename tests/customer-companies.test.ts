@@ -11,11 +11,11 @@ async function partner(tenant:TestTenant,number:string,roles:['CUSTOMER']|['SUPP
 }
 beforeAll(async()=>{
   alpha=await createTenant('customer-company-alpha');beta=await createTenant('customer-company-beta');
-  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY'])await partner(alpha,number);
+  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY','PAYDUN','PAYBAD'])await partner(alpha,number);
   await partner(alpha,'SUPPLIERONLY',['SUPPLIER']);
 });
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
-const input=(number:string,patch:Partial<CustomerCompanyInput>={}):CustomerCompanyInput=>({client:alpha.client,partnerNumber:number,companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company test',reconciliationAccount:'110000',paymentTermsCode:'NET30',isBlocked:false,...patch});
+const input=(number:string,patch:Partial<CustomerCompanyInput>={}):CustomerCompanyInput=>({client:alpha.client,partnerNumber:number,companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company test',reconciliationAccount:'110000',paymentTermsCode:'NET30',paymentMethods:'',dunningProcedure:'',isBlocked:false,...patch});
 describe('customer company-code settings',()=>{
   it('stages and completes accounting settings independently',async()=>{
     expect((await saveCustomerCompany(input('STAGED',{reconciliationAccount:'',paymentTermsCode:''}))).status).toBe('INCOMPLETE');
@@ -105,5 +105,36 @@ describe('customer company-code settings',()=>{
   it('cascades new company settings with tenant removal',async()=>{
     const temp=await createTenant('customer-company-cascade');await partner(temp,'TEMP');await saveCustomerCompany({...input('TEMP'),client:temp.client});await destroyTenant(temp.client);
     expect(await withTenant(temp.client,tx=>tx.execute(sql`select * from customer_company_code`))).toHaveLength(0);
+  });
+});
+describe('customer company payment methods and dunning procedure (B-018)',()=>{
+  it('normalizes payment methods and the dunning procedure on save',async()=>{
+    await saveCustomerCompany(input('PAYDUN',{paymentMethods:' t , c,C ',dunningProcedure:'ma04'}));
+    const row=await getCustomerCompany(alpha.client,'PAYDUN','1000');
+    expect(row?.paymentMethods).toBe('C,T');expect(row?.dunningProcedure).toBe('MA04');
+    expect(row?.version).toBe(1);expect(row?.companyStatus).toBe('CREATED');
+  });
+  it('treats a reordered or duplicated payment-method set as unchanged',async()=>{
+    expect(await saveCustomerCompany(input('PAYDUN',{expectedVersion:1,paymentMethods:'T,C',dunningProcedure:'MA04'}))).toEqual({changed:false,version:1,status:'CREATED'});
+  });
+  it('records a dunning-only change with version bump and security-relevant history item',async()=>{
+    expect(await saveCustomerCompany(input('PAYDUN',{expectedVersion:1,paymentMethods:'C,T',dunningProcedure:'MA02'}))).toEqual({changed:true,version:2,status:'MAINTAINED'});
+    const items=await withTenant(alpha.client,tx=>tx.execute(sql`select i.field_name,i.old_value,i.new_value,i.is_security_relevant from change_document_item i join change_document d on d.id=i.change_document_id where d.object_class='customer_company_code' and d.object_key='PAYDUN/1000' and d.change_type='CHANGE' and i.is_security_relevant='true'`));
+    expect(items).toEqual([{field_name:'dunningProcedure',old_value:'MA04',new_value:'MA02',is_security_relevant:'true'}]);
+  });
+  it('clears the dunning procedure again on blank input without losing the payment methods',async()=>{
+    await saveCustomerCompany(input('PAYDUN',{expectedVersion:2,paymentMethods:'C,T',dunningProcedure:''}));
+    const row=await getCustomerCompany(alpha.client,'PAYDUN','1000');
+    expect(row?.dunningProcedure).toBeNull();expect(row?.paymentMethods).toBe('C,T');expect(row?.version).toBe(3);
+  });
+  it.each([{paymentMethods:'WIRE TRANSFER'},{paymentMethods:'TOOLONGCODE'},{paymentMethods:'A,B,C,D,E,F,G,H,I,J,K'},{dunningProcedure:'MAHNV'}])('rejects invalid payment/dunning codes without writing %j',async(patch)=>{
+    await expect(saveCustomerCompany(input('PAYBAD',patch))).rejects.toThrow();
+    expect(await getCustomerCompany(alpha.client,'PAYBAD','1000')).toBeNull();
+  });
+  it('keeps payment/dunning fields out of the completeness gate',async()=>{
+    await saveCustomerCompany(input('PAYDUN',{expectedVersion:3,reconciliationAccount:'',paymentTermsCode:'',paymentMethods:'T',dunningProcedure:'MA01'}));
+    const row=await getCustomerCompany(alpha.client,'PAYDUN','1000');
+    expect(row?.companyStatus).toBe('INCOMPLETE');expect(row?.paymentMethods).toBe('T');expect(row?.dunningProcedure).toBe('MA01');
+    await expect(withTenant(alpha.client,tx=>requireCustomerCompany(tx,alpha.client,'PAYDUN','1000'))).rejects.toThrow('incomplete');
   });
 });
