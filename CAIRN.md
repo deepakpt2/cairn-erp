@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.49 — B-033 supplier partner-function editor browser acceptance passed)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.69 — B-054 versioned bank-data encryption primitive)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -175,6 +175,16 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-055 | **Default Compose deployment uses project `.env`, without repeated env-file flags.** `.env.example` is now the deployment template; the old local-Node template moves to `.env.development.example`, and `.env.docker.example` remains a compatibility template only. Keep explicit whitelisted container variables rather than passing the whole file into the app. | Owner clarification: the host was changed to `.env` and the owner does not want `--env-file .env.docker` on every command. Compose already loads project `.env`; the problem is potentially stale containers/stored role passwords, not the supported filename. Existing actual secret files are never overwritten or committed. | 2026-10-10 |
 | D-056 | **Database connection URLs use a Cairn-specific private-network alias.** PostgreSQL stays on `cairn_internal` with alias `cairn-postgres`; app and migration runtime/owner URLs all use that alias, never generic `db` or a hardcoded IP. App remains on the existing external proxy for Traefik. | The owner diagnostic confirmed equal credentials but app-side `db` DNS resolved 172.18.0.9 while the intended database was 172.31.0.2. This is a shared-network wrong-target collision, not a stored-password mismatch. Correct routing and recreate connection pools; no password reset, volume deletion or ERP-data edit is required. | 2026-10-10 |
 | D-057 | **Production web tenant provisioning is deployment-owner controlled, not public registration.** First tenant requires a configured private `CAIRN_PROVISIONING_TOKEN` of at least 32 characters. Once any tenant exists, both that token and a verified session with `CFG.PLT.CLIENT.ONBOARD` are required. Recheck admission under a global transaction advisory lock before the insert; client-side flags cannot authorize it. | Owner correctly identified public onboarding as a security risk. Missing/wrong owner token fails closed, even for administrators. Existing users/data stay unchanged. Anonymous production directory/launchpad access is closed; signed-in directories show only their own tenant. Only an explicitly server-configured development environment retains the isolated fixture path. This supersedes D-044's unrestricted onboarding clause, not its session/tenant isolation rules. | 2026-10-10 |
+| D-058 | **Payment Methods v1 is a tenant-scoped, country-specific definition catalogue.** Key each method by tenant + ISO country + 1–2-character uppercase ASCII alphanumeric code; the same code may have a different meaning in another country. Each definition has a description, allowed direction (`OUTGOING`, `INCOMING`, or `BOTH`) and active state. Ship no standard method rows. | Owner approved one shared master with direction eligibility, definitions-only scope, and no generic seed entries. Future company-code assignments resolve their code against that company code’s country and required direction: Supplier = outgoing, Customer = incoming. B-018/B-019 Customer values remain format-only until a separate integration batch. Supplier/customer permissions, house-bank eligibility, payment-medium formats and payment execution remain separate work; no transaction behavior is implied. | 2026-10-11 |
+| D-059 | **Partner bank and contact v1 records are partner-wide, valid-dated, audited, and privacy-preserving.** Bank details are a multi-record partner-general dataset shared for a dual-role partner; contact persons are also partner-general, while the existing general email/phone remain organisation-level values. | Owner-approved bank fields: account holder, country, bank name/code, IBAN or local account number, BIC/SWIFT, valid-from/to and active state. Full bank identifiers must be encrypted at rest, masked in ordinary views and history, and revealed only via a separate audited authority; generic change history must never contain plaintext identifiers. No company-code/role assignment, default payment choice, payment-method permission, house-bank eligibility, or payment execution is included. Contact persons carry name, title/function, email, phone, validity and active state, with at most one primary at a time per partner. Log contact-data views/changes; mask personal email/phone in history and end-date/inactivate records, with hard deletion only through an approved retention/privacy workflow. Country-profile data coverage and encryption-key implementation remain follow-up work. | 2026-10-11 |
+| D-060 | **Partner bank fields are governed by fail-closed country profiles and standards-based identifier validation.** A bank country without a defined profile cannot accept a bank record. | Require account holder and bank country; each country's profile determines whether IBAN or local account number is required and whether bank code/BIC is mandatory. Bank name remains optional. Normalize IBAN uppercase without spaces, validate country prefix against bank country, country-specific length and MOD-97 checksum; validate supplied BIC/SWIFT syntax, but never claim bank/account existence. Valid-from is required, valid-to optional with inclusive endpoints; reject valid-to before valid-from. Multiple records may overlap; active state is independent; never hard-delete a bank record. Owner approved in B-047. | 2026-10-11 |
+| D-061 | **Initial bank-validation profile coverage is IN, KW, GB, US and JP.** A profile must be implemented and verified for each before that country's bank details can be stored; unprofiled countries fail closed (D-060). | Owner-selected initial country set in B-048. All five ISO-2 codes are already in the 30-country reference seed; this selects profile work only, not profile readiness. Other countries may be added through later explicit profile work. | 2026-10-11 |
+| D-062 | **Kuwait partner-bank capture uses an IBAN-only profile.** Account holder and country remain required; require a bank-issued KW IBAN, do not accept a separate local account number, and derive the four-letter bank code from the IBAN. | CBK states Kuwait's IBAN was activated in 2011 and describes its 30-character structure, including `KW`, two check digits, a four-letter bank code and a 22-character account component; the account-holding bank issues the IBAN. SWIFT Registry Release 103 (Sep 2026) specifies `KW2!n4!a22!c`, length 30, with the bank identifier in BBAN positions 1–4. Normalize to uppercase electronic form, remove spaces, enforce country/length/pattern and MOD-97; do not claim account existence. BIC is optional in this non-payment master-data record; if supplied, syntax-check it, leaving payment-routing requirements to a later payment slice. Sources: [CBK IBAN page](https://www.cbk.gov.kw/en/payment-systems/iban), [CBK implementation manual](https://www.cbk.gov.kw/en/images/iban-9721_v60_tcm10-9721.pdf), [SWIFT IBAN Registry](https://www.swift.com/resource/iban-registry-pdf). | 2026-10-11 |
+| D-063 | **India partner-bank capture uses a local account number plus IFSC, not an IBAN.** Account holder and country remain required; require the supplied local account identifier and the beneficiary-branch IFSC. | RBI describes IFSC as an 11-character alphanumeric branch-routing code with four alphabetic bank characters, `0` in position 5 and six branch characters; normalize to uppercase and validate syntax as `^[A-Z]{4}0[A-Z0-9]{6}$`, with no directory or account-existence lookup in this slice. Keep the account number opaque and exact: RBI's 2013 committee report documents bank-specific number structures, so impose no India-wide length/pattern/check digit, padding or truncation and preserve leading zeros. The report's India IBAN material was a proposal opened for comment, not an implemented national format; SWIFT IBAN Registry Release 103 has no `IN` profile. Bank name and BIC are optional for this non-payment master-data record; BIC syntax-checking, if supplied, does not equate IFSC with BIC or settle later payment-routing needs. Sources: [RBI NEFT FAQ](https://www.rbi.org.in/scripts/faqview.aspx?id=60), [RBI Technical Committee report](https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695), [RBI consultation press release](https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=27975), [SWIFT IBAN Registry](https://www.swift.com/resource/iban-registry-pdf). | 2026-10-11 |
+| D-064 | **United Kingdom partner-bank capture uses a GB IBAN.** Account holder and country remain required; require a bank-issued GB IBAN rather than a local-account-only entry. | Normalize to uppercase electronic form without spaces; require 22 characters matching `^GB[0-9]{2}[A-Z]{4}[0-9]{14}$` and a valid MOD-97 check. The four-letter institution identifier is embedded in positions 5–8; the six-digit sort code and eight-digit account number are embedded in positions 9–14 and 15–22, so do not request duplicate local-account/routing fields. Bank name and BIC are optional for this non-payment master-data record; syntax-check supplied BIC, but do not claim bank/account existence or payment-rail eligibility. Sources: [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf), [Pay.UK Standard — UK IBAN format](https://www.wearepay.uk/wp-content/uploads/2018/10/Pay.UK-Standard-Format-of-the-IBAN-issued-in-the-UK-October18.pdf). | 2026-10-11 |
+| D-065 | **United States partner-bank capture uses a local account number plus ABA routing transit number (RTN), not an IBAN.** Account holder and country remain required; the required RTN occupies the existing bank-code field. | Require exactly nine ASCII digits matching `^[0-9]{9}$`; the first two digits must be in ABA's bank/legacy-thrift routing-symbol ranges `01–12` or `21–32`. Validate the ABA check digit using the 3-7-1 mod-10 rule: `3(d1+d4+d7)+7(d2+d5+d8)+(d3+d6+d9) ≡ 0 (mod 10)`. Treat the account number as opaque: preserve leading zeros and impose no U.S.-wide length, pattern, checksum, padding or truncation. Do not query a live directory or assert that an RTN is assigned/current, suitable for a particular ACH/wire/check rail, or that an account exists. Bank name and BIC are optional for this non-payment master-data record; syntax-check supplied BIC. SWIFT IBAN Registry Release 103 has no `US` profile. Sources: [ABA Routing Number Policy & Procedures](https://www.aba.com/news-research/analysis-guides/routing-number-policy-procedures), [ABA routing-number registry information](https://www.aba.com/about-us/routing-number), [Apache Commons Validator ABA check-digit reference](https://commons.apache.org/proper/commons-validator/apidocs/org/apache/commons/validator/routines/checkdigit/ABANumberCheckDigit.html), [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf). | 2026-10-11 |
+| D-066 | **Japan partner-bank capture uses a local account number plus the domestic institution-and-branch code, not an IBAN.** Account holder and country remain required; no new field is added. | Require the complete four-digit financial-institution code plus three-digit branch/store code in the existing bank-code field as a seven-digit numeric composite (`^[0-9]{7}$`), preserving leading zeros. Require the associated bank-supplied local account number as opaque text; impose no nationwide length/pattern/checksum or zero-padding/truncation rule. For Japan Post Bank, capture the interbank-transfer representation and code supplied by its official conversion guidance; do not algorithmically convert its separate symbol/number identifier or perform directory/account-existence lookup. Bank name and BIC are optional for this non-payment master-data record; syntax-check supplied BIC. Account type and payment-rail-specific variants remain outside D-059. SWIFT IBAN Registry Release 103 has no `JP` profile. Sources: [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf), [Japanese Bankers Association member/code directory](https://www.zenginkyo.or.jp/abstract/outline/organization/member-01/), [MUFG branch-code/account-number guidance](https://www.bk.mufg.jp/ebusiness/gplus/listofbranchesinjapan.html), [Japan Post Bank transfer-format guidance](https://www.jp-bank.japanpost.jp/kojin/sokin/furikomi/kouza/kj_sk_fm_kz_1.html). | 2026-10-11 |
+| D-067 | **Full partner-bank identifiers use a versioned app-managed keyring; key IDs are authenticated with the ciphertext and bound to the record context.** | Owner selected high-entropy keys delivered through deployment secrets, key IDs, retained prior keys for decryption during rotation and later re-encryption, and no external KMS. B-054 implements AES-256-GCM with random 96-bit nonces and 128-bit authentication tags; envelope version, key ID, tenant/client, partner, bank-record ID, and field are authenticated as associated data. The primitive encrypts with the active key and can decrypt with a retained prior key; it does not load keys, authorize or audit reveals, mask history, or persist data. Key provisioning and the remaining safeguards stay separate prerequisites; no bank identifiers may be stored until the full gate is satisfied. | 2026-10-11 |
 
 ---
 
@@ -743,12 +753,29 @@ carry the segment data.
 
 | Role | Segment data | Key fields |
 |---|---|---|
-| Vendor (general) | `business_partner` + general company data | Name, addresses, tax numbers, bank details, contact persons |
+| Vendor (general) | `business_partner` + general company data | Name, addresses, tax numbers, partner-wide bank details and contact persons (D-059) |
 | Vendor (company code) | `vendor_company_code` | Reconciliation account, payment terms, payment methods, dunning procedure, cash discount, tolerance group |
 | Vendor (purchasing org) | `vendor_purchasing_org` | Order currency, incoterms, purchasing group, partner functions |
-| Customer (general) | `business_partner` | Name, addresses, tax numbers, payment behaviour |
+| Customer (general) | `business_partner` | Name, addresses, tax numbers, payment behaviour; shared partner-wide bank/contact records where present (D-059) |
 | Customer (company code) | `customer_company_code` | Reconciliation account, payment terms, dunning procedure, interest indicator, tolerance group |
 | Customer (sales area) | `customer_sales_area` | Sales district, delivering plant, pricing procedure, complete delivery flag, order combination |
+
+**Partner bank/contact v1 (D-059):** bank details are multiple partner-wide records shared if a partner
+has both Supplier and Customer roles. Capture account holder, bank country, bank name/code, IBAN or
+local account number, BIC/SWIFT, validity dates and active state; do not add company/role assignments,
+a default-payment choice, payment-method permissions, house-bank eligibility or payment execution in
+this slice. Full account identifiers must be encrypted at rest, masked in normal views and change
+history, and revealable only through a separate audited authority; generic history must never contain
+plaintext identifiers. D-060 defines the fail-closed country-profile rules, strict IBAN/BIC checks, and
+validity semantics; a missing bank-country profile rejects saving. Initial profile work covers IN, KW,
+GB, US and JP (D-061); source-backed rules for all five are recorded in D-062 through D-066. No profile
+is implemented or enabled, so all countries remain blocked. Encryption-key provisioning/rotation and
+the approved masking, audited-reveal and history safeguards remain prerequisites to storing identifiers.
+
+Contacts are multiple partner-wide named persons; current general email/phone remain organisation-level
+values. Each person has name, title/function, email, phone, validity dates and active state, with at most
+one primary per partner. Log contact-data access/changes, mask personal email/phone in history, and
+end-date/inactivate records; hard deletion requires the approved retention/privacy workflow.
 
 This mirrors the reference system's partner structure and is essential for the intercompany and
 one-partner-many-roles cases (R-15).
@@ -1352,6 +1379,13 @@ and cost centre reporting. Investment management, insurance, and leasing are Tie
 | Automatic clearing | Rule-based matching of statement lines to open items: amount, reference, date windows; residual items and partial clearing |
 | Dunning | Dunning levels, charges, interest, letter output, blocking of further dunning on dispute |
 
+**Payment Methods master v1 (D-058):** tenant-defined country-specific records keyed by country and a
+1–2-character uppercase alphanumeric code, with description, allowed direction (`OUTGOING`, `INCOMING`,
+or `BOTH`), and active state. No methods are seeded. Company-code country supplies context when later
+code-backed Supplier/Customer defaults are integrated. Vendor/customer and house-bank eligibility,
+payment-medium formats, and payment execution remain separate slices; this catalogue alone does not
+permit or execute a payment.
+
 ### 14.7 Intercompany (cross-company-code postings) — D-028
 
 Both company codes in the tenant transact with each other. This is a core SAP capability and is
@@ -1850,7 +1884,7 @@ through the UI the stored value wins. Mail outages never block a workflow step (
 |---|---|
 | Authentication | Session cookie, HTTP-only, secure, same-site; password hashing with a modern adaptive algorithm; optional two-factor for administrators and approvers |
 | Authorisation | Capability-based per transaction code, with organisational restrictions (company code, plant, purchasing org, sales org, cost centre) |
-| Field-level control | Sensitive fields restricted by role: vendor bank details, payment terms, pricing conditions, standard prices |
+| Field-level control | Sensitive fields restricted by role: partner bank identifiers are encrypted at rest and masked in normal views/history; full reveal requires a separate audited authority (D-059). Payment terms, pricing conditions and standard prices are also role-restricted. |
 | Segregation of duties | Rule catalogue detecting forbidden combinations, evaluated on every role assignment (§16.7) |
 | Release strategies | Approval thresholds enforced server-side; a document above threshold cannot be posted unreleased by any user |
 | Audit | Every access, change, approval, export and failed authorisation attempt is logged |
@@ -1995,6 +2029,10 @@ Isolated, explicitly identified test fixtures may be used in a verification batc
 part of fixture cleanup. Full-suite, build/release, and backup/restore checks are separate batches
 when combining them would jeopardise the time budget.
 
+**Publish trigger (owner instruction, 2026-10-11):** once the full system is implemented and a UI test is
+ready for the owner to run, push the completed state to the configured Git remote and inform the owner.
+Do not push interim or partial module batches before that trigger.
+
 | Batch | One outcome | Implementation budget | State |
 |---|---|---|---|
 | B-000 | Preserve the current database/source and record this smaller execution plan | ≤5 min | **DONE — this checkpoint; no feature/database mutation** |
@@ -2031,6 +2069,28 @@ when combining them would jeopardise the time budget.
 | B-031 | Display-only supplier partner-function panel on Supplier Purchasing view | ≤10 min | **DONE — authority-gated catalogue/assignment cards and empty/default/inactive states (§26.47)** |
 | B-032 | Supplier partner-function assignment editor on Supplier Purchasing view only | ≤10 min | **DONE — unique add/replace, multiple add/default, versioned remove; browser acceptance passed in B-033 (§26.48–49)** |
 | B-033 | Dedicated live-browser acceptance for the supplier partner-function assignment editor | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — dev-fixture lifecycle and authority coverage; fixture cleanup confirmed (§26.49)** |
+| B-034 | UI-only disabled placeholders for four Supplier company-code defaults | ≤10 min | **DONE — fields appear in maintenance/display views, have no submitted names or save path; focused checks pass; live browser acceptance pending because isolated dev DB credentials are not configured (§26.50)** |
+| B-035 | Define Payment Methods master v1 semantics and scope | ≤10 min | **DONE — owner-approved country-scoped codes, shared direction, definitions-only scope, and no standard seeds (D-058; §26.51)** |
+| B-036 | Payment Methods master tenant-scoped schema and RLS only | ≤10 min | **IMPLEMENTED — table/constraints in 0012, forced tenant RLS/grants in 9014, schema registration and DB contract tests; migrations applied and schema/RLS acceptance passed 3/3 on disposable PostgreSQL 17.11 (§26.52)** |
+| B-037 | Payment Methods tenant-scoped read services only | ≤10 min | **IMPLEMENTED — country/code get and country list, requested-direction filter includes BOTH, inactive rows retained unless activeOnly; DB read acceptance passed as part of the focused 8/8 service suite (§26.53)** |
+| B-038 | Payment Methods audited create/change/retire service only | ≤10 min | **IMPLEMENTED — expected-version tenant-scoped create/change and soft retire with required actor/reason and field history; DB lifecycle/version/audit acceptance passed in the focused suite (§26.54); no server action, UI, seed, or partner-field integration** |
+| B-039 | Payment Methods protected create/change/retire server actions and capability registration only | ≤10 min | **DONE — session-derived tenant/actor, `CFG.FIN.PAYMENTMETHOD.DEFINE` enforcement, grantable capability catalogue entry, forged/unauthorized/anonymous action tests (§26.56); no UI, payment-method data seed, or partner integration** |
+| B-040 | Payment Methods workbench activity and status lifecycle only | ≤10 min | **DONE — seeded activity, idempotent NOT_STARTED backfill for existing tenants, writes mark it COMPLETED without downgrading; DB checks passed (§26.57); no UI** |
+| B-041 | Payment Methods workbench route, registry entry and read-only list/detail/history UI only | ≤10 min | **DONE — tenant-scoped country/method review, detail and change history; workbench/registry links point to the built route; no editor** |
+| B-042 | Payment Methods create/change editor form only | ≤10 min | **DONE — capability-gated create/change form uses B-039 protected save action, expected version and required reason; retirement UI remains separate** |
+| B-043 | Payment Methods soft-retire confirmation UI only | ≤10 min | **DONE — capability-gated explicit confirmation, required acknowledgment/reason, expected version, and B-039 protected soft-retire action; no deletion** |
+| B-044 | Add dedicated Payment Methods browser acceptance target only | ≤10 min | **DONE — `npm run smoke:browser:payment-methods`, guarded T989 fixture; create/change/retire, audit/activity state, display-only access and forged-query checks implemented; target selection passes** |
+| B-045 | Run Payment Methods browser acceptance on a fresh disposable development DB only | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — fresh PostgreSQL 17.11 fixture completed the target; tenant, method and test user cleanup verified (§26.62); no owner/production data used; product-owner walkthrough/sign-off remains pending (§24.1)** |
+| B-046 | Capture and approve partner bank/contact v1 page rules only | ≤10 min | **DONE — owner approved partner-wide scope, bank fields, encryption/masking/reveal/audit policy, contact model and retention boundaries (D-059; §26.63); no code or data mutation** |
+| B-047 | Define country-specific requiredness and validation rules for partner bank fields only | ≤10 min | **DONE — owner approved fail-closed country profiles, holder/country requirements, strict country-matched IBAN checksum/length, BIC syntax validation, and inclusive valid-from/to semantics with overlapping records allowed (D-060; §26.64)** |
+| B-048 | Select the initial countries for partner bank validation profiles only | ≤10 min | **DONE — owner selected IN, KW, GB, US and JP; all are in the reference seed; no profile records added (D-061; §26.65)** |
+| B-049 | Verify and record the Kuwait (KW) bank-validation profile requirements only | ≤10 min | **DONE — CBK and SWIFT Registry Release 103 confirm KW IBAN-only structure, length, bank identifier and issue/validation limits; profile specification recorded as D-062 (§26.66); no code or activation** |
+| B-050 | Verify and record the India (IN) bank-validation profile requirements only | ≤10 min | **DONE — RBI IFSC and account-number sources plus current SWIFT registry verified; D-063 / §26.67 records local-account-number + IFSC rules and no India IBAN; research only, no code/profile activation or bank data** |
+| B-051 | Verify and record the United Kingdom (GB) bank-validation profile requirements only | ≤10 min | **DONE — SWIFT and Pay.UK establish a 22-character GB IBAN with embedded bank, sort-code and account components; D-064 / §26.68 records the IBAN-only profile; research only, no code/profile activation or bank data** |
+| B-052 | Verify and record the United States (US) bank-validation profile requirements only | ≤10 min | **DONE — ABA routing-number structure/check digit and current SWIFT registry verified; D-065 / §26.69 records nine-digit RTN plus opaque local account number; research only, no code/profile activation or bank data** |
+| B-053 | Verify and record the Japan (JP) bank-validation profile requirements only | ≤10 min | **DONE — SWIFT, Japanese Bankers Association, MUFG and Japan Post sources verified; D-066 / §26.70 records domestic institution+branch code and local account handling; research only, no code/profile activation or bank data** |
+| B-054 | Implement the versioned bank-data authenticated-encryption primitive only | ≤10 min | **DONE — AES-256-GCM envelope; key ID and tenant/partner/record/field context are authenticated; active-key writes and retained-key reads support later rotation; six focused tests, typecheck and diff check pass. No key loading, reveal/audit, masking/history, schema/database integration or bank identifiers (§26.71; D-067)** |
+| B-055 | Define and implement fail-closed app-keyring configuration from deployment secrets only | ≤10 min | **PENDING — choose/configure keyring input representation without reading, recording or committing real secret values; no bank-data integration** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2071,12 +2131,32 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    assignments and protected display/maintenance, and B-033 dedicated live-browser acceptance passed in a
    disposable development fixture (§26.41–49). PO determination remains a separate future outcome. Do not
    add unapproved role types, effective dates, plant/sub-range levels, or transaction behavior.
-2. **Supplier company-code completion:** add and verify the §9.2 defaults still missing from the
-   vendor segment—payment methods, dunning procedure, cash discount, and tolerance group—after their
-   required configuration masters and semantics are confirmed.
-3. **Business-partner bank/contact data:** gather the page rules first, including sensitive-field
-   visibility, masking, audit, and validity requirements; then implement bank details and contact
-   persons through the normal backend, UI, access-control, and test cycle.
+2. **Payment Methods and Supplier company-code defaults:** B-034 adds disabled, non-persisted placeholders
+   for the four §9.2 Supplier defaults. B-035 records the owner-approved country-scoped, no-seed master
+   semantics (D-058). B-036 adds the catalogue table and forced tenant RLS; B-037 adds tenant-scoped
+   country/code reads; B-038 adds versioned, audited create/change and non-destructive retire services
+   (§26.52–54). B-039 adds session-derived protected write actions and the grantable configuration
+   capability (§26.56). All migrations and focused DB acceptance passed on a fresh disposable PostgreSQL
+   17.11 cluster. B-040 registers the workbench activity and status lifecycle (§26.57). B-041 adds the
+   workbench/registry entry and read-only list/detail/history route (§26.58); B-042 adds capability-gated
+   create/change forms through the existing protected action (§26.59). B-043 adds versioned soft-retire
+   confirmation (§26.60). B-044 adds a guarded dedicated browser target; B-045 ran it on a fresh
+   disposable development database and passed the full lifecycle/access checks, then verified fixture
+   cleanup (§26.62). Neither batch uses owner/production data. Later code-backed Supplier integration remains separate; the Supplier field stays disabled
+   until its protected master/configuration integration is implemented. Per owner instruction, do not push
+   these partial module batches; push and notify only when a user-runnable UI test is ready after full-system
+   implementation.
+   Dunning procedure, cash discount, and tolerance group remain disabled until their own required
+   masters/semantics are available.
+3. **Business-partner bank/contact data:** B-046 captured owner-approved v1 semantics/security
+   boundaries (D-059), and B-047 approved fail-closed country-profile validation and date rules (D-060).
+   B-048 selected IN, KW, GB, US and JP as the initial profile set (D-061). B-049–B-053 recorded
+   source-backed specifications for KW, IN, GB, US and JP (D-062–D-066); initial profile-authoring scope
+   is complete. No country profile is implemented or enabled. B-054 adds only the versioned AES-256-GCM
+   primitive (D-067; §26.71); it has no key loader or bank-data integration. Complete deployment-secret
+   keyring configuration/rotation, masked views and history, and separately authorized/audited reveal
+   safeguards before storing any full bank identifier. Then build bank and contact records through
+   separate bounded backend, UI, access-control and test batches.
 4. **Enterprise structure (SCR-012–025):** finish company/chart assignments, plants/storage locations,
    purchasing and sales organisations/assignments, channels/divisions/sales areas, and controlling-area
    assignments in dependency order.
@@ -2227,7 +2307,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-033 | Currency and exchange rates | `CFG.FIN.EXRATE.MAINTAIN` | OB08 | DRAFT |
 | SCR-034 | Tax codes | `CFG.FIN.TAXCODE.DEFINE` | FTXP | DRAFT |
 | SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **BUILT — backend and maintenance UI tested; owner sign-off pending** |
-| SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | DRAFT |
+| SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | Schema/RLS B-036, reads B-037, audited writes B-038, protected actions/capability B-039, activity/status lifecycle B-040, read-only route/list/detail/history B-041, create/change UI B-042, soft-retire UI B-043; dedicated browser target B-044 and isolated browser acceptance/cleanup B-045 passed (§26.62); DB acceptance passed; product-owner walkthrough/sign-off pending (§24.1) |
 | SCR-037 | House banks and accounts | `CFG.FIN.HOUSEBANK.DEFINE` | FI12 | DRAFT |
 | SCR-038 | Document types and number ranges | `CFG.FIN.DOCTYPE.DEFINE` | OBA7 | DRAFT |
 | SCR-039 | Tolerances | `CFG.FIN.TOLERANCE.DEFINE` | OBA4 | DRAFT |
@@ -2245,7 +2325,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
 | SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
-| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general, supplier/customer company-code, supplier purchasing and customer sales-area segments implemented; payment/dunning codes added; bank segment and owner sign-off pending** |
+| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general, supplier/customer company-code, supplier purchasing and customer sales-area segments implemented; payment/dunning codes added; bank/contact rules approved (D-059), implementation and owner screen sign-off pending** |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
 | SCR-052 | Routing create and change | `PROD.ROUTING.CREATE` | CA01 | DRAFT |
@@ -4256,6 +4336,517 @@ passed. Playwright Chromium and its Linux runtime dependencies were installed in
 No product schema or migration changed.
 
 
+### 26.50 B-034 — Supplier company-code pending defaults placeholders `IMPLEMENTATION COMPLETE · LIVE BROWSER ACCEPTANCE PENDING`
+
+**Scope:** added a four-field **Additional company-code defaults** group to the Supplier company-code
+maintenance and authorised display-only views: Payment methods, Dunning procedure, Cash discount, and
+Tolerance group. Each field is an explicitly disabled, read-only form control showing “Master
+configuration pending”; the group explains that these are planning-only and not saved. In the editable
+view the group is outside the existing save form and its controls have no `name`, so they cannot enter
+`FormData`. The helper is shared with the read-only view. No `CompanyFields`, server action, service,
+schema, migration, capability, save/persistence, or business behavior was added or changed.
+
+**Dependency decision:** the owner selected Payment Methods as the first related master. B-035 is limited
+to capturing its v1 semantics and scope; master implementation and later Supplier-field integration must
+be separate bounded batches. The four placeholders remain disabled until their respective masters exist.
+
+**Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (173 files),
+`npm run test:browser-harness` (65/65), and `git diff --check` passed. The `supplier-company` Playwright
+target now asserts the presence of exactly four disabled, non-submitted fields. Live browser acceptance
+was not run: this worktree has no configured `DATABASE_URL` for the isolated development database, and
+a read-only connection check failed authentication before any fixture was created or database mutation
+was attempted. No owner/production data was accessed. Owner walkthrough/sign-off remains pending.
+
+
+### 26.51 B-035 — Payment Methods master v1 semantics and scope `OWNER APPROVED · SCHEMA ADDED IN B-036`
+
+**Outcome:** captured the owner-approved v1 definition contract only. No source, schema, migration, seed,
+service, UI, supplier/customer integration, or payment behavior changed in B-035.
+
+**Decision D-058:** the master is tenant-scoped and country-specific. Its natural key is
+`(client, country, paymentMethodCode)`, where `country` is the existing ISO country reference and the
+method code is 1–2 uppercase ASCII letters/digits. Codes may be reused in another country with a distinct
+meaning. Each definition has a description, one allowed-direction value (`OUTGOING`, `INCOMING`, or
+`BOTH`), and an active flag. The master contains definitions only; the standard configuration package
+ships no generic methods.
+
+Later code-backed company defaults resolve methods using the company code’s country and direction:
+Supplier company defaults require an outgoing method, Customer company defaults an incoming method. The
+existing Customer company field remains format-only until its own integration batch; this decision does
+not change its current validation or stored values. Method permissions per Supplier/Customer, house-bank
+eligibility, payment-medium/file formats, payment proposals/execution, and payment clearing are out of
+this master slice and remain separate work. Supplier placeholders from B-034 stay disabled until the
+master and its relevant integration are implemented.
+
+**Verification:** owner-approved design recorded in D-058 and §14.6. B-036 adds the schema/RLS layer
+(§26.52), B-037 adds read services (§26.53), and B-038 adds audited maintenance services (§26.54).
+Their migrations and focused DB acceptance subsequently passed on a disposable local PostgreSQL 17.11
+cluster (§26.55). `git diff --check` passed. No database connection or data change was required in B-035.
+
+
+### 26.52 B-036 — Payment Methods master schema and tenant RLS `IMPLEMENTED · ISOLATED DB ACCEPTANCE PASSED (§26.55)`
+
+**Scope:** added the `payment_method` table and registered it through the Foundation schema root. The
+natural key is `(client, country, method_code)`; the tenant key cascades from `client`, and `country`
+references the shared ISO country table. The table stores description, allowed direction, active state,
+version, and standard audit columns. Database checks enforce the 1–2 uppercase alphanumeric code, a
+nonblank description, one of `OUTGOING`/`INCOMING`/`BOTH`, and positive version. B-036 covered storage
+and RLS only; read/write services were implemented separately in B-037/B-038 (§26.53–54). No method seed,
+UI, company-field integration, payment permission, or payment execution is included.
+
+**Migrations:** additive DDL is `0012_payment_method_master.sql`; forced tenant RLS, a default-deny
+`cairn.client` policy, and `cairn_app` CRUD grants are `9014_payment_method_policies.sql`. The application
+role cannot read or write another tenant’s rows or operate unscoped. Both files run through the existing
+checksum-tracked migration runner; no prior migration was edited.
+
+**Tests:** added `tests/payment-method-schema.test.ts` for same-code reuse across countries, duplicate-key
+and database-domain rejection, RLS read/write isolation, forced-RLS flags, defaults, and tenant-cascade
+cleanup. Its DB acceptance was pending at the B-036 implementation checkpoint; it subsequently passed 3/3
+in the fresh disposable PostgreSQL 17.11 run (§26.55), alongside application of all 28 migrations.
+
+**Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (177 files),
+`npm run test:browser-harness` (65/65), and `git diff --check` passed. Isolated schema/migration acceptance
+subsequently passed (§26.55). No owner/production database was accessed.
+
+
+### 26.53 B-037 — Payment Methods tenant-scoped read services `IMPLEMENTED · DB ACCEPTANCE PASSED (§26.55)`
+
+**Scope:** added `src/modules/foundation/payment-methods.ts` with read-only `getPaymentMethod` and
+`listPaymentMethods` functions. Both validate inputs, execute through `withTenant`, and explicitly constrain
+by tenant. The get key is tenant + country + method code; country and method code are trimmed and
+canonicalised to uppercase only after ASCII-format validation. `getPaymentMethod` returns inactive rows
+for review and returns `null` when the key does not exist.
+
+`listPaymentMethods` is country-scoped and ordered by code. It includes inactive definitions by default;
+`activeOnly: true` filters them out. A requested `OUTGOING` or `INCOMING` use includes definitions with
+that direction **and** `BOTH`, so callers can use it for future Supplier/Customer choices. It does not
+accept `BOTH` as a requested use. The B-037 batch added no write path; audited writes are separate B-038
+work (§26.54). No action, UI, seed, payment behavior, or partner-field integration was added.
+
+**Tests:** added `tests/payment-methods.test.ts` for country/code resolution and canonicalization, country
+separation, direction + `BOTH` behavior, inactive handling, tenant isolation, and invalid-key/filter refusal.
+At the B-037 implementation checkpoint its DB tests were pending; the read-service cases subsequently
+passed in the focused 8/8 service-test run (§26.55). No database mutation was attempted in B-037 itself.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (65/65), `npm run lint:ip` (179 files),
+and `git diff --check` passed. Isolated DB acceptance for B-036–B-038 subsequently passed (§26.55).
+No owner/production database was accessed.
+
+
+### 26.54 B-038 — Payment Methods audited create/change/retire service only `IMPLEMENTED · DB ACCEPTANCE PASSED (§26.55)`
+
+**Scope:** extended `src/modules/foundation/payment-methods.ts` with `savePaymentMethod` for create/change
+and `retirePaymentMethod` for non-destructive retirement. Both validate the tenant + country + method-code
+key, required actor, reason, and expected version, then execute inside `withTenant` with an explicit full
+key filter. Create requires expected version 0 and persists version 1; changes require the exact current
+version and increment it. Advisory transaction locks serialize service writes to the same key. The country
+must exist in the shared reference catalogue. An unchanged save is silent and creates no history.
+
+Retirement sets `isActive=false`, increments the version, and retains the definition for review; a repeated
+retire at the current version is a no-op. All actual writes use `recordChange` with required reason/actor
+and before/after field snapshots. The supported audit types remain `CREATE` and `CHANGE`; retirement is
+audited as a `CHANGE` to the active flag, without inventing a `RETIRE` change type. No configuration
+activity completion is assumed. There is no server action, UI, seed, payment execution, Supplier/Customer
+integration, or migration in this batch.
+
+**Tests:** extended `tests/payment-methods.test.ts` with create/change/retire history, versions and stale
+write rejection, no-op behavior, retained inactive reads, same country/code isolation across tenants, and
+invalid/missing write cases. The focused DB run passed `tests/payment-methods.test.ts` (8/8) and
+`tests/payment-method-schema.test.ts` (3/3); the B-038 lifecycle, stale-version, audit, no-op, and soft-retire
+cases all passed (§26.55).
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (65/65), `npm run lint:ip` (179 files),
+and `git diff --check` passed. B-036–B-038 DB acceptance passed on a disposable local PostgreSQL 17.11
+cluster; it was stopped and its temporary data directory removed after confirming fixture cleanup. No
+owner/production data was used. Configuration UI and Supplier integration remain separate follow-on batches.
+
+
+### 26.55 B-036–B-038 — Disposable PostgreSQL database acceptance `PASSED`
+
+**Setup:** PostgreSQL 17.11 server binaries were already available in the workspace environment, though not
+on `PATH`. To avoid reusing the pre-existing local cluster of unknown provenance, created a brand-new,
+temporary cluster and `cairn_b038_test` database on loopback only (port 55433). No `.env.local` change was
+made; the app and migration URLs were supplied only to the commands for this isolated test database.
+Applied all 28 migrations, including `0012_payment_method_master.sql` and
+`9014_payment_method_policies.sql`, then loaded shared reference fixtures required by the tests.
+
+**Results:** `npx vitest run tests/payment-method-schema.test.ts tests/payment-methods.test.ts` passed:
+2 files, 11/11 tests. The schema/RLS suite passed 3/3; the Payment Methods service suite passed 8/8,
+covering B-037 reads and B-038 create/change/retire, tenant isolation, optimistic versions, audit history,
+no-op and retained-inactive behavior. The application role passed its non-elevated role check.
+
+**Cleanup:** test teardown succeeded, and a read-only check confirmed zero development test tenants remained.
+The temporary PostgreSQL process was stopped and its data directory removed. The existing local cluster,
+owner/production databases, and their data were not accessed. No package, application schema, or migration
+file was changed for this acceptance outcome.
+
+
+### 26.56 B-039 — Payment Methods protected write actions and capability registration `DONE`
+
+**Scope:** added `src/app/config/payment-methods/actions.ts` with session-protected create/change and retire
+actions. Both require `CFG.FIN.PAYMENTMETHOD.DEFINE`; the tenant and actor come only from the verified
+session, while reason, expected version, and method fields are parsed from the form and validated by the
+B-038 service. Forged `client` and `changedBy` form values are ignored. Expected version is rejected when
+missing rather than silently treating it as a create. Successful writes revalidate the future Payment
+Methods route and configuration workbench. The action module does not add a page or read action.
+
+Added the grantable `CFG.FIN.PAYMENTMETHOD.DEFINE` capability to `scripts/seed.ts` and localized success
+messages. No Payment Method data is seeded and no role grants are changed. At the B-039 boundary, no
+workbench activity existed, so these actions did not depend on an activity-status row; B-040 subsequently
+registered the activity and added lifecycle completion (§26.57). No UI, schema/migration, payment
+execution, or Supplier/Customer integration was added in B-039.
+
+**Tests:** extended `tests/action-security.test.ts` for authorized create + soft retire, session-derived
+tenant/actor despite forged form fields, denial without the capability, and anonymous redirects. On a fresh
+disposable PostgreSQL 17.11 database with migrations and global/reference seed applied,
+`npx vitest run tests/action-security.test.ts -t 'Payment Method'` passed all 3 selected tests (30 unrelated
+tests skipped). The capability catalogue row was verified; teardown left zero test tenants.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (65/65), `npm run lint:ip` (180 files),
+and `git diff --check` passed. The temporary database process and data directory were removed; the
+pre-existing local cluster and owner/production databases were not accessed. B-040 activity/status
+lifecycle is recorded in §26.57; B-041 read-only UI and later browser acceptance remain separate.
+
+
+### 26.57 B-040 — Payment Methods workbench activity and status lifecycle only `DONE`
+
+**Scope:** registered `CFG.FIN.PAYMENTMETHOD.DEFINE` (“Define payment methods”) in the configuration
+activity catalogue, with the existing client-definition prerequisite, `STANDARD` stage, and future route
+`/config/payment-methods`. Seed now backfills a missing `NOT_STARTED` status row for existing tenants;
+`ON CONFLICT DO NOTHING` preserves any status already recorded. Standard tenant setup can also initialize
+the registered activity for new tenants. This batch adds no workbench route, term-registry entry, or UI.
+
+**Completion behavior:** successful Payment Method create/change and retire operations mark the activity
+`COMPLETED` in the same tenant transaction as the maintenance and audit write. Valid no-op save and
+already-inactive retire confirmations also mark it complete; validation, concurrency, or persistence
+failures do not. Activity status is not reset by re-seeding. No method data is seeded and Supplier/Customer
+integration remains out of scope.
+
+**Tests and acceptance:** extended `tests/payment-methods.test.ts` to seed status rows for its tenant
+fixtures and assert that a successful write completes the activity. On a fresh disposable PostgreSQL 17.11
+cluster/database, applied all 28 migrations and reference seed; `npx vitest run
+tests/payment-method-schema.test.ts tests/payment-methods.test.ts` passed 11/11 tests, and
+`npx vitest run tests/action-security.test.ts -t 'Payment Method'` passed 3 selected tests (30 unrelated
+tests skipped). A dedicated seed check confirmed a newly backfilled row starts `NOT_STARTED`, then remains
+`COMPLETED` after re-seeding. The temporary cluster was stopped and its test data directory removed; the
+pre-existing local cluster and owner/production databases were not used.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (65/65), `npm run lint:ip`
+(180 files), and `git diff --check` passed. No application migration or payment-method data seed was
+added. No UI or browser acceptance is included.
+B-041 (workbench route, registry entry, and read-only list/detail/history) is next; see §25.5.2 and the
+batch queue. No commit or push was made; the full-system/user-runnable UI-test publish trigger remains in §25.4.
+
+
+### 26.58 B-041 — Payment Methods workbench route, registry entry and read-only UI `DONE`
+
+**Scope:** built `/config/payment-methods` as an authenticated, read-only review screen. The verified
+session supplies the tenant; the screen offers the global country catalogue, lists that tenant's
+country-specific definitions (including inactive rows), and displays a selected method and its audited
+change history. Added the route to the workbench's built-route allowlist and registered
+`CFG.FIN.PAYMENTMETHOD.DEFINE` in the term registry so both entry points resolve. New labels are localized
+through the English catalogue. B-041 added no create/change/retire controls, new actions, method data, or
+Supplier/Customer integration; B-042 subsequently added create/change forms (§26.59), with retire UI in
+B-043.
+
+**Verification:** `npm run typecheck`, `npm run lint:ip` (181 files), `npm run test:browser-harness`
+(65/65), and `git diff --check` passed. This batch did not run dedicated Payment Methods database or
+live-browser acceptance; B-045 remains the separate browser run. The B-044 target is recorded in §26.61. Process check found no Cairn app,
+Vitest, or PostgreSQL process running; the persistent platform Jupyter service was left untouched. No
+commit or push was made; the full-system/user-runnable UI-test publish trigger remains in §25.4.
+
+
+### 26.59 B-042 — Payment Methods create/change editor form only `DONE`
+
+**Scope:** added the client-side `PaymentMethodForm` for capability-authorized creation and change on the
+B-041 route. The page shows create/change controls only when the session holds
+`CFG.FIN.PAYMENTMETHOD.DEFINE`; the form submits only to B-039's protected save action, which continues to
+derive tenant and actor from the verified session. Create requires a country-scoped 1–2 character code;
+existing codes are immutable. Both modes require description, allowed direction, active state and a
+maintenance reason. Create sends expected version zero; change sends the version read by the page. Success
+provides a link to the saved definition, while validation/authority errors retain a remedy. Read-only users
+have no editor controls. No retire control, new action, method seed, or partner integration was added;
+versioned soft retirement is B-043.
+
+**Verification:** `npm run typecheck`, `npm run build` (Payment Methods route compiled as dynamic),
+`npm run lint:ip` (182 files), `npm run test:browser-harness` (65/65), and `git diff --check` passed.
+No dedicated Payment Methods database or live-browser acceptance was run; B-045 remains the separate
+browser run after the B-044 target implementation (§26.61). No commit or push was made; the
+full-system/user-runnable UI-test publish trigger remains in §25.4.
+
+
+### 26.60 B-043 — Payment Methods soft-retire confirmation UI only `DONE`
+
+**Scope:** added `RetirePaymentMethodForm` to the detail view for authorized users when the selected method
+is active. It uses B-039's existing protected retire action, submitting the page's expected version, the
+country/method key, and a required maintenance reason. A disclosure/confirmation step explains that
+retirement marks the definition inactive but retains its record and audit history; an acknowledgment
+checkbox is required before submitting. The action remains a versioned soft change, never a delete. On
+success the user can reopen the saved definition; action errors and remedies remain visible. Inactive rows
+show no retire control. No new action, schema, seed, or Supplier/Customer integration was added.
+
+**Verification:** `npm run typecheck`, `npm run build` (Payment Methods route compiled as dynamic),
+`npm run lint:ip` (183 files), `npm run test:browser-harness` (65/65), and `git diff --check` passed.
+The generic harness is not Payment Methods browser acceptance; no dedicated database or live-browser run
+was made. The B-044 browser target is recorded in §26.61; B-045 is next. No commit or push was made; the
+full-system/user-runnable UI-test publish trigger remains in §25.4.
+
+
+### 26.61 B-044 — Payment Methods dedicated browser acceptance target only `IMPLEMENTED`
+
+**Scope:** added the isolated browser target `payment-methods` on reserved development key `T989`, runnable
+as `npm run smoke:browser:payment-methods`. The existing runner creates the tenant through the UI and only
+removes it if the key is the exact owned development fixture. The scenario covers workbench discovery and
+initial status, empty country catalogue, UI create/change/soft-retire with version and audit evidence,
+activity completion, and a no-payment-authority user who can display the active method/history but has no
+create/change/retire controls. It also tries forged `client=0100` and `edit=1` query parameters. The
+read-only user's identity/role is a test-only fixture; business method records are created through the UI.
+The post-signout route check now targets `/config/payment-methods`.
+
+**Verification:** `npm run typecheck`, browser-harness target-selection tests (66/66), `npm run lint:ip`
+(183 files), `npm run smoke:browser -- --list`, and `git diff --check` passed. This verifies target
+registration, not the browser acceptance itself. No Cairn app or PostgreSQL process/DB URL was running or
+configured during this batch; B-045 will set up a fresh disposable development database, run this target,
+and verify cleanup. No commit or push was made; the full-system/user-runnable UI-test publish trigger
+remains in §25.4.
+
+
+### 26.62 B-045 — Payment Methods fresh-database browser acceptance and fixture cleanup `PASSED`
+
+**Environment:** ran `npm run smoke:browser:payment-methods` against a newly initialized disposable PostgreSQL 17.11 database (`cairn_b045_test`) with all 28 repository migrations and the reference/application seeds. The guarded target created development fixture `T989` through the onboarding UI. No pre-existing local database, owner tenant, or production data was used.
+
+**Browser acceptance:** the dedicated target passed all steps: onboarding left accounting intervals unconfigured; the Payment Methods workbench exposed the new tenant's empty catalogue; authorized create/change kept the method code immutable and produced versioned history/audit evidence under the signed-in actor; the configuration activity completed; a display-only user could view but not maintain the definition; forged `client=0100` and `edit=1` query parameters did not grant cross-tenant access or edit controls; and versioned soft retirement preserved the inactive definition and history. The retirement success feedback was initially lost on revalidation because the parent unmounted the form when the detail became inactive. The UI was corrected to keep the form component mounted for editable detail and pass its active state, allowing the success message to render before the inactive control hides; the retirement feedback assertion then passed. The browser sign-in helper waits for `domcontentloaded` on the root redirect. This is automated acceptance only; product-owner walkthrough/sign-off remains pending under §24.1.
+
+**Cleanup and verification:** target cleanup removed the owned T989 fixture. Direct post-run checks returned zero fixture tenants, zero `payment_method` rows, and zero `app_user` rows for T989. The Next.js app and PostgreSQL test server were stopped, and `/tmp/cairn-b045-pg` was removed. `npm run typecheck`, the dedicated browser target, `npm run test:browser-harness` (66/66), `npm run lint:ip` (183 files), and `git diff --check` passed. This batch changed no database schema, migration, seed data, payment execution, or Supplier/Customer integration. No commit or push was made; the full-system/user-runnable UI-test publish trigger remains in §25.4.
+
+
+### 26.63 B-046 — Business-partner bank/contact v1 rules `AGREED`
+
+**Owner-approved scope (D-059):** bank details are multiple partner-wide records, shared where one partner
+has both Supplier and Customer roles. Fields are account holder, bank country, bank name/code, IBAN or
+local account number, BIC/SWIFT, valid-from/to, and active state. Full bank identifiers must be encrypted
+at rest, masked in ordinary views and change history, and revealed only through a separate audited
+authority; generic change history must never hold the plaintext identifiers. No company-code or role
+assignment, default payment selection, payment-method permission, house-bank eligibility, or payment
+execution is added here.
+
+Contacts are multiple partner-wide named people; the existing general email/phone stay as organisation-
+level values. Each contact has name, title/function, email, phone, validity dates and active state, with at
+most one primary at a time per partner. Log contact-data views and changes; mask personal email/phone in
+history; end-date/inactivate records, with hard deletion only through an approved retention/privacy
+workflow.
+
+**Implementation gates:** country-specific bank-field requiredness and format validation, plus encryption-
+key provisioning/rotation and the separate reveal/audit path, remain to be defined and implemented before
+full bank identifiers can be stored. The current general partner schema has no bank/contact record tables;
+its change history records supplied before/after values, and no bank-field encryption/reveal path exists.
+B-047 is next to define bank field requiredness/validation. This was a requirements-only batch: no source,
+schema, database, or real partner data changed. No commit or push; the full-system publish trigger remains
+in §25.4.
+
+**Status update:** B-047 subsequently approved the profile-driven requiredness, validation, and date
+rules (D-060; §26.64). Initial country coverage and encryption-key/reveal implementation remain.
+
+
+### 26.64 B-047 — Partner bank country-profile validation and date semantics `AGREED`
+
+**Owner-approved validation policy (D-060):** account holder and bank country are required. A country
+profile decides whether IBAN or local account number is required, and whether bank code/BIC is mandatory;
+bank name is optional. Saving fails closed if no profile exists for the bank country. Normalize IBAN to
+uppercase without spaces; verify that its country prefix matches the bank country, then check the
+country-specific length and MOD-97 checksum. Validate supplied BIC/SWIFT syntax, but do not claim to verify
+that the bank or account exists. Local account formats follow their country profile.
+
+Valid-from is required; valid-to is optional. Both endpoints are inclusive; reject a valid-to date earlier
+than valid-from. Overlapping validity periods are allowed because several accounts may be valid
+simultaneously. Active state is separate from dates, and bank records are never hard-deleted.
+
+**Boundary:** this approves the validation policy, not country-profile data coverage or implementation.
+No profile rows, code, schema, database or bank identifiers were added. Encryption-key provisioning,
+rotation and audited reveal infrastructure must still precede storage of real/full account identifiers.
+Initial country coverage is the next requirements step, B-048. No commit or push; the full-system publish
+trigger remains in §25.4. `git diff --check` passed.
+
+**Status update:** B-048 subsequently selected `IN`, `KW`, `GB`, `US`, and `JP` as the initial profile set;
+no country-profile records exist yet (§26.65). B-049 begins source-backed profile verification with KW.
+
+
+### 26.65 B-048 — Initial partner bank-profile country set selected `AGREED`
+
+Owner selected the first country-profile coverage as `IN`, `KW`, `GB`, `US`, and `JP` (ISO-2 codes;
+D-061). All five already exist in the shared 30-country reference seed. This selects profile-authoring
+scope only: no country validation profile has been defined or enabled, and D-060 continues to reject
+bank records for every country until its required profile exists. Other countries remain outside the
+initial set unless explicitly added later.
+
+No code, schema, country-profile rows, database, or real bank identifiers changed. `git diff --check`
+passed. B-049 will verify the KW profile requirements from authoritative sources before any profile is
+implemented. No commit or push; the full-system publish trigger remains in §25.4.
+
+**Status update:** B-049 subsequently verified the KW rules from CBK and the SWIFT Registry (D-062; §26.66).
+The country profile is still not implemented; B-050 will verify IN next.
+
+
+### 26.66 B-049 — Kuwait (KW) bank-validation profile specification `VERIFIED`
+
+**Authoritative profile sources:** the Central Bank of Kuwait states that Kuwait's registered IBAN format
+was activated on 2011-01-01 and links its implementation manual. The CBK manual describes the KW IBAN as
+30 characters: `KW`, two check digits, a 26-character BBAN consisting of a four-letter bank code and a
+22-character account component; it says the account-holding bank generates the customer's IBAN and the
+electronic form contains no spaces. The SWIFT Registration Authority's current IBAN Registry Release 103
+(Sep 2026) confirms `KW2!n4!a22!c`, total length 30, BBAN length 26, and a four-letter bank identifier in
+BBAN positions 1–4. Sources: [CBK IBAN page](https://www.cbk.gov.kw/en/payment-systems/iban), [CBK implementation manual](https://www.cbk.gov.kw/en/images/iban-9721_v60_tcm10-9721.pdf), and [SWIFT IBAN Registry](https://www.swift.com/resource/iban-registry-pdf).
+
+**KW profile specification (D-062):** account holder and bank country are required; country is `KW`.
+Require a bank-issued IBAN; do not accept a separate local account number and do not generate an IBAN from
+one. Normalize by removing spaces and uppercasing, then require exactly 30 characters matching
+`^KW[0-9]{2}[A-Z]{4}[A-Z0-9]{22}$` and a valid MOD-97 check. The four-letter bank identifier is embedded
+at normalized IBAN positions 5–8; derive it rather than asking for a separately entered bank code. Bank
+name is optional. BIC/SWIFT is optional for this partner-data capture slice; validate syntax if supplied,
+but leave payment-routing requirements to the later payment workflow. No validation claims that a bank
+or account exists. Valid-from/to and active-state behavior follow D-060.
+
+**Boundary:** this records verified KW profile rules only. It does not implement or activate a country
+profile and adds no code, schema, database row, or bank data. Full identifiers remain blocked until the
+encryption-key/reveal/audit path is implemented. B-050 will verify India's profile next. No commit or push;
+the full-system publish trigger remains in §25.4. `git diff --check` passed.
+
+
+### 26.67 B-050 — India (IN) bank-validation profile specification `VERIFIED`
+
+**Authoritative profile sources:** RBI's NEFT FAQ says a beneficiary's bank-branch IFSC and account
+number are supplied for NEFT beneficiary identification. It defines IFSC as an 11-character
+alphanumeric code identifying a participating bank-branch: positions 1–4 identify the bank, position 5
+is `0`, and positions 6–11 identify the branch. RBI's 2013 Technical Committee report describes
+bank-specific variation in account-number structures and discusses an India IBAN design; the RBI release
+issued with that report invited comments before implementation was considered. The current SWIFT IBAN
+Registry Release 103 (Sep 2026) has no `IN` IBAN profile. Sources: [RBI NEFT FAQ](https://www.rbi.org.in/scripts/faqview.aspx?id=60), [RBI Technical Committee report](https://www.rbi.org.in/scripts/PublicationReportDetails.aspx?ID=695), [RBI consultation press release](https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=27975), and [SWIFT IBAN Registry](https://www.swift.com/resource/iban-registry-pdf).
+
+**IN profile specification (D-063):** account holder and bank country are required; country is `IN`.
+Require the local bank account number and the beneficiary-branch IFSC as the profile's bank code;
+do not accept an IBAN for this profile. Normalize IFSC to uppercase and require exactly 11 characters
+matching `^[A-Z]{4}0[A-Z0-9]{6}$`. This is syntax validation only: do not perform live directory lookup,
+claim the branch/account exists, or equate IFSC with BIC/SWIFT. Treat the local account number as an
+opaque bank-specific identifier: preserve leading zeros and do not impose a country-wide length, syntax,
+checksum, padding or truncation rule. Bank name is optional. BIC/SWIFT is optional for this non-payment
+partner-data slice; if supplied, apply the generic syntax check and leave later payment-routing needs to
+the payment workflow. RBI also lists account type in NEFT beneficiary instructions; it remains a
+transaction-specific field outside D-059's bank-master field set. Validity dates and active state follow
+D-060.
+
+**Boundary:** this records verified IN profile rules only. It does not implement or activate a country
+profile and adds no code, schema, database row, or bank data. Full identifiers remain blocked until the
+encryption-key/reveal/audit path is implemented. B-051 will verify the GB profile next. No commit or push;
+the full-system publish trigger remains in §25.4. `git diff --check` passed.
+
+
+### 26.68 B-051 — United Kingdom (GB) bank-validation profile specification `VERIFIED`
+
+**Authoritative profile sources:** SWIFT IBAN Registry Release 103 (Sep 2026) lists the UK format as
+`GB2!n4!a6!n8!n`, length 22. Pay.UK's UK IBAN standard explains the BBAN components: a four-letter
+institution code derived from the bank BIC, six-digit sort code, and eight-digit account number. Sources:
+[SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf) and [Pay.UK Standard — UK IBAN format](https://www.wearepay.uk/wp-content/uploads/2018/10/Pay.UK-Standard-Format-of-the-IBAN-issued-in-the-UK-October18.pdf).
+
+**GB profile specification (D-064):** account holder and bank country are required; country is `GB`.
+Require a bank-issued IBAN; do not accept a local-account-only entry. Normalize by removing spaces and
+uppercasing, then require exactly 22 characters matching `^GB[0-9]{2}[A-Z]{4}[0-9]{14}$` and a valid
+MOD-97 check. Derive the four-letter institution identifier from normalized IBAN positions 5–8 for the
+existing bank-code field; the sort code is positions 9–14 and account number positions 15–22. Do not ask
+for duplicate local account/sort-code entry. Bank name is optional. BIC/SWIFT is optional for this
+non-payment master-data slice; syntax-check if supplied, but do not assert bank/account existence or
+payment-rail eligibility. Validity dates and active state follow D-060.
+
+**Boundary:** this records verified GB profile rules only. It does not implement or activate a country
+profile and adds no code, schema, database row, or bank data. Full identifiers remain blocked until the
+approved encryption-key/reveal/audit safeguards exist. B-052 and B-053 record US and JP next. No commit
+or push; the full-system publish trigger remains in §25.4. `git diff --check` passed.
+
+
+### 26.69 B-052 — United States (US) bank-validation profile specification `VERIFIED`
+
+**Authoritative profile sources:** the American Bankers Association's Routing Number Policy specifies a
+nine-digit routing number made up of the Federal Reserve routing symbol, institution identifier and
+check digit. It also states that regular routing numbers may be used for electronic transactions; that
+does not identify which number is correct for a particular payment rail. Sources: [ABA Routing Number Policy & Procedures](https://www.aba.com/news-research/analysis-guides/routing-number-policy-procedures), [ABA routing-number registry information](https://www.aba.com/about-us/routing-number), and the [Apache Commons Validator ABA check-digit reference](https://commons.apache.org/proper/commons-validator/apidocs/org/apache/commons/validator/routines/checkdigit/ABANumberCheckDigit.html). SWIFT IBAN Registry Release 103 (Sep 2026) has no `US` IBAN profile: [SWIFT IBAN Registry](https://www.swift.com/resource/iban-registry-pdf).
+
+**US profile specification (D-065):** account holder and bank country are required; country is `US`.
+Require the local account number and a nine-digit ABA routing transit number (RTN), stored in the
+existing bank-code field; do not accept an IBAN. Require `^[0-9]{9}$`; the first two digits must be in ABA's bank/legacy-thrift routing-symbol ranges
+`01–12` or `21–32`. Validate the ABA check digit with the standard 3-7-1 mod-10 rule:
+`3(d1+d4+d7)+7(d2+d5+d8)+(d3+d6+d9) ≡ 0 (mod 10)`. Treat the account number as an opaque
+bank-specific value: preserve leading zeros and impose no U.S.-wide length, syntax, checksum, padding
+or truncation rule. Validate the RTN's structure/check digit only; do not look up an active directory,
+claim institutional assignment, infer ACH/wire/check eligibility, or claim account existence. Bank name
+is optional. BIC/SWIFT is optional for this non-payment master-data slice; syntax-check if supplied.
+Validity dates and active state follow D-060.
+
+**Boundary:** this records verified US profile rules only. It does not implement or activate a country
+profile and adds no code, schema, database row, or bank data. Full identifiers remain blocked until the
+approved encryption-key/reveal/audit safeguards exist. B-053 records JP next. No commit or push; the
+full-system publish trigger remains in §25.4. `git diff --check` passed.
+
+
+### 26.70 B-053 — Japan (JP) bank-validation profile specification `VERIFIED`
+
+**Authoritative profile sources:** SWIFT IBAN Registry Release 103 (Sep 2026) contains no `JP` IBAN
+profile. The Japanese Bankers Association's code directory lists four-digit financial-institution codes;
+MUFG documents a three-digit branch code and the associated account number. Japan Post Bank instructs
+customers to use its transfer-specific institution/store/account representation and provides official
+conversion guidance from its separate symbol/number format. Sources: [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf), [Japanese Bankers Association code directory](https://www.zenginkyo.or.jp/abstract/outline/organization/member-01/), [MUFG branch-code/account-number guidance](https://www.bk.mufg.jp/ebusiness/gplus/listofbranchesinjapan.html), and [Japan Post Bank transfer-format guidance](https://www.jp-bank.japanpost.jp/kojin/sokin/furikomi/kouza/kj_sk_fm_kz_1.html).
+
+**JP profile specification (D-066):** account holder and bank country are required; country is `JP`.
+Require a local account number and the domestic institution-plus-branch identifier; do not accept an
+IBAN. To fit D-059's approved field set without adding a branch column, the existing bank-code field
+carries the four-digit institution code followed by the three-digit branch/store code as one seven-digit
+value matching `^[0-9]{7}$`; preserve leading zeros. Treat the bank-supplied account number as opaque and
+exact; impose no nationwide length, syntax, checksum, padding or truncation rule. For Japan Post Bank,
+use the bank's transfer-format branch/store code and account number from its official guidance; do not
+algorithmically convert the separate symbol/number identifier in this profile. Bank name and BIC/SWIFT
+are optional for this non-payment master-data slice; syntax-check BIC if supplied. Account type and
+payment-rail-specific requirements remain outside D-059. No live directory, branch/account-existence or
+network-eligibility claim. Validity dates and active state follow D-060.
+
+**Boundary:** this records verified JP profile rules only. It does not implement or activate a country
+profile and adds no code, schema, database row, or bank data. Full identifiers remain blocked until the
+approved encryption-key/reveal/audit safeguards exist. B-051–B-053 are now complete; all five D-061
+initial-country specifications are recorded, but none is implemented or enabled. No commit or push; the
+full-system publish trigger remains in §25.4. `git diff --check` passed.
+
+
+### 26.71 B-054 — Versioned bank-data encryption primitive `IMPLEMENTED — NOT INTEGRATED`
+
+**Decision and scope (D-067):** the owner selected a versioned app-managed keyring whose high-entropy
+keys are supplied through deployment secrets, with key IDs, retention of prior keys during rotation,
+and no external KMS. This batch implements only the server-side cryptographic primitive in
+`src/platform/security/bank-data-encryption.ts`; it neither reads deployment configuration nor stores or
+reveals bank data.
+
+**Cryptographic contract:** AES-256-GCM, a fresh random 96-bit nonce per encryption, and a 128-bit
+authentication tag. The canonical unpadded-base64url envelope is
+`cbd1.<key-id>.<nonce>.<ciphertext>.<tag>`. Key material must be 32 bytes; key IDs match
+`^[A-Za-z0-9_-]{1,32}$`. The envelope version, key ID, tenant/client, partner number, bank-record ID,
+and stable field name are serialized as authenticated associated data, so moving ciphertext between
+keys, tenants, partners, rows, or fields fails authentication. Encryption always uses the supplied
+keyring's active key; decryption resolves the key ID from the supplied keyring, allowing retained
+old-key reads while a later bounded re-encryption process remains future work. Nonempty UTF-8 values
+are limited to 4,096 bytes; context components must be nonempty and bounded, and field names must be
+stable ASCII identifiers. Errors expose no plaintext, ciphertext, context, or key material.
+
+`encryptBankData` and `decryptBankData` intentionally do not load or provision keys, authorize a caller,
+write a reveal audit, mask normal views/history, or access the database. A caller must not expose the
+plaintext result except through the future separately authorized and audited reveal path. Focused tests
+cover round-trip and ciphertext secrecy, nonce uniqueness, tenant/partner/record/field and key-ID
+binding, ciphertext tampering, missing prior keys, active-key rotation behavior, malformed envelopes,
+and invalid key material/context. Six tests pass; `npm run typecheck` and `git diff --check` pass.
+
+**Boundary:** no key configuration or real key material was read, written, or committed. No schema,
+migration, database, profile, contact, bank-record service, UI, masking/history filter, reveal authority,
+or bank identifier was added. Test inputs are non-bank placeholders with ephemeral test-only keys.
+B-055 is the next bounded keyring-configuration batch; bank-record storage remains blocked until the
+full D-059/D-060/D-067 security gate is complete. No commit or push; §25.4's full-system publish trigger
+remains authoritative.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -4423,6 +5014,26 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.47 | 2026-10-11 | **B-031 display-only supplier partner-function panel added.** Integrated the authority-gated read view into the Supplier Purchasing tab, grouped by function and showing cardinality, active state, related supplier status/blocking, default and empty/no-default states. New UI labels use i18n. Typecheck, full Vitest (342/342), browser harness (65/65), production build, IP lint (173 files) and diff check pass. Dedicated live-browser acceptance and editing controls remain pending. No schema, migration or PO behavior. §26.47 records scope; assignment editor next. | Agent |
 | 0.48 | 2026-10-11 | **B-032 supplier partner-function assignment editor added.** Maintain users can add/replace unique assignments, add multiple assignments, designate/change/unset their optional default, and remove rows with reason/version controls. Pickers query same-tenant active Supplier roles, advertise the 200-row limit, and stay disabled until a purchasing-org segment exists. Existing session-derived actions remain the only write path; no cardinality setting is invented or changed. Typecheck, full Vitest (343/343), browser harness (65/65), production build, IP lint (173 files) and diff check pass. Dedicated editor browser acceptance and PO determination remain pending. §26.48 records limits; browser acceptance next. | Agent |
 | 0.49 | 2026-10-11 | **B-033 dedicated supplier partner-function live-browser acceptance passed.** Extended the disposable `supplier-purchasing` Playwright target with segment-gate, unique add/replace/remove, configured-multiple add/default set/unset/transfer/removal, read-only Auditor and unrelated-authority checks. The multiple rule was altered only in the UI-created T990 dev fixture; guarded cleanup ran and post-run query confirmed no T990 fixture remains. No browser errors. `npm run typecheck`, browser harness (65/65), focused target and diff check pass; no app schema/migration, transaction behavior, owner/production data, commit or deployment. §26.49 records coverage and boundary. | Agent |
+| 0.50 | 2026-10-11 | **B-034 Supplier company-code UI-only pending defaults.** Added disabled, read-only placeholders for payment methods, dunning procedure, cash discount, and tolerance group to both maintenance and authorised display-only panels; they are outside the save form, have no submitted names, and have no persistence/action/schema behavior. Updated the `supplier-company` browser target to assert four disabled, non-submitted fields. Typecheck, production build, IP lint, 65 browser-harness tests and diff check pass. Live Playwright acceptance remains pending because no authenticated isolated development `DATABASE_URL` was configured; the read-only connection check failed before a fixture or database mutation. Payment Methods is the owner-selected first master; B-035 captures its v1 semantics/scope. §26.50 records scope and boundary. | Agent |
+| 0.51 | 2026-10-11 | **B-035 Payment Methods master v1 semantics approved.** Owner selected a tenant+country+1–2-character uppercase alphanumeric identity, a shared catalogue with `OUTGOING`/`INCOMING`/`BOTH` eligibility, description and active state, definitions-only scope, and no standard seed methods. Future Supplier/Customer code assignments resolve by company-code country and direction; current Customer code-only validation remains unchanged. Vendor/customer and house-bank permissions, payment-medium formats, and execution stay separate. No code/schema/seed/database changes; D-058 and §26.51 record the decision; B-036 schema/RLS is next. `git diff --check` passes. | Agent |
+| 0.52 | 2026-10-11 | **B-036 Payment Methods schema and tenant RLS implemented.** Added `payment_method` to the typed Foundation schema with country/code primary key, ISO country and tenant FKs, direction/domain/code/description/version checks, audit metadata, and additive migrations `0012_payment_method_master.sql` / `9014_payment_method_policies.sql` (ENABLE + FORCE RLS and app-role grants). Added DB-backed schema/RLS tests for country reuse, constraints, isolation, defaults, and cascade. Typecheck, build, IP lint (177), 65 browser-harness tests and diff check pass. DB-backed test/migration application remains pending because isolated development credentials are unavailable; no database/owner data touched. §26.52 records limits; B-037 read service is next. | Agent |
+| 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
+| 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
+| 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 0.69 | 2026-10-11 | **B-054 implements the versioned bank-data encryption primitive only.** D-067 records the selected app-managed keyring and AES-256-GCM contract: random 96-bit nonce, 128-bit tag, key ID and tenant/partner/record/field bound as AAD, active-key encryption and retained-prior-key decryption. Six isolated unit tests, typecheck and diff check pass. No deployment-secret loader/key material, reveal authority/audit, masking/history safeguards, schema/database integration, profile activation or bank identifiers. §26.71 documents the contract and strict boundary; B-055 keyring configuration is next. No commit or push; full-system publish trigger remains. | Agent |
+| 0.68 | 2026-10-11 | **B-051–B-053 verified the remaining initial bank-validation profiles together.** D-064 records GB bank-issued IBAN-only validation (`GB`, 22 characters, MOD-97; bank/sort/account components embedded). D-065 records US local account + 9-digit ABA RTN with check digit, no active-directory or payment-rail claim. D-066 records JP local account + seven-digit institution/branch composite in the existing bank-code field, with Japan Post's official transfer-format exception. Source links are recorded in §§26.68–26.70. All five D-061 profiles now have research specifications (D-062–D-066), but none is implemented or enabled; no code/schema/database/profile rows/real bank values. Encryption/reveal/masking safeguards still block identifier storage. `git diff --check` passes; no commit or push. | Agent |
+| 0.67 | 2026-10-11 | **B-050 India bank-validation profile verified from authoritative sources.** RBI's NEFT FAQ specifies branch IFSC and account number; IFSC syntax is 11 characters (`^[A-Z]{4}0[A-Z0-9]{6}$`). RBI's committee report describes bank-specific account-number formats and its India IBAN design was consultation-stage; current SWIFT Registry Release 103 has no IN profile. D-063 records required local account number + IFSC, opaque account-number handling, optional BIC for this non-payment master, no directory/account-existence lookup, and account type deferred to transactions. No profile implementation/activation, code/schema/database/profile rows/real bank values. §26.67 records the source-backed rules; B-051 GB is next. `git diff --check` passes. | Agent |
+| 0.66 | 2026-10-11 | **B-049 Kuwait bank-validation profile verified from authoritative sources.** CBK documents Kuwait's IBAN adoption/activation and 30-character structure, account-bank issuance, and no-space electronic form; SWIFT's current Registry Release 103 (Sep 2026) confirms `KW2!n4!a22!c`, length 30, BBAN length 26 and embedded four-letter bank identifier. D-062 specifies bank-issued IBAN only for KW; no separate local-account entry, derived bank code, optional BIC in this non-payment master. Profile not implemented/activated; no code/schema/database/profile rows/real bank values. §26.66 records source-backed rules; India profile research B-050 is next. `git diff --check` passes. | Agent |
+| 0.65 | 2026-10-11 | **B-048 initial bank-validation countries selected.** Owner selected `IN`, `KW`, `GB`, `US`, and `JP`; all exist in the current 30-country shared reference seed. This sets profile-authoring scope only; no country profiles, code/schema, database rows, or bank identifiers were added. D-061 and §26.65 record the set; all countries remain blocked until their profile exists. B-049 source-backed Kuwait profile verification is next. `git diff --check` passes. | Agent |
+| 0.64 | 2026-10-11 | **B-047 partner-bank validation policy approved.** Country profiles are fail-closed: account holder/country required; profile selects the required IBAN or local account and bank-code/BIC fields; bank name optional. IBAN normalization, country match, country-length and MOD-97 validation; BIC syntax only, no account-existence claim. Valid-from required, valid-to optional/inclusive, overlaps allowed, active independent, no hard deletion. No profile rows, code, schema, database, or real identifiers added. D-060 and §26.64 record policy; initial supported countries (B-048) and encryption-key/reveal infrastructure remain. `git diff --check` passes. | Agent |
+| 0.63 | 2026-10-11 | **B-046 partner bank/contact v1 rules approved.** Owner selected partner-wide valid-dated bank records with the standard holder/country/bank/IBAN-or-local-account/BIC fields, encryption-at-rest, masked views/history and separate audited reveal; no company/role/default/payment/house-bank execution behavior. Contact persons are multiple partner-wide records with one primary, date validity, logged reads/changes, masked personal email/phone history and retention-controlled deletion; existing general email/phone remain organisation-level. Country-specific field requiredness/validation and key provisioning/rotation remain prerequisites. No code/schema/database/real data changes. D-059 and §26.63 record approval; B-047 validation rules are next. `git diff --check` passes. | Agent |
+| 0.62 | 2026-10-11 | **B-045 Payment Methods isolated browser acceptance passed.** Ran the dedicated target on a fresh disposable PostgreSQL 17.11 database after all 28 migrations and reference/application seeds. UI onboarding, create/change/history/audit/activity, display-only, forged tenant/edit and soft-retire checks passed. Fixed retirement-success feedback lost during revalidation and adjusted the browser helper's root redirect wait. Cleanup confirmed zero T989 tenant, method, and user rows; stopped the app/database and removed the temporary cluster. Typecheck, target, browser harness (66/66), IP lint (183 files), and diff check pass. No owner/production data, schema/migration/seed behavior, partner integration, commit or push. §26.62 records results; owner walkthrough/sign-off remains pending; the full-system publish trigger remains. | Agent |
+| 0.61 | 2026-10-11 | **B-044 Payment Methods dedicated browser target implemented, not yet run.** Added `npm run smoke:browser:payment-methods` with guarded disposable T989 tenant setup/cleanup and UI coverage for workbench status, create/change/soft-retire, history, display-only access, and forged tenant/edit queries. Typecheck, target-selection browser harness (66/66), IP lint (183 files), smoke target listing, and diff check pass. No live browser/database acceptance or push; B-045 will execute the target on a fresh disposable development DB. §26.61 records the scope. | Agent |
+| 0.60 | 2026-10-11 | **B-043 Payment Methods soft-retire confirmation UI.** Added capability-gated retirement for active methods, using the existing session-protected, versioned soft-retire action. Requires explicit acknowledgment and reason; the inactive definition and audit trail remain. No hard delete, new action, schema, seed, or partner integration. Typecheck, production build, IP lint (183 files), browser harness (65/65), and diff check pass. No dedicated Payment Methods database/browser acceptance, commit, or push; B-044 browser acceptance remains. §26.60 records the scope. | Agent |
+| 0.59 | 2026-10-11 | **B-042 Payment Methods create/change editor form.** Added capability-gated create/change controls using the existing session-protected save action, immutable method code on change, required reason and expected-version checks, plus success/error feedback. No retire controls, new server action, method data seed, or partner integration. Typecheck, production build, IP lint (182 files), browser harness (65/65), and diff check pass. No dedicated Payment Methods browser/database acceptance, commit, or push; B-043 retire UI and B-044 browser acceptance remain. §26.59 records the scope. | Agent |
+| 0.58 | 2026-10-11 | **B-041 Payment Methods read-only workbench route.** Added an authenticated, tenant-scoped country/method list, detail and change-history view; registered the route with the workbench and term registry. Inactive methods remain visible. No editor, new action, seeded method data, or Supplier/Customer integration. Typecheck, IP lint (181 files), browser harness (65/65), and diff check pass. No dedicated database/browser acceptance, commit, or push; B-042 create/change UI, B-043 retire UI, and B-044 browser acceptance remain. §26.58 records the scope. | Agent |
+| 0.57 | 2026-10-11 | **B-040 Payment Methods workbench activity/status lifecycle.** Registered `CFG.FIN.PAYMENTMETHOD.DEFINE`; seed adds only missing tenant `NOT_STARTED` statuses and preserves existing progress, while successful create/change/retire and valid no-op confirmations complete the activity in the same transaction. The activity and seed backfill were verified on a fresh disposable PostgreSQL 17.11 cluster; 11 Payment Method service/schema tests and 3 Payment Method action-security tests passed. Typecheck, browser harness (65/65), IP lint (180 files), and diff check pass. No UI, registry entry, payment-method data, or Supplier/Customer integration; no commit or push. §26.57 records the outcome; B-041 read-only configuration UI is next. | Agent |
+| 0.56 | 2026-10-11 | **B-039 Payment Methods protected write actions and capability registration.** Added create/change and soft-retire server actions guarded by `CFG.FIN.PAYMENTMETHOD.DEFINE`; tenant and actor are session-derived, forged form values ignored, missing expected version rejected, and success invalidates the Payment Methods/workbench paths. Added the capability catalogue entry and translated success messages without adding method data or a config activity. Action-security tests passed 3/3 for authorised create+retire, capability denial and anonymous redirects on a fresh isolated PostgreSQL 17.11 database; the capability row was verified and fixtures cleaned. Typecheck, browser harness (65/65), IP lint (180 files), and diff check passed. No UI, schema/migration, payment execution, or partner integration. §26.56 records behavior; B-040 status lifecycle followed, with UI still pending. | Agent |
 
 ---
 

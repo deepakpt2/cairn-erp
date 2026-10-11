@@ -21,6 +21,8 @@ import { saveMaterialAction } from '@/app/inventory/materials/actions';
 import { getMaterialDetail } from '@/modules/inventory/materials';
 import { savePaymentTermAction } from '@/app/config/payment-terms/actions';
 import { getPaymentTerms } from '@/modules/foundation/payment-terms';
+import { retirePaymentMethodAction, savePaymentMethodAction } from '@/app/config/payment-methods/actions';
+import { getPaymentMethod } from '@/modules/foundation/payment-methods';
 import { savePartnerAction } from '@/app/foundation/partners/actions';
 import { getBusinessPartner } from '@/modules/foundation/business-partners';
 import { saveSupplierCompanyAction } from '@/app/foundation/partners/company-actions';
@@ -190,6 +192,34 @@ describe('server action security', () => {
   it('refuses anonymous payment-term server-action calls', async () => {
     request.session=null;
     await expect(savePaymentTermAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+  });
+
+  it('derives Payment Method tenant and actor from session and supports soft retirement', async () => {
+    signedIn(['CFG.FIN.PAYMENTMETHOD.DEFINE']);
+    const create = form({client:beta.client,changedBy:'FORGED',country:'KW',methodCode:'Q',description:'Action security method',allowedDirection:'BOTH',isActive:'on',expectedVersion:'0',reason:'Payment Method action security test'});
+    expect(await savePaymentMethodAction({ok:true},create)).toMatchObject({ok:true,country:'KW',methodCode:'Q',changed:true,version:1});
+    expect(await getPaymentMethod(alpha.client,'KW','Q')).toMatchObject({client:alpha.client,createdBy:'real.operator',allowedDirection:'BOTH',version:1});
+    expect(await getPaymentMethod(beta.client,'KW','Q')).toBeNull();
+
+    const retire = form({client:beta.client,changedBy:'FORGED',country:'KW',methodCode:'Q',expectedVersion:'1',reason:'Retire action security test'});
+    expect(await retirePaymentMethodAction({ok:true},retire)).toMatchObject({ok:true,changed:true,version:2});
+    expect(await getPaymentMethod(alpha.client,'KW','Q')).toMatchObject({isActive:false,changedBy:'real.operator',version:2});
+    expect(await getPaymentMethod(beta.client,'KW','Q')).toBeNull();
+  });
+
+  it('refuses Payment Method writes without its configuration capability', async () => {
+    signedIn(['FIN.*']);
+    const data=form({country:'KW',methodCode:'D',description:'Denied method',allowedDirection:'OUTGOING',isActive:'on',expectedVersion:'0',reason:'Denied Payment Method test'});
+    const result=await savePaymentMethodAction({ok:true},data);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('CFG.FIN.PAYMENTMETHOD.DEFINE');
+    expect(await getPaymentMethod(alpha.client,'KW','D')).toBeNull();
+  });
+
+  it('refuses anonymous Payment Method server-action requests', async () => {
+    request.session=null;
+    await expect(savePaymentMethodAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
+    await expect(retirePaymentMethodAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
 
   it('ignores a forged tenant/actor when changing posting controls', async () => {

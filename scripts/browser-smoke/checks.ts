@@ -8,6 +8,7 @@ import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
+import { getPaymentMethod } from '../../src/modules/foundation/payment-methods';
 import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { getSupplierCompany } from '../../src/modules/foundation/supplier-companies';
 import { getSupplierPurchasing } from '../../src/modules/foundation/supplier-purchasing';
@@ -530,6 +531,106 @@ async function paymentTerms(ctx: BrowserContext) {
   console.log('  ✓ term search and define/assign checklist are consistent');
 }
 
+async function paymentMethods(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  await page.goto(`${BASE}/config`, { waitUntil: 'domcontentloaded' });
+  const activity = page.locator('tr').filter({ hasText: 'CFG.FIN.PAYMENTMETHOD.DEFINE' });
+  await activity.waitFor();
+  assert.match(await activity.innerText(), /Not started/i);
+  await activity.getByRole('link', { name: 'Open', exact: true }).click();
+  await page.waitForURL(/\/config\/payment-methods/);
+  await page.locator('select[name="country"]').selectOption('KW');
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  await page.getByText('No methods are defined for this country.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Create payment method', exact: true }).click();
+
+  await page.locator('[name="methodCode"]').fill('B1');
+  await page.locator('input[name="description"]').fill('Browser Payment Method');
+  await page.locator('[name="allowedDirection"]').selectOption('BOTH');
+  await page.locator('input[name="reason"]').fill('Browser payment method create');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Payment Method saved and change evidence recorded.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Open saved Payment Method', exact: true }).click();
+  let method = await getPaymentMethod(CLIENT, 'KW', 'B1');
+  assert.equal(method?.description, 'Browser Payment Method');
+  assert.equal(method?.allowedDirection, 'BOTH');
+  assert.equal(method?.version, 1);
+  const statusRows = await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status from config_activity_status
+    where client = ${CLIENT} and activity_code = 'CFG.FIN.PAYMENTMETHOD.DEFINE'
+  `)) as unknown as Array<{ status: string }>;
+  assert.equal(statusRows[0]?.status, 'COMPLETED');
+  console.log('  ✓ workbench route, empty tenant state, create, audit actor and activity completion');
+
+  await page.getByRole('link', { name: 'Change', exact: true }).click();
+  assert.equal(await page.locator('[name="methodCode"]').getAttribute('readonly'), '');
+  await page.locator('input[name="description"]').fill('Browser Payment Method revised');
+  await page.locator('[name="allowedDirection"]').selectOption('INCOMING');
+  await page.locator('input[name="reason"]').fill('Browser payment method change');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Payment Method saved and change evidence recorded.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Open saved Payment Method', exact: true }).click();
+  method = await getPaymentMethod(CLIENT, 'KW', 'B1');
+  assert.equal(method?.description, 'Browser Payment Method revised');
+  assert.equal(method?.allowedDirection, 'INCOMING');
+  assert.equal(method?.version, 2);
+  await page.getByRole('link', { name: 'Change history', exact: true }).click();
+  await page.getByText('Browser payment method create', { exact: true }).waitFor();
+  await page.getByText('Browser payment method change', { exact: true }).waitFor();
+  console.log('  ✓ code immutability, versioned change and history');
+
+  const viewerId = randomUUID();
+  const password = await hashPassword(PASSWORD);
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into app_user (id, client, username, full_name, password_hash, must_change_password, created_by)
+      values (${viewerId}, ${CLIENT}, 'payment.viewer', 'Payment Method Viewer', ${password}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+      values (${CLIENT}, ${viewerId}, 'WAREHOUSE_CLERK', 'BROWSER_FIXTURE')`);
+  });
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'domcontentloaded' });
+  }
+  await signInAs('payment.viewer');
+  await page.goto(`${BASE}/config/payment-methods?country=KW`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Browser Payment Method revised', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Create payment method', exact: true }).count(), 0);
+  await page.goto(`${BASE}/config/payment-methods?country=KW&code=B1&client=0100`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Browser Payment Method revised', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.getByText('Retire this method', { exact: true }).count(), 0, 'Display-only user cannot see retire controls for an active method');
+  await page.goto(`${BASE}/config/payment-methods?country=KW&code=B1&edit=1&client=0100`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Browser Payment Method revised', { exact: true }).waitFor();
+  assert.equal(await page.locator('input[name="reason"]').count(), 0, 'Forged edit query must not expose a form');
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  await page.getByRole('link', { name: 'Change history', exact: true }).click();
+  await page.getByText('Browser payment method change', { exact: true }).waitFor();
+  console.log('  ✓ non-configurator is display-only; forged tenant/edit query does not grant maintenance');
+
+  await signInAs('browser.admin');
+  await page.goto(`${BASE}/config/payment-methods?country=KW&code=B1`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Retire this method', { exact: true }).click();
+  await page.locator('input[name="reason"]').fill('Browser payment method retirement');
+  await page.getByRole('checkbox', { name: 'I understand this method will be inactive and retained for review.' }).check();
+  await page.getByRole('button', { name: 'Confirm retirement', exact: true }).click();
+  await page.getByText('Payment Method retired and retained for review.', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Open saved Payment Method', exact: true }).click();
+  method = await getPaymentMethod(CLIENT, 'KW', 'B1');
+  assert.equal(method?.isActive, false);
+  assert.equal(method?.version, 3);
+  await page.getByRole('link', { name: 'Change history', exact: true }).click();
+  await page.getByText('Browser payment method retirement', { exact: true }).waitFor();
+  await page.goto(`${BASE}/config`, { waitUntil: 'domcontentloaded' });
+  const completed = page.locator('tr').filter({ hasText: 'CFG.FIN.PAYMENTMETHOD.DEFINE' });
+  assert.match(await completed.innerText(), /Completed/i);
+  console.log('  ✓ explicit versioned soft retirement retains the definition and evidence');
+}
+
 async function businessPartners(ctx: BrowserContext) {
   const {page,BASE,CLIENT}=scope(ctx);
   await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
@@ -625,6 +726,12 @@ async function supplierCompany(ctx: BrowserContext) {
   await page.getByRole('link',{name:'Open saved business partner',exact:true}).click();
   await page.getByRole('link',{name:'Supplier company code',exact:true}).click();
   await page.locator('[name="reconciliationAccount"]').waitFor();
+  const pendingDefaults=page.locator('fieldset').filter({hasText:'Additional company-code defaults'});
+  assert.equal(await pendingDefaults.count(),1);
+  assert.equal(await pendingDefaults.locator('input').count(),4);
+  assert.equal(await pendingDefaults.locator('input:disabled').count(),4);
+  assert.equal(await pendingDefaults.locator('input[name]').count(),0,'Pending defaults are display-only and never submitted.');
+  console.log('  ✓ four pending supplier defaults appear as disabled, non-submitted form fields');
   await page.locator('[name="reason"]').fill('Browser staged supplier accounting');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier company view saved. Status: Incomplete.',{exact:true}).waitFor();
@@ -1136,6 +1243,7 @@ async function customerSalesArea(ctx: BrowserContext) {
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'payment-terms': paymentTerms,
+  'payment-methods': paymentMethods,
   'business-partners': businessPartners,
   'supplier-company': supplierCompany,
   'supplier-purchasing': supplierPurchasing,

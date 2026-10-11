@@ -456,6 +456,7 @@ export const documentType = pgTable(
 );
 
 export * from './payment-terms-schema';
+export * from './payment-method-schema';
 
 export * from './business-partner-schema';
 

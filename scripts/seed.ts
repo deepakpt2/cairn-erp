@@ -43,6 +43,7 @@ const ACTIVITIES: Activity[] = [
   { code: 'CFG.FIN.EXRATE.MAINTAIN', area: 'FINANCIAL_ACCOUNTING', title: 'Maintain exchange rates', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Foreign currency posting', wizardStage: 'ONBOARDING', route: '/config/exchange-rates' },
   { code: 'CFG.FIN.TAXCODE.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define tax codes', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Tax determination', wizardStage: 'ONBOARDING', route: '/config/tax-codes' },
   { code: 'CFG.FIN.PAYTERMS.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define payment terms', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Due date calculation', wizardStage: 'ONBOARDING', route: '/config/payment-terms' },
+  { code: 'CFG.FIN.PAYMENTMETHOD.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define payment methods', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'Country-specific payment-method definitions', wizardStage: 'STANDARD', route: '/config/payment-methods' },
   { code: 'CFG.FIN.DOCTYPE.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define document types', kind: 'DEFINE', prerequisites: ['CFG.PLT.NUMBERRANGE.DEFINE'], enables: 'Document classification', wizardStage: 'ONBOARDING', route: '/config/document-types' },
   { code: 'CFG.FIN.ACCTDET.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define account determination', kind: 'DEFINE', prerequisites: ['CFG.FIN.COA.DEFINE'], enables: 'Automatic postings from logistics', wizardStage: 'ONBOARDING', route: '/config/account-determination' },
 
@@ -93,6 +94,7 @@ const ACTIVITIES: Activity[] = [
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
   { code: 'CFG.FIN.PAYTERMS.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain payment-term definitions' },
+  { code: 'CFG.FIN.PAYMENTMETHOD.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain country-specific payment-method definitions' },
   { code: 'FND.PARTNER.MAINTAIN', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Maintain general business partner data and role assignments' },
   { code: 'FIN.SUPPLIER.COMPANY.MAINTAIN', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain supplier company accounting assignments' },
   { code: 'FIN.SUPPLIER.COMPANY.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Review supplier company accounting assignments' },
@@ -170,6 +172,7 @@ const REGISTRY: Array<{
   { ourCode: 'FND.PARTNER.DISPLAY', termType: 'TRANSACTION', module: 'FND', title: 'Business partner list', route: '/foundation/partners', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Search general partner data and review change evidence.' },
   { ourCode: 'FND.PARTNER.MAINTAIN', termType: 'TRANSACTION', module: 'FND', title: 'Maintain general business partners', route: '/foundation/partners', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Role-protected maintenance of general partner data only.' },
   { ourCode: 'CFG.FIN.PAYTERMS.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'Payment terms', route: '/config/payment-terms', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OBB8'], description: 'Due-date offsets and exact cash-discount deadlines with audit history.' },
+  { ourCode: 'CFG.FIN.PAYMENTMETHOD.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'Payment method definitions', route: '/config/payment-methods', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Country-specific definitions and their change history; no payment execution or partner assignment.' },
   { ourCode: 'INV.MATERIAL.CREATE', termType: 'TRANSACTION', module: 'INV', title: 'Create material', route: '/inventory/materials?new=1', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['MM01'], description: 'Basic, purchasing, MRP and valuation views. Other views are still pending.' },
   { ourCode: 'INV.MATERIAL.DISPLAY', termType: 'TRANSACTION', module: 'INV', title: 'Material master list', route: '/inventory/materials', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['MM02', 'MM03'], description: 'Find a material and maintain its organisational views.' },
   { ourCode: 'PROD.MRP.SETTINGS', termType: 'TRANSACTION', module: 'PROD', title: 'Material planning settings', route: '/inventory/materials?view=MRP', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Planning parameters and net-change file, not yet an executable planning run.' },
@@ -247,6 +250,15 @@ async function main() {
         ],
       );
     }
+
+    // Existing tenants predate this activity; add only a missing NOT_STARTED row.
+    // ON CONFLICT DO NOTHING preserves any tenant progress on seed reapplication.
+    await client.unsafe(`
+      insert into config_activity_status (client, activity_code, status, created_by)
+      select client, 'CFG.FIN.PAYMENTMETHOD.DEFINE', 'NOT_STARTED', 'SEED'
+        from client
+      on conflict (client, activity_code) do nothing
+    `);
 
     console.log('Seeding term registry…');
     for (const r of REGISTRY) {
