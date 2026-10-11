@@ -464,3 +464,4 @@ export * from './supplier-company-schema';
 export * from './supplier-purchasing-schema';
 
 export * from './customer-company-schema';
+export * from './customer-sales-area-schema';

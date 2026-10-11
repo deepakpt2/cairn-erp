@@ -29,6 +29,8 @@ import { saveSupplierPurchasingAction } from '@/app/foundation/partners/purchasi
 import { getSupplierPurchasing } from '@/modules/foundation/supplier-purchasing';
 import { saveCustomerCompanyAction } from '@/app/foundation/partners/customer-company-actions';
 import { getCustomerCompany } from '@/modules/foundation/customer-companies';
+import { saveCustomerSalesAreaAction } from '@/app/foundation/partners/customer-sales-area-actions';
+import { getCustomerSalesArea } from '@/modules/foundation/customer-sales-areas';
 
 let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
@@ -60,6 +62,20 @@ describe('server action security', () => {
   it('refuses customer accounting changes with only supplier-specific authority',async()=>{
     signedIn(['FIN.SUPPLIER.COMPANY.MAINTAIN']);const data=form({partnerNumber:'SEC-CUSTOMER',companyCode:'1000',expectedVersion:'1',reason:'Denied AR security test'});
     expect((await saveCustomerCompanyAction({ok:true},data)).message).toContain('FIN.CUSTOMER.COMPANY.MAINTAIN');
+  });
+  it('derives customer sales-area tenant/actor and normalises posted codes',async()=>{
+    signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-CUSTOMER',salesOrg:'1000',distributionChannel:'01',division:'01',deliveringPlant:'1000',pricingProcedure:'rvaa01',salesDistrict:'kw01',completeDelivery:'on',expectedVersion:'0',reason:'Customer sales-area security test'});
+    expect((await saveCustomerSalesAreaAction({ok:true},data)).ok).toBe(true);
+    const row=await getCustomerSalesArea(alpha.client,'SEC-CUSTOMER','1000','01','01');
+    expect(row?.createdBy).toBe('real.operator');expect(row?.pricingProcedure).toBe('RVAA01');expect(row?.salesDistrict).toBe('KW01');expect(row?.completeDelivery).toBe(true);
+    expect(await getCustomerSalesArea(beta.client,'SEC-CUSTOMER','1000','01','01')).toBeNull();
+  });
+  it('refuses customer sales-area changes with only accounting authority',async()=>{
+    signedIn(['FIN.CUSTOMER.COMPANY.MAINTAIN']);const data=form({partnerNumber:'SEC-CUSTOMER',salesOrg:'1000',distributionChannel:'01',division:'01',expectedVersion:'1',reason:'Denied sales-area security test'});
+    expect((await saveCustomerSalesAreaAction({ok:true},data)).message).toContain('SALES.CUSTOMER.SALESAREA.MAINTAIN');
+  });
+  it('refuses anonymous customer sales-area action requests',async()=>{
+    request.session=null;await expect(saveCustomerSalesAreaAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
   it('refuses anonymous customer company action requests',async()=>{
     request.session=null;await expect(saveCustomerCompanyAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
