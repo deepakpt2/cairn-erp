@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.37 — approved completion roadmap)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.38 — B-022 database acceptance passed)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2016,10 +2016,10 @@ when combining them would jeopardise the time budget.
 | B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
 | B-018 | Customer company **payment-methods/dunning-procedure fields backend** only | ≤10 min | **DONE — code-only payment-method set and dunning procedure on the company segment; validated, versioned, audited; no UI inputs yet** |
 | B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable and read-only views expose the B-018 fields; existing authority, version and audit path retained; browser acceptance pending** |
-| B-020 | Customer company interest-indicator/tolerance-group fields, backend only | ≤10 min | **IMPLEMENTED — code-only defaults; database/migration acceptance pending (§26.36)** |
+| B-020 | Customer company interest-indicator/tolerance-group fields, backend only | ≤10 min | **DONE — code-only defaults; migration, service and action acceptance passed in isolated PostgreSQL test DB (§26.36, §26.38)** |
 | B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **IMPLEMENTED — editable/display-only fields and access behavior; browser acceptance pending (§26.37)** |
-| B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **BLOCKED — PostgreSQL unavailable; no migration applied here (§26.36)** |
-| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **BLOCKED — requires B-022 and a PostgreSQL/browser environment (§26.35, §26.37)** |
+| B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **DONE — isolated PostgreSQL 17.11 test DB; all 24 migrations including 0010 applied; 65/65 DB service/action tests pass (§26.38)** |
+| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **NEXT — database ready; browser acceptance and owner walkthrough pending (§26.35, §26.37–26.38)** |
 | B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **PENDING — target/DB-backed browser acceptance not yet completed (§26.33)** |
 | B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **NEXT FEATURE — agree supported functions, direction, cardinality and default/validity rules (§25.5)** |
 
@@ -3833,7 +3833,7 @@ code fields on the Customer company segment, backend only. See §26.36. Owner br
 sign-off for the B-019 UI remain pending.
 
 
-### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PENDING`
+### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PASSED IN B-022`
 
 **Scope:** optional code-only defaults on the existing Customer company-code segment, as listed in
 §9.2. This is a backend slice only: no controls were added to the Customer company screen. No interest
@@ -3866,25 +3866,25 @@ and checksum-locks applied files. Tenant RLS, grants, keys and cascades are unch
 customer-company tests cover canonical save, security-relevant history, case-only no-op, omitted-value
 preservation, blank clear, invalid values and completeness-gate independence. The action-security test
 also verifies that the existing form path forwards explicit codes and that a legacy form omitting them
-preserves them. **Run here:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164 files),
-`npm run test:browser-harness` (**64/64**) and `git diff --check` all pass. **Not run:** the DB-backed
-customer-company/action-security suites or migration application, because PostgreSQL is unavailable in
-this workspace. No database, owner tenant, production host or credentials were touched. These checks
-are still required before claiming database acceptance.
+preserves them. **At B-020 implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip`
+(164 files), `npm run test:browser-harness` (**64/64**) and `git diff --check` passed; PostgreSQL was
+unavailable then. **Subsequent DB acceptance:** B-022 applied the migrations and ran the customer-company
+and action-security suites against an isolated local PostgreSQL 17.11 database; **65/65 tests passed**
+(§26.38). No owner or production database/tenant was used.
 
-**Owner update:** when next deploying to a development/test environment, apply migration 0010 through
-the normal migration service; expected count is 24 if the 23-migration B-018 baseline is current. No
-reseed is required. The current screen intentionally has no interest/tolerance inputs, so there is no
-manual in-app editing step yet; the values remain backend-only until a later UI slice. Do not set them
-through production SQL.
+**Owner update:** migration 0010 was applied only to the isolated local test database in B-022. Other
+development/test deployments should apply it through the normal migration service; it is the 24th SQL
+migration when starting from 0000. No reference reseed is required by this schema change. The current
+screen intentionally has no interest/tolerance inputs, so these values became user-maintainable only in
+the later B-021 UI slice. Do not set them through production SQL.
 
 **Limitations:** values are format-checked codes only. There is no master lookup, interest calculation,
-interest posting, tolerance calculation/enforcement, open-item processing, billing or payment use. The
-DB-backed assertions and application of migration 0010 remain pending in a PostgreSQL-enabled
-development environment.
+interest posting, tolerance calculation/enforcement, open-item processing, billing or payment use. DB
+migration/service/action acceptance passed in the isolated test database; browser acceptance remains
+pending under B-023.
 
-Next: **B-021** was selected for the matching Customer company UI for these two defaults; see §26.37.
-Partner-function relationships or the next Phase 1 master remain candidates for a later bounded slice.
+At B-020 close, **B-021** was selected for the matching Customer company UI and is now implemented
+(§26.37). B-022 database acceptance is complete (§26.38); B-023 is the next acceptance batch.
 
 
 ### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · BROWSER ACCEPTANCE PENDING`
@@ -3907,13 +3907,14 @@ boundary.
   codes only, and states that their masters and execution/calculation behavior are not available.
 - The customer-company browser target now exercises interest/tolerance canonical save, persisted
   reload, canonical no-op, blank clear and restore, security-relevant history, display-only read access
-  without edit controls, and denial to a non-finance user. The DB-backed target has not been run here.
+  without edit controls, and denial to a non-finance user. The DB-backed target was not run during B-021;
+  B-022 subsequently prepared the isolated database and verified the underlying service/action behavior.
 
 **Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164 files),
-`npm run test:browser-harness` (**64/64**) and `git diff --check` pass. `npm run smoke:browser:customer-company`
-was not run because PostgreSQL is unavailable in this workspace; the extended browser target and DB
-assertions therefore remain acceptance-pending. No database, owner tenant, production host or credentials
-were touched. The B-020 service tests were also not rerun against PostgreSQL.
+`npm run test:browser-harness` (**64/64**) and `git diff --check` passed for B-021. The browser target
+`npm run smoke:browser:customer-company` and owner walkthrough remain pending for B-023. B-022 has
+since applied the migrations and passed 65 customer-company/action-security database tests on a fresh,
+loopback-only PostgreSQL 17.11 test database (§26.38). No owner/production database or tenant was touched.
 
 **Owner manual test (R-23):** after the B-020 migration 0010 is applied in a development/test tenant,
 open active customer `TESTCUST01` → **Customer company code** → `1000`. With the existing valid account
@@ -3933,10 +3934,35 @@ baseline is current). Do not write values through production SQL.
 tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
 consumes them yet.
 
-Next: B-022 through B-024 are the pending acceptance gates in §25.5. If the database/browser
-environment keeps them blocked, unrelated development may proceed in the approved roadmap; the next
-feature package is the B-025 partner-function rules decision. Database/browser acceptance remains
-required before M1 release.
+Next: **B-023** customer-company browser acceptance is the next batch; the local test database is
+ready (§26.38). B-024 customer sales-area browser acceptance remains pending. Complete both gates and
+owner walkthroughs before M1 release; after the acceptance gates, B-025 is the next feature package in
+§25.5.
+
+
+### 26.38 B-022 — B-020 migration and database acceptance `COMPLETE · ISOLATED TEST DATABASE`
+
+**Isolation:** Provisioned a fresh PostgreSQL 17.11 cluster for this workspace only. The application
+server listens on loopback `127.0.0.1:55432`; the dedicated database is `cairn_b022_test`, with a
+superuser migration role (`cairn`) and a restricted application role (`cairn_app`, no `BYPASSRLS`).
+The instance is isolated from owner/production data and uses no production host or credentials. Local
+test connection settings are kept outside the repository under `/home/user/.arena/cairn-b022.env`;
+that file is not part of Git. The database server is left running for the next B-023 browser batch.
+
+**Migration and reference setup:** `npm run db:migrate` applied all **24 migrations** in lexical order,
+including `0010_customer_company_interest_tolerance.sql` and the RLS/policy migrations through 9012.
+The normal migration runner recorded each checksum. `npm run seed:reference` populated 30 countries,
+26 currencies and 21 units of measure; no tenant fixture or owner data was imported.
+
+**Acceptance:** `npm run test -- tests/customer-companies.test.ts tests/action-security.test.ts` passed:
+**2 files, 65/65 tests**. This covers customer-company create/change/no-op/clear/version/history,
+B-020 normalization and validation, completeness independence, tenant isolation, and session-derived
+action/security boundaries. Test fixtures ran only in the dedicated disposable database and cleaned up.
+
+**Result / next:** B-022 is complete. Migration 0010 and the B-020 service/action acceptance passed in
+this isolated PostgreSQL environment. The B-019/B-021 customer-company browser target and owner
+walkthrough have **not** been run; B-023 is next. Do not apply this local database or its test data to
+an owner/production tenant.
 
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -4094,6 +4120,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.35 | 2026-10-11 | **B-020 implementation complete: customer-company interest-indicator/tolerance-group backend only; DB acceptance pending.** Added nullable varchar(4) fields and additive migration 0010, preserving 0009. Both optional code-only fields trim, uppercase and accept 1–4 alphanumeric characters; explicit blank clears and an omitted field preserves stored values for legacy callers. They join the existing version/no-op/security-relevant history pipeline but do not affect completeness or operational use. No UI, master FK, calculation, enforcement, seed or capability change. Added pure normalizer coverage, DB-backed lifecycle/audit/validation tests, and an action-security legacy-form regression; DB-backed tests and migration application remain unrun because PostgreSQL is unavailable. Typecheck, production build, IP lint (164 files), 64 pure harness tests and diff check pass. §26.36 records behavior and limitations; B-021 is to be selected next. | Agent |
 | 0.36 | 2026-10-11 | **B-021 implementation complete: customer company interest-indicator/tolerance-group UI; browser acceptance pending.** The existing Customer company panel now passes stored values to editable controls and authorised display-only values; codes remain max-four-character alphanumeric inputs, canonicalised by the B-020 service. The existing action/session-derived authority and omitted-field compatibility remain intact. Extended the isolated customer-company browser target for canonical save/reload, no-op, clear/restore, history and display-only/non-finance boundaries. No schema, migration, capability, seed or service behavior change. Typecheck, production build, IP lint (164 files), 64 pure harness tests and diff check pass; DB-backed browser smoke cannot run without PostgreSQL. §26.37 records owner steps; B-022 remains for selection. | Agent |
 | 0.37 | 2026-10-11 | **Owner-approved dependency-ordered completion roadmap.** Added §25.5 from outstanding B-020/B-021/B-017 acceptance through M1b–M1e, M1 release/sign-off, then Phases 2–9. Added pending B-022–B-024 acceptance gates and B-025 partner-function rule capture to the bounded queue. Roadmap packages must still be split into ≤10-minute one-outcome batches; no code, schema, migration or database changes in this update. §25.5 records the M1/Phase-2 scope reconciliation and keeps D-028/D-029 baseline acceptance in M1. | Agent |
+| 0.38 | 2026-10-11 | **B-022 complete: isolated PostgreSQL migration/database acceptance passed.** Provisioned fresh local PostgreSQL 17.11, loopback-only on port 55432, using dedicated `cairn_b022_test`; applied all 24 SQL migrations including 0010 and seeded reference data. Customer-company and action-security DB suites pass, 65/65 tests. B-023 customer-company browser acceptance is next; the test server remains available locally. No owner/production DB or tenant touched. No code or migration-file changes were made; the schema was applied only to the disposable local test database. §26.38 records setup and results. | Agent |
 
 ---
 
