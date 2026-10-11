@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.33 — B-018 customer company payment/dunning backend)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.37 — approved completion roadmap)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2015,13 +2015,152 @@ when combining them would jeopardise the time budget.
 | B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
 | B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
 | B-018 | Customer company **payment-methods/dunning-procedure fields backend** only | ≤10 min | **DONE — code-only payment-method set and dunning procedure on the company segment; validated, versioned, audited; no UI inputs yet** |
-| B-019 | To be declared at the start of the next batch (customer payment/dunning UI is the natural candidate) | ≤10 min | **NEXT — not yet chosen** |
+| B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable and read-only views expose the B-018 fields; existing authority, version and audit path retained; browser acceptance pending** |
+| B-020 | Customer company interest-indicator/tolerance-group fields, backend only | ≤10 min | **IMPLEMENTED — code-only defaults; database/migration acceptance pending (§26.36)** |
+| B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **IMPLEMENTED — editable/display-only fields and access behavior; browser acceptance pending (§26.37)** |
+| B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **BLOCKED — PostgreSQL unavailable; no migration applied here (§26.36)** |
+| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **BLOCKED — requires B-022 and a PostgreSQL/browser environment (§26.35, §26.37)** |
+| B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **PENDING — target/DB-backed browser acceptance not yet completed (§26.33)** |
+| B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **NEXT FEATURE — agree supported functions, direction, cardinality and default/validity rules (§25.5)** |
 
-All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
-imports, P2P, production/MRP execution, O2C, banking, closing, audit and deployment) follows the same
-backend/view/rule-sized pattern. These are not single large future batches. Resolve their dependencies
-and declare a ≤10-minute implementation target at each batch start. Do not drop the standing scope
-requirements to meet the time budget; preserve partial work and continue in the next bounded batch.
+The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
+to combine large work into one batch: before implementation, declare one outcome, split it to fit the
+≤10-minute feature budget, and run only that batch in the reply. PostgreSQL-gated acceptance items do
+not authorize touching an owner/production database; unrelated development may proceed while a gate is
+blocked. Do not drop requirements to meet the time budget; preserve partial work and continue in the
+next bounded batch.
+
+
+### 25.5 Approved completion roadmap `AGREED · SEQUENCING ONLY`
+
+**Owner-approved sequence (2026-10-11).** This is the route from the current B-021 state through M1
+acceptance and the later phases already agreed in §25.3. It orders work; it does not create new product
+requirements or authorise undocumented field semantics. The detailed screen cycle in §24.1 remains
+binding. Every package below must be split into actual one-outcome B-series batches under §25.4; each
+reply does one such batch, ≤10 minutes of feature work. Large modules are not single batches.
+
+#### 25.5.1 Outstanding acceptance gates
+
+These close work already implemented. They are release/acceptance gates, not permission to use an
+owner or production database. If PostgreSQL remains unavailable, record the blocker and continue only
+with independent development.
+
+1. **B-022 — B-020 database acceptance:** apply migration `0010` in an isolated development/test
+   database, then run customer-company lifecycle, change-history, validation and action-security tests.
+2. **B-023 — B-019/B-021 browser acceptance:** run the customer-company target against the migrated
+   database; verify save/reload, canonical no-op, blank clear, history/control-change flags, finance
+   display-only read access, and no-authority denial. Record the owner walkthrough result.
+3. **B-024 — B-017 browser acceptance:** add focused customer sales-area browser coverage if missing,
+   run the target in a disposable development tenant, and record owner acceptance.
+
+#### 25.5.2 M1b — foundation, configuration, and master data
+
+Execute prerequisites in the define/assign order of §6.2. For every screen, follow §24.1 and split
+schema/service, UI/authority, and test/browser work into separate bounded batches where necessary.
+
+1. **Partner functions:** first capture and approve the supported relationship types, direction,
+   cardinality, and default/validity rules (B-025); then implement the tenant-scoped supplier
+   purchasing-organisation assignments, validation, locking/version/audit, DB tests, protected
+   display/maintenance, and browser acceptance. Do not code an assumed role catalogue.
+2. **Supplier company-code completion:** add and verify the §9.2 defaults still missing from the
+   vendor segment—payment methods, dunning procedure, cash discount, and tolerance group—after their
+   required configuration masters and semantics are confirmed.
+3. **Business-partner bank/contact data:** gather the page rules first, including sensitive-field
+   visibility, masking, audit, and validity requirements; then implement bank details and contact
+   persons through the normal backend, UI, access-control, and test cycle.
+4. **Enterprise structure (SCR-012–025):** finish company/chart assignments, plants/storage locations,
+   purchasing and sales organisations/assignments, channels/divisions/sales areas, and controlling-area
+   assignments in dependency order.
+5. **Financial configuration (SCR-026–040):** complete chart of accounts/G/L masters; fiscal-year and
+   posting-period variants; currency/exchange/tax; payment methods and house banks; document types,
+   tolerances, and account determination.
+6. **Costing configuration (SCR-041–045):** cost centres and hierarchy, activity types and rates, and
+   profit centres, including the relationships required by M1 posting and reporting.
+7. **Remaining M1 masters (SCR-048–055):** material type/group and required material views; work
+   centres, BOMs, routings; purchasing info records; sales pricing conditions; and MRP parameters.
+   Confirm every page field/action in §24.1 rather than inferring unspecified rules.
+8. **Master-data migration:** templates first, then the import session workbench with staging,
+   shared validation, dry-run simulation, dependency-ordered posting, resumability, duplicate-file
+   protection, and verification through normal services.
+
+#### 25.5.3 M1c — Procure to Pay
+
+Build and verify the §11.1 minimum golden flow in this order:
+
+1. Purchase requisition create/change, approval, worklist, and conversion path.
+2. Purchase order headers/lines/schedules, vendor/material defaults, release strategy, and document
+   flow.
+3. Goods receipt with stock/value, PO history, account determination, balanced FI posting, and
+   reversal.
+4. Supplier invoice verification and two-/three-way matching, including park/block/release paths.
+5. GR/IR analysis and vendor open-item/balance tie-outs.
+6. Payment proposal/review/execution, payment medium, bank statement import, and reconciliation/auto-
+   clearing.
+7. Procurement reports and the P2P end-to-end regression, including balances and accounting entries.
+
+#### 25.5.4 M1d — MRP and Production
+
+Build and verify the §11 / §12 / §13 production path in dependency order:
+
+1. Planning data, BOM explosion, lead-time/lot-sizing rules, planning-file entries, dependent
+   requirements, and exceptions.
+2. Single-item then plant-wide MRP runs; planned orders and purchase requisitions; exception and
+   stock/requirements displays.
+3. Planned-order maintenance/conversion, production-order creation/status/release, component
+   availability, and reservations.
+4. Component goods issue, operation confirmations, finished-goods receipt, document flow, and
+   reversal/status controls.
+5. Standard cost estimate/release, actual-versus-target analysis, variance, settlement, and order
+   close for the §13.2 worked case.
+6. Golden-flow and focused performance tests proving demand → supply → production → settlement.
+
+#### 25.5.5 M1e — Order to Cash, Record to Report, People, and Audit
+
+Deliver the M1 baseline in this order; advanced depth remains in later phases:
+
+1. **Credit (D-029):** credit-control assignments, customer credit master, exposure, order/delivery/GI
+   checks, blocked-document worklist, authorised reason-coded release, and tests.
+2. **Sales:** pricing/availability, enquiry/quotation/order rules in the agreed M1 cut, order release,
+   and source-document flow.
+3. **Delivery and billing:** delivery creation, picking/packing, goods issue, billing/AR open items,
+   credit/debit memo and cancellation/reversal paths.
+4. **Receivables:** incoming payment, allocation/clearing, dunning, customer balances/statements, and
+   AR-to-GL tie-outs.
+5. **Intercompany (D-028):** configured intercompany accounts, dual customer/vendor relationship,
+   automatic mirror posting, linked flow, clearing, consistency tie-out, and elimination.
+6. **R2R:** close cockpit and evidence; M1-period FX/accrual/carryforward/asset scope; trial balance,
+   balance sheet, P&L and the agreed M1 reports with drill-through and reconciliations.
+7. **People (R-09 acceptance):** dated employee/org/position/cost-centre data, pay components and
+   configurable deductions; imported or configured payroll results, payroll posting, end-of-service
+   provision, salary payment and personnel-cost reporting. Statutory payroll calculations remain out
+   of scope (DV-001).
+8. **Audit:** read-only scoped access, workspace/findings, document/change drill-through, tie-outs,
+   number-range/period evidence, access/SoD review, and hash-manifested export.
+
+#### 25.5.6 M1 cross-cutting release and sign-off
+
+1. Reusable output definitions, reproducible PDF/artifact generation, archive, mail-server UI, and
+   optional notifications that never gate workflow.
+2. Worker/job execution and the job, lock, and message-monitoring needed by long-running flows.
+3. Transactional/opening-data imports through normal document paths with idempotency and tie-outs.
+4. Host deployment verification: Docker, Traefik/proxy, secrets, startup/migration order, pooling,
+   access controls, and operational health.
+5. Backup retention/WAL and a rehearsed restore; record measured results.
+6. Full P2P, MRP/production, O2C, R2R, intercompany, People, audit, tenant-isolation, security, and
+   conformance acceptance; owner walkthroughs and sign-off under §24.1.
+
+#### 25.5.7 After M1 — agreed phase order
+
+Do not start these until M1 sign-off. Follow §25.3: **Phase 2** MM purchasing/inventory depth; **Phase
+3** SD depth; **Phase 4** FICO depth; **Phase 5** costing depth; **Phase 6** MRP enhancements;
+**Phase 7** People depth; **Phase 8** audit depth; **Phase 9** Tier-3 items only on request, one
+transaction at a time. Each phase gets its own dependency and page-gathering plan before implementation.
+
+**Scope reconciliation:** §10 lists RFQ/quotation, source-list/quota, and physical-inventory/batch
+items broadly, while §25.3 places much of that depth in Phase 2. The approved planning default is to
+ship the §25.1 M1 end-to-end P2P path first and schedule the explicitly deferred depth in Phase 2; the
+§10 items remain on the roadmap, not dropped. Baseline D-029 credit and D-028 intercompany stay in M1;
+Phase 3 contains further SD/credit depth, not a removal of the M1 controls.
 
 ---
 
@@ -2097,7 +2236,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
 | SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
-| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general backend/UI verified; company/purchasing/sales/bank segments and owner sign-off pending** |
+| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general, supplier/customer company-code, supplier purchasing and customer sales-area segments implemented; payment/dunning codes added; bank segment and owner sign-off pending** |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
 | SCR-052 | Routing create and change | `PROD.ROUTING.CREATE` | CA01 | DRAFT |
@@ -3633,14 +3772,172 @@ Created/unchanged behaviour. Do not set the new columns through SQL.
 
 **Limitations:** payment-method and dunning-procedure masters do not exist; no payment run, dunning
 run, interest calculation, tolerance or open-item behaviour is enabled; the fields are not yet
-snapshot-consumed by any document service because no AR documents exist yet. Interest indicator and
-tolerance group (§9.2) remain later slices.
+snapshot-consumed by any document service because no AR documents exist yet. Interest indicator and tolerance group (§9.2) were left for later slices; B-020 now addresses their
+code-only backend storage in §26.36.
 
 Next: **B-019**, to be declared at the start of the next bounded batch. Natural candidate: the
 matching **UI** for these two fields on the Customer company tab; other candidates remain partner
 function relationships or the next Phase 1 master.
 
 ---
+
+### 26.35 B-019 — Customer company payment-method/dunning UI `COMPLETE · BROWSER ACCEPTANCE PENDING`
+
+**Scope:** expose the B-018 `payment_methods` and `dunning_procedure` fields on the existing
+Customer company-code view. This is UI wiring only: no schema/migration, route, capability, term/master
+seed, payment execution or dunning execution was added. No new authority is created; the existing
+`FIN.CUSTOMER.COMPANY.DISPLAY` / `FIN.CUSTOMER.COMPANY.MAINTAIN` boundary remains in force.
+
+**UI:**
+- `CustomerCompanyPanel` now receives both persisted fields from the tenant-scoped customer-company
+  record. Maintainers get editable controls; authorised display-only users get read-only values. A user
+  without the existing display authority still receives neither field nor value.
+- Payment methods accept a comma/space-separated set of up to ten unique one- or two-character
+  alphanumeric codes. The backend continues to canonicalise case/order/deduplication; blank clears it.
+  Dunning procedure is an optional one-to-four-character alphanumeric code, canonicalised by the
+  existing service; blank clears it. The form's labels and shared help text explain that these are
+  code-only values and the master data does not exist yet.
+- Both values travel through the existing authenticated server action, staged save, optimistic
+  version/no-op check and security-relevant change history. They do not change the completion or
+  operational gate, which remains driven by reconciliation account and payment terms. No payment run,
+  dunning run, billing, clearing or sales document is enabled.
+- The existing isolated customer-company browser target now exercises canonical persistence, reload
+  display, reordered-input no-op, history and denial of code values to a non-finance user. The existing
+  action-security test now submits these fields through the session-derived action.
+
+**Verification:** `npm run typecheck`, `npm run build`, and `npm run lint:ip` pass (162 files).
+`npm run test:browser-harness` passes **58/58** pure tests. `scripts/browser-smoke/checks.ts` and the
+DB-backed action-security test were updated but **not executed**: this fresh workspace has no PostgreSQL
+service, so the integrated/browser target cannot safely run here. The build and typecheck are not a
+substitute for that acceptance. No database, owner tenant, production host or credentials were touched.
+No migration or reseed is required.
+
+**Owner manual test (R-23):** in a development/test tenant, open an active Customer partner such as
+`TESTCUST01` → **Customer company code** → company `1000`. Keep reconciliation `110000` and terms
+`NET30`; do not use real payment/dunning data. Enter payment methods `t, c,C`, dunning procedure `ma04`,
+and reason `Owner payment/dunning UI test`; save. Expect the controls to reload as `C,T` and `MA04`,
+version to increase once, status to remain based on the account/terms, and change history to show both
+fields as security-relevant. Save reordered `T C` and `MA04` with a new reason: expect “No customer
+company data changed” and no version increment. Clear both values with a reason: expect blank fields and
+one version/history change, without changing the completeness rules.
+
+Negative/access checks: eleven unique method codes, a method code longer than two characters, or
+non-alphanumeric code text must be refused without changing saved data; a dunning value containing
+punctuation must be refused (the input itself is capped at four characters). Missing reason blocks save.
+A display-only finance user can see the saved codes but has no Save control; a user without customer
+company display authority cannot see the codes/history; signed-out access redirects. These fields are
+not yet consumed by any invoice/payment/dunning service.
+
+Next: **B-020** was selected for the next bounded batch: optional interest-indicator and tolerance-group
+code fields on the Customer company segment, backend only. See §26.36. Owner browser walkthrough and
+sign-off for the B-019 UI remain pending.
+
+
+### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PENDING`
+
+**Scope:** optional code-only defaults on the existing Customer company-code segment, as listed in
+§9.2. This is a backend slice only: no controls were added to the Customer company screen. No interest
+indicator/tolerance master, foreign key, calculation, tolerance enforcement, invoice/open-item/payment
+behavior, capability, transaction code or seed change is implied.
+
+**Schema and migration:** `customer_company_code` now declares nullable `interest_indicator` and
+`tolerance_group`, both varchar(4). The additive migration is
+`drizzle/0010_customer_company_interest_tolerance.sql`; it follows and does not rewrite the existing
+`0009_customer_company_payment_dunning.sql`. The migration runner applies SQL files in lexical order
+and checksum-locks applied files. Tenant RLS, grants, keys and cascades are unchanged.
+
+**Service semantics:**
+- Each field is an optional one-to-four-character alphanumeric code. The service trims and uppercases
+  it (` i1 ` → `I1`); blank/whitespace normalises to `null`; punctuation and values longer than four
+  characters are rejected. No master validation or foreign key exists yet.
+- An explicitly supplied blank clears a stored value. An omitted field is different: it preserves the
+  existing value. The server action checks `FormData.has()` so older Customer company forms that do
+  not submit these new controls cannot accidentally erase data. A new row with an omitted field stores
+  `null`.
+- When supplied, both values use the existing staged-save/optimistic-version/no-op pipeline and are
+  included in before/after change history as security-relevant fields. Case/whitespace-only edits are
+  no-ops; real changes bump the version. The accounting completeness status and operational gate
+  remain based on the existing reconciliation-account/payment-terms rules; these defaults neither
+  complete nor block a segment.
+- The existing `FIN.CUSTOMER.COMPANY.DISPLAY` / `FIN.CUSTOMER.COMPANY.MAINTAIN` authority remains the
+  sole boundary. No UI-visible behavior changes in this batch.
+
+**Tests and verification:** a pure normalization suite was added to the browser harness. The DB-backed
+customer-company tests cover canonical save, security-relevant history, case-only no-op, omitted-value
+preservation, blank clear, invalid values and completeness-gate independence. The action-security test
+also verifies that the existing form path forwards explicit codes and that a legacy form omitting them
+preserves them. **Run here:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164 files),
+`npm run test:browser-harness` (**64/64**) and `git diff --check` all pass. **Not run:** the DB-backed
+customer-company/action-security suites or migration application, because PostgreSQL is unavailable in
+this workspace. No database, owner tenant, production host or credentials were touched. These checks
+are still required before claiming database acceptance.
+
+**Owner update:** when next deploying to a development/test environment, apply migration 0010 through
+the normal migration service; expected count is 24 if the 23-migration B-018 baseline is current. No
+reseed is required. The current screen intentionally has no interest/tolerance inputs, so there is no
+manual in-app editing step yet; the values remain backend-only until a later UI slice. Do not set them
+through production SQL.
+
+**Limitations:** values are format-checked codes only. There is no master lookup, interest calculation,
+interest posting, tolerance calculation/enforcement, open-item processing, billing or payment use. The
+DB-backed assertions and application of migration 0010 remain pending in a PostgreSQL-enabled
+development environment.
+
+Next: **B-021** was selected for the matching Customer company UI for these two defaults; see §26.37.
+Partner-function relationships or the next Phase 1 master remain candidates for a later bounded slice.
+
+
+### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · BROWSER ACCEPTANCE PENDING`
+
+**Scope:** expose the B-020 `interest_indicator` and `tolerance_group` values on the existing Customer
+company-code panel. UI wiring only: no schema, migration, service rules, route, capability, seed, master
+lookup, interest calculation or tolerance enforcement change. Existing
+`FIN.CUSTOMER.COMPANY.DISPLAY` / `FIN.CUSTOMER.COMPANY.MAINTAIN` authorities remain the only access
+boundary.
+
+**UI and behavior:**
+- The tenant-scoped persisted values are included in the panel props. Maintainers get optional text
+  inputs capped at four characters and constrained to letters/digits; blank is allowed to clear a
+  value. The existing B-020 service remains authoritative for trimming, uppercasing, validation,
+  no-op/version handling and security-relevant change history.
+- Authorised display-only finance users see the two values as read-only text and have no Save control.
+  A user without Customer company display authority still does not receive the segment, code values or
+  its history. No new authority or registry entry was added.
+- Shared help text now identifies all four payment/dunning/interest/tolerance values as format-checked
+  codes only, and states that their masters and execution/calculation behavior are not available.
+- The customer-company browser target now exercises interest/tolerance canonical save, persisted
+  reload, canonical no-op, blank clear and restore, security-relevant history, display-only read access
+  without edit controls, and denial to a non-finance user. The DB-backed target has not been run here.
+
+**Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164 files),
+`npm run test:browser-harness` (**64/64**) and `git diff --check` pass. `npm run smoke:browser:customer-company`
+was not run because PostgreSQL is unavailable in this workspace; the extended browser target and DB
+assertions therefore remain acceptance-pending. No database, owner tenant, production host or credentials
+were touched. The B-020 service tests were also not rerun against PostgreSQL.
+
+**Owner manual test (R-23):** after the B-020 migration 0010 is applied in a development/test tenant,
+open active customer `TESTCUST01` → **Customer company code** → `1000`. With the existing valid account
+and terms, enter interest indicator `i1` and tolerance group `t1` and save with a reason. Expect `I1` and
+`T1` after reload, one version increment, and both fields flagged in change history. Resave lowercase
+`i1` / `t1` and expect no version increment; clear both explicitly and expect null/blank values with
+one version/history update, without changing segment completeness or operational eligibility. A
+finance display-only user must see the values but have no Save control; a user with no Customer company
+display authority must not see the values or history. Punctuation or values longer than four characters
+must be rejected by the service; the inputs also provide browser constraints.
+
+**Deployment:** B-021 itself adds no migration and needs no reseed. When deploying the combined B-020/B-021
+state, apply migration 0010 using the normal migration service first (24 total if the 23-migration B-018
+baseline is current). Do not write values through production SQL.
+
+**Limitations:** codes are not validated against masters; they do not drive interest calculation/posting,
+tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
+consumes them yet.
+
+Next: B-022 through B-024 are the pending acceptance gates in §25.5. If the database/browser
+environment keeps them blocked, unrelated development may proceed in the approved roadmap; the next
+feature package is the B-025 partner-function rules decision. Database/browser acceptance remains
+required before M1 release.
+
 
 ## §27 · Open items `RESOLVED v0.2`
 
@@ -3793,6 +4090,10 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.31 | 2026-10-10 | **B-016 complete: customer sales-area backend, UI pending.** Added forced-RLS/cascading `customer_sales_area` master plus immutable 0008/9012 additions (22 applied, 70 tables). Validates active customer role, sales area/organisation/company and same-company delivering plant; delivery/pricing defaults, flags, blocks, staging, version, audit and operational gate. Pricing procedure and sales district are code-only until their masters exist. 22 new tests; 302 total, 8 Python, typecheck/build/IP lint pass; Customer company regression unchanged. §26.32 gives dummy TESTCUST01/1000/01/01/RVAA01 future data and limitations; B-017 sales-area UI is next. Next B-017 sales-area UI. | Agent |
 | 0.32 | 2026-10-10 | **B-017 complete: customer sales-area maintenance UI, browser acceptance pending.** Added Sales area tab on active Customer partners with separate SALES.CUSTOMER.SALESAREA DISPLAY/MAINTAIN authority, scoped area selector, plant/procedure/district/flags/block/reason/status/history and server action. Catalogue now 48/24/21 with seed rerun required. 3 action tests and 1 choice test added; 306 Vitest, 8 Python, typecheck/build/IP lint pass; SSR checks for maintainer/reader/no-authority roles pass. No browser run (no Chromium in sandbox). §26.33 gives owner steps and B-018 selection is next. | Agent |
 | 0.33 | 2026-10-11 | **B-018 complete: customer company payment-methods/dunning-procedure fields, backend only.** Additive migration 0009 adds nullable `payment_methods` varchar(40) and `dunning_procedure` varchar(4) to `customer_company_code` (23 applied). Service normalises the payment-method set (capitalise/dedupe/sort, ≤10 codes of 1–2 chars) and the dunning code (≤4 capital letters/digits), both code-only until their masters exist; fields join version/no-op/history/RLS pipeline and are flagged security-relevant; completeness gate and operational gate unchanged; server action forwards fields with no visible UI change. No new capability, no reseed. 9 new tests; 315 Vitest across 19 files, 8 Python, typecheck/build/IP lint (162 files) pass in a freshly provisioned dev cluster. §26.34 records semantics, owner steps and limitations; B-019 (matching UI) is the natural next. | Agent |
+| 0.34 | 2026-10-11 | **B-019 complete: customer company payment-method/dunning UI only.** Exposed the B-018 fields in the existing company-code form and authorised read-only view, populated them from persisted tenant data, and retained the existing session-derived action, version/no-op, change-history and authority behavior. No schema, migration, capability, seed or payment/dunning execution change. Added a focused action assertion and extended the customer-company browser target for canonical save/reload/no-op/history/access checks; the DB-backed target is not run in this fresh workspace because PostgreSQL is unavailable. Typecheck, production build, IP lint and 58 pure harness tests pass. §26.35 records behavior and owner walkthrough steps; B-020 is the next selected backend slice. | Agent |
+| 0.35 | 2026-10-11 | **B-020 implementation complete: customer-company interest-indicator/tolerance-group backend only; DB acceptance pending.** Added nullable varchar(4) fields and additive migration 0010, preserving 0009. Both optional code-only fields trim, uppercase and accept 1–4 alphanumeric characters; explicit blank clears and an omitted field preserves stored values for legacy callers. They join the existing version/no-op/security-relevant history pipeline but do not affect completeness or operational use. No UI, master FK, calculation, enforcement, seed or capability change. Added pure normalizer coverage, DB-backed lifecycle/audit/validation tests, and an action-security legacy-form regression; DB-backed tests and migration application remain unrun because PostgreSQL is unavailable. Typecheck, production build, IP lint (164 files), 64 pure harness tests and diff check pass. §26.36 records behavior and limitations; B-021 is to be selected next. | Agent |
+| 0.36 | 2026-10-11 | **B-021 implementation complete: customer company interest-indicator/tolerance-group UI; browser acceptance pending.** The existing Customer company panel now passes stored values to editable controls and authorised display-only values; codes remain max-four-character alphanumeric inputs, canonicalised by the B-020 service. The existing action/session-derived authority and omitted-field compatibility remain intact. Extended the isolated customer-company browser target for canonical save/reload, no-op, clear/restore, history and display-only/non-finance boundaries. No schema, migration, capability, seed or service behavior change. Typecheck, production build, IP lint (164 files), 64 pure harness tests and diff check pass; DB-backed browser smoke cannot run without PostgreSQL. §26.37 records owner steps; B-022 remains for selection. | Agent |
+| 0.37 | 2026-10-11 | **Owner-approved dependency-ordered completion roadmap.** Added §25.5 from outstanding B-020/B-021/B-017 acceptance through M1b–M1e, M1 release/sign-off, then Phases 2–9. Added pending B-022–B-024 acceptance gates and B-025 partner-function rule capture to the bounded queue. Roadmap packages must still be split into ≤10-minute one-outcome batches; no code, schema, migration or database changes in this update. §25.5 records the M1/Phase-2 scope reconciliation and keeps D-028/D-029 baseline acceptance in M1. | Agent |
 
 ---
 

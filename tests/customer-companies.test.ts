@@ -11,11 +11,11 @@ async function partner(tenant:TestTenant,number:string,roles:['CUSTOMER']|['SUPP
 }
 beforeAll(async()=>{
   alpha=await createTenant('customer-company-alpha');beta=await createTenant('customer-company-beta');
-  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY','PAYDUN','PAYBAD'])await partner(alpha,number);
+  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY','PAYDUN','PAYBAD','ARCONTROL','ARINCOMP','ARLEGACY'])await partner(alpha,number);
   await partner(alpha,'SUPPLIERONLY',['SUPPLIER']);
 });
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
-const input=(number:string,patch:Partial<CustomerCompanyInput>={}):CustomerCompanyInput=>({client:alpha.client,partnerNumber:number,companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company test',reconciliationAccount:'110000',paymentTermsCode:'NET30',paymentMethods:'',dunningProcedure:'',isBlocked:false,...patch});
+const input=(number:string,patch:Partial<CustomerCompanyInput>={}):CustomerCompanyInput=>({client:alpha.client,partnerNumber:number,companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company test',reconciliationAccount:'110000',paymentTermsCode:'NET30',paymentMethods:'',dunningProcedure:'',interestIndicator:'',toleranceGroup:'',isBlocked:false,...patch});
 describe('customer company-code settings',()=>{
   it('stages and completes accounting settings independently',async()=>{
     expect((await saveCustomerCompany(input('STAGED',{reconciliationAccount:'',paymentTermsCode:''}))).status).toBe('INCOMPLETE');
@@ -136,5 +136,51 @@ describe('customer company payment methods and dunning procedure (B-018)',()=>{
     const row=await getCustomerCompany(alpha.client,'PAYDUN','1000');
     expect(row?.companyStatus).toBe('INCOMPLETE');expect(row?.paymentMethods).toBe('T');expect(row?.dunningProcedure).toBe('MA01');
     await expect(withTenant(alpha.client,tx=>requireCustomerCompany(tx,alpha.client,'PAYDUN','1000'))).rejects.toThrow('incomplete');
+  });
+});
+
+describe('customer company interest and tolerance defaults (B-020)',()=>{
+  it('normalizes both codes and records them as security-relevant fields',async()=>{
+    await saveCustomerCompany(input('ARCONTROL',{interestIndicator:'i1',toleranceGroup:' t1 '}));
+    const row=await getCustomerCompany(alpha.client,'ARCONTROL','1000');
+    expect(row?.interestIndicator).toBe('I1');expect(row?.toleranceGroup).toBe('T1');
+    expect(row?.version).toBe(1);expect(row?.companyStatus).toBe('CREATED');
+    const items=await withTenant(alpha.client,tx=>tx.execute(sql`select i.field_name,i.new_value,i.is_security_relevant from change_document_item i join change_document d on d.id=i.change_document_id where d.object_class='customer_company_code' and d.object_key='ARCONTROL/1000' and i.field_name in ('interestIndicator','toleranceGroup') order by i.field_name`));
+    expect(items).toEqual([
+      {field_name:'interestIndicator',new_value:'I1',is_security_relevant:'true'},
+      {field_name:'toleranceGroup',new_value:'T1',is_security_relevant:'true'},
+    ]);
+  });
+  it('treats case-only differences as an unchanged save',async()=>{
+    expect(await saveCustomerCompany(input('ARCONTROL',{expectedVersion:1,interestIndicator:'I1',toleranceGroup:'T1'}))).toEqual({changed:false,version:1,status:'CREATED'});
+  });
+  it('preserves existing defaults when a legacy caller omits the optional fields',async()=>{
+    await saveCustomerCompany(input('ARLEGACY',{interestIndicator:'I1',toleranceGroup:'T1'}));
+    const {interestIndicator:_interestIndicator,toleranceGroup:_toleranceGroup,...legacyInput}=input('ARLEGACY',{expectedVersion:1});
+    await saveCustomerCompany(legacyInput);
+    const row=await getCustomerCompany(alpha.client,'ARLEGACY','1000');
+    expect(row?.interestIndicator).toBe('I1');expect(row?.toleranceGroup).toBe('T1');expect(row?.version).toBe(1);
+  });
+  it('clears both defaults without changing the accounting completeness rule',async()=>{
+    await saveCustomerCompany(input('ARCONTROL',{expectedVersion:1,interestIndicator:'',toleranceGroup:''}));
+    const row=await getCustomerCompany(alpha.client,'ARCONTROL','1000');
+    expect(row?.interestIndicator).toBeNull();expect(row?.toleranceGroup).toBeNull();
+    expect(row?.version).toBe(2);expect(row?.companyStatus).toBe('MAINTAINED');
+  });
+  it.each([
+    ['ARBAD1',{interestIndicator:'ABCDE'}],
+    ['ARBAD2',{interestIndicator:'A-1'}],
+    ['ARBAD3',{toleranceGroup:'ABCDE'}],
+    ['ARBAD4',{toleranceGroup:'A_1'}],
+  ] as const)('rejects invalid code-only customer defaults for %s',async(partnerNumber,patch)=>{
+    await partner(alpha,partnerNumber);
+    await expect(saveCustomerCompany(input(partnerNumber,patch))).rejects.toThrow();
+    expect(await getCustomerCompany(alpha.client,partnerNumber,'1000')).toBeNull();
+  });
+  it('does not let the code-only defaults complete an accounting segment',async()=>{
+    await saveCustomerCompany(input('ARINCOMP',{reconciliationAccount:'',paymentTermsCode:'',interestIndicator:'I1',toleranceGroup:'T1'}));
+    const row=await getCustomerCompany(alpha.client,'ARINCOMP','1000');
+    expect(row?.companyStatus).toBe('INCOMPLETE');
+    await expect(withTenant(alpha.client,tx=>requireCustomerCompany(tx,alpha.client,'ARINCOMP','1000'))).rejects.toThrow('incomplete');
   });
 });
