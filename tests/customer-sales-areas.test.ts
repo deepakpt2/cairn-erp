@@ -102,7 +102,7 @@ describe('customer sales-area defaults',()=>{
   it('does not change customer company or supplier segments of a dual-role partner',async()=>{
     await saveBusinessPartner({client:alpha.client,partnerNumber:'DUALROLE',expectedVersion:0,changedBy:'TEST',reason:'Dual role sales fixture',category:'ORGANIZATION',name:'Dual role partner',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles:['CUSTOMER','SUPPLIER'],isBlocked:false});
     const {saveCustomerCompany,getCustomerCompany}=await import('../src/modules/foundation/customer-companies');
-    await saveCustomerCompany({client:alpha.client,partnerNumber:'DUALROLE',companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company fixture',reconciliationAccount:'110000',paymentTermsCode:'NET30',isBlocked:false});
+    await saveCustomerCompany({client:alpha.client,partnerNumber:'DUALROLE',companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Customer company fixture',reconciliationAccount:'110000',paymentTermsCode:'NET30',paymentMethods:'',dunningProcedure:'',isBlocked:false});
     await saveCustomerSalesArea(input('DUALROLE',{pricingProcedure:'RVAA05',isBlocked:true}));
     const company=await getCustomerCompany(alpha.client,'DUALROLE','1000');expect(company?.reconciliationAccount).toBe('110000');expect(company?.paymentTermsCode).toBe('NET30');expect(company?.isBlocked).toBe(false);
   });

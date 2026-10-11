@@ -13,8 +13,24 @@ export class CustomerCompanyError extends Error{
   constructor(message:string,readonly remedy='Review customer company settings and try again.'){super(message);}
 }
 const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partnerNumber:z.string().regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/),companyCode:z.string().regex(/^[A-Z0-9]{2,10}$/),
-  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),reconciliationAccount:z.string().trim().max(20),paymentTermsCode:z.string().trim().max(12),isBlocked:z.boolean()});
+  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),reconciliationAccount:z.string().trim().max(20),paymentTermsCode:z.string().trim().max(12),
+  paymentMethods:z.string().trim().max(60),dunningProcedure:z.string().trim().max(8),isBlocked:z.boolean()});
 export type CustomerCompanyInput=z.input<typeof inputSchema>;
+/** Payment-method set: up to ten one-or-two-character capital/digit codes, deduplicated and sorted so reordered input is a no-op. Codes only — the method master does not exist yet. */
+function normalizePaymentMethods(raw:string):string|null{
+  const codes=[...new Set(raw.split(/[,\s]+/).map(part=>part.trim().toUpperCase()).filter(Boolean))];
+  if(!codes.length)return null;
+  if(codes.length>10)throw new CustomerCompanyError('At most ten payment methods are allowed per customer company.');
+  for(const code of codes)if(!/^[A-Z0-9]{1,2}$/.test(code))throw new CustomerCompanyError(`Payment method '${code}' is not a valid code.`,'Use one-or-two-character capital letter or digit codes, for example T or CK.');
+  return codes.sort().join(',');
+}
+/** Dunning procedure code, up to four capital letters or digits. Code-only until a dunning-procedure master exists. */
+function normalizeDunningProcedure(raw:string):string|null{
+  const code=raw.trim().toUpperCase();
+  if(!code)return null;
+  if(!/^[A-Z0-9]{1,4}$/.test(code))throw new CustomerCompanyError('Dunning procedure uses up to four capital letters or digits.');
+  return code;
+}
 const key=(client:string,partner:string,company:string)=>and(eq(customerCompany.client,client),eq(customerCompany.partnerNumber,partner),eq(customerCompany.companyCode,company));
 async function validateAssignments(tx:Tx,client:string,company:string,account:string|null,terms:string|null){
   const [site]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,company)));
@@ -34,10 +50,11 @@ export async function saveCustomerCompany(raw:CustomerCompanyInput){
     const [role]=await tx.select().from(bpRole).where(and(eq(bpRole.client,client),eq(bpRole.partnerNumber,partnerNumber),eq(bpRole.roleCode,'CUSTOMER')));
     if(!partner||!role?.isActive)throw new CustomerCompanyError('An existing active customer role is required.','Create/activate the general Customer role first.');
     const account=input.reconciliationAccount||null,terms=input.paymentTermsCode||null;
+    const paymentMethods=normalizePaymentMethods(input.paymentMethods),dunningProcedure=normalizeDunningProcedure(input.dunningProcedure);
     const site=await validateAssignments(tx,client,company,account,terms);
     const [before]=await tx.select().from(customerCompany).where(key(client,partnerNumber,company)).for('update');
     if((before?.version??0)!==expectedVersion)throw new CustomerCompanyError('Customer company view changed after it was opened.','Reload the current company view before saving.');
-    const values={chartOfAccounts:site.chartOfAccounts,reconciliationAccount:account,paymentTermsCode:terms,isBlocked:input.isBlocked};
+    const values={chartOfAccounts:site.chartOfAccounts,reconciliationAccount:account,paymentTermsCode:terms,paymentMethods,dunningProcedure,isBlocked:input.isBlocked};
     if(before&&Object.entries(values).every(([k,v])=>(before as Record<string,unknown>)[k]===v))return {changed:false,version:before.version,status:before.companyStatus};
     if(before&&(before.reconciliationAccount!==account||before.chartOfAccounts!==site.chartOfAccounts)){
       const history=await tx.select({line:journalEntryLine.lineNumber}).from(journalEntryLine).where(and(eq(journalEntryLine.client,client),eq(journalEntryLine.businessPartner,partnerNumber),eq(journalEntryLine.companyCode,company))).limit(1);
@@ -48,7 +65,7 @@ export async function saveCustomerCompany(raw:CustomerCompanyInput){
     else await tx.insert(customerCompany).values({...values,client,partnerNumber,companyCode:company,roleCode:'CUSTOMER',companyStatus,version,createdBy:changedBy});
     const snapshot=(row:Record<string,unknown>)=>Object.fromEntries(Object.keys(values).map(k=>[k,row[k]]));
     await recordChange(tx,{client,objectClass:'customer_company_code',objectKey:`${partnerNumber}/${company}`,changeType:!before?'CREATE':before.isBlocked!==input.isBlocked?input.isBlocked?'BLOCK':'UNBLOCK':'CHANGE',changedBy,reason,
-      transactionCode:'FIN.CUSTOMER.COMPANY.MAINTAIN',before:before?{...snapshot(before),companyStatus:before.companyStatus}:undefined,after:{...values,companyStatus},securityRelevantFields:['chartOfAccounts','reconciliationAccount','paymentTermsCode','isBlocked']});
+      transactionCode:'FIN.CUSTOMER.COMPANY.MAINTAIN',before:before?{...snapshot(before),companyStatus:before.companyStatus}:undefined,after:{...values,companyStatus},securityRelevantFields:['chartOfAccounts','reconciliationAccount','paymentTermsCode','paymentMethods','dunningProcedure','isBlocked']});
     return {changed:true,version,status:companyStatus};
   });
 }

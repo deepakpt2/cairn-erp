@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-10 (v0.32 — B-017 customer sales-area maintenance UI)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.33 — B-018 customer company payment/dunning backend)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2014,7 +2014,8 @@ when combining them would jeopardise the time budget.
 | B-015 | Customer **company-code UI** only | ≤10 min | **DONE — scoped AR form/history, finance access, status/block/validation lifecycle passed** |
 | B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
 | B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
-| B-018 | To be declared at the start of the next batch (§26.33 lists candidates) | ≤10 min | **NEXT — not yet chosen** |
+| B-018 | Customer company **payment-methods/dunning-procedure fields backend** only | ≤10 min | **DONE — code-only payment-method set and dunning procedure on the company segment; validated, versioned, audited; no UI inputs yet** |
+| B-019 | To be declared at the start of the next batch (customer payment/dunning UI is the natural candidate) | ≤10 min | **NEXT — not yet chosen** |
 
 All remaining work (customer segments, cost centres, work centres, BOM, routing, configuration,
 imports, P2P, production/MRP execution, O2C, banking, closing, audit and deployment) follows the same
@@ -3579,6 +3580,66 @@ Private checkpoint not created in this batch. Next: **B-018**, to be declared at
 bounded batch. Candidates from the remaining Customer and partner scope: customer company payment-method
 and dunning-procedure segment fields, partner function relationships, or the next Phase 1 master in §25.3.
 
+### 26.34 B-018 — Customer company payment-methods and dunning-procedure fields, backend `COMPLETE · UI PENDING (B-019)`
+
+Chosen from the §26.33 candidates: the payment-method and dunning-procedure segment fields of the
+customer company-code view, **backend only**, continuing the backend→UI batch pattern.
+
+**Schema:** one additive migration `0009_customer_company_payment_dunning.sql` adds two nullable
+columns to `customer_company_code`: `payment_methods` varchar(40) and `dunning_procedure` varchar(4).
+**23 applied migrations**; forced RLS/default-deny, grants and cascade behaviour are unchanged because
+the table's policies already cover the new columns. No new table, no new capability, no seed change:
+the fields belong to the existing `FIN.CUSTOMER.COMPANY.DISPLAY/MAINTAIN` authority scope and the
+existing `FIN.CUSTOMER.COMPANY.MAINTAIN` transaction code.
+
+**Semantics (service layer, `saveCustomerCompany`):**
+- **Payment methods** are stored as a normalised set: input is split on commas/spaces, trimmed,
+  capitalised, deduplicated and sorted, then joined with commas (for example ` t , c,C ` → `C,T`).
+  Each code must be one or two capital letters/digits; at most ten codes. Reordered or duplicated
+  input therefore compares equal and is reported as "No customer company data changed." Blank clears.
+- **Dunning procedure** is one code of up to four capital letters/digits, capitalised server-side
+  (for example `ma04` → `MA04`). Blank clears.
+- Both are **code-only**: no payment-method master (§14.6 SCR-036) and no dunning-procedure master
+  exist yet, so nothing is foreign-keyed; validation is format-only, as with pricing-procedure and
+  sales-district codes in the B-016 sales area.
+- Fields join the existing staged-save pipeline: same advisory/row locking, optimistic version,
+  no-op preservation, reason requirement, change-document snapshot (both fields are flagged
+  security-relevant in history, §16.3) and tenant RLS. They do **not** affect the completeness gate:
+  status is still driven by reconciliation account + payment terms, and `requireCustomerCompany` is
+  unchanged. Payment runs and dunning execution remain R-14/§14.6 work, not this slice.
+- The server action forwards both fields (capitalised) from form data; absent form fields read as
+  blank, which matches current database state, so existing behaviour is untouched until the B-019
+  form exposes the inputs.
+
+**Verified:** typecheck and IP lint (**162 files**) clean; `next build` passes; **315/315 Vitest
+tests across 19 files** in a freshly provisioned development cluster (23 migrations, bootstrap, dev
+tenant) — 9 new customer-company tests: normalisation, reorder-no-op, dunning-only change with
+version bump and security-relevant history item, blank-clear preserving payment methods, refusal of
+long/oversize/over-count codes without writing, and completeness-gate independence; 8 Python
+deployment regressions pass; customer sales-area (B-016/17) suite still passes. **Not run:** a
+browser-driven check — the fields have no form controls yet (that is B-019), and this sandbox has no
+Chromium.
+
+No owner data was touched; verification used isolated test tenants only. No private checkpoint was
+created in this batch.
+
+**Owner update (R-23):** `git pull`, then `docker compose up -d --build --force-recreate migrate app`,
+keeping the private `.env`. Confirm migration `0009_customer_company_payment_dunning.sql` applied
+(23 total). **No reseed is required** — no new capabilities or terms. No new UI is visible in this
+batch: the Customer company tab works exactly as before; the payment-method and dunning-procedure
+inputs appear with B-019. Manual browser checks for this batch are therefore limited to regression:
+open the Customer company tab for an existing customer, save with a reason, and confirm the usual
+Created/unchanged behaviour. Do not set the new columns through SQL.
+
+**Limitations:** payment-method and dunning-procedure masters do not exist; no payment run, dunning
+run, interest calculation, tolerance or open-item behaviour is enabled; the fields are not yet
+snapshot-consumed by any document service because no AR documents exist yet. Interest indicator and
+tolerance group (§9.2) remain later slices.
+
+Next: **B-019**, to be declared at the start of the next bounded batch. Natural candidate: the
+matching **UI** for these two fields on the Customer company tab; other candidates remain partner
+function relationships or the next Phase 1 master.
+
 ---
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -3731,6 +3792,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.30 | 2026-10-10 | **B-015 complete: Customer company AR maintenance UI.** Added Customer-only tab/company selector/derived chart-currency/valid AR-terms/block/history panel, separate FIN Customer read/write caps and independent session-derived action. 46 caps/23 terms; caught/fixed i18n namespace collision at typecheck. Three action tests and browser target; 280 tests, 8 Python, standalone/typecheck/IP lint, Customer browser and two Supplier regressions pass. Original data/schema preserved, owner reviews/rollout pending. §26.31 includes TESTCUST01/1000/110000/NET30 dummy/checks; no billing/clearing/credit flow implied and B-016 backend next. Normal AR UI push verified; commit recorded in §26.31. | Agent |
 | 0.31 | 2026-10-10 | **B-016 complete: customer sales-area backend, UI pending.** Added forced-RLS/cascading `customer_sales_area` master plus immutable 0008/9012 additions (22 applied, 70 tables). Validates active customer role, sales area/organisation/company and same-company delivering plant; delivery/pricing defaults, flags, blocks, staging, version, audit and operational gate. Pricing procedure and sales district are code-only until their masters exist. 22 new tests; 302 total, 8 Python, typecheck/build/IP lint pass; Customer company regression unchanged. §26.32 gives dummy TESTCUST01/1000/01/01/RVAA01 future data and limitations; B-017 sales-area UI is next. Next B-017 sales-area UI. | Agent |
 | 0.32 | 2026-10-10 | **B-017 complete: customer sales-area maintenance UI, browser acceptance pending.** Added Sales area tab on active Customer partners with separate SALES.CUSTOMER.SALESAREA DISPLAY/MAINTAIN authority, scoped area selector, plant/procedure/district/flags/block/reason/status/history and server action. Catalogue now 48/24/21 with seed rerun required. 3 action tests and 1 choice test added; 306 Vitest, 8 Python, typecheck/build/IP lint pass; SSR checks for maintainer/reader/no-authority roles pass. No browser run (no Chromium in sandbox). §26.33 gives owner steps and B-018 selection is next. | Agent |
+| 0.33 | 2026-10-11 | **B-018 complete: customer company payment-methods/dunning-procedure fields, backend only.** Additive migration 0009 adds nullable `payment_methods` varchar(40) and `dunning_procedure` varchar(4) to `customer_company_code` (23 applied). Service normalises the payment-method set (capitalise/dedupe/sort, ≤10 codes of 1–2 chars) and the dunning code (≤4 capital letters/digits), both code-only until their masters exist; fields join version/no-op/history/RLS pipeline and are flagged security-relevant; completeness gate and operational gate unchanged; server action forwards fields with no visible UI change. No new capability, no reseed. 9 new tests; 315 Vitest across 19 files, 8 Python, typecheck/build/IP lint (162 files) pass in a freshly provisioned dev cluster. §26.34 records semantics, owner steps and limitations; B-019 (matching UI) is the natural next. | Agent |
 
 ---
 
