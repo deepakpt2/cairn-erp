@@ -40,6 +40,10 @@ export async function onboard(ctx: BrowserContext) {
   const NAME = FIXTURE_NAME;
   console.log('Browser: create tenant through onboarding');
   await page.goto(`${BASE}/clients/new`, { waitUntil: 'domcontentloaded' });
+  // The runner enforces CAIRN_ENV=development. If the protected field is
+  // rendered, satisfy it with an ephemeral value rather than a deployment secret.
+  const provisioningToken = page.locator('[name="provisioningToken"]');
+  if (await provisioningToken.count()) await provisioningToken.fill(randomUUID());
   await page.locator('[name="clientKey"]').fill(CLIENT);
   await page.locator('[name="name"]').fill(NAME);
   await page.locator('[name="companyName"]').fill('Browser verification company');
@@ -654,6 +658,15 @@ async function businessPartners(ctx: BrowserContext) {
   assert.equal((await getBusinessPartner(CLIENT,'TESTSUPP01'))?.general.version,2);
   console.log('  ✓ general partner stages/completes; unchanged save preserves version');
 
+  await page.getByRole('link',{name:'Bank details',exact:true}).click();
+  await page.getByRole('heading',{name:'Partner-wide bank records',exact:true}).waitFor();
+  await page.getByText('No bank records are available for this partner.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:/reveal/i}).count(),0);
+  await page.getByRole('link',{name:'General data',exact:true}).click();
+  await page.locator('[name="partnerNumber"][readonly]').waitFor();
+  console.log('  ✓ bank tab is display-only and shows the no-record state');
+
   await page.locator('[name="roles"][value="CUSTOMER"]').check();
   await page.locator('[name="reason"]').fill('Browser dual partner role');
   await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -697,10 +710,12 @@ async function businessPartners(ctx: BrowserContext) {
   await page.locator('[name="q"]').fill('DEMOSUPP');
   await page.getByRole('button',{name:'Search',exact:true}).click();
   await page.getByRole('link',{name:'TESTSUPP01',exact:true}).waitFor();
-  console.log('  ✓ general partner search/history and explicit pending segments are visible');
+  console.log('  ✓ general partner search/history and bank metadata empty state are visible');
 
   const id=randomUUID();const password=await hashPassword(PASSWORD);
   await withTenant(CLIENT,async tx=>{
+    // Give this synthetic warehouse viewer partner display, but not maintain.
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code,created_by) values(${CLIENT},'WAREHOUSE_CLERK','FND.PARTNER.DISPLAY','BROWSER_FIXTURE') on conflict (client,role_code,capability_code) do nothing`);
     await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${id},${CLIENT},'partner.viewer','Partner Viewer',${password},false,'BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
   });
@@ -711,7 +726,12 @@ async function businessPartners(ctx: BrowserContext) {
   await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01`,{waitUntil:'domcontentloaded'});
   await page.getByText(/FND.PARTNER.MAINTAIN/).last().waitFor();
   assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
-  console.log('  ✓ warehouse authority can review but cannot maintain general partner data');
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=BANKS`,{waitUntil:'domcontentloaded'});
+  await page.getByRole('heading',{name:'Partner-wide bank records',exact:true}).waitFor();
+  await page.getByText('No bank records are available for this partner.',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:/reveal/i}).count(),0);
+  console.log('  ✓ display-only user can review the bank summary but cannot maintain or reveal');
 }
 
 async function supplierCompany(ctx: BrowserContext) {

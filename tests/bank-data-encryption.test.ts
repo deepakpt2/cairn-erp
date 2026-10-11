@@ -1,9 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { generateBankRecordId } from '../src/platform/security/bank-record-id';
 import {
   BankDataEncryptionError,
   decryptBankData,
   encryptBankData,
+  reencryptBankData,
+  reencryptBankDataBatch,
+  verifyBankDataBatchOnActiveKey,
   type BankDataContext,
   type BankDataKeyring,
 } from '../src/platform/security/bank-data-encryption';
@@ -11,7 +15,7 @@ import {
 const context: BankDataContext = {
   client: 'T999',
   partnerNumber: 'TEST-PARTNER',
-  bankRecordId: 'TEST-BANK-ROW',
+  bankRecordId: generateBankRecordId(),
   field: 'localAccountNumber',
 };
 
@@ -55,7 +59,7 @@ describe('versioned bank-data encryption primitive', () => {
     expect(() => decryptBankData(envelope, { ...context, partnerNumber: 'OTHER-PARTNER' }, keys)).toThrow(
       BankDataEncryptionError,
     );
-    expect(() => decryptBankData(envelope, { ...context, bankRecordId: 'OTHER-ROW' }, keys)).toThrow(
+    expect(() => decryptBankData(envelope, { ...context, bankRecordId: generateBankRecordId() }, keys)).toThrow(
       BankDataEncryptionError,
     );
     expect(() => decryptBankData(envelope, { ...context, field: 'bic' }, keys)).toThrow(BankDataEncryptionError);
@@ -109,6 +113,41 @@ describe('versioned bank-data encryption primitive', () => {
     expect(decryptBankData(newEnvelope, context, rotatedKeyring)).toBe('test-only-secret-value');
   });
 
+  it('re-encrypts retained-key values with the active key and then becomes idempotent', () => {
+    const oldKey = randomBytes(32);
+    const newKey = randomBytes(32);
+    const oldKeyring: BankDataKeyring = { activeKeyId: 'key-a', keys: new Map([['key-a', oldKey]]) };
+    const oldEnvelope = encryptBankData('test-only-secret-value', context, oldKeyring);
+    const rotatedKeyring: BankDataKeyring = {
+      activeKeyId: 'key-b',
+      keys: new Map([
+        ['key-a', oldKey],
+        ['key-b', newKey],
+      ]),
+    };
+
+    const reencrypted = reencryptBankData(oldEnvelope, context, rotatedKeyring);
+    expect(reencrypted).not.toBe(oldEnvelope);
+    expect(reencrypted.split('.')[1]).toBe('key-b');
+    expect(reencrypted).not.toContain('test-only-secret-value');
+    expect(decryptBankData(reencrypted, context, rotatedKeyring)).toBe('test-only-secret-value');
+    expect(reencryptBankData(reencrypted, context, rotatedKeyring)).toBe(reencrypted);
+  });
+
+  it('authenticates already-current envelopes and refuses missing prior keys or wrong context', () => {
+    const keys = keyring();
+    const current = encryptBankData('test-only-secret-value', context, keys);
+    expect(reencryptBankData(current, context, keys)).toBe(current);
+    expect(() => reencryptBankData(flipCiphertextByte(current), context, keys)).toThrow(BankDataEncryptionError);
+    expect(() => reencryptBankData(current, { ...context, field: 'bic' }, keys)).toThrow(BankDataEncryptionError);
+
+    const missingPrior: BankDataKeyring = {
+      activeKeyId: 'key-b',
+      keys: new Map([['key-b', randomBytes(32)]]),
+    };
+    expect(() => reencryptBankData(current, context, missingPrior)).toThrow(BankDataEncryptionError);
+  });
+
   it('fails closed for malformed key material and malformed envelopes', () => {
     const invalidKeyring: BankDataKeyring = {
       activeKeyId: 'key-a',
@@ -120,6 +159,139 @@ describe('versioned bank-data encryption primitive', () => {
     expect(() => encryptBankData('test-only-secret-value', { ...context, field: '' }, keyring())).toThrow(
       BankDataEncryptionError,
     );
+
+    const malformedRecordId = { ...context, bankRecordId: 'TEST-BANK-ROW' } as unknown as BankDataContext;
+    expect(() => encryptBankData('test-only-secret-value', malformedRecordId, keyring())).toThrow(
+      BankDataEncryptionError,
+    );
+  });
+
+  it('re-encrypts all non-null fields in a supplied batch and returns ciphertext only', () => {
+    const plaintext = 'test-only-rotation-value';
+    const oldKey = randomBytes(32);
+    const newKey = randomBytes(32);
+    const oldKeyring: BankDataKeyring = { activeKeyId: 'key-a', keys: new Map([['key-a', oldKey]]) };
+    const rotatedKeyring: BankDataKeyring = {
+      activeKeyId: 'key-b',
+      keys: new Map([
+        ['key-a', oldKey],
+        ['key-b', newKey],
+      ]),
+    };
+    const bankRecordId = generateBankRecordId();
+    const row = {
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: {
+        iban: encryptBankData(plaintext, { ...context, bankRecordId, field: 'iban' }, oldKeyring),
+        localAccountNumber: null,
+      },
+    };
+    const result = reencryptBankDataBatch([row], rotatedKeyring);
+    const newIban = result.records[0].fields.iban;
+
+    expect(result.reencryptedFieldCount).toBe(1);
+    expect(newIban).not.toBe(row.fields.iban);
+    expect(newIban?.split('.')[1]).toBe('key-b');
+    expect(decryptBankData(String(newIban), { ...context, bankRecordId, field: 'iban' }, rotatedKeyring)).toBe(plaintext);
+    expect(result.records[0].fields.localAccountNumber).toBeNull();
+    expect(JSON.stringify(result)).not.toContain(plaintext);
+    expect(row.fields.iban).not.toBe(newIban);
+  });
+
+  it('authenticates and leaves already-current batch fields unchanged', () => {
+    const keys = keyring();
+    const bankRecordId = generateBankRecordId();
+    const current = encryptBankData('test-only-current-value', { ...context, bankRecordId, field: 'bic' }, keys);
+    const result = reencryptBankDataBatch([{
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: { bic: current },
+    }], keys);
+
+    expect(result.reencryptedFieldCount).toBe(0);
+    expect(result.records[0].fields.bic).toBe(current);
+  });
+
+  it('fails the entire pure batch on an invalid envelope', () => {
+    const bankRecordId = generateBankRecordId();
+    const records = [{
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: { iban: 'not-an-envelope' },
+    }];
+
+    expect(() => reencryptBankDataBatch(records, keyring())).toThrow(BankDataEncryptionError);
+  });
+
+  it('verifies every supplied ciphertext using an active-key-only keyring', () => {
+    const oldKey = randomBytes(32);
+    const newKey = randomBytes(32);
+    const oldKeyring: BankDataKeyring = { activeKeyId: 'key-a', keys: new Map([['key-a', oldKey]]) };
+    const rotatedKeyring: BankDataKeyring = {
+      activeKeyId: 'key-b',
+      keys: new Map([
+        ['key-a', oldKey],
+        ['key-b', newKey],
+      ]),
+    };
+    const bankRecordId = generateBankRecordId();
+    const records = reencryptBankDataBatch([{
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: {
+        iban: encryptBankData('test-only-verify-value', { ...context, bankRecordId, field: 'iban' }, oldKeyring),
+        bic: null,
+      },
+    }], rotatedKeyring).records;
+    const activeOnly: BankDataKeyring = { activeKeyId: 'key-b', keys: new Map([['key-b', newKey]]) };
+
+    expect(verifyBankDataBatchOnActiveKey(records, activeOnly)).toEqual({
+      activeKeyId: 'key-b',
+      recordCount: 1,
+      encryptedFieldCount: 1,
+    });
+  });
+
+  it('rejects prior-key envelopes and refuses a verification keyring that retains old keys', () => {
+    const oldKey = randomBytes(32);
+    const newKey = randomBytes(32);
+    const oldKeyring: BankDataKeyring = { activeKeyId: 'key-a', keys: new Map([['key-a', oldKey]]) };
+    const rotatedKeyring: BankDataKeyring = {
+      activeKeyId: 'key-b',
+      keys: new Map([
+        ['key-a', oldKey],
+        ['key-b', newKey],
+      ]),
+    };
+    const bankRecordId = generateBankRecordId();
+    const oldRecords = [{
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: {
+        iban: encryptBankData('test-only-old-key-value', { ...context, bankRecordId, field: 'iban' }, oldKeyring),
+      },
+    }];
+    const activeOnly: BankDataKeyring = { activeKeyId: 'key-b', keys: new Map([['key-b', newKey]]) };
+    expect(() => verifyBankDataBatchOnActiveKey(oldRecords, activeOnly)).toThrow(BankDataEncryptionError);
+
+    const currentEnvelope = encryptBankData(
+      'test-only-current-key-value',
+      { ...context, bankRecordId, field: 'bic' },
+      rotatedKeyring,
+    );
+    const currentRecords = [{
+      client: context.client,
+      partnerNumber: context.partnerNumber,
+      bankRecordId,
+      fields: { bic: currentEnvelope },
+    }];
+    expect(() => verifyBankDataBatchOnActiveKey(currentRecords, rotatedKeyring)).toThrow(BankDataEncryptionError);
   });
 });
 

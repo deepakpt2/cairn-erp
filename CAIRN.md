@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.69 — B-054 versioned bank-data encryption primitive)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.93 — B-078 disposable browser acceptance)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -185,6 +185,24 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-065 | **United States partner-bank capture uses a local account number plus ABA routing transit number (RTN), not an IBAN.** Account holder and country remain required; the required RTN occupies the existing bank-code field. | Require exactly nine ASCII digits matching `^[0-9]{9}$`; the first two digits must be in ABA's bank/legacy-thrift routing-symbol ranges `01–12` or `21–32`. Validate the ABA check digit using the 3-7-1 mod-10 rule: `3(d1+d4+d7)+7(d2+d5+d8)+(d3+d6+d9) ≡ 0 (mod 10)`. Treat the account number as opaque: preserve leading zeros and impose no U.S.-wide length, pattern, checksum, padding or truncation. Do not query a live directory or assert that an RTN is assigned/current, suitable for a particular ACH/wire/check rail, or that an account exists. Bank name and BIC are optional for this non-payment master-data record; syntax-check supplied BIC. SWIFT IBAN Registry Release 103 has no `US` profile. Sources: [ABA Routing Number Policy & Procedures](https://www.aba.com/news-research/analysis-guides/routing-number-policy-procedures), [ABA routing-number registry information](https://www.aba.com/about-us/routing-number), [Apache Commons Validator ABA check-digit reference](https://commons.apache.org/proper/commons-validator/apidocs/org/apache/commons/validator/routines/checkdigit/ABANumberCheckDigit.html), [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf). | 2026-10-11 |
 | D-066 | **Japan partner-bank capture uses a local account number plus the domestic institution-and-branch code, not an IBAN.** Account holder and country remain required; no new field is added. | Require the complete four-digit financial-institution code plus three-digit branch/store code in the existing bank-code field as a seven-digit numeric composite (`^[0-9]{7}$`), preserving leading zeros. Require the associated bank-supplied local account number as opaque text; impose no nationwide length/pattern/checksum or zero-padding/truncation rule. For Japan Post Bank, capture the interbank-transfer representation and code supplied by its official conversion guidance; do not algorithmically convert its separate symbol/number identifier or perform directory/account-existence lookup. Bank name and BIC are optional for this non-payment master-data record; syntax-check supplied BIC. Account type and payment-rail-specific variants remain outside D-059. SWIFT IBAN Registry Release 103 has no `JP` profile. Sources: [SWIFT IBAN Registry Release 103](https://www.swift.com/resource/iban-registry-pdf), [Japanese Bankers Association member/code directory](https://www.zenginkyo.or.jp/abstract/outline/organization/member-01/), [MUFG branch-code/account-number guidance](https://www.bk.mufg.jp/ebusiness/gplus/listofbranchesinjapan.html), [Japan Post Bank transfer-format guidance](https://www.jp-bank.japanpost.jp/kojin/sokin/furikomi/kouza/kj_sk_fm_kz_1.html). | 2026-10-11 |
 | D-067 | **Full partner-bank identifiers use a versioned app-managed keyring; key IDs are authenticated with the ciphertext and bound to the record context.** | Owner selected high-entropy keys delivered through deployment secrets, key IDs, retained prior keys for decryption during rotation and later re-encryption, and no external KMS. B-054 implements AES-256-GCM with random 96-bit nonces and 128-bit authentication tags; envelope version, key ID, tenant/client, partner, bank-record ID, and field are authenticated as associated data. The primitive encrypts with the active key and can decrypt with a retained prior key; it does not load keys, authorize or audit reveals, mask history, or persist data. Key provisioning and the remaining safeguards stay separate prerequisites; no bank identifiers may be stored until the full gate is satisfied. | 2026-10-11 |
+| D-068 | **The app-managed keyring is loaded lazily from one deployment-secret value, with strict validation and no fallback.** | B-055 sets `CAIRN_BANK_DATA_KEYRING_JSON` to a JSON object with exactly `activeKeyId` and `keys`; each key ID maps to canonical unpadded base64url for exactly 32 random bytes. The parser accepts at most 16 keys, requires the active ID to exist, rejects unknown fields/malformed values, and emits a generic error that never includes the secret. Compose passes the variable only to the app container, not the migration job. Templates contain comments only; actual key material remains in the deployment secret channel, with old keys retained until re-encryption is verified. This is an implementation contract, not approval to store bank identifiers. | 2026-10-11 |
+| D-069 | **Key rotation uses an authenticated envelope transform, not an implicit database mutation.** | B-056 fully authenticates/decrypts an envelope with its recorded key ID and record context, then encrypts under the supplied keyring's active ID with a fresh nonce; valid envelopes already under the active key are authenticated and returned unchanged. The helper returns only ciphertext and performs no persistence, logging, history write, key retirement, or reveal authorization. Future callers own transactional storage, monitoring/audit policy, bulk re-encryption, verification, and old-key retirement. | 2026-10-11 |
+| D-070 | **Generic change history for partner bank/contact records is projected through a privacy allowlist on both write and read.** | `partner_bank` histories mask IBAN/local-account/account-identifier values; `partner_contact` histories mask personal email/phone values. Unknown and nested fields are omitted; free-form reasons and caller field labels are suppressed, and read-time projection also redacts any older stored value. `business_partner` organization-level email/phone history remains unchanged. Bank/contact callers must use opaque record keys. This is a history safeguard only: ordinary views, encryption/storage integration, and reveal authorization remain separate work. | 2026-10-11 |
+| D-071 | **Full bank-account identifiers may be revealed only through a dedicated, audited operation.** | Owner selected `SEC.PARTNER.BANK.REVEAL`, normal capability-pattern matching, plus `FND.PARTNER.DISPLAY`; therefore `FND.*`/`AUDIT.*` do not imply reveal, while the Administrator `*` pattern does. One operation may select one or more IBAN/local-account fields only; bank code/BIC and contact coordinates are outside reveal scope. Require one controlled purpose code (`PARTNER_SUPPORT`, `DATA_CORRECTION`, `AUDIT_REVIEW`, `LEGAL_REGULATORY`) and log every authenticated attempt to `audit_access_log` with session-derived actor/tenant, opaque partner and bank-record IDs, field names, outcome and fixed denial code—never values, ciphertext or key material. Commit the success audit event before returning plaintext; audit persistence failure denies the reveal. Harden the existing log against UPDATE/DELETE at the database layer before reveal implementation. | 2026-10-11 |
+| D-072 | **Audit-log protection revokes direct runtime mutation, while full tenant deletion retains its current cascade.** | B-059 revokes `UPDATE`, `DELETE`, and `TRUNCATE` on `audit_access_log` from `cairn_app` while preserving `SELECT` and `INSERT`. Owner explicitly chose to retain the existing `client` → `audit_access_log` `ON DELETE CASCADE` as a permitted whole-tenant lifecycle/retention exception; no FK or tenant-delete-policy change is included. Thus append-only protection applies to direct runtime log-row mutation, not authorized tenant deletion. | 2026-10-11 |
+| D-073 | **Bank reveal is a two-stage, session-bound audit boundary; authorization alone is not a completed reveal.** | B-060 validates the owner-selected `FND.PARTNER.DISPLAY` + `SEC.PARTNER.BANK.REVEAL` authorities, selected IBAN/local-account field names and controlled purpose codes, and records only safe metadata. An `AUTHORIZED` gate event is not proof plaintext was released. The later data service must record a terminal `SUCCESS` or fixed-code `DENIED` event in the same tenant transaction and commit before returning any plaintext. No decrypt, storage, route or plaintext is part of B-060. | 2026-10-11 |
+| D-074 | **Ordinary bank-identifier detail views may show only a limited suffix; list views expose no suffix.** | Owner selected fixed `••••` in list/summary views and `••••` plus the final four characters in detail views for IBAN and local account identifiers. Never preserve original length or country prefix; identifiers of four or fewer characters remain fully masked to prevent accidental full-value disclosure. History remains fully masked as D-070, and any complete value still requires the separately audited reveal capability. | 2026-10-11 |
+| D-075 | **Normal-view bank projections reuse the strict bank-history allowlist but apply a separate display mask.** | B-062 uses `••••` for list/summary and the final-four detail form from D-074; ciphertext aliases, unknown fields and nested values are omitted. Safe allowlisted metadata may remain, while the history projection continues to use `[masked]` for every sensitive identifier. This is a pure projection only, not authorization, storage or UI integration. | 2026-10-11 |
+| D-076 | **The KW bank profile is a pure IBAN-only validator; no separate local account is accepted.** | B-063 enforces `KW` + two check digits + four-letter bank code + 22 alphanumeric account characters, uppercases and removes ASCII spaces, and validates MOD-97. It derives the bank code from IBAN positions 5–8; optional BIC receives syntax-only validation, with no account/bank existence lookup. Account holder and KW country are required. The helper is not registered, activated or connected to storage. | 2026-10-11 |
+| D-077 | **The IN bank profile is a pure local-account + IFSC validator; account identifiers remain opaque.** | B-064 requires account holder and country `IN`, preserves the non-empty local account number exactly without country-wide syntax/length/checksum/padding/truncation rules, and normalizes the IFSC in the existing bank-code field before enforcing `^[A-Z]{4}0[A-Z0-9]{6}$`. Reject a non-empty IBAN. Optional BIC is syntax-checked only. No directory/account lookup, persistence or profile activation. | 2026-10-11 |
+| D-078 | **The GB bank profile is a pure bank-issued IBAN validator.** | B-065 removes ASCII spaces, uppercases, enforces the 22-character `GB` structure and MOD-97, derives the four-letter bank code from IBAN positions 5–8, and rejects a separate non-empty local account number. Optional BIC is syntax-checked only; no directory/account-existence or payment-rail assertion. No profile activation or storage integration. | 2026-10-11 |
+| D-079 | **The US bank profile requires an opaque local account number and a syntactically/check-digit-valid ABA routing number.** | B-065 preserves the non-empty account number exactly without a U.S.-wide pattern/length rule. It requires nine ASCII routing digits, ABA symbol range `01–12` or `21–32`, and the 3-7-1 mod-10 check. Optional BIC receives syntax-only validation; reject a non-empty IBAN. No live directory, assignment/currentness, payment-rail, or account-existence claim; no profile activation or storage integration. | 2026-10-11 |
+| D-080 | **The JP bank profile requires a seven-digit institution-plus-branch code and an opaque local account number.** | B-065 preserves leading zeros in the existing bank-code field and preserves the non-empty local account number exactly, with no nationwide account-number length/pattern/checksum or padding/truncation rule. Reject a non-empty IBAN. Optional BIC is syntax-checked only; no directory/account-existence lookup or account-number conversion. No profile activation or storage integration. | 2026-10-11 |
+| D-081 | **The partner read route enforces `FND.PARTNER.DISPLAY` before accessing partner data.** | B-066 checks the session capability in `/foundation/partners` before reading search parameters, listing/fetching partners, or loading history; maintenance actions remain separately guarded by `FND.PARTNER.MAINTAIN`. This establishes the actual display-authority prerequisite for any future reveal flow, but does not implement reveal. Opaque bank-record-ID handling remains an independent unresolved gate. | 2026-10-11 |
+| D-082 | **Bank-record IDs are server-generated random UUIDv4 values; future reads/reveals must use tenant-, partner- and ID-scoped lookup.** | B-067 adds a cryptographic UUIDv4 generator and tightens the B-060 audit-boundary shape check to canonical lowercase UUIDv4. UUID syntax alone does not establish provenance. A future service must ignore raw client-supplied IDs as authority, load the row under the authenticated session tenant and selected partner, and use the matched row's ID for audit/encryption context. No bank table, row creation, lookup, persistence, or reveal path is included; the opacity gate remains until that scoped data path uses this contract. | 2026-10-11 |
+| D-083 | **Bank-data encryption/decryption contexts accept only canonical UUIDv4 bank-record IDs.** | B-068 enforces UUIDv4 shape at the encryption AAD boundary and types the context ID as `BankRecordId`, preventing ad hoc sequential IDs from being used accidentally in code or ciphertext context. This is format enforcement, not provenance: database reads must still be constrained by authenticated tenant, partner and ID before any reveal path. No schema, persistence or data flow is added. | 2026-10-11 |
+| D-084 | **A pure batch transformer may re-encrypt supplied bank-data envelopes without exposing plaintext or persisting results.** | B-069 authenticates each non-null field with its client/partner/UUIDv4-row/field context, writes under the active key, preserves nulls and already-current ciphertext, and returns ciphertext only. Invalid input fails the whole transformation. Database chunking/transactionality, scan completeness, verification of old-key retirement, audit/monitoring and persistence remain caller/operational responsibilities. | 2026-10-11 |
+| D-085 | **A supplied ciphertext batch can be authenticated with an active-key-only keyring as a local rotation check.** | B-070 requires a keyring containing only its active key, authenticates every non-null envelope/context in the caller-supplied rows, and returns counts only. A passing batch proves nothing about omitted/unscanned database rows, concurrent writes, persistence, or global key retirement. Operational completeness and verified retirement remain separate. | 2026-10-11 |
 
 ---
 
@@ -768,9 +786,13 @@ this slice. Full account identifiers must be encrypted at rest, masked in normal
 history, and revealable only through a separate audited authority; generic history must never contain
 plaintext identifiers. D-060 defines the fail-closed country-profile rules, strict IBAN/BIC checks, and
 validity semantics; a missing bank-country profile rejects saving. Initial profile work covers IN, KW,
-GB, US and JP (D-061); source-backed rules for all five are recorded in D-062 through D-066. No profile
-is implemented or enabled, so all countries remain blocked. Encryption-key provisioning/rotation and
-the approved masking, audited-reveal and history safeguards remain prerequisites to storing identifiers.
+GB, US and JP (D-061); source-backed rules for all five are recorded in D-062 through D-066, and pure
+validators plus a fail-closed dispatcher now exist (§§26.80–26.82, 26.88). None is activated in a bank
+save path; countries outside that set remain blocked. B-072 adds a ciphertext-only, tenant-RLS table, but
+the app role is read-only and no records can yet be written. B-076 adds a display-only metadata tab whose list
+view uses the fixed D-074 mask; this does not read/decrypt ciphertext. Normal-detail suffix handling remains
+unintegrated. Operational key rotation/re-encryption and verified retirement, full ordinary-view masking, and
+audited terminal-reveal integration remain prerequisites to storing full identifiers.
 
 Contacts are multiple partner-wide named persons; current general email/phone remain organisation-level
 values. Each person has name, title/function, email, phone, validity dates and active state, with at most
@@ -2090,7 +2112,29 @@ Do not push interim or partial module batches before that trigger.
 | B-052 | Verify and record the United States (US) bank-validation profile requirements only | ≤10 min | **DONE — ABA routing-number structure/check digit and current SWIFT registry verified; D-065 / §26.69 records nine-digit RTN plus opaque local account number; research only, no code/profile activation or bank data** |
 | B-053 | Verify and record the Japan (JP) bank-validation profile requirements only | ≤10 min | **DONE — SWIFT, Japanese Bankers Association, MUFG and Japan Post sources verified; D-066 / §26.70 records domestic institution+branch code and local account handling; research only, no code/profile activation or bank data** |
 | B-054 | Implement the versioned bank-data authenticated-encryption primitive only | ≤10 min | **DONE — AES-256-GCM envelope; key ID and tenant/partner/record/field context are authenticated; active-key writes and retained-key reads support later rotation; six focused tests, typecheck and diff check pass. No key loading, reveal/audit, masking/history, schema/database integration or bank identifiers (§26.71; D-067)** |
-| B-055 | Define and implement fail-closed app-keyring configuration from deployment secrets only | ≤10 min | **PENDING — choose/configure keyring input representation without reading, recording or committing real secret values; no bank-data integration** |
+| B-055 | Define and implement fail-closed app-keyring configuration from deployment secrets only | ≤10 min | **DONE — lazy `CAIRN_BANK_DATA_KEYRING_JSON` parser accepts exactly the active ID plus up to 16 canonical 32-byte base64url keys; no default/fallback, generic errors, and Compose passes it only to the app. Seven pure tests pass; no actual keys, bank data, database, or storage integration (§26.72; D-068)** |
+| B-056 | Add a safe envelope re-encryption helper for retained-key rotation only | ≤10 min | **DONE — authenticates before no-op; old-key envelopes are decrypted with the retained ID and re-encrypted under the active ID with a fresh nonce; wrong context/missing key/tampering fail closed. Eight encryption tests and seven keyring tests pass; no persistence, logs, DB, or bank data (§26.73; D-069)** |
+| B-057 | Add a bank/contact change-history projection that masks sensitive values before generic history | ≤10 min | **DONE — `recordChange` writes allowlisted snapshots with IBAN/account identifiers and named-contact email/phone fully masked; free-form reasons/labels are withheld, unknown fields dropped, and `changeHistory` re-redacts stored values. Five isolated tests pass; no bank storage or database (§26.74; D-070)** |
+| B-058 | Specify the separate authorization and audit contract for bank-data reveal only | ≤10 min | **DONE — owner selected `SEC.PARTNER.BANK.REVEAL` plus partner DISPLAY (normal matching; Administrator `*` inherits), selected IBAN/local-account fields only, required controlled purpose codes, every authenticated attempt logged before release, fail-closed audit, and DB-enforced append-only hardening (§26.75; D-071). No implementation or data** |
+| B-059 | Add database-enforced direct-mutation protection to `audit_access_log` only | ≤10 min | **DONE — new migration revokes runtime UPDATE/DELETE/TRUNCATE while preserving SELECT/INSERT; parent-tenant cascade remains the owner-approved lifecycle exception (D-072). Two development-tenant integration tests added but not run without a confirmed disposable DB; typecheck and diff check pass. No reveal endpoint or bank data** |
+| B-060 | Implement the session-bound bank-reveal authorization/audit writer boundary only | ≤10 min | **DONE — validated both authorities, field/purpose allowlists and opaque keys; added safe `AUTHORIZED`/denial attempt rows plus terminal-outcome writer; registered display/reveal capabilities in seed code but granted no new role pattern. Seven isolated tests pass; typecheck/diff check pass; no DB, decrypt, data path or UI (§26.77; D-073)** |
+| B-061 | Specify the normal-view masking format for bank identifiers only | ≤10 min | **DONE — lists show fixed `••••`; details show `••••` + final four characters, with no original length/country prefix; values ≤4 chars remain fully masked; history stays fully masked (D-074; §26.78)** |
+| B-062 | Implement the pure normal-view bank-identifier projection only | ≤10 min | **DONE — `projectPartnerBankNormalView` reuses the strict bank allowlist, applies the fixed list/detail masks, fully hides ≤4-character values, and drops ciphertext/unknown/nested fields. Three new pure tests pass; focused privacy/reveal suites pass 15/15; typecheck/diff check pass; no storage, route, UI or database (§26.79; D-075)** |
+| B-063 | Implement the pure Kuwait (`KW`) bank-validation profile only | ≤10 min | **DONE — pure helper enforces KW IBAN normalization/structure/MOD-97, required holder/country, IBAN-only capture, derived bank code and optional BIC syntax; four tests pass; typecheck/diff check pass; no activation, persistence or bank data (§26.80; D-076)** |
+| B-064 | Implement the pure India (`IN`) bank-validation profile only | ≤10 min | **DONE — pure helper requires holder/country, local account and IFSC; preserves the opaque account exactly, rejects IBAN, and syntax-checks IFSC/optional BIC. Five isolated tests, typecheck and diff check pass; no activation, persistence or bank data (§26.81; D-077)** |
+| B-065 | Implement the remaining pure GB, US and JP bank-validation profiles together | ≤10 min | **DONE — pure validators enforce GB IBAN/MOD-97, US ABA routing structure/check digit plus opaque account, and JP seven-digit institution/branch code plus opaque account. Fourteen isolated tests; typecheck/diff check pass; no activation, persistence or bank data (§26.82; D-078–D-080)** |
+| B-066 | Enforce the existing `FND.PARTNER.DISPLAY` capability in the partner read route only | ≤10 min | **DONE — `/foundation/partners` checks display access before route parameters or partner/history reads; denial regression test passes; typecheck/diff check pass. No bank data or reveal path (§26.83; D-081)** |
+| B-067 | Establish server-generated opaque bank-record ID contract only | ≤10 min | **DONE — `generateBankRecordId` creates canonical random UUIDv4 IDs; B-060 boundary validates UUIDv4 shape and rejects malformed IDs without logging them. Eleven focused tests, typecheck and diff check pass. UUID shape is not provenance; no table, lookup, storage or reveal path (§26.84; D-082)** |
+| B-068 | Enforce UUIDv4 bank-record IDs in the encryption context only | ≤10 min | **DONE — encryption/decryption AAD context requires the `BankRecordId` brand and validates canonical UUIDv4 at runtime. Nineteen focused ID/reveal/encryption tests pass; typecheck and diff check pass. No schema, database, bank data or reveal path (§26.85; D-083)** |
+| B-069 | Add pure batch re-encryption for supplied encrypted bank fields only | ≤10 min | **DONE — transforms caller-supplied rows/fields to the active key, preserves null/current envelopes, returns ciphertext only, and fails closed on invalid envelopes. Three new batch tests; 22 focused ID/reveal/encryption tests pass; typecheck/diff check pass. No DB scan, persistence or retirement verification (§26.86; D-084)** |
+| B-070 | Add active-key-only verification for supplied encrypted bank fields only | ≤10 min | **DONE — authenticates each non-null field/context in a supplied batch against a one-key active keyring; old-key envelopes or retained-key rings fail closed. Two new tests; 24 focused ID/reveal/encryption tests pass; typecheck/diff check pass. No DB scan completeness or global retirement proof (§26.87; D-085)** |
+| B-071 | Add a pure dispatcher for implemented partner-bank country profiles only | ≤10 min | **DONE — normalizes country and dispatches only KW/IN/GB/US/JP to their pure validators; missing and unsupported countries fail closed. Three dispatcher tests plus all five profile suites pass (26 tests total); typecheck passes. No save-path integration, storage, schema, or bank data (§26.88)** |
+| B-072 | Add the ciphertext-only partner-bank table schema and read-only tenant RLS only | ≤10 min | **DONE — typed schema plus migrations add UUIDv4-scoped, valid-dated partner rows; identifiers have envelope-only columns, forced tenant RLS, and app-role SELECT only. Four typed-schema/static-contract tests and typecheck pass. No migration application, write service, bank rows or values (§26.89)** |
+| B-073 | Accept partner-bank migrations, constraints and RLS on a disposable PostgreSQL cluster only | ≤10 min | **DONE — all migrations passed on fresh disposable PostgreSQL 17.11; verified envelope/UUID/date/version/FK constraints, forced tenant RLS, SELECT-only privileges, tenant isolation, partner-delete block, and tenant cascade. The first run exposed PostgreSQL's repetition-count limit; additive migration 0014 corrected the bound without changing 0013. Cluster and synthetic fixtures removed; no owner/production data (§26.90)** |
+| B-074 | Add a display-authorized, read-only partner-bank metadata lookup scoped by session tenant, partner and UUIDv4 row ID | ≤10 min | **DONE — requires `FND.PARTNER.DISPLAY`, derives tenant only from the authenticated session, and binds tenant + selected partner + UUIDv4 bank-row ID in the query. Returns allowlisted non-ciphertext metadata and the matched database row's ID only. Four focused tests and typecheck pass. No reveal/decryption, writes, UI or persistent DB access (§26.91)** |
+| B-075 | Add a display-authorized, read-only partner-bank metadata list scoped by session tenant and partner | ≤10 min | **DONE — derives tenant from the authenticated session, binds tenant + partner, returns every matched row's ID and allowlisted non-ciphertext metadata, includes inactive history, and sorts deterministically. Four added tests (eight total) and typecheck pass. No DB access, writes, decryption, reveal, or UI (§26.92)** |
+| B-076 | Add a display-only, masked partner-bank metadata tab to the Business Partner view | ≤10 min | **DONE — explicit `BANKS` tab only; reuses the display-authorized list service and shows only allowlisted metadata plus the fixed `••••` list mask. No identifiers, edit controls, decryption or reveal. Four focused UI/route tests, typecheck and production build pass; no live database/browser acceptance (§26.93)** |
+| B-077 | Extend Business Partner browser acceptance to cover the read-only bank metadata tab | ≤10 min | **IMPLEMENTED — T992 target now checks the empty bank-list state, absence of Save/reveal controls for maintainer and display-only users, and return to General data. Typecheck and browser-harness (66/66) pass; target not run and no database accessed (§26.94)** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2152,11 +2196,48 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    boundaries (D-059), and B-047 approved fail-closed country-profile validation and date rules (D-060).
    B-048 selected IN, KW, GB, US and JP as the initial profile set (D-061). B-049–B-053 recorded
    source-backed specifications for KW, IN, GB, US and JP (D-062–D-066); initial profile-authoring scope
-   is complete. No country profile is implemented or enabled. B-054 adds only the versioned AES-256-GCM
-   primitive (D-067; §26.71); it has no key loader or bank-data integration. Complete deployment-secret
-   keyring configuration/rotation, masked views and history, and separately authorized/audited reveal
-   safeguards before storing any full bank identifier. Then build bank and contact records through
-   separate bounded backend, UI, access-control and test batches.
+   is complete. No profile registry/configuration data is persisted and no validator is activated in a bank
+   save path or connected to bank storage; B-063 adds only a pure KW validator (D-076; §26.80), B-064
+   adds only a pure IN validator (D-077; §26.81), and B-065 adds only pure GB/US/JP validators
+   (D-078–D-080; §26.82); B-066 adds the explicit partner display-route guard
+   (D-081; §26.83). B-054 adds only the versioned AES-256-GCM primitive (D-067; §26.71); B-055
+   adds a lazy, fail-closed deployment-secret parser and app-only Compose
+   injection (D-068; §26.72), but no actual key value or bank-data caller. B-056 adds a pure authenticated
+   envelope re-encryption helper (D-069; §26.73), not a database migration or key-retirement process.
+   B-057 installs allowlisted write-time and read-time change-history masking (D-070; §26.74); B-058
+   defines the audited reveal contract (D-071; §26.75); B-059 revokes direct audit-log row mutation while
+   retaining the approved tenant-delete cascade exception (D-072; §26.76); B-060 adds the session-bound
+   authorization and safe audit-writer boundary, but not a data path (D-073; §26.77). Still required before
+   any full bank identifier is stored: operational rotation/re-encryption and verified old-key retirement,
+   complete ordinary-view masking (B-076 integrates only the fixed list mask; any detail suffix path remains
+   unintegrated), and integration of the authorized terminal reveal outcome with the encrypted data path.
+   B-061 selected the normal-view suffix policy (D-074; §26.78), and B-062 implemented its pure
+   allowlisted projection (D-075; §26.79); B-063 added the pure KW validator (D-076; §26.80), B-064
+   added the pure IN validator (D-077; §26.81), and B-065 added pure GB/US/JP validators (D-078–D-080;
+   §26.82); B-066 enforces `FND.PARTNER.DISPLAY` in the existing route (D-081; §26.83), and B-067 adds
+   the UUIDv4 ID generator/format guard (D-082; §26.84), B-068 enforces that format in encryption AAD
+   contexts (D-083; §26.85), B-069 adds a pure batch re-encryption transform (D-084; §26.86), B-070
+   adds active-key-only verification for supplied batches (D-085; §26.87), B-071 adds a pure dispatcher for
+   the five implemented country validators (§26.88), and B-072 adds the typed `partner_bank` schema with
+   ciphertext-only identifier columns and forced tenant RLS (§26.89). B-073 applied all migrations only on a
+   fresh disposable PostgreSQL 17.11 cluster, verified the constraints/RLS/privileges, and removed its cluster
+   and synthetic rows (§26.90); no persistent application DB or owner/production database was used. The app role
+   remains SELECT-only and the table is not a write path. B-073 also adds migration 0014 after a live test caught
+   PostgreSQL's regex repetition-count limit in the initial envelope constraint. B-074 adds a read-only, display-
+   authorized metadata lookup constrained by authenticated session tenant, selected partner and UUIDv4 bank-row ID
+   (§26.91); it returns allowlisted non-ciphertext metadata and the ID from the matched database row. B-075 adds an
+   all-row metadata list scoped to the session tenant and selected partner, retaining inactive rows and returning
+   matched row IDs only (§26.92). B-076 adds an explicit display-only `BANKS` tab using the fixed list mask
+   (§26.93); it queries the list service only when that tab is selected. No bank-record write service, database
+   scan, scan-completeness proof, or verified global key retirement exists. Country validators remain unactivated
+   in an application save path or connected to bank storage. B-074/B-075 do not retrieve encrypted account fields,
+   decrypt, or execute audited reveal. B-076 does not expose identifiers or maintenance controls and has not had
+   live database/browser acceptance. B-077 extends the T992 browser target for the bank tab's empty/read-only state,
+   but that target has not been run; no confirmed disposable browser database was available. Any future reveal still
+   requires its own authorized and audited path and must resolve the row under tenant/partner/ID scope before using
+   its database ID;
+   UUID syntax alone does not establish row provenance. Then build bank and contact records through separate bounded
+   backend, UI, access-control and test batches.
 4. **Enterprise structure (SCR-012–025):** finish company/chart assignments, plants/storage locations,
    purchasing and sales organisations/assignments, channels/divisions/sales areas, and controlling-area
    assignments in dependency order.
@@ -2325,7 +2406,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-046 | Material type define | `CFG.INV.MATERIALTYPE.DEFINE` | OMS2 | DRAFT |
 | SCR-047 | Material group define | `CFG.INV.MATERIALGROUP.DEFINE` | OMSF | DRAFT |
 | SCR-048 | Material create and change | `INV.MATERIAL.CREATE` | MM01 / MM02 / MM03 | **IN BUILD — four implemented views UI verified; other views/imports and owner sign-off remain pending** |
-| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general, supplier/customer company-code, supplier purchasing and customer sales-area segments implemented; payment/dunning codes added; bank/contact rules approved (D-059), implementation and owner screen sign-off pending** |
+| SCR-049 | Business partner create and change | `FND.PARTNER.CREATE` | BP / XK01 / XD01 | **IN BUILD — general, supplier/customer company-code, supplier purchasing and customer sales-area segments implemented; payment/dunning codes added; read-only masked bank metadata tab implemented (B-076); bank/contact maintenance and owner screen sign-off remain pending** |
 | SCR-050 | Work centre create | `PROD.WORKCENTER.CREATE` | CR01 | DRAFT |
 | SCR-051 | BOM create and change | `PROD.BOM.CREATE` | CS01 | DRAFT |
 | SCR-052 | Routing create and change | `PROD.ROUTING.CREATE` | CA01 | DRAFT |
@@ -4842,9 +4923,574 @@ and invalid key material/context. Six tests pass; `npm run typecheck` and `git d
 **Boundary:** no key configuration or real key material was read, written, or committed. No schema,
 migration, database, profile, contact, bank-record service, UI, masking/history filter, reveal authority,
 or bank identifier was added. Test inputs are non-bank placeholders with ephemeral test-only keys.
-B-055 is the next bounded keyring-configuration batch; bank-record storage remains blocked until the
-full D-059/D-060/D-067 security gate is complete. No commit or push; §25.4's full-system publish trigger
+B-055's separate keyring configuration is recorded in §26.72; bank-record storage remains blocked until
+the full D-059/D-060/D-067/D-068 security gate is complete. No commit or push; §25.4's full-system publish
+trigger remains authoritative.
+
+
+### 26.72 B-055 — Fail-closed deployment-secret keyring configuration `IMPLEMENTED — NOT INTEGRATED`
+
+**Configuration contract (D-068):** the runtime secret is `CAIRN_BANK_DATA_KEYRING_JSON`, a JSON object
+with exactly two properties: `activeKeyId` and `keys`. `keys` maps each valid key ID to canonical,
+unpadded base64url encoding of exactly 32 bytes; the active ID must exist, there must be 1–16 keys, and
+unknown top-level properties, malformed JSON, invalid IDs, noncanonical encoding, wrong key sizes, and
+oversized values fail closed. High-entropy bytes must be generated by a cryptographically secure source;
+the parser checks byte size/encoding, not entropy. Prior IDs/keys must remain available until ciphertext
+written with them has been re-encrypted and verified.
+
+`src/platform/security/bank-data-keyring.ts` exposes a lazy environment loader and a pure parser. Importing
+the module does not read the environment. Missing or invalid configuration throws one generic typed error
+without echoing the supplied JSON or key bytes; there is no generated, hard-coded, or development fallback.
+Docker Compose passes the variable only into the application container, not the migration job. `.env.example`
+and `.env.development.example` contain comments/placeholders only; no actual key values were read, written,
+or committed. No current service calls the loader, so this does not enable or authorize bank-data access.
+
+Seven pure tests pass for active/retained keys, unset configuration, malformed/unsupported shapes, missing
+active keys, encoding/size/ID validation, key-count limits, and generic error redaction. The focused encryption
+and keyring suites pass 13/13; `npm run typecheck` and `git diff --check` pass. No database setup or test
+global cleanup ran.
+
+**Boundary:** no deployment key was generated or provisioned; tests used only ephemeral test keys. No
+database, schema, key-rotation/re-encryption job, profile, bank/contact service, reveal authority,
+masking/history safeguard, or bank identifier was added. B-056's pure envelope helper is recorded in §26.73;
+operational migration and key retirement remain future work. Full partner-bank storage remains blocked until
+the D-059/D-060/D-067/D-068 security gate is complete. No commit or push; §25.4's full-system publish trigger
 remains authoritative.
+
+
+### 26.73 B-056 — Authenticated bank-data envelope re-encryption helper `IMPLEMENTED — PURE`
+
+**Contract (D-069):** `reencryptBankData(envelope, context, keyring)` first fully authenticates and decrypts
+the envelope using the key ID and context-bound associated data. If the envelope is already under the active
+key ID, it returns the original string only after that verification succeeds. Otherwise, it encrypts the
+transient plaintext with the supplied active key and a fresh nonce, returning a new versioned envelope; it
+never returns or logs plaintext. Invalid/tampered ciphertext, a mismatched client/partner/record/field, or a
+missing retained old key fails closed with the existing generic cryptography error.
+
+The helper is pure with respect to storage: it does not update a row, write audit/history, authorize a reveal,
+retire keys, or schedule a bulk migration. Callers must own any transaction, persistence, re-encryption
+progress tracking, post-migration verification, and old-key retirement. The prior key must remain available
+until all ciphertext using it has been migrated and verified.
+
+Two added focused tests cover old-to-active re-encryption, ciphertext-only return, same-key idempotence,
+verification before no-op, tamper/context refusal, and missing-prior-key failure. The encryption suite passes
+8/8 and, with the seven B-055 keyring tests, the focused security suites pass 15/15. Typecheck and diff check
+pass; tests use ephemeral keys and no database setup/global cleanup.
+
+**Boundary:** no database, schema, bank field, real key, bank identifier, reveal authority, masking/history
+safeguard, operational re-encryption job, or key-retirement behavior was added. Bank storage stays blocked;
+B-057's history redaction boundary and separately audited reveal remain prerequisites. No commit or push;
+§25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.72):** B-057's write/read history redaction is recorded in §26.74. Ordinary-view masking,
+separately audited reveal, and operational rotation/old-key retirement remain outstanding.
+
+
+### 26.74 B-057 — Partner bank/contact history redaction `IMPLEMENTED — HISTORY ONLY`
+
+**Privacy contract (D-070):** the generic `recordChange` path now applies an allowlisted projection before
+serializing snapshots for the canonical object classes `partner_bank` and `partner_contact`. Bank IBAN,
+local-account/account-number/account-identifier values (including ciphertext-column aliases) are replaced
+with the fixed `[masked]` marker. Named-contact email and phone fields are likewise fully masked; no last
+characters or length are retained. Approved non-sensitive fields such as account holder, country, bank name,
+bank code/BIC, contact name/title/function, validity, active state and primary state remain in history.
+Unknown and nested fields are dropped rather than serialized.
+
+For these classes the generic free-form `reason` and caller-supplied field labels are omitted, because they
+could smuggle sensitive values; safe field labels are regenerated from field names. Sensitive changes whose
+before/after values both project to `[masked]` are still recorded when their in-memory source values differ;
+true no-ops remain silent. The source values are used only for this equality check and never enter history.
+`changeHistory` also reprojects stored values on read, replaces stored field labels, strips reasons and drops
+unknown fields, providing defense in depth for any older/miswritten item. Organization-level
+`business_partner` email/phone history remains unchanged. Future writers must use the exported canonical
+object-class constants and opaque record IDs; alternate object classes are not covered by this policy.
+
+Five isolated tests cover bank and contact masking on create/change, unknown-field and reason/label
+suppression, masked change vs true no-op, read-time redaction of stored values, and preservation of general
+partner email/phone. Typecheck and `git diff --check` pass; no database setup/global cleanup ran.
+
+**Boundary:** this safeguards generic history only. It does not implement ordinary-view masking, at-rest
+column integration, reveal authorization/audit, bank/contact storage, or key rotation operations. No schema,
+migration, database, real bank identifier, or deployment key was added. B-058 must specify the separate
+audited reveal contract; bank storage remains blocked until the full security gate is complete. No commit or
+push; §25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.73):** B-058 has specified the reveal contract (§26.75, D-071); audit-log hardening and
+all reveal/view/storage implementations remain pending.
+
+
+### 26.75 B-058 — Bank-data reveal authorization and audit contract `SPECIFIED — NOT IMPLEMENTED`
+
+**Owner-selected policy (D-071):** a reveal requires both `FND.PARTNER.DISPLAY` and the dedicated
+`SEC.PARTNER.BANK.REVEAL` capability, using the normal capability-pattern matcher. `FND.*` and `AUDIT.*`
+do not match the `SEC` namespace, but the Administrator's `*` does grant reveal. Check the verified session
+and both authorities before reading/decrypting a record. Missing-capability messages follow D-045; no
+unauthorized request may expose whether a bank record exists.
+
+One operation may request one or more allowlisted account-identifier fields—IBAN and/or local account number.
+It does not reveal bank code/BIC, named-contact email/phone, or other fields. Require exactly one controlled
+purpose code: `PARTNER_SUPPORT`, `DATA_CORRECTION`, `AUDIT_REVIEW`, or `LEGAL_REGULATORY`; no free-text
+reason is accepted or logged.
+
+Every authenticated operation attempt, successful or denied, is recorded in the existing tenant-scoped
+`audit_access_log`. Success uses `event_type=READ`; missing authority uses `CAPABILITY_DENIED`; other
+validation, record, or cryptographic denials use `READ` with a fixed denial code. Use
+`transaction_code=SEC.PARTNER.BANK.REVEAL`, `object_type=partner_bank`, and an opaque bank-record `object_key`.
+Tenant, actor ID and username come only from the verified session; the fixed-schema `detail` may contain the
+partner key, selected field names, outcome, approved purpose code and fixed denial code. Never log identifier
+values, ciphertext, key IDs/material, or raw invalid input. An unauthenticated request redirects to sign-in;
+without a verified tenant/actor, no tenant-scoped reveal event is written.
+
+The success audit row must commit before any plaintext is returned. If audit persistence fails, deny the reveal
+and return no plaintext. Authorization, field/purpose validation, missing-record and cryptographic failures
+also return no plaintext; non-authorization failures use a generic response that does not distinguish record
+existence or expose cryptographic details. B-059 must first add database-enforced UPDATE/DELETE protection
+for runtime access to `audit_access_log` (the current runtime grants include both). This batch changed no code,
+capability catalogue, schema, migration, database or data; no tests were applicable. No commit or push; bank
+data remains blocked pending implementation of the complete security gate.
+
+**Status update (v0.74):** B-059 revoked direct runtime mutation of `audit_access_log` (§26.76). The owner
+explicitly retained the existing whole-tenant `ON DELETE CASCADE` as a lifecycle/retention exception (D-072).
+
+
+### 26.76 B-059 — Runtime audit-log mutation protection `IMPLEMENTED — DIRECT DML`
+
+Added immutable migration `drizzle/9015_audit_access_log_append_only.sql`. It revokes `UPDATE`, `DELETE`,
+and `TRUNCATE` from `cairn_app` on `audit_access_log`; existing `SELECT` and `INSERT` grants remain, so
+runtime history can still be read and written. The change is narrowly scoped to this table. No trigger is
+needed for direct DML because PostgreSQL rejects the operation at privilege check.
+
+The owner explicitly selected the existing full-tenant `client` → `audit_access_log` `ON DELETE CASCADE`
+as a permitted lifecycle/retention exception. B-059 leaves that FK and tenant-delete behavior unchanged;
+whole-tenant deletion can still remove that tenant's logs through the cascade. This is the stated limit of
+the direct-row append-only guarantee (D-072), not protection against every privileged lifecycle action.
+
+Added `tests/audit-access-log-append-only.test.ts` to verify runtime SELECT/INSERT remain allowed, UPDATE/
+DELETE/TRUNCATE are denied, and a tenant cascade still cleans the isolated development fixture. The integration
+test was not run because no confirmed disposable development database was available; no database or owner/
+production data was accessed. Typecheck and `git diff --check` pass. No reveal endpoint, capability entry,
+bank data, or new audit table was added. No commit or push; §25.4's full-system publish trigger remains.
+
+**Status update (v0.75):** B-060 adds the verified-session reveal gate and safe attempt/final-outcome writer
+(§26.77, D-073). It remains a non-data boundary; no bank identifier is stored or returned.
+
+
+### 26.77 B-060 — Session-bound reveal authorization and audit writer `IMPLEMENTED — NO DATA PATH`
+
+Added `src/platform/security/bank-data-reveal.ts`. It requires a verified `SessionContext`, checks both
+`FND.PARTNER.DISPLAY` and `SEC.PARTNER.BANK.REVEAL` using the existing matcher, validates requested fields
+against `iban`/`localAccountNumber`, restricts purpose to the four D-071 codes, and accepts only safe-format
+partner/bank-record keys. Tenant, actor ID and username are taken from the session; request-supplied identity,
+free text, unknown fields and invalid key text are never copied into the audit detail.
+
+`authorizeAndRecordBankRevealAttempt` inserts a safe `READ` or `CAPABILITY_DENIED` event. For an allowed
+request its `AUTHORIZED` outcome means only that the gate passed—not that plaintext was read. The future
+data service must then call `recordBankRevealOutcome` with terminal `SUCCESS` or a fixed-code `DENIED`, in the
+same transaction, and return plaintext only after commit. Audit-write failures throw a generic denial error;
+a caller must return logged denials from the transaction rather than throw inside it and roll back the event.
+Neither helper reads data, decrypts ciphertext, nor returns plaintext.
+
+Registered `FND.PARTNER.DISPLAY` and `SEC.PARTNER.BANK.REVEAL` in the idempotent global capability seed;
+no role grant, command route or user interface was added, and the seed was not run. Normal role-pattern
+semantics remain: Administrator `*` grants reveal, while `FND.*`/`AUDIT.*` do not. Seven isolated fake-Tx
+tests pass for explicit/wildcard authority, session-derived actor/tenant, safe audit metadata, denied/invalid
+requests, terminal outcomes and audit-write failure. Typecheck and `git diff --check` pass. No database,
+key, bank record, decryption path or UI was used or added. No commit or push; §25.4's full-system publish
+trigger remains authoritative.
+
+**Status update (v0.76):** B-061 specifies ordinary-view identifier masking in §26.78 (D-074); implementation
+remains a separate pure-projection batch. History stays fully masked, and the audited reveal gate is unchanged.
+
+
+### 26.78 B-061 — Normal-view bank-identifier masking format `SPECIFIED — NOT IMPLEMENTED`
+
+Owner selected a fixed `••••` marker for list/summary views and `••••` followed by the final four characters
+for detail views of IBAN and local account number. Do not retain the country prefix or original identifier
+length. If an identifier has four or fewer characters, show only `••••` so a short local account can never
+become fully visible through the suffix rule. Use the final four characters as stored; never normalize or
+change the underlying local account value for display. This does not alter bank code/BIC treatment, named
+contact behavior or the full-value audited reveal flow. History remains fully `[masked]` under D-070.
+
+B-061 was a policy-only batch: no code, UI, bank data, database or tests changed. D-074 records the choice;
+B-062 implements the pure view projection only. No commit or push; §25.4's full-system publish trigger remains
+authoritative.
+
+**Status update (v0.77):** B-062 adds the pure allowlisted projection in §26.79 (D-075); no normal-view
+route currently uses it. B-063 begins the first country-profile validator, KW only.
+
+
+### 26.79 B-062 — Pure normal-view bank-identifier projection `IMPLEMENTED — NOT INTEGRATED`
+
+Added `src/platform/security/partner-bank-view.ts`. `projectPartnerBankNormalView` reuses B-057's strict
+`partner_bank` allowlist, then applies D-074: list mode returns fixed `••••`; detail mode returns `••••` plus
+only the last four characters when the value exceeds four characters. Short values remain fully masked; empty,
+null and undefined values remain empty/absent. Ciphertext aliases, unknown fields and nested non-sensitive
+values are omitted; safe allowlisted metadata is preserved. A malformed nested value in an identifier field
+is replaced by the fixed mask rather than exposed.
+
+Three pure tests cover list and detail formats, suffix/length/country-prefix hiding, short values, empty values,
+ciphertext omission, and unknown/nested-field dropping. The new tests plus B-057 history and B-060 reveal
+boundary suites pass 15/15. Typecheck and `git diff --check` pass; no database, bank record, decryption, route
+or UI was used or added. This helper does not authorize reads and no existing view calls it yet. No commit or
+push; §25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.78):** B-063 implements the pure KW profile helper (§26.80, D-076). It is not persisted,
+activated, or connected to any bank-data flow.
+
+
+### 26.80 B-063 — Pure Kuwait (`KW`) bank-profile validator `IMPLEMENTED — NOT ACTIVATED`
+
+Added `src/platform/security/bank-profile-kw.ts`. It requires a non-empty account holder and country `KW`,
+normalizes the IBAN to uppercase after removing ASCII spaces, and validates the exact 30-character
+`KW` + check digits + four-letter bank code + 22-character alphanumeric account format. MOD-97 is checked
+with a streaming remainder. The profile rejects any separate non-empty local account number and derives the
+bank code from IBAN positions 5–8; an optional supplied bank code is accepted only if it matches that derived
+value. Optional BIC/SWIFT is normalized and syntax-checked only; no directory, bank or account-existence
+lookup occurs. Failures return fixed error codes, never raw input.
+
+Four pure tests pass using only a synthetic KW-format identifier; they cover normalization/derivation, optional
+BIC, KW-only/IBAN-only requiredness, structure/checksum, and mismatch/invalid-BIC failures. Typecheck and
+`git diff --check` pass. No database, profile registry/activation, schema, bank storage, actual bank value,
+decryption, or UI was used or added. This helper is not called by any save path. B-064 (IN profile) is next;
+no commit or push; §25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.79):** B-064 adds the pure IN profile helper (§26.81, D-077). It is not persisted,
+activated, or connected to any bank-data flow.
+
+
+### 26.81 B-064 — Pure India (`IN`) bank-profile validator `IMPLEMENTED — NOT ACTIVATED`
+
+Added `src/platform/security/bank-profile-in.ts`. The pure helper requires a non-empty account holder and
+country `IN`. It requires a non-empty local account number and returns it exactly as supplied, preserving
+leading zeros and any bank-specific representation; it imposes no India-wide account-number length, syntax,
+checksum, padding, or truncation rule. Non-string account input is rejected with a fixed error. The profile
+rejects a non-empty IBAN. It requires IFSC in the existing `bankCode` field, trims and uppercases it, and
+validates exactly `^[A-Z]{4}0[A-Z0-9]{6}$`. Optional BIC/SWIFT is normalized and syntax-checked only. No
+IFSC directory, bank, branch, account-existence, or payment-rail lookup occurs; account type remains outside
+this bank-master profile. Failures expose only fixed error codes, and unknown input properties are not returned.
+
+Five isolated tests pass with synthetic identifiers only. They cover IFSC/BIC/country normalization, exact
+opaque account preservation without a national format/length rule, required fields, IBAN rejection, invalid
+IFSC/BIC and rejection of non-string account input. Typecheck and `git diff --check` pass. No profile registry
+or activation, persistence, schema, database, bank storage/data, decryption, save path, route, or UI was used
+or added. The helper is not enabled or called by any save path. No commit or push; §25.4's full-system publish
+trigger remains authoritative.
+
+**Status update (v0.80):** B-065 adds pure GB, US and JP validators (§26.82, D-078–D-080). All five
+initial-country validators are still unregistered, unactivated and disconnected from bank-data flows.
+
+
+### 26.82 B-065 — Pure GB, US and JP bank-profile validators `IMPLEMENTED — NOT ACTIVATED`
+
+Added `src/platform/security/bank-profile-gb.ts`, `bank-profile-us.ts` and `bank-profile-jp.ts`.
+
+**GB:** Requires account holder and country `GB`; removes ASCII spaces, uppercases, enforces the 22-character
+`GB` + check digits + four-letter institution code + 14-digit format, and validates MOD-97. Derives the bank
+code from IBAN positions 5–8, checks any supplied bank code for consistency, and rejects a separate non-empty
+local account number. Optional BIC receives syntax-only validation; no account/branch lookup or payment-rail
+claim is made.
+
+**US:** Requires account holder, country `US`, an opaque non-empty local account number, and a nine-digit ABA
+routing transit number in `bankCode`. It enforces the `01–12` or `21–32` routing-symbol range and the 3-7-1
+mod-10 check digit. The account number is preserved exactly with no U.S.-wide length, pattern, checksum,
+padding or truncation rule. Optional BIC receives syntax-only validation. No live directory, assignment/currentness,
+payment-rail or account-existence claim is made; a non-empty IBAN is rejected.
+
+**JP:** Requires account holder, country `JP`, an opaque non-empty local account number and exactly seven ASCII
+digits in `bankCode` for the institution-plus-branch composite. Leading zeros in both identifiers are preserved;
+no nationwide local-account format/length/checksum or padding/truncation rule is imposed. Optional BIC receives
+syntax-only validation. No directory/account lookup or Japan Post symbol/number conversion is performed; for
+Japan Post the caller must supply the transfer-compatible representation described by D-066. A non-empty IBAN
+is rejected.
+
+Four GB, five US and five JP isolated tests pass with synthetic fixtures only (14 total). They cover country and
+identifier normalization, GB structure/MOD-97/derived bank code, US routing range/check digit, JP composite
+format, opaque account preservation, optional/invalid BIC, required fields and IBAN/local-account rejection.
+Typecheck and `git diff --check` pass. No profile registry or activation, persistence, schema, database, bank
+data, encryption/decryption, save path, route or UI was used or added. These helpers are not called by any save
+path. No commit or push; §25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.81):** B-066 enforces `FND.PARTNER.DISPLAY` before partner data reads on the actual
+`/foundation/partners` route (§26.83, D-081). No reveal path is added; opaque bank-record-ID handling remains
+unresolved and blocks any future reveal execution path.
+
+
+### 26.83 B-066 — Partner display-route authorization `IMPLEMENTED — NO BANK DATA PATH`
+
+`src/app/foundation/partners/page.tsx` now checks the session's `FND.PARTNER.DISPLAY` capability immediately
+after session resolution and before awaiting route/search parameters or calling partner, company, country, or
+history read services. A missing capability receives the explicit missing-authority message without any partner
+data query. The page code label now identifies the display authority. `FND.PARTNER.MAINTAIN` remains a separate
+write authority enforced by the existing UI condition and server actions; supplier/customer segment reads retain
+their own capability checks.
+
+Added `tests/partner-display-page-auth.test.tsx`. Its denial case verifies the actual page guard is evaluated
+before `searchParams` can be read. The isolated route test passes; typecheck and `git diff --check` pass. The test
+used a mocked session and no database. No bank data, reveal route, decryption, or bank-record-ID handling was
+added; B-060's ID-opacity concern remains a blocker before any reveal execution path. No commit or push;
+§25.4's full-system publish trigger remains authoritative.
+
+**Status update (v0.82):** B-067 defines server-generated UUIDv4 bank-row IDs and tightens the reveal
+boundary's shape check (§26.84, D-082). This does not establish ID provenance; a tenant/partner-scoped row
+lookup is still required before any reveal path.
+
+
+### 26.84 B-067 — Bank-record ID generation contract `IMPLEMENTED — NO STORAGE OR REVEAL`
+
+Added `src/platform/security/bank-record-id.ts`. `generateBankRecordId()` uses Node's cryptographic `randomUUID`
+to create a canonical lowercase UUIDv4; `BankRecordId` is a compile-time brand, and `isBankRecordId()` checks
+UUIDv4 shape only. B-060's reveal-audit boundary now accepts only that shape and returns `INVALID_OBJECT_KEY`
+for malformed/sequential IDs, writing a null audit object key rather than echoing the invalid input.
+
+This is not proof that a well-shaped UUID was generated by the app or belongs to the requested partner. The
+future repository must generate IDs with this helper and resolve every requested row under the session-derived
+tenant, selected partner and supplied ID, then use the matched row's ID for audit/encryption context. It must
+never treat a raw client-provided UUID as a trusted record reference. No partner-bank table, row creation, lookup,
+persistence, database, bank value, reveal path or decryption was added; the opacity blocker remains until that
+scoped data path is implemented and verified.
+
+Three ID-helper tests and eight B-060 boundary tests pass (11 total), including a test documenting that UUID
+shape alone cannot attest provenance. Typecheck and `git diff --check` pass. No commit or push; §25.4's
+full-system publish trigger remains authoritative.
+
+**Status update (v0.83):** B-068 enforces the UUIDv4 record-ID format at the encryption-context boundary
+(§26.85, D-083). Tenant/partner-scoped row lookup is still absent and remains a prerequisite before reveal.
+
+
+### 26.85 B-068 — UUIDv4 enforcement in bank-data encryption context `IMPLEMENTED — NO STORAGE OR REVEAL`
+
+`src/platform/security/bank-data-encryption.ts` now types `BankDataContext.bankRecordId` as `BankRecordId` and
+runtime-validates it with `isBankRecordId()` before including it in GCM associated data. Encrypt, decrypt and
+re-encrypt therefore reject noncanonical/non-v4 record IDs with the existing generic crypto error. Valid row IDs
+remain bound to the authenticated client, partner, field and key ID as before.
+
+The pure crypto layer does not establish where a valid-shaped ID came from. A future bank repository must create
+row IDs with `generateBankRecordId()` and load records using authenticated tenant + selected partner + ID before
+any reveal operation; B-068 does not implement that lookup. Eight encryption tests, three ID-helper tests and
+eight B-060 audit-boundary tests pass (19 total). Typecheck and `git diff --check` pass. No schema, persistence,
+database, bank data, reveal route or decryption caller was added. No commit or push; §25.4's full-system publish
+trigger remains authoritative.
+
+**Status update (v0.84):** B-069 adds a pure batch re-encryption transformer (§26.86, D-084). It operates
+only on rows supplied by a caller; no database scan or old-key retirement verification is implemented.
+
+
+### 26.86 B-069 — Pure batch bank-data re-encryption `IMPLEMENTED — NO PERSISTENCE`
+
+Added `reencryptBankDataBatch` to `src/platform/security/bank-data-encryption.ts`. It accepts one bounded
+caller-supplied set of records, validates UUIDv4 row IDs and per-field authenticated context, re-encrypts each
+non-null envelope with the active key, authenticates and preserves already-current envelopes, preserves nulls,
+and returns ciphertext-only row projections plus a changed-field count. It does not mutate inputs, return
+plaintext, read/write a database, log values, or persist partial results; an invalid envelope fails the call.
+
+Three new batch tests cover re-encryption, current-key no-op, null preservation, input immutability, ciphertext-only
+output and fail-closed invalid input. Together with the ID and reveal-boundary suites, 22 focused tests pass.
+Typecheck and `git diff --check` pass. No actual bank values, schema, database scan, persistence, operational
+monitoring, exhaustive re-encryption verification or old-key retirement was used or added. A future runner must
+process all rows in bounded tenant-scoped transactions, verify every envelope against the active key and retire
+prior keys only after verified completion. No commit or push; §25.4's full-system publish trigger remains
+authoritative.
+
+**Status update (v0.93):** B-078 closes B-077's live-acceptance gap on a fresh disposable PostgreSQL 17.11 cluster.
+The custom runner applied all 32 lexical SQL migrations, then the T992 Business Partner target passed for both the
+maintainer and a display-only user: Bank Details showed the empty state without Save or reveal controls. The Drizzle
+journal/snapshots ending at 0008 are not read by this runner and did not affect acceptance; future Drizzle Kit
+migration generation still requires a separate metadata reconciliation. The target cleaned up T992, verified absent;
+the cluster used only a private Unix socket with TCP disabled and was removed. `npm run typecheck`, browser-harness
+(66/66), and `git diff --check` pass. No owner/production or persistent development database, bank rows, or real
+identifiers were accessed. B-076's view remains read-only; encryption-key retirement, encrypted writes/reveal, and
+contact UI remain separate gates. No commit or push.
+
+
+### 26.87 B-070 — Active-key verification for supplied batches `IMPLEMENTED — NO GLOBAL RETIREMENT PROOF`
+
+Added `verifyBankDataBatchOnActiveKey` to `src/platform/security/bank-data-encryption.ts`. It requires a keyring
+with exactly one key—the active key—then checks each non-null envelope's key ID and authenticates/decrypts it
+against the record's client, partner, UUIDv4 row ID and field context. It returns only the active key ID and
+record/field counts; it does not return plaintext. Retained-key rings and prior-key envelopes fail closed.
+
+Two tests cover a successfully re-encrypted batch, rejection of an old-key envelope, and refusal of a keyring
+that still includes prior keys. Thirteen encryption tests plus three ID-helper and eight audit-boundary tests pass
+(24 total). Typecheck and `git diff --check` pass. The verifier only speaks for supplied rows; it does not prove
+a database scan was complete, cover concurrent writes, persist results, or authorize retiring any key. No database,
+real bank data, schema, reveal path, or commit/push was used.
+
+
+### 26.88 B-071 — Pure partner-bank country-profile dispatcher `IMPLEMENTED — NOT INTEGRATED`
+
+Added `validatePartnerBankProfile` in `src/platform/security/partner-bank-profile.ts`. It trims and uppercases
+the country code, then dispatches only to the implemented KW, IN, GB, US, or JP pure validator. Missing country
+returns `COUNTRY_REQUIRED`; any other country returns `PROFILE_UNAVAILABLE`; there is no fallback profile.
+Country-specific validation remains in the individual profile helpers and follows D-060–D-066/D-076–D-080.
+
+Added three synthetic dispatcher tests covering all five country paths, country-code normalization, and missing/
+unsupported-country rejection. The dispatcher suite and all five profile suites passed: 26 tests across six files.
+`npm run typecheck` passes. This helper does not activate profile validation in an application save path, persist
+records, create schema or database state, establish profile readiness beyond these helpers, or contain real bank
+data. No lookup, reveal path, commit, or push was added.
+
+
+### 26.89 B-072 — Ciphertext-only partner-bank schema and read-only RLS `IMPLEMENTED — TESTED IN B-073`
+
+Added `partner_bank` to the typed Foundation schema and registered it at the schema root. Migration
+`0013_partner_bank_master.sql` defines the partner-wide row with a server-generated UUIDv4 key, required
+holder/country, optional bank metadata, validity dates, active/version/audit fields, and exactly one of two
+account-identifier envelope columns: `iban_ciphertext` or `local_account_number_ciphertext`. There are no
+plaintext identifier columns. Database checks require the `cbd1` envelope shape, UUIDv4 variant/version,
+nonblank holder, valid date order and positive version; overlapping validity remains allowed. Tenant deletion
+follows D-041's client cascade; deleting a partner row directly is blocked while bank records exist.
+
+Migration `0013_partner_bank_master.sql` enables and forces RLS immediately, with no policy yet, so the table
+default-denies even if the existing `9000` migration or its default privileges grant DML. Migration
+`9016_partner_bank_policies.sql` installs the scoped SELECT policy, revokes all app-role privileges previously
+granted by `9000`, and grants only SELECT; the app cannot insert, update, delete or truncate partner-bank rows.
+Four typed-schema/static-contract tests and `npm run typecheck` passed at B-072 completion; at that point, no
+migration had been applied. B-073's disposable acceptance later caught PostgreSQL's repetition-count limit in
+the initial envelope regex. Migration `0014_partner_bank_envelope_bound.sql` replaces those constraints using a
+PostgreSQL-safe nonempty payload pattern and a 5,540-character total-envelope cap, without editing `0013`.
+See §26.90 for final live acceptance. The shape constraint does not authenticate ciphertext. No bank-row service, save path, scoped lookup, bank data, UI, reveal path, commit or push was added.
+
+
+### 26.90 B-073 — Disposable PostgreSQL acceptance for partner-bank schema `PASSED — CLUSTER REMOVED`
+
+Downloaded/extracted PostgreSQL 17.11 binaries under a temporary `/tmp` directory, initialized a fresh local
+cluster with host connections disabled, and applied every SQL migration in `drizzle/` in lexical order. The
+cluster used only local Unix-socket connections. Synthetic development tenants `T991`/`T992`, partners, and
+placeholder envelopes were created only inside this disposable database; the cluster, package files, and test
+rows were removed by the cleanup trap. No configured, owner, production, or persistent development database was
+contacted.
+
+The first fixture insert exposed a PostgreSQL ARE repetition-count limit: the initial migration's `{1,5462}`
+regex could not be evaluated. Kept migration `0013` unchanged and added `0014_partner_bank_envelope_bound.sql`.
+It uses a nonempty URL-safe payload pattern plus a total-envelope cap of 5,540 characters, matching the 4,096-byte
+plaintext limit; the 5,540-character boundary was accepted and 5,541 was rejected. All migrations, including
+`0014` and `9016`, then applied successfully.
+
+Live checks passed: multiple same-partner records with overlapping validity were accepted; missing/both identifier
+envelopes, plaintext in a ciphertext column, a non-v4 UUID, blank holder, inverted dates, version zero, unknown
+country and oversize envelope were rejected. Forced RLS flags were both true. The `cairn_app` role had SELECT but
+not INSERT/UPDATE/DELETE/TRUNCATE; unscoped reads returned no rows, tenant-scoped reads saw only their tenant,
+and cross-tenant reads were hidden. App-role DELETE was denied, direct partner deletion was blocked while bank
+rows existed, and tenant deletion cascaded to the synthetic bank rows under D-041. Five typed-schema/static
+contract tests and `npm run typecheck` pass; `git diff --check` passes.
+
+This proves the migration/constraint/RLS behavior only on the temporary PostgreSQL cluster. It does not prove
+ciphertext authenticity, operational key rotation or global retirement, nor add a bank-row service, write path,
+scoped lookup, UI, reveal path or contact storage. No commit or push.
+
+
+### 26.91 B-074 — Read-only, scoped partner-bank metadata lookup `IMPLEMENTED — NO REVEAL OR UI`
+
+Added `lookupPartnerBankMetadata` in `src/modules/foundation/partner-bank-reads.ts`. It requires
+`FND.PARTNER.DISPLAY` through the existing capability matcher, validates the session-derived tenant, selected partner
+number and canonical UUIDv4 row ID, then calls `withTenant` using the session tenant. Its single-row query binds
+`partner_bank.client`, `partner_bank.partner_number`, and `partner_bank.bank_record_id` together. The result is a
+strict allowlist of non-ciphertext metadata plus `bankRecordId` from the matched database row; encrypted IBAN and
+local-account columns are not selected, and no account-identifier plaintext, decryption or reveal authority is involved.
+Invalid selectors, invalid returned row IDs and absent rows return `null`; callers cannot supply a tenant.
+
+Four focused tests verify authorization denial without a query, the tenant/partner/row-ID SQL predicates and bound
+values, the metadata-only projection, and invalid/missing-row behavior. `npm run typecheck` and `git diff --check`
+pass. Tests use a fake tenant transaction and Drizzle PostgreSQL SQL rendering; no live or persistent database was
+accessed. No writes, audit/reveal integration, save path, route, UI, masking projection, bank values, commit or push
+were added. Normal bank identifiers remain subject to D-074 masking, and any future reveal must retain all existing
+authorization, audit-before-return, fail-closed audit, encryption, provenance and key-retirement gates. The metadata
+lookup is not an encrypted-row reveal loader.
+
+
+### 26.92 B-075 — Read-only, scoped partner-bank metadata list `IMPLEMENTED — NO REVEAL OR UI`
+
+Added `listPartnerBankMetadata` to `src/modules/foundation/partner-bank-reads.ts`, reusing the single-row metadata
+allowlist from B-074. It requires `FND.PARTNER.DISPLAY`, validates the session-derived tenant and selected partner,
+then runs through `withTenant` with explicit predicates on `partner_bank.client` and `partner_bank.partner_number`.
+No caller-supplied tenant is accepted. The projection excludes both encrypted account-identifier columns and any
+plaintext IBAN/local-account field; every returned row ID is UUIDv4-checked and comes from that database row.
+
+The query returns all matching rows, including inactive and out-of-validity history, without an implicit truncation.
+Rows are ordered by `validFrom` descending and UUIDv4 row ID ascending for deterministic display. Invalid selectors or
+an invalid-shaped row ID fail closed as `null`; a valid partner with no rows returns an empty list.
+
+Four added tests cover display denial without a query, tenant/partner predicates and parameters, stable ordering,
+inactive-row inclusion, metadata-only projection, invalid selectors, empty results, and malformed database IDs. The
+focused metadata-read suite passes 8/8; `npm run typecheck` and `git diff --check` pass. Tests use a fake tenant
+transaction and Drizzle PostgreSQL SQL rendering; no live or persistent database was accessed. Tests use only synthetic
+metadata placeholders; no bank rows were persisted. No real account identifiers, ciphertext, decryption, writes,
+audit/reveal path, masking projection, route, UI, or commit/push were added. Ordinary-view
+masking and all existing encryption, UUID-provenance, key-retirement, and audited-reveal gates remain unchanged.
+
+
+
+### 26.93 B-076 — Display-only masked bank metadata tab `IMPLEMENTED — NO LIVE DB/BROWSER ACCEPTANCE`
+
+Added the explicit `BANKS` tab to the selected-partner navigation in `src/app/foundation/partners/page.tsx` and a
+server-rendered `PartnerBankMetadataPanel`. The query runs only when that tab is selected; the existing general view
+and other segments do not call the partner-bank list service. The route's existing `FND.PARTNER.DISPLAY` guard remains
+before search-parameter reads, and the panel receives only B-075's session-tenant/partner-scoped metadata result.
+
+The panel is display-only and shared across Supplier/Customer roles. It shows account holder, country, bank name/code,
+BIC, validity dates and active state. The identifier column renders only the fixed `••••` list mask from D-074, with an
+accessible “masked” label. Bank-record IDs are used only as render keys and are not printed; ciphertext and full
+identifier values are not queried or passed to the component. No edit, save, reveal, detail-suffix, or history action
+is exposed on this tab. It is available only to the already-authorized partner-display route.
+
+Two panel-render tests cover safe metadata, fixed masking, row-ID/ciphertext omission and empty/unavailable states. Two
+route tests verify display denial avoids the bank read and the explicit `BANKS` tab alone invokes the list service with
+the authenticated session and matched partner. The focused tests pass 4/4; typecheck, production build,
+and `git diff --check` pass. A temporary
+Vitest configuration used JSX automatic mode and disabled destructive global setup; it was removed. No live database,
+migration application, browser acceptance, actual bank row or real account identifier was used. The new tab requires
+the bank migrations in the target database; acceptance must use a fresh disposable development database only.
+
+This does not add bank/contact maintenance, operational key rotation/re-encryption, old-key retirement, normal-detail
+suffix display, audited reveal/decryption, or contact views. D-074's summary mask is integrated only for this tab; the
+full bank-data gate remains closed. No commit or push; §25.4's full-system publish trigger remains authoritative.
+
+
+
+### 26.94 B-077 — Business Partner browser target coverage for bank metadata `IMPLEMENTED — ACCEPTED IN B-078`
+
+Extended `scripts/browser-smoke/checks.ts`'s existing `business-partners` target (reserved development fixture T992).
+After creating the partner through the UI, the target opens the `BANKS` tab, verifies the no-record empty state, and
+asserts that neither save nor reveal controls appear. It returns to General data and later repeats the empty-state and
+no-maintenance/no-reveal checks after signing in as a display-only warehouse user. The target creates no bank row or
+bank/account value; the fixed-mask rendering remains covered by B-076's component test. The target label was updated
+to describe its bank-summary coverage.
+
+At B-077 completion, `npm run typecheck` and `npm run test:browser-harness` (66/66) passed, and
+`npm run smoke:browser -- --list` confirmed the updated Business Partner target was selectable. Live acceptance was
+then pending because no confirmed disposable database was available; §26.95 records the subsequent B-078 acceptance.
+The target's fixture guard still refuses to delete a tenant unless it matches the exact reserved T992 development
+fixture. No commit or push; §25.4's full-system publish trigger remains authoritative.
+
+
+### 26.95 B-078 — Drizzle metadata review and disposable B-077 browser acceptance `PASSED — CLUSTER REMOVED`
+
+**Metadata review.** At this revision, `drizzle/meta/_journal.json` and snapshots end at `0008`, while the SQL
+folder continues through `0014` and policy files through `9016`. `src/platform/db/migrate.ts` does not read Drizzle
+metadata: it applies every `drizzle/*.sql` file in lexical order and records its filename/checksum in
+`cairn_migration`. The discrepancy therefore did not affect the fresh-database acceptance procedure. Metadata was not
+changed; future Drizzle Kit generation/snapshot-diff behavior remains unreviewed and must be resolved separately
+before relying on that workflow.
+
+**Disposable acceptance.** Extracted PostgreSQL 17.11 binaries under `/tmp`, initialized a fresh cluster with TCP
+listening disabled, host authentication rejected, and a private Unix socket only. A local migration role had
+`BYPASSRLS`; `cairn_app` was non-superuser and did not bypass RLS. The custom runner applied all 32 SQL migrations;
+shared reference and global catalogue seeds loaded into that disposable database. No configured, unverified,
+persistent development, owner, or production database was contacted.
+
+`npm run smoke:browser:business-partners` passed on the built app against the disposable database. The T992 fixture
+was created through onboarding and cleaned by the target; a post-run query confirmed no T992 development fixture
+remained. Maintainer and display-only partner viewer both saw the Bank Details empty state with no Save or reveal
+controls. The existing partner create/maintain/no-op, dual-role, block/unblock, invalid-country, search, and history
+checks also passed. No bank record, bank/account value, ciphertext, or real identifier was created or read.
+
+The browser harness now satisfies the optional owner-token form field with a per-run random value only if that field
+is rendered; the runner remains development-only. Its synthetic T992 warehouse viewer is granted
+`FND.PARTNER.DISPLAY` without `FND.PARTNER.MAINTAIN`, so the view-only assertion exercises an authorized display user.
+`npm run typecheck`, `npm run test:browser-harness` (66/66), and `git diff --check` pass. The app and cluster were
+stopped; temporary cluster and extracted package files were removed. The PAT in `.env.local` was not read or
+revealed; its contents were left unchanged and the file was restored. No commit or push; §25.4's full-system publish
+trigger remains authoritative.
 
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -5020,6 +5666,30 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 0.93 | 2026-10-11 | **B-078 reviews the Drizzle metadata gap and passes B-077's live browser target on a disposable PostgreSQL 17.11 database.** Confirms the custom runner ignores metadata and applies 32 lexical SQL migrations; Drizzle Kit metadata reconciliation remains separate. The T992 Business Partner target passes maintainer and display-only Bank Details checks; cleanup verified, private Unix socket only, TCP disabled, temporary cluster/app removed. Smoke onboarding uses only an ephemeral per-run value if its owner field is rendered; the synthetic viewer has `FND.PARTNER.DISPLAY` without maintain. Typecheck, browser-harness (66/66), and diff check pass. No bank records/values, persistent/owner/production DB, `.env.local` content access/change, commit or push. §26.95 records results. | Agent |
+| 0.92 | 2026-10-11 | **B-077 extends Business Partner browser target coverage for the bank metadata tab.** The T992 target asserts the empty state and absence of save/reveal controls for maintainer and display-only users. Typecheck and browser-harness (66/66) pass; selection list confirms the target. Live browser/database acceptance was not run; no DB, bank rows or real identifiers touched. §26.94 records limits; no commit or push. | Agent |
+| 0.91 | 2026-10-11 | **B-076 integrates a display-only Bank Details tab for Business Partners.** It loads B-075 metadata only on explicit selection and renders only allowlisted fields plus D-074's fixed `••••` list mask; no account identifiers, ciphertext, edit or reveal. Two panel and two route tests, typecheck, production build and diff check pass. No live database/browser acceptance, real bank data, commit or push; §26.93 records scope. | Agent |
+| 0.90 | 2026-10-11 | **B-075 adds a display-authorized, read-only partner-bank metadata list.** The query is scoped by session tenant and selected partner, includes inactive records, returns only database row IDs and allowlisted non-ciphertext metadata, and uses deterministic order. Four new cases; focused suite 8/8 and typecheck pass. No DB access, persisted bank data, real identifiers, decryption, writes, reveal, or UI; §26.92 documents the boundary. No commit or push. | Agent |
+| 0.89 | 2026-10-11 | **B-074 adds a display-authorized, read-only partner-bank metadata lookup.** Requires `FND.PARTNER.DISPLAY`, derives tenant from the authenticated session, and binds tenant + partner + UUIDv4 bank-row ID; returns allowlisted non-ciphertext metadata and the matched row's ID. Four focused tests and typecheck pass. No DB access, writes, decryption, reveal path or UI; §26.91 records the scope. No commit or push. | Agent |
+| 0.88 | 2026-10-11 | **B-073 accepts partner-bank migrations and RLS on a fresh disposable PostgreSQL 17.11 cluster.** All migrations applied; live tests verified constraints including the 5,540-character envelope boundary, forced RLS, app-role SELECT-only privileges, tenant isolation, partner-delete block, and D-041 tenant cascade. The first run found PostgreSQL's regex repetition-count limit; additive migration `0014_partner_bank_envelope_bound.sql` corrected it without editing `0013`. The temporary cluster and synthetic fixtures were removed. Five static schema-contract tests, typecheck and diff check pass. No owner/production data, write service or reveal path; §26.90 records limits. No commit or push. | Agent |
+| 0.87 | 2026-10-11 | **B-072 adds a ciphertext-only partner-bank table schema with forced tenant RLS and read-only app access.** The typed schema and additive migrations enforce UUIDv4/date/version/envelope-shape checks, retain client tenant cascade, and block direct partner deletion while rows exist. Four typed-schema/static-contract tests and typecheck pass; no migration application, persistent database or bank rows at B-072 completion. No write service, save path, UI or reveal path. §26.89 records the boundary. No commit or push. | Agent |
+| 0.86 | 2026-10-11 | **B-071 adds a pure fail-closed dispatcher for the implemented KW/IN/GB/US/JP partner-bank validators.** Three dispatcher tests plus all five profile suites pass (26 total); typecheck and diff check pass. Missing/unsupported countries fail closed. The dispatcher is not connected to a save path or storage; no schema, database, or bank values. §26.88 records the boundary. No commit or push. | Agent |
+| 0.85 | 2026-10-11 | **B-070 adds active-key-only verification for supplied ciphertext batches.** The verifier requires a one-key active keyring, checks key IDs and authenticates each non-null envelope/context, returning counts only. Two new tests; 24 focused ID/reveal/encryption tests pass; typecheck and diff check pass. It does not prove DB scan completeness or global key retirement; no database or bank data. D-085 / §26.87 document the limit. No commit or push. | Agent |
+| 0.84 | 2026-10-11 | **B-069 adds a pure batch re-encryption transformer for supplied encrypted bank fields.** It authenticates each field context, re-encrypts old-key envelopes under the active key, preserves current envelopes and nulls, and returns ciphertext only; no DB read/write or key-retirement claim. Three new tests; 22 focused ID/reveal/encryption tests pass; typecheck and diff check pass. No actual bank data, schema, database scan, persistence or reveal path. D-084 / §26.86 document the boundary. No commit or push. | Agent |
+| 0.83 | 2026-10-11 | **B-068 enforces the UUIDv4 bank-record ID policy at the encryption/decryption context boundary.** `BankDataContext.bankRecordId` uses the `BankRecordId` brand and receives runtime UUIDv4 validation before GCM AAD construction. Nineteen focused encryption/ID/audit tests pass; typecheck and diff check pass. This checks shape only; tenant/partner/ID-scoped lookup remains mandatory before any reveal path. No schema, persistence, database or bank data. D-083 / §26.85 document the boundary. No commit or push. | Agent |
+| 0.82 | 2026-10-11 | **B-067 establishes server-generated UUIDv4 bank-record IDs and applies canonical-shape validation at the B-060 audit boundary.** Invalid/sequential IDs are denied and omitted from the audit object key; three ID helper tests plus eight reveal-boundary tests pass. Typecheck and diff check pass. UUID shape is not provenance: tenant/partner/ID-scoped row lookup remains mandatory before any reveal path. No bank table, row persistence, database, bank values, or reveal route. D-082 / §26.84 document the contract. No commit or push. | Agent |
+| 0.81 | 2026-10-11 | **B-066 enforces `FND.PARTNER.DISPLAY` in the partner list/detail route before any partner-data reads.** Missing authority gets a fixed denial message before route parameters are awaited; existing maintenance actions remain independently gated by `FND.PARTNER.MAINTAIN`. One isolated route-guard regression test passes; typecheck and diff check pass. No bank data, reveal path, decryption or database use. D-081 / §26.83 document the authorization check; bank-record-ID opacity still blocks future reveal execution. No commit or push. | Agent |
+| 0.80 | 2026-10-11 | **B-065 implements the remaining pure GB, US and JP bank-profile validators together.** GB enforces its 22-character IBAN structure/MOD-97 and derives the bank code; US validates ABA routing range/check digit with an opaque local account; JP requires the seven-digit institution/branch code with an opaque local account. Fourteen isolated synthetic-data tests pass; typecheck and diff check pass. No activation, persistence, schema, database, bank data, lookup, save path or UI. D-078–D-080 / §26.82 document the boundaries. No commit or push. | Agent |
+| 0.79 | 2026-10-11 | **B-064 implements the pure India (`IN`) bank-profile validator only.** It requires holder/country, a local account number preserved exactly, and IFSC normalized/validated in `bankCode`; rejects a non-empty IBAN and syntax-checks optional BIC only. Five isolated synthetic-data tests pass; typecheck and diff check pass. No country-wide account-number rules, lookup, profile activation, persistence, schema, bank data, database, save path or UI. D-077 / §26.81 document the boundary. No commit or push. | Agent |
+| 0.78 | 2026-10-11 | **B-063 implements the pure Kuwait (`KW`) bank-profile validator only.** It requires account holder and KW country; normalizes uppercase and ASCII spaces, validates the 30-character KW IBAN structure and MOD-97, rejects a separate non-empty local account number, derives bank code from IBAN positions 5–8 (and checks any supplied code), and syntax-checks optional BIC without external lookup. Four synthetic-data tests pass; typecheck and diff check pass. No profile registry/activation, persistence, schema, bank storage/data, database or UI. D-076 / §26.80 document the contract; B-064 India profile is next. No commit or push. | Agent |
+| 0.77 | 2026-10-11 | **B-062 implemented a pure normal-view bank-identifier projection.** It reuses the B-057 strict bank-field allowlist, applies D-074 list/detail masks, fully masks values up to four characters, drops ciphertext and unknown/nested fields, and preserves safe metadata. Three new tests; focused B-057/B-060/B-062 privacy suites pass 15/15; typecheck and diff check pass. No bank schema, storage, data, database, decryption, route or UI. D-075 / §26.79 document the boundary; helper is not integrated into a view. B-063 Kuwait profile validator is next; no commit or push. | Agent |
+| 0.76 | 2026-10-11 | **B-061 specified normal-view masking only.** Owner selected fixed `••••` in list/summary views and `••••` plus the final four characters in detail views for IBAN/local account identifiers; identifiers four or fewer characters remain fully masked, no original length or country prefix is shown, and history remains fully masked. D-074 / §26.78 record the rule. No code, UI, data or database changes; no tests applicable. B-062 pure projection is next; no commit or push. | Agent |
+| 0.75 | 2026-10-11 | **B-060 added the session-bound bank-reveal authorization/audit writer boundary only.** The helper requires partner display plus reveal capability, validates IBAN/local-account fields and controlled purpose codes, takes actor/tenant from the verified session, and logs safe gate events plus terminal success/denial metadata without plaintext. Added capability catalogue seed entries but no role grants, route or UI; seed not run. Seven isolated fake-Tx tests pass; typecheck/diff check pass; no database, bank record or decryption. D-073 / §26.77 document that `AUTHORIZED` is not a completed reveal and terminal result must commit before plaintext return. B-061 normal-view mask format decision is next; no commit or push. | Agent |
+| 0.74 | 2026-10-11 | **B-059 blocks direct runtime mutation of `audit_access_log`.** New immutable migration `9015_audit_access_log_append_only.sql` revokes UPDATE/DELETE/TRUNCATE from `cairn_app`, preserving SELECT/INSERT. The owner retained the existing whole-tenant `client` → log `ON DELETE CASCADE` as a lifecycle/retention exception (D-072). Added a development-tenant integration test for privileges, allowed writes and cascade cleanup; not run because no confirmed disposable DB was available. Typecheck and diff check pass; no database or owner/production data accessed. No reveal action, capability registration, bank data, commit or push. B-060 reveal authorization/audit writer boundary is next. | Agent |
+| 0.73 | 2026-10-11 | **B-058 specified the separate bank-identifier reveal authorization and audit contract only.** Owner selected `SEC.PARTNER.BANK.REVEAL` plus `FND.PARTNER.DISPLAY`, normal wildcard matching (so Administrator `*` grants it), selected IBAN/local-account fields only, and required controlled purposes `PARTNER_SUPPORT`, `DATA_CORRECTION`, `AUDIT_REVIEW`, `LEGAL_REGULATORY`. Every authenticated attempt is audited; success must be committed before returning plaintext, and audit failure denies the reveal. Existing `audit_access_log` must be hardened against runtime UPDATE/DELETE before reveal implementation. D-071 / §26.75 record denial/logging behavior; no code, capability registration, schema, migration, database or data changed. B-059 append-only audit-log protection is next; no commit or push. | Agent |
+| 0.72 | 2026-10-11 | **B-057 privacy projection integrated at generic history write and read boundaries.** Canonical `partner_bank`/`partner_contact` histories use allowlists; full IBAN/account identifiers and named-contact email/phone are replaced with `[masked]`, unknown/nested fields and free-form reasons/labels are omitted, and old stored items are redacted again on read. Organization-level `business_partner` contacts remain unchanged. Five isolated tests pass for create/change/no-op/read-redaction/general-contact behavior; typecheck and diff check pass; no database setup, bank storage, key or real identifiers. D-070 / §26.74 record exact scope and require future writers to use canonical object-class constants and opaque record IDs. B-058 audited-reveal contract remains next; ordinary-view masking and bank-data storage remain blocked. No commit or push; full-system publish trigger remains. | Agent |
+| 0.71 | 2026-10-11 | **B-056 authenticated envelope re-encryption helper only.** Added `reencryptBankData`: it authenticates/decrypts using the recorded key ID and tenant/partner/record/field AAD, re-encrypts old-key envelopes with the supplied active key and fresh nonce, and verifies then no-ops already-current ciphertext. Generic failures; no persistence, audit/history, logging, key retirement, or bulk migration. Eight encryption tests plus seven keyring tests pass (15 total); typecheck and diff check pass. No schema, database, deployment keys, bank data, reveal authority, masking/history safeguards, or storage integration. D-069 / §26.73 records behavior; B-057 history redaction is next. No commit or push; full-system publish trigger remains. | Agent |
+| 0.70 | 2026-10-11 | **B-055 fail-closed deployment-secret keyring configuration only.** Added lazy `CAIRN_BANK_DATA_KEYRING_JSON` parser for strict JSON with active key ID and 1–16 canonical unpadded base64url 32-byte keys; no fallback, generated/default key, raw-value error output, or integration into bank-data callers. Compose passes the secret only to the app; templates contain comments only. Seven keyring tests and six encryption tests pass (13 total), typecheck and diff check pass; no actual deployment key, schema, database, bank record, reveal/masking/history path or country-profile activation. D-068 / §26.72 record the contract; B-056 re-encryption helper is next. No commit or push; full-system publish trigger remains. | Agent |
 | 0.69 | 2026-10-11 | **B-054 implements the versioned bank-data encryption primitive only.** D-067 records the selected app-managed keyring and AES-256-GCM contract: random 96-bit nonce, 128-bit tag, key ID and tenant/partner/record/field bound as AAD, active-key encryption and retained-prior-key decryption. Six isolated unit tests, typecheck and diff check pass. No deployment-secret loader/key material, reveal authority/audit, masking/history safeguards, schema/database integration, profile activation or bank identifiers. §26.71 documents the contract and strict boundary; B-055 keyring configuration is next. No commit or push; full-system publish trigger remains. | Agent |
 | 0.68 | 2026-10-11 | **B-051–B-053 verified the remaining initial bank-validation profiles together.** D-064 records GB bank-issued IBAN-only validation (`GB`, 22 characters, MOD-97; bank/sort/account components embedded). D-065 records US local account + 9-digit ABA RTN with check digit, no active-directory or payment-rail claim. D-066 records JP local account + seven-digit institution/branch composite in the existing bank-code field, with Japan Post's official transfer-format exception. Source links are recorded in §§26.68–26.70. All five D-061 profiles now have research specifications (D-062–D-066), but none is implemented or enabled; no code/schema/database/profile rows/real bank values. Encryption/reveal/masking safeguards still block identifier storage. `git diff --check` passes; no commit or push. | Agent |
 | 0.67 | 2026-10-11 | **B-050 India bank-validation profile verified from authoritative sources.** RBI's NEFT FAQ specifies branch IFSC and account number; IFSC syntax is 11 characters (`^[A-Z]{4}0[A-Z0-9]{6}$`). RBI's committee report describes bank-specific account-number formats and its India IBAN design was consultation-stage; current SWIFT Registry Release 103 has no IN profile. D-063 records required local account number + IFSC, opaque account-number handling, optional BIC for this non-payment master, no directory/account-existence lookup, and account type deferred to transactions. No profile implementation/activation, code/schema/database/profile rows/real bank values. §26.67 records the source-backed rules; B-051 GB is next. `git diff --check` passes. | Agent |

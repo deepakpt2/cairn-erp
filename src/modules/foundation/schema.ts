@@ -459,6 +459,7 @@ export * from './payment-terms-schema';
 export * from './payment-method-schema';
 
 export * from './business-partner-schema';
+export * from './partner-bank-schema';
 
 export * from './supplier-company-schema';
 

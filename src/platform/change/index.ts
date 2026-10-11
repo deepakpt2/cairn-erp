@@ -5,19 +5,25 @@
  * what makes two things possible that an auditor will always ask for:
  *
  *   - "Show me the vendor master as it was on the posting date, not as it is now."
- *   - "Who changed this bank account, when, and from what?"
+ *   - "Who changed this bank account, when, and which safe fields changed? Sensitive values are masked."
  *
  * A change that alters nothing writes nothing. Noise in a change log is worse
  * than no change log, because it hides the entries that matter.
  */
 import type { Tx } from '../db/client';
+import {
+  isPartnerHistoryMaskedField,
+  isPartnerSensitiveHistoryClass,
+  projectPartnerHistorySnapshot,
+  projectPartnerHistoryStoredValue,
+} from './partner-data-history';
 import { changeDocument, changeDocumentItem } from '../tables/audit-trail';
 
 export interface RecordChangeInput {
   client: string;
   /** Business object class, e.g. 'gl_account', 'company_code', 'condition_record'. */
   objectClass: string;
-  /** Business key of the changed object. */
+  /** Business key of the changed object; partner bank/contact callers must use opaque record IDs, never account values. */
   objectKey: string;
   changeType: 'CREATE' | 'CHANGE' | 'BLOCK' | 'UNBLOCK' | 'REVERSE';
   changedBy: string;
@@ -55,27 +61,37 @@ export async function recordChange(
   tx: Tx,
   input: RecordChangeInput,
 ): Promise<string | null> {
+  const partnerSensitive = isPartnerSensitiveHistoryClass(input.objectClass);
+  const beforeSnapshot = projectPartnerHistorySnapshot(input.objectClass, input.before);
+  const afterSnapshot = projectPartnerHistorySnapshot(input.objectClass, input.after);
+  // Free-form reason text and caller-supplied labels can themselves contain sensitive values.
+  const reason = partnerSensitive ? undefined : input.reason;
+  const fieldLabels = partnerSensitive ? undefined : input.fieldLabels;
   const ignored = new Set([...DEFAULT_IGNORED, ...(input.ignoredFields ?? [])]);
   const securityRelevant = new Set(input.securityRelevantFields ?? []);
 
   const items: Array<{ field: string; oldValue: string | null; newValue: string | null }> = [];
 
   if (input.changeType === 'CREATE') {
-    const after = input.after ?? {};
+    const after = afterSnapshot ?? {};
     for (const [field, value] of Object.entries(after)) {
       if (ignored.has(field)) continue;
       if (value === undefined || value === null) continue;
       items.push({ field, oldValue: null, newValue: serialize(value) });
     }
   } else {
-    const before = input.before ?? {};
-    const after = input.after ?? {};
+    const before = beforeSnapshot ?? {};
+    const after = afterSnapshot ?? {};
     const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
     for (const field of fields) {
       if (ignored.has(field)) continue;
       const oldValue = serialize(before[field]);
       const newValue = serialize(after[field]);
-      if (oldValue === newValue) continue;
+      const maskedValueChanged =
+        partnerSensitive &&
+        isPartnerHistoryMaskedField(input.objectClass, field) &&
+        serialize(input.before?.[field]) !== serialize(input.after?.[field]);
+      if (oldValue === newValue && !maskedValueChanged) continue;
       items.push({ field, oldValue, newValue });
     }
   }
@@ -90,7 +106,7 @@ export async function recordChange(
     objectKey: input.objectKey,
     changeType: input.changeType,
     transactionCode: input.transactionCode,
-    reason: input.reason,
+    reason,
     changedBy: input.changedBy,
     effectiveFrom: input.effectiveFrom,
   });
@@ -101,7 +117,7 @@ export async function recordChange(
       changeDocumentId: id,
       client: input.client,
       fieldName: item.field,
-      fieldLabel: input.fieldLabels?.[item.field] ?? humanize(item.field),
+      fieldLabel: fieldLabels?.[item.field] ?? humanize(item.field),
       oldValue: item.oldValue,
       newValue: item.newValue,
       isSecurityRelevant: securityRelevant.has(item.field) ? 'true' : 'false',
@@ -134,7 +150,23 @@ export async function changeHistory(
     const items = await tx.query.changeDocumentItem.findMany({
       where: (t, { and, eq }) => and(eq(t.client, client), eq(t.changeDocumentId, doc.id)),
     });
-    result.push({ ...doc, items });
+
+    if (isPartnerSensitiveHistoryClass(objectClass)) {
+      const safeItems = items.flatMap((item) => {
+        const oldValue = projectPartnerHistoryStoredValue(objectClass, item.fieldName, item.oldValue);
+        const newValue = projectPartnerHistoryStoredValue(objectClass, item.fieldName, item.newValue);
+        if (!oldValue.included || !newValue.included) return [];
+        return [{
+          ...item,
+          fieldLabel: humanize(item.fieldName),
+          oldValue: oldValue.value,
+          newValue: newValue.value,
+        }];
+      });
+      result.push({ ...doc, reason: undefined, items: safeItems });
+    } else {
+      result.push({ ...doc, items });
+    }
   }
   return result;
 }
