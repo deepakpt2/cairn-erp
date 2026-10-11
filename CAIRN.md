@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.38 — B-022 database acceptance passed)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.39 — B-023 customer-company browser acceptance passed)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2015,11 +2015,11 @@ when combining them would jeopardise the time budget.
 | B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
 | B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
 | B-018 | Customer company **payment-methods/dunning-procedure fields backend** only | ≤10 min | **DONE — code-only payment-method set and dunning procedure on the company segment; validated, versioned, audited; no UI inputs yet** |
-| B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable and read-only views expose the B-018 fields; existing authority, version and audit path retained; browser acceptance pending** |
+| B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable/read-only fields and existing authority/version/audit path; automated browser acceptance passed in B-023; owner walkthrough pending (§26.35, §26.39)** |
 | B-020 | Customer company interest-indicator/tolerance-group fields, backend only | ≤10 min | **DONE — code-only defaults; migration, service and action acceptance passed in isolated PostgreSQL test DB (§26.36, §26.38)** |
-| B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **IMPLEMENTED — editable/display-only fields and access behavior; browser acceptance pending (§26.37)** |
+| B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **DONE — editable/display-only fields and access behavior; automated browser acceptance passed in B-023; owner walkthrough pending (§26.37, §26.39)** |
 | B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **DONE — isolated PostgreSQL 17.11 test DB; all 24 migrations including 0010 applied; 65/65 DB service/action tests pass (§26.38)** |
-| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **NEXT — database ready; browser acceptance and owner walkthrough pending (§26.35, §26.37–26.38)** |
+| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — dev-fixture browser target passed; owner walkthrough pending (§26.39)** |
 | B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **PENDING — target/DB-backed browser acceptance not yet completed (§26.33)** |
 | B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **NEXT FEATURE — agree supported functions, direction, cardinality and default/validity rules (§25.5)** |
 
@@ -3781,7 +3781,7 @@ function relationships or the next Phase 1 master.
 
 ---
 
-### 26.35 B-019 — Customer company payment-method/dunning UI `COMPLETE · BROWSER ACCEPTANCE PENDING`
+### 26.35 B-019 — Customer company payment-method/dunning UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
 
 **Scope:** expose the B-018 `payment_methods` and `dunning_procedure` fields on the existing
 Customer company-code view. This is UI wiring only: no schema/migration, route, capability, term/master
@@ -3805,12 +3805,11 @@ seed, payment execution or dunning execution was added. No new authority is crea
   display, reordered-input no-op, history and denial of code values to a non-finance user. The existing
   action-security test now submits these fields through the session-derived action.
 
-**Verification:** `npm run typecheck`, `npm run build`, and `npm run lint:ip` pass (162 files).
-`npm run test:browser-harness` passes **58/58** pure tests. `scripts/browser-smoke/checks.ts` and the
-DB-backed action-security test were updated but **not executed**: this fresh workspace has no PostgreSQL
-service, so the integrated/browser target cannot safely run here. The build and typecheck are not a
-substitute for that acceptance. No database, owner tenant, production host or credentials were touched.
-No migration or reseed is required.
+**Verification at implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (162
+files) and `npm run test:browser-harness` (**58/58**) passed. The browser/DB acceptance was not run then
+because PostgreSQL was unavailable. The combined customer-company browser target subsequently passed
+in B-023 against the isolated development database (§26.39). No owner/production data was used; no
+migration or reseed is required for this UI slice. Product-owner walkthrough remains pending.
 
 **Owner manual test (R-23):** in a development/test tenant, open an active Customer partner such as
 `TESTCUST01` → **Customer company code** → company `1000`. Keep reconciliation `110000` and terms
@@ -3828,9 +3827,9 @@ A display-only finance user can see the saved codes but has no Save control; a u
 company display authority cannot see the codes/history; signed-out access redirects. These fields are
 not yet consumed by any invoice/payment/dunning service.
 
-Next: **B-020** was selected for the next bounded batch: optional interest-indicator and tolerance-group
-code fields on the Customer company segment, backend only. See §26.36. Owner browser walkthrough and
-sign-off for the B-019 UI remain pending.
+At B-019 close, B-020 was selected and is now complete; B-021 UI is also implemented. The combined
+B-019/B-021 automated customer-company browser target passed in B-023 (§26.39); owner walkthrough and
+sign-off remain pending.
 
 
 ### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PASSED IN B-022`
@@ -3883,11 +3882,12 @@ interest posting, tolerance calculation/enforcement, open-item processing, billi
 migration/service/action acceptance passed in the isolated test database; browser acceptance remains
 pending under B-023.
 
-At B-020 close, **B-021** was selected for the matching Customer company UI and is now implemented
-(§26.37). B-022 database acceptance is complete (§26.38); B-023 is the next acceptance batch.
+At B-020 close, **B-021** was selected and is now implemented (§26.37). B-022 database acceptance
+passed (§26.38), and B-023 automated browser acceptance has since passed (§26.39); owner walkthrough
+remains pending.
 
 
-### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · BROWSER ACCEPTANCE PENDING`
+### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
 
 **Scope:** expose the B-020 `interest_indicator` and `tolerance_group` values on the existing Customer
 company-code panel. UI wiring only: no schema, migration, service rules, route, capability, seed, master
@@ -3910,11 +3910,11 @@ boundary.
   without edit controls, and denial to a non-finance user. The DB-backed target was not run during B-021;
   B-022 subsequently prepared the isolated database and verified the underlying service/action behavior.
 
-**Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164 files),
-`npm run test:browser-harness` (**64/64**) and `git diff --check` passed for B-021. The browser target
-`npm run smoke:browser:customer-company` and owner walkthrough remain pending for B-023. B-022 has
-since applied the migrations and passed 65 customer-company/action-security database tests on a fresh,
-loopback-only PostgreSQL 17.11 test database (§26.38). No owner/production database or tenant was touched.
+**Verification at implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164
+files), `npm run test:browser-harness` (**64/64**) and `git diff --check` passed. B-022 later applied the
+migrations and passed 65 customer-company/action-security DB tests (§26.38). The B-023 Playwright target
+`npm run smoke:browser:customer-company` has now passed against a development fixture (§26.39); its
+owner walkthrough remains pending. No owner/production database or tenant was used.
 
 **Owner manual test (R-23):** after the B-020 migration 0010 is applied in a development/test tenant,
 open active customer `TESTCUST01` → **Customer company code** → `1000`. With the existing valid account
@@ -3934,10 +3934,9 @@ baseline is current). Do not write values through production SQL.
 tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
 consumes them yet.
 
-Next: **B-023** customer-company browser acceptance is the next batch; the local test database is
-ready (§26.38). B-024 customer sales-area browser acceptance remains pending. Complete both gates and
-owner walkthroughs before M1 release; after the acceptance gates, B-025 is the next feature package in
-§25.5.
+The B-023 automated browser target passed (§26.39). The next outstanding acceptance gate is **B-024**
+customer sales-area browser acceptance; the B-019/B-021 owner walkthrough is still pending. Complete
+both acceptance gates and owner walkthroughs before M1 release; B-025 follows the acceptance gates.
 
 
 ### 26.38 B-022 — B-020 migration and database acceptance `COMPLETE · ISOLATED TEST DATABASE`
@@ -3960,9 +3959,30 @@ B-020 normalization and validation, completeness independence, tenant isolation,
 action/security boundaries. Test fixtures ran only in the dedicated disposable database and cleaned up.
 
 **Result / next:** B-022 is complete. Migration 0010 and the B-020 service/action acceptance passed in
-this isolated PostgreSQL environment. The B-019/B-021 customer-company browser target and owner
-walkthrough have **not** been run; B-023 is next. Do not apply this local database or its test data to
-an owner/production tenant.
+this isolated PostgreSQL environment. At B-022 close, the B-019/B-021 customer-company browser target
+had not yet run; it subsequently passed in B-023 (§26.39). The owner walkthrough remains pending. Do not
+apply this local database or its test data to an owner/production tenant.
+
+
+### 26.39 B-023 — B-019/B-021 customer-company browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH PENDING`
+
+**Environment and fixture:** ran `npm run smoke:browser:customer-company` with the isolated B-022
+PostgreSQL database and local development app. Playwright Chromium 156 (Playwright revision 1248) was
+installed for this acceptance. The harness created development fixture tenant `T988` through the UI,
+with the reserved name `Browser verification tenant`; it did not use an owner tenant or any existing
+customer records. The harness removed the fixture in cleanup, and a follow-up query confirmed zero
+matching `T988` fixture rows remain. Test data was disposable, as authorised by the owner.
+
+**Result:** the target passed with exit code 0 and no browser page errors. It verified UI onboarding;
+customer-company accounting staged/completed/blocked lifecycle; B-019 payment-method/dunning values;
+B-021 interest/tolerance canonical save, persisted reload, no-op, explicit clear/restore and version
+behavior; security-relevant change history; invalid reconciliation-account refusal; finance display-only
+access without Save controls; denial of values/history to non-finance users; and signed-out protection.
+The run also confirmed the fixture had no hidden accounting number ranges.
+
+**Owner walkthrough:** automated acceptance is passed; the product-owner manual review/sign-off remains
+pending. Review the existing steps in §26.35 and §26.37 against a development tenant before marking the
+customer-company acceptance fully signed off. B-024 sales-area browser acceptance also remains pending.
 
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -4121,6 +4141,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.36 | 2026-10-11 | **B-021 implementation complete: customer company interest-indicator/tolerance-group UI; browser acceptance pending.** The existing Customer company panel now passes stored values to editable controls and authorised display-only values; codes remain max-four-character alphanumeric inputs, canonicalised by the B-020 service. The existing action/session-derived authority and omitted-field compatibility remain intact. Extended the isolated customer-company browser target for canonical save/reload, no-op, clear/restore, history and display-only/non-finance boundaries. No schema, migration, capability, seed or service behavior change. Typecheck, production build, IP lint (164 files), 64 pure harness tests and diff check pass; DB-backed browser smoke cannot run without PostgreSQL. §26.37 records owner steps; B-022 remains for selection. | Agent |
 | 0.37 | 2026-10-11 | **Owner-approved dependency-ordered completion roadmap.** Added §25.5 from outstanding B-020/B-021/B-017 acceptance through M1b–M1e, M1 release/sign-off, then Phases 2–9. Added pending B-022–B-024 acceptance gates and B-025 partner-function rule capture to the bounded queue. Roadmap packages must still be split into ≤10-minute one-outcome batches; no code, schema, migration or database changes in this update. §25.5 records the M1/Phase-2 scope reconciliation and keeps D-028/D-029 baseline acceptance in M1. | Agent |
 | 0.38 | 2026-10-11 | **B-022 complete: isolated PostgreSQL migration/database acceptance passed.** Provisioned fresh local PostgreSQL 17.11, loopback-only on port 55432, using dedicated `cairn_b022_test`; applied all 24 SQL migrations including 0010 and seeded reference data. Customer-company and action-security DB suites pass, 65/65 tests. B-023 customer-company browser acceptance is next; the test server remains available locally. No owner/production DB or tenant touched. No code or migration-file changes were made; the schema was applied only to the disposable local test database. §26.38 records setup and results. | Agent |
+| 0.39 | 2026-10-11 | **B-023 automated browser acceptance passed for B-019/B-021.** Ran the isolated `customer-company` Playwright target against the B-022 PostgreSQL database using a UI-created, disposable development fixture `T988`; all save/reload/no-op/clear/restore/history, finance display-only, non-finance denial, validation and sign-out checks passed, with no page errors. The harness cleaned up its fixture (zero matching rows afterward). Owner walkthrough/sign-off and B-024 sales-area browser acceptance remain pending. CAIRN updated; no code or migration-file changes in this batch. §26.39 records scope and result. | Agent |
 
 ---
 
