@@ -6,7 +6,7 @@ export const TARGETS = [
   { id: 'material-mrp', client: 'T996', label: 'Material planning settings only, with basic-data prerequisite' },
   { id: 'material-valuation', client: 'T997', label: 'Material valuation and price authorities only, with basic-data prerequisite' },
   { id: 'payment-terms', client: 'T993', label: 'Payment term maintenance and saved due-date preview' },
-  { id: 'business-partners', client: 'T992', label: 'General partner identity, roles, blocking, bank summary and audit' },
+  { id: 'business-partners', client: 'T992', label: 'Partner identity, roles, bank summary/detail masking and audit' },
   { id: 'supplier-company', client: 'T991', label: 'Supplier company accounting and financial authority' },
   { id: 'supplier-purchasing', client: 'T990', label: 'Supplier buying defaults, partner-function assignments and procurement authority' },
   { id: 'customer-company', client: 'T988', label: 'Customer company AR settings and financial authority' },

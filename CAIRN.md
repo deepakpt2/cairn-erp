@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-11 (v0.94 — B-079 owner-directed publication)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.10 — B-095 stale/missing profile browser acceptance)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2134,7 +2134,25 @@ Do not push interim or partial module batches before that trigger.
 | B-074 | Add a display-authorized, read-only partner-bank metadata lookup scoped by session tenant, partner and UUIDv4 row ID | ≤10 min | **DONE — requires `FND.PARTNER.DISPLAY`, derives tenant only from the authenticated session, and binds tenant + selected partner + UUIDv4 bank-row ID in the query. Returns allowlisted non-ciphertext metadata and the matched database row's ID only. Four focused tests and typecheck pass. No reveal/decryption, writes, UI or persistent DB access (§26.91)** |
 | B-075 | Add a display-authorized, read-only partner-bank metadata list scoped by session tenant and partner | ≤10 min | **DONE — derives tenant from the authenticated session, binds tenant + partner, returns every matched row's ID and allowlisted non-ciphertext metadata, includes inactive history, and sorts deterministically. Four added tests (eight total) and typecheck pass. No DB access, writes, decryption, reveal, or UI (§26.92)** |
 | B-076 | Add a display-only, masked partner-bank metadata tab to the Business Partner view | ≤10 min | **DONE — explicit `BANKS` tab only; reuses the display-authorized list service and shows only allowlisted metadata plus the fixed `••••` list mask. No identifiers, edit controls, decryption or reveal. Four focused UI/route tests, typecheck and production build pass; no live database/browser acceptance (§26.93)** |
-| B-077 | Extend Business Partner browser acceptance to cover the read-only bank metadata tab | ≤10 min | **IMPLEMENTED — T992 target now checks the empty bank-list state, absence of Save/reveal controls for maintainer and display-only users, and return to General data. Typecheck and browser-harness (66/66) pass; target not run and no database accessed (§26.94)** |
+| B-077 | Extend Business Partner browser acceptance to cover the read-only bank metadata tab | ≤10 min | **IMPLEMENTED — T992 target now checks the empty bank-list state, absence of Save/reveal controls for maintainer and display-only users, and return to General data. Typecheck and browser-harness (66/66) pass; target not run at B-077 completion (§26.94)** |
+| B-078 | Review Drizzle metadata and run B-077 empty/read-only browser acceptance on a disposable PostgreSQL cluster | ≤10 min | **DONE — all 32 lexical migrations and B-077 target passed on a fresh disposable PostgreSQL 17.11 cluster; T992 cleanup verified; no owner/production data (§26.95)** |
+| B-079 | Publish the pending bank-data batch on owner instruction only | ≤10 min | **DONE — one-time owner-directed exception pushed commits `9a39286` and `057e19c`; no-partial-push rule remains for future batches (§26.96)** |
+| B-080 | Add the session/tenant/partner/UUIDv4-scoped D-074 masked detail reader only | ≤10 min | **DONE — row-derived crypto context; only mask + final four returned; six synthetic focused tests pass; no route/UI or real data (§26.97)** |
+| B-081 | Wire the versioned keyring loader and D-074 reader into a read-only partner-bank detail UI | ≤10 min | **DONE — selected-row detail link/panel, generic unavailable state on keyring/crypto failure, no save/reveal; build and focused tests pass; live acceptance completed by B-082 (§26.98–26.99)** |
+| B-082 | Run synthetic D-074 masked-detail browser acceptance on a disposable loopback database | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — both maintainer and display-only viewer saw `••••` + synthetic final four; no save/reveal/plaintext; T992 partner/bank cleanup verified and cluster removed (§26.99)** |
+| B-083 | Add a pure fail-closed readiness gate for the approved bank-profile authoring set | ≤10 min | **DONE — IN/KW/GB/US/JP report not-ready until a persisted profile is configured; missing/unsupported countries deny; validator success does not imply readiness. No persistence or save integration (§26.100)** |
+| B-084 | Persist global profile policy revision/readiness for the approved country set; keep the runtime read-only | ≤10 min | **DONE — global country-keyed table, SELECT-only app privilege, seed defines five initial NOT_READY rows; same-revision seed runs preserve state and policy revision changes reset to NOT_READY. Fresh-cluster migration/seed acceptance passed in B-086 (§26.101, §26.103)** |
+| B-085 | Add a read-only readiness service for the shared global partner-bank profile registry | ≤10 min | **DONE — only a current-revision READY row returns PROFILE_READY; missing, stale, non-ready and unsupported profiles deny; runtime role is checked and DB errors propagate. App-role integration and seed-state transitions passed in B-086; no activation or bank save path (§26.102–103)** |
+| B-086 | Accept the global profile registry and readiness service on a disposable PostgreSQL cluster | ≤10 min | **PASSED — 34 migrations and reference seeds; app SELECT-only privileges, denied update, 5 NOT_READY rows, reader transitions, same-revision preservation and revision-change reset verified. Zero tenant/partner/bank rows; cluster removed; no owner/production DB (§26.103)** |
+| B-087 | Register the approved profile-activation capability and fixed evidence code only | ≤10 min | **DONE — added `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` to the capability catalogue with no role grants, plus fixed evidence `PROFILE_VALIDATION_ACCEPTED`; existing Administrator `*` semantics remain. No activation action, audit table or profile mutation (§26.104)** |
+| B-088 | Add a pure validator for the one-way profile-activation command only | ≤10 min | **DONE — requires an approved country, exact current policy revision, positive PostgreSQL integer version and fixed evidence code; rejects free-text/unknown fields and targets only READY. No actor check, DB write, audit or activation service (§26.105)** |
+| B-089 | Add the global profile-activation audit schema and deny direct runtime access only | ≤10 min | **DONE — fixed-field global audit schema constrains actor scope, policy revision, one-way state transition, versions, evidence and UUIDv4 event ID; `PUBLIC`/app privileges revoked. No activation writer or DB application (§26.106)** |
+| B-090 | Add a private atomic profile-activation database function only | ≤10 min | **DONE — row-locks and verifies revision/version/status, updates only `NOT_READY`→`READY`, then inserts the fixed audit event in the same function transaction. `PUBLIC`/app EXECUTE revoked; no runtime grant or service caller; SQL not applied (§26.107)** |
+| B-091 | Add the capability-checked activation service/action and narrowly grant function execution | ≤10 min | **DONE — verified-session actor only, fixed evidence and strict command validation; uses the atomic function under tenant scope. `9020` grants only function EXECUTE to `cairn_app`; no role-capability grants or UI (§26.108)** |
+| B-092 | Disposable PostgreSQL acceptance for activation migrations, function and runtime privileges | ≤10 min | **DONE — all 38 migrations and seeds passed on fresh local PostgreSQL 17.11; success/audit, concurrent one-way guard, stale/invalid denials, rollback on audit failure, direct-table privilege denials, no role grants and zero tenant/partner/bank rows verified. Cluster and artifacts removed; no remote/persistent DB (§26.109)** |
+| B-093 | Add a capability-gated global profile-readiness/activation page only | ≤10 min | **DONE — separate `/foundation/partners/bank-profiles` route is gated by the activation capability, displays current policy/revision/status/version, and offers the one-way action only for current `NOT_READY` rows. No bank-record controls or reveal; 59 focused tests, typecheck, IP lint and diff check pass (§26.110)** |
+| B-094 | Run cookie-backed browser acceptance for the activation route/action on disposable local PostgreSQL; remove all fixtures and temporary infrastructure | ≤10 min | **PASSED — anonymous, display-only denial, exact capability, Administrator `*`, one-way activation, forged-form resistance and fixed audit evidence verified in headless Chromium against a fresh PostgreSQL 17.11 database. Two authorized activations audited; zero partner/bank rows; all app/DB/browser fixtures removed (§26.111)** |
+| B-095 | Run Chromium acceptance for stale-policy and missing-registry profile states on disposable local PostgreSQL; remove fixtures and temporary infrastructure | ≤10 min | **PASSED — stale KW and missing JP rows had no activation forms; current IN/GB/US `NOT_READY` rows retained forms with expected policy/version. No action submitted, activation audit, partner, or bank row created; all disposable fixtures and infrastructure removed (§26.112)** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2196,8 +2214,28 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    boundaries (D-059), and B-047 approved fail-closed country-profile validation and date rules (D-060).
    B-048 selected IN, KW, GB, US and JP as the initial profile set (D-061). B-049–B-053 recorded
    source-backed specifications for KW, IN, GB, US and JP (D-062–D-066); initial profile-authoring scope
-   is complete. No profile registry/configuration data is persisted and no validator is activated in a bank
-   save path or connected to bank storage; B-063 adds only a pure KW validator (D-076; §26.80), B-064
+   is complete. B-083 adds a pure fail-closed readiness resolver for the D-061 set. B-084 adds a global country-keyed
+   policy-revision/readiness registry and idempotent seed for five initial `NOT_READY` rows; a policy-revision change
+   resets a row to `NOT_READY`. B-085 adds a read-only runtime lookup that reports ready only for an explicitly READY
+   row matching the current policy revision. B-086 applied all 34 migrations and reference seeds on a fresh
+   disposable PostgreSQL 17.11 cluster, verified five `NOT_READY` rows, SELECT-only runtime privileges, reader
+   transitions, same-revision preservation and policy-revision reset, then removed the cluster; no tenant, partner
+   or bank rows remained. B-087 registers `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` without role grants and defines
+   fixed evidence code `PROFILE_VALIDATION_ACCEPTED`; Administrator wildcard semantics are unchanged. B-088 adds a
+   pure activation-command validator for exact current revision/version, fixed evidence and one-way READY target,
+   rejecting free text. B-089 adds a fixed-field global activation audit schema and revokes direct PUBLIC/app access.
+   B-090 adds a private atomic SECURITY DEFINER function; B-091 adds the verified-session capability-checked service
+   and server action, with actor client/user derived from the session and fixed evidence. Migration `9020` grants only
+   function EXECUTE to `cairn_app`; B-092 accepts all 38 migrations/seeds and activation/privilege/rollback behavior
+   on disposable PostgreSQL 17.11, then removes the cluster. B-093 adds a separate capability-gated global profile
+   page with activation forms only for current `NOT_READY` rows. B-094 passes cookie-backed browser acceptance on a
+   disposable PostgreSQL 17.11 database: viewer denial, exact-capability and Administrator `*` allowance, two one-way
+   activations and fixed audit evidence; its temporary T094 role grants were fixtures only, not seeds (§26.111). B-095
+   passes real-browser stale/missing fail-closed acceptance: stale KW and missing JP had no forms, while current IN/GB/US
+   `NOT_READY` rows retained their expected activation forms. No action was submitted, and zero activation audits,
+   partners or bank rows remained; T095's exact-capability grant was fixture-only (§26.112). No persistent/remote DB,
+   bank save or reveal is added. B-063 adds only a pure
+   KW validator (D-076; §26.80), B-064
    adds only a pure IN validator (D-077; §26.81), and B-065 adds only pure GB/US/JP validators
    (D-078–D-080; §26.82); B-066 adds the explicit partner display-route guard
    (D-081; §26.83). B-054 adds only the versioned AES-256-GCM primitive (D-067; §26.71); B-055
@@ -2207,11 +2245,11 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    B-057 installs allowlisted write-time and read-time change-history masking (D-070; §26.74); B-058
    defines the audited reveal contract (D-071; §26.75); B-059 revokes direct audit-log row mutation while
    retaining the approved tenant-delete cascade exception (D-072; §26.76); B-060 adds the session-bound
-   authorization and safe audit-writer boundary, but not a data path (D-073; §26.77). Still required before
-   any full bank identifier is stored: operational rotation/re-encryption and verified old-key retirement,
-   complete ordinary-view masking (B-076 integrates only the fixed list mask; any detail suffix path remains
-   unintegrated), and integration of the authorized terminal reveal outcome with the encrypted data path.
-   B-061 selected the normal-view suffix policy (D-074; §26.78), and B-062 implemented its pure
+   authorization and safe audit-writer boundary, but not a data path (D-073; §26.77). Before any product bank-data
+   write/reveal workflow exists, operational rotation/re-encryption and verified old-key retirement remain required,
+   as does integration of the authorized terminal reveal outcome with the encrypted data path. Ordinary-view
+   masking is now integrated: B-076's fixed list mask, B-080/B-081's scoped detail suffix UI, and B-082's live
+   synthetic-only acceptance (§26.99). B-061 selected the normal-view suffix policy (D-074; §26.78), and B-062 implemented its pure
    allowlisted projection (D-075; §26.79); B-063 added the pure KW validator (D-076; §26.80), B-064
    added the pure IN validator (D-077; §26.81), and B-065 added pure GB/US/JP validators (D-078–D-080;
    §26.82); B-066 enforces `FND.PARTNER.DISPLAY` in the existing route (D-081; §26.83), and B-067 adds
@@ -2231,9 +2269,11 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    (§26.93); it queries the list service only when that tab is selected. No bank-record write service, database
    scan, scan-completeness proof, or verified global key retirement exists. Country validators remain unactivated
    in an application save path or connected to bank storage. B-074/B-075 do not retrieve encrypted account fields,
-   decrypt, or execute audited reveal. B-076 does not expose identifiers or maintenance controls and has not had
-   live database/browser acceptance. B-077 extends the T992 browser target for the bank tab's empty/read-only state,
-   but that target has not been run; no confirmed disposable browser database was available. Any future reveal still
+   decrypt, or execute audited reveal. B-076/B-081 expose no plaintext identifiers or maintenance controls. B-077 added empty/read-only browser checks;
+   B-078 ran them on a disposable cluster. B-082 expanded and passed the live target with one strictly guarded
+   synthetic encrypted fixture for both maintainer and display-only roles. Runtime reads used `cairn_app`; only the
+   fixture insert used a separate privileged connection restricted to loopback `cairn_test` and the owned T992
+   development tenant; cleanup was verified. Any future reveal still
    requires its own authorized and audited path and must resolve the row under tenant/partner/ID scope before using
    its database ID;
    UUID syntax alone does not establish row provenance. Then build bank and contact records through separate bounded
@@ -5512,6 +5552,332 @@ check confirmed none of the 47 paths contained the PAT or recognizable GitHub-to
 ignored and untracked. No database or bank data was accessed for publication.
 
 
+### 26.97 B-080 — Scoped D-074 detail mask reader `IMPLEMENTED — NOT UI-INTEGRATED`
+
+Added server-side `getPartnerBankMaskedDetail` in `src/modules/foundation/partner-bank-detail-view.ts`. It requires
+actual `FND.PARTNER.DISPLAY`, derives tenant from the authenticated session, and loads exactly one row with tenant,
+selected partner, and UUIDv4 bank-row ID bound together. After matching all three values, it uses the database row's
+client, partner number, and row ID as authenticated-decryption context. The query selects only approved metadata and
+the two ciphertext columns; it selects no identifier plaintext column. Exactly one non-null, non-empty identifier
+envelope is required. The service applies the existing D-074 detail projection internally and returns only the identifier kind
+and `••••` plus the final four characters; it returns no plaintext, ciphertext, or row ID. Crypto errors remain generic.
+
+The caller must provide the keyring explicitly; the deployment keyring loader is not yet connected. This service is
+not wired to a route or UI and provides no save control, full-value reveal authority, reveal audit operation, or
+plaintext-returning response. Six focused synthetic-envelope tests use a fake tenant transaction and verify
+capability denial, tenant/partner/row-ID predicates, ciphertext-only selection, IBAN/local-account masking,
+row mismatch and malformed-envelope rejection, and generic authenticated-decryption failure. The focused suite (6/6),
+`npm run typecheck`, browser harness (66/66), and `git diff --check` pass. No database, real bank data, browser
+acceptance, commit or push. §25.4's full-system publish trigger remains authoritative; a read-only detail UI is a
+separate next slice.
+
+
+### 26.98 B-081 — Read-only D-074 bank-detail UI integration `IMPLEMENTED — LIVE SYNTHETIC ACCEPTANCE IN §26.99`
+
+The Business Partner Bank Details tab now adds a `View details` link per metadata row. The opaque UUIDv4 is carried
+as the `bank` selector only; the page passes it with the authenticated session and matched partner to
+`getPartnerBankMaskedDetail`, whose tenant + partner + row-ID query and row-derived crypto context remain the
+security boundary. The server loads the versioned deployment keyring on demand only for an explicitly selected
+bank detail. The new read-only detail panel receives only the safe DTO and shows the account kind, fixed `••••`
+mask plus final four characters, and allowlisted bank metadata. It also provides a back-to-list link. Keyring
+configuration and authenticated-decryption errors render a generic unavailable state; other server/database errors
+are not converted into record-not-found responses.
+
+No save/edit controls, full-value reveal, reveal authority/audit path, plaintext response, schema, or write behavior
+was added. No keyring secret was provisioned, no real bank data or database row was used, and no live browser/database
+acceptance was run. Four isolated no-database focused test files pass 14/14 (scoped reader 6, metadata panel 2,
+detail panel 2, route integration/authorization 4); `npm run typecheck`, production build, browser harness (66/66),
+IP lint (223 files), and `git diff --check` pass. No commit or push; §25.4's full-system publication trigger remains
+authoritative.
+
+
+### 26.99 B-082 — Synthetic D-074 masked-detail browser acceptance `PASSED — CLUSTER REMOVED`
+
+Extended the guarded `business-partners` browser target with one synthetic encrypted `partner_bank` fixture because
+there is no product write path. The fixture writer requires an explicit `CAIRN_SMOKE_FIXTURE_DATABASE_URL` and
+refuses writes unless the database is `cairn_test`, the server address is `127.0.0.1`, the connection is elevated,
+and the exact `T992` owned browser tenant is marked development with the UI-created partner present and no prior bank
+row. A fresh random UUIDv4 and a synthetic-only identifier were encrypted using a per-run test keyring; the keyring
+file was mode 0600 under `/tmp` and removed after the run. App reads continued through `cairn_app` with its
+SELECT-only bank-table privilege.
+
+On a fresh local PostgreSQL 17.11 cluster, the browser target applied all 32 migrations and shared seeds, onboarded
+T992 through the UI, confirmed the empty bank state, inserted only the guarded synthetic ciphertext fixture, and
+passed for both the maintainer and a display-only viewer. Both saw the fixed list mask and detail `••••4321`; neither
+page contained the synthetic full value or ciphertext, and neither offered Save or reveal controls. No page errors.
+Post-run verification showed zero T992 tenant, partner, and bank rows; the app and database were stopped, and the
+cluster, extracted PostgreSQL package, and test keyring were removed. `npm run smoke:browser:business-partners`,
+`npm run typecheck`, browser harness (66/66), IP lint (223 files), and `git diff --check` pass. No owner/production
+or persistent development database, real bank data, schema change, commit or push. §25.4 remains the full-system
+publish gate.
+
+
+### 26.100 B-083 — Initial fail-closed bank-profile readiness boundary `IMPLEMENTED — EXTENDED BY B-085`
+
+At B-083 completion, `src/platform/security/partner-bank-profile-readiness.ts` provided a pure deny-only readiness
+query for the owner-approved D-061 authoring set (`IN`, `KW`, `GB`, `US`, `JP`). It normalized country input and
+returned `PROFILE_NOT_READY` for every approved country until persisted configuration existed; missing and unsupported
+countries also denied. Validator availability or a successful pure validation was not treated as profile readiness.
+B-085 later extends this module with row/revision resolution and adds a read-only database lookup (§26.102); readiness
+still does not grant bank-save authority.
+
+B-083 added no profile persistence, readiness activation, country-profile data, validator-to-save integration, save
+service, schema/migration, or bank values. Eight focused synthetic/no-DB tests passed at that batch, including all five
+approved countries and the validator-success/readiness separation; typecheck, IP lint (225 files), and `git diff --check`
+passed. No DB, browser acceptance, commit or push. §25.4's full-system publication trigger remains authoritative.
+
+
+### 26.101 B-084 — Shared global bank-profile readiness registry `IMPLEMENTED — ACCEPTED IN §26.103`
+
+Following the selected global governance model, added `partner_bank_country_profile` as a shared, country-keyed
+registry with source-policy revision (`D-062`–`D-066`), readiness status (`NOT_READY`/`READY`), version and audit
+columns. The country FK binds each row to global reference data; no tenant key or RLS is appropriate for this shared
+policy table. Additive migration `0015_partner_bank_country_profile.sql` creates it, and `9017` revokes all runtime
+privileges then grants only `SELECT` to `cairn_app` (the application cannot activate or rewrite profiles).
+
+`seed-reference.ts` defines idempotent rows for the five D-061 countries, initially `NOT_READY`. A repeated seed for
+the same policy revision preserves status/version; changing the policy revision resets that row to `NOT_READY`, bumps
+version and records a system change. At B-084 completion, the static B-083 resolver was not yet wired to this table
+and no runtime readiness reader existed; B-085 adds the read-only lookup in §26.102. There is still no activation action,
+profile authoring UI, bank save path or reveal path.
+
+Twelve focused no-database schema/readiness tests passed at B-084 completion; typecheck, IP lint (229 files), and
+`git diff --check` passed. No database or migration was executed in B-084, and no Drizzle Kit metadata snapshot was
+reconciled. B-086 later applied and accepted the migrations/seeds on a fresh disposable cluster (§26.103); no
+owner/production or real bank data was used. No commit or push. §25.4 remains the full-system publish gate.
+
+
+### 26.102 B-085 — Read-only global profile-readiness service `IMPLEMENTED — ACCEPTED IN §26.103`
+
+Added `readPartnerBankProfileReadiness` in `src/modules/foundation/partner-bank-profile-readiness.ts`. Missing and
+unsupported country inputs are rejected before DB access. For one of the five approved countries, the service verifies
+the runtime application role, then selects only `policy_revision` and `readiness_status` from the global registry using
+the normalized country key; it does not establish a tenant scope because the table is shared reference configuration.
+Database/role errors propagate, so callers must fail closed. The pure resolver returns ready only for an explicit
+`READY` registry row whose policy revision matches the current D-062–D-066 mapping. This is profile readiness only,
+not permission to save bank data.
+
+`createPartnerBankProfileReadinessReader` supports deterministic no-database service tests. The tests cover preflight
+no-query behavior, ready state, stale revisions, not-ready/missing rows, and registry failure. Combined profile
+resolver/schema/service suites passed 19/19; typecheck, IP lint (231 files), and `git diff --check` passed. No database
+migration/seed was executed in B-085; B-086 later accepted the reader against the app role on a disposable cluster
+(§26.103). No activation route, bank save/reveal path, UI or real bank data. No commit or push; §25.4 remains the
+full-system publish gate.
+
+
+### 26.103 B-086 — Disposable PostgreSQL acceptance for B-084/B-085 `PASSED — CLUSTER REMOVED`
+
+Initialized a fresh PostgreSQL 17.11 cluster under `/tmp`, created a new `cairn_test` database, and applied all 34
+lexical migrations, including `0015` and `9017`. `npm run seed:reference` created exactly five global profile rows for
+IN/KW/GB/US/JP at `NOT_READY`, with policy revisions D-063, D-062, D-064, D-065 and D-066 respectively. The database
+identity query reported the expected test database, local address/port and elevated migration role.
+
+Verified the global registry has no RLS, `cairn_app` can read all five rows, and that role has no INSERT/UPDATE/DELETE
+privilege; an attempted UPDATE was denied. The B-085 service, using `cairn_app`, reported KW not-ready initially,
+then ready only after a synthetic `READY` status was set in this disposable DB for matching D-062. A same-revision
+reference-seed rerun preserved that status/version. After staging a stale revision, the seed reset the row to D-062
+and `NOT_READY`, incremented version and set `changed_by=SYSTEM`; the runtime service returned not-ready again. The
+other four profiles remained blocked. This temporary status toggle was not a product activation.
+
+Final counts were zero tenants, partners and bank rows, with the five global profile rows. The PostgreSQL server was
+stopped, temporary cluster/package/test script removed, and final listener check showed port 55433 closed. No remote,
+owner/production or persistent database, real bank data, bank-save/reveal path, commit or push. `npm run db:migrate`,
+`npm run seed:reference`, the runtime-role check and B-085 service integration all passed; §25.4 remains the
+full-system publish gate.
+
+
+### 26.104 B-087 — Register profile-activation capability and fixed evidence code `IMPLEMENTED — NO ACTION`
+
+Following the owner-approved activation contract, added the stable capability identifier
+`CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` and fixed evidence code `PROFILE_VALIDATION_ACCEPTED` in
+`src/platform/security/partner-bank-profile-activation.ts`. The global seed catalogue registers the capability as
+Foundation `CONFIGURE`, non-posting. It adds no `role_capability` grants; existing Administrator `*` wildcard
+semantics remain unchanged, and other roles receive no new authority by this batch.
+
+This is catalogue-only groundwork. No activation action, profile mutation, dedicated global audit table, role grant,
+UI or database seed was added/run. Two focused tests verify catalogue registration, no seeded grants, controlled
+evidence and existing wildcard semantics; combined profile registry/readiness/capability suites pass 21/21.
+Typecheck, IP lint (233 files), and `git diff --check` pass. No commit or push; §25.4 remains the full-system
+publication gate.
+
+
+### 26.105 B-088 — Pure partner-bank profile activation command contract `IMPLEMENTED — NO MUTATION`
+
+Added `validatePartnerBankProfileActivationCommand` to the profile activation security module. It accepts only the
+four approved fields: country, expected policy revision, expected row version, and fixed evidence code. It
+canonicalizes an approved country, requires an exact match to its current D-062–D-066 policy revision, requires a
+positive PostgreSQL `integer` version, and accepts only `PROFILE_VALIDATION_ACCEPTED`. Unknown fields/free-text are
+rejected; the output fixes the transition target to `READY`, with no deactivate or caller-selected target status.
+
+This is a pure contract only: it does not check session capability, read current row status, write the profile,
+create audit evidence, or authorize activation. Eleven focused command tests plus readiness/schema/capability suites
+pass (32/32); typecheck, IP lint (234 files), and `git diff --check` pass. No database, migration, seed, UI, bank data,
+commit or push. §25.4 remains the full-system publication gate.
+
+
+### 26.106 B-089 — Global profile-activation audit schema `IMPLEMENTED — DISPOSABLE DB-ACCEPTED §26.109`
+
+Added `partner_bank_profile_activation_audit` as a global fixed-field table for the approved app activation contract.
+It records an event UUIDv4, actor tenant key + user UUID snapshot, country, policy revision, `NOT_READY`→`READY`
+transition, previous/new row versions, fixed `PROFILE_VALIDATION_ACCEPTED` evidence, and timestamp. There are no
+free-text fields or actor foreign keys that could make tenant/user deletion erase global evidence. Constraints bind
+the country to reference data, validate the 2–4-character actor key/revision shapes, require the one-way state transition, and require
+`new_version = previous_version + 1`.
+
+Migration `0016_partner_bank_profile_activation_audit.sql` creates the table; `9018` revokes all direct `PUBLIC` and
+`cairn_app` privileges. It is global, so it has no tenant RLS. No activation writer, capability-checked action, or
+status mutation is implemented yet; a later narrow atomic writer must append the audit event and change the registry
+in one transaction. Three focused schema-contract tests plus the profile/readiness/activation suites pass (35/35);
+typecheck, IP lint (238 files), and `git diff --check` pass. At B-089 completion no migration had been applied; B-092
+later applied and accepted it on a disposable local PostgreSQL cluster (§26.109). No persistent/remote database,
+bank data, commit or push. §25.4 remains the full-system publication gate.
+
+
+### 26.107 B-090 — Private atomic activation database function `IMPLEMENTED — DISPOSABLE DB-ACCEPTED §26.109`
+
+Added `cairn_activate_partner_bank_profile` in migration `9019_partner_bank_profile_activation_function.sql`.
+The function validates UUIDv4 event identity, the 2–4-character actor tenant key, uppercase country, current-format
+policy revision, positive expected integer version, and the fixed evidence code. It locks the global country row,
+requires the expected policy revision and version, refuses an already-READY row, and updates only
+`NOT_READY`→`READY`, incrementing the version and setting the registry actor/timestamp. It then inserts the dedicated
+global audit event with the locked before-state and new version in the same PostgreSQL function call; an insert failure
+aborts the statement and rolls back the readiness update. No target status or free text is accepted.
+
+The SECURITY DEFINER routine uses only schema-qualified tables and `search_path = pg_catalog`. At B-090 completion,
+`PUBLIC` and `cairn_app` EXECUTE were explicitly revoked; B-091 later adds the narrow app grant only alongside the
+capability-checked, verified-session action, and B-092 accepts the whole path on a disposable cluster (§26.109).
+Three static function-contract tests plus readiness/schema/activation suites pass (38/38); typecheck, IP lint (240
+files), and `git diff --check` pass. No persistent/remote database, role-capability grants, bank data, commit or push.
+§25.4 remains the full-system publication gate.
+
+
+### 26.108 B-091 — Capability-checked activation service and server action `IMPLEMENTED — DISPOSABLE DB-ACCEPTED §26.109`
+
+Added a server-side activation service and `activatePartnerBankProfileAction`. The service requires the exact
+`CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` capability (preserving Administrator `*` matching), validates the strict
+command, and derives both actor client and UUID from the verified session. The action reads only country, expected
+policy revision and expected version; it supplies fixed `PROFILE_VALIDATION_ACCEPTED` evidence itself. No caller can
+choose actor identity, target state, evidence text or another mutation. The service invokes only the atomic database
+function inside `withTenant(session.client, ...)`, so the application-role guard and tenant scope are established
+before the global operation; success is returned only after the transaction commits.
+
+Migration `9020_partner_bank_profile_activation_function_runtime.sql` grants only EXECUTE on that exact function to
+`cairn_app`, while preserving revoked direct UPDATE/INSERT/DELETE privileges on the registry/audit tables. It adds
+no `role_capability` grants. Eight service tests and two server-action/grant contract tests, plus the profile/readiness/
+activation suites, pass (48/48); typecheck, IP lint (245 files), and `git diff --check` pass. At B-091 completion no
+migration/seed had been applied; B-092 later exercised the migrations and activation on a disposable local cluster
+(§26.109). At B-091 completion the action was not UI-wired; B-093 later adds the dedicated page (§26.110). No
+persistent/remote database, bank save/reveal, bank data, commit or push. Remote DB identity remains unverified; §25.4
+remains the full-system publication gate.
+
+
+### 26.109 B-092 — Disposable PostgreSQL acceptance for audited profile activation `PASSED — CLUSTER REMOVED`
+
+Provisioned a fresh PostgreSQL 17.11 cluster under `/tmp`; it listened only on a private Unix socket with TCP disabled.
+The custom lexical migration runner applied all 38 SQL migrations, including `0015`–`0016` and `9017`–`9020`.
+`seed:reference` and `seed` completed. The five global profile rows were all `NOT_READY`; the activation capability
+was present as non-posting Foundation `CONFIGURE` with no `role_capability` grant. No user, tenant, partner, or bank
+record was seeded.
+
+The actual server-side activation service called the atomic function through `cairn_app`/`withTenant` using a
+synthetic capability-bearing session: KW changed from `NOT_READY` version 1 to `READY` version 2, and the audit row
+matched the session-derived tenant/user, country, D-062 revision, before/after status, versions and fixed evidence.
+Two simultaneous GB calls at version 1 produced exactly one activation/audit event; the other returned
+`PROFILE_ALREADY_READY`. Direct function checks rejected stale policy revision, stale version, unavailable profile,
+invalid evidence and malformed country without changing profile rows.
+
+Privilege checks confirmed `cairn_app` is NOSUPERUSER/NOBYPASSRLS, retains profile SELECT but has no profile UPDATE/
+INSERT, and has no direct SELECT/INSERT/UPDATE/DELETE/TRUNCATE on the audit table. It has EXECUTE only on the narrow
+activation function; PUBLIC does not. Direct audit read/insert and profile update attempts failed with
+`insufficient_privilege`. A deliberate duplicate audit-event fixture caused SQLSTATE `23505`; the function call
+rolled back the preceding status update, leaving IN `NOT_READY` version 1. The collision fixture was deleted.
+Final disposable counts: zero tenants, partners and bank records; two successful activation audit events (KW and GB).
+
+The run exercised the service with a synthetic `SessionContext`; it did not perform a browser/cookie login flow.
+All temporary cluster, downloaded package, test script and logs were removed. No remote, owner, persistent development
+or production database was contacted; no persistent profile state, commit or push. B-093 subsequently added the
+separate UI route (§26.110); browser acceptance remains pending. Bank-record saves/plaintext reveal remain out of
+scope. §25.4 remains the full-system publication gate.
+
+
+### 26.110 B-093 — Capability-gated global profile activation page `IMPLEMENTED — BROWSER ACCEPTANCE PENDING`
+
+Added `/foundation/partners/bank-profiles` as a separate global configuration page rather than placing country policy
+activation inside an individual partner's bank-record view. The page requires a verified session and the exact
+`CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` capability; its link is shown from Partners only to that capability. A
+read-only server query builds the five-country view model with current/registry policy revision, status and row version.
+Missing, stale-revision or invalid rows fail closed and have no activation form. Only a current-revision `NOT_READY`
+row gets an action with country, expected policy revision and expected version. The server action still supplies the
+fixed evidence code and derives actor from session; the page offers no status override, free-text rationale, bank-row
+save or plaintext reveal.
+
+Added readiness/status translations, a view-model resolver, and UI/page-contract tests. The focused profile,
+activation, panel and existing bank-display suites pass 59/59; typecheck, IP lint (251 files), and `git diff --check`
+pass. No database or seed was run in this batch; B-092 remains the disposable PostgreSQL acceptance. The new route
+has not had browser acceptance, and no persistent/remote profile state, bank data, commit or push was touched.
+§25.4 remains the full-system publication gate.
+
+
+### 26.111 B-094 — Cookie-backed browser acceptance for B-093 route and action `PASSED — DISPOSABLE INFRASTRUCTURE REMOVED`
+
+Built the production standalone Next app and exercised it in headless Chromium against a fresh PostgreSQL 17.11 cluster.
+The cluster lived under `/tmp`, accepted TCP only on loopback `127.0.0.1:55494` plus a private Unix socket, and hosted only
+`cairn_b094`. The run verified its database identity before applying all 38 lexical SQL migrations, `seed:reference`,
+and `seed`. The seeded activation capability was non-posting Foundation `CONFIGURE`; all five approved profiles began
+`NOT_READY` at version 1. `role_capability` was empty before fixtures. The runtime `cairn_app` role was
+`NOSUPERUSER NOBYPASSRLS`, had profile SELECT but no profile mutation, and had no direct activation-audit access.
+
+Created a temporary `T094` tenant, three synthetic users and cookie-backed server sessions only in that database: a
+`FND.PARTNER.DISPLAY` viewer, an exact-capability activator, and an `ADMINISTRATOR` role holding `*`. These four
+temporary role-capability rows were acceptance fixtures, not seed changes or grants to any persistent role.
+
+Browser checks passed: anonymous access redirected to sign-in; the display-only viewer saw no navigation link, was
+denied on direct route access, and was refused by the actual server action when a form rendered for an authorized user
+was submitted with the viewer cookie. The denied JP attempt left its profile at `NOT_READY` version 1 and emitted no
+activation-audit event. The exact capability exposed all five current policy/revision/status/version rows and their activation controls.
+The exact-capability user activated KW and the `ADMINISTRATOR` `*` user activated GB, each through the browser UI from
+`NOT_READY` v1 to `READY` v2; each completed row lost its action, with no reverse control. Forged extra form values for
+actor, evidence, target status and rationale did not affect the result. Exactly two activation-audit rows recorded the session-derived
+`T094` actors, D-062/KW and D-064/GB, `NOT_READY`→`READY`, versions 1→2, and fixed evidence
+`PROFILE_VALIDATION_ACCEPTED`. IN, JP and US remained `NOT_READY` v1. No browser page errors; zero partner or bank rows;
+no Save/reveal path was exposed.
+
+The production build and browser acceptance passed. The app and PostgreSQL processes were stopped; the disposable
+cluster/database, downloaded PostgreSQL package, browser binaries/dependencies, fixture tokens/script and `.next` build
+were removed, and ports 3000/55494 were closed. No remote, owner, persistent development or production database was
+contacted; no bank identifiers, persistent profile change, commit or push. Bank-record saves and plaintext reveal remain
+out of scope. §25.4 remains the full-system publication gate.
+
+
+### 26.112 B-095 — Fail-closed browser acceptance for stale and missing profile rows `PASSED — DISPOSABLE INFRASTRUCTURE REMOVED`
+
+Built the production standalone Next app and exercised it in headless Chromium against a freshly initialized PostgreSQL
+17.11 cluster under `/tmp`. The cluster listened only on loopback `127.0.0.1:55495` plus a private Unix socket and hosted
+only `cairn_b095`; before migrations, the run verified database name, loopback address, port, server version, primary
+status and zero public tables. Applied all 38 lexical SQL migrations, `seed:reference` and `seed`. All five approved
+profiles began at their current D-062–D-066 policy revisions, `NOT_READY`, version 1; `role_capability` was empty. The
+runtime `cairn_app` role was `NOSUPERUSER NOBYPASSRLS`, had profile SELECT but no UPDATE, and had no activation-audit
+SELECT access.
+
+Created only disposable local tenant `T095` and a synthetic user/role with the exact
+`CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` capability. This one role grant was an acceptance fixture, not a seed or
+persistent grant. The fixture made KW stale (`D-061` vs current `D-062`) and removed the JP registry row; IN, GB and US
+remained current `NOT_READY` version 1.
+
+Chromium verified an anonymous route request redirected to sign-in, then signed in through the real cookie-backed UI.
+The page rendered the closed five-country view: stale KW displayed `Policy revision mismatch` and missing JP displayed
+`Registry row missing`; neither row had a form or button. Current IN/GB/US rows each retained exactly one activation
+form with the current expected policy revision and version 1. Three activation controls appeared in total. No
+activation was submitted; no Save or Reveal control, browser page error or console error was observed.
+
+Post-run verification found four registry rows (KW stale; JP absent; IN/GB/US still `NOT_READY` version 1), zero
+activation-audit rows, zero partners and zero bank rows. The app and database were stopped; the cluster, extracted
+PostgreSQL package/client, browser binaries and system dependencies, temporary fixture scripts, `.next` build,
+`node_modules`, and transient Playwright caches were removed. No remote, owner, persistent development or production DB,
+real bank identifiers, activation, commit or push was involved. Bank-record saves and plaintext reveal remain out of
+scope; §25.4 remains the full-system publication gate.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -5685,6 +6051,22 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.10 | 2026-10-12 | **B-095 passes real-browser fail-closed acceptance for stale and missing profile rows.** Fresh loopback PostgreSQL 17.11; all 38 migrations and both shared seeds passed. A disposable T095 exact-capability fixture made KW stale (D-061 vs current D-062) and removed JP's registry row. Chromium confirmed neither fail-closed row had an activation form, while current IN/GB/US `NOT_READY` rows retained controls with expected revision/version. No action submitted; zero activation audits, partners or bank rows; no browser errors or Save/Reveal controls. Production app, DB, fixture, PostgreSQL/browser dependencies and build removed. No remote/persistent DB, bank values, commit or push. §26.112 records scope. | Agent |
+| 1.09 | 2026-10-12 | **B-094 passes cookie-backed browser acceptance for the capability-gated profile page/action.** Fresh PostgreSQL 17.11 loopback cluster; all 38 SQL migrations and both shared seeds passed. No role grant existed before temporary T094 fixtures. Chromium verified anonymous sign-in redirect, display-only route/action denial, exact-capability access and Administrator `*`; KW and GB transitioned only `NOT_READY` v1→`READY` v2. Forged actor/evidence/status/reason fields were ignored; exactly two activation-audit rows held session-derived actors and fixed evidence. No browser errors, partner/bank rows, or reveal/save controls. App, DB, fixtures, browser binaries/dependencies and build removed; no remote/persistent DB, bank values, commit or push. §26.111 records scope. | Agent |
+| 1.08 | 2026-10-12 | **B-093 adds the capability-gated global partner-bank profile UI.** New `/foundation/partners/bank-profiles` route and Partners navigation link require `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE`. Read-only view shows current policy, registry revision, readiness and version for the five approved profiles; missing/stale/invalid states fail closed. Only current `NOT_READY` rows get a one-way form with expected revision/version; fixed evidence and session-derived actor remain server-only. No bank-row save/reveal or role-capability grant. 59 focused profile/activation/UI/bank-display tests pass; typecheck, IP lint (251 files), diff check pass. No DB run or browser acceptance; no persistent state, commit or push. §26.110 records limits. | Agent |
+| 1.07 | 2026-10-12 | **B-092 passes disposable PostgreSQL acceptance for the audited activation path.** On a fresh PG 17.11 Unix-socket-only cluster, all 38 lexical migrations and reference/global seeds applied. Verified five NOT_READY profiles, non-posting activation capability with no role grant, NOSUPERUSER/NOBYPASSRLS app role, exact function EXECUTE grant and denied direct profile/audit-table access. The real service/DB call activated synthetic KW and recorded matching audit; concurrent GB calls yielded one activation/event; stale/malformed requests denied; duplicate audit ID raised 23505 and rolled back the status change. Final disposable data: zero tenants, partners, bank rows; two activation events. Cluster, package and test script removed. No remote/persistent DB, bank identifiers, commit or push. §26.109 records scope; UI remains separate. | Agent |
+| 1.06 | 2026-10-12 | **B-091 adds the capability-checked partner-bank profile activation service and server action.** Requires `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE`, derives actor tenant/user only from the verified session, validates country/revision/version, fixes evidence server-side, and calls the atomic function inside tenant scope. Migration `9020` grants only exact-function EXECUTE to `cairn_app`; no role-capability grants or table DML. Eight service tests plus two action/grant contract tests and 38 previous focused tests pass (48/48 total); typecheck, IP lint (245 files), and diff check pass. No DB migration/seed applied, UI wired, profile changed, bank saved/revealed, commit or push. §26.108 records the boundary. | Agent |
+| 1.05 | 2026-10-12 | **B-090 adds a private atomic activation database function.** It locks the global profile row, checks policy revision/status/expected version, changes only `NOT_READY`→`READY` with version +1, then inserts the fixed-field audit event in the same transaction. SECURITY DEFINER search path is locked to `pg_catalog`; `PUBLIC` and app EXECUTE are revoked, with no runtime grant. Three static function-contract tests plus profile/readiness/activation suites pass (38/38); typecheck, IP lint (240 files), and diff check pass. SQL not applied or live-tested; no capability service/action or profile change. §26.107 records the limits. No commit or push. | Agent |
+| 1.04 | 2026-10-11 | **B-089 adds the global partner-bank profile activation audit schema.** Fixed-field table records actor tenant/user IDs, country, policy revision, one-way status transition, versions, fixed evidence and event timestamp; constraints reject free-text and inconsistent transitions. Migration `0016` creates the table; `9018` revokes all direct `PUBLIC`/app access. Three schema-contract tests plus profile/readiness/activation suites pass (35/35); typecheck, IP lint (238 files), and diff check pass. SQL not applied; no activation writer or profile mutation. No commit or push. §26.106 records the boundary. | Agent |
+| 1.03 | 2026-10-11 | **B-088 adds a pure profile-activation command validator.** Requires an approved country, exact current D-062–D-066 policy revision, positive PostgreSQL integer version, and fixed `PROFILE_VALIDATION_ACCEPTED` evidence. Rejects unknown/free-text fields and fixes target status to `READY`; no session authorization, database mutation or audit writer. Eleven focused command tests plus resolver/schema/capability suites pass (32/32); typecheck, IP lint (234 files), diff check pass. No DB, seed, activation action, UI, bank data, commit or push. §26.105 records limits. | Agent |
+| 1.02 | 2026-10-11 | **B-087 registers the profile-activation capability and fixed evidence code.** Added `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE` to the global capability catalogue as non-posting Foundation configuration, without role grants; existing Administrator `*` semantics remain. Added fixed evidence `PROFILE_VALIDATION_ACCEPTED`. Two focused tests; combined profile suites pass 21/21, typecheck, IP lint (233 files), and diff check pass. No activation action, audit table, role grants, DB seed/run, UI, commit or push. §26.104 records the boundary. | Agent |
+| 1.01 | 2026-10-11 | **B-086 passes disposable PostgreSQL acceptance for the global profile registry and readiness service.** Applied all 34 lexical migrations to fresh PostgreSQL 17.11, seeded five NOT_READY profiles, verified app-role SELECT-only privileges and denied UPDATE, then tested the B-085 service's not-ready → synthetic ready → same-revision preserve → stale-revision reset lifecycle. The profile table had no tenant/bank rows; final counts were zero tenants/partners/bank rows. Server, cluster, extracted package and test script removed; no remote/owner/production DB or real bank data. No activation, bank save/reveal, commit or push. §26.103 records results. | Agent |
+| 1.00 | 2026-10-11 | **B-085 adds a read-only global bank-profile readiness service.** The runtime checks its app role and reads only the country’s policy revision/status; only an explicitly `READY` row matching the current D-062–D-066 policy revision resolves ready. Missing, stale, non-ready, missing-country and unsupported inputs fail closed; DB errors propagate. Six service tests plus the profile resolver/schema suites pass (19/19); typecheck, IP lint (231 files), and diff check pass. SQL was not applied at B-085 completion; B-086 later accepted migration/seed and runtime behavior. No activation, bank save/reveal, UI, commit or push. §26.102 records the boundary. | Agent |
+| 0.99 | 2026-10-11 | **B-084 adds the global profile-readiness registry schema and seed.** Shared country-keyed table ties readiness to owner-approved policy revisions; the app role receives SELECT only. The reference seed defines IN/KW/GB/US/JP as initial `NOT_READY` rows, preserves status for the same revision, and resets to `NOT_READY` if policy revision changes. Twelve focused schema/readiness tests, typecheck, IP lint (229 files), and diff check pass. SQL migration/seed were not executed at B-084 completion; B-085 later adds the read-only reader and B-086 passes the disposable PostgreSQL acceptance. No bank save/reveal, commit, or push. §26.101/103 record the boundaries. | Agent |
+| 0.98 | 2026-10-11 | **B-083 adds the initial pure deny-only bank-profile readiness boundary.** At B-083 completion, the D-061 authoring set (`IN`, `KW`, `GB`, `US`, `JP`) returned not-ready until persisted configuration existed; missing and unsupported countries failed closed. Tests proved validator success did not imply readiness. Eight focused no-DB tests, typecheck, IP lint (225 files), and diff check passed. No profile persistence/activation, save integration, schema, database, browser run, bank values, commit or push. B-085 later extends the resolver and adds a read-only registry service (§26.102). | Agent |
+| 0.97 | 2026-10-11 | **B-082 passes live D-074 masked-detail acceptance with synthetic data only.** Extends the `business-partners` target with a strict fixture guard requiring an explicit elevated fixture URL, loopback `cairn_test`, and owned development T992 tenant. Fresh disposable PostgreSQL 17.11 with all 32 migrations/seeds; per-run 32-byte keyring and synthetic encrypted identifier. Maintainer and display-only viewer both see the fixed list mask and `••••4321` detail suffix without plaintext/ciphertext or Save/Reveal controls. T992 tenant/partner/bank row cleanup confirmed; app server stopped, cluster and extracted package removed, and keyring deleted. Target, typecheck, browser harness (66/66), IP lint (223 files), and diff check pass. No owner/production data, real bank data, schema change, commit or push. §26.99 records scope. | Agent |
+| 0.96 | 2026-10-11 | **B-081 integrates the D-074 read-only bank detail view.** Metadata rows link to a selected record; the server loads the deployment keyring on demand and calls the scoped mask reader, while the panel receives only the D-074 safe DTO. Keyring/crypto failures show a generic unavailable state. Four focused no-DB suites pass 14/14; typecheck, production build, browser harness (66/66), IP lint (223 files) and diff check pass. No save, full-value reveal, key provisioning, database/live-browser acceptance, real data, commit or push. §26.98 records scope. | Agent |
+| 0.95 | 2026-10-11 | **B-080 implements the scoped D-074 bank-detail mask reader, not yet UI-integrated.** Requires actual `FND.PARTNER.DISPLAY`; scopes the read by authenticated tenant, selected partner and UUIDv4 row ID; uses the matched row's identifiers for crypto context; returns only the D-074 suffix mask. Six synthetic focused tests, typecheck, browser harness (66/66) and diff check pass. No route/UI, save, full-value reveal, database, or real bank data. No commit or push; §25.4 full-system publish trigger remains. §26.97 records scope. | Agent |
 | 0.94 | 2026-10-11 | **Owner-directed one-time publication of the bank-data batch to `main`.** Owner explicitly authorized an exception to the full-system publish gate for this batch only; future no-partial-push restriction remains. Committed 47 source/test/migration/doc paths as `9a39286 feat: add partner bank-data foundations and read-only view` and fast-forward pushed from `39e3d35` to `origin/main`. PAT from ignored `.env.local` used only for authentication through temporary askpass; no credential in source, commit, remote URL/config, or logs; staged-file secret check passed. §26.96 records scope. | Agent |
 | 0.93 | 2026-10-11 | **B-078 reviews the Drizzle metadata gap and passes B-077's live browser target on a disposable PostgreSQL 17.11 database.** Confirms the custom runner ignores metadata and applies 32 lexical SQL migrations; Drizzle Kit metadata reconciliation remains separate. The T992 Business Partner target passes maintainer and display-only Bank Details checks; cleanup verified, private Unix socket only, TCP disabled, temporary cluster/app removed. Smoke onboarding uses only an ephemeral per-run value if its owner field is rendered; the synthetic viewer has `FND.PARTNER.DISPLAY` without maintain. Typecheck, browser-harness (66/66), and diff check pass. No bank records/values, persistent/owner/production DB, `.env.local` content access/change, commit or push. §26.95 records results. | Agent |
 | 0.92 | 2026-10-11 | **B-077 extends Business Partner browser target coverage for the bank metadata tab.** The T992 target asserts the empty state and absence of save/reveal controls for maintainer and display-only users. Typecheck and browser-harness (66/66) pass; selection list confirms the target. Live browser/database acceptance was not run; no DB, bank rows or real identifiers touched. §26.94 records limits; no commit or push. | Agent |

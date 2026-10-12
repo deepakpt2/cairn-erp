@@ -8,6 +8,7 @@
  * Runs as the owning role: these are global tables with no tenant scope.
  */
 import postgres from 'postgres';
+import { PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY } from '../src/platform/security/partner-bank-profile-activation';
 
 interface Activity {
   code: string;
@@ -97,6 +98,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CFG.FIN.PAYMENTMETHOD.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain country-specific payment-method definitions' },
   { code: 'FND.PARTNER.DISPLAY', module: 'FND', action: 'DISPLAY', posting: false, description: 'Display general business partner data' },
   { code: 'FND.PARTNER.MAINTAIN', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Maintain general business partner data and role assignments' },
+  { code: PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY, module: 'FND', action: 'CONFIGURE', posting: false, description: 'Activate an approved global partner-bank country profile' },
   { code: 'SEC.PARTNER.BANK.REVEAL', module: 'SEC', action: 'EXECUTE', posting: false, description: 'Reveal selected partner-bank account identifiers after authorization and audit' },
   { code: 'FIN.SUPPLIER.COMPANY.MAINTAIN', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain supplier company accounting assignments' },
   { code: 'FIN.SUPPLIER.COMPANY.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Review supplier company accounting assignments' },

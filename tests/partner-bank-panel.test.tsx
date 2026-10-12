@@ -20,7 +20,7 @@ const row: PartnerBankMetadata = {
 
 describe('partner bank metadata panel', () => {
   it('renders allowlisted metadata and only the fixed list mask', () => {
-    const markup = renderToStaticMarkup(<PartnerBankMetadataPanel records={[row]} />);
+    const markup = renderToStaticMarkup(<PartnerBankMetadataPanel partnerNumber="BP.100" records={[row]} />);
 
     expect(markup).toContain('Partner-wide bank records');
     expect(markup).toContain('Synthetic Holder');
@@ -29,15 +29,17 @@ describe('partner bank metadata panel', () => {
     expect(markup).toContain('••••');
     expect(markup).toContain('Account identifier masked');
     expect(markup).toContain('Active');
-    expect(markup).not.toContain(row.bankRecordId);
+    expect(markup).toContain(`bank=${row.bankRecordId}`);
+    expect(markup).not.toContain(`>${row.bankRecordId}<`);
+    expect(markup).toContain('View details');
     expect(markup).not.toContain('ibanCiphertext');
     expect(markup).not.toContain('localAccountNumberCiphertext');
     expect(markup).not.toContain('SEC.PARTNER.BANK.REVEAL');
   });
 
   it('renders distinct empty and unavailable states', () => {
-    const empty = renderToStaticMarkup(<PartnerBankMetadataPanel records={[]} />);
-    const unavailable = renderToStaticMarkup(<PartnerBankMetadataPanel records={null} />);
+    const empty = renderToStaticMarkup(<PartnerBankMetadataPanel partnerNumber="BP.100" records={[]} />);
+    const unavailable = renderToStaticMarkup(<PartnerBankMetadataPanel partnerNumber="BP.100" records={null} />);
 
     expect(empty).toContain('No bank records are available for this partner.');
     expect(empty).not.toContain('<table');

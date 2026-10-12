@@ -6,6 +6,11 @@ const auth = vi.hoisted(() => ({
   can: vi.fn(),
 }));
 const bankReads = vi.hoisted(() => ({ listPartnerBankMetadata: vi.fn() }));
+const bankDetail = vi.hoisted(() => ({
+  getPartnerBankMaskedDetail: vi.fn(),
+  loadBankDataKeyring: vi.fn(),
+  keyring: { activeKeyId: 'synthetic-key', keys: new Map<string, Uint8Array>() },
+}));
 const partnerReads = vi.hoisted(() => ({ getBusinessPartner: vi.fn(), listBusinessPartners: vi.fn() }));
 const db = vi.hoisted(() => ({ withTenant: vi.fn() }));
 
@@ -16,6 +21,13 @@ vi.mock('@/platform/auth/current', () => ({
 vi.mock('../src/modules/foundation/partner-bank-reads', () => ({
   listPartnerBankMetadata: bankReads.listPartnerBankMetadata,
 }));
+vi.mock('../src/modules/foundation/partner-bank-detail-view', () => ({
+  getPartnerBankMaskedDetail: bankDetail.getPartnerBankMaskedDetail,
+}));
+vi.mock('@/platform/security/bank-data-keyring', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/platform/security/bank-data-keyring')>()),
+  loadBankDataKeyring: bankDetail.loadBankDataKeyring,
+}));
 vi.mock('@/modules/foundation/business-partners', () => ({
   getBusinessPartner: partnerReads.getBusinessPartner,
   listBusinessPartners: partnerReads.listBusinessPartners,
@@ -24,6 +36,8 @@ vi.mock('@/platform/db/client', () => ({ withTenant: db.withTenant }));
 
 import PartnersPage from '../src/app/foundation/partners/page';
 import { PartnerBankMetadataPanel } from '../src/app/foundation/partners/PartnerBankMetadataPanel';
+import { PartnerBankDetailPanel } from '../src/app/foundation/partners/PartnerBankDetailPanel';
+import { BankDataKeyringConfigError } from '../src/platform/security/bank-data-keyring';
 
 function containsElementType(node: unknown, type: unknown): boolean {
   if (Array.isArray(node)) return node.some((child) => containsElementType(child, type));
@@ -82,6 +96,8 @@ function setupAuthorizedPartnerPage() {
     return callback(tx);
   });
   bankReads.listPartnerBankMetadata.mockResolvedValue([]);
+  bankDetail.getPartnerBankMaskedDetail.mockResolvedValue(null);
+  bankDetail.loadBankDataKeyring.mockReturnValue(bankDetail.keyring);
   return session;
 }
 
@@ -103,6 +119,8 @@ describe('partner display route authorization and bank panel integration', () =>
     expect(auth.requireSession).toHaveBeenCalledWith('/foundation/partners');
     expect(auth.can).toHaveBeenCalledWith(session, 'FND.PARTNER.DISPLAY');
     expect(bankReads.listPartnerBankMetadata).not.toHaveBeenCalled();
+    expect(bankDetail.getPartnerBankMaskedDetail).not.toHaveBeenCalled();
+    expect(bankDetail.loadBankDataKeyring).not.toHaveBeenCalled();
     expect(then).not.toHaveBeenCalled();
     expect(page).toMatchObject({ type: 'div' });
     expect(page.props.children.props.children).toContain('FND.PARTNER.DISPLAY');
@@ -117,6 +135,8 @@ describe('partner display route authorization and bank panel integration', () =>
 
     expect(bankReads.listPartnerBankMetadata).toHaveBeenCalledTimes(1);
     expect(bankReads.listPartnerBankMetadata).toHaveBeenCalledWith(session, 'BP.100');
+    expect(bankDetail.getPartnerBankMaskedDetail).not.toHaveBeenCalled();
+    expect(bankDetail.loadBankDataKeyring).not.toHaveBeenCalled();
     expect(containsElementType(bankPage, PartnerBankMetadataPanel)).toBe(true);
 
     vi.clearAllMocks();
@@ -126,6 +146,55 @@ describe('partner display route authorization and bank panel integration', () =>
     });
 
     expect(bankReads.listPartnerBankMetadata).not.toHaveBeenCalled();
+    expect(bankDetail.getPartnerBankMaskedDetail).not.toHaveBeenCalled();
+    expect(bankDetail.loadBankDataKeyring).not.toHaveBeenCalled();
     expect(containsElementType(generalPage, PartnerBankMetadataPanel)).toBe(false);
+  });
+
+  it('loads the keyring only for a selected row and passes session-scoped partner/row selectors to the reader', async () => {
+    const session = setupAuthorizedPartnerPage();
+    const bankRecordId = 'f0c49b11-9ab2-4ca8-91d6-ef6a0c9f5f22';
+    const maskedDetail = {
+      accountHolder: 'Synthetic Holder',
+      country: 'KW',
+      bankName: 'Synthetic Bank',
+      bankCode: 'SYN',
+      bic: null,
+      validFrom: '2026-01-01',
+      validTo: null,
+      isActive: true,
+      version: 1,
+      identifierKind: 'IBAN' as const,
+      maskedIdentifier: '••••4321',
+    };
+    bankDetail.getPartnerBankMaskedDetail.mockResolvedValue(maskedDetail);
+
+    const page = await PartnersPage({
+      searchParams: Promise.resolve({ partner: 'BP.100', view: 'BANKS', bank: bankRecordId }),
+    });
+
+    expect(bankDetail.loadBankDataKeyring).toHaveBeenCalledTimes(1);
+    expect(bankDetail.getPartnerBankMaskedDetail).toHaveBeenCalledWith(
+      session, 'BP.100', bankRecordId, bankDetail.keyring,
+    );
+    expect(containsElementType(page, PartnerBankDetailPanel)).toBe(true);
+  });
+
+  it('shows the generic unavailable detail state when deployment keyring configuration is missing', async () => {
+    setupAuthorizedPartnerPage();
+    bankDetail.loadBankDataKeyring.mockImplementation(() => {
+      throw new BankDataKeyringConfigError();
+    });
+
+    const page = await PartnersPage({
+      searchParams: Promise.resolve({
+        partner: 'BP.100',
+        view: 'BANKS',
+        bank: 'f0c49b11-9ab2-4ca8-91d6-ef6a0c9f5f22',
+      }),
+    });
+
+    expect(bankDetail.getPartnerBankMaskedDetail).not.toHaveBeenCalled();
+    expect(containsElementType(page, PartnerBankDetailPanel)).toBe(true);
   });
 });

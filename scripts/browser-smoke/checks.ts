@@ -1,9 +1,13 @@
-/** Independently runnable browser cases. Business records are created only through UI. */
+/** Independently runnable browser cases. Business data uses the UI; the D-074 check adds one synthetic encrypted bank row through a guarded disposable-test fixture connection because no bank write path exists. */
 import type { Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
+import { encryptBankData } from '../../src/platform/security/bank-data-encryption';
+import { generateBankRecordId } from '../../src/platform/security/bank-record-id';
+import { loadBankDataKeyring } from '../../src/platform/security/bank-data-keyring';
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
@@ -18,9 +22,63 @@ import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sale
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
+const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
 const year = new Date().getUTCFullYear();
 export type BrowserContext = { page: Page; base: string; target: BrowserTarget };
 function scope(ctx: BrowserContext) { return { page: ctx.page, BASE: ctx.base, CLIENT: ctx.target.client }; }
+
+/** Elevated fixture writes are allowed only to a fresh, loopback cairn_test database. */
+async function insertSyntheticPartnerBankRecord(client: string, partnerNumber: string): Promise<string> {
+  const fixtureUrl = process.env.CAIRN_SMOKE_FIXTURE_DATABASE_URL;
+  assert.ok(fixtureUrl, 'Masked bank-detail smoke requires CAIRN_SMOKE_FIXTURE_DATABASE_URL.');
+  const fixtureDb = postgres(fixtureUrl, { max: 1, prepare: false, onnotice: () => {} });
+
+  try {
+    const [identity] = await fixtureDb`
+      select current_database() as database_name,
+             host(inet_server_addr()) as server_address,
+             current_user as role_name`;
+    assert.equal(identity?.database_name, 'cairn_test', 'Fixture writes are restricted to the disposable cairn_test database.');
+    assert.equal(identity?.server_address, '127.0.0.1', 'Fixture writes are restricted to loopback PostgreSQL.');
+    assert.notEqual(identity?.role_name, 'cairn_app', 'Fixture writer must be separate from the read-only application role.');
+    const [role] = await fixtureDb`
+      select (rolsuper or rolbypassrls) as elevated
+      from pg_roles where rolname = current_user`;
+    assert.equal(role?.elevated, true, 'Fixture connection must be privileged only inside the disposable test cluster.');
+
+    const [tenant] = await fixtureDb`
+      select name, is_development from client where client = ${client}`;
+    assert.equal(tenant?.name, FIXTURE_NAME, 'Refusing fixture writes outside the owned browser tenant.');
+    assert.equal(tenant?.is_development, true, 'Refusing fixture writes outside a development tenant.');
+    const [partner] = await fixtureDb`
+      select 1 as present from business_partner
+      where client = ${client} and partner_number = ${partnerNumber}`;
+    assert.equal(partner?.present, 1, 'Synthetic bank row requires the UI-created test partner.');
+    const [existing] = await fixtureDb`
+      select count(*)::int as count from partner_bank
+      where client = ${client} and partner_number = ${partnerNumber}`;
+    assert.equal(existing?.count, 0, 'Refusing to add a fixture beside any pre-existing bank row.');
+
+    const bankRecordId = generateBankRecordId();
+    const envelope = encryptBankData(SYNTHETIC_BANK_IDENTIFIER, {
+      client,
+      partnerNumber,
+      bankRecordId,
+      field: 'iban',
+    }, loadBankDataKeyring());
+    await fixtureDb`
+      insert into partner_bank (
+        client, partner_number, bank_record_id, account_holder, country, bank_name,
+        iban_ciphertext, valid_from, is_active, version, created_by
+      ) values (
+        ${client}, ${partnerNumber}, ${bankRecordId}, 'Synthetic Test Holder', 'KW',
+        'Synthetic Test Bank', ${envelope}, '2026-01-01', true, 1, 'BROWSER_FIXTURE'
+      )`;
+    return bankRecordId;
+  } finally {
+    await fixtureDb.end({ timeout: 5 });
+  }
+}
 
 async function createSupplierRoleThroughUi(page: Page, BASE: string, number: string, name: string) {
   await page.goto(`${BASE}/foundation/partners?new=1`, { waitUntil: 'domcontentloaded' });
@@ -663,9 +721,27 @@ async function businessPartners(ctx: BrowserContext) {
   await page.getByText('No bank records are available for this partner.',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:/reveal/i}).count(),0);
+
+  const bankRecordId = await insertSyntheticPartnerBankRecord(CLIENT, 'TESTSUPP01');
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=BANKS`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Synthetic Test Holder', { exact: true }).waitFor();
+  await page.getByText('••••', { exact: true }).waitFor();
+  const detailsLink = page.getByRole('link', { name: 'View details', exact: true });
+  assert.equal(await detailsLink.count(), 1);
+  assert.ok((await detailsLink.getAttribute('href'))?.includes(`bank=${bankRecordId}`));
+  await detailsLink.click();
+  await page.getByRole('heading', { name: 'Bank record details', exact: true }).waitFor();
+  await page.getByText('••••4321', { exact: true }).waitFor();
+  const maskedDetailText = await page.locator('body').innerText();
+  assert.equal(maskedDetailText.includes(SYNTHETIC_BANK_IDENTIFIER), false);
+  assert.equal((await page.content()).includes('cbd1.'), false);
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /reveal/i }).count(), 0);
+  await page.getByRole('link', { name: 'Back to bank records', exact: true }).click();
+  await page.getByRole('heading', { name: 'Partner-wide bank records', exact: true }).waitFor();
   await page.getByRole('link',{name:'General data',exact:true}).click();
   await page.locator('[name="partnerNumber"][readonly]').waitFor();
-  console.log('  ✓ bank tab is display-only and shows the no-record state');
+  console.log('  ✓ masked detail shows only the synthetic D-074 suffix and no save/reveal controls');
 
   await page.locator('[name="roles"][value="CUSTOMER"]').check();
   await page.locator('[name="reason"]').fill('Browser dual partner role');
@@ -728,10 +804,16 @@ async function businessPartners(ctx: BrowserContext) {
   assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
   await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=BANKS`,{waitUntil:'domcontentloaded'});
   await page.getByRole('heading',{name:'Partner-wide bank records',exact:true}).waitFor();
-  await page.getByText('No bank records are available for this partner.',{exact:true}).waitFor();
+  await page.getByText('Synthetic Test Holder',{exact:true}).waitFor();
+  await page.getByText('••••',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'View details',exact:true}).click();
+  await page.getByRole('heading',{name:'Bank record details',exact:true}).waitFor();
+  await page.getByText('••••4321',{exact:true}).waitFor();
+  assert.equal((await page.locator('body').innerText()).includes(SYNTHETIC_BANK_IDENTIFIER),false);
+  assert.equal((await page.content()).includes('cbd1.'),false);
   assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:/reveal/i}).count(),0);
-  console.log('  ✓ display-only user can review the bank summary but cannot maintain or reveal');
+  console.log('  ✓ display-only user sees the suffix mask but cannot maintain or reveal');
 }
 
 async function supplierCompany(ctx: BrowserContext) {

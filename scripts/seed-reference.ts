@@ -7,6 +7,7 @@
  * and extending it is additive.
  */
 import postgres from 'postgres';
+import { PARTNER_BANK_PROFILE_POLICIES } from '../src/platform/security/partner-bank-profile-readiness';
 
 const COUNTRIES: Array<[string, string, string]> = [
   ['KW', 'Kuwait', 'KWD'], ['SA', 'Saudi Arabia', 'SAR'], ['AE', 'United Arab Emirates', 'AED'],
@@ -60,6 +61,22 @@ async function main() {
         `insert into country (code, name, default_currency) values ($1,$2,$3)
          on conflict (code) do update set name = excluded.name, default_currency = excluded.default_currency`,
         [code, name, defaultCurrency],
+      );
+    }
+
+    for (const { country, policyRevision } of PARTNER_BANK_PROFILE_POLICIES) {
+      await client.unsafe(
+        `insert into partner_bank_country_profile
+           (country_code, policy_revision, readiness_status, created_by)
+         values ($1, $2, 'NOT_READY', 'SYSTEM')
+         on conflict (country_code) do update
+           set policy_revision = excluded.policy_revision,
+               readiness_status = 'NOT_READY',
+               version = partner_bank_country_profile.version + 1,
+               changed_by = 'SYSTEM',
+               changed_at = now()
+         where partner_bank_country_profile.policy_revision is distinct from excluded.policy_revision`,
+        [country, policyRevision],
       );
     }
 
