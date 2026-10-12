@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.10 — B-095 stale/missing profile browser acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.11 — B-096 owner-directed bank-profile publication)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2153,6 +2153,7 @@ Do not push interim or partial module batches before that trigger.
 | B-093 | Add a capability-gated global profile-readiness/activation page only | ≤10 min | **DONE — separate `/foundation/partners/bank-profiles` route is gated by the activation capability, displays current policy/revision/status/version, and offers the one-way action only for current `NOT_READY` rows. No bank-record controls or reveal; 59 focused tests, typecheck, IP lint and diff check pass (§26.110)** |
 | B-094 | Run cookie-backed browser acceptance for the activation route/action on disposable local PostgreSQL; remove all fixtures and temporary infrastructure | ≤10 min | **PASSED — anonymous, display-only denial, exact capability, Administrator `*`, one-way activation, forged-form resistance and fixed audit evidence verified in headless Chromium against a fresh PostgreSQL 17.11 database. Two authorized activations audited; zero partner/bank rows; all app/DB/browser fixtures removed (§26.111)** |
 | B-095 | Run Chromium acceptance for stale-policy and missing-registry profile states on disposable local PostgreSQL; remove fixtures and temporary infrastructure | ≤10 min | **PASSED — stale KW and missing JP rows had no activation forms; current IN/GB/US `NOT_READY` rows retained forms with expected policy/version. No action submitted, activation audit, partner, or bank row created; all disposable fixtures and infrastructure removed (§26.112)** |
+| B-096 | Publish the complete pending partner-bank batch, B-080–B-095, to `main` on explicit owner instruction | ≤10 min | **PUBLISHED — all 45 pending paths committed as `3035c9b` and fast-forward pushed to `deepakpt2/cairn-erp:main`; `.env.local` was not committed and no database was touched (§26.113)** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2233,8 +2234,9 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    activations and fixed audit evidence; its temporary T094 role grants were fixtures only, not seeds (§26.111). B-095
    passes real-browser stale/missing fail-closed acceptance: stale KW and missing JP had no forms, while current IN/GB/US
    `NOT_READY` rows retained their expected activation forms. No action was submitted, and zero activation audits,
-   partners or bank rows remained; T095's exact-capability grant was fixture-only (§26.112). No persistent/remote DB,
-   bank save or reveal is added. B-063 adds only a pure
+   partners or bank rows remained; T095's exact-capability grant was fixture-only (§26.112). B-096 then publishes the
+   complete pending B-080–B-095 partner-bank batch to `main` on explicit owner instruction (§26.113). No persistent or
+   remote DB, bank save or reveal is added. B-063 adds only a pure
    KW validator (D-076; §26.80), B-064
    adds only a pure IN validator (D-077; §26.81), and B-065 adds only pure GB/US/JP validators
    (D-078–D-080; §26.82); B-066 adds the explicit partner display-route guard
@@ -5878,6 +5880,20 @@ real bank identifiers, activation, commit or push was involved. Bank-record save
 scope; §25.4 remains the full-system publication gate.
 
 
+### 26.113 B-096 — Owner-directed publication of the complete B-080–B-095 partner-bank batch `PUBLISHED — FAST-FORWARD`
+
+The owner explicitly directed a full commit and push of the complete pending partner-bank batch. All 45 staged paths
+were committed as `3035c9b` (`feat: add partner bank profile readiness and activation`) with the repository identity
+`deepakpt2`, then fast-forward pushed from `057e19c` to `deepakpt2/cairn-erp:main`. The remote branch and local `main`
+were verified at the new commit; the worktree is clean. No force push was used.
+
+For authentication, the PAT was read from ignored `.env.local` and supplied only through a temporary askpass helper.
+The token was not staged, committed, written into the remote URL/config, or emitted in logs; `.env.local` remains
+untracked/ignored and is not in the commit. This publication was expressly owner-directed and applies only to the
+complete pending B-080–B-095 batch; §25.4 remains the gate for future publication. No database was contacted or
+changed during publication; no real bank values were included.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -6051,6 +6067,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.11 | 2026-10-12 | **B-096 publishes the complete pending B-080–B-095 partner-bank batch on explicit owner instruction.** All 45 paths committed as `3035c9b` and fast-forward pushed from `057e19c` to `deepakpt2/cairn-erp:main` as the repository user. The ignored `.env.local` PAT was supplied only through a temporary askpass helper; it was not committed, stored in the remote URL/config, or logged. `.env.local` is not in the commit; no database changed and no real bank values were included. §26.113 records scope. | Agent |
 | 1.10 | 2026-10-12 | **B-095 passes real-browser fail-closed acceptance for stale and missing profile rows.** Fresh loopback PostgreSQL 17.11; all 38 migrations and both shared seeds passed. A disposable T095 exact-capability fixture made KW stale (D-061 vs current D-062) and removed JP's registry row. Chromium confirmed neither fail-closed row had an activation form, while current IN/GB/US `NOT_READY` rows retained controls with expected revision/version. No action submitted; zero activation audits, partners or bank rows; no browser errors or Save/Reveal controls. Production app, DB, fixture, PostgreSQL/browser dependencies and build removed. No remote/persistent DB, bank values, commit or push. §26.112 records scope. | Agent |
 | 1.09 | 2026-10-12 | **B-094 passes cookie-backed browser acceptance for the capability-gated profile page/action.** Fresh PostgreSQL 17.11 loopback cluster; all 38 SQL migrations and both shared seeds passed. No role grant existed before temporary T094 fixtures. Chromium verified anonymous sign-in redirect, display-only route/action denial, exact-capability access and Administrator `*`; KW and GB transitioned only `NOT_READY` v1→`READY` v2. Forged actor/evidence/status/reason fields were ignored; exactly two activation-audit rows held session-derived actors and fixed evidence. No browser errors, partner/bank rows, or reveal/save controls. App, DB, fixtures, browser binaries/dependencies and build removed; no remote/persistent DB, bank values, commit or push. §26.111 records scope. | Agent |
 | 1.08 | 2026-10-12 | **B-093 adds the capability-gated global partner-bank profile UI.** New `/foundation/partners/bank-profiles` route and Partners navigation link require `CFG.FND.PARTNER.BANKPROFILE.ACTIVATE`. Read-only view shows current policy, registry revision, readiness and version for the five approved profiles; missing/stale/invalid states fail closed. Only current `NOT_READY` rows get a one-way form with expected revision/version; fixed evidence and session-derived actor remain server-only. No bank-row save/reveal or role-capability grant. 59 focused profile/activation/UI/bank-display tests pass; typecheck, IP lint (251 files), diff check pass. No DB run or browser acceptance; no persistent state, commit or push. §26.110 records limits. | Agent |
