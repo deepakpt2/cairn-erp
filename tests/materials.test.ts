@@ -2,7 +2,7 @@
 import { beforeEach, afterEach, afterAll, describe, it, expect } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { createTenant, destroyTenant, withTenant, closeDb, type TestTenant } from './helpers';
-import { saveMaterialView, getMaterialDetail, listMaterials, requireUsableMaterial, type MaterialInput } from '@/modules/inventory/materials';
+import { saveMaterialView, getMaterialDetail, listMaterials, materialChoices, requireUsableMaterial, type MaterialInput } from '@/modules/inventory/materials';
 
 let tenant: TestTenant; let serial = 0;
 beforeEach(async () => { tenant = await createTenant(`material-master-${++serial}`); });
@@ -171,5 +171,19 @@ describe('material master', () => {
     await expect(saveMaterialView(mrp())).rejects.toMatchObject({ message: 'Material RAW-TEST does not exist.', remedy: 'Create its basic view first.' });
     await saveMaterialView(basic());
     await expect(saveMaterialView(mrp({ plant: '9999' }))).rejects.toThrow('Plant');
+  });
+
+  it('excludes unassigned Plants from material choices and refuses valuation or operational use before assignment', async () => {
+    await saveMaterialView(basic());
+    await saveMaterialView(accounting());
+    await withTenant(tenant.client, (tx) => tx.execute(sql`update plant set company_code = null where plant = '1000'`));
+    try {
+      const choices = await materialChoices(tenant.client);
+      expect(choices.plants.map((site) => site.plant)).not.toContain('1000');
+      await expect(saveMaterialView(accounting({ expectedVersion: 1, movingAveragePrice: '13' }))).rejects.toThrow('not assigned to a company code');
+      await expect(withTenant(tenant.client, (tx) => requireUsableMaterial(tx, tenant.client, number, 'ACCOUNTING', '1000'))).rejects.toThrow('not assigned to a company code');
+    } finally {
+      await withTenant(tenant.client, (tx) => tx.execute(sql`update plant set company_code = ${tenant.companyCode} where plant = '1000'`));
+    }
   });
 });

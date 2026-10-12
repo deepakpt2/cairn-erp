@@ -34,6 +34,14 @@ describe('bounded browser target selection', () => {
     expect(assignment?.database).not.toBe(definition?.database);
     expect(assignment?.port).not.toBe(definition?.port);
   });
+  it('keeps B-125 Plant definition browser acceptance isolated from B-123 service acceptance', () => {
+    const plant = TARGETS.find((target) => target.id === 'plant-definition');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['plant-definition'];
+    expect(plant).toMatchObject({ client: 'T984' });
+    expect(guard).toMatchObject({ database: 'cairn_b125', port: '55521', batch: 'B-125' });
+    expect(guard?.database).not.toBe('cairn_b123');
+    expect(guard?.port).not.toBe('55520');
+  });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
   });

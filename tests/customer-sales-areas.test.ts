@@ -10,7 +10,7 @@ async function partner(tenant:TestTenant,number:string,roles:['CUSTOMER']|['SUPP
 }
 beforeAll(async()=>{
   alpha=await createTenant('customer-sales-area-alpha');beta=await createTenant('customer-sales-area-beta');
-  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTI','HISTORY','GATE','ROLEOFF'])await partner(alpha,number);
+  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTI','HISTORY','GATE','ROLEOFF','UNASSIGNEDPLANT'])await partner(alpha,number);
   await partner(alpha,'SUPPLIERONLY',['SUPPLIER']);
   // Extra fixtures, explicitly test-only: a second company with its own plant, a second sales area, and an inactive sales area.
   await withTenant(alpha.client,async tx=>{
@@ -98,6 +98,18 @@ describe('customer sales-area defaults',()=>{
     await expect(gate('HISTORY')).rejects.toThrow('plant');
     await withTenant(alpha.client,tx=>tx.execute(sql`update plant set is_active=true where plant='1000'`));
     await expect(gate('HISTORY')).resolves.toBeTruthy();
+  });
+  it('does not offer or use an unassigned Plant for customer delivery',async()=>{
+    await saveCustomerSalesArea(input('UNASSIGNEDPLANT'));
+    await withTenant(alpha.client,tx=>tx.execute(sql`update plant set company_code=null where plant='1000'`));
+    try {
+      await expect(gate('UNASSIGNEDPLANT')).rejects.toThrow('no assigned Company Code');
+      await expect(saveCustomerSalesArea(input('UNASSIGNEDPLANT',{expectedVersion:1,pricingProcedure:'RVAA02'}))).rejects.toThrow('no assigned Company Code');
+      const choices=await customerSalesAreaChoices(alpha.client,'1000/01/01');
+      expect(choices.plants.map(row=>row.code)).not.toContain('1000');
+    } finally {
+      await withTenant(alpha.client,tx=>tx.execute(sql`update plant set company_code='1000' where plant='1000'`));
+    }
   });
   it('does not change customer company or supplier segments of a dual-role partner',async()=>{
     await saveBusinessPartner({client:alpha.client,partnerNumber:'DUALROLE',expectedVersion:0,changedBy:'TEST',reason:'Dual role sales fixture',category:'ORGANIZATION',name:'Dual role partner',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles:['CUSTOMER','SUPPLIER'],isBlocked:false});

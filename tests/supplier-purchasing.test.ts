@@ -8,7 +8,7 @@ let alpha:TestTenant;let beta:TestTenant;
 async function partner(tenant:TestTenant,number:string,roles:['SUPPLIER']|['CUSTOMER']=['SUPPLIER']){
   await saveBusinessPartner({client:tenant.client,partnerNumber:number,expectedVersion:0,changedBy:'TEST',reason:'Purchasing fixture setup',category:'ORGANIZATION',name:'Example supplier',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles,isBlocked:false});
 }
-beforeAll(async()=>{alpha=await createTenant('supplier-purchasing-alpha');beta=await createTenant('supplier-purchasing-beta');for(const n of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','MULTI','INACTIVE'])await partner(alpha,n);await partner(alpha,'CUSTOMERONLY',['CUSTOMER']);});
+beforeAll(async()=>{alpha=await createTenant('supplier-purchasing-alpha');beta=await createTenant('supplier-purchasing-beta');for(const n of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','MULTI','INACTIVE','UNASSIGNEDPLANT'])await partner(alpha,n);await partner(alpha,'CUSTOMERONLY',['CUSTOMER']);});
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
 const input=(number:string,patch:Partial<SupplierPurchasingInput>={}):SupplierPurchasingInput=>({client:alpha.client,partnerNumber:number,purchasingOrg:'1000',expectedVersion:0,changedBy:'TEST',reason:'Purchasing master test',orderCurrency:'USD',purchasingGroup:'001',incotermsCode:'FCA',incotermsLocation:'Kuwait City',paymentTermsCode:'NET30',isBlocked:false,...patch});
 describe('supplier purchasing-organisation defaults',()=>{
@@ -63,6 +63,15 @@ describe('supplier purchasing-organisation defaults',()=>{
     await expect(withTenant(alpha.client,tx=>requireSupplierPurchasing(tx,alpha.client,'READY','1000','9999'))).rejects.toThrow('Plant');
     await withTenant(alpha.client,tx=>tx.execute(sql`delete from purchasing_org_plant where purchasing_org='1000' and plant='1000'`));
     await expect(withTenant(alpha.client,tx=>requireSupplierPurchasing(tx,alpha.client,'READY','1000','1000'))).rejects.toThrow('not assigned');
+  });
+  it('refuses unassigned Plants in purchasing operations',async()=>{
+    await saveSupplierPurchasing(input('UNASSIGNEDPLANT'));
+    await withTenant(alpha.client,tx=>tx.execute(sql`update plant set company_code=null where plant='1000'`));
+    try {
+      await expect(withTenant(alpha.client,tx=>requireSupplierPurchasing(tx,alpha.client,'UNASSIGNEDPLANT','1000','1000'))).rejects.toThrow('no assigned Company Code');
+    } finally {
+      await withTenant(alpha.client,tx=>tx.execute(sql`update plant set company_code='1000' where plant='1000'`));
+    }
   });
   it('isolates same keys and default-denies unscoped reads',async()=>{
     expect(await getSupplierPurchasing(beta.client,'READY','1000')).toBeNull();expect(await db().execute(sql`select * from supplier_purchasing_org`)).toHaveLength(0);

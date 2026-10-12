@@ -603,6 +603,11 @@ const en: Catalogue = {
   'cc.city': 'City',
   'cc.taxNumber': 'Tax registration number',
 
+  // ── Plants ────────────────────────────────────────────────────────────────
+  'plant.created': 'Plant {code} defined; Company Code assignment remains separate.',
+  'plant.changed': 'Plant {code} saved and its change history recorded.',
+  'plant.unchanged': 'No Plant definition data changed for {code}.',
+
   // ── G/L accounts ──────────────────────────────────────────────────────────
   'gl.title': 'G/L accounts',
   'gl.subtitle':
@@ -651,11 +656,37 @@ const en: Catalogue = {
   // ── Plants ────────────────────────────────────────────────────────────────
   'plant.title': 'Plants',
   'plant.subtitle':
-    'Production and storage sites. A plant belongs to exactly one company code.',
-  'plant.code': 'Plant',
+    'Define Plant identity and address, then assign it to a Company Code in a separate step.',
+  'plant.code': 'Plant code',
   'plant.name': 'Name',
-  'plant.company': 'Company code',
+  'plant.country': 'Country',
+  'plant.chooseCountry': 'Choose a country',
+  'plant.street': 'Street',
+  'plant.houseNumber': 'House number',
+  'plant.postalCode': 'Postal code',
+  'plant.city': 'City',
+  'plant.region': 'Region',
+  'plant.factoryCalendar': 'Factory Calendar key',
+  'plant.factoryCalendarNote': 'Stored as a key only: it is not checked against a master or used operationally.',
+  'plant.language': 'Language',
+  'plant.languageDefault': 'defaults to EN',
+  'plant.reason': 'Reason / maintenance note',
+  'plant.siteFlags': 'Cairn site-role flags',
+  'plant.roleFlagsNote': 'Production and storage are Cairn-specific descriptive flags only; neither controls operational behavior. Either or both may be unchecked.',
+  'plant.assignmentNote': 'Company Code assignment is maintained separately. The Factory Calendar value is optional, unvalidated and not used operationally.',
+  'plant.countryReferenceMissing': 'Country reference data is unavailable. Contact an administrator.',
+  'plant.notFound': 'The requested Plant does not exist in this tenant.',
+  'plant.empty': 'No Plants are defined for this tenant yet.',
+  'plant.create': 'Create Plant',
+  'plant.change': 'Change',
+  'plant.openSaved': 'Open saved Plant',
+  'plant.backToList': 'Back to Plants',
+  'plant.company': 'Company Code',
   'plant.locations': 'Storage locations',
+  'plant.negativeStock': 'Negative stock',
+  'plant.permitted': 'Permitted',
+  'plant.refused': 'Refused',
+  'plant.noStorageLocations': 'No storage locations defined.',
   'plant.production': 'Production',
   'plant.storage': 'Storage',
 

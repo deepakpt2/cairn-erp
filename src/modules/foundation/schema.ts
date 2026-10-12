@@ -19,6 +19,7 @@ import {
   primaryKey,
   uniqueIndex,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, client } from '../../platform/tables/tenancy';
 
@@ -179,7 +180,7 @@ export const companyCode = pgTable(
   ],
 );
 
-/** Plant — a production or storage site belonging to exactly one company code. */
+/** Plant — a production or storage site, optionally assigned to a company code after definition. */
 export const plant = pgTable(
   'plant',
   {
@@ -188,12 +189,20 @@ export const plant = pgTable(
       .references(() => client.client, { onDelete: 'cascade' }),
     plant: varchar('plant', { length: 10 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
-    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    companyCode: varchar('company_code', { length: 10 }),
     country: char('country', { length: 2 }).notNull(),
     city: varchar('city', { length: 80 }),
+    region: varchar('region', { length: 80 }),
+    postalCode: varchar('postal_code', { length: 20 }),
+    street: varchar('street', { length: 160 }),
+    houseNumber: varchar('house_number', { length: 40 }),
+    /** Legacy free-form address retained as-is; new Plant maintenance uses the structured fields above. */
     address: text('address'),
-    /** Plant is a production site, a storage site, or both. */
+    /** Optional code only; no factory-calendar master is available yet, so this is not validated or operational. */
+    factoryCalendar: varchar('factory_calendar', { length: 10 }),
+    /** Cairn-specific descriptive flag, not an operational gate; both role flags default true and may both be false. */
     isProductionSite: boolean('is_production_site').notNull().default(true),
+    /** Cairn-specific descriptive flag, not an operational gate. */
     isStorageSite: boolean('is_storage_site').notNull().default(true),
     /** Default storage location used when a movement does not specify one. */
     defaultStorageLocation: varchar('default_storage_location', { length: 10 }),
@@ -205,6 +214,11 @@ export const plant = pgTable(
   (t) => [
     primaryKey({ columns: [t.client, t.plant] }),
     index('plant_company_idx').on(t.client, t.companyCode),
+    foreignKey({
+      name: 'plant_client_company_code_fk',
+      columns: [t.client, t.companyCode],
+      foreignColumns: [companyCode.client, companyCode.companyCode],
+    }),
   ],
 );
 

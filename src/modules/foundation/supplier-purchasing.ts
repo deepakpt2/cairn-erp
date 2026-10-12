@@ -58,7 +58,7 @@ export async function requireSupplierPurchasing(tx:Tx,client:string,partner:stri
   const [segment]=await tx.select().from(supplierPurchasing).where(key(client,partner,org));
   if(!segment||segment.purchasingStatus==='INCOMPLETE'||segment.isBlocked)throw new SupplierPurchasingError('Supplier purchasing defaults are missing, incomplete or blocked.');
   await validateAssignments(tx,client,org,segment.orderCurrency,segment.purchasingGroup,segment.paymentTermsCode);
-  if(plant){const [site]=await tx.select().from(plantTable).where(and(eq(plantTable.client,client),eq(plantTable.plant,plant),eq(plantTable.isActive,true)));if(!site)throw new SupplierPurchasingError('Plant is missing or inactive.');const [assignment]=await tx.select().from(purchasingOrgPlant).where(and(eq(purchasingOrgPlant.client,client),eq(purchasingOrgPlant.purchasingOrg,org),eq(purchasingOrgPlant.plant,plant)));if(!assignment)throw new SupplierPurchasingError('The purchasing organisation is not assigned to this plant.');}
+  if(plant){const [site]=await tx.select().from(plantTable).where(and(eq(plantTable.client,client),eq(plantTable.plant,plant),eq(plantTable.isActive,true)));if(!site)throw new SupplierPurchasingError('Plant is missing or inactive.');if(!site.companyCode)throw new SupplierPurchasingError('Plant has no assigned Company Code.','Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before using it for purchasing.');const [assignment]=await tx.select().from(purchasingOrgPlant).where(and(eq(purchasingOrgPlant.client,client),eq(purchasingOrgPlant.purchasingOrg,org),eq(purchasingOrgPlant.plant,plant)));if(!assignment)throw new SupplierPurchasingError('The purchasing organisation is not assigned to this plant.');}
   return segment;
 }
 

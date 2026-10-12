@@ -1,6 +1,6 @@
 /** Master views are separate, audited writes; no stock can be edited here. */
 import { z } from 'zod';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
@@ -111,7 +111,9 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
     if (!base) throw new MaterialError(`Material ${materialNumber} does not exist.`, 'Create its basic view first.');
     const [site] = await tx.select().from(plant).where(eq(plant.plant, input.plant));
     if (!site?.isActive) throw new MaterialError(`Plant ${input.plant} does not exist or is inactive.`);
-    const [company] = await tx.select().from(companyCode).where(eq(companyCode.companyCode, site.companyCode));
+    const assignedCompanyCode = site.companyCode;
+    if (!assignedCompanyCode) throw new MaterialError('The plant is not assigned to a company code.', 'Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before maintaining this view.');
+    const [company] = await tx.select().from(companyCode).where(eq(companyCode.companyCode, assignedCompanyCode));
     if (!company?.isActive) throw new MaterialError('The plant must belong to an active company code.');
     const [type] = await tx.select().from(materialType).where(eq(materialType.materialType, base.materialType));
 
@@ -188,7 +190,7 @@ export async function materialChoices(client: string) {
     valuationClasses: await tx.select().from(valuationClass).where(eq(valuationClass.isActive, true)).orderBy(valuationClass.valuationClass),
     controllers: await tx.select().from(mrpController).where(eq(mrpController.isActive, true)).orderBy(mrpController.controller),
     units: await tx.select().from(unitOfMeasure).orderBy(unitOfMeasure.code),
-    plants: await tx.select().from(plant).where(eq(plant.isActive, true)).orderBy(plant.plant),
+    plants: await tx.select().from(plant).where(and(eq(plant.isActive, true), isNotNull(plant.companyCode))).orderBy(plant.plant),
     companies: await tx.select().from(companyCode).orderBy(companyCode.companyCode),
     purchasingGroups: await tx.select().from(purchasingGroup).orderBy(purchasingGroup.purchasingGroup),
   }));
@@ -215,6 +217,11 @@ export async function requireUsableMaterial(tx: Tx, client: string, materialNumb
   if (base.basicStatus === 'INCOMPLETE') throw new MaterialError(`The basic view of ${materialNumber} is incomplete.`, 'Complete description, group and base unit before operational use.');
   if (view === 'BASIC') return { base, plantData: null, valuation: null };
   if (!plantCode) throw new MaterialError(`Plant scope is required for the ${view} view.`);
+  const [site] = await tx.select().from(plant).where(and(eq(plant.client, client), eq(plant.plant, plantCode)));
+  if (!site?.isActive) throw new MaterialError(`Plant ${plantCode} does not exist or is inactive.`);
+  if (!site.companyCode) throw new MaterialError('The plant is not assigned to a company code.', 'Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before operational use.');
+  const [company] = await tx.select().from(companyCode).where(and(eq(companyCode.client, client), eq(companyCode.companyCode, site.companyCode)));
+  if (!company?.isActive) throw new MaterialError('The plant must belong to an active company code.');
   if (view === 'ACCOUNTING') {
     const [valuation] = await tx.select().from(materialValuation).where(and(eq(materialValuation.client, client), eq(materialValuation.materialNumber, materialNumber), eq(materialValuation.valuationArea, plantCode)));
     if (!valuation || valuation.accountingStatus === 'INCOMPLETE') throw new MaterialError(`The valuation view of ${materialNumber} / ${plantCode} is missing or incomplete.`, 'Complete its Accounting / Costing view before stock valuation.');

@@ -11,7 +11,7 @@ function guardedConnectionUrl(
   role: string,
   guard: BrowserAcceptanceDatabaseGuard,
 ): string {
-  assert.ok(raw, `${variable} must be set explicitly for ${guard.batch} Company Code browser acceptance.`);
+  assert.ok(raw, `${variable} must be set explicitly for ${guard.batch} browser acceptance.`);
   let url: URL;
   try { url = new URL(raw); }
   catch { throw new Error(`${variable} is not a valid PostgreSQL URL; refusing browser acceptance.`); }
@@ -25,7 +25,7 @@ function guardedConnectionUrl(
   return raw;
 }
 
-async function verifyCompanyCodeAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
+async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
   // Reject a remote/mistargeted URL from its parsed host before opening a socket.
   const runtimeUrl = guardedConnectionUrl(process.env.DATABASE_URL, 'DATABASE_URL', 'cairn_app', guard);
   const migrationUrl = guardedConnectionUrl(process.env.MIGRATION_DATABASE_URL, 'MIGRATION_DATABASE_URL', 'cairn', guard);
@@ -69,6 +69,7 @@ async function verifyCompanyCodeAcceptanceDatabase(guard: BrowserAcceptanceDatab
 
 function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'company-code-definition' || target.id === 'company-code-coa-assignment') return '/config/company-codes';
+  if (target.id === 'plant-definition') return '/config/plants';
   if (target.id === 'foundation') return '/finance/journal/new';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
@@ -79,7 +80,7 @@ function protectedRouteFor(target: BrowserTarget): string {
 async function run(target: BrowserTarget) {
   assert.equal(process.env.CAIRN_ENV ?? 'development', 'development', 'Browser smoke runs only against development.');
   const databaseGuard = ACCEPTANCE_DATABASE_GUARDS[target.id];
-  if (databaseGuard) await verifyCompanyCodeAcceptanceDatabase(databaseGuard);
+  if (databaseGuard) await verifyAcceptanceDatabase(databaseGuard);
   const [{ chromium }, { sql }, { withTenant, closeDb }, { listTenants }, { CHECKS, onboard }] = await Promise.all([
     import('@playwright/test'), import('drizzle-orm'), import('../src/platform/db/client'),
     import('../src/platform/tenancy'), import('./browser-smoke/checks'),

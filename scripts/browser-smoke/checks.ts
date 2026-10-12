@@ -702,6 +702,201 @@ async function companyCodeDefinition(ctx: BrowserContext) {
   console.log('  ✓ cookie-backed Auditor retains the readable list but receives no form or reference choices');
 }
 
+async function plantDefinition(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = 'PLT125';
+  const name = 'Browser Acceptance Plant';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Plant definition: verify exact capability, audited create/change and display-only access');
+
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B125_PLANT_DEFINE', 'B-125 Plant Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B125_PLANT_DEFINE', 'CFG.ORG.PLANT.DEFINE', 'BROWSER_FIXTURE')`);
+    const [definerId, viewerId] = [randomUUID(), randomUUID()];
+    for (const [id, username, fullName, roleCode] of [
+      [definerId, 'plant.definer', 'Plant Definition-Only User', 'B125_PLANT_DEFINE'],
+      [viewerId, 'plant.viewer', 'Plant Read-Only User', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = 'B125_PLANT_DEFINE' order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), ['CFG.ORG.PLANT.DEFINE']);
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+  }
+
+  // A role containing only the registered definition capability gets the create/change UI.
+  await signInAs('plant.definer');
+  await page.goto(`${BASE}/config/plants?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Plants', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Create Plant', exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Create Plant', exact: true }).waitFor();
+  assert.ok((await page.locator('[name="country"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  )).includes('KW'));
+  assert.equal(await page.locator('[name="language"]').inputValue(), 'EN');
+  assert.equal(await page.locator('input[type="checkbox"][name="isProductionSite"]').isChecked(), true);
+  assert.equal(await page.locator('input[type="checkbox"][name="isStorageSite"]').isChecked(), true);
+  for (const field of ['companyCode', 'defaultStorageLocation', 'isActive', 'client', 'changedBy']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is not a Plant definition-form field.`);
+  }
+  await page.getByText('Stored as a key only: it is not checked against a master or used operationally.', { exact: true }).waitFor();
+  await page.locator('[name="plant"]').fill(code);
+  await page.locator('[name="name"]').fill(name);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="street"]').fill('Industrial Road');
+  await page.locator('[name="houseNumber"]').fill('12A');
+  await page.locator('[name="postalCode"]').fill('12345');
+  await page.locator('[name="city"]').fill('Al Jahra');
+  await page.locator('[name="region"]').fill('Al Jahra');
+  await page.locator('[name="factoryCalendar"]').fill('UNUSED');
+  await page.locator('input[type="checkbox"][name="isProductionSite"]').uncheck();
+  await page.locator('input[type="checkbox"][name="isStorageSite"]').uncheck();
+  const createForm = page.locator('form').filter({ has: page.locator('[name="plant"]') });
+  await createForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({
+      client: '0100',
+      changedBy: 'spoofed.actor',
+      companyCode: '1000',
+      defaultStorageLocation: '0001',
+      isActive: 'false',
+    })) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = field;
+      input.value = value;
+      form.appendChild(input);
+    }
+  });
+  await page.getByRole('button', { name: 'Create Plant', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Plant PLT125 defined; Company Code assignment remains separate.',
+    { exact: true },
+  ).waitFor();
+
+  const readPlant = async () => {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, plant, name, company_code, country, street, house_number,
+             postal_code, city, region, factory_calendar, language,
+             is_production_site, is_storage_site, default_storage_location,
+             is_active, created_by, changed_by
+        from plant where client = ${CLIENT} and plant = ${code}
+    `))) as unknown as Array<{
+      client: string; plant: string; name: string; company_code: string | null;
+      country: string; street: string | null; house_number: string | null;
+      postal_code: string | null; city: string | null; region: string | null;
+      factory_calendar: string | null; language: string;
+      is_production_site: boolean; is_storage_site: boolean;
+      default_storage_location: string | null; is_active: boolean;
+      created_by: string; changed_by: string | null;
+    }>;
+    assert.equal(rows.length, 1);
+    return rows[0];
+  };
+  const created = await readPlant();
+  assert.deepEqual(
+    {
+      client: created.client, plant: created.plant, name: created.name,
+      companyCode: created.company_code, country: created.country.trim(),
+      street: created.street, houseNumber: created.house_number,
+      postalCode: created.postal_code, city: created.city, region: created.region,
+      factoryCalendar: created.factory_calendar, language: created.language.trim(),
+      isProductionSite: created.is_production_site, isStorageSite: created.is_storage_site,
+      defaultStorageLocation: created.default_storage_location, isActive: created.is_active,
+      createdBy: created.created_by,
+    },
+    {
+      client: CLIENT, plant: code, name, companyCode: null, country: 'KW',
+      street: 'Industrial Road', houseNumber: '12A', postalCode: '12345',
+      city: 'Al Jahra', region: 'Al Jahra', factoryCalendar: 'UNUSED', language: 'EN',
+      isProductionSite: false, isStorageSite: false, defaultStorageLocation: null,
+      isActive: true, createdBy: 'plant.definer',
+    },
+  );
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'plant', code));
+  assert.equal(history.length, 1);
+  assert.equal(history[0].changeType, 'CREATE');
+  assert.equal(history[0].changedBy, 'plant.definer');
+  assert.equal(history[0].transactionCode, 'CFG.ORG.PLANT.DEFINE');
+  console.log('  ✓ definition-only user creates an unassigned Plant; forged tenant/actor/assignment fields are ignored and both role flags may be false');
+
+  const plantCard = () => page.locator('section.panel').filter({ hasText: code }).filter({ hasText: name });
+  await plantCard().waitFor();
+  assert.deepEqual(await plantCard().locator('.chip').allInnerTexts(), ['NOT ASSIGNED']);
+  await plantCard().getByRole('link', { name: 'Change', exact: true }).click();
+  await page.getByRole('heading', { name: 'Change', exact: true }).waitFor();
+  assert.equal(await page.locator('[name="plant"]').inputValue(), code);
+  assert.equal(await page.locator('[name="plant"]').getAttribute('readonly'), '');
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '1');
+  assert.equal(await page.locator('[name="city"]').inputValue(), 'Al Jahra');
+  assert.equal(await page.locator('input[type="checkbox"][name="isProductionSite"]').isChecked(), false);
+  assert.equal(await page.locator('input[type="checkbox"][name="isStorageSite"]').isChecked(), false);
+  for (const field of ['companyCode', 'defaultStorageLocation', 'isActive']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} stays outside the change form.`);
+  }
+  await page.locator('[name="city"]').fill('Al Jahra Industrial Area');
+  await page.locator('[name="factoryCalendar"]').fill('STILLFAKE');
+  await page.locator('input[type="checkbox"][name="isProductionSite"]').check();
+  await page.locator('[name="reason"]').fill('Browser UI maintenance change');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Plant PLT125 saved and its change history recorded.',
+    { exact: true },
+  ).waitFor();
+  const changed = await readPlant();
+  assert.equal(changed.city, 'Al Jahra Industrial Area');
+  assert.equal(changed.factory_calendar, 'STILLFAKE');
+  assert.equal(changed.is_production_site, true);
+  assert.equal(changed.is_storage_site, false);
+  assert.equal(changed.company_code, null);
+  assert.equal(changed.default_storage_location, null);
+  assert.equal(changed.is_active, true);
+  assert.equal(changed.changed_by, 'plant.definer');
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'plant', code));
+  assert.equal(history.length, 2);
+  assert.deepEqual(new Set(history.map((entry) => entry.changeType)), new Set(['CREATE', 'CHANGE']));
+  assert.ok(history.every((entry) => entry.changedBy === 'plant.definer'));
+  assert.ok(history.every((entry) => entry.transactionCode === 'CFG.ORG.PLANT.DEFINE'));
+  const [activity] = await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = 'CFG.ORG.PLANT.DEFINE'
+  `)) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'plant.definer');
+  console.log('  ✓ change form preserves assignment/defaults, records a second version and completes the definition activity');
+
+  // An Auditor retains the list but receives neither create/change controls nor form/reference data.
+  await signInAs('plant.viewer');
+  await page.goto(`${BASE}/config/plants`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Plants', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.DEFINE.', { exact: true }).waitFor();
+  await plantCard().waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Create Plant', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.locator('[name="plant"]').count(), 0);
+  await page.goto(`${BASE}/config/plants?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create Plant', exact: true }).count(), 0);
+  assert.equal(await page.locator('[name="country"]').count(), 0, 'Country choices are not rendered for a viewer.');
+  assert.equal(await page.locator('[name="plant"]').count(), 0, 'A direct create URL does not bypass the capability gate.');
+  console.log('  ✓ cookie-backed Auditor can read Plant data but cannot see the form or country choices');
+}
+
 async function companyCodeCoaAssignment(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const code = '2000';
@@ -1905,6 +2100,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   foundation,
   'company-code-definition': companyCodeDefinition,
   'company-code-coa-assignment': companyCodeCoaAssignment,
+  'plant-definition': plantDefinition,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,

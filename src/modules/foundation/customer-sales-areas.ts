@@ -30,6 +30,7 @@ async function validateSalesArea(tx:Tx,client:string,org:string,channel:string,d
   if(plantCode){
     const [site]=await tx.select().from(plant).where(and(eq(plant.client,client),eq(plant.plant,plantCode)));
     if(!site?.isActive)throw new CustomerSalesAreaError('Delivering plant is missing or inactive.');
+    if(!site.companyCode)throw new CustomerSalesAreaError('Delivering plant has no assigned Company Code.','Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before using it for customer delivery.');
     if(site.companyCode!==organisation.companyCode)throw new CustomerSalesAreaError('Delivering plant must belong to the sales organisation company code.');
   }
   return {area,organisation,company};
