@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TARGETS, FIXTURE_NAME, RUN_TIMEOUT_MS, parseBrowserCommand, isOwnedFixture } from '../scripts/browser-smoke/targets';
+import { ACCEPTANCE_DATABASE_GUARDS } from '../scripts/browser-smoke/database-guards';
 
 describe('bounded browser target selection', () => {
   it('defaults to the existing foundation regression only', () => {
@@ -24,6 +25,14 @@ describe('bounded browser target selection', () => {
     expect(new Set(TARGETS.map((target) => target.client)).size).toBe(TARGETS.length);
     for (const target of TARGETS) expect(target.client).toMatch(/^T\d{3}$/);
     expect(TARGETS.some((target) => String(target.client) === '0100')).toBe(false);
+  });
+  it('keeps B-115 acceptance guarded by its own disposable database and port', () => {
+    const definition = ACCEPTANCE_DATABASE_GUARDS['company-code-definition'];
+    const assignment = ACCEPTANCE_DATABASE_GUARDS['company-code-coa-assignment'];
+    expect(definition).toMatchObject({ database: 'cairn_b110', port: '55496', batch: 'B-110' });
+    expect(assignment).toMatchObject({ database: 'cairn_b115', port: '55498', batch: 'B-115' });
+    expect(assignment?.database).not.toBe(definition?.database);
+    expect(assignment?.port).not.toBe(definition?.port);
   });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);

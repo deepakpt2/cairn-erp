@@ -7,6 +7,7 @@ import { configActivityStatus } from '../../platform/tables/registry';
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
 import { companyCode, documentType } from './schema';
+import { hasCompanyCodeAssignments } from './company-code-assignments';
 import { ConfigError } from './services';
 
 export const NUMBER_OBJECTS = [
@@ -62,6 +63,10 @@ export async function journalRangeReadiness(tx: Tx, client: string, fiscalYear =
   const ranges = await tx.select().from(numberRange).where(eq(numberRange.objectCode, 'JOURNAL_ENTRY'));
   const missing: Array<{ companyCode: string; subObject: string; state: string }> = [];
   for (const company of companies) {
+    if (!hasCompanyCodeAssignments(company)) {
+      missing.push({ companyCode: company.companyCode, subObject: 'ASSIGNMENTS', state: 'ASSIGNMENTS_INCOMPLETE' });
+      continue;
+    }
     for (const subObject of new Set(types.map((t) => t.numberRangeSubObject))) {
       const candidates = ranges.filter((r) => r.companyCode === company.companyCode && r.subObject === subObject);
       const range = candidates.find((r) => r.fiscalYear === fiscalYear) ?? candidates.find((r) => r.fiscalYear === 0);

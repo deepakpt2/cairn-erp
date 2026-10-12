@@ -30,6 +30,11 @@ import {
   postingPeriodVariant,
   companyCode,
 } from '../../modules/foundation/schema';
+import {
+  describeMissingCompanyCodeAssignments,
+  hasCompanyCodeAssignments,
+  missingCompanyCodeAssignments,
+} from '../../modules/foundation/company-code-assignments';
 
 /** Account type classification, matching the reference model's distinction (§14.3). */
 export type AccountType = 'S' | 'K' | 'D' | 'A' | 'M';
@@ -217,6 +222,14 @@ export async function periodStatus(
     throw new PeriodError(
       `Company code ${companyCodeKey} does not exist.`,
       'Create it in Company Codes (CFG.ORG.COMPANYCODE.DEFINE).',
+    );
+  }
+
+  if (!hasCompanyCodeAssignments(company)) {
+    const missing = missingCompanyCodeAssignments(company);
+    throw new PeriodError(
+      `Company code ${companyCodeKey} is missing ${describeMissingCompanyCodeAssignments(missing)}.`,
+      'Complete the Company Code assignment steps in §6.2 before opening posting periods.',
     );
   }
 

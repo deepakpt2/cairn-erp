@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.21 — B-106 owner-directed publication)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.31 — B-116 SCR-012 status reconciliation)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2164,6 +2164,16 @@ Do not push interim or partial module batches before that trigger.
 | B-104 | Complete Supplier Payment Methods live-browser acceptance on a verified disposable local database; remove temporary infrastructure | ≤10 min | **PASSED — `supplier-company` alone passed in headless Chromium against local PostgreSQL 17.11 using the production standalone build; filtering, ten-code cap, persistence, read-only authority, stale-method removal and explicit clear covered. No B-104 migration/service-suite rerun; fixtures and temporary infrastructure removed (§26.121). No remote DB, commit or push.** |
 | B-105 | Register the Company Code define capability only | ≤10 min | **DONE — added `CFG.ORG.COMPANYCODE.DEFINE` as a grantable, non-posting Foundation configuration capability; contract tests preserve no-role-grant and wildcard behavior. No action, UI, migration, seed execution or database access (§26.122). No remote DB, commit or push.** |
 | B-106 | Publish the pending B-098–B-105 batch to `main` on explicit owner instruction | ≤10 min | **PUBLISHED — commit `8eac55f4cf51d3260be259859bbe38464264c124` fast-forward pushed from `f3119c6d2966beb5da44f17d028bb104dba00fb5` to `deepakpt2/cairn-erp:main`; 19 source/schema/test/document paths included. `.env.local` and its token were not committed or disclosed; no DB was accessed (§26.123).** |
+| B-107 | Permit Company Code definition before CoA/FYV/PPV assignment and fail closed until assignment | ≤10 min | **DONE — assignment columns are nullable; reference integrity is checked for each non-null assignment. Read paths preserve define/assign order, and posting/period reads block until complete. Fresh disposable PostgreSQL 17.11 migration/seed and focused acceptance passed; temporary cluster/packages removed. No remote DB, commit, push, definition action or assignment UI (§26.124).** |
+| B-108 | Add a capability-protected, create-only Company Code define service/action with assignments unset | ≤10 min | **DONE — exact `CFG.ORG.COMPANYCODE.DEFINE` gate, session-derived tenant/actor, strict definition-only input, active country/currency checks, duplicate refusal, create audit and activity completion. All three assignments stay null; no update or UI form. Fresh local PostgreSQL 17.11 acceptance passed; temporary cluster/packages removed. No remote DB, commit or push (§26.125).** |
+| B-109 | Add the capability-gated Company Code definition form only | ≤10 min | **DONE — form rendered only to users with `CFG.ORG.COMPANYCODE.DEFINE`; reads countries and active currencies, and submits only the definition fields to B-108’s protected action. Display-only users retain the read view. No assignment fields, DB/browser acceptance, remote DB, commit or push (§26.126).** |
+| B-110 | Run cookie-backed Company Code definition browser acceptance on a verified disposable local database | ≤10 min | **PASSED — authorized create/reset/audit, forged actor/tenant/assignment values, duplicate refusal, null assignments and Auditor read-only list verified in headless Chromium; T986 fixture and temporary infrastructure removed. Browser-only acceptance setup used a fresh local PostgreSQL 17.11 database; migration/service acceptance is not claimed (§26.127). No remote DB, commit or push.** |
+| B-111 | Register the separate CoA-assignment capability for SCR-013 only | ≤10 min | **DONE — added `CFG.ORG.COMPANYCODE.ASSIGN_COA` as non-posting FND/CONFIGURE, separate from Company Code definition; no role-specific grant. Contract covers SCR-013 prerequisites and exact/Configurator-pattern/Administrator-wildcard authorization. Focused 3/3, browser harness 95/95, typecheck, IP lint (270 files), diff check pass. No DB, seed execution, schema, migration, assignment action or UI (§26.128). No remote DB, commit or push.** |
+| B-112 | Implement the protected initial CoA-assignment service/action only | ≤10 min | **IMPLEMENTED — exact `CFG.ORG.COMPANYCODE.ASSIGN_COA` gate, session-derived tenant/actor, strict company/chart input, completed define/CoA prerequisites, active same-tenant CoA, audited one-time assignment and SCR-013 completion. Same-value retry is idempotent; replacing a different existing CoA is refused. Contract 4/4; browser harness 99/99; typecheck, IP lint (272 files), diff check pass. No DB-backed service acceptance, DB, seed, migration/schema change, UI, or assignment execution (§26.129). No remote DB, commit or push.** |
+| B-113 | Accept the CoA-assignment service on a verified disposable local PostgreSQL database only | ≤10 min | **PASSED — fresh PostgreSQL 17.11 at 127.0.0.1:55497, identity verified before 41 migrations and reference/global seeds (test setup only); `cairn_app` verified NOSUPERUSER/NOBYPASSRLS. Focused suite 4/4 covers initial audited assignment, preserved null FYV/PPV, activity completion, idempotent retry, overwrite refusal, missing Company Code, inactive/missing/cross-tenant charts and both unmet prerequisites. Final test-tenant, Company Code and audit counts zero; cluster/data and 11 temporary packages removed (§26.130). No remote DB, commit or push.** |
+| B-114 | Add the SCR-013 CoA-assignment UI only | ≤10 min | **IMPLEMENTED — assignment authority is separate from definition; active same-tenant CoA choices are loaded only for authorized users when a Company Code is unassigned. Per-row form submits only Company Code and CoA; already-assigned rows have no replacement control; no-choice/read-only states are explicit. UI contract 3/3, browser harness 102/102, typecheck, IP lint (275 files), diff check pass. No DB, assignment execution, migration/seed, live-browser acceptance or production build (§26.131). No remote DB, commit or push.** |
+| B-115 | Run cookie-backed live-browser acceptance of SCR-013 on a verified disposable local PostgreSQL database | ≤10 min | **PASSED — only the independently guarded `company-code-coa-assignment` target (T985) ran against verified local PostgreSQL 17.11 `cairn_b115` on 127.0.0.1:55498. Definition-only, assignment-only and Auditor cookie sessions verified independent capability gates, active tenant-local choices/inactive exclusion, audited one-time assignment, null FYV/PPV preservation, forged tenant/actor/assignment-field resistance, refreshed UI and read-only/no-replacement controls. The 41 migrations and shared seeds were browser setup only—not migration/seed acceptance or a rerun of B-113 service acceptance. Cleanup confirmed zero T985 tenant, Company Code, chart, user, role, activity or change-history rows; app, cluster/data, 42 temporary packages, browser cache, build/dependency output and credentials removed (§26.132). Typecheck, browser harness 104/104, IP lint (276 files), production standalone build (temporary `ignoreBuildErrors` override after typecheck), and diff check pass. No remote DB, commit or push.** |
+| B-116 | Reconcile the SCR-012 Company Code definition inventory status with B-110 acceptance | ≤10 min | **COMPLETE — replaced the stale DRAFT label with BUILT, automated UI contract and cookie-backed browser acceptance passed (B-110); owner walkthrough/sign-off remains pending under §24.1. Documentation-only; no source, schema, database or browser behavior changed. `git diff --check` passes; no remote DB, commit or push (§26.133).** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2412,8 +2422,8 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 
 | ID | Our screen name | Code | Aliases | Status |
 |---|---|---|---|---|
-| SCR-012 | Company code define | `CFG.ORG.COMPANYCODE.DEFINE` | OX02 | DRAFT |
-| SCR-013 | Company code assign chart of accounts | `CFG.ORG.COMPANYCODE.ASSIGN_COA` | — | DRAFT |
+| SCR-012 | Company code define | `CFG.ORG.COMPANYCODE.DEFINE` | OX02 | **BUILT · automated UI contract and cookie-backed live-browser acceptance passed (B-110) · owner walkthrough/sign-off pending** |
+| SCR-013 | Company code assign chart of accounts | `CFG.ORG.COMPANYCODE.ASSIGN_COA` | — | **BUILT · automated UI contract and cookie-backed live-browser acceptance passed (B-115)** |
 | SCR-014 | Plant define | `CFG.ORG.PLANT.DEFINE` | OX10 | DRAFT |
 | SCR-015 | Plant assign to company code | `CFG.ORG.PLANT.ASSIGN_COMPANY` | — | DRAFT |
 | SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | DRAFT |
@@ -6120,6 +6130,281 @@ the remote URL. No database was accessed, no migration/seed was applied and no r
 is authorized by this publication record.
 
 
+### 26.124 B-107 — Company Code define/assign schema and read gates `LOCAL ACCEPTANCE PASSED · WRITE PATH PENDING`
+
+The owner selected to align the schema with the define/assign sequence in §6.2. Added migration
+`0018_company_code_assignments_nullable.sql` to allow the chart-of-accounts, fiscal-year-variant, and
+posting-period-variant fields to remain unset when a Company Code is defined. Existing assignments are
+not rewritten. Migration `9021_company_code_refs_allow_unassigned.sql` replaces the legacy reference
+trigger so each non-null assignment still has to reference a tenant-local definition; it permits a
+valid stepwise assignment without requiring the later steps to be complete.
+
+Updated the Foundation schema and Company Code detail/list views to represent unassigned values. Supplier
+and Customer company-code choices/maintenance require chart-of-accounts assignment. Posting-period status
+and journal posting refuse incomplete Company Codes; number-range readiness reports incomplete
+assignments, the journal form omits unassigned codes, and a direct posting-period URL shows an assignment
+message rather than attempting to load missing variants. No definition action, assignment action or
+write-form UI was added in this batch.
+
+**Acceptance:** on a fresh, loopback-only PostgreSQL 17.11 database, all 41 migrations applied, followed
+by the local reference and global-catalog seeds. Six related DB test files passed 115/115, covering the
+new define/assign sequence, valid partial assignment, retained reference validation, detail/choice reads,
+posting-period and journal-posting denials, plus existing posting, range, Supplier and Customer suites.
+Final verification found all three columns nullable, both B-107 migrations applied, zero test tenants and
+zero Company Code rows. The temporary cluster and PostgreSQL packages were removed. Browser harness
+87/87, typecheck, IP lint (264 files), production build and diff check pass. No remote DB was accessed;
+B-103 migration/service acceptance and B-104 live-browser acceptance were not rerun or conflated with this
+schema batch. No commit or push.
+
+**Next:** add the protected create-only Company Code define service/action, deriving tenant and actor from
+the verified session and leaving the three assignments unset. Build each later assignment as its own
+protected, dependency-ordered step under §6.2.
+
+
+### 26.125 B-108 — protected create-only Company Code definition `SERVICE/ACTION COMPLETE · FORM PENDING`
+
+Added `company-code-definition.ts` as a strict, create-only service. Its input contains only the definition
+fields: Company Code, name, country, currency, and optional city/tax-registration number. It rejects unknown
+fields (including CoA/FYV/PPV), validates the country and an active currency against the global reference
+catalogues, serializes same-tenant/code attempts, and refuses an existing key without changing it. A new
+row is inserted with all three assignment columns explicitly `NULL`; the same transaction writes the
+`CREATE` change document and marks `CFG.ORG.COMPANYCODE.DEFINE` complete.
+
+Added the server action in `/config/company-codes/actions.ts`. It requires a verified session and the exact
+`CFG.ORG.COMPANYCODE.DEFINE` capability before invoking the service; tenant and actor come only from the
+session. The action ignores forged tenant/actor/assignment form fields, reports authorization/validation
+errors safely, and revalidates the configuration routes. No form or user-runnable UI is wired yet, and no
+assignment action is included.
+
+**Acceptance:** fresh loopback-only PostgreSQL 17.11; all 41 migrations plus reference and global-catalog
+seeds applied. Seven focused DB suites passed 118/118, including create with null assignments, audit and
+activity completion, duplicate no-overwrite, reference rejection, B-107 sequence behavior, and existing
+posting/range/Supplier/Customer tests. Final counts: 0 test tenants and 0 Company Code rows. Temporary
+cluster/packages removed. Browser harness 91/91, typecheck, IP lint (268 files), production build, and diff
+check pass. No remote DB or live-browser acceptance; B-103 and B-104 remain separate. No commit or push.
+
+**Next:** add the capability-gated Company Code definition form and connect it to the action, keeping the
+list/detail view readable but the write path protected. Company Code assignment activities remain separate
+and dependency-ordered under §6.2.
+
+
+### 26.126 B-109 — capability-gated Company Code definition form `UI COMPLETE · LIVE BROWSER PENDING`
+
+Added a definition form to `/config/company-codes`, rendered only when the verified session has
+`CFG.ORG.COMPANYCODE.DEFINE`. Country choices and active currency choices are loaded from the global
+reference tables only for an authorized maintainer. The form accepts Company Code, name, country,
+currency, optional city and optional tax-registration number, and submits only these fields to B-108's
+protected action. It exposes no client/actor fields and no CoA/FYV/PPV fields. The existing Company Code
+list remains readable without the define capability; those users receive a read-only authority notice.
+The form reports action status, resets after success, and disables submission if either reference list is
+empty.
+
+**Acceptance:** browser-harness contract suite 93/93, typecheck, IP lint (270 files), production build,
+and diff check pass. No DB access, migration, seed, or live-browser test in this UI-only batch; B-103/B-104
+and the separate Company Code browser target are not conflated. The build used an explicit loopback-only
+unavailable URL to prevent accidental remote access. No commit or push.
+
+**Next:** B-110 — cookie-backed live-browser acceptance of the Company Code define form/action on a
+verified disposable local PostgreSQL database; test denied/allowed authority, field forgery resistance,
+create-only behavior, null assignments and visible refresh; remove all fixtures and temporary
+infrastructure. Do not use an owner/production database.
+
+
+### 26.127 B-110 — cookie-backed Company Code definition browser acceptance `PASSED · DISPOSABLE LOCAL ONLY`
+
+Added the independently selectable `company-code-definition` Playwright target (reserved fixture T986) and
+ran only that target. A fresh PostgreSQL 17.11 cluster under `/tmp` listened on `127.0.0.1:55496`; before any
+migration or seed, verified database `cairn_b110`, current migration role `cairn`, loopback address/port,
+primary status, PostgreSQL 17.11, and zero public-schema objects. The target runner now rejects non-loopback,
+wrong-name/port, or wrong-role URLs before opening its preflight connections, then checks the live database
+identity and that the runtime `cairn_app` role is not elevated. Applied the 41 lexical migrations and the two
+shared global/reference seeds only as prerequisites for this browser environment. This does **not** claim new
+migration or service acceptance; no database service suite ran for B-110.
+
+The browser created T986 through the onboarding UI. Administrator access used the real sign-in and cookie flow.
+The target verified country/currency choices (KW/KWD), absence of tenant/actor/assignment controls, and actual
+create submission with forged hidden `client=0100`, `changedBy=spoofed.actor`, and CoA/FYV/PPV values. The
+result stayed in T986, recorded `browser.admin` as creator/auditor, and retained all three assignments as NULL.
+The success feedback remained visible while all form controls reset; the refreshed list showed the new row as
+unassigned and did not offer posting periods. A duplicate submit was refused without overwriting the row or
+adding history. A cookie-backed Auditor retained the readable list and received the read-only notice, without
+a definition form or reference-choice controls. The target completed its sign-out/protected-route redirect and
+reported no browser page errors.
+
+The runner cleanup and final direct count check found zero T986 tenant, Company Code, user, change-history,
+partner or bank rows. The server, cluster/data, extracted PostgreSQL package, downloaded Chromium/cache and
+system packages, temporary env/password files, `.next`, `node_modules`, and the target screenshot were removed.
+No owner/production/remote database was accessed, and no commit or push occurred.
+
+**Verification:** typecheck passed; browser harness **94/94**; IP lint scanned 270 files; final diff check is
+recorded in the v1.25 changelog. Next's internal type-check worker was SIGKILLed during both standard and
+`--no-lint` build attempts, although the standalone `npm run typecheck` passed. For the production standalone
+browser run, a temporary `typescript.ignoreBuildErrors` override was used with `--no-lint`, then immediately
+restored; the production bundle and cookie-backed target passed. This is not recorded as a normal build pass.
+The earlier cold dev-server attempt timed out during first-route compilation and created no tenant; the final
+production standalone run is the accepted browser result.
+
+
+### 26.128 B-111 — separate CoA-assignment capability registration for SCR-013 only `CAPABILITY READY · ASSIGNMENT ACTION/UI PENDING`
+
+Added `CFG.ORG.COMPANYCODE.ASSIGN_COA` to the global capability catalogue in `scripts/seed.ts` as a
+Foundation (`FND`) `CONFIGURE`, non-posting capability. This is deliberately separate from
+`CFG.ORG.COMPANYCODE.DEFINE`: defining a Company Code does not assign its chart of accounts. SCR-013's
+assignment activity was already registered with prerequisites for Company Code definition and CoA definition;
+this batch does not change that activity or add a role-specific grant. Existing exact-capability, `CFG.*`
+Configurator-pattern, and `*` Administrator-wildcard authorization behavior is preserved.
+
+Expanded `tests/company-code-capability-contract.test.ts` to assert the new catalogue entry, the existing
+SCR-013 activity and prerequisites, absence of explicit role-capability grants in the catalogue block, and
+exact/wildcard/fail-closed checks. The seed source was not executed. No schema or migration, assignment
+service/action, UI, CoA/FYV/PPV mutation, or database operation is included.
+
+**Verification:** focused contract suite **3/3**; browser harness **15 files / 95 tests passed**; typecheck
+and IP lint (270 files) passed; `git diff --check` passed. A first default Vitest invocation used the wrong
+configuration: its global setup attempted `127.0.0.1:5432` and was refused before test collection. No database
+connection or state access resulted; rerunning the focused test with the DB-free browser-harness config passed.
+No production build, remote DB, commit or push.
+
+**Next:** implement the protected CoA-assignment service/action in a separate bounded batch, gated by the new
+capability and SCR-013 prerequisites; keep its UI and browser acceptance separate. B-111 performs no assignment.
+
+
+### 26.129 B-112 — protected initial CoA-assignment service/action only `IMPLEMENTED · DB ACCEPTANCE PENDING`
+
+Added `src/modules/foundation/company-code-coa-assignment.ts` for SCR-013. The strict service input accepts
+only Company Code and chart keys plus trusted service-supplied tenant/actor context. In a tenant-scoped
+transaction it serializes concurrent attempts, locks the Company Code row, verifies that both
+`CFG.ORG.COMPANYCODE.DEFINE` and `CFG.FIN.COA.DEFINE` are completed, and requires an active chart of accounts
+from the same tenant. It changes only the Company Code's CoA field; FYV and PPV remain untouched. The initial
+assignment is audited as a security-relevant `CHANGE`, and SCR-013 completion is recorded in the same
+transaction. Repeating the same assignment is idempotent; replacing a different existing CoA is refused until
+reassignment semantics are separately approved.
+
+Added `assignCompanyCodeCoaAction` alongside the existing definition action. It requires a verified session
+and exact `CFG.ORG.COMPANYCODE.ASSIGN_COA` capability before service invocation. Tenant and actor come only from
+the session; the form payload is limited to the Company Code and CoA keys. Successful/idempotent results use
+English i18n messages and revalidate Company Codes, the workbench, posting periods and the new-journal route.
+No assignment form or UI is wired in this batch.
+
+Added a database-free contract suite and registered it in the browser-harness configuration. The existing
+Company Code definition contract now scopes its assertions to the define action, preserving B-108's rule that
+its request and service do not accept assignment fields.
+
+**Verification:** new contract suite **4/4**; browser harness **16 files / 99 tests passed**; typecheck and IP
+lint (272 files) passed; `git diff --check` passed. The database-backed service was not executed or accepted;
+no database connection, migration or seed command was run, and no assignment was performed. No schema/migration,
+UI, production build, remote DB, commit or push.
+
+**Next:** B-113 — add/run focused service acceptance on a verified disposable local PostgreSQL database,
+including successful assignment, tenant/reference/prerequisite denials, same-value retry, overwrite refusal,
+audit/activity atomicity and cleanup. Verify actual database identity before any migration or seed; never use
+an owner/production database.
+
+
+### 26.130 B-113 — disposable local PostgreSQL acceptance for protected CoA assignment `PASSED · CLUSTER REMOVED`
+
+A fresh PostgreSQL 17.11 cluster was bound only to `127.0.0.1:55497`; the disposable database was
+`cairn_b113`. Before any migration or seed, verified database name, current migration role `cairn`, loopback
+address/port, primary status, server version 17.11 (`170011`), zero public-schema objects, and the expected
+elevated migration-role flags. No existing owner/local cluster or remote database was used. After that gate,
+applied the 41 lexical migrations and ran the shared reference and global-catalog seeds solely to provision
+the service-test environment. This is not new migration/seed acceptance. Runtime tests used `cairn_app`; its
+`rolsuper` and `rolbypassrls` flags were both verified false.
+
+The focused database suite passed **4/4**. It created an unassigned Company Code and assigned the active same-tenant
+`CAIRN` chart. It verified that only CoA changed (FYV/PPV stayed NULL), the security-relevant `CHANGE` history
+record and SCR-013 completion were recorded with the test actor, and retrying the same assignment added no
+second history event. A different existing chart was refused without mutation. Missing Company Code, missing or
+inactive chart, a chart defined only in another tenant, and each incomplete prerequisite were denied; failed
+checks left the Company Code unassigned and added no assignment history. The first run exposed that the shared
+`createTenant` test helper does not create workbench-status rows; the disposable fixture was corrected to add
+the required prerequisite/status rows, and the final run passed.
+
+Final direct counts found **zero** test tenants, Company Code rows or change-history rows. The PostgreSQL server
+was stopped cleanly; cluster data, temporary cluster config and PostgreSQL OS account were removed, and all 11
+temporary PostgreSQL-related packages were purged. `node_modules` was removed after verification. Typecheck,
+browser harness **16 files / 99 tests**, IP lint (273 files), and final diff check pass. No owner/production/remote
+database, commit or push. No schema change, new migration, UI or live-browser acceptance; no persistent assignment.
+
+**Next:** implement the SCR-013 capability-gated assignment UI with active tenant-local CoA choices; keep live
+browser acceptance as a separate batch. No manual screen walkthrough is possible until that UI is added.
+
+
+### 26.131 B-114 — capability-gated SCR-013 CoA-assignment UI only `BUILT · LIVE-BROWSER ACCEPTANCE PENDING`
+
+Added `CompanyCodeCoaAssignmentForm` to `/config/company-codes` as a separate SCR-013 step. Definition and
+assignment authorities are evaluated independently: only a verified session with `CFG.ORG.COMPANYCODE.ASSIGN_COA`
+receives active CoA choices, and only when at least one Company Code has no CoA assigned. Choices are queried
+inside `withTenant` with an explicit tenant filter and `isActive = true`. Users without the assignment capability
+retain the existing readable Company Code list and receive an authority notice; the define form remains governed
+only by `CFG.ORG.COMPANYCODE.DEFINE`. A capability holder with no active CoA receives a clear empty-choice notice
+instead of an unusable form.
+
+Each unassigned Company Code row gets a selector only when active choices exist. Its payload contains only the
+Company Code key and selected CoA; tenant and actor remain session-derived in B-112's action, and FYV/PPV are not
+exposed. Already-assigned rows show their CoA without a replacement control, matching B-112's initial-assignment-only
+service. Added English `en` messages for selection, no-choice, success/readout and the initial-only boundary.
+
+Registered a database-free UI contract suite; the existing definition UI test was adjusted to assert the separate
+`canDefine` gate after both capabilities were added to the same page. The SCR-013 inventory status now records
+that the UI is built while live-browser acceptance remains pending.
+
+**Verification:** new UI contract **3/3**; focused definition/assignment UI contracts **5/5**; browser harness
+**17 files / 102 tests passed**; typecheck and IP lint (275 files) passed; `git diff --check` passed. No database,
+migration, seed, assignment action, CoA mutation, live-browser run or production build. No remote DB, commit or push.
+
+**Next:** B-115 — cookie-backed live-browser acceptance of SCR-013 on a verified disposable local PostgreSQL database.
+Verify database identity before migration/seed setup; test capability separation, active-choice scope, successful
+initial assignment, read-only access and UI refresh; clean every fixture and remove temporary infrastructure. Keep
+this browser-only acceptance distinct from B-113 service acceptance; never use an owner/production database.
+
+
+### 26.132 B-115 — cookie-backed SCR-013 CoA-assignment browser acceptance `PASSED · DISPOSABLE LOCAL ONLY`
+
+Added and ran only the independently selectable `company-code-coa-assignment` target (reserved fixture T985).
+Its identity guard is separate from B-110: runtime and migration URLs must use loopback PostgreSQL database
+`cairn_b115` on port 55498 and the distinct `cairn_app` / `cairn` roles. Before setup, a direct preflight verified
+127.0.0.1, port 55498, primary PostgreSQL 17.11 (`170011`), elevated migration role and zero public-schema
+base tables. The target runner then rechecked live runtime/migration identity; `cairn_app` was NOSUPERUSER and
+NOBYPASSRLS. Applied the 41 existing migrations and reference/global seeds only to prepare the browser database.
+This does **not** claim migration/seed acceptance and does not rerun B-113 service acceptance.
+
+The browser created T985 through onboarding and Company Code 2000 through the session-bound definition UI; all
+three assignments began NULL. Test-only active `B115ACT` and inactive `B115OFF` chart rows were placed in T985
+as existing choices; CoA definition/seed behavior was not under test. A definition-only user saw the definition
+form but no assignment selector or chart values. A cookie-backed Auditor read the unassigned Company Code with
+neither maintenance form nor choices. An assignment-only user saw the CoA selector, but no definition form; its
+options exactly matched the tenant-local active chart rows and excluded the inactive row. That session assigned
+`B115ACT` once. Forged `client=0100`, actor, FYV and PPV fields were ignored: the Company Code remained in T985,
+`changedBy` was `company.assigner`, FYV/PPV remained NULL, and one security-relevant SCR-013 change item plus
+activity completion were recorded. The assignment-only control disappeared immediately and after a fresh page
+load; an Auditor then saw the saved chart read-only and no replacement control. Sign-out redirected from the
+protected route and the browser reported no page errors.
+
+The browser target's cleanup and a final direct query confirmed zero T985 tenant, Company Code, chart, user, role,
+activity-status, change-document and change-item rows (and zero remaining tenants in the disposable database).
+PostgreSQL and the app were stopped; cluster/data, temporary URL/password file, build and dependency output,
+Playwright browser cache, acceptance screenshot, temporary configuration and 42 temporarily installed PostgreSQL/
+Chromium dependency packages were removed. No remote, owner or production database was contacted.
+
+**Verification:** browser target `company-code-coa-assignment` passed; browser harness **17 files / 104 tests**,
+typecheck and IP lint (276 files) passed; `git diff --check` passed. The standalone production bundle compiled
+for this cookie-backed run with `typescript.ignoreBuildErrors` temporarily enabled after the separate typecheck
+passed; this is not recorded as a normal Next type-validation build. No B-113 service suite, migration/seed
+acceptance, remote DB, commit or push.
+
+
+### 26.133 B-116 — SCR-012 Company Code definition inventory reconciliation `DOCUMENTATION ONLY · COMPLETE`
+
+The SCR-012 screen inventory still read `DRAFT`, although B-109 had completed the capability-gated definition
+form and its automated UI contract, and B-110 had passed the cookie-backed live-browser acceptance. Updated the
+inventory to record the built state and both acceptance results, while explicitly retaining **owner
+walkthrough/sign-off pending** under §24.1. This reconciles existing evidence only: no source, schema, database,
+migration, seed, or browser behavior changed, and no acceptance was rerun.
+
+**Verification:** `git diff --check` passed. No remote DB, commit or push.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -6293,6 +6578,16 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.31 | 2026-10-12 | **B-116 reconciles the stale SCR-012 inventory status.** The Company Code definition screen now records built status and the automated UI contract plus B-110 cookie-backed browser acceptance; owner walkthrough/sign-off remains pending under §24.1. Documentation only; no source, schema, database, migration, seed, browser behavior or acceptance rerun. `git diff --check` passed; no remote DB, commit or push. §26.133 records scope. | Agent |
+| 1.30 | 2026-10-12 | **B-115 passes SCR-013 cookie-backed browser acceptance.** Only the independently guarded `company-code-coa-assignment` target ran on freshly verified disposable PostgreSQL 17.11 `cairn_b115` at 127.0.0.1:55498. Definition-only, assignment-only and Auditor sessions verified capability separation, tenant-local active choices/inactive exclusion, initial audited assignment, unchanged NULL FYV/PPV, forged tenant/actor/assignment-field resistance, read-only access and refreshed no-replacement UI. The 41 migrations and reference/global seeds were test prerequisites only; no migration/seed acceptance or B-113 service-suite rerun is claimed. Zero T985 tenant, code, chart, user, role, activity and change-history rows verified; app, cluster, browser cache/dependencies, temporary packages/files and build output removed. Browser harness 104/104, typecheck, IP lint (276 files), diff check pass. The standalone browser bundle used a temporary `ignoreBuildErrors` override after typecheck passed, so this is not a normal typed Next build. No remote DB, commit or push. §26.132 records scope. | Agent |
+| 1.29 | 2026-10-12 | **B-114 adds the capability-gated SCR-013 CoA-assignment UI only.** The assignment capability is distinct from Company Code definition; active tenant-local chart choices are fetched only for authorized users with unassigned codes. Each form submits only Company Code and CoA; no replacement control is shown for assigned rows. Added explicit read-only/no-choice states and English messages. New UI contract 3/3, focused UI contracts 5/5, browser harness 102/102, typecheck, IP lint (275 files) and diff check pass. SCR-013 is built; live-browser acceptance remains pending. No DB, migration/seed, assignment execution, production build, remote DB, commit or push. §26.131 records scope; B-115 is the browser-only gate. | Agent |
+| 1.28 | 2026-10-12 | **B-113 passes disposable-local PostgreSQL service acceptance for initial CoA assignment.** Verified fresh PG17.11 `cairn_b113` on 127.0.0.1:55497 before setup; applied 41 existing migrations plus reference/global seeds solely for the fixture, not as migration acceptance. Runtime `cairn_app` is NOSUPERUSER/NOBYPASSRLS. Four database tests pass: audited initial assignment preserving FYV/PPV NULLs, SCR-013 completion, same-value idempotency, overwrite refusal, missing/inactive/cross-tenant chart denial and both prerequisite gates. Final test tenant/company/audit counts zero; cluster/data, postgres account, temporary config and 11 packages removed. Browser harness 99/99, typecheck, IP lint (273), diff check pass. No owner/production/remote DB, UI, live browser, commit or push. §26.130 records scope. | Agent |
+| 1.27 | 2026-10-12 | **B-112 implements the protected initial CoA-assignment service/action only.** Exact `CFG.ORG.COMPANYCODE.ASSIGN_COA`, session-derived tenant/actor, strict input, completed Company Code/CoA prerequisites, active same-tenant chart, initial assignment-only semantics, idempotent same-value retry, audited security-relevant change and atomic SCR-013 completion. No different-chart overwrite; no UI. Contract 4/4, browser harness 99/99, typecheck, IP lint (272 files) and diff check pass. No database-backed acceptance or connection, migration/seed, assignment execution, schema, production build, remote DB, commit or push. §26.129 records scope; disposable-local PostgreSQL service acceptance is next. | Agent |
+| 1.26 | 2026-10-12 | **B-111 registers the separate CoA-assignment capability for SCR-013 only.** Added `CFG.ORG.COMPANYCODE.ASSIGN_COA` as FND/CONFIGURE/non-posting, independent of Company Code definition; the existing SCR-013 activity and prerequisites remain unchanged, and no role-specific grant was added. Contract tests cover registration, prerequisites, and exact/`CFG.*`/`*` authorization. Focused 3/3 and browser harness 95/95 pass; typecheck, IP lint (270 files), and diff check pass. No schema/migration, service/action/UI, assignment, DB access, migration or seed execution, or production build. The initial wrong-config Vitest attempt was refused at localhost:5432 before collection; the proper DB-free harness passed. No remote DB, commit or push. §26.128 records scope. | Agent |
+| 1.25 | 2026-10-12 | **B-110 passes cookie-backed Company Code definition browser acceptance.** Only `company-code-definition` (T986) ran on a freshly verified disposable PostgreSQL 17.11 database bound to 127.0.0.1:55496. The 41 migrations and shared seeds were test setup only, not migration/service acceptance. Browser verified Administrator create and form reset, forged tenant/actor/assignment fields ignored, create audit/session actor, null assignments and refreshed read list; duplicate no-overwrite; cookie-backed Auditor read-only list without form/choices. T986 rows/tenant cleaned; app, cluster/data, Chromium/browser dependencies, extracted PG package, build and temporary files removed. Typecheck, browser harness 94/94, IP lint (270 files), and diff check pass. Normal Next type-check worker was SIGKILLed; standalone output used `--no-lint` plus a temporary `ignoreBuildErrors` override after standalone typecheck passed; override restored. No remote DB, commit or push. §26.127 records scope. | Agent |
+| 1.24 | 2026-10-12 | **B-109 adds the capability-gated Company Code definition form.** Authorized users receive country and active-currency choices and can submit only definition fields to the B-108 action; display-only users retain read access but no form. No assignments, tenant/actor input fields, database access, seed, migration, or live-browser acceptance. Browser harness 93/93, typecheck, IP lint (270 files), production build, and diff check pass. No remote DB, commit or push. §26.126 records scope. | Agent |
+| 1.23 | 2026-10-12 | **B-108 adds the protected create-only Company Code definition service/action.** The strict input accepts definition fields only, validates country/active currency references, serializes duplicate attempts, refuses overwrites and inserts CoA/FYV/PPV as null. The server action checks the exact capability and derives tenant/actor from the verified session. Audit history and workbench completion are recorded in the transaction. Fresh disposable local PostgreSQL 17.11: 41 migrations and reference/catalog seeds; seven DB suites 118/118; zero test tenants/Company Code rows and temporary cluster/packages removed. Browser harness 91/91, typecheck, IP lint (268 files), production build and diff check pass. No remote DB, form/UI, live-browser acceptance, commit or push. §26.125 records scope. | Agent |
+| 1.22 | 2026-10-12 | **B-107 makes Company Code definition precede its three separate assignments.** Migration 0018 allows null CoA/FYV/PPV fields; migration 9021 retains tenant-local reference checks for every non-null assignment. Detail, partner choices, number-range readiness, period-status and posting paths handle incomplete codes explicitly. Fresh disposable local PostgreSQL 17.11: 41 migrations and reference/catalog seeds; six DB suites 115/115; final zero tenants/Company Code rows and temporary cluster/packages removed. Browser harness 87/87, typecheck, IP lint (264 files), production build and diff check pass. No remote DB, definition action, assignment UI, commit or push. §26.124 records scope. | Agent |
 | 1.21 | 2026-10-12 | **B-106 publishes the pending B-098–B-105 batch to `main` on explicit owner instruction.** Commit `8eac55f4cf51d3260be259859bbe38464264c124` was fast-forward pushed from `f3119c6d2966beb5da44f17d028bb104dba00fb5` to `deepakpt2/cairn-erp:main`; 19 source/schema/test/document paths included. `.env.local` was excluded; the authorized token was supplied through temporary askpass and not logged or stored in the remote URL. No database access or migration/seed. §26.123 records scope. | Agent |
 | 1.20 | 2026-10-12 | **B-105 begins Enterprise Structure at SCR-012 by registering the Company Code define capability only.** Added `CFG.ORG.COMPANYCODE.DEFINE` as module FND, CONFIGURE, non-posting; a no-DB contract test ensures no tenant-role grants and preserves wildcard semantics. No server action, UI, schema, migration, seed execution or database access. Browser harness 83/83, typecheck, IP lint (258 files), and diff check pass. No remote DB, commit or push. §26.122 records scope. | Agent |
 | 1.19 | 2026-10-12 | **B-104 passes Supplier Payment Methods browser-only acceptance on disposable local PostgreSQL.** Verified local identity before B-104 setup applied the existing 39 migrations and two shared seeds; this batch did not rerun migration/service acceptance. The `supplier-company` target alone passed in headless Chromium v1248 against the optimized standalone Next build with no browser errors, covering filtering, ten-selection cap, persistence, authority boundaries, stale-choice removal and explicit clear. Synthetic definitions used audited service fixtures; Supplier selection and `B1` retirement were exercised in the UI. The runner left zero tenants, partners, Supplier company rows, Payment Method rows or partner-bank rows. App, cluster/data/logs, temporary PostgreSQL packages and Chromium binaries removed; apt autoremove removed 29 no-longer-needed runtime packages while shared system dependencies were retained. `npm run build`, browser harness 81/81, typecheck, IP lint (257 files) and diff check pass. No remote DB, commit or push. §26.121 records scope. | Agent |

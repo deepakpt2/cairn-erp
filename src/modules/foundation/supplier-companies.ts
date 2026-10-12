@@ -1,6 +1,6 @@
 /** Validated supplier/company master writes; invoice services must snapshot these assignments. */
 import { z } from 'zod';
-import { and,eq,asc,inArray,or,sql } from 'drizzle-orm';
+import { and,eq,asc,inArray,isNotNull,or,sql } from 'drizzle-orm';
 import { withTenant,type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { companyCode } from './schema';
@@ -35,10 +35,12 @@ const key=(client:string,partner:string,company:string)=>and(eq(supplierCompany.
 async function validateAssignments(tx:Tx,client:string,company:string,account:string|null,terms:string|null){
   const [site]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,company)));
   if(!site?.isActive)throw new SupplierCompanyError('Company code is missing or inactive.');
-  if(account){const [gl]=await tx.select().from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,site.chartOfAccounts),eq(glAccount.accountNumber,account)));
+  const chartOfAccounts=site.chartOfAccounts;
+  if(!chartOfAccounts)throw new SupplierCompanyError('Company code chart of accounts is not assigned.','Assign a chart of accounts before maintaining supplier company data (CFG.ORG.COMPANYCODE.ASSIGN_COA).');
+  if(account){const [gl]=await tx.select().from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,chartOfAccounts),eq(glAccount.accountNumber,account)));
     if(!gl||gl.isBlocked||gl.reconciliationType!=='VENDOR')throw new SupplierCompanyError('Use an unblocked supplier reconciliation account in the company chart.');}
   if(terms){const [term]=await tx.select().from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.termsCode,terms)));if(!term?.isActive)throw new SupplierCompanyError('Payment terms are missing or inactive.');}
-  return site;
+  return { ...site, chartOfAccounts };
 }
 async function validateSupplierPaymentMethods(tx:Tx,client:string,countryCode:string,paymentMethods:string|null){
   if(!paymentMethods)return;
@@ -91,7 +93,8 @@ export async function requireSupplierCompany(tx:Tx,client:string,partner:string,
 }
 
 export async function supplierCompanyChoices(client:string,company:string){return withTenant(client,async tx=>{
-  const companies=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency,country:companyCode.country}).from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.isActive,true))).orderBy(asc(companyCode.companyCode));
+  const rows=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency,country:companyCode.country}).from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.isActive,true),isNotNull(companyCode.chartOfAccounts))).orderBy(asc(companyCode.companyCode));
+  const companies=rows.filter((row):row is (typeof rows)[number]&{chartOfAccounts:string}=>row.chartOfAccounts!==null);
   const selected=companies.find(row=>row.code===company);
   const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'VENDOR'),eq(glAccount.isBlocked,false))).orderBy(asc(glAccount.accountNumber)):[];
   const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.isActive,true))).orderBy(asc(paymentTerms.termsCode));

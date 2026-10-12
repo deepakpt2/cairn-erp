@@ -50,29 +50,32 @@ export async function getCompanyCodeDetail(client: string, companyCodeKey: strin
     if (rows.length === 0) return null;
     const company = rows[0];
 
-    // The assigned configuration, resolved so the screen shows what the company
-    // code will actually do rather than just which keys it points at.
-    const coa = await tx
-      .select()
-      .from(chartOfAccounts)
-      .where(
-        and(
-          eq(chartOfAccounts.client, client),
-          eq(chartOfAccounts.chartOfAccounts, company.chartOfAccounts),
-        ),
-      )
-      .limit(1);
+    // The assigned configuration, resolved when the corresponding assignment exists.
+    const coa = company.chartOfAccounts
+      ? await tx
+          .select()
+          .from(chartOfAccounts)
+          .where(
+            and(
+              eq(chartOfAccounts.client, client),
+              eq(chartOfAccounts.chartOfAccounts, company.chartOfAccounts),
+            ),
+          )
+          .limit(1)
+      : [];
 
-    const fyv = await tx
-      .select()
-      .from(fiscalYearVariant)
-      .where(
-        and(
-          eq(fiscalYearVariant.client, client),
-          eq(fiscalYearVariant.variant, company.fiscalYearVariant),
-        ),
-      )
-      .limit(1);
+    const fyv = company.fiscalYearVariant
+      ? await tx
+          .select()
+          .from(fiscalYearVariant)
+          .where(
+            and(
+              eq(fiscalYearVariant.client, client),
+              eq(fiscalYearVariant.variant, company.fiscalYearVariant),
+            ),
+          )
+          .limit(1)
+      : [];
 
     const plants = await tx
       .select()
@@ -80,15 +83,17 @@ export async function getCompanyCodeDetail(client: string, companyCodeKey: strin
       .where(and(eq(plant.client, client), eq(plant.companyCode, company.companyCode)))
       .orderBy(asc(plant.plant));
 
-    const accountCount = await tx
-      .select({ count: sql<number>`count(*)::int` })
-      .from(glAccount)
-      .where(
-        and(
-          eq(glAccount.client, client),
-          eq(glAccount.chartOfAccounts, company.chartOfAccounts),
-        ),
-      );
+    const accountCount = company.chartOfAccounts
+      ? await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(glAccount)
+          .where(
+            and(
+              eq(glAccount.client, client),
+              eq(glAccount.chartOfAccounts, company.chartOfAccounts),
+            ),
+          )
+      : [{ count: 0 }];
 
     return {
       company,

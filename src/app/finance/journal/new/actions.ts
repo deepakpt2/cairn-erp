@@ -7,6 +7,11 @@ import { postJournalEntry, PostingError, type PostingLineInput } from '@/platfor
 import { derivePosition, getCompanyCode, PeriodError } from '@/platform/periods';
 import { NumberRangeError } from '@/platform/numbering';
 import { requireCapability, requireSession, AuthzError } from '@/platform/auth/current';
+import {
+  describeMissingCompanyCodeAssignments,
+  hasCompanyCodeAssignments,
+  missingCompanyCodeAssignments,
+} from '@/modules/foundation/company-code-assignments';
 
 export interface PostState {
   ok: boolean;
@@ -48,6 +53,13 @@ export async function postJournalAction(_previous: PostState, formData: FormData
       const companyCode = read('companyCode');
       const company = await getCompanyCode(tx, client, companyCode);
       if (!company?.isActive) throw new PostingError(`Company code ${companyCode} is not active or does not exist.`, 'Choose an active company code in this tenant.');
+      if (!hasCompanyCodeAssignments(company)) {
+        const missing = missingCompanyCodeAssignments(company);
+        throw new PostingError(
+          `Company code ${companyCode} is missing ${describeMissingCompanyCodeAssignments(missing)}.`,
+          'Complete the Company Code assignment steps in §6.2 before posting.',
+        );
+      }
       const position = await derivePosition(tx, client, company.fiscalYearVariant, postingDate);
       const currency = read('currency') || company.currency;
       if (currency !== company.currency) throw new PostingError('Foreign-currency journal entry is not available on this form yet.', 'Post in the company local currency; exchange-rate selection will be added with currency maintenance.');

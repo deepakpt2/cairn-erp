@@ -1,10 +1,85 @@
 /** One browser target per invocation; each owns a disposable, guarded fixture. */
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
+import postgres from 'postgres';
 import { TARGETS, FIXTURE_NAME, RUN_TIMEOUT_MS, parseBrowserCommand, isOwnedFixture, type BrowserTarget } from './browser-smoke/targets';
+import { ACCEPTANCE_DATABASE_GUARDS, type BrowserAcceptanceDatabaseGuard } from './browser-smoke/database-guards';
+
+function guardedConnectionUrl(
+  raw: string | undefined,
+  variable: string,
+  role: string,
+  guard: BrowserAcceptanceDatabaseGuard,
+): string {
+  assert.ok(raw, `${variable} must be set explicitly for ${guard.batch} Company Code browser acceptance.`);
+  let url: URL;
+  try { url = new URL(raw); }
+  catch { throw new Error(`${variable} is not a valid PostgreSQL URL; refusing browser acceptance.`); }
+  assert.equal(url.protocol, 'postgresql:', `${variable} must use PostgreSQL.`);
+  assert.equal(url.hostname, '127.0.0.1', `${variable} must use loopback; remote databases are forbidden.`);
+  assert.equal(url.port, guard.port, `${variable} must target the isolated ${guard.batch} port.`);
+  assert.equal(url.pathname, `/${guard.database}`, `${variable} must target only the ${guard.batch} disposable database.`);
+  assert.equal(decodeURIComponent(url.username), role, `${variable} must use the expected separated role.`);
+  assert.ok(url.password.length > 0, `${variable} must include the isolated test password.`);
+  assert.equal(url.search, '', `${variable} must not include unreviewed connection parameters.`);
+  return raw;
+}
+
+async function verifyCompanyCodeAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
+  // Reject a remote/mistargeted URL from its parsed host before opening a socket.
+  const runtimeUrl = guardedConnectionUrl(process.env.DATABASE_URL, 'DATABASE_URL', 'cairn_app', guard);
+  const migrationUrl = guardedConnectionUrl(process.env.MIGRATION_DATABASE_URL, 'MIGRATION_DATABASE_URL', 'cairn', guard);
+  for (const [url, expectedRole, expectedElevated] of [
+    [runtimeUrl, 'cairn_app', false],
+    [migrationUrl, 'cairn', true],
+  ] as const) {
+    const connection = postgres(url, { max: 1, prepare: false, connect_timeout: 5, onnotice: () => {} });
+    try {
+      const [identity] = await connection<Array<{
+        database_name: string;
+        server_address: string | null;
+        server_port: number;
+        role_name: string;
+        elevated: boolean;
+        version_num: number;
+        in_recovery: boolean;
+      }>>`
+        select current_database() as database_name,
+               host(inet_server_addr()) as server_address,
+               inet_server_port() as server_port,
+               current_user as role_name,
+               (r.rolsuper or r.rolbypassrls) as elevated,
+               current_setting('server_version_num')::int as version_num,
+               pg_is_in_recovery() as in_recovery
+          from pg_roles r where r.rolname = current_user
+      `;
+      assert.equal(identity?.database_name, guard.database);
+      assert.equal(identity?.server_address, '127.0.0.1');
+      assert.equal(String(identity?.server_port), guard.port);
+      assert.equal(identity?.role_name, expectedRole);
+      assert.equal(identity?.elevated, expectedElevated);
+      assert.equal(Math.floor(Number(identity?.version_num) / 10_000), 17, 'Acceptance requires PostgreSQL 17.');
+      assert.equal(identity?.in_recovery, false);
+    } finally {
+      await connection.end({ timeout: 5 });
+    }
+  }
+  console.log(`Verified ${guard.batch} database: ${guard.database} on 127.0.0.1:${guard.port}; runtime role restricted, migration role elevated.`);
+}
+
+function protectedRouteFor(target: BrowserTarget): string {
+  if (target.id === 'company-code-definition' || target.id === 'company-code-coa-assignment') return '/config/company-codes';
+  if (target.id === 'foundation') return '/finance/journal/new';
+  if (target.id === 'payment-terms') return '/config/payment-terms';
+  if (target.id === 'payment-methods') return '/config/payment-methods';
+  if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
+  return '/inventory/materials';
+}
 
 async function run(target: BrowserTarget) {
   assert.equal(process.env.CAIRN_ENV ?? 'development', 'development', 'Browser smoke runs only against development.');
+  const databaseGuard = ACCEPTANCE_DATABASE_GUARDS[target.id];
+  if (databaseGuard) await verifyCompanyCodeAcceptanceDatabase(databaseGuard);
   const [{ chromium }, { sql }, { withTenant, closeDb }, { listTenants }, { CHECKS, onboard }] = await Promise.all([
     import('@playwright/test'), import('drizzle-orm'), import('../src/platform/db/client'),
     import('../src/platform/tenancy'), import('./browser-smoke/checks'),
@@ -48,8 +123,7 @@ async function run(target: BrowserTarget) {
           await CHECKS[target.id](ctx);
           await page.screenshot({ path: `.arena/${target.id}-review.png`, fullPage: true });
           await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-          const protectedPath = target.id === 'foundation' ? '/finance/journal/new' : target.id === 'payment-terms' ? '/config/payment-terms' : target.id === 'payment-methods' ? '/config/payment-methods' : (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') ? '/foundation/partners' : '/inventory/materials';
-          await page.goto(`${BASE}${protectedPath}`, { waitUntil: 'domcontentloaded' });
+          await page.goto(`${BASE}${protectedRouteFor(target)}`, { waitUntil: 'domcontentloaded' });
           await page.waitForURL(/\/signin\?/);
           assert.deepEqual(errors, [], 'No browser runtime errors');
           assert.equal(timedOut, false, 'Browser target exceeded its deadline');

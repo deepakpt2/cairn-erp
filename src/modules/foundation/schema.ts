@@ -156,9 +156,9 @@ export const companyCode = pgTable(
     companyCode: varchar('company_code', { length: 10 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
     /** Assignments — the "assign" half of the define/assign chain. */
-    chartOfAccounts: varchar('chart_of_accounts', { length: 8 }).notNull(),
-    fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }).notNull(),
-    postingPeriodVariant: varchar('posting_period_variant', { length: 4 }).notNull(),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 8 }),
+    fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }),
+    postingPeriodVariant: varchar('posting_period_variant', { length: 4 }),
     /** Local currency: the books are kept in this currency (§14.4). */
     currency: char('currency', { length: 3 }).notNull(),
     country: char('country', { length: 2 }).notNull(),

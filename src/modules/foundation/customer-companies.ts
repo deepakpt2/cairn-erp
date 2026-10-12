@@ -1,6 +1,6 @@
 /** Validated customer/company master writes; invoice services must snapshot these assignments. */
 import { z } from 'zod';
-import { and,eq,asc,sql } from 'drizzle-orm';
+import { and,eq,asc,isNotNull,sql } from 'drizzle-orm';
 import { withTenant,type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { companyCode } from './schema';
@@ -48,10 +48,12 @@ const key=(client:string,partner:string,company:string)=>and(eq(customerCompany.
 async function validateAssignments(tx:Tx,client:string,company:string,account:string|null,terms:string|null){
   const [site]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,company)));
   if(!site?.isActive)throw new CustomerCompanyError('Company code is missing or inactive.');
-  if(account){const [gl]=await tx.select().from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,site.chartOfAccounts),eq(glAccount.accountNumber,account)));
+  const chartOfAccounts=site.chartOfAccounts;
+  if(!chartOfAccounts)throw new CustomerCompanyError('Company code chart of accounts is not assigned.','Assign a chart of accounts before maintaining customer company data (CFG.ORG.COMPANYCODE.ASSIGN_COA).');
+  if(account){const [gl]=await tx.select().from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,chartOfAccounts),eq(glAccount.accountNumber,account)));
     if(!gl||gl.isBlocked||gl.reconciliationType!=='CUSTOMER')throw new CustomerCompanyError('Use an unblocked customer reconciliation account in the company chart.');}
   if(terms){const [term]=await tx.select().from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.termsCode,terms)));if(!term?.isActive)throw new CustomerCompanyError('Payment terms are missing or inactive.');}
-  return site;
+  return { ...site, chartOfAccounts };
 }
 export async function saveCustomerCompany(raw:CustomerCompanyInput){
   const parsed=inputSchema.safeParse(raw);if(!parsed.success)throw new CustomerCompanyError(parsed.error.issues[0].message);
@@ -95,9 +97,10 @@ export async function requireCustomerCompany(tx:Tx,client:string,partner:string,
 }
 
 export async function customerCompanyChoices(client:string,company:string){return withTenant(client,async tx=>{
-  const companies=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency}).from(companyCode).where(eq(companyCode.isActive,true)).orderBy(asc(companyCode.companyCode));
+  const rows=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency}).from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.isActive,true),isNotNull(companyCode.chartOfAccounts))).orderBy(asc(companyCode.companyCode));
+  const companies=rows.filter((row):row is (typeof rows)[number]&{chartOfAccounts:string}=>row.chartOfAccounts!==null);
   const selected=companies.find(row=>row.code===company);
-  const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'CUSTOMER'),eq(glAccount.isBlocked,false))).orderBy(asc(glAccount.accountNumber)):[];
-  const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(eq(paymentTerms.isActive,true)).orderBy(asc(paymentTerms.termsCode));
+  const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'CUSTOMER'),eq(glAccount.isBlocked,false))).orderBy(asc(glAccount.accountNumber)):[];
+  const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.isActive,true))).orderBy(asc(paymentTerms.termsCode));
   return {companies,selected,accounts,terms};
 });}

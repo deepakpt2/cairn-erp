@@ -11,6 +11,8 @@ export const TARGETS = [
   { id: 'supplier-purchasing', client: 'T990', label: 'Supplier buying defaults, partner-function assignments and procurement authority' },
   { id: 'customer-company', client: 'T988', label: 'Customer company AR settings and financial authority' },
   { id: 'customer-sales-area', client: 'T987', label: 'Customer sales-area maintenance, persistence and history' },
+  { id: 'company-code-definition', client: 'T986', label: 'Company Code definition capability gate and create-only form' },
+  { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];

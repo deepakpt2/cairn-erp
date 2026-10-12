@@ -14,6 +14,11 @@
  */
 import { and, eq } from 'drizzle-orm';
 import { documentType } from '../../modules/foundation/schema';
+import {
+  describeMissingCompanyCodeAssignments,
+  hasCompanyCodeAssignments,
+  missingCompanyCodeAssignments,
+} from '../../modules/foundation/company-code-assignments';
 import { numberRangeAllocation } from '../tables/numbering';
 import type { Tx } from '../db/client';
 import { glAccount, journalEntry, journalEntryLine } from '../../modules/finance/schema';
@@ -484,6 +489,14 @@ async function assertPostingPeriodOpen(tx: Tx, input: PostJournalInput): Promise
     throw new PostingError(
       `Company code ${input.companyCode} is not configured.`,
       'Create it in Company Codes (CFG.ORG.COMPANYCODE.DEFINE) before posting.',
+    );
+  }
+
+  if (!hasCompanyCodeAssignments(company)) {
+    const missing = missingCompanyCodeAssignments(company);
+    throw new PostingError(
+      `Company code ${input.companyCode} is missing ${describeMissingCompanyCodeAssignments(missing)}.`,
+      'Complete the Company Code assignment steps in §6.2 before posting.',
     );
   }
 

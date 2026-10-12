@@ -4,6 +4,7 @@ import { listPeriodRules } from '@/modules/foundation/services';
 import { savePeriodRule } from './actions';
 import { PeriodRules } from './PeriodRules';
 import { can, requireSession } from '@/platform/auth/current';
+import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-assignments';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,13 +28,34 @@ export default async function PostingPeriodsPage({
 
   const { listCompanyCodes } = await import('@/modules/foundation/services');
   const companies = await listCompanyCodes(client);
-  const companyCodeKey = params.company ?? companies[0]?.companyCode;
+  const assignedCompanies = companies.filter(hasCompanyCodeAssignments);
+  const companyCodeKey = params.company ?? assignedCompanies[0]?.companyCode ?? companies[0]?.companyCode;
 
   if (!companyCodeKey) {
     return (
       <div className="mx-auto max-w-3xl p-6">
         <div className="panel p-8 text-center text-sm text-ink-soft">
           No company code exists in tenant {client}.
+        </div>
+      </div>
+    );
+  }
+
+  const selectedCompany = companies.find((company) => company.companyCode === companyCodeKey);
+  if (!selectedCompany) {
+    return <div className="mx-auto max-w-3xl p-6"><div className="panel p-8 text-center text-sm text-ink-soft">{t('pp.companyNotFound')}</div></div>;
+  }
+  if (!hasCompanyCodeAssignments(selectedCompany)) {
+    return (
+      <div className="mx-auto max-w-5xl p-6">
+        <header className="mb-4 border-b border-line pb-4">
+          <span className="code text-ink-faint">FIN.CLOSE.PERIOD</span>
+          <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('pp.title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('pp.subtitle')}</p>
+        </header>
+        <div className="panel p-5 text-sm text-ink-soft">
+          <p className="code font-semibold">{selectedCompany.companyCode} · {selectedCompany.name}</p>
+          <p className="mt-2">{t('cc.assignmentsPending')}</p>
         </div>
       </div>
     );

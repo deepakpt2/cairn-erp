@@ -10,6 +10,8 @@ import { generateBankRecordId } from '../../src/platform/security/bank-record-id
 import { loadBankDataKeyring } from '../../src/platform/security/bank-data-keyring';
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
+import { changeHistory } from '../../src/platform/change';
+import { listCompanyCodes } from '../../src/modules/foundation/services';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
 import { getPaymentMethod, savePaymentMethod } from '../../src/modules/foundation/payment-methods';
@@ -541,6 +543,461 @@ async function valuation(ctx: BrowserContext) {
   for (const price of ['12.3456','25.6789']) assert.equal(html.includes(price), false, 'Financial values must not leak in rendered or serialized content');
   assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
   console.log('  ✓ warehouse authority cannot read valuation prices or their history');
+}
+
+async function companyCodeDefinition(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = '2000';
+  const name = 'Browser Acceptance Secondary Company';
+  console.log('Company Code: verify the capability-gated definition form');
+
+  await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Create company code', exact: true }).waitFor();
+  assert.equal(await page.locator('tbody tr').count() >= 1, true, 'The standard package should leave a readable existing Company Code.');
+
+  const countryOptions = await page.locator('[name="country"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+  const currencyOptions = await page.locator('[name="currency"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+  assert.ok(countryOptions.includes('KW'), 'Authorized maintainer receives country choices.');
+  assert.ok(currencyOptions.includes('KWD'), 'Authorized maintainer receives active-currency choices.');
+
+  for (const field of ['client', 'changedBy', 'chartOfAccounts', 'fiscalYearVariant', 'postingPeriodVariant']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is not a definition-form field.`);
+  }
+  await page.locator('[name="companyCode"]').fill(code);
+  await page.locator('[name="name"]').fill(name);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="currency"]').selectOption('KWD');
+  await page.locator('[name="city"]').fill('Al Jahra');
+  await page.locator('[name="taxRegistrationNumber"]').fill('B110-TAX-2000');
+  const definitionForm = page.locator('form').filter({ has: page.locator('[name="companyCode"]') });
+  await definitionForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({
+      client: '0100',
+      changedBy: 'spoofed.actor',
+      chartOfAccounts: 'FORGED',
+      fiscalYearVariant: 'FORGED',
+      postingPeriodVariant: 'FORGED',
+    })) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = field;
+      input.value = value;
+      form.appendChild(input);
+    }
+  });
+  await page.getByRole('button', { name: 'Create company code', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Company code 2000 defined; its assignments remain pending.',
+    { exact: true },
+  ).waitFor();
+
+  // A successful create resets the form but keeps the server-confirmed feedback visible.
+  for (const field of ['companyCode', 'name', 'city', 'taxRegistrationNumber']) {
+    assert.equal(await page.locator(`[name="${field}"]`).inputValue(), '', `${field} resets after success.`);
+  }
+  assert.equal(await page.locator('[name="country"]').inputValue(), '');
+  assert.equal(await page.locator('[name="currency"]').inputValue(), '');
+
+  let rows = await listCompanyCodes(CLIENT);
+  let created = rows.filter((row) => row.companyCode === code);
+  assert.equal(created.length, 1, 'The create action inserts exactly one Company Code.');
+  assert.deepEqual(
+    {
+      name: created[0].name,
+      country: created[0].country,
+      currency: created[0].currency,
+      city: created[0].city,
+      taxRegistrationNumber: created[0].taxRegistrationNumber,
+      chartOfAccounts: created[0].chartOfAccounts,
+      fiscalYearVariant: created[0].fiscalYearVariant,
+      postingPeriodVariant: created[0].postingPeriodVariant,
+      createdBy: created[0].createdBy,
+    },
+    {
+      name,
+      country: 'KW',
+      currency: 'KWD',
+      city: 'Al Jahra',
+      taxRegistrationNumber: 'B110-TAX-2000',
+      chartOfAccounts: null,
+      fiscalYearVariant: null,
+      postingPeriodVariant: null,
+      createdBy: 'browser.admin',
+    },
+  );
+  const createdHistory = await withTenant(CLIENT, (tx) =>
+    changeHistory(tx, CLIENT, 'company_code', code),
+  );
+  assert.equal(createdHistory.length, 1);
+  assert.equal(createdHistory[0].changeType, 'CREATE');
+  assert.equal(createdHistory[0].changedBy, 'browser.admin');
+  assert.equal(createdHistory[0].transactionCode, 'CFG.ORG.COMPANYCODE.DEFINE');
+
+  const createdRow = page.locator('tbody tr').filter({ hasText: code }).filter({ hasText: name });
+  await createdRow.waitFor();
+  const visibleValues = await createdRow.locator('td').allInnerTexts();
+  assert.deepEqual(visibleValues.slice(0, 7), [
+    code,
+    name,
+    'KWD',
+    'KW',
+    'Not assigned',
+    'Not assigned',
+    'Not assigned',
+  ]);
+  assert.equal(await createdRow.getByRole('link').count(), 0, 'Unassigned periods are not opened.');
+  await createdRow.getByText('Complete the Company Code assignments before opening posting periods.', { exact: true }).waitFor();
+  console.log('  ✓ form creates one audited definition, resets after success and leaves assignments unset');
+
+  // Duplicate submits are rejected by the create-only action and do not overwrite the row.
+  await page.locator('[name="companyCode"]').fill(code);
+  await page.locator('[name="name"]').fill('Attempted browser overwrite');
+  await page.locator('[name="country"]').selectOption('US');
+  await page.locator('[name="currency"]').selectOption('USD');
+  await page.getByRole('button', { name: 'Create company code', exact: true }).click();
+  await page.getByRole('status').getByText('Company code 2000 already exists.', { exact: true }).waitFor();
+  rows = await listCompanyCodes(CLIENT);
+  created = rows.filter((row) => row.companyCode === code);
+  assert.equal(created.length, 1);
+  assert.equal(created[0].name, name);
+  assert.equal(created[0].country, 'KW');
+  assert.equal(created[0].currency, 'KWD');
+  assert.equal((await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'company_code', code))).length, 1);
+  console.log('  ✓ duplicate definition is refused without overwrite or extra history');
+
+  // The Auditor role has display-only authority: keep list access, omit the form.
+  const viewerId = randomUUID();
+  const password = await hashPassword(PASSWORD);
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into app_user
+      (id, client, username, full_name, password_hash, must_change_password, created_by)
+      values (${viewerId}, ${CLIENT}, 'company.viewer', 'Company Code Viewer', ${password}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+      values (${CLIENT}, ${viewerId}, 'AUDITOR', 'BROWSER_FIXTURE')`);
+  });
+
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="client"]').fill(CLIENT);
+  await page.locator('[name="username"]').fill('company.viewer');
+  await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.waitForURL((url) => url.pathname === '/');
+  await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create company code', exact: true }).count(), 0);
+  for (const field of ['companyCode', 'name', 'country', 'currency', 'city', 'taxRegistrationNumber']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `Display-only session has no ${field} form control.`);
+  }
+  assert.equal(await page.locator('select').count(), 0, 'Reference choices are not rendered for display-only sessions.');
+  const viewerRow = page.locator('tbody tr').filter({ hasText: code }).filter({ hasText: name });
+  await viewerRow.waitFor();
+  assert.deepEqual((await viewerRow.locator('td').allInnerTexts()).slice(0, 7), visibleValues.slice(0, 7));
+  console.log('  ✓ cookie-backed Auditor retains the readable list but receives no form or reference choices');
+}
+
+async function companyCodeCoaAssignment(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = '2000';
+  const name = 'Browser Acceptance CoA Assignment';
+  const activeChart = 'B115ACT';
+  const inactiveChart = 'B115OFF';
+  console.log('Company Code CoA assignment: verify independent capabilities, local active choices, one-time save and read-only access');
+
+  await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Create company code', exact: true }).waitFor();
+  assert.equal(await page.locator('tbody tr').count() >= 1, true, 'The standard package should leave a readable assigned Company Code.');
+
+  // Create a fresh unassigned row through the real session-bound definition action.
+  await page.locator('[name="companyCode"]').fill(code);
+  await page.locator('[name="name"]').fill(name);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="currency"]').selectOption('KWD');
+  await page.locator('[name="city"]').fill('Al Jahra');
+  await page.locator('[name="taxRegistrationNumber"]').fill('B115-TAX-2000');
+  await page.getByRole('button', { name: 'Create company code', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Company code 2000 defined; its assignments remain pending.',
+    { exact: true },
+  ).waitFor();
+
+  let companyRows = await listCompanyCodes(CLIENT);
+  let created = companyRows.filter((row) => row.companyCode === code);
+  assert.equal(created.length, 1);
+  assert.deepEqual(
+    {
+      client: created[0].client,
+      name: created[0].name,
+      country: created[0].country,
+      currency: created[0].currency,
+      chartOfAccounts: created[0].chartOfAccounts,
+      fiscalYearVariant: created[0].fiscalYearVariant,
+      postingPeriodVariant: created[0].postingPeriodVariant,
+      createdBy: created[0].createdBy,
+      changedBy: created[0].changedBy,
+    },
+    {
+      client: CLIENT,
+      name,
+      country: 'KW',
+      currency: 'KWD',
+      chartOfAccounts: null,
+      fiscalYearVariant: null,
+      postingPeriodVariant: null,
+      createdBy: 'browser.admin',
+      changedBy: null,
+    },
+  );
+
+  // Test-only local choices: one active chart and one inactive chart in this tenant.
+  // This provisions the browser fixture; it is not CoA definition or seed acceptance.
+  const beforeCharts = (await withTenant(CLIENT, (tx) =>
+    tx.execute(sql`select chart_of_accounts, is_active from chart_of_accounts where client = ${CLIENT}`),
+  )) as unknown as Array<{ chart_of_accounts: string; is_active: boolean }>;
+  assert.ok(beforeCharts.some((chart) => chart.chart_of_accounts === 'CAIRN' && chart.is_active));
+  assert.equal(beforeCharts.some((chart) => [activeChart, inactiveChart].includes(chart.chart_of_accounts)), false);
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`
+      insert into chart_of_accounts (client, chart_of_accounts, name, is_active, created_by)
+      values
+        (${CLIENT}, ${activeChart}, 'B-115 Active Local Chart', true, 'BROWSER_FIXTURE'),
+        (${CLIENT}, ${inactiveChart}, 'B-115 Inactive Local Chart', false, 'BROWSER_FIXTURE')
+    `);
+  });
+  const chartRows = (await withTenant(CLIENT, (tx) =>
+    tx.execute(sql`select chart_of_accounts, is_active from chart_of_accounts where client = ${CLIENT} order by chart_of_accounts`),
+  )) as unknown as Array<{ chart_of_accounts: string; is_active: boolean }>;
+  const activeChartChoices = chartRows
+    .filter((chart) => chart.is_active)
+    .map((chart) => chart.chart_of_accounts)
+    .sort();
+  assert.ok(activeChartChoices.includes(activeChart));
+  assert.equal(chartRows.find((chart) => chart.chart_of_accounts === inactiveChart)?.is_active, false);
+  assert.deepEqual(companyRows.filter((row) => !row.chartOfAccounts).map((row) => row.companyCode), [code]);
+
+  const defineOnlyId = randomUUID();
+  const assignOnlyId = randomUUID();
+  const viewerId = randomUUID();
+  const passwordHash = await hashPassword(PASSWORD);
+  await withTenant(CLIENT, async (tx) => {
+    for (const [roleCode, roleName, capability] of [
+      ['B115_DEFINE_ONLY', 'B-115 Company Code Definer', 'CFG.ORG.COMPANYCODE.DEFINE'],
+      ['B115_ASSIGN_ONLY', 'B-115 CoA Assigner', 'CFG.ORG.COMPANYCODE.ASSIGN_COA'],
+    ] as const) {
+      await tx.execute(sql`
+        insert into role (client, code, name, is_read_only, created_by)
+        values (${CLIENT}, ${roleCode}, ${roleName}, false, 'BROWSER_FIXTURE')
+      `);
+      await tx.execute(sql`
+        insert into role_capability (client, role_code, capability_code, created_by)
+        values (${CLIENT}, ${roleCode}, ${capability}, 'BROWSER_FIXTURE')
+      `);
+    }
+    for (const [id, username, fullName, roleCode] of [
+      [defineOnlyId, 'company.definer', 'Company Code Definition-Only User', 'B115_DEFINE_ONLY'],
+      [assignOnlyId, 'company.assigner', 'CoA Assignment-Only User', 'B115_ASSIGN_ONLY'],
+      [viewerId, 'company.viewer', 'Company Code Read-Only User', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`
+        insert into app_user
+          (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')
+      `);
+      await tx.execute(sql`
+        insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')
+      `);
+    }
+  });
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+    await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
+  }
+  const companyRow = () => page.locator('tbody tr').filter({ hasText: code }).filter({ hasText: name });
+  const unassignedCells = [code, name, 'KWD', 'KW', 'Not assigned', 'Not assigned', 'Not assigned'];
+
+  // Definition-only authority must not receive assignment controls or CoA choices.
+  await signInAs('company.definer');
+  await page.getByRole('heading', { name: 'Create company code', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.ASSIGN_COA.', { exact: true }).waitFor();
+  assert.equal(await page.locator('select[name="chartOfAccounts"]').count(), 0);
+  assert.equal((await page.locator('body').innerText()).includes(activeChart), false);
+  const definerRow = companyRow();
+  await definerRow.waitFor();
+  assert.deepEqual((await definerRow.locator('td').allInnerTexts()).slice(0, 7), unassignedCells);
+  console.log('  ✓ definition authority does not imply CoA assignment or expose its choices');
+
+  // A display-only Auditor can read the unassigned row but receives neither form nor choices.
+  await signInAs('company.viewer');
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.DEFINE.', { exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.ASSIGN_COA.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create company code', exact: true }).count(), 0);
+  assert.equal(await page.locator('select').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Assign', exact: true }).count(), 0);
+  assert.equal((await page.locator('body').innerText()).includes(activeChart), false);
+  const viewerUnassignedRow = companyRow();
+  await viewerUnassignedRow.waitFor();
+  assert.deepEqual((await viewerUnassignedRow.locator('td').allInnerTexts()).slice(0, 7), unassignedCells);
+  console.log('  ✓ cookie-backed Auditor can read the unassigned Company Code without either maintenance form or chart choices');
+
+  // Assignment-only authority may assign, but cannot open the independent definition form.
+  await signInAs('company.assigner');
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create company code', exact: true }).count(), 0);
+  assert.equal(await page.locator('[name="name"]').count(), 0);
+  await page.getByText('This is an initial assignment only. A different chart cannot replace an existing assignment through this step.', { exact: true }).waitFor();
+  const assignRow = companyRow();
+  const chartSelect = assignRow.locator('select[name="chartOfAccounts"]');
+  await chartSelect.waitFor();
+  const renderedChoices = await chartSelect.locator('option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value).filter(Boolean).sort(),
+  );
+  assert.deepEqual(renderedChoices, activeChartChoices, 'Choices must equal the active charts belonging to this tenant.');
+  assert.equal(renderedChoices.includes(inactiveChart), false, 'Inactive tenant-local charts are not assignable.');
+  const renderedLabels = await chartSelect.locator('option').allTextContents();
+  assert.ok(renderedLabels.some((label) => label.includes(`${activeChart} · B-115 Active Local Chart`)));
+  for (const field of ['client', 'changedBy', 'fiscalYearVariant', 'postingPeriodVariant']) {
+    assert.equal(await assignRow.locator(`[name="${field}"]`).count(), 0, `${field} is not an assignment-form field.`);
+  }
+  await chartSelect.selectOption(activeChart);
+  const assignmentForm = assignRow.locator('form');
+  await assignmentForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({
+      client: '0100',
+      changedBy: 'spoofed.actor',
+      fiscalYearVariant: 'FORGED',
+      postingPeriodVariant: 'FORGED',
+    })) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = field;
+      input.value = value;
+      form.appendChild(input);
+    }
+  });
+  await assignmentForm.getByRole('button', { name: 'Assign', exact: true }).click();
+  await page.waitForFunction(
+    ({ targetCode, targetName, chart }) => {
+      const row = Array.from(document.querySelectorAll('tbody tr')).find((candidate) => {
+        const cells = candidate.querySelectorAll('td');
+        return cells[0]?.textContent?.trim() === targetCode && cells[1]?.textContent?.trim() === targetName;
+      });
+      return row?.querySelectorAll('td')[4]?.textContent?.trim() === chart
+        && !row.querySelector('select[name="chartOfAccounts"]');
+    },
+    { targetCode: code, targetName: name, chart: activeChart },
+  );
+
+  companyRows = await listCompanyCodes(CLIENT);
+  created = companyRows.filter((row) => row.companyCode === code);
+  assert.equal(created.length, 1);
+  assert.deepEqual(
+    {
+      client: created[0].client,
+      name: created[0].name,
+      chartOfAccounts: created[0].chartOfAccounts,
+      fiscalYearVariant: created[0].fiscalYearVariant,
+      postingPeriodVariant: created[0].postingPeriodVariant,
+      createdBy: created[0].createdBy,
+      changedBy: created[0].changedBy,
+    },
+    {
+      client: CLIENT,
+      name,
+      chartOfAccounts: activeChart,
+      fiscalYearVariant: null,
+      postingPeriodVariant: null,
+      createdBy: 'browser.admin',
+      changedBy: 'company.assigner',
+    },
+  );
+  assert.deepEqual(companyRows.filter((row) => !row.chartOfAccounts).map((row) => row.companyCode), []);
+
+  const assignmentHistory = await withTenant(CLIENT, (tx) =>
+    changeHistory(tx, CLIENT, 'company_code', code),
+  );
+  assert.equal(assignmentHistory.length, 2, 'Definition and initial assignment each write one change document.');
+  const assignmentEvent = assignmentHistory.find((event) => event.transactionCode === 'CFG.ORG.COMPANYCODE.ASSIGN_COA');
+  assert.ok(assignmentEvent, 'The initial assignment writes SCR-013 change evidence.');
+  assert.equal(assignmentEvent.changeType, 'CHANGE');
+  assert.equal(assignmentEvent.changedBy, 'company.assigner');
+  assert.equal(assignmentEvent.items.length, 1);
+  assert.equal(assignmentEvent.items[0].fieldName, 'chartOfAccounts');
+  assert.equal(assignmentEvent.items[0].oldValue, null);
+  assert.equal(assignmentEvent.items[0].newValue, activeChart);
+  assert.equal(assignmentEvent.items[0].isSecurityRelevant, 'true');
+  const activityRows = (await withTenant(CLIENT, (tx) =>
+    tx.execute(sql`
+      select status, completed_by from config_activity_status
+       where client = ${CLIENT} and activity_code = 'CFG.ORG.COMPANYCODE.ASSIGN_COA'
+    `),
+  )) as unknown as Array<{ status: string; completed_by: string }>;
+  assert.equal(activityRows.length, 1);
+  assert.equal(activityRows[0].status, 'COMPLETED');
+  assert.equal(activityRows[0].completed_by, 'company.assigner');
+  console.log('  ✓ assignment-only session saves one CoA, preserves FYV/PPV, ignores forged tenant/actor values and records audit evidence');
+
+  // The server-action revalidation and a fresh request both remove the initial-only control.
+  const assignedRow = companyRow();
+  assert.deepEqual((await assignedRow.locator('td').allInnerTexts()).slice(0, 7), [
+    code,
+    name,
+    'KWD',
+    'KW',
+    activeChart,
+    'Not assigned',
+    'Not assigned',
+  ]);
+  assert.equal(await assignedRow.locator('select[name="chartOfAccounts"]').count(), 0);
+  assert.equal(await assignedRow.getByRole('link').count(), 0, 'Posting periods remain unavailable until their separate assignments.');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
+  const refreshedRow = companyRow();
+  await refreshedRow.waitFor();
+  assert.deepEqual((await refreshedRow.locator('td').allInnerTexts()).slice(0, 7), [
+    code,
+    name,
+    'KWD',
+    'KW',
+    activeChart,
+    'Not assigned',
+    'Not assigned',
+  ]);
+  assert.equal(await refreshedRow.locator('select[name="chartOfAccounts"]').count(), 0);
+  assert.equal(await page.locator('select[name="chartOfAccounts"]').count(), 0, 'Assigned Company Codes have no replacement control.');
+
+  await signInAs('company.viewer');
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.COMPANYCODE.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create company code', exact: true }).count(), 0);
+  assert.equal(await page.locator('select').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Assign', exact: true }).count(), 0);
+  const finalViewerRow = companyRow();
+  await finalViewerRow.waitFor();
+  assert.deepEqual((await finalViewerRow.locator('td').allInnerTexts()).slice(0, 7), [
+    code,
+    name,
+    'KWD',
+    'KW',
+    activeChart,
+    'Not assigned',
+    'Not assigned',
+  ]);
+  console.log('  ✓ refreshed UI and cookie-backed Auditor show the saved assignment read-only, with no replacement control');
 }
 
 async function paymentTerms(ctx: BrowserContext) {
@@ -1446,6 +1903,8 @@ async function customerSalesArea(ctx: BrowserContext) {
 
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
+  'company-code-definition': companyCodeDefinition,
+  'company-code-coa-assignment': companyCodeCoaAssignment,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,
