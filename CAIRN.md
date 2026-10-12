@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.20 — B-105 Company Code define capability)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.21 — B-106 owner-directed publication)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2163,6 +2163,7 @@ Do not push interim or partial module batches before that trigger.
 | B-103 | Accept Supplier company Payment Methods migration and service behavior on fresh local PostgreSQL only | ≤10 min | **PASSED — fresh loopback PostgreSQL 17.11; 39 migrations and two shared seeds applied, Supplier service suite 25/25, fixtures removed with zero tenant/partner/default/payment/bank rows (§26.120)** |
 | B-104 | Complete Supplier Payment Methods live-browser acceptance on a verified disposable local database; remove temporary infrastructure | ≤10 min | **PASSED — `supplier-company` alone passed in headless Chromium against local PostgreSQL 17.11 using the production standalone build; filtering, ten-code cap, persistence, read-only authority, stale-method removal and explicit clear covered. No B-104 migration/service-suite rerun; fixtures and temporary infrastructure removed (§26.121). No remote DB, commit or push.** |
 | B-105 | Register the Company Code define capability only | ≤10 min | **DONE — added `CFG.ORG.COMPANYCODE.DEFINE` as a grantable, non-posting Foundation configuration capability; contract tests preserve no-role-grant and wildcard behavior. No action, UI, migration, seed execution or database access (§26.122). No remote DB, commit or push.** |
+| B-106 | Publish the pending B-098–B-105 batch to `main` on explicit owner instruction | ≤10 min | **PUBLISHED — commit `8eac55f4cf51d3260be259859bbe38464264c124` fast-forward pushed from `f3119c6d2966beb5da44f17d028bb104dba00fb5` to `deepakpt2/cairn-erp:main`; 19 source/schema/test/document paths included. `.env.local` and its token were not committed or disclosed; no DB was accessed (§26.123).** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -6105,6 +6106,20 @@ log. No remote database, commit or push.
 order in §6.2 and the current Company Code assignment-field constraints explicit.
 
 
+### 26.123 B-106 — Owner-directed publication of B-098–B-105 `PUBLISHED`
+
+On explicit user instruction, which superseded the earlier publication hold for this batch only, staged
+and committed the pending Supplier Payment Methods and Company Code capability work (19
+source/schema/test/document paths) as
+`8eac55f4cf51d3260be259859bbe38464264c124`, then fast-forward pushed `main` from
+`f3119c6d2966beb5da44f17d028bb104dba00fb5` to `deepakpt2/cairn-erp:main`. `.env.local` was not staged;
+the authorized token was supplied only through a temporary askpass helper and was not logged or placed in
+the remote URL. No database was accessed, no migration/seed was applied and no runtime data changed.
+
+**Next:** continue with the next bounded Company Code define-path batch in §26.122. No owner/production DB
+is authorized by this publication record.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -6278,6 +6293,7 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.21 | 2026-10-12 | **B-106 publishes the pending B-098–B-105 batch to `main` on explicit owner instruction.** Commit `8eac55f4cf51d3260be259859bbe38464264c124` was fast-forward pushed from `f3119c6d2966beb5da44f17d028bb104dba00fb5` to `deepakpt2/cairn-erp:main`; 19 source/schema/test/document paths included. `.env.local` was excluded; the authorized token was supplied through temporary askpass and not logged or stored in the remote URL. No database access or migration/seed. §26.123 records scope. | Agent |
 | 1.20 | 2026-10-12 | **B-105 begins Enterprise Structure at SCR-012 by registering the Company Code define capability only.** Added `CFG.ORG.COMPANYCODE.DEFINE` as module FND, CONFIGURE, non-posting; a no-DB contract test ensures no tenant-role grants and preserves wildcard semantics. No server action, UI, schema, migration, seed execution or database access. Browser harness 83/83, typecheck, IP lint (258 files), and diff check pass. No remote DB, commit or push. §26.122 records scope. | Agent |
 | 1.19 | 2026-10-12 | **B-104 passes Supplier Payment Methods browser-only acceptance on disposable local PostgreSQL.** Verified local identity before B-104 setup applied the existing 39 migrations and two shared seeds; this batch did not rerun migration/service acceptance. The `supplier-company` target alone passed in headless Chromium v1248 against the optimized standalone Next build with no browser errors, covering filtering, ten-selection cap, persistence, authority boundaries, stale-choice removal and explicit clear. Synthetic definitions used audited service fixtures; Supplier selection and `B1` retirement were exercised in the UI. The runner left zero tenants, partners, Supplier company rows, Payment Method rows or partner-bank rows. App, cluster/data/logs, temporary PostgreSQL packages and Chromium binaries removed; apt autoremove removed 29 no-longer-needed runtime packages while shared system dependencies were retained. `npm run build`, browser harness 81/81, typecheck, IP lint (257 files) and diff check pass. No remote DB, commit or push. §26.121 records scope. | Agent |
 | 1.18 | 2026-10-12 | **B-103 passes disposable migration/service acceptance for Supplier Payment Methods.** Fresh local PostgreSQL 17.11 bound only to 127.0.0.1; identity verified before migration/seed. Applied all 39 migrations (including 0017) and the two shared seeds; `tests/supplier-companies.test.ts` passes 25/25. Final counts: zero tenants, partners, Supplier company rows, Payment Method rows or partner-bank rows. Cluster/data/packages removed. No remote DB or live browser target; the latter remains separate. §26.120 records scope. No commit or push. | Agent |
