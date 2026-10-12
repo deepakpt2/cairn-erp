@@ -1,18 +1,27 @@
 import { beforeAll,afterAll,describe,expect,it } from 'vitest';
 import { sql } from 'drizzle-orm';
+import { changeHistory } from '@/platform/change';
+import { paymentMethod } from '@/platform/schema';
 import { createTenant,destroyTenant,withTenant,closeDb,defineTestRanges,type TestTenant } from './helpers';
 import { db } from '../src/platform/db/client';
 import { postJournalEntry } from '../src/platform/posting';
 import { saveBusinessPartner } from '../src/modules/foundation/business-partners';
-import { saveSupplierCompany,getSupplierCompany,listSupplierCompanies,requireSupplierCompany,type SupplierCompanyInput } from '../src/modules/foundation/supplier-companies';
+import { saveSupplierCompany,getSupplierCompany,listSupplierCompanies,requireSupplierCompany,supplierCompanyChoices,type SupplierCompanyInput } from '../src/modules/foundation/supplier-companies';
 let alpha:TestTenant;let beta:TestTenant;
 async function partner(tenant:TestTenant,number:string,roles:['SUPPLIER']|['CUSTOMER']=['SUPPLIER']){
   await saveBusinessPartner({client:tenant.client,partnerNumber:number,expectedVersion:0,changedBy:'TEST',reason:'Supplier company fixture',category:'ORGANIZATION',name:'Example supplier',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles,isBlocked:false});
 }
 beforeAll(async()=>{
   alpha=await createTenant('supplier-company-alpha');beta=await createTenant('supplier-company-beta');
-  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY'])await partner(alpha,number);
+  for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTICO','HISTORY','PAYMETHODS','METHODPRESERVE','METHODSTAGED'])await partner(alpha,number);
   await partner(alpha,'CUSTOMERONLY',['CUSTOMER']);
+  await withTenant(alpha.client,tx=>tx.insert(paymentMethod).values([
+    {client:alpha.client,country:'KW',methodCode:'C',description:'Cash method',allowedDirection:'BOTH'},
+    {client:alpha.client,country:'KW',methodCode:'T',description:'Transfer method',allowedDirection:'OUTGOING'},
+    {client:alpha.client,country:'KW',methodCode:'I',description:'Incoming only',allowedDirection:'INCOMING'},
+    {client:alpha.client,country:'KW',methodCode:'X',description:'Inactive outbound',allowedDirection:'OUTGOING',isActive:false},
+    {client:alpha.client,country:'US',methodCode:'U',description:'US-only method',allowedDirection:'OUTGOING'},
+  ]));
 });
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
 const input=(number:string,patch:Partial<SupplierCompanyInput>={}):SupplierCompanyInput=>({client:alpha.client,partnerNumber:number,companyCode:'1000',expectedVersion:0,changedBy:'TEST',reason:'Supplier company test',reconciliationAccount:'200000',paymentTermsCode:'NET30',isBlocked:false,...patch});
@@ -26,6 +35,32 @@ describe('supplier company-code settings',()=>{
     await saveSupplierCompany(input('READY'));
     const row=await getSupplierCompany(alpha.client,'READY','1000');expect(row?.chartOfAccounts).toBe('CAIRN');expect(row?.reconciliationAccount).toBe('200000');
     await expect(withTenant(alpha.client,tx=>requireSupplierCompany(tx,alpha.client,'READY','1000'))).resolves.toMatchObject({paymentTermsCode:'NET30'});
+  });
+  it('saves canonical active outbound methods and records a security-relevant no-op-safe history item',async()=>{
+    expect(await saveSupplierCompany(input('PAYMETHODS',{paymentMethods:'t, c, T'}))).toEqual({changed:true,version:1,status:'CREATED'});
+    expect((await getSupplierCompany(alpha.client,'PAYMETHODS','1000'))?.paymentMethods).toBe('C,T');
+    const history=await withTenant(alpha.client,tx=>changeHistory(tx,alpha.client,'supplier_company_code','PAYMETHODS/1000'));
+    expect(history[0].items).toEqual(expect.arrayContaining([expect.objectContaining({fieldName:'paymentMethods',newValue:'C,T',isSecurityRelevant:'true'})]));
+    expect(await saveSupplierCompany(input('PAYMETHODS',{expectedVersion:1,paymentMethods:'T C'}))).toEqual({changed:false,version:1,status:'CREATED'});
+  });
+  it('offers only active outgoing or BOTH methods for the selected company country',async()=>{
+    const choices=await supplierCompanyChoices(alpha.client,'1000');
+    expect(choices.paymentMethods).toEqual([
+      {code:'C',description:'Cash method'},
+      {code:'T',description:'Transfer method'},
+    ]);
+  });
+  it('preserves omitted payment methods, clears explicit blank, and keeps them outside completeness',async()=>{
+    await saveSupplierCompany(input('METHODPRESERVE',{paymentMethods:'T'}));
+    await saveSupplierCompany(input('METHODPRESERVE',{expectedVersion:1,paymentTermsCode:'NET15'}));
+    expect((await getSupplierCompany(alpha.client,'METHODPRESERVE','1000'))?.paymentMethods).toBe('T');
+    await saveSupplierCompany(input('METHODPRESERVE',{expectedVersion:2,paymentMethods:''}));
+    expect((await getSupplierCompany(alpha.client,'METHODPRESERVE','1000'))?.paymentMethods).toBeNull();
+    expect((await saveSupplierCompany(input('METHODSTAGED',{reconciliationAccount:'',paymentTermsCode:'',paymentMethods:'T'}))).status).toBe('INCOMPLETE');
+  });
+  it.each(['I','X','U','Z'])('rejects inbound, inactive, wrong-country or unknown method %s without writing',async(paymentMethods)=>{
+    await expect(saveSupplierCompany(input('INVALID',{paymentMethods}))).rejects.toThrow('active outbound');
+    expect(await getSupplierCompany(alpha.client,'INVALID','1000')).toBeNull();
   });
   it('refuses a customer-only partner or unknown partner',async()=>{
     await expect(saveSupplierCompany(input('CUSTOMERONLY'))).rejects.toThrow('active supplier');

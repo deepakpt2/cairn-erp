@@ -12,7 +12,7 @@ import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
-import { getPaymentMethod } from '../../src/modules/foundation/payment-methods';
+import { getPaymentMethod, savePaymentMethod } from '../../src/modules/foundation/payment-methods';
 import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { getSupplierCompany } from '../../src/modules/foundation/supplier-companies';
 import { getSupplierPurchasing } from '../../src/modules/foundation/supplier-purchasing';
@@ -818,6 +818,7 @@ async function businessPartners(ctx: BrowserContext) {
 
 async function supplierCompany(ctx: BrowserContext) {
   const {page,BASE,CLIENT}=scope(ctx);
+  page.setDefaultNavigationTimeout(30_000);
   await page.goto(`${BASE}/foundation/partners?new=1`,{waitUntil:'domcontentloaded'});
   await page.locator('[name="partnerNumber"]').fill('TESTSUPP01');
   await page.locator('input[name="name"]').fill('Demo Industrial Supply');
@@ -830,10 +831,15 @@ async function supplierCompany(ctx: BrowserContext) {
   await page.locator('[name="reconciliationAccount"]').waitFor();
   const pendingDefaults=page.locator('fieldset').filter({hasText:'Additional company-code defaults'});
   assert.equal(await pendingDefaults.count(),1);
-  assert.equal(await pendingDefaults.locator('input').count(),4);
-  assert.equal(await pendingDefaults.locator('input:disabled').count(),4);
+  assert.equal(await pendingDefaults.locator('input').count(),3);
+  assert.equal(await pendingDefaults.locator('input:disabled').count(),3);
   assert.equal(await pendingDefaults.locator('input[name]').count(),0,'Pending defaults are display-only and never submitted.');
-  console.log('  ✓ four pending supplier defaults appear as disabled, non-submitted form fields');
+  const paymentMethods=page.getByRole('group',{name:'Payment methods'});
+  assert.equal(await page.locator('input[name="paymentMethods"]').count(),1);
+  assert.equal(await page.locator('input[name="paymentMethods"]').inputValue(),'');
+  assert.equal(await paymentMethods.locator('input[type="checkbox"]').count(),0);
+  await page.getByText('No active outgoing or BOTH methods are configured for the country assigned to this company code.',{exact:true}).waitFor();
+  console.log('  ✓ three pending defaults stay disabled; empty eligible-method editor submits a clear field');
   await page.locator('[name="reason"]').fill('Browser staged supplier accounting');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier company view saved. Status: Incomplete.',{exact:true}).waitFor();
@@ -841,12 +847,48 @@ async function supplierCompany(ctx: BrowserContext) {
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('No supplier company data changed.',{exact:true}).waitFor();
   assert.equal((await getSupplierCompany(CLIENT,'TESTSUPP01','1000'))?.version,1);
+  async function createMethodFixture(country:string,code:string,direction:'OUTGOING'|'INCOMING'|'BOTH'){
+    await savePaymentMethod({
+      client:CLIENT,country,methodCode:code,expectedVersion:0,changedBy:'BROWSER_FIXTURE',
+      reason:`Supplier Payment Methods browser fixture ${country}/${code}`,
+      values:{description:`Browser supplier ${code} ${direction}`,allowedDirection:direction,isActive:true},
+    });
+  }
+  const eligiblePaymentMethods=[
+    {code:'B1',direction:'BOTH'},{code:'C1',direction:'OUTGOING'},{code:'D1',direction:'OUTGOING'},
+    {code:'E1',direction:'OUTGOING'},{code:'F1',direction:'OUTGOING'},{code:'G1',direction:'OUTGOING'},
+    {code:'H1',direction:'OUTGOING'},{code:'J1',direction:'OUTGOING'},{code:'K1',direction:'OUTGOING'},
+    {code:'O1',direction:'OUTGOING'},{code:'P1',direction:'OUTGOING'},
+  ] as const;
+  const methodLabel=(method:typeof eligiblePaymentMethods[number])=>`${method.code} · Browser supplier ${method.code} ${method.direction}`;
+  const selectedPaymentMethods=eligiblePaymentMethods.slice(0,10);
+  for(const method of eligiblePaymentMethods) await createMethodFixture('KW',method.code,method.direction);
+  await createMethodFixture('KW','I1','INCOMING');
+  await createMethodFixture('US','U1','OUTGOING');
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=SUPPLIER_COMPANY&company=1000`,{waitUntil:'networkidle'});
+  const methodsGroup=page.getByRole('group',{name:'Payment methods'});
+  await methodsGroup.getByText(methodLabel(eligiblePaymentMethods[0]),{exact:true}).waitFor();
+  assert.equal(await methodsGroup.getByRole('checkbox').count(),eligiblePaymentMethods.length,'Only same-country outgoing/BOTH methods are selectable.');
+  assert.equal(await methodsGroup.getByText('I1 · Browser supplier I1 INCOMING',{exact:true}).count(),0);
+  assert.equal(await methodsGroup.getByText('U1 · Browser supplier U1 OUTGOING',{exact:true}).count(),0);
+  for(const method of selectedPaymentMethods) await methodsGroup.getByRole('checkbox',{name:methodLabel(method)}).check();
+  const savedPaymentMethods=selectedPaymentMethods.map(method=>method.code).join(',');
+  await page.waitForFunction(expected=>document.querySelector<HTMLInputElement>('input[name="paymentMethods"]')?.value===expected,savedPaymentMethods);
+  const eleventhPaymentMethod=eligiblePaymentMethods[10];
+  assert.equal(await methodsGroup.getByRole('checkbox',{name:methodLabel(eleventhPaymentMethod)}).isDisabled(),true,'An eleventh selection must be disabled.');
   await page.locator('[name="reconciliationAccount"]').selectOption('200000');
   await page.locator('[name="paymentTermsCode"]').selectOption('NET30');
   await page.locator('[name="reason"]').fill('Browser supplier accounting completion');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier company view saved. Status: Created.',{exact:true}).waitFor();
-  assert.equal((await getSupplierCompany(CLIENT,'TESTSUPP01','1000'))?.chartOfAccounts,'CAIRN');
+  const completedSupplierCompany=await getSupplierCompany(CLIENT,'TESTSUPP01','1000');
+  assert.equal(completedSupplierCompany?.chartOfAccounts,'CAIRN');
+  assert.equal(completedSupplierCompany?.paymentMethods,savedPaymentMethods);
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.locator('input[name="paymentMethods"]').waitFor({state:'attached'});
+  assert.equal(await page.locator('input[name="paymentMethods"]').inputValue(),savedPaymentMethods);
+  for(const method of selectedPaymentMethods) assert.equal(await page.getByRole('checkbox',{name:methodLabel(method)}).isChecked(),true);
+  assert.equal(await page.getByRole('checkbox',{name:methodLabel(eleventhPaymentMethod)}).isDisabled(),true);
   await page.locator('[name="paymentTermsCode"]').selectOption('NET15');
   await page.locator('[name="reason"]').fill('Browser supplier accounting maintenance');
   await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -875,8 +917,10 @@ async function supplierCompany(ctx: BrowserContext) {
 
   const id=randomUUID();const password=await hashPassword(PASSWORD);
   await withTenant(CLIENT,async tx=>{
+    await tx.execute(sql`insert into role(client,code,name,is_read_only,created_by) values(${CLIENT},'PARTNER_VIEWER','Partner viewer',true,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'PARTNER_VIEWER','FND.PARTNER.DISPLAY')`);
     await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${id},${CLIENT},'company.viewer','Company Viewer',${password},false,'BROWSER_FIXTURE')`);
-    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE'),(${CLIENT},${id},'PARTNER_VIEWER','BROWSER_FIXTURE')`);
   });
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
@@ -887,6 +931,64 @@ async function supplierCompany(ctx: BrowserContext) {
   assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
   assert.equal((await page.content()).includes('Browser supplier accounting completion'),false);
   console.log('  ✓ non-finance authority cannot read/maintain supplier accounting or its history');
+
+  const financeViewerId=randomUUID();
+  await withTenant(CLIENT,async tx=>{
+    await tx.execute(sql`insert into role(client,code,name,is_read_only,created_by) values(${CLIENT},'SUPPLIER_FINANCE_VIEWER','Supplier finance viewer',true,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'SUPPLIER_FINANCE_VIEWER','FIN.SUPPLIER.COMPANY.DISPLAY')`);
+    await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${financeViewerId},${CLIENT},'finance.viewer','Finance Viewer',${password},false,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${financeViewerId},'WAREHOUSE_CLERK','BROWSER_FIXTURE'),(${CLIENT},${financeViewerId},'PARTNER_VIEWER','BROWSER_FIXTURE'),(${CLIENT},${financeViewerId},'SUPPLIER_FINANCE_VIEWER','BROWSER_FIXTURE')`);
+  });
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="client"]').fill(CLIENT);await page.locator('[name="username"]').fill('finance.viewer');await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=SUPPLIER_COMPANY&company=1000`,{waitUntil:'domcontentloaded'});
+  await page.getByText('Payment methods',{exact:true}).waitFor();
+  await page.getByText(savedPaymentMethods,{exact:true}).waitFor();
+  assert.equal(await page.locator('input[name="paymentMethods"]').count(),0,'Display-only users must not receive an editable Payment Methods field.');
+  assert.equal(await page.getByRole('checkbox').count(),0);
+  assert.equal(await page.getByRole('button',{name:'Save',exact:true}).count(),0);
+  console.log('  ✓ authorized display-only user sees saved Payment Methods without controls');
+
+  await page.getByRole('button',{name:'Sign out',exact:true}).click();
+  await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
+  await page.locator('[name="client"]').fill(CLIENT);await page.locator('[name="username"]').fill('browser.admin');await page.locator('[name="password"]').fill(PASSWORD);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();await page.waitForURL(/\/$/);
+  await page.goto(`${BASE}/config/payment-methods?country=KW&code=B1`,{waitUntil:'domcontentloaded'});
+  await page.getByText('Retire this method',{exact:true}).click();
+  await page.locator('input[name="reason"]').fill('Browser supplier stale method retirement');
+  await page.getByRole('checkbox',{name:'I understand this method will be inactive and retained for review.'}).check();
+  await page.getByRole('button',{name:'Confirm retirement',exact:true}).click();
+  await page.getByText('Payment Method retired and retained for review.',{exact:true}).waitFor();
+  await page.goto(`${BASE}/foundation/partners?partner=TESTSUPP01&view=SUPPLIER_COMPANY&company=1000`,{waitUntil:'domcontentloaded'});
+  const staleMethodsGroup=page.getByRole('group',{name:'Payment methods'});
+  await page.getByText('Some saved methods are no longer eligible for this company code. Uncheck them before saving.',{exact:true}).waitFor();
+  const staleMethod=staleMethodsGroup.getByRole('checkbox',{name:/^B1 · No longer eligible/});
+  assert.equal(await staleMethod.isChecked(),true);
+  assert.equal(await staleMethodsGroup.getByRole('checkbox',{name:'O1 · Browser supplier O1 OUTGOING'}).isChecked(),true);
+  await staleMethod.click();
+  const paymentMethodsAfterStaleRemoval=selectedPaymentMethods.slice(1).map(method=>method.code).join(',');
+  await page.waitForFunction(expected=>document.querySelector<HTMLInputElement>('input[name="paymentMethods"]')?.value===expected,paymentMethodsAfterStaleRemoval);
+  await page.locator('[name="reason"]').fill('Browser clear stale supplier Payment Method');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Supplier company view saved. Status: Maintained.',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='6');
+  let clearedStale=await getSupplierCompany(CLIENT,'TESTSUPP01','1000');
+  assert.equal(clearedStale?.paymentMethods,paymentMethodsAfterStaleRemoval);
+  assert.equal(clearedStale?.version,6);
+  for(const method of selectedPaymentMethods.slice(1)){
+    await page.getByRole('group',{name:'Payment methods'}).getByRole('checkbox',{name:methodLabel(method)}).uncheck();
+  }
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="paymentMethods"]')?.value==='');
+  await page.locator('[name="reason"]').fill('Browser explicitly clear all supplier Payment Methods');
+  await page.getByRole('button',{name:'Save',exact:true}).click();
+  await page.getByText('Supplier company view saved. Status: Maintained.',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector<HTMLInputElement>('input[name="expectedVersion"]')?.value==='7');
+  clearedStale=await getSupplierCompany(CLIENT,'TESTSUPP01','1000');
+  assert.equal(clearedStale?.paymentMethods,null);
+  assert.equal(clearedStale?.version,7);
+  console.log('  ✓ stale saved method can be removed; an empty selection explicitly clears the stored set');
 }
 
 async function supplierPartnerFunctionEditor(ctx: BrowserContext) {

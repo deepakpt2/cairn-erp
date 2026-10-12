@@ -94,6 +94,7 @@ const ACTIVITIES: Activity[] = [
 
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
+  { code: 'CFG.ORG.COMPANYCODE.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define tenant-scoped company-code records' },
   { code: 'CFG.FIN.PAYTERMS.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain payment-term definitions' },
   { code: 'CFG.FIN.PAYMENTMETHOD.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain country-specific payment-method definitions' },
   { code: 'FND.PARTNER.DISPLAY', module: 'FND', action: 'DISPLAY', posting: false, description: 'Display general business partner data' },

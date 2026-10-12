@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.11 — B-096 owner-directed bank-profile publication)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.20 — B-105 Company Code define capability)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -2076,12 +2076,12 @@ Do not push interim or partial module batches before that trigger.
 | B-016 | Customer **sales-area backend** only | ≤10 min | **DONE — pricing/delivery master defaults, staging/blocks/version/audit and operational gate tested; no order posting** |
 | B-017 | Customer **sales-area UI** only | ≤10 min | **DONE — protected sales-area maintenance on the partner Customer tab; no order posting** |
 | B-018 | Customer company **payment-methods/dunning-procedure fields backend** only | ≤10 min | **DONE — code-only payment-method set and dunning procedure on the company segment; validated, versioned, audited; no UI inputs yet** |
-| B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable/read-only fields and existing authority/version/audit path; automated browser acceptance passed in B-023; owner walkthrough pending (§26.35, §26.39)** |
+| B-019 | Customer company payment-method/dunning UI only | ≤10 min | **DONE — editable/read-only fields and existing authority/version/audit path; automated browser acceptance passed in B-023 and owner-reported walkthrough pass recorded in B-097 (§26.35, §26.39, §26.114)** |
 | B-020 | Customer company interest-indicator/tolerance-group fields, backend only | ≤10 min | **DONE — code-only defaults; migration, service and action acceptance passed in isolated PostgreSQL test DB (§26.36, §26.38)** |
-| B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **DONE — editable/display-only fields and access behavior; automated browser acceptance passed in B-023; owner walkthrough pending (§26.37, §26.39)** |
+| B-021 | Customer company interest-indicator/tolerance-group UI only | ≤10 min | **DONE — editable/display-only fields and access behavior; automated browser acceptance passed in B-023 and owner-reported walkthrough pass recorded in B-097 (§26.37, §26.39, §26.114)** |
 | B-022 | Apply migration 0010 in an isolated dev DB and run B-020 service/action tests | ≤10 min | **DONE — isolated PostgreSQL 17.11 test DB; all 24 migrations including 0010 applied; 65/65 DB service/action tests pass (§26.38)** |
-| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — dev-fixture browser target passed; owner walkthrough pending (§26.39)** |
-| B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — focused target passed; owner walkthrough pending (§26.40)** |
+| B-023 | Run customer-company browser acceptance for B-019/B-021 | ≤10 min | **COMPLETE — automated browser target passed; owner reported all walkthrough checks passed in B-097 (§26.39, §26.114)** |
+| B-024 | Close B-017 customer sales-area browser acceptance; add focused target if needed | ≤10 min | **COMPLETE — focused browser target passed; owner reported all walkthrough checks passed in B-097 (§26.40, §26.114)** |
 | B-025 | Capture and approve partner-function semantics before implementation | ≤10 min | **DONE — roles, direction, cardinality/default and validity scope approved (§26.41)** |
 | B-026 | Supplier partner-function catalogue/assignment schema and tenant RLS only | ≤10 min | **DONE — migrations 0011/9013 applied and default-deny verified in isolated PostgreSQL (§26.42)** |
 | B-027 | Supplier partner-function read services only | ≤10 min | **DONE — tenant-scoped catalogue and assignment queries; database read/isolation tests pass (§26.43)** |
@@ -2154,6 +2154,15 @@ Do not push interim or partial module batches before that trigger.
 | B-094 | Run cookie-backed browser acceptance for the activation route/action on disposable local PostgreSQL; remove all fixtures and temporary infrastructure | ≤10 min | **PASSED — anonymous, display-only denial, exact capability, Administrator `*`, one-way activation, forged-form resistance and fixed audit evidence verified in headless Chromium against a fresh PostgreSQL 17.11 database. Two authorized activations audited; zero partner/bank rows; all app/DB/browser fixtures removed (§26.111)** |
 | B-095 | Run Chromium acceptance for stale-policy and missing-registry profile states on disposable local PostgreSQL; remove fixtures and temporary infrastructure | ≤10 min | **PASSED — stale KW and missing JP rows had no activation forms; current IN/GB/US `NOT_READY` rows retained forms with expected policy/version. No action submitted, activation audit, partner, or bank row created; all disposable fixtures and infrastructure removed (§26.112)** |
 | B-096 | Publish the complete pending partner-bank batch, B-080–B-095, to `main` on explicit owner instruction | ≤10 min | **PUBLISHED — all 45 pending paths committed as `3035c9b` and fast-forward pushed to `deepakpt2/cairn-erp:main`; `.env.local` was not committed and no database was touched (§26.113)** |
+| B-097 | Record owner walkthrough outcome for B-023/B-024 | ≤10 min | **DONE — owner reported both walkthroughs complete and all checks passed; no per-step evidence or environment details supplied; documentation only, no independent re-run (§26.114)** |
+| B-098 | Add Supplier company-code Payment Methods storage only | ≤10 min | **DONE — nullable code-set column and additive migration 0017 plus schema-contract test; no master validation, service/action, UI, DB migration or seed application (§26.115)** |
+| B-099 | Validate Supplier company-code Payment Methods in the save service only | ≤10 min | **DONE — canonical code set checked against same-tenant, same-country active OUTGOING/BOTH definitions; explicit blank clears, omission preserves, history is security-relevant; DB acceptance not run (§26.116)** |
+| B-100 | Wire the protected Supplier Payment Methods action and eligible choices only | ≤10 min | **DONE — existing maintain action conditionally forwards the field using session-derived identity; choice service returns only active same-country OUTGOING/BOTH methods; UI remains disabled; DB acceptance not run (§26.117)** |
+| B-101 | Add the capability-gated Supplier Payment Methods selector using eligible choices only | ≤10 min | **DONE — maintain-only checkbox editor, display-only saved value, explicit clear and stale-choice removal; remaining defaults stay disabled. No DB access; browser acceptance remains separate (§26.118)** |
+| B-102 | Prepare Supplier Payment Methods live-browser acceptance only | ≤10 min | **TARGET UPDATED — supplier-company browser case now covers filtering, the ten-method cap, persistence, display-only access, stale-choice removal and explicit clear. Live run remains separate (§26.119)** |
+| B-103 | Accept Supplier company Payment Methods migration and service behavior on fresh local PostgreSQL only | ≤10 min | **PASSED — fresh loopback PostgreSQL 17.11; 39 migrations and two shared seeds applied, Supplier service suite 25/25, fixtures removed with zero tenant/partner/default/payment/bank rows (§26.120)** |
+| B-104 | Complete Supplier Payment Methods live-browser acceptance on a verified disposable local database; remove temporary infrastructure | ≤10 min | **PASSED — `supplier-company` alone passed in headless Chromium against local PostgreSQL 17.11 using the production standalone build; filtering, ten-code cap, persistence, read-only authority, stale-method removal and explicit clear covered. No B-104 migration/service-suite rerun; fixtures and temporary infrastructure removed (§26.121). No remote DB, commit or push.** |
+| B-105 | Register the Company Code define capability only | ≤10 min | **DONE — added `CFG.ORG.COMPANYCODE.DEFINE` as a grantable, non-posting Foundation configuration capability; contract tests preserve no-role-grant and wildcard behavior. No action, UI, migration, seed execution or database access (§26.122). No remote DB, commit or push.** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2165,25 +2174,23 @@ next bounded batch.
 
 ### 25.5 Approved completion roadmap `AGREED · SEQUENCING ONLY`
 
-**Owner-approved sequence (2026-10-11).** This is the route from the current B-021 state through M1
+**Owner-approved sequence (2026-10-11).** This is the route from the B-021 state at that time through M1
 acceptance and the later phases already agreed in §25.3. It orders work; it does not create new product
 requirements or authorise undocumented field semantics. The detailed screen cycle in §24.1 remains
 binding. Every package below must be split into actual one-outcome B-series batches under §25.4; each
 reply does one such batch, ≤10 minutes of feature work. Large modules are not single batches.
 
-#### 25.5.1 Outstanding acceptance gates
+#### 25.5.1 Acceptance-gate status
 
-These close work already implemented. They are release/acceptance gates, not permission to use an
-owner or production database. If PostgreSQL remains unavailable, record the blocker and continue only
-with independent development.
+**B-022, B-023 and B-024 are complete.** B-022's isolated-database acceptance passed (§26.38).
+B-023's customer-company and B-024's sales-area automated browser targets passed (§26.39–40); on
+2026-10-12, the owner reported both manual walkthroughs complete with all checks passed (§26.114).
+The walkthrough result is owner-reported; no per-step evidence or environment details were supplied,
+and it was not independently re-run by the agent.
 
-1. **B-022 — B-020 database acceptance:** apply migration `0010` in an isolated development/test
-   database, then run customer-company lifecycle, change-history, validation and action-security tests.
-2. **B-023 — B-019/B-021 browser acceptance:** run the customer-company target against the migrated
-   database; verify save/reload, canonical no-op, blank clear, history/control-change flags, finance
-   display-only read access, and no-authority denial. Record the owner walkthrough result.
-3. **B-024 — B-017 browser acceptance:** the focused target now passes in a disposable development tenant
-   (§26.40); product-owner walkthrough/sign-off remains outstanding (see §26.33).
+No B-022–B-024 acceptance gate remains outstanding. This closes only those listed acceptance outcomes;
+it does not constitute overall M1 sign-off, production approval, or release/deployment. Do not access
+an owner/production database for this record.
 
 #### 25.5.2 M1b — foundation, configuration, and master data
 
@@ -2205,10 +2212,13 @@ schema/service, UI/authority, and test/browser work into separate bounded batche
    create/change forms through the existing protected action (§26.59). B-043 adds versioned soft-retire
    confirmation (§26.60). B-044 adds a guarded dedicated browser target; B-045 ran it on a fresh
    disposable development database and passed the full lifecycle/access checks, then verified fixture
-   cleanup (§26.62). Neither batch uses owner/production data. Later code-backed Supplier integration remains separate; the Supplier field stays disabled
-   until its protected master/configuration integration is implemented. Per owner instruction, do not push
-   these partial module batches; push and notify only when a user-runnable UI test is ready after full-system
-   implementation.
+   cleanup (§26.62). Neither batch uses owner/production data. B-098 adds nullable Supplier company-code
+   storage (§26.115), B-099 adds country/direction validation in the save service (§26.116), and B-100
+   wires the existing protected action and eligible method choices (§26.117). B-101 adds the
+   maintain-only selector, display-only saved value and explicit clear/stale-choice handling (§26.118).
+   The selector uses only eligible choices; live browser acceptance and disposable migration acceptance
+   remain separate. Per owner instruction, do not push these partial module batches; push and notify only
+   when a user-runnable UI test is ready after full-system implementation.
    Dunning procedure, cash discount, and tolerance group remain disabled until their own required
    masters/semantics are available.
 3. **Business-partner bank/contact data:** B-046 captured owner-approved v1 semantics/security
@@ -3873,7 +3883,7 @@ added before those documents exist.
 Private checkpoint not created in this batch. Next **B-017 customer sales-area UI** only.
 
 
-### 26.33 B-017 — Customer sales-area maintenance UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
+### 26.33 B-017 — Customer sales-area maintenance UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
 
 An active Customer partner now has a **Sales area** tab on `/foundation/partners`, replacing the former
 pending placeholder. Command **SALES.CUSTOMER.SALESAREA.MAINTAIN** opens selection; `view=CUSTOMER_SALES`
@@ -3912,7 +3922,8 @@ outside the allowed network, so no browser target was added for that batch. Acti
 is covered by the Vitest action tests. The focused B-024 maintainer-flow browser target has since passed
 (§26.40); it does not repeat user switching for display-only or finance-only denial. The original
 server-rendered role checks and accounting-only action denial above remain the recorded automated
-coverage for those boundaries. Product-owner walkthrough remains pending.
+coverage for those boundaries. The owner later reported the B-024 walkthrough passed; see §26.114.
+No per-step notes or environment details were supplied.
 
 Verification data lived only in a throwaway test tenant created for this batch in the sandbox database.
 No owner data was touched, and no migration was added in this batch (still 22 applied migrations).
@@ -3997,7 +4008,7 @@ function relationships or the next Phase 1 master.
 
 ---
 
-### 26.35 B-019 — Customer company payment-method/dunning UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
+### 26.35 B-019 — Customer company payment-method/dunning UI `COMPLETE · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
 
 **Scope:** expose the B-018 `payment_methods` and `dunning_procedure` fields on the existing
 Customer company-code view. This is UI wiring only: no schema/migration, route, capability, term/master
@@ -4025,7 +4036,7 @@ seed, payment execution or dunning execution was added. No new authority is crea
 files) and `npm run test:browser-harness` (**58/58**) passed. The browser/DB acceptance was not run then
 because PostgreSQL was unavailable. The combined customer-company browser target subsequently passed
 in B-023 against the isolated development database (§26.39). No owner/production data was used; no
-migration or reseed is required for this UI slice. Product-owner walkthrough remains pending.
+migration or reseed is required for this UI slice. The owner later reported the walkthrough passed; see §26.114.
 
 **Owner manual test (R-23):** in a development/test tenant, open an active Customer partner such as
 `TESTCUST01` → **Customer company code** → company `1000`. Keep reconciliation `110000` and terms
@@ -4044,8 +4055,8 @@ company display authority cannot see the codes/history; signed-out access redire
 not yet consumed by any invoice/payment/dunning service.
 
 At B-019 close, B-020 was selected and is now complete; B-021 UI is also implemented. The combined
-B-019/B-021 automated customer-company browser target passed in B-023 (§26.39); owner walkthrough and
-sign-off remain pending.
+B-019/B-021 automated customer-company browser target passed in B-023 (§26.39). The owner later
+reported the customer-company walkthrough passed (§26.114).
 
 
 ### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PASSED IN B-022`
@@ -4095,15 +4106,15 @@ the later B-021 UI slice. Do not set them through production SQL.
 
 **Limitations:** values are format-checked codes only. There is no master lookup, interest calculation,
 interest posting, tolerance calculation/enforcement, open-item processing, billing or payment use. DB
-migration/service/action acceptance passed in the isolated test database; browser acceptance remains
-pending under B-023.
+migration/service/action acceptance passed in the isolated test database; browser acceptance passed in
+B-023, and the owner-reported walkthrough outcome is recorded in B-097 (§26.114).
 
 At B-020 close, **B-021** was selected and is now implemented (§26.37). B-022 database acceptance
-passed (§26.38), and B-023 automated browser acceptance has since passed (§26.39); owner walkthrough
-remains pending.
+passed (§26.38), and B-023 automated browser acceptance has since passed (§26.39). The owner walkthrough
+was still pending at this point and was later reported passed in B-097 (§26.114).
 
 
-### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH PENDING`
+### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
 
 **Scope:** expose the B-020 `interest_indicator` and `tolerance_group` values on the existing Customer
 company-code panel. UI wiring only: no schema, migration, service rules, route, capability, seed, master
@@ -4129,8 +4140,9 @@ boundary.
 **Verification at implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164
 files), `npm run test:browser-harness` (**64/64**) and `git diff --check` passed. B-022 later applied the
 migrations and passed 65 customer-company/action-security DB tests (§26.38). The B-023 Playwright target
-`npm run smoke:browser:customer-company` has now passed against a development fixture (§26.39); its
-owner walkthrough remains pending. No owner/production database or tenant was used.
+`npm run smoke:browser:customer-company` has now passed against a development fixture (§26.39). The
+owner later reported the customer-company walkthrough passed (§26.114). No owner/production database
+or tenant was used.
 
 **Owner manual test (R-23):** after the B-020 migration 0010 is applied in a development/test tenant,
 open active customer `TESTCUST01` → **Customer company code** → `1000`. With the existing valid account
@@ -4150,8 +4162,9 @@ baseline is current). Do not write values through production SQL.
 tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
 consumes them yet.
 
-The B-024 focused automated sales-area target has now passed (§26.40). Product-owner walkthroughs for
-B-023 and B-024 remain pending before M1 release; B-025 follows the completed automated acceptance gates.
+The B-024 focused automated sales-area target has passed (§26.40). The owner subsequently reported both
+B-023 and B-024 walkthroughs complete with all checks passed (§26.114). B-025 follows the completed
+automated acceptance gates; other M1 acceptance criteria remain governed by §24.1.
 
 
 ### 26.38 B-022 — B-020 migration and database acceptance `COMPLETE · ISOLATED TEST DATABASE`
@@ -4175,11 +4188,12 @@ action/security boundaries. Test fixtures ran only in the dedicated disposable d
 
 **Result / next:** B-022 is complete. Migration 0010 and the B-020 service/action acceptance passed in
 this isolated PostgreSQL environment. At B-022 close, the B-019/B-021 customer-company browser target
-had not yet run; it subsequently passed in B-023 (§26.39). The owner walkthrough remains pending. Do not
-apply this local database or its test data to an owner/production tenant.
+had not yet run; it subsequently passed in B-023 (§26.39). The owner walkthrough had not yet been
+recorded at that time; the owner later reported B-023/B-024 walkthroughs complete with all checks passed
+(§26.114). Do not apply this local database or its test data to an owner/production tenant.
 
 
-### 26.39 B-023 — B-019/B-021 customer-company browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH PENDING`
+### 26.39 B-023 — B-019/B-021 customer-company browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
 
 **Environment and fixture:** ran `npm run smoke:browser:customer-company` with the isolated B-022
 PostgreSQL database and local development app. Playwright Chromium 156 (Playwright revision 1248) was
@@ -4195,13 +4209,13 @@ behavior; security-relevant change history; invalid reconciliation-account refus
 access without Save controls; denial of values/history to non-finance users; and signed-out protection.
 The run also confirmed the fixture had no hidden accounting number ranges.
 
-**Owner walkthrough:** automated acceptance is passed; the product-owner manual review/sign-off remains
-pending. Review the existing steps in §26.35 and §26.37 against a development tenant before marking the
-customer-company acceptance fully signed off. B-024 automated sales-area browser acceptance has since
-passed (§26.40); its owner walkthrough also remains pending.
+**Owner walkthrough:** on 2026-10-12, the owner confirmed the B-023 and B-024 walkthroughs were complete
+and selected “All checks passed” (§26.114). No per-step evidence or environment details were supplied;
+this is an owner-reported result, not an independent re-run. The procedures remain documented in
+§26.35, §26.37 and §26.33.
 
 
-### 26.40 B-024 — B-017 customer sales-area browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH PENDING`
+### 26.40 B-024 — B-017 customer sales-area browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
 
 **Environment and fixture:** ran `npm run smoke:browser -- --target customer-sales-area` against the
 isolated B-022 PostgreSQL database and local development app using Playwright Chromium. The harness
@@ -4221,10 +4235,10 @@ reported no page errors.
 
 **Coverage boundary and owner walkthrough:** this target exercises the authorised maintainer lifecycle;
 it does not switch to display-only or finance-only users in the browser. The original B-017
-server-rendered role checks and accounting-only action denial remain documented in §26.33. Complete the
-manual walkthrough in §26.33 before marking B-024 fully signed off or releasing M1, including the
-read-only/no-Save and finance-only denial checks. B-023's separate customer-company owner walkthrough
-also remains pending.
+server-rendered role checks and accounting-only action denial remain documented in §26.33. The owner
+later reported the B-024 manual walkthrough complete with all checks passed (§26.114); no per-step
+evidence or environment details were supplied. This outcome is limited to B-023/B-024 and does not
+constitute overall M1 sign-off.
 
 **Verification after the target:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5
 files**) and `git diff --check` passed. No application/schema/migration changes were made for B-024.
@@ -4469,9 +4483,11 @@ view the group is outside the existing save form and its controls have no `name`
 `FormData`. The helper is shared with the read-only view. No `CompanyFields`, server action, service,
 schema, migration, capability, save/persistence, or business behavior was added or changed.
 
-**Dependency decision:** the owner selected Payment Methods as the first related master. B-035 is limited
-to capturing its v1 semantics and scope; master implementation and later Supplier-field integration must
-be separate bounded batches. The four placeholders remain disabled until their respective masters exist.
+**Dependency decision:** the owner selected Payment Methods as the first related master. B-035 captured
+its v1 semantics; B-036–B-045 implemented and accepted the master. At B-034 close, all four Supplier
+placeholders were disabled. B-098 now adds only the nullable Supplier payment-method storage column; its
+control remains disabled pending country/direction validation, protected save behavior, UI and acceptance.
+Dunning procedure, cash discount, and tolerance group remain disabled until their own required masters exist.
 
 **Verification:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (173 files),
 `npm run test:browser-harness` (65/65), and `git diff --check` passed. The `supplier-company` Playwright
@@ -5894,6 +5910,201 @@ complete pending B-080–B-095 batch; §25.4 remains the gate for future publica
 changed during publication; no real bank values were included.
 
 
+### 26.114 B-097 — Owner-reported B-023/B-024 walkthrough outcome `COMPLETE — OWNER REPORTED PASS`
+
+On 2026-10-12, the owner confirmed that both the B-023 Customer company and B-024 Customer Sales area
+walkthroughs were complete and selected “All checks passed.” This is an owner-reported result. No
+per-step notes, screenshots, or test-environment details were supplied, and the agent did not
+independently re-run the walkthroughs or access the application, host, or database for verification.
+
+The report closes only the B-023/B-024 owner-walkthrough outcomes; it is not an overall M1 sign-off,
+production approval, or deployment instruction. The walkthrough procedures remain in §§26.33, 26.35
+and 26.37. This documentation-only update made no application or database changes.
+
+
+### 26.115 B-098 — Supplier company-code Payment Methods storage only `SCHEMA ADDED · MIGRATION NOT APPLIED`
+
+Added nullable `payment_methods varchar(40)` to the existing tenant/company-code-scoped
+`supplier_company_code` segment and registered it in the typed Drizzle schema. Additive migration
+`0017_supplier_company_payment_methods.sql` adds only that column; the existing tenant RLS policy
+continues to protect the table, so no separate policy migration was introduced. Added a static schema
+contract covering the nullable column, composite company key, and non-destructive migration.
+
+This is storage only. It adds no Supplier write-path behavior, country/direction lookup, validation
+against active `OUTGOING`/`BOTH` Payment Methods, server action, UI control, seed row, or payment
+execution. The Supplier field remains disabled. No database migration was applied, and no persistent,
+remote, owner, or production database was accessed or changed.
+
+**Verification:** the no-database schema-contract test is registered in the browser-harness configuration;
+`npm run test:browser-harness` passed **68/68 across 6 files**, including both new contract checks.
+`npm run typecheck`, `npm run lint:ip` (253 files), and `git diff --check` passed. The normal Vitest
+configuration invokes database global setup and failed before collection with
+`ECONNREFUSED 127.0.0.1:5432`; the connection was refused and no database was reached or modified.
+
+**Follow-up:** B-099 canonicalizes and validates explicitly submitted codes against active
+`OUTGOING`/`BOTH` definitions for the company-code country (§26.116). B-100 wires the session-derived
+protected action and eligible choices (§26.117). The UI remains disabled pending its separate implementation
+and browser acceptance. Any database acceptance must apply migration 0017 only to a verified disposable
+database. Payment execution, bank-record saves and plaintext reveal remain outside this slice.
+
+
+### 26.116 B-099 — Supplier Payment Methods save-service validation only `IMPLEMENTED · DATABASE ACCEPTANCE NOT RUN`
+
+Extended `saveSupplierCompany` with optional `paymentMethods` input. Supplied code sets are trimmed,
+uppercased, deduplicated, sorted, limited to ten unique one-or-two-character alphanumeric codes, and
+validated in the same tenant transaction against the assigned company code's country. Each selected
+method must exist for that tenant/country and be active with `OUTGOING` or `BOTH` direction. The lookup
+locks matching definition rows `FOR SHARE`, so concurrent direction/active-state maintenance cannot
+invalidate the check before the Supplier save commits. Unknown, inactive, wrong-country, and
+`INCOMING`-only choices fail with a generic validation error.
+
+An omitted field preserves existing data for legacy callers; an explicit blank clears the set. The value
+participates in normal no-op/version handling and is recorded as security-relevant history. It does not
+affect company-segment completeness or enable a payment transaction. The protected action and Supplier
+UI are unchanged, so the field remains disabled and this service path is not yet user-reachable.
+
+Added pure normalization/eligibility tests and DB-backed service cases for outgoing/BOTH acceptance,
+canonicalization, country/direction/activity denials, explicit clear, omitted-field preservation, history,
+no-op and completeness independence. The database cases were not run because no verified disposable
+PostgreSQL test database was available; no migration or seed was applied and no database was accessed.
+
+**Verification:** `npm run test:browser-harness` passed **74/74 across 7 files**; `npm run typecheck`,
+`npm run lint:ip` (254 files), and `git diff --check` passed.
+
+**Follow-up:** B-100 adds the session-derived protected action and active country/outgoing choices
+(§26.117). The editable selector and browser acceptance remain separate work. No payment execution,
+bank-record save, plaintext reveal, remote DB access, commit, or push occurred in this batch.
+
+
+### 26.117 B-100 — Protected Supplier Payment Methods action and eligible choices only `WIRED · UI PENDING`
+
+The existing `FIN.SUPPLIER.COMPANY.MAINTAIN` action now conditionally forwards `paymentMethods` only
+when the form includes that field. Tenant and actor continue to come exclusively from the verified session;
+legacy forms that omit the field preserve the stored assignment, while an explicit blank remains a clear.
+No new capability or action route was introduced. The Supplier form still has no Payment Methods
+control, so the field is not yet user-accessible.
+
+`supplierCompanyChoices` now returns active Payment Methods for the selected company code's country,
+scoped by tenant and filtered to `OUTGOING` or `BOTH`. It does not include inactive, incoming-only, or
+other-country methods. The existing company, account, and payment-term choice queries also carry explicit
+tenant predicates.
+
+Added a database-free action/choice source-contract test and a DB-backed choice-service case. The DB case
+was not run because no verified disposable PostgreSQL environment was available; migration 0017 was not
+applied and no database was accessed.
+
+**Verification:** `npm run test:browser-harness` passed **76/76 across 8 files**; `npm run typecheck`,
+`npm run lint:ip` (255 files), and `git diff --check` passed.
+
+**Next:** render the eligible methods in a capability-gated Supplier company-code selector, while preserving
+authorised display-only values and existing omitted-field behavior. Keep the UI/browser acceptance and any
+disposable migration test as separate bounded work; do not add payment execution. No bank-record save,
+plaintext reveal, remote DB access, commit, or push occurred.
+
+
+### 26.118 B-101 — capability-gated Supplier Payment Methods selector `IMPLEMENTED · LIVE BROWSER ACCEPTANCE SEPARATE`
+
+Wired `supplierCompanyChoices.paymentMethods` and the stored company-code value into the existing
+Supplier company panel. The Payment Methods checkbox editor appears only for users with the existing
+`FIN.SUPPLIER.COMPANY.MAINTAIN` capability; authorized display-only users continue to see the saved code
+set without controls. No new capability was added. Choices remain constrained by B-100 to active,
+same-tenant, same-country `OUTGOING`/`BOTH` methods.
+
+The editor supports at most ten selected codes, preserves saved selections that are still eligible, and
+shows previously saved but now-ineligible codes as checked items that must be unchecked before a save can
+succeed. A hidden comma-delimited field is submitted even when empty, so clearing every selection remains
+an explicit clear; legacy callers omitting the field still preserve the stored value through B-100. The
+Dunning procedure, Cash discount, and Tolerance group placeholders remain disabled pending their masters.
+This is a supplier default only; it does not execute payments.
+
+Added English help/status strings and a no-database UI source-contract test. **Verification:**
+`npm run test:browser-harness` passed **78/78 across 9 files**; `npm run typecheck`, `npm run lint:ip`
+(256 files), and `git diff --check` passed. DB-backed Supplier tests were not run. Migration 0017 remains
+unapplied; no database was accessed. Live browser acceptance was not run and remains a separate batch.
+No commit or push occurred.
+
+**Next:** run live browser acceptance separately and, only against a verified disposable database, test
+migration/service acceptance. Keep payment execution, bank-record saves and plaintext reveal outside scope.
+
+
+### 26.119 B-102 — Supplier Payment Methods browser acceptance target preparation `TARGET UPDATED · LIVE RUN BLOCKED`
+
+Updated the `supplier-company` Playwright target for the B-101 selector. It now expects only the three
+remaining company defaults to be disabled; verifies the initially empty explicit field; creates synthetic
+KW and US definitions through the Payment Methods UI; confirms same-country active `OUTGOING`/`BOTH`
+filtering, the ten-selection cap and reload persistence; and exercises authorized display-only access,
+retirement/stale-choice removal and explicit clear. Added a database-free browser-target source-contract
+test. No new database fixtures were created during this preparation.
+
+**Verification:** `npm run test:browser-harness` passed **81/81 across 10 files**; `npm run typecheck`,
+`npm run lint:ip` (257 files), and `git diff --check` passed. The live target was not run: no database URL
+or local PostgreSQL service/tools were available, and migration 0017 remains unapplied. A fresh disposable,
+migrated database is required. No database was accessed or modified. No commit or push.
+
+**Next:** perform migration/service acceptance on a verified disposable database in a separate batch; then
+run this live browser target against a fresh disposable, migrated test database. Do not use an owner,
+production or unidentified remote database.
+
+
+### 26.120 B-103 — Supplier Payment Methods migration and service acceptance `PASSED · DISPOSABLE LOCAL ONLY`
+
+With owner authorization, installed PostgreSQL 17.11 and created a fresh disposable `cairn_test` cluster
+bound only to `127.0.0.1`. Before applying any migration or seed, verified over TCP that the target was
+`cairn_test` on loopback, PostgreSQL 17.11, as the disposable-cluster `postgres` migration superuser.
+The app connection was separately verified as `cairn_app` with `NOSUPERUSER` and `NOBYPASSRLS`.
+
+Applied all **39** lexical SQL migrations, including `0017_supplier_company_payment_methods.sql`, then
+ran the global-definition and shared-reference seeds. The DB-backed `tests/supplier-companies.test.ts`
+suite passed **25/25**, covering persisted outgoing/BOTH choices, tenant/country/direction validation,
+explicit clear, omitted-field preservation, history/version handling and completeness independence.
+
+After testing, verified 39 migration records and the 0017 record, with **zero tenants, partners, Supplier
+company-code rows, Payment Method rows or partner-bank rows**. Stopped and removed the disposable cluster,
+its temporary data and the PostgreSQL packages installed for this batch. No owner/production/remote
+connection was used. The live browser target was not run; it remains a separate batch. No commit or push.
+
+
+### 26.121 B-104 — Supplier Payment Methods live-browser acceptance `PASSED · DISPOSABLE LOCAL ONLY`
+
+Used the freshly provisioned `cairn_test` PostgreSQL 17.11 cluster bound only to `127.0.0.1:55432`.
+Its local identity was verified before the B-104 setup applied the existing 39 migrations and two shared
+seeds. This was browser-only acceptance: B-104 did not rerun migrations/seeds or the Supplier service suite
+from B-103. No owner, production or remote database was accessed.
+
+Built the optimized Next standalone app and ran only `npm run smoke:browser:supplier-company` in headless
+Playwright Chromium v1248. The single target passed with no browser runtime errors. The run covered the
+empty/no-choice state and disabled pending defaults; same-country active `OUTGOING`/`BOTH` filtering;
+exclusion of incoming-only and other-country methods; ten selectable methods with the eleventh disabled;
+save/reload persistence; non-finance denial and authorized display-only access without controls; retiring
+saved `B1`, removing the stale choice, and explicitly clearing the remaining selection. Synthetic payment
+method definitions were created through the audited Payment Methods service as isolated fixtures so the
+browser target remained focused on Supplier company selection; the `B1` retirement and Supplier edits were
+performed through the UI. The fixture setup is not a substitute for the separate Payment Methods UI target.
+
+The smoke runner removed its `T991` fixture. Verified zero tenants, partners, Supplier company-code rows,
+Payment Method rows and partner-bank rows after the run. Stopped the app and removed the disposable cluster,
+temporary database data/logs, PostgreSQL packages installed for this batch and the Playwright Chromium
+binary cache. Apt autoremove also removed 29 newly installed Chromium runtime packages that were no longer
+needed; shared system dependencies were retained. `npm run build` passed; final browser-harness, typecheck,
+IP lint and diff-check results are recorded in the v1.19 change log. No commit or push.
+
+
+### 26.122 B-105 — Company Code define capability registration only `CAPABILITY READY · ACTION/UI PENDING`
+
+Started the Enterprise Structure roadmap at SCR-012 by registering `CFG.ORG.COMPANYCODE.DEFINE` in the
+global capability catalogue as module `FND`, action `CONFIGURE`, and non-posting. A database-free contract
+test checks the seed entry, confirms this batch adds no tenant-role grants, and preserves exact-capability
+and Administrator `*` behavior.
+
+This is only capability registration: it is not yet wired to the Company Code route, a server action, or a
+form, and it grants no default role. No schema or migration changed; no seed was executed and no database
+was accessed. Typecheck, browser harness, IP lint and diff-check results are recorded in the v1.20 change
+log. No remote database, commit or push.
+
+**Next:** add the protected Company Code define path in a separate bounded batch, keeping the define/assign
+order in §6.2 and the current Company Code assignment-field constraints explicit.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -6067,6 +6278,15 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.20 | 2026-10-12 | **B-105 begins Enterprise Structure at SCR-012 by registering the Company Code define capability only.** Added `CFG.ORG.COMPANYCODE.DEFINE` as module FND, CONFIGURE, non-posting; a no-DB contract test ensures no tenant-role grants and preserves wildcard semantics. No server action, UI, schema, migration, seed execution or database access. Browser harness 83/83, typecheck, IP lint (258 files), and diff check pass. No remote DB, commit or push. §26.122 records scope. | Agent |
+| 1.19 | 2026-10-12 | **B-104 passes Supplier Payment Methods browser-only acceptance on disposable local PostgreSQL.** Verified local identity before B-104 setup applied the existing 39 migrations and two shared seeds; this batch did not rerun migration/service acceptance. The `supplier-company` target alone passed in headless Chromium v1248 against the optimized standalone Next build with no browser errors, covering filtering, ten-selection cap, persistence, authority boundaries, stale-choice removal and explicit clear. Synthetic definitions used audited service fixtures; Supplier selection and `B1` retirement were exercised in the UI. The runner left zero tenants, partners, Supplier company rows, Payment Method rows or partner-bank rows. App, cluster/data/logs, temporary PostgreSQL packages and Chromium binaries removed; apt autoremove removed 29 no-longer-needed runtime packages while shared system dependencies were retained. `npm run build`, browser harness 81/81, typecheck, IP lint (257 files) and diff check pass. No remote DB, commit or push. §26.121 records scope. | Agent |
+| 1.18 | 2026-10-12 | **B-103 passes disposable migration/service acceptance for Supplier Payment Methods.** Fresh local PostgreSQL 17.11 bound only to 127.0.0.1; identity verified before migration/seed. Applied all 39 migrations (including 0017) and the two shared seeds; `tests/supplier-companies.test.ts` passes 25/25. Final counts: zero tenants, partners, Supplier company rows, Payment Method rows or partner-bank rows. Cluster/data/packages removed. No remote DB or live browser target; the latter remains separate. §26.120 records scope. No commit or push. | Agent |
+| 1.17 | 2026-10-12 | **B-102 prepares the Supplier Payment Methods live-browser target.** The supplier-company target now covers empty/no-choice state, same-country OUTGOING/BOTH filtering, an 11th-choice disable after ten selections, persistence, authorized display-only, stale-choice removal and explicit clear. Added a no-DB target-contract test. Browser harness 81/81 and typecheck pass; IP lint and diff check pass. Live target was not run because no local disposable DB URL/service was available; migration 0017 remains unapplied and no database was accessed. §26.119 records the blocked gate. No commit or push. | Agent |
+| 1.16 | 2026-10-12 | **B-101 adds the capability-gated Supplier Payment Methods selector.** The existing maintain capability controls the checkbox editor; display-only users retain saved-value access. Eligible methods are wired from the tenant/country-scoped choices, empty selection submits an explicit clear, and stale saved choices can be removed. The other three company defaults remain disabled. Browser harness 78/78, typecheck, IP lint (256 files), and diff check pass. DB tests and live browser acceptance remain separate; migration 0017 unapplied and no database accessed. §26.118 records scope. No commit or push. | Agent |
+| 1.15 | 2026-10-12 | **B-100 wires the Supplier Payment Methods action and eligible-choice service.** The existing maintain action conditionally passes the new field while tenant/actor remain session-derived; the choice query returns only active same-country `OUTGOING`/`BOTH` methods with explicit tenant filters. No UI control or new capability yet. Browser harness 76/76, typecheck, IP lint (255 files), and diff check pass. DB choice test not run; no migration or database access. §26.117 records scope; selector UI and browser acceptance remain. No commit or push. | Agent |
+| 1.14 | 2026-10-12 | **B-099 adds country/direction-aware Supplier Payment Methods save-service validation.** Canonicalizes code sets; validates all selected methods against the same tenant and company country, requiring active `OUTGOING`/`BOTH`, and locks definition rows during save. Explicit blank clears, omission preserves, and changes are security-relevant/versioned. Added pure tests plus DB service cases; the latter were not run without a verified disposable DB. Browser harness 74/74, typecheck, IP lint (254 files), and diff check pass. No action/UI, migration application, database access, commit or push. §26.116 records boundary; action/UI are next. | Agent |
+| 1.13 | 2026-10-12 | **B-098 adds nullable Supplier company-code Payment Methods storage only.** Added the schema field, additive migration `0017`, a static schema contract, and registered it in the database-free browser-harness suite. No validation/service/action/UI or database migration was applied. Browser harness: 68/68; typecheck, IP lint (253 files), and diff check pass. Default Vitest global setup attempted `127.0.0.1:5432` and was refused before collection; no database was reached. §26.115 records limits; next is country/direction-aware save validation. No commit or push. | Agent |
+| 1.12 | 2026-10-12 | **B-097 records the owner's reported pass for the B-023/B-024 walkthroughs.** Updated acceptance status based on the owner's confirmation that both walkthroughs were complete and all checks passed. Per-step evidence and test-environment details were not supplied; no independent verification, app/host/database access, deployment, commit, or push occurred in this documentation-only update. §26.114 records the scope and distinction. | Agent |
 | 1.11 | 2026-10-12 | **B-096 publishes the complete pending B-080–B-095 partner-bank batch on explicit owner instruction.** All 45 paths committed as `3035c9b` and fast-forward pushed from `057e19c` to `deepakpt2/cairn-erp:main` as the repository user. The ignored `.env.local` PAT was supplied only through a temporary askpass helper; it was not committed, stored in the remote URL/config, or logged. `.env.local` is not in the commit; no database changed and no real bank values were included. §26.113 records scope. | Agent |
 | 1.10 | 2026-10-12 | **B-095 passes real-browser fail-closed acceptance for stale and missing profile rows.** Fresh loopback PostgreSQL 17.11; all 38 migrations and both shared seeds passed. A disposable T095 exact-capability fixture made KW stale (D-061 vs current D-062) and removed JP's registry row. Chromium confirmed neither fail-closed row had an activation form, while current IN/GB/US `NOT_READY` rows retained controls with expected revision/version. No action submitted; zero activation audits, partners or bank rows; no browser errors or Save/Reveal controls. Production app, DB, fixture, PostgreSQL/browser dependencies and build removed. No remote/persistent DB, bank values, commit or push. §26.112 records scope. | Agent |
 | 1.09 | 2026-10-12 | **B-094 passes cookie-backed browser acceptance for the capability-gated profile page/action.** Fresh PostgreSQL 17.11 loopback cluster; all 38 SQL migrations and both shared seeds passed. No role grant existed before temporary T094 fixtures. Chromium verified anonymous sign-in redirect, display-only route/action denial, exact-capability access and Administrator `*`; KW and GB transitioned only `NOT_READY` v1→`READY` v2. Forged actor/evidence/status/reason fields were ignored; exactly two activation-audit rows held session-derived actors and fixed evidence. No browser errors, partner/bank rows, or reveal/save controls. App, DB, fixtures, browser binaries/dependencies and build removed; no remote/persistent DB, bank values, commit or push. §26.111 records scope. | Agent |
