@@ -1,11 +1,122 @@
 # CAIRN — Project Log & Technical Specification (continued)
 
-**Part 2 of 2 · Last updated:** 2026-10-12 (v1.40)
-**Continues:** [CAIRN.md](CAIRN.md) · **Sections:** §26.45–§30
+**Part 2 of 2 · Last updated:** 2026-10-12 (v1.52)
+**Continues:** [CAIRN.md](CAIRN.md) · **Sections:** §26.41–§30
 
 ---
 
 ## §26 · Phase 1 screen inventory (continued)
+
+### 26.41 B-025 — Supplier purchasing partner-function semantics `APPROVED · B-026–B-032 IMPLEMENTED · B-033 BROWSER ACCEPTANCE PASSED · PO DETERMINATION PENDING`
+
+**Scope:** decision capture only. No schema, service, UI, capability, seed, migration or transaction
+behavior is added here. Implementation remains subject to the bounded batch discipline in §25.4.
+
+**Owner-approved semantics:**
+- **Roles:** the supplier being maintained is the implicit primary/fallback partner. The purchasing-
+  organisation assignment set is limited to an ordering address, goods supplier, and invoicing party.
+  Do not add a separate pay-to partner in this slice. Use Cairn-owned product labels and keys; do not
+  copy proprietary reference-system codes or names (§4, R-01).
+- **Direction:** assignments are directed from the focal supplier and purchasing organisation to the
+  related supplier. Do not create a reciprocal relationship automatically; maintain the other supplier's
+  outbound assignment separately if required.
+- **Cardinality/default:** each role has a configured unique-or-multiple rule. A unique role allows at
+  most one assigned partner for the focal supplier and purchasing organisation. A multiple role allows
+  several; at most one may be marked default. If none is default, the user chooses among eligible partners
+  when a consuming transaction is introduced.
+- **Validity and scope:** this M1 slice stores the current purchasing-organisation assignment only. No
+  valid-from/to dates; replacing a current assignment uses the ordinary version/audit history. Defer
+  plant- and supplier-sub-range-specific overrides.
+
+**Reference basis:** SAP Help describes the primary vendor as the fallback plus ordering-address,
+goods-supplier and invoicing-party roles, with purchasing-organisation data and more-specific plant or
+supplier-sub-range variants. [SAP Help — Partner Roles in Purchasing](https://help.sap.com/docs/SAP_ERP/967e1c2a6a8c4183b7e07d28e7574445/c080b65334e6b54ce10000000a174cb4.html).
+SAP Learning describes the configurable unique/multiple behavior, optional default, and selection when
+multiple partners exist without a default. [SAP Learning — Using Partner Functions in Purchasing](https://learning.sap.com/courses/purchasing-in-sap-s-4hana/using-partner-functions-in-purchasing).
+These sources inform workflow semantics only; Cairn keeps its own vocabulary and codes.
+
+**Implementation status:** B-026 added the tenant-scoped schema and forced RLS (§26.42), intentionally
+without catalogue rows. B-028 seeds the approved Cairn-owned functions and explicit initial cardinality settings into
+standard-package tenant activation (§26.44). B-029 adds the audited assignment write service and
+cardinality/default enforcement (§26.45); B-030 adds session-derived protected actions (§26.46), B-031
+the read panel (§26.47), and B-032 the assignment editor (§26.48). B-033 browser acceptance passed (§26.49);
+PO determination remains pending.
+
+
+### 26.42 B-026 — Supplier partner-function schema and tenant RLS `COMPLETE · WRITE SERVICE ADDED IN B-029`
+
+**Scope:** storage only for the B-025-approved directed supplier purchasing-organisation assignments.
+Added `supplier_partner_function` for each tenant's role name, active flag and unique/multiple policy,
+and `supplier_purchasing_partner` for owner supplier, purchasing organisation, function, related Supplier,
+default flag, version and audit columns. Cairn-owned function keys are `ORDERING_PARTNER`,
+`DELIVERY_PARTNER`, and `INVOICE_SENDER`; the SQL constraint rejects unapproved keys. Composite foreign
+keys bind owner, related Supplier and function to the same tenant. A partial unique index guarantees at
+most one default for a supplier/function/organisation. No valid-from/to columns or plant/sub-range scope.
+
+Added immutable `drizzle/0011_supplier_purchasing_partners.sql` and
+`drizzle/9013_supplier_purchasing_partner_policies.sql`; registered the TypeScript schema in the
+Foundation schema root. Both new tables use ENABLE + FORCE RLS with default-deny tenant policies and
+restricted `cairn_app` grants. The app role was verified `NOSUPERUSER NOBYPASSRLS`. Dynamic unique-versus-
+multiple enforcement, tenant catalogue seeding, actor-derived service writes, version locking and change
+history are **not** implemented in this batch. No PO or other transaction behavior was added.
+
+**Database verification:** provisioned a fresh isolated PostgreSQL 17.11 cluster on loopback port 55432
+and dedicated empty `cairn_b026_test`; applied all **26 migrations**, including 0011 and 9013. Confirmed
+both tables have row security and FORCE enabled, the default-only unique index exists, the app role has no
+RLS bypass, an unscoped read sees zero rows and an unscoped write is denied by RLS. No tenant/business
+fixtures, owner/production data, or credentials from outside this disposable environment were used.
+
+**Verification:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5 files**) and
+`git diff --check` passed. At B-026 completion the catalogue had no tenant rows; B-028 later seeds
+standard-package tenants with the approved initial settings (§26.44), and B-029 later adds assignment
+writes (§26.45). Tenant-level configuration UI remains pending.
+
+
+### 26.43 B-027 — Supplier partner-function read services `COMPLETE · WRITE SERVICE ADDED IN §26.45`
+
+**Scope:** added tenant-scoped query functions only in
+`src/modules/foundation/supplier-purchasing-partners.ts`. `listSupplierPartnerFunctions` returns the
+configured catalogue, including inactive rows for maintenance/review. `listSupplierPurchasingPartners`
+returns the chosen supplier/purchasing-organisation assignments with function labels/cardinality,
+default/version, and linked Supplier name/status/block/role-active state. Inactive links remain visible
+for correction rather than being silently hidden. Both queries explicitly scope by tenant; the assignment
+query also filters by focal supplier and purchasing organisation and orders by function, default, and
+related supplier. No writes, UI, action, capability, seed, or cardinality default was added.
+
+**Database acceptance at B-027 completion:** `npm run test -- tests/supplier-purchasing-partners.test.ts`
+passed **2/2 tests** on the isolated B-026 PostgreSQL database. It verified configured and inactive
+function rows, assignment labels/default/order and linked Supplier state, empty results for another
+tenant/organisation, and unscoped default-deny reads. B-028 later extended the same test file (§26.44). Fixtures are development tenants created through the test helpers and are
+removed by teardown.
+
+**Verification:** `npm run typecheck` passed. No schema or migration change was needed. At B-027 completion
+the catalogue was still unseeded; B-028 later adds standard-package initialization (§26.44), and B-029
+later adds mutation/cardinality enforcement (§26.45). Protected UI and browser acceptance remain pending.
+
+
+### 26.44 B-028 — Supplier partner-function catalogue initialization `COMPLETE · ASSIGNMENT WRITES ADDED IN §26.45`
+
+**Scope:** added the three Cairn-owned supplier partner-function definitions to the versioned standard
+tenant configuration package, now `INTL-STD-2`. Initial `allows_multiple` is explicitly `false` for
+`ORDERING_PARTNER`, `DELIVERY_PARTNER`, and `INVOICE_SENDER`, as selected by the owner for all three
+roles. Cairn labels are “Ordering partner”, “Delivery partner”, and “Invoice sender”. The seed is
+idempotent and only inserts missing rows; it does not overwrite existing tenant settings when the package
+is reapplied. It runs in the existing tenant-scoped package transaction and records the catalogue count in
+the package change document.
+
+No partner assignments, default assignments, UI, mutation service, cardinality enforcement, schema
+change, migration, or transaction determination behavior was added. `is_default` remains false unless a
+future assignment is explicitly made default; choosing a cardinality setting does not designate a partner.
+Existing tenants are not globally backfilled by this change; the definitions are inserted when the standard
+package runs or is reapplied for that tenant. B-029 subsequently adds assignment writes (§26.45).
+
+**Verification:** `npm run typecheck`, the supplier partner-function database suite (**4/4**), and the
+full `npm run test` suite (**335/335 across 21 files**) passed. The focused suite checks the three exact
+seeded function keys/labels/initial values, confirms package re-application preserves tenant edits, retains
+a tenant-level multiple-rule fixture for B-027 reads, and verifies scoped assignment queries.
+`npm run test:browser-harness` (**65/65**) and `git diff --check` passed. No migration was needed; testing
+used only disposable development tenants in the isolated B-026 PostgreSQL database.
+
 
 ### 26.45 B-029 — Supplier purchasing partner assignment write service `COMPLETE · EDITOR / BROWSER ACCEPTANCE PASSED IN §26.49`
 
@@ -2227,7 +2338,7 @@ acceptance, UI, new migration, remote/owner/production DB, commit or push. B-121
 SCR-014's UI and live-browser acceptance remain pending at B-123's completion.
 
 
-### 26.141 B-124 — SCR-014 Plant definition UI `IMPLEMENTED · LIVE-BROWSER ACCEPTANCE PENDING`
+### 26.141 B-124 — SCR-014 Plant definition UI `IMPLEMENTED · B-125 LIVE-BROWSER ACCEPTANCE PASSED`
 
 B-124 adds the capability-gated create/change UI to the existing `/config/plants` page. The Plant and
 storage-location list remains readable for authenticated users; only users with the exact
@@ -2249,9 +2360,243 @@ optional. Existing Production/Storage badges are retained.
 22 files**, typecheck passes, IP lint scans **288 files** with no user-facing reference trademarks, and
 `git diff --check` passes. Project dependencies were installed temporarily for verification and removed. No
 application/database connection, database setup, migration, seed, production build or live browser was used.
-B-125 is the distinct pending cookie-backed live-browser acceptance task, using its own identity-verified
-disposable local PostgreSQL 17 fixture. No remote/owner/production database, Company Code assignment UI,
-Factory Calendar master/use, commit or push.
+B-125 is recorded as passed in §26.142 using its own identity-verified disposable local PostgreSQL 17 fixture.
+No remote/owner/production database, Company Code assignment UI, Factory Calendar master/use or operational
+behavior was included.
+
+
+### 26.142 B-125 — SCR-014 Plant create/change live-browser acceptance `PASSED`
+
+**Identity preflight before migrations/seeds:** created fresh disposable PostgreSQL 17.11 cluster `17/b125` and
+`cairn_b125` on loopback `127.0.0.1:55521`. Verified version `170011`, UTF8, non-recovery state, data directory
+`/var/lib/postgresql/17/b125`, system identifier `7695783951422697350`, database name, server address/port,
+restricted `cairn_app`, and elevated migration role. Before setup, the public schema had zero relations and
+`cairn_migration` was absent. Only after verification, applied the 43 existing migrations and global/reference
+seeds as browser prerequisites; this is not separate migration/service acceptance.
+
+Only the `plant-definition` target (`T984`) ran. Cookie-backed checks passed for definition-only create/change,
+ignored forged tenant/actor/Company-Code assignment values, unassigned Plant creation, both Cairn-specific role
+flags false, change-version/history and activity completion, and Auditor read-only access (including no form or
+country choices). The target completed without browser runtime errors and checked the signed-out protected route.
+The first run caught a case-sensitive `NOT ASSIGNED` text assertion; it was corrected and the target rerun passed.
+No other browser target ran.
+
+**Cleanup and verification:** T984 tenant/Plant counts were zero before dropping `cairn_b125`, both roles, and the
+cluster/configuration. Temporary database/browser packages, credentials, Chromium cache, project `node_modules`,
+Next artifacts and smoke screenshots were removed; ports 3000 and 55521 were closed. Browser harness passed
+**127/127**, IP lint scanned 288 files, and `git diff --check` passed. The earlier typecheck passed before the
+case-only assertion correction; the attempted post-correction rerun stalled without returning a result, so it is
+not counted as a fresh pass. No remote/owner/production database was accessed; no B-123 migration/service
+acceptance is implied. The B-125 implementation batch was subsequently pushed as `bcb52dd`.
+
+
+### 26.143 B-126 — protected initial Plant-to-Company-Code assignment service/action `IMPLEMENTED · UI NEXT`
+
+Owner decision D-090 makes the current lifecycle initial-only. Repeating the same assignment is idempotent; a
+Plant already assigned to a different Company Code cannot be overwritten or cleared. Reassignment/unassignment
+are planned for a future milestone after full application development and are not exposed in this scope.
+
+Registered `CFG.ORG.PLANT.ASSIGN_COMPANY` as a distinct non-posting FND configuration capability, separate from
+`CFG.ORG.PLANT.DEFINE`; no role-specific grant was added. Added
+`src/modules/foundation/plant-company-code-assignment.ts` and a separately guarded server action in
+`src/app/config/plants/actions.ts`. The strict writer accepts only Plant and Company Code values plus service
+identity, derives tenant/actor in the protected action, requires completed Plant definition, serializes assignment,
+accepts only an active Company Code in the same tenant, updates only `plant.company_code`, records field-level
+assignment history and completes the distinct assignment activity. The Plant definition form and page UI are
+unchanged in this slice.
+
+DB-free assignment contract tests pass **5/5**; browser harness passes **132/132 tests across 23 files**,
+typecheck passes, IP lint scans **290 files**, and `git diff --check` passes. No migration, database setup/service
+acceptance, assignment UI, Factory Calendar master/use, reassignment or unassignment was included. Next bounded
+slice: SCR-015 initial-only assignment UI; disposable PostgreSQL service acceptance and live-browser acceptance
+remain separate gates. No remote database, commit or push for B-126.
+
+
+### 26.144 B-127 — SCR-015 initial Plant Company Code assignment UI `IMPLEMENTED · ACCEPTANCE NEXT`
+
+Added a separate client form for initial Plant-to-Company-Code assignment and integrated it into `/config/plants`
+without adding assignment fields to `PlantDefinitionForm`. The page checks the distinct
+`CFG.ORG.PLANT.ASSIGN_COMPANY` capability. It queries active, tenant-local Company Codes only when the signed-in
+user has that capability and at least one Plant is unassigned. Only unassigned Plants show the control; assigned
+Plants have no replace or clear option. Users without assignment authority receive an explicit read-only state,
+and authorized users with no eligible choices see an empty-choice message instead of a form. The form submits only
+the Plant code and selected Company Code; the existing server action derives tenant and actor from the verified
+session and rechecks the one-time assignment rules. English labels state that assignment cannot be changed or
+cleared in this milestone.
+
+**Verification:** new DB-free UI contracts pass **4/4**; browser harness passes **136/136 tests across 24 files**,
+typecheck passes, IP lint scans **292 files**, and `git diff --check` passes. No database, migration/seed, service
+acceptance or assignment execution was used. Cookie-backed live-browser acceptance remains separate and pending;
+no Factory Calendar master/use, reassignment/unassignment, remote database, commit or push.
+
+
+### 26.145 B-128 — SCR-015 disposable PostgreSQL service acceptance `PASSED · LIVE-BROWSER GATE SEPARATE`
+
+Provisioned a fresh PostgreSQL **17.11** disposable local cluster and database `cairn_b128` bound to
+`127.0.0.1:55522`. Before any migration or seed, verified database name, loopback address/port, PostgreSQL
+version, UTF8 encoding, empty public schema, data directory and system identifier `7695799799471555719`.
+Applied the **43 existing migrations** plus global and reference seeds only to support the service-test fixture;
+no migration or seed change was part of acceptance. The application role was verified as
+`NOSUPERUSER`/`NOBYPASSRLS`.
+
+Added `tests/plant-company-code-assignment.test.ts`. Its focused PostgreSQL suite passes **5/5**:
+
+- First assignment changes only the Plant's Company Code, records security-relevant before/after history, and
+  completes `CFG.ORG.PLANT.ASSIGN_COMPANY`.
+- Repeating the same Company Code is idempotent; an attempt to replace it is refused without a second history
+  event.
+- Missing Plants and missing, inactive or cross-tenant Company Codes are denied without mutation.
+- An incomplete Plant-definition prerequisite fails closed without assignment, audit or activity completion.
+- Concurrent initial choices serialize to one winner and one assignment history event.
+
+All temporary `T###` tenants were destroyed and a post-test query confirmed zero remained. Typecheck, IP lint
+(**293 files**) and `git diff --check` pass. This was focused service acceptance only: no full Vitest suite,
+browser harness or cookie-backed live-browser acceptance ran in B-128; the latter remained a separate gate and
+passed in B-129 (§26.146). The cluster/data and all **11 temporary PostgreSQL packages** plus `node_modules` were removed. No remote database,
+commit or push; no schema migration, Factory Calendar master/use, reassignment or unassignment was introduced.
+
+
+### 26.146 B-129 — SCR-015 cookie-backed live-browser acceptance `PASSED`
+
+**Endpoint and isolated database:** Retried the supplied disposable PostgreSQL endpoint as authorized; the connection
+failed with `ENETUNREACH` before PostgreSQL was reached. No remote identity query, migration, seed or fixture write
+occurred. Used the authorized fresh local PostgreSQL 17 fallback instead. Before any migration or seed, verified
+`cairn_b129` at `127.0.0.1:55523`, PostgreSQL **17.11**, UTF8, an empty public schema, data directory
+`/var/lib/postgresql/17/b129` and system identifier `7695808240469379780`. The runtime role `cairn_app` was
+NOSUPERUSER/NOBYPASSRLS; elevated setup credentials were used only for existing migrations and shared seed setup.
+Applied the 43 existing migrations and global capability/activity/registry/message plus shared reference seeds only
+as fresh-database browser prerequisites. This was not migration/service acceptance and not a rerun of B-128.
+
+**Target and browser:** Ran exactly `npm run smoke:browser:plant-company-assignment`, which selects only
+`plant-company-code-assignment` for tenant `T983`, against the development app at `127.0.0.1:3000`. Playwright's
+Chromium headless shell launched successfully. The full cookie-backed UI/action checks passed:
+
+- Onboarding created `T983` without hidden accounting intervals. A definition-only user created an unassigned Plant;
+  forged Company Code, tenant and actor form values did not assign it or override session identity.
+- An Auditor had read-only Plant access, with no definition or assignment form.
+- The assignment-only user saw only active Company Codes belonging to the same tenant; the inactive local and active
+  cross-tenant choices were excluded. The user completed the initial assignment once.
+- Persisted Company Code, security-relevant before/after history and configuration-activity completion matched the
+  authenticated session actor and tenant. After assignment, no replacement or unassignment control was exposed.
+- The target asserted no browser page errors and passed; no other browser target ran.
+
+**Cleanup and verification:** The target removed its temporary `T983`/`T982`, users, Companies, Plant, audit/history
+and activity fixtures. Post-run queries on the isolated DB confirmed zero `T###` tenants and zero matching
+`app_user`, `company_code`, `plant`, `change_document`, `change_document_item` and `config_activity_status` rows;
+`cairn_app` remained NOSUPERUSER/NOBYPASSRLS. After capturing these results, the local cluster/data, temporary
+PostgreSQL and Playwright OS/browser packages/cache, project `node_modules` and build artifacts were removed.
+Typecheck, browser harness (**138/138**, 24 files), IP lint (**293 files**), the focused target and `git diff --check`
+pass. No full suite, production build, remote database mutation, commit or push. `db.txt` is ignored by Git and was
+not tracked; the uploaded copy remains untouched.
+
+
+### 26.147 B-130 — development UI build marker `IMPLEMENTED`
+
+Added the fixed marker `DEV-SCR015-ASSIGN-20261012` to the global status bar so the UI build can be
+identified while checking the Plant-assignment page. It appears when `NODE_ENV` or `CAIRN_ENV` is
+explicitly `development` and is hidden in production. The marker is static UI metadata only; it does
+not alter authentication, authorization, route behavior, database access or assignment logic.
+
+Typecheck, browser harness (**138/138 across 24 files**), IP lint (**293 files**) and `git diff --check`
+pass. No database or browser acceptance, production build, commit or push was performed for this marker.
+Temporary `node_modules` installed for checks were removed after verification.
+
+
+### 26.148 B-131 — SCR-016 Storage Location definition specification `CORE CONTRACT APPROVED · HARD DELETE DEFERRED`
+
+**Implementation facts at the B-131 baseline, not new decisions:** `storage_location` is tenant-scoped and keyed by
+`(client, plant, storage_location)`. Its existing columns are Plant code (10), Storage Location code (10), required
+name (120), `allow_negative_stock` (default false), `is_active` (default true), and audit metadata. RLS is enabled
+through the shared policy migration; at that baseline the table had a client FK but no composite Plant FK. The standard
+package creates four existing locations for Plant `1000` (`0001` Raw materials store, `0002` Production floor, `0003`
+Finished goods warehouse, `0099` Goods receipt area), all with negative stock disabled. `/config/plants` shows code,
+name and the negative-stock flag; it does not currently show active state or provide maintenance.
+
+The workbench activity `CFG.ORG.STORAGELOC.DEFINE` already names `/config/storage-locations` and requires the Plant
+definition activity, but the page/route is not implemented or allowlisted as built. B-132 registers the exact
+grantable capability without role-specific grants. The maintenance service/action remains unimplemented. B-133 adds
+the composite Plant FK schema and migration; local database acceptance remains pending (§26.150).
+
+**Owner input captured (2026-10-12; D-091):** keep Cairn's 10-character Plant-unique key and make
+`allow_negative_stock` editable (default remains false). New locations require an active Plant in the same tenant;
+Company Code assignment is not a prerequisite. Hard-delete only when the location has never held stock and no
+transaction refers to it; otherwise allow non-destructive deactivation.
+
+**Draft Cairn contract:** create and change description/negative-stock setting under the separate
+`CFG.ORG.STORAGELOC.DEFINE` capability. Keep the code immutable after creation, require a name (max 120), derive
+tenant/actor from the verified session, audit changes and complete the separate workbench activity. Preserve the
+standard-package rows. Deactivation keeps the record/history and marks `is_active=false`; new operational selection
+must reject inactive locations. Hard delete must fail closed if any stock movement/history, transaction, Plant default
+or other reference exists. Add a composite same-tenant Plant FK (`client`,`plant`) after existing-row preflight and
+separate migration acceptance. The editable `allow_negative_stock` flag is stored configuration only until movement
+logic is separately implemented; do not claim negative-stock enforcement.
+
+The current repository has **no stock ledger or transaction table referencing Storage Location**; the only existing
+configuration reference is `plant.default_storage_location`. Absence of a current-balance row cannot prove a location
+was never stocked. A reliable “never held stock” test needs durable movement/history records; until those exist, the
+hard-delete control must be withheld or fail closed.
+
+**Reference:** SAP Help describes a Storage Location as a stock-holding organizational unit belonging to one Plant,
+with multiple locations per Plant and one Plant per location; it says the SAP key is four alphanumeric characters and
+that descriptions can be maintained. The owner-selected Cairn 10-character key intentionally follows Cairn's existing
+schema instead. The general Help page does not specify whether an inactive Plant is eligible or define a general
+active/deactivation/delete lifecycle. [SAP Help — Storage Locations](https://help.sap.com/docs/SAP_S4HANA_ON-PREMISE/b7eb2f9e70ab4c88abbff8b34a409b26/d268875433c5c02ae10000000a44538d.html).
+
+**Owner resolution:** because the repository has no durable stock/history ledger, the first SCR-016 maintenance screen
+must omit hard delete. It will support create/change and non-destructive deactivation; add hard delete only in a later
+batch once a reliable never-stocked/where-used guard can be proven against the persisted ledger and all transaction
+references. At B-131, the same-tenant composite Plant FK and active-Plant validation were future work. B-133 has since
+added the FK schema/migration; local DB acceptance remains pending, while active-Plant validation belongs in the future
+writer/service. B-131 was documentation-only; `git diff --check` passed.
+
+
+### 26.149 B-132 — SCR-016 capability registration only `COMPLETE`
+
+Registered `CFG.ORG.STORAGELOC.DEFINE` as a non-posting Foundation configuration capability in the shared capability
+seed. No role-specific grants were added; Administrator `*` and Configurator `CFG.*` semantics remain unchanged. The
+workbench activity already existed, but the route/page, writer, schema migration and seed execution remain outside this
+batch. B-131/D-091 approve a 10-character Plant-unique key, editable negative-stock configuration with no current
+movement enforcement, active same-tenant Plant prerequisite, and deactivation for used locations; hard delete is
+deferred until durable stock history can prove the never-used condition.
+
+New capability contract passes **3/3**; browser harness passes **141/141 across 25 files**. Typecheck, IP lint (**294
+files**) and `git diff --check` pass. No DB, migration, seed run, service, action, UI, production build, or browser
+acceptance. Temporary `node_modules` used for validation were removed; no commit or push.
+
+
+### 26.150 B-133 — SCR-016 same-tenant Plant FK schema and migration `IMPLEMENTED · LOCAL DB ACCEPTANCE PENDING`
+
+Updated the Drizzle `storage_location` definition with a composite FK from `(client, plant)` to
+`plant(client, plant)`, named `storage_location_client_plant_fk`. Added additive migration
+`drizzle/0021_storage_location_plant_fk.sql`. Before altering the table, it checks every existing Storage Location
+for a same-tenant Plant and raises an exception if any orphan is present; only then does it add the FK with
+`NO ACTION` for delete and update. The migration runner applies each SQL file transactionally. It sorts migration
+filenames lexically, so 0021 follows the existing 0020 Plant fields migration and precedes the 9000-series RLS files.
+
+The FK enforces Plant existence and same-tenant pairing only. It does not enforce that the Plant is active; that
+check belongs in the future protected writer. No Company Code dependency, write service/action, UI, stock movement
+behavior, hard-delete path or seed execution was added. Hard delete remains deferred until durable usage history can
+prove the location was never stocked and is unreferenced.
+
+The focused schema/migration contract passes **2/2**; browser harness passes **143/143 across 26 files**. Typecheck,
+IP lint (**296 files**) and `git diff --check` pass. No database was accessed and migration 0021 was not applied
+locally or remotely; local PostgreSQL acceptance is a separate next step before service/action and UI batches. No
+commit or push. Temporary `node_modules` used for validation were removed.
+
+
+### 26.151 B-134 — SCR-016 Storage Location FK migration acceptance `LOCAL POSTGRESQL 17.11 PASSED`
+
+Used a fresh PostgreSQL 17.11 cluster on `127.0.0.1:55524` (system identifier `7695828577458595661`). The clean
+database had an empty public schema and no migration journal before setup. `npm run db:migrate` applied all 44
+migrations, including 0021; no seed ran. A rerun skipped all 44. `cairn_app` remained NOSUPERUSER/NOBYPASSRLS.
+
+Verified the FK is validated with NO ACTION on update/delete. Same-tenant insert passed; missing and cross-tenant
+Plant references failed; changing or deleting a referenced Plant failed. In a separate database at migration 0020,
+a synthetic orphan caused 0021's preflight to raise the expected error; the FK was not added and the orphan remained
+until explicit fixture cleanup. Fixture counts were zero before both databases and the cluster were removed.
+
+Typecheck, browser harness **143/143 across 26 files**, IP lint (**296 files**) and `git diff --check` pass. No
+seed, service/action, UI, live-browser acceptance, remote DB, commit or push. Hard delete remains deferred.
 
 
 ## §27 · Open items `RESOLVED v0.2`
@@ -2427,6 +2772,18 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.52 | 2026-10-12 | **B-134 accepts SCR-016 migration 0021 on disposable PostgreSQL 17.11.** All 44 migrations applied; valid same-tenant FK behavior, NO ACTION rules and fail-closed orphan preflight verified. Test fixtures, databases and cluster removed. Typecheck, browser harness 143/143, IP lint (296 files), diff check pass. No seed, service/action, UI, remote DB, commit or push (§26.151). | Agent |
+| 1.51 | 2026-10-12 | **B-133 adds same-tenant Storage Location→Plant referential integrity.** Updated Drizzle with the composite FK and added migration 0021 with a fail-closed orphan preflight. Contract 2/2; browser harness 143/143 (26 files), typecheck, IP lint (296 files) and diff check pass. Migration not applied; no database access, seed, service/action, UI, commit or push. Local PostgreSQL acceptance is next (§26.150). | Agent |
+| 1.50 | 2026-10-12 | **B-132 registers `CFG.ORG.STORAGELOC.DEFINE` as a separate non-posting grantable Foundation capability.** No role-specific grants, database access, seed execution, service, UI, migration or deployment. Capability contract 3/3, browser harness 141/141 (25 files), typecheck, IP lint (294 files) and diff check pass; temporary project dependencies removed. §26.149 records scope. | Agent |
+| 1.49 | 2026-10-12 | **B-131 SCR-016 lifecycle decisions captured.** Owner chose active same-tenant Plant prerequisite and hard-delete-only-if-never-stocked-and-unreferenced; otherwise deactivate, while retaining Cairn's 10-character code and making `allow_negative_stock` editable. Current repository has no stock ledger, so the hard-delete guard is blocked until usage can be proven; no code or database behavior changed. §26.148 records this limit. | Agent |
+| 1.48 | 2026-10-12 | **B-131 Storage Location spec draft updated with owner input.** Owner chose Cairn's existing 10-character Plant-unique code and asked that `allow_negative_stock` be editable. SAP Help confirms one-Plant ownership but does not specify active Plant/deactivation behavior; unresolved lifecycle questions are documented. No code, schema, seed, migration, database or operational changes. §26.148 records the proposal. | Agent |
+| 1.47 | 2026-10-12 | **Draft SCR-016 Storage Location definition contract for owner review.** Documented existing tenant+Plant+code key, fields/defaults, standard package locations, missing Plant FK/capability/page, and a conservative create/name-change proposal; captured open approval questions. SAP Help source informs context only and does not set Cairn's code length. No code, schema, migration, seed or database change. §26.148 records the draft. | Agent |
+| 1.46 | 2026-10-12 | **Add a development UI build marker to diagnose version mismatch.** The global status bar now shows `DEV-SCR015-ASSIGN-20261012` when `NODE_ENV` or `CAIRN_ENV` is explicitly `development`, and hides it in production. Typecheck, browser harness (138/138), IP lint (293 files) and diff check pass. No DB/authorization changes or deployment; dependencies installed for verification were removed. §26.147 records the implementation. | Agent |
+| 1.45 | 2026-10-12 | **B-129 passes SCR-015 live-browser acceptance.** On identity-verified local PostgreSQL 17.11, ran only `plant-company-code-assignment` (T983): distinct define/assign/Auditor gates, active same-tenant choice filtering, forged tenant/actor resistance, one-time assignment, audit/activity and no replacement/clear control all passed. Remote endpoint retry failed ENETUNREACH before querying; no remote data touched. Local DB/cluster, browser packages/cache and project dependencies were cleaned. Typecheck, browser harness (138/138), IP lint (293 files), focused target and diff check pass. Added `db.txt` to `.gitignore`; it was not tracked, and uploaded copy was untouched. No full suite, commit or push. §26.146 records details. | Agent |
+| 1.44 | 2026-10-12 | **Extend the linked-document split to keep each file under 400,000 bytes.** Moved the complete existing §26.41–§26.44 batch records from `CAIRN.md` to the start of `CAIRN-2.md`; all text and section numbers are preserved. Updated the split pointers. The canonical log remains continuous; no product behavior, code, schema, tests or acceptance scope changed. `git diff --check` passes. | Agent |
+| 1.43 | 2026-10-12 | **B-128 passes SCR-015 initial-assignment service acceptance on disposable PostgreSQL 17.** Verified fresh local `cairn_b128` (PostgreSQL 17.11, 127.0.0.1:55522, UTF8, empty public schema) before applying the 43 existing migrations and global/reference seeds as fixture setup only. `cairn_app` is NOSUPERUSER/NOBYPASSRLS. New focused DB suite passes 5/5: initial assignment with security-relevant audit and activity completion, same-value idempotency, refused reassignment, missing/inactive/cross-tenant eligibility and missing-Plant denial, prerequisite refusal, and serialized concurrent first assignment. Zero test tenants after cleanup. Typecheck, IP lint (293 files) and diff check pass. No full suite, browser harness or live-browser acceptance in the B-128 batch; the separate B-129 gate later passed (§26.146). Cluster/data, 11 temporary PostgreSQL packages and `node_modules` removed. No schema change, remote DB, commit or push. §26.145 records scope. | Agent |
+| 1.42 | 2026-10-12 | **B-127 adds the SCR-015 initial Plant assignment UI only.** Active tenant-local Company Code choices are fetched only for `CFG.ORG.PLANT.ASSIGN_COMPANY` users while a Plant is unassigned; assigned Plants have no replacement/clear control, and the Plant definition form remains separate. Added read-only and empty-choice states. UI contracts 4/4; browser harness 136/136, typecheck, IP lint (292 files) and diff check pass. No database/service acceptance, migration/seed, live-browser acceptance, commit or push for B-127. §26.144 records scope. | Agent |
+| 1.41 | 2026-10-12 | **B-125 Plant live-browser acceptance passed; B-126 starts SCR-015 initial assignment.** Recorded identity-verified disposable PostgreSQL 17.11 browser acceptance for `plant-definition` only; T984 and all temporary resources were removed. Updated SCR-014 status. D-090 records one-time Plant-to-Company-Code assignment now, with replacement/unassignment deferred to a milestone after full application development. B-126 adds a separate non-posting assignment capability, protected service/action, strict tenant-derived input, active same-tenant Company Code check, audit/activity completion, and 5/5 DB-free contracts; no UI or database acceptance. Browser harness 132/132, typecheck, IP lint (290 files) and diff check pass. B-125 implementation commit `bcb52dd` is pushed; B-126 remains uncommitted. | Agent |
 | 1.40 | 2026-10-12 | **Split the canonical project log into linked files capped at 400,000 bytes.** Preserved content and continuous section numbering: `CAIRN.md` contains §0–§26.44 and links to `CAIRN-2.md` for §26.45–§30. Updated the single-source-of-truth and repository references; no application code, decisions or scope changed. | Agent |
 | 1.39 | 2026-10-12 | **B-124 implements the capability-gated SCR-014 Plant definition UI only.** `/config/plants` now supports authorized create/change through B-121's protected action, with the approved required/optional field contract, country choices loaded only for the define capability, audit-count change token, optional inert Factory Calendar key, and both Cairn-specific descriptive flags (including both false). Company Code assignment, active editing, default-storage editing, Factory Calendar master/use, and operational gates remain out of scope. UI contract 3/3, browser harness 125/125, typecheck, IP lint (288 files), and diff check pass. No database, migration/seed, production build, live-browser acceptance, remote DB, commit or push. §26.141 records scope; B-125 is the separate browser-acceptance task. | Agent |
 | 1.38 | 2026-10-12 | **B-123 passes disposable PostgreSQL 17 acceptance for B-121 Plant create/change.** Fresh identity-verified PostgreSQL 17.11 `cairn_b123`, explicit 127.0.0.1:55520, system identifier recorded, empty schema and absent migration ledger verified before setup. Applied the 43 already-approved migrations and global/reference seeds only; no new migration. Targeted Plant service suite 5/5 covers create/defaults/audit/activity, change allowlist and preservation, both descriptive flags false, inert Factory Calendar, no-op/stale version and tenant isolation. `cairn_app` remained NOSUPERUSER/NOBYPASSRLS; test tenants/Plants/history/items/activity rows zero after tests. Cluster/data, temporary credentials/config, 11 temporary PostgreSQL packages and `node_modules` removed. Typecheck, browser harness 122/122, IP lint (286 files) and diff check pass. No full DB suite, new UI/live-browser acceptance, remote DB, commit or push. §26.140 records scope. | Agent |

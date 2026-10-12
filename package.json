@@ -37,7 +37,8 @@
     "smoke:browser:supplier-company": "tsx scripts/browser-smoke.ts --target supplier-company",
     "smoke:browser:supplier-purchasing": "tsx scripts/browser-smoke.ts --target supplier-purchasing",
     "smoke:browser:customer-company": "tsx scripts/browser-smoke.ts --target customer-company",
-    "smoke:browser:plant-definition": "tsx scripts/browser-smoke.ts --target plant-definition"
+    "smoke:browser:plant-definition": "tsx scripts/browser-smoke.ts --target plant-definition",
+    "smoke:browser:plant-company-assignment": "tsx scripts/browser-smoke.ts --target plant-company-code-assignment"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

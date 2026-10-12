@@ -20,6 +20,8 @@ storage/
 # Credentials and private/local configuration
 .env
 .env.*
+# Local database connection strings (including attached db.txt files)
+db.txt
 !.env.example
 !.env.docker.example
 !.env.development.example

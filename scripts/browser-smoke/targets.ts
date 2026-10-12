@@ -14,6 +14,7 @@ export const TARGETS = [
   { id: 'company-code-definition', client: 'T986', label: 'Company Code definition capability gate and create-only form' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
+  { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];

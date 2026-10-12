@@ -8,9 +8,14 @@ import {
   savePlantDefinition,
   type PlantDefinitionMode,
 } from '@/modules/foundation/plant-maintenance';
+import {
+  assignPlantCompanyCode,
+  PlantCompanyCodeAssignmentError,
+} from '@/modules/foundation/plant-company-code-assignment';
 import { t } from '@/platform/i18n';
 
 const ACTIVITY = 'CFG.ORG.PLANT.DEFINE';
+const PLANT_ASSIGNMENT = 'CFG.ORG.PLANT.ASSIGN_COMPANY';
 const ROUTE = '/config/plants';
 
 export interface PlantMaintenanceActionState {
@@ -97,6 +102,50 @@ export async function savePlantDefinitionAction(
     };
   } catch (error) {
     if (error instanceof PlantMaintenanceError || error instanceof AuthzError) {
+      return { ok: false, message: error.message, remedy: error.remedy, plant: plantCode };
+    }
+    throw error;
+  }
+}
+
+export interface PlantCompanyCodeAssignmentState {
+  ok: boolean;
+  message?: string;
+  remedy?: string;
+  plant?: string;
+  companyCode?: string;
+}
+
+/** One-time assignment only; tenant and actor always come from the verified session. */
+export async function assignPlantCompanyCodeAction(
+  _previous: PlantCompanyCodeAssignmentState,
+  form: FormData,
+): Promise<PlantCompanyCodeAssignmentState> {
+  const session = await requireSession(ROUTE);
+  const plantCode = read(form, 'plant');
+  const targetCompanyCode = read(form, 'companyCode');
+
+  try {
+    await requireCapability(PLANT_ASSIGNMENT, session);
+    const result = await assignPlantCompanyCode({
+      client: session.user.client,
+      changedBy: session.user.username,
+      plant: plantCode,
+      companyCode: targetCompanyCode,
+    });
+
+    revalidatePath(ROUTE);
+    revalidatePath('/config');
+    return {
+      ok: true,
+      message: result.assigned
+        ? t('plant.companyAssigned', { plant: result.plant, companyCode: result.companyCode })
+        : t('plant.companyAlreadyAssigned', { plant: result.plant, companyCode: result.companyCode }),
+      plant: result.plant,
+      companyCode: result.companyCode,
+    };
+  } catch (error) {
+    if (error instanceof PlantCompanyCodeAssignmentError || error instanceof AuthzError) {
       return { ok: false, message: error.message, remedy: error.remedy, plant: plantCode };
     }
     throw error;

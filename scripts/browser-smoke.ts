@@ -69,7 +69,7 @@ async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
 
 function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'company-code-definition' || target.id === 'company-code-coa-assignment') return '/config/company-codes';
-  if (target.id === 'plant-definition') return '/config/plants';
+  if (target.id === 'plant-definition' || target.id === 'plant-company-code-assignment') return '/config/plants';
   if (target.id === 'foundation') return '/finance/journal/new';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';

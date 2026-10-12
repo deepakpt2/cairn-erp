@@ -232,12 +232,19 @@ export const storageLocation = pgTable(
     plant: varchar('plant', { length: 10 }).notNull(),
     storageLocation: varchar('storage_location', { length: 10 }).notNull(),
     name: varchar('name', { length: 120 }).notNull(),
-    /** Negative stock is refused unless explicitly permitted for this area. */
+    /** Persisted configuration only; stock-movement enforcement is not implemented. */
     allowNegativeStock: boolean('allow_negative_stock').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.plant, t.storageLocation] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.plant, t.storageLocation] }),
+    foreignKey({
+      name: 'storage_location_client_plant_fk',
+      columns: [t.client, t.plant],
+      foreignColumns: [plant.client, plant.plant],
+    }),
+  ],
 );
 
 /** Purchasing organisation — negotiates and issues purchase orders (§6.1). */

@@ -23,7 +23,6 @@ describe('SCR-014 Plant definition UI contract', () => {
     expect(page).toContain('session.user.client');
     expect(page).toContain('getPlantDefinitionVersion(client, selected.plant)');
     expect(page).not.toContain('params.client');
-    expect(page).not.toContain('CFG.ORG.PLANT.ASSIGN_COMPANY');
   });
 
   it('supports Plant create and change with the approved required and optional field contract', () => {
@@ -68,6 +67,6 @@ describe('SCR-014 Plant definition UI contract', () => {
     expect(page).toContain('isProductionSite: true');
     expect(page).toContain('isStorageSite: true');
     expect(form).not.toMatch(/name="(companyCode|defaultStorageLocation|isActive)"/);
-    expect(page).not.toContain('CFG.ORG.PLANT.ASSIGN_COMPANY');
+    expect(form).not.toContain('assignPlantCompanyCodeAction');
   });
 });

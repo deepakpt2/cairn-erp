@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { hasCapability } from '../src/platform/auth/session';
 
 const actionSource = readFileSync('src/app/config/plants/actions.ts', 'utf8');
-const action = actionSource.slice(actionSource.indexOf('export async function savePlantDefinitionAction'));
-const plantsPage = readFileSync('src/app/config/plants/page.tsx', 'utf8');
+const definitionActionStart = actionSource.indexOf('export async function savePlantDefinitionAction');
+const assignmentActionStart = actionSource.indexOf('export interface PlantCompanyCodeAssignmentState');
+const action = actionSource.slice(definitionActionStart, assignmentActionStart);
+const definitionForm = readFileSync('src/app/config/plants/PlantDefinitionForm.tsx', 'utf8');
 const i18n = readFileSync('src/platform/i18n/index.ts', 'utf8');
 
 const capability = 'CFG.ORG.PLANT.DEFINE';
@@ -52,9 +54,9 @@ describe('protected Plant definition action contract', () => {
     expect(action).toContain('isStorageSite: readSiteFlag(form, \'isStorageSite\')');
   });
 
-  it('keeps the Plant page read-only in this service/action slice and registers English success messages', () => {
-    expect(plantsPage).not.toContain('savePlantDefinitionAction');
-    expect(plantsPage).not.toContain('actions.ts');
+  it('keeps initial Company Code assignment out of the Plant definition form and registers English messages', () => {
+    expect(definitionForm).not.toContain('assignPlantCompanyCodeAction');
+    expect(definitionForm).not.toMatch(/name="companyCode"/);
     expect(i18n).toContain("'plant.created': 'Plant {code} defined; Company Code assignment remains separate.'");
     expect(i18n).toContain("'plant.changed': 'Plant {code} saved and its change history recorded.'");
     expect(i18n).toContain("'plant.unchanged': 'No Plant definition data changed for {code}.'");

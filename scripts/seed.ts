@@ -96,6 +96,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
   { code: 'CFG.ORG.COMPANYCODE.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define tenant-scoped company-code records' },
   { code: 'CFG.ORG.PLANT.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and change tenant-scoped Plant records' },
+  { code: 'CFG.ORG.PLANT.ASSIGN_COMPANY', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign an unassigned Plant to a Company Code' },
+  { code: 'CFG.ORG.STORAGELOC.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Storage Locations' },
   { code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign a chart of accounts to a Company Code' },
   { code: 'CFG.FIN.PAYTERMS.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain payment-term definitions' },
   { code: 'CFG.FIN.PAYMENTMETHOD.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Maintain country-specific payment-method definitions' },

@@ -42,6 +42,15 @@ describe('bounded browser target selection', () => {
     expect(guard?.database).not.toBe('cairn_b123');
     expect(guard?.port).not.toBe('55520');
   });
+  it('keeps B-129 Plant Company Code assignment acceptance isolated from B-125 and B-128', () => {
+    const assignment = TARGETS.find((target) => target.id === 'plant-company-code-assignment');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['plant-company-code-assignment'];
+    expect(assignment).toMatchObject({ client: 'T983' });
+    expect(guard).toMatchObject({ database: 'cairn_b129', port: '55523', batch: 'B-129' });
+    expect(guard?.database).not.toBe('cairn_b125');
+    expect(guard?.database).not.toBe('cairn_b128');
+    expect(guard?.port).not.toBe('55521');
+  });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
   });

@@ -607,6 +607,13 @@ const en: Catalogue = {
   'plant.created': 'Plant {code} defined; Company Code assignment remains separate.',
   'plant.changed': 'Plant {code} saved and its change history recorded.',
   'plant.unchanged': 'No Plant definition data changed for {code}.',
+  'plant.companyAssigned': 'Plant {plant} assigned to Company Code {companyCode}; change history recorded.',
+  'plant.companyAlreadyAssigned': 'Plant {plant} is already assigned to Company Code {companyCode}.',
+  'plant.assignmentInitialOnly': 'Initial assignment only; an assigned Plant cannot be changed or cleared in this milestone.',
+  'plant.companyCodeForPlant': 'Company Code for Plant {code}',
+  'plant.chooseCompanyCode': 'Choose a Company Code',
+  'plant.assignCompanyCode': 'Assign Company Code',
+  'plant.noActiveCompanyCodes': 'No active Company Codes are available to assign.',
 
   // ── G/L accounts ──────────────────────────────────────────────────────────
   'gl.title': 'G/L accounts',

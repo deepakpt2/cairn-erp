@@ -1,16 +1,19 @@
 import Link from 'next/link';
-import { asc } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { t } from '@/platform/i18n';
 import { listPlants } from '@/modules/foundation/services';
 import { getPlantDefinitionVersion } from '@/modules/foundation/plant-maintenance';
 import { can, requireSession } from '@/platform/auth/current';
 import { withTenant } from '@/platform/db/client';
 import { country as countryReference } from '@/platform/tables/reference';
+import { companyCode as companyCodeTable } from '@/modules/foundation/schema';
+import { PlantCompanyCodeAssignmentForm, type PlantCompanyCodeChoice } from './PlantCompanyCodeAssignmentForm';
 import { PlantDefinitionForm, type PlantDefinitionDraft } from './PlantDefinitionForm';
 
 export const dynamic = 'force-dynamic';
 
 const PLANT_DEFINE = 'CFG.ORG.PLANT.DEFINE';
+const PLANT_ASSIGNMENT = 'CFG.ORG.PLANT.ASSIGN_COMPANY';
 
 const EMPTY_DRAFT: PlantDefinitionDraft = {
   plant: '',
@@ -38,7 +41,21 @@ export default async function PlantsPage({
   const session = await requireSession('/config/plants');
   const client = session.user.client;
   const canDefine = can(session, PLANT_DEFINE);
+  const canAssign = can(session, PLANT_ASSIGNMENT);
   const plants = await listPlants(client);
+  const hasUnassignedPlants = plants.some((item) => !item.companyCode);
+
+  // Do not expose tenant Company Code choices without the separate assignment authority.
+  const companyCodeChoices: PlantCompanyCodeChoice[] = canAssign && hasUnassignedPlants
+    ? await withTenant(client, async (tx) => {
+        const rows = await tx
+          .select({ code: companyCodeTable.companyCode, name: companyCodeTable.name })
+          .from(companyCodeTable)
+          .where(and(eq(companyCodeTable.client, client), eq(companyCodeTable.isActive, true)))
+          .orderBy(asc(companyCodeTable.companyCode));
+        return rows.map((item) => ({ ...item, code: item.code.trim() }));
+      })
+    : [];
 
   const editCode = params.edit?.trim() ?? '';
   const creating = !editCode && params.new === '1';
@@ -139,6 +156,27 @@ export default async function PlantsPage({
                   )}
                 </div>
               </div>
+              {!plant.companyCode && (
+                <div className="border-t border-line px-4 py-3">
+                  {canAssign ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="code text-ink-faint">{PLANT_ASSIGNMENT}</span>
+                        <p className="text-xs text-ink-soft">{t('plant.assignmentInitialOnly')}</p>
+                      </div>
+                      {companyCodeChoices.length > 0 ? (
+                        <PlantCompanyCodeAssignmentForm plant={plant.plant} companyCodes={companyCodeChoices} />
+                      ) : (
+                        <p role="status" className="text-sm text-ink-soft">{t('plant.noActiveCompanyCodes')}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-ink-soft">
+                      {t('auth.readOnly', { authority: PLANT_ASSIGNMENT })}
+                    </p>
+                  )}
+                </div>
+              )}
               <table className="grid-table">
                 <thead>
                   <tr>

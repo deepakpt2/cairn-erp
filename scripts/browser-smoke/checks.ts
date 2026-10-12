@@ -897,6 +897,239 @@ async function plantDefinition(ctx: BrowserContext) {
   console.log('  ✓ cookie-backed Auditor can read Plant data but cannot see the form or country choices');
 }
 
+async function plantCompanyCodeAssignment(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const plantCode = 'B129PLT';
+  const plantName = 'B-129 Assignment Plant';
+  const otherClient = 'T982';
+  const otherTenantName = 'B-129 Company Choice Isolation Fixture';
+  const otherCompanyCode = 'B129REM';
+  const inactiveCompanyCode = 'B129OFF';
+  let otherTenantCreated = false;
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Plant Company Code assignment: verify separate capabilities, active tenant-local choices, audited initial save and no replacement control');
+
+  async function removeOtherTenant() {
+    if (!otherTenantCreated) return;
+    const removed = (await withTenant(otherClient, (tx) => tx.execute(sql`
+      delete from client
+       where client = ${otherClient}
+         and name = ${otherTenantName}
+         and is_development = true
+       returning client
+    `))) as unknown as Array<{ client: string }>;
+    assert.equal(removed.length, 1, 'The guarded cross-tenant choice fixture must be removed.');
+    otherTenantCreated = false;
+  }
+
+  try {
+    // These two fixture-only rows prove the UI picker excludes inactive and other-tenant choices.
+    const localFixture = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select company_code from company_code
+       where client = ${CLIENT} and company_code = ${inactiveCompanyCode}
+    `))) as unknown as Array<{ company_code: string }>;
+    assert.equal(localFixture.length, 0, 'Refusing to overwrite an existing inactive-code fixture.');
+    await withTenant(CLIENT, (tx) => tx.execute(sql`
+      insert into company_code
+        (client, company_code, name, country, currency, is_active, created_by)
+      values
+        (${CLIENT}, ${inactiveCompanyCode}, 'B-129 Inactive Company Code', 'KW', 'KWD', false, 'BROWSER_FIXTURE')
+    `));
+
+    await withTenant(otherClient, async (tx) => {
+      const existing = (await tx.execute(sql`
+        select name from client where client = ${otherClient}
+      `)) as unknown as Array<{ name: string }>;
+      assert.equal(existing.length, 0, 'Refusing to alter a pre-existing tenant using the reserved fixture key.');
+      await tx.execute(sql`
+        insert into client (client, name, country, currency, status, is_development, created_by)
+        values (${otherClient}, ${otherTenantName}, 'KW', 'KWD', 'ACTIVE', true, 'BROWSER_FIXTURE')
+      `);
+      await tx.execute(sql`
+        insert into company_code
+          (client, company_code, name, country, currency, is_active, created_by)
+        values
+          (${otherClient}, ${otherCompanyCode}, 'B-129 Other-Tenant Company Code', 'KW', 'KWD', true, 'BROWSER_FIXTURE')
+      `);
+    });
+    otherTenantCreated = true;
+
+    const roles = await withTenant(CLIENT, async (tx) => {
+      await tx.execute(sql`
+        insert into role (client, code, name, is_read_only, created_by)
+        values
+          (${CLIENT}, 'B129_PLANT_DEFINE', 'B-129 Plant Definition Only', false, 'BROWSER_FIXTURE'),
+          (${CLIENT}, 'B129_PLANT_ASSIGN', 'B-129 Plant Assignment Only', false, 'BROWSER_FIXTURE')
+      `);
+      await tx.execute(sql`
+        insert into role_capability (client, role_code, capability_code, created_by)
+        values
+          (${CLIENT}, 'B129_PLANT_DEFINE', 'CFG.ORG.PLANT.DEFINE', 'BROWSER_FIXTURE'),
+          (${CLIENT}, 'B129_PLANT_ASSIGN', 'CFG.ORG.PLANT.ASSIGN_COMPANY', 'BROWSER_FIXTURE')
+      `);
+      for (const [id, username, fullName, roleCode] of [
+        [randomUUID(), 'plant.definer', 'B-129 Plant Definition-Only User', 'B129_PLANT_DEFINE'],
+        [randomUUID(), 'plant.assigner', 'B-129 Plant Assignment-Only User', 'B129_PLANT_ASSIGN'],
+        [randomUUID(), 'plant.viewer', 'B-129 Plant Read-Only User', 'AUDITOR'],
+      ]) {
+        await tx.execute(sql`
+          insert into app_user
+            (id, client, username, full_name, password_hash, must_change_password, created_by)
+          values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')
+        `);
+        await tx.execute(sql`
+          insert into user_role (client, user_id, role_code, created_by)
+          values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')
+        `);
+      }
+      return tx.execute(sql`
+        select role_code, capability_code from role_capability
+         where client = ${CLIENT} and role_code in ('B129_PLANT_DEFINE', 'B129_PLANT_ASSIGN')
+         order by role_code, capability_code
+      `);
+    }) as unknown as Array<{ role_code: string; capability_code: string }>;
+    assert.deepEqual(roles.map((row) => [row.role_code, row.capability_code]), [
+      ['B129_PLANT_ASSIGN', 'CFG.ORG.PLANT.ASSIGN_COMPANY'],
+      ['B129_PLANT_DEFINE', 'CFG.ORG.PLANT.DEFINE'],
+    ]);
+
+    async function signInAs(username: string) {
+      await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+      await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+      await page.locator('[name="client"]').fill(CLIENT);
+      await page.locator('[name="username"]').fill(username);
+      await page.locator('[name="password"]').fill(PASSWORD);
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await page.waitForURL((url) => url.pathname === '/');
+    }
+
+    const plantCard = () => page.locator('section.panel').filter({ hasText: plantCode }).filter({ hasText: plantName });
+
+    // Definition remains a distinct operation; a forged Company Code field is ignored.
+    await signInAs('plant.definer');
+    await page.goto(`${BASE}/config/plants?new=1`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Create Plant', exact: true }).waitFor();
+    assert.equal(await page.locator('[name="companyCode"]').count(), 0);
+    await page.locator('[name="plant"]').fill(plantCode);
+    await page.locator('[name="name"]').fill(plantName);
+    await page.locator('[name="country"]').selectOption('KW');
+    const definitionForm = page.locator('form').filter({ has: page.locator('[name="plant"]') });
+    await definitionForm.evaluate((form) => {
+      for (const [field, value] of Object.entries({
+        client: '0100',
+        changedBy: 'spoofed.actor',
+        companyCode: '1000',
+      })) {
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+      }
+    });
+    await page.getByRole('button', { name: 'Create Plant', exact: true }).click();
+    await page.getByRole('status').getByText(
+      `Plant ${plantCode} defined; Company Code assignment remains separate.`,
+      { exact: true },
+    ).waitFor();
+    const [definedPlant] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, plant, company_code, created_by
+        from plant where client = ${CLIENT} and plant = ${plantCode}
+    `))) as unknown as Array<{ client: string; plant: string; company_code: string | null; created_by: string }>;
+    assert.deepEqual(definedPlant, {
+      client: CLIENT, plant: plantCode, company_code: null, created_by: 'plant.definer',
+    });
+    await plantCard().waitFor();
+    await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.ASSIGN_COMPANY.', { exact: true }).waitFor();
+    assert.equal(await page.locator('[name="companyCode"]').count(), 0, 'Definition-only authority must not expose assignment choices.');
+    console.log('  ✓ definition-only user creates an unassigned Plant; forged Company Code, tenant and actor fields are ignored');
+
+    // Neither capability means read-only even while the Plant remains unassigned.
+    await signInAs('plant.viewer');
+    await page.goto(`${BASE}/config/plants`, { waitUntil: 'domcontentloaded' });
+    await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.DEFINE.', { exact: true }).waitFor();
+    await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.ASSIGN_COMPANY.', { exact: true }).waitFor();
+    await plantCard().waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Create Plant', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+    assert.equal(await page.locator('[name="companyCode"]').count(), 0);
+    await page.goto(`${BASE}/config/plants?new=1`, { waitUntil: 'domcontentloaded' });
+    assert.equal(await page.getByRole('heading', { name: 'Create Plant', exact: true }).count(), 0);
+    assert.equal(await page.locator('[name="companyCode"]').count(), 0);
+    console.log('  ✓ cookie-backed Auditor has read-only Plant access and no assignment or definition form');
+
+    // Assignment-only authority sees active choices from this tenant, but no definition controls.
+    await signInAs('plant.assigner');
+    await page.goto(`${BASE}/config/plants`, { waitUntil: 'domcontentloaded' });
+    await page.getByText('Read-only view. Changes require authority CFG.ORG.PLANT.DEFINE.', { exact: true }).waitFor();
+    await plantCard().waitFor();
+    await page.getByText('Initial assignment only; an assigned Plant cannot be changed or cleared in this milestone.', { exact: true }).waitFor();
+    const assignmentForm = page.locator('form').filter({ has: page.locator('[name="companyCode"]') });
+    await assignmentForm.waitFor();
+    assert.equal(await page.getByRole('link', { name: 'Create Plant', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+    assert.equal(await page.locator('[name="country"]').count(), 0);
+
+    const expectedChoices = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select company_code from company_code
+       where client = ${CLIENT} and is_active = true
+       order by company_code
+    `))) as unknown as Array<{ company_code: string }>;
+    const expectedChoiceCodes = expectedChoices.map((row) => row.company_code.trim());
+    assert.ok(expectedChoiceCodes.includes('1000'));
+    assert.ok(!expectedChoiceCodes.includes(inactiveCompanyCode));
+    assert.ok(!expectedChoiceCodes.includes(otherCompanyCode));
+    const renderedChoices = await assignmentForm.locator('select[name="companyCode"] option').evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value).filter(Boolean),
+    );
+    assert.deepEqual(renderedChoices, expectedChoiceCodes);
+    assert.equal(renderedChoices.includes(inactiveCompanyCode), false);
+    assert.equal(renderedChoices.includes(otherCompanyCode), false);
+    console.log('  ✓ assignment-only user receives only active, same-tenant Company Code choices');
+
+    // The action must use the signed-in tenant and actor, not forged form fields.
+    await assignmentForm.evaluate((form) => {
+      for (const [field, value] of Object.entries({
+        client: '0100',
+        changedBy: 'spoofed.actor',
+        company_code: 'B129REM',
+      })) {
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+      }
+    });
+    await assignmentForm.locator('[name="companyCode"]').selectOption('1000');
+    await assignmentForm.getByRole('button', { name: 'Assign Company Code', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('select[name="companyCode"]') === null);
+    const [assignedPlant] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, plant, company_code, changed_by
+        from plant where client = ${CLIENT} and plant = ${plantCode}
+    `))) as unknown as Array<{ client: string; plant: string; company_code: string | null; changed_by: string | null }>;
+    assert.deepEqual(assignedPlant, {
+      client: CLIENT, plant: plantCode, company_code: '1000', changed_by: 'plant.assigner',
+    });
+    const history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'plant', plantCode));
+    assert.equal(history.length, 2, 'Definition plus one assignment event; no replacement event exists.');
+    const assignmentEvent = history.find((event) => event.transactionCode === 'CFG.ORG.PLANT.ASSIGN_COMPANY');
+    assert.equal(assignmentEvent?.changeType, 'CHANGE');
+    assert.equal(assignmentEvent?.changedBy, 'plant.assigner');
+    assert.ok(assignmentEvent?.items.some((item) =>
+      item.fieldName === 'companyCode' && item.oldValue === null && item.newValue === '1000' && item.isSecurityRelevant === 'true',
+    ));
+    const [assignmentActivity] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select status, completed_by from config_activity_status
+       where client = ${CLIENT} and activity_code = 'CFG.ORG.PLANT.ASSIGN_COMPANY'
+    `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+    assert.equal(assignmentActivity?.status, 'COMPLETED');
+    assert.equal(assignmentActivity?.completed_by, 'plant.assigner');
+    await plantCard().waitFor();
+    assert.equal(await assignmentForm.count(), 0, 'Assigned Plant has no replacement or clear form.');
+    assert.equal(await page.getByRole('button', { name: 'Assign Company Code', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+    assert.equal(await plantCard().getByText('1000', { exact: true }).count(), 1);
+    console.log('  ✓ initial assignment persists once, records security-relevant history and completion under the session actor; no replacement control remains');
+  } finally {
+    await removeOtherTenant();
+  }
+}
+
 async function companyCodeCoaAssignment(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const code = '2000';
@@ -2101,6 +2334,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'company-code-definition': companyCodeDefinition,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
+  'plant-company-code-assignment': plantCompanyCodeAssignment,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,
