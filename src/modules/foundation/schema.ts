@@ -256,7 +256,7 @@ export const purchasingOrg = pgTable(
       .references(() => client.client, { onDelete: 'cascade' }),
     purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
-    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    companyCode: varchar('company_code', { length: 10 }),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },

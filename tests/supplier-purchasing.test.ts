@@ -3,12 +3,12 @@ import { sql } from 'drizzle-orm';
 import { createTenant,destroyTenant,withTenant,closeDb,type TestTenant } from './helpers';
 import { db } from '../src/platform/db/client';
 import { saveBusinessPartner } from '../src/modules/foundation/business-partners';
-import { saveSupplierPurchasing,getSupplierPurchasing,listSupplierPurchasing,requireSupplierPurchasing,type SupplierPurchasingInput } from '../src/modules/foundation/supplier-purchasing';
+import { saveSupplierPurchasing,getSupplierPurchasing,listSupplierPurchasing,requireSupplierPurchasing,supplierPurchasingChoices,type SupplierPurchasingInput } from '../src/modules/foundation/supplier-purchasing';
 let alpha:TestTenant;let beta:TestTenant;
 async function partner(tenant:TestTenant,number:string,roles:['SUPPLIER']|['CUSTOMER']=['SUPPLIER']){
   await saveBusinessPartner({client:tenant.client,partnerNumber:number,expectedVersion:0,changedBy:'TEST',reason:'Purchasing fixture setup',category:'ORGANIZATION',name:'Example supplier',name2:'',searchTerm:'',country:'KW',region:'',street:'Test street',city:'Kuwait City',postalCode:'',taxNumber:'',email:'',phone:'',roles,isBlocked:false});
 }
-beforeAll(async()=>{alpha=await createTenant('supplier-purchasing-alpha');beta=await createTenant('supplier-purchasing-beta');for(const n of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','MULTI','INACTIVE','UNASSIGNEDPLANT'])await partner(alpha,n);await partner(alpha,'CUSTOMERONLY',['CUSTOMER']);});
+beforeAll(async()=>{alpha=await createTenant('supplier-purchasing-alpha');beta=await createTenant('supplier-purchasing-beta');for(const n of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','MULTI','INACTIVE','UNASSIGNEDPLANT','UNASSIGNEDORG'])await partner(alpha,n);await partner(alpha,'CUSTOMERONLY',['CUSTOMER']);});
 afterAll(async()=>{await destroyTenant(alpha.client);await destroyTenant(beta.client);await closeDb();});
 const input=(number:string,patch:Partial<SupplierPurchasingInput>={}):SupplierPurchasingInput=>({client:alpha.client,partnerNumber:number,purchasingOrg:'1000',expectedVersion:0,changedBy:'TEST',reason:'Purchasing master test',orderCurrency:'USD',purchasingGroup:'001',incotermsCode:'FCA',incotermsLocation:'Kuwait City',paymentTermsCode:'NET30',isBlocked:false,...patch});
 describe('supplier purchasing-organisation defaults',()=>{
@@ -28,6 +28,19 @@ describe('supplier purchasing-organisation defaults',()=>{
   it('requires an active supplier role, never a customer-only identity',async()=>{
     await expect(saveSupplierPurchasing(input('CUSTOMERONLY'))).rejects.toThrow('active general Supplier');
     await expect(saveSupplierPurchasing(input('MISSING'))).rejects.toThrow('active general Supplier');
+  });
+  it('keeps an unassigned Purchasing Organisation pending and unusable until Company Code assignment',async()=>{
+    await saveSupplierPurchasing(input('UNASSIGNEDORG'));
+    await withTenant(alpha.client,tx=>tx.execute(sql`update purchasing_org set company_code=null where client=${alpha.client} and purchasing_org='1000'`));
+    try {
+      await expect(saveSupplierPurchasing(input('UNASSIGNEDORG',{expectedVersion:1}))).rejects.toThrow('Company Code assignment is required');
+      await expect(withTenant(alpha.client,tx=>requireSupplierPurchasing(tx,alpha.client,'UNASSIGNEDORG','1000'))).rejects.toThrow('Company Code assignment is required');
+      const choices=await supplierPurchasingChoices(alpha.client,'1000');
+      expect(choices.organisations.some(row=>row.code==='1000')).toBe(false);
+      expect(choices.selected).toBeUndefined();
+    } finally {
+      await withTenant(alpha.client,tx=>tx.execute(sql`update purchasing_org set company_code='1000' where client=${alpha.client} and purchasing_org='1000'`));
+    }
   });
   it.each([{purchasingOrg:'9999'},{orderCurrency:'ZZZ'},{purchasingGroup:'ZZZ'},{paymentTermsCode:'MISSING'},{incotermsCode:'BAD' as SupplierPurchasingInput['incotermsCode']},{incotermsCode:'' as const,incotermsLocation:'Location without code'},{reason:''}])('rejects invalid references/rules without writing %j',async(patch)=>{
     await expect(saveSupplierPurchasing(input('INVALID',patch))).rejects.toThrow();expect(await getSupplierPurchasing(alpha.client,'INVALID','1000')).toBeNull();

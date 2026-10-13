@@ -114,7 +114,7 @@ export async function onboard(ctx: BrowserContext) {
   await page.waitForURL(/\/signin\?/);
   await page.locator('[name="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.waitForURL(/\/config$/);
+  await page.waitForURL(/\/config$/, { waitUntil: 'domcontentloaded' });
   assert.equal((await withTenant(CLIENT, (tx) => tx.execute(sql`select count(*)::int as n from number_range where object_code = 'JOURNAL_ENTRY'`)) as unknown as Array<{ n: number }>)[0].n, 0);
   console.log('  ✓ UI-created tenant has no hidden accounting intervals');
 }
@@ -2447,7 +2447,9 @@ async function storageLocations(ctx: BrowserContext) {
   const parentRows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
     select company_code, is_active from plant where client = ${CLIENT} and plant = ${plantCode}
   `))) as unknown as Array<{ company_code: string | null; is_active: boolean }>;
-  assert.deepEqual(parentRows, [{ company_code: null, is_active: true }]);
+  assert.equal(parentRows.length, 1);
+  assert.equal(parentRows[0].company_code, null);
+  assert.equal(parentRows[0].is_active, true);
   const objectKey = `${plantCode.length}:${plantCode}${locationCode.length}:${locationCode}`;
   let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'storage_location', objectKey));
   assert.equal(history.length, 1);

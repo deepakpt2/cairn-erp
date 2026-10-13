@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.56 — SCR-016 Storage Location UI implementation)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.63 — B-145 accepts SCR-017 definition service)
 **Document set:** Canonical project log in two linked files; this is Part 1 of 2
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -59,7 +59,7 @@
 | 29 | Glossary & alias examples | DRAFT |
 | 30 | Change log | LIVE |
 
-> **Document split:** This file contains §0–§26.40. Section §26.41 onward continues in [CAIRN-2.md](CAIRN-2.md); numbering and change history remain continuous.
+> **Document split:** This file contains §0–§26.36. Section §26.37 onward continues in [CAIRN-2.md](CAIRN-2.md); numbering and change history remain continuous.
 
 ---
 
@@ -210,6 +210,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-089 | **Keep Cairn's production-site and storage-site flags as descriptive Plant metadata, not SAP-standard fields or operational gates.** Preserve both defaults as true, permit both false, retain read-view badges, and expose both flags in the future Plant definition/change form. | Owner chose to keep the existing schema fields as Cairn-specific descriptive metadata. They do not currently gate inventory, production, procurement or storage behavior; any future operational meaning requires separate approval/design. They are not represented as standard OX10 fields. | 2026-10-12 |
 | D-090 | **Plant-to-Company-Code assignment is initial-only for the current milestone.** A Plant with no Company Code may receive one active tenant-local Company Code assignment; the same assignment may be retried idempotently. Reassignment and unassignment are disabled. | Owner directed that reassignment not be implemented now and be planned as a future milestone after full application development. The current assignment writer/UI must not expose an overwrite or clear path; replacement semantics require a later reviewed milestone. The assignment remains separate from `CFG.ORG.PLANT.DEFINE`. | 2026-10-12 |
 | D-091 | **SCR-016 Storage Location scope.** Keep Cairn's 10-character Plant-unique key; require an active same-tenant Plant; allow editing `allow_negative_stock` (false by default) without claiming movement enforcement; hard-delete only if never stocked and unreferenced, otherwise deactivate. | Owner specified the Cairn-specific key limit, active-Plant prerequisite, editable field and lifecycle. Deactivation must retain the record/history; hard delete must check stock/history, transactions and configuration references (including Plant default Storage Location). Owner further directed that the first screen defer hard delete until durable stock history exists; deactivation remains available for used locations. §26.148 records the boundary. | 2026-10-12 |
+| D-092 | **SCR-017 Purchasing Organisation define/assign contract.** Keep a tenant-unique 10-character Cairn code (uppercase alphanumeric, 2–10 characters; immutable after creation) and required name up to 160 characters. OX08 defines/changes code and name only; Company Code and Plant assignments remain separate. One active Company Code is required before supplier-purchasing use; an unassigned organisation is pending, not cross-company, and multi-Company-Code scope is excluded. Keep Plant assignment as its own activity/page (`CFG.PROC.PURORG.ASSIGN_PLANT`, SCR-064). Support create/change/deactivate; retain history/references; no hard delete or reactivation. | Product owner explicitly approved the proposed SCR-017 baseline on 2026-10-13. Existing Company Code-definition prerequisite remains; B-142 allows the pending Company Code state and makes supplier-purchasing fail closed until assignment. See §26.157–161. | 2026-10-13 |
 
 ---
 
@@ -839,8 +840,8 @@ built on demand.
 `CFG.PLT.CLIENT.DEFINE` · `CFG.PLT.USER.CREATE` · `CFG.PLT.ROLE.DEFINE` · `CFG.PLT.AUTH.ASSIGN` ·
 `CFG.PLT.NUMBERRANGE.DEFINE` · `CFG.PLT.MESSAGE.DISPLAY` · `CFG.ORG.COMPANYCODE.DEFINE` ·
 `CFG.ORG.COMPANYCODE.ASSIGN_COA` · `CFG.ORG.PLANT.DEFINE` · `CFG.ORG.PLANT.ASSIGN_COMPANY` ·
-`CFG.ORG.STORAGELOC.DEFINE` · `CFG.ORG.PURORG.DEFINE` · `CFG.ORG.PURORG.ASSIGN_COMPANY` ·
-`CFG.ORG.PURORG.ASSIGN_PLANT` · `CFG.ORG.SALESORG.DEFINE` · `CFG.ORG.SALESORG.ASSIGN_COMPANY` ·
+`CFG.ORG.STORAGELOC.DEFINE` · `CFG.PROC.PURORG.DEFINE` · `CFG.PROC.PURORG.ASSIGN_COMPANY` ·
+`CFG.PROC.PURORG.ASSIGN_PLANT` · `CFG.ORG.SALESORG.DEFINE` · `CFG.ORG.SALESORG.ASSIGN_COMPANY` ·
 `CFG.ORG.DISTCHANNEL.DEFINE` · `CFG.ORG.DIVISION.DEFINE` · `CFG.ORG.SALESAREA.DEFINE` ·
 `CFG.COST.CONTROLLINGAREA.DEFINE` · `CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY` ·
 `CFG.FIN.COA.DEFINE` · `CFG.FIN.COA.COPY` · `CFG.FIN.GLACCOUNT.CREATE` · `CFG.FIN.COA.ASSIGN` ·
@@ -1741,7 +1742,7 @@ naming. Users can hide reference terms entirely through a preference.
 ```
 cairn/
 ├── CAIRN.md                      ← canonical project log, Part 1
-├── CAIRN-2.md                    ← continuation, Part 2 (from §26.41)
+├── CAIRN-2.md                    ← continuation, Part 2 (from §26.37)
 ├── docker/                       compose files, dockerfiles, entrypoints, backup scripts
 ├── drizzle/                      SQL migrations, versioned
 ├── src/
@@ -2203,8 +2204,15 @@ Do not push interim or partial module batches before that trigger.
 | B-135 | Record owner UI walkthrough feedback for SCR-005/035/036 | ≤10 min | **DONE — SCR-005/035 passed; SCR-036 blocked in production: Administrator, filtered country, empty list/no Create. Source expects Create; cause unresolved (§26.152).** |
 | B-136 | Implement SCR-016 Storage Location create/change/deactivate service and protected actions only | ≤10 min | **IMPLEMENTED — audited tenant-scoped writer, exact-capability actions, optimistic audit version, active same-tenant Plant prerequisite for create, no Company Code prerequisite, soft deactivation only. Static contract 5/5; DB lifecycle suite added but not run at this step (§26.153).** |
 | B-137 | Accept SCR-016 Storage Location service on fresh disposable PostgreSQL 17 only | ≤10 min | **PASSED — fresh local PostgreSQL 17.11, 44 migrations, global/reference seeds, restricted app role, five lifecycle tests 5/5, migration rerun skipped 44, all tenant/location/history fixture counts zero; cluster and packages removed (§26.154).** |
-| B-138 | Implement the capability-gated SCR-016 Storage Location UI/page and DB-free contract; define browser target only | ≤10 min | **DONE — `/config/storage-locations` is built for create/change/deactivate only, with exact-capability controls, same-tenant active Plant choices, read-only history/list, and stored-only negative-stock guidance. Workbench route and registry seed entry added; DB-free UI contract 5/5, harness 155/155, typecheck/IP lint/diff check pass. B-139 browser target is defined but not run. No DB, migration, seed execution, production build, or live-browser acceptance (§26.155).** |
-| B-139 | Run separate cookie-backed SCR-016 browser acceptance on a verified disposable PostgreSQL 17 target only | ≤10 min | **PENDING — guarded `storage-locations` target (`T981`, `cairn_b139`, port 55525) is registered; no browser session or acceptance has run. Keep separate from B-137 service/database acceptance (§26.155).** |
+| B-138 | Implement the capability-gated SCR-016 Storage Location UI/page and DB-free contract; define browser target only | ≤10 min | **DONE — `/config/storage-locations` is built for create/change/deactivate only, with exact-capability controls, same-tenant active Plant choices, read-only history/list, and stored-only negative-stock guidance. Workbench route and registry seed entry added; DB-free UI contract 5/5, harness 155/155, typecheck/IP lint/diff check pass. The separately registered B-139 browser acceptance passed later (§26.156). B-138 itself remained UI-only and did not run its own DB/migration/seed/production-build/browser session (§26.155).** |
+| B-139 | Run separate cookie-backed SCR-016 browser acceptance on a verified disposable PostgreSQL 17 target only | ≤10 min | **PASSED — only `storage-locations` (`T981`) ran against fresh local PostgreSQL 17.11 `cairn_b139` at 127.0.0.1:55525; the guard verified the restricted application role and elevated migration role. Exact-capability/session-tenant security, active same-tenant Plant choices, Company Code separation, create/change/no-op/deactivate history, stored-only negative-stock behavior and Auditor read-only access passed; fixture cleanup verified (zero T981 tenant/Plant/location rows). No remote database; separate from B-137 (§26.156).** |
+| B-140 | Draft and obtain owner approval for the SCR-017 Purchasing Organisation definition contract only | ≤10 min | **DONE — owner selected the proposed baseline; D-092 records the approved 10-character key, definition-only OX08, separate Company Code/Plant assignments, one Company Code before supplier-purchasing use, no cross/multi-company scope, retained history and no hard delete/reactivation (§26.157).** |
+| B-141 | Clarify the Next.js build mode used for B-139 browser acceptance | ≤10 min | **DONE — `npm run build` invokes `next build`, producing a production-mode standalone artifact even with Cairn `CAIRN_ENV=development`; the runtime flag did not turn this into `next dev` or enable HMR. Addendum records that B-139 used a locally served production build under Cairn development settings, not a development-server run or production deployment. Docs-only; no code, tests or database change (§26.156).** |
+| B-142 | Allow a Purchasing Organisation to remain pending before its separate Company Code assignment | ≤10 min | **IMPLEMENTED — schema/migration 0022 permit null `company_code`; supplier-purchasing rejects unassigned organisations and choice reads exclude them. Static contract 2/2, typecheck, browser harness 157/157, IP lint (306 files) and diff check pass. The DB-backed regression subsequently passed in B-143; no UI/assignment writer/seed change (§26.158–159).** |
+| B-143 | Accept migration 0022 and pending-assignment fail-closed behavior on disposable local PostgreSQL 17 only | ≤10 min | **PASSED — fresh PG 17.11 `cairn_b143` on loopback; 45 migrations and local global/reference seeds; restricted app-role guard passed; `company_code` is nullable; supplier-purchasing suite 21/21 including unassigned refusal and hidden choices; rerun skipped 45; all test tenants/org/supplier-purchasing rows zero. Temporary cluster/data and PostgreSQL packages removed. No browser/remote DB (§26.159).** |
+| B-144 | Implement the audited tenant-scoped SCR-017 definition service (create/change/deactivate) only | ≤10 min | **IMPLEMENTED — approved 2–10 uppercase alphanumeric immutable key and required name; create leaves Company Code pending; change is name-only; deactivation retains assignments/references/history. Audit-count optimistic versions and tenant-scoped transaction locks are used. Typecheck, browser harness 161/161 (30 files), IP lint (309 files) and diff check pass. The five-case DB suite added here passed separately in B-145; service tenant/actor inputs remain explicit pending derivation from the verified session at the protected-action boundary. No UI, action, assignment writer, migration or seed change (§26.160–161).** |
+| B-145 | Accept the SCR-017 definition service on a fresh disposable local PostgreSQL 17 database only | ≤10 min | **PASSED — fresh PostgreSQL 17.11 `cairn_b145`, 45 migrations and local seeds; `cairn_app` NOSUPERUSER/NOBYPASSRLS, pending Company Code nullable, focused service tests 5/5, migration rerun skipped 45, all fixture counts zero; cluster and temporary packages removed. No remote DB or browser (§26.161).** |
+| B-146 | Register `CFG.PROC.PURORG.DEFINE` as the grantable SCR-017 maintenance capability only | ≤10 min | **NEXT — capability catalogue/seed and DB-free contract only; no protected action, UI or database seed execution in this batch.** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2457,9 +2465,9 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-013 | Company code assign chart of accounts | `CFG.ORG.COMPANYCODE.ASSIGN_COA` | — | **BUILT · automated UI contract and cookie-backed live-browser acceptance passed (B-115)** |
 | SCR-014 | Plant define | `CFG.ORG.PLANT.DEFINE` | OX10 | **BUILT · service/action and disposable PostgreSQL 17 acceptance passed (B-121/B-123); capability-gated UI and live-browser acceptance passed (B-124/B-125)** |
 | SCR-015 | Plant assign to company code | `CFG.ORG.PLANT.ASSIGN_COMPANY` | — | **BUILT · initial-only service/action and capability (B-126), UI (B-127), disposable PostgreSQL service acceptance (B-128) and separate cookie-backed live-browser acceptance (B-129) passed; reassignment deferred per D-090** |
-| SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | **BUILT — exact-capability create/change/deactivate UI and DB-free UI contract pass (B-138); migration/FK and service acceptance passed separately (B-132–137). Dedicated cookie-backed browser target is registered but not run (B-139). Hard delete remains deferred (§26.148–155).** |
-| SCR-017 | Purchasing organisation define | `CFG.ORG.PURORG.DEFINE` | OX08 | DRAFT |
-| SCR-018 | Purchasing organisation assign | `CFG.ORG.PURORG.ASSIGN_COMPANY` | — | DRAFT |
+| SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | **BUILT — B-138 UI/contract and separate B-139 cookie-backed browser acceptance passed (§26.155–156); B-132–137 capability, FK, service and DB acceptance passed. Owner walkthrough/sign-off remains pending. Hard delete remains deferred until durable stock history proves never stocked and unreferenced.** |
+| SCR-017 | Purchasing organisation define | `CFG.PROC.PURORG.DEFINE` | OX08 | **IN BUILD — D-092 approved; pending-Company-Code support and the audited definition service passed disposable PostgreSQL acceptance (B-143/B-145). Grantable capability, session-derived protected actions and UI remain pending; live-browser acceptance stays separate (§26.157–161).** |
+| SCR-018 | Purchasing organisation assign to Company Code | `CFG.PROC.PURORG.ASSIGN_COMPANY` | — | **DRAFT — separate assignment; exactly one active Company Code before supplier-purchasing use, per D-092. Assignment writer/UI and detailed page contract pending.** |
 | SCR-019 | Purchasing group define | `CFG.PROC.PURGROUP.DEFINE` | — | DRAFT |
 | SCR-020 | Sales organisation define | `CFG.ORG.SALESORG.DEFINE` | — | DRAFT |
 | SCR-021 | Sales organisation assign | `CFG.ORG.SALESORG.ASSIGN_COMPANY` | — | DRAFT |
@@ -2467,6 +2475,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-023 | Sales area define | `CFG.ORG.SALESAREA.DEFINE` | — | DRAFT |
 | SCR-024 | Controlling area define | `CFG.COST.CONTROLLINGAREA.DEFINE` | OKKP | DRAFT |
 | SCR-025 | Controlling area assign | `CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY` | — | DRAFT |
+| SCR-064 | Purchasing organisation assign to Plant | `CFG.PROC.PURORG.ASSIGN_PLANT` | — | **DRAFT — separate activity/page per D-092; detailed assignment contract remains a later screen-spec batch** |
 
 #### SCR-014 · Plant define `BUILT — field/lifecycle contract, service/action, disposable DB acceptance and live-browser acceptance passed`
 
@@ -4184,139 +4193,5 @@ passed (§26.38), and B-023 automated browser acceptance has since passed (§26.
 was still pending at this point and was later reported passed in B-097 (§26.114).
 
 
-### 26.37 B-021 — Customer company interest-indicator/tolerance-group UI `IMPLEMENTED · AUTOMATED BROWSER ACCEPTANCE PASSED · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
-
-**Scope:** expose the B-020 `interest_indicator` and `tolerance_group` values on the existing Customer
-company-code panel. UI wiring only: no schema, migration, service rules, route, capability, seed, master
-lookup, interest calculation or tolerance enforcement change. Existing
-`FIN.CUSTOMER.COMPANY.DISPLAY` / `FIN.CUSTOMER.COMPANY.MAINTAIN` authorities remain the only access
-boundary.
-
-**UI and behavior:**
-- The tenant-scoped persisted values are included in the panel props. Maintainers get optional text
-  inputs capped at four characters and constrained to letters/digits; blank is allowed to clear a
-  value. The existing B-020 service remains authoritative for trimming, uppercasing, validation,
-  no-op/version handling and security-relevant change history.
-- Authorised display-only finance users see the two values as read-only text and have no Save control.
-  A user without Customer company display authority still does not receive the segment, code values or
-  its history. No new authority or registry entry was added.
-- Shared help text now identifies all four payment/dunning/interest/tolerance values as format-checked
-  codes only, and states that their masters and execution/calculation behavior are not available.
-- The customer-company browser target now exercises interest/tolerance canonical save, persisted
-  reload, canonical no-op, blank clear and restore, security-relevant history, display-only read access
-  without edit controls, and denial to a non-finance user. The DB-backed target was not run during B-021;
-  B-022 subsequently prepared the isolated database and verified the underlying service/action behavior.
-
-**Verification at implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip` (164
-files), `npm run test:browser-harness` (**64/64**) and `git diff --check` passed. B-022 later applied the
-migrations and passed 65 customer-company/action-security DB tests (§26.38). The B-023 Playwright target
-`npm run smoke:browser:customer-company` has now passed against a development fixture (§26.39). The
-owner later reported the customer-company walkthrough passed (§26.114). No owner/production database
-or tenant was used.
-
-**Owner manual test (R-23):** after the B-020 migration 0010 is applied in a development/test tenant,
-open active customer `TESTCUST01` → **Customer company code** → `1000`. With the existing valid account
-and terms, enter interest indicator `i1` and tolerance group `t1` and save with a reason. Expect `I1` and
-`T1` after reload, one version increment, and both fields flagged in change history. Resave lowercase
-`i1` / `t1` and expect no version increment; clear both explicitly and expect null/blank values with
-one version/history update, without changing segment completeness or operational eligibility. A
-finance display-only user must see the values but have no Save control; a user with no Customer company
-display authority must not see the values or history. Punctuation or values longer than four characters
-must be rejected by the service; the inputs also provide browser constraints.
-
-**Deployment:** B-021 itself adds no migration and needs no reseed. When deploying the combined B-020/B-021
-state, apply migration 0010 using the normal migration service first (24 total if the 23-migration B-018
-baseline is current). Do not write values through production SQL.
-
-**Limitations:** codes are not validated against masters; they do not drive interest calculation/posting,
-tolerance calculation/enforcement, open-item handling, billing, payment or dunning. No document service
-consumes them yet.
-
-The B-024 focused automated sales-area target has passed (§26.40). The owner subsequently reported both
-B-023 and B-024 walkthroughs complete with all checks passed (§26.114). B-025 follows the completed
-automated acceptance gates; other M1 acceptance criteria remain governed by §24.1.
-
-
-### 26.38 B-022 — B-020 migration and database acceptance `COMPLETE · ISOLATED TEST DATABASE`
-
-**Isolation:** Provisioned a fresh PostgreSQL 17.11 cluster for this workspace only. The application
-server listens on loopback `127.0.0.1:55432`; the dedicated database is `cairn_b022_test`, with a
-superuser migration role (`cairn`) and a restricted application role (`cairn_app`, no `BYPASSRLS`).
-The instance is isolated from owner/production data and uses no production host or credentials. Local
-test connection settings are kept outside the repository under `/home/user/.arena/cairn-b022.env`;
-that file is not part of Git. The database server is left running for the next B-023 browser batch.
-
-**Migration and reference setup:** `npm run db:migrate` applied all **24 migrations** in lexical order,
-including `0010_customer_company_interest_tolerance.sql` and the RLS/policy migrations through 9012.
-The normal migration runner recorded each checksum. `npm run seed:reference` populated 30 countries,
-26 currencies and 21 units of measure; no tenant fixture or owner data was imported.
-
-**Acceptance:** `npm run test -- tests/customer-companies.test.ts tests/action-security.test.ts` passed:
-**2 files, 65/65 tests**. This covers customer-company create/change/no-op/clear/version/history,
-B-020 normalization and validation, completeness independence, tenant isolation, and session-derived
-action/security boundaries. Test fixtures ran only in the dedicated disposable database and cleaned up.
-
-**Result / next:** B-022 is complete. Migration 0010 and the B-020 service/action acceptance passed in
-this isolated PostgreSQL environment. At B-022 close, the B-019/B-021 customer-company browser target
-had not yet run; it subsequently passed in B-023 (§26.39). The owner walkthrough had not yet been
-recorded at that time; the owner later reported B-023/B-024 walkthroughs complete with all checks passed
-(§26.114). Do not apply this local database or its test data to an owner/production tenant.
-
-
-### 26.39 B-023 — B-019/B-021 customer-company browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
-
-**Environment and fixture:** ran `npm run smoke:browser:customer-company` with the isolated B-022
-PostgreSQL database and local development app. Playwright Chromium 156 (Playwright revision 1248) was
-installed for this acceptance. The harness created development fixture tenant `T988` through the UI,
-with the reserved name `Browser verification tenant`; it did not use an owner tenant or any existing
-customer records. The harness removed the fixture in cleanup, and a follow-up query confirmed zero
-matching `T988` fixture rows remain. Test data was disposable, as authorised by the owner.
-
-**Result:** the target passed with exit code 0 and no browser page errors. It verified UI onboarding;
-customer-company accounting staged/completed/blocked lifecycle; B-019 payment-method/dunning values;
-B-021 interest/tolerance canonical save, persisted reload, no-op, explicit clear/restore and version
-behavior; security-relevant change history; invalid reconciliation-account refusal; finance display-only
-access without Save controls; denial of values/history to non-finance users; and signed-out protection.
-The run also confirmed the fixture had no hidden accounting number ranges.
-
-**Owner walkthrough:** on 2026-10-12, the owner confirmed the B-023 and B-024 walkthroughs were complete
-and selected “All checks passed” (§26.114). No per-step evidence or environment details were supplied;
-this is an owner-reported result, not an independent re-run. The procedures remain documented in
-§26.35, §26.37 and §26.33.
-
-
-### 26.40 B-024 — B-017 customer sales-area browser acceptance `AUTOMATED PASS · OWNER WALKTHROUGH REPORTED PASSED (§26.114)`
-
-**Environment and fixture:** ran `npm run smoke:browser -- --target customer-sales-area` against the
-isolated B-022 PostgreSQL database and local development app using Playwright Chromium. The harness
-created development fixture `T987` through onboarding, then created customer `TESTCUST01` through the
-UI. The target exited **0** within its 120-second deadline with no browser runtime errors. Harness
-cleanup completed; a follow-up query found **zero** `T987` rows matching the reserved fixture name and
-development flag. Only disposable development data was used; no owner/production tenant or data was touched.
-
-**Browser acceptance:** verified tenant onboarding has no hidden accounting intervals; UI creation and
-opening of an active Customer partner; active sales area `1000/01/01` and delivering-plant choice `1000`;
-staged save as Incomplete (version 1); completed save as Created (version 2) with plant `1000`,
-canonicalised pricing procedure `RVAA01`, sales district `KW01`, and both delivery flags; persisted UI
-readback after submitting the sales-area selector GET; canonical no-op without a version increment;
-area-scoped block/unblock; and security-relevant change history, including the pricing-procedure control
-change. The browser harness also verified signed-out access redirects from `/foundation/partners` and
-reported no page errors.
-
-**Coverage boundary and owner walkthrough:** this target exercises the authorised maintainer lifecycle;
-it does not switch to display-only or finance-only users in the browser. The original B-017
-server-rendered role checks and accounting-only action denial remain documented in §26.33. The owner
-later reported the B-024 manual walkthrough complete with all checks passed (§26.114); no per-step
-evidence or environment details were supplied. This outcome is limited to B-023/B-024 and does not
-constitute overall M1 sign-off.
-
-**Verification after the target:** `npm run typecheck`, `npm run test:browser-harness` (**65/65 across 5
-files**) and `git diff --check` passed. No application/schema/migration changes were made for B-024.
-
-
-
-
----
-
-> **Continuation:** This file continues in [CAIRN-2.md](CAIRN-2.md), beginning at §26.41.
+> **Continuation:** This file continues in [CAIRN-2.md](CAIRN-2.md), beginning at §26.37.
 .

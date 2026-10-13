@@ -19,6 +19,7 @@ const key=(client:string,partner:string,org:string)=>and(eq(supplierPurchasing.c
 async function validateAssignments(tx:Tx,client:string,org:string,cur:string|null,group:string|null,terms:string|null){
   const [scope]=await tx.select().from(purchasingOrg).where(and(eq(purchasingOrg.client,client),eq(purchasingOrg.purchasingOrg,org)));
   if(!scope?.isActive)throw new SupplierPurchasingError('Purchasing organisation is missing or inactive.');
+  if(!scope.companyCode)throw new SupplierPurchasingError('A Company Code assignment is required before supplier purchasing can be used.','Assign an active Company Code to this Purchasing Organisation first.');
   const [company]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,scope.companyCode)));
   if(!company?.isActive)throw new SupplierPurchasingError('Purchasing organisation must belong to an active company.');
   if(cur){const [ref]=await tx.select().from(currency).where(eq(currency.code,cur));if(!ref?.isActive)throw new SupplierPurchasingError('Order currency is missing or inactive.');}
@@ -63,7 +64,7 @@ export async function requireSupplierPurchasing(tx:Tx,client:string,partner:stri
 }
 
 export async function supplierPurchasingChoices(client:string,org:string){return withTenant(client,async tx=>{
-  const organisations=await tx.select({code:purchasingOrg.purchasingOrg,name:purchasingOrg.name,companyCode:purchasingOrg.companyCode,currency:companyCode.currency}).from(purchasingOrg).innerJoin(companyCode,and(eq(companyCode.client,purchasingOrg.client),eq(companyCode.companyCode,purchasingOrg.companyCode))).where(and(eq(purchasingOrg.isActive,true),eq(companyCode.isActive,true))).orderBy(asc(purchasingOrg.purchasingOrg));
+  const organisations=await tx.select({code:purchasingOrg.purchasingOrg,name:purchasingOrg.name,companyCode:companyCode.companyCode,currency:companyCode.currency}).from(purchasingOrg).innerJoin(companyCode,and(eq(companyCode.client,purchasingOrg.client),eq(companyCode.companyCode,purchasingOrg.companyCode))).where(and(eq(purchasingOrg.isActive,true),eq(companyCode.isActive,true))).orderBy(asc(purchasingOrg.purchasingOrg));
   const selected=organisations.find(row=>row.code===org);
   const groups=await tx.select({code:purchasingGroup.purchasingGroup,name:purchasingGroup.name,org:purchasingGroup.purchasingOrg}).from(purchasingGroup).where(eq(purchasingGroup.isActive,true)).orderBy(asc(purchasingGroup.purchasingGroup));
   const currencies=await tx.select({code:currency.code,name:currency.name}).from(currency).where(eq(currency.isActive,true)).orderBy(asc(currency.code));
