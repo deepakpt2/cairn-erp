@@ -24,6 +24,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
+import { country } from '../../platform/tables/reference';
+import { centralAddress } from './central-address-schema';
 
 /* ══ Enterprise structure ═══════════════════════════════════════════════════ */
 
@@ -316,6 +318,24 @@ export const purchasingGroup = pgTable(
   ],
 );
 
+/** Tenant-local mirror of SAP factory-calendar customizing used by the OVX5 value help. */
+export const factoryCalendar = pgTable(
+  'factory_calendar',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    calendarId: char('calendar_id', { length: 2 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.calendarId] }),
+    check('factory_calendar_key_format_ck', sql`${t.calendarId} ~ '^[A-Z0-9]{2}$'`),
+  ],
+);
+
 /** Sales organisation — legally responsible for sales (§6.1). */
 export const salesOrg = pgTable(
   'sales_org',
@@ -323,15 +343,64 @@ export const salesOrg = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    salesOrg: varchar('sales_org', { length: 10 }).notNull(),
-    name: varchar('name', { length: 160 }).notNull(),
-    companyCode: varchar('company_code', { length: 10 }).notNull(),
-    currency: char('currency', { length: 3 }).notNull(),
-    country: char('country', { length: 2 }).notNull(),
+    salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+    /** Set only by the separate SCR-021 assignment activity. */
+    companyCode: varchar('company_code', { length: 10 }),
+    /** Optional SAP CUKY key for pricing and reporting in the Sales Organization. */
+    currency: varchar('currency', { length: 5 }),
+    /** Optional CAM address association; address contents live only in central_address. */
+    addressNumber: char('address_number', { length: 10 }),
+    /** Two-character legacy factory-calendar key; rules are maintained separately. */
+    factoryCalendar: char('factory_calendar', { length: 2 }),
+    /** Optional sourcing Purchasing Organization shown on the OVX5 definition. */
+    purchasingOrganization: varchar('purchasing_organization', { length: 4 }),
+    /** Optional reference Sales Organization used for sales document-type determination. */
+    referenceSalesOrg: varchar('reference_sales_org', { length: 4 }),
+    /** Optional ALE integration switch; persisted here, while ALE processing is a separate integration. */
+    alePurchaseOrders: boolean('ale_purchase_orders').notNull().default(false),
+    /** Optional intercompany billing customer/vendor master keys. */
+    intercompanyBillingCustomer: varchar('intercompany_billing_customer', { length: 10 }),
+    intercompanyBillingVendor: varchar('intercompany_billing_vendor', { length: 10 }),
+    rebateProcessingActive: boolean('rebate_processing_active').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.salesOrg] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.salesOrg] }),
+    check('sales_org_key_format_ck', sql`${t.salesOrg} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_org_address_number_format_ck', sql`${t.addressNumber} is null or ${t.addressNumber} ~ '^[0-9]{10}$'`),
+    check('sales_org_factory_calendar_format_ck', sql`${t.factoryCalendar} is null or ${t.factoryCalendar} ~ '^[A-Z0-9]{2}$'`),
+    check('sales_org_purchasing_org_format_ck', sql`${t.purchasingOrganization} is null or ${t.purchasingOrganization} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_org_reference_sales_org_format_ck', sql`${t.referenceSalesOrg} is null or ${t.referenceSalesOrg} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_org_intercompany_vendor_format_ck', sql`${t.intercompanyBillingVendor} is null or ${t.intercompanyBillingVendor} ~ '^[0-9]{1,10}$'`),
+    foreignKey({ name: 'sales_org_company_code_fk', columns: [t.client, t.companyCode], foreignColumns: [companyCode.client, companyCode.companyCode] }),
+    foreignKey({ name: 'sales_org_address_number_fk', columns: [t.client, t.addressNumber], foreignColumns: [centralAddress.client, centralAddress.addressNumber] }),
+    foreignKey({ name: 'sales_org_factory_calendar_fk', columns: [t.client, t.factoryCalendar], foreignColumns: [factoryCalendar.client, factoryCalendar.calendarId] }),
+    foreignKey({ name: 'sales_org_purchasing_org_fk', columns: [t.client, t.purchasingOrganization], foreignColumns: [purchasingOrg.client, purchasingOrg.purchasingOrg] }),
+    foreignKey({ name: 'sales_org_reference_sales_org_fk', columns: [t.client, t.referenceSalesOrg], foreignColumns: [t.client, t.salesOrg] }),
+  ],
+);
+
+/** Language-dependent Sales Organization texts (TVKOT analogue, including the form-text key). */
+export const salesOrgText = pgTable(
+  'sales_org_text',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+    /** SAP language key (SPRAS/SY-LANGU), one character; English is E. */
+    languageKey: char('language_key', { length: 1 }).notNull(),
+    name: varchar('name', { length: 35 }).notNull(),
+    /** Optional language-dependent 12-character standard text-module key. */
+    formText: char('form_text', { length: 12 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.salesOrg, t.languageKey] }),
+    check('sales_org_text_language_format_ck', sql`${t.languageKey} ~ '^[A-Z]$'`),
+    foreignKey({ name: 'sales_org_text_sales_org_fk', columns: [t.client, t.salesOrg], foreignColumns: [salesOrg.client, salesOrg.salesOrg] }),
+  ],
 );
 
 export const distributionChannel = pgTable(
@@ -369,7 +438,7 @@ export const salesArea = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    salesOrg: varchar('sales_org', { length: 10 }).notNull(),
+    salesOrg: varchar('sales_org', { length: 4 }).notNull(),
     distributionChannel: varchar('distribution_channel', { length: 4 }).notNull(),
     division: varchar('division', { length: 4 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
@@ -378,6 +447,8 @@ export const salesArea = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.client, t.salesOrg, t.distributionChannel, t.division] }),
+    check('sales_area_sales_org_key_format_ck', sql`${t.salesOrg} ~ '^[A-Z0-9]{4}$'`),
+    foreignKey({ name: 'sales_area_sales_org_fk', columns: [t.client, t.salesOrg], foreignColumns: [salesOrg.client, salesOrg.salesOrg] }),
   ],
 );
 
@@ -513,3 +584,5 @@ export * from './supplier-partner-schema';
 
 export * from './customer-company-schema';
 export * from './customer-sales-area-schema';
+
+export * from './central-address-schema';

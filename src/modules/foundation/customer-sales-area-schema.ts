@@ -7,7 +7,7 @@ import { bpRole } from './business-partner-schema';
 export const customerSalesArea=pgTable('customer_sales_area',{
   client:varchar('client',{length:4}).notNull().references(()=>client.client,{onDelete:'cascade'}),
   partnerNumber:varchar('partner_number',{length:40}).notNull(),roleCode:varchar('role_code',{length:16}).notNull().default('CUSTOMER'),
-  salesOrg:varchar('sales_org',{length:10}).notNull(),distributionChannel:varchar('distribution_channel',{length:4}).notNull(),division:varchar('division',{length:4}).notNull(),
+  salesOrg:varchar('sales_org',{length:4}).notNull(),distributionChannel:varchar('distribution_channel',{length:4}).notNull(),division:varchar('division',{length:4}).notNull(),
   salesDistrict:varchar('sales_district',{length:6}),deliveringPlant:varchar('delivering_plant',{length:10}),pricingProcedure:varchar('pricing_procedure',{length:6}),
   completeDelivery:boolean('complete_delivery').notNull().default(false),orderCombination:boolean('order_combination').notNull().default(false),
   salesStatus:varchar('sales_status',{length:16}).notNull().default('INCOMPLETE'),

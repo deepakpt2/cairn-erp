@@ -77,6 +77,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'purchasing-orgs') return '/config/purchasing-orgs';
   if (target.id === 'purchasing-org-company-code') return '/config/purchasing-orgs/assign-company';
   if (target.id === 'purchasing-groups') return '/config/purchasing-groups';
+  if (target.id === 'sales-orgs') return '/config/sales-orgs';
   if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
   return '/inventory/materials';
 }

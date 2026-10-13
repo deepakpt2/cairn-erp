@@ -58,11 +58,11 @@ const ACTIVITIES: Activity[] = [
   { code: 'CFG.PROC.PURGROUP.DEFINE', area: 'MATERIALS_MANAGEMENT', title: 'Define purchasing groups', kind: 'DEFINE', prerequisites: ['CFG.PROC.PURORG.DEFINE'], enables: 'Buyer assignment', wizardStage: 'ONBOARDING', route: '/config/purchasing-groups' },
   { code: 'CFG.PROC.RELEASE.DEFINE', area: 'MATERIALS_MANAGEMENT', title: 'Define release strategy for purchase orders', kind: 'DEFINE', prerequisites: ['CFG.PROC.PURGROUP.DEFINE'], enables: 'Document approval (R-05)', wizardStage: 'ONBOARDING', route: '/config/release-strategies' },
 
-  { code: 'CFG.SALES.SALESORG.DEFINE', area: 'SALES', title: 'Define sales organisation', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Selling', wizardStage: 'ONBOARDING', route: '/config/sales-orgs' },
-  { code: 'CFG.SALES.SALESORG.ASSIGN_COMPANY', area: 'SALES', title: 'Assign sales organisation to company code', kind: 'ASSIGN', prerequisites: ['CFG.SALES.SALESORG.DEFINE'], enables: 'Sales accounting', wizardStage: 'ONBOARDING', route: '/config/sales-orgs' },
-  { code: 'CFG.ORG.DISTCHANNEL.DEFINE', area: 'SALES', title: 'Define distribution channel', kind: 'DEFINE', prerequisites: ['CFG.SALES.SALESORG.DEFINE'], enables: 'Sales areas', wizardStage: 'ONBOARDING', route: '/config/distribution-channels' },
-  { code: 'CFG.ORG.DIVISION.DEFINE', area: 'SALES', title: 'Define division', kind: 'DEFINE', prerequisites: ['CFG.SALES.SALESORG.DEFINE'], enables: 'Product line reporting', wizardStage: 'ONBOARDING', route: '/config/divisions' },
-  { code: 'CFG.ORG.SALESAREA.DEFINE', area: 'SALES', title: 'Define sales area', kind: 'DEFINE', prerequisites: ['CFG.SALES.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.DIVISION.DEFINE'], enables: 'Sales master data and documents', wizardStage: 'ONBOARDING', route: '/config/sales-areas' },
+  { code: 'CFG.ORG.SALESORG.DEFINE', area: 'SALES', title: 'Define Sales Organizations', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Selling and Sales Areas', wizardStage: 'ONBOARDING', route: '/config/sales-orgs' },
+  { code: 'CFG.SALES.SALESORG.ASSIGN_COMPANY', area: 'SALES', title: 'Assign Sales Organization to Company Code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Sales accounting', wizardStage: 'ONBOARDING' },
+  { code: 'CFG.ORG.DISTCHANNEL.DEFINE', area: 'SALES', title: 'Define distribution channel', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Sales areas', wizardStage: 'ONBOARDING', route: '/config/distribution-channels' },
+  { code: 'CFG.ORG.DIVISION.DEFINE', area: 'SALES', title: 'Define division', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Product line reporting', wizardStage: 'ONBOARDING', route: '/config/divisions' },
+  { code: 'CFG.ORG.SALESAREA.DEFINE', area: 'SALES', title: 'Define sales area', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.DIVISION.DEFINE'], enables: 'Sales master data and documents', wizardStage: 'ONBOARDING', route: '/config/sales-areas' },
   { code: 'CFG.SALES.PRICING.DEFINE', area: 'SALES', title: 'Define pricing procedure', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESAREA.DEFINE'], enables: 'Price determination', wizardStage: 'ONBOARDING', route: '/config/pricing-procedures' },
   { code: 'CFG.SALES.CONDITION.MAINTAIN', area: 'SALES', title: 'Maintain condition records', kind: 'DEFINE', prerequisites: ['CFG.SALES.PRICING.DEFINE'], enables: 'Actual prices on documents', wizardStage: 'STANDARD', route: '/config/conditions' },
 
@@ -98,6 +98,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CFG.ORG.PLANT.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and change tenant-scoped Plant records' },
   { code: 'CFG.ORG.PLANT.ASSIGN_COMPANY', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign an unassigned Plant to a Company Code' },
   { code: 'CFG.ORG.STORAGELOC.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Storage Locations' },
+  { code: 'CFG.ORG.SALESORG.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change and deactivate tenant-scoped Sales Organizations' },
   { code: 'CFG.PROC.PURORG.DEFINE', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Purchasing Organisations' },
   { code: 'CFG.PROC.PURORG.ASSIGN_COMPANY', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Assign an active tenant Purchasing Organisation to one active Company Code' },
   { code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign a chart of accounts to a Company Code' },
@@ -192,6 +193,7 @@ const REGISTRY: Array<{
   { ourCode: 'FIN.CLOSE.PERIOD', termType: 'TRANSACTION', module: 'FIN', title: 'Posting periods', route: '/config/posting-periods', tier: 'TIER_1_BUILT', conformance: 'A', aliases: ['OB52'], description: 'Which periods are open, per account type. Closing a period is recorded in the change log.' },
   { ourCode: 'CFG.ORG.PLANT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Plant definition', route: '/config/plants', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX10'], description: 'Production and storage sites; Company Code assignment and Storage Location definitions are separate activities.' },
   { ourCode: 'CFG.ORG.STORAGELOC.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Storage Location definitions', route: '/config/storage-locations', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX09'], description: 'Create, change and deactivate Storage Locations within an active tenant Plant; negative-stock allowance is stored configuration only.' },
+  { ourCode: 'CFG.ORG.SALESORG.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Sales Organization definition', route: '/config/sales-orgs', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Create, change and soft-deactivate tenant Sales Organizations with retained history; Company Code assignment is separate in SCR-021. Exact S/4HANA on-prem GUI field parity remains under review.' },
   { ourCode: 'CFG.PROC.PURORG.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PROC', title: 'Purchasing Organisation definitions', route: '/config/purchasing-orgs', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX08'], description: 'Define the tenant-local code and name, retain change history and deactivate; Company Code and Plant assignments remain separate, and supplier-purchasing use requires one Company Code.' },
   { ourCode: 'CFG.PROC.PURORG.ASSIGN_COMPANY', termType: 'CONFIG_ACTIVITY', module: 'PROC', title: 'Assign Purchasing Organisation to Company Code', route: '/config/purchasing-orgs/assign-company', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Make the initial assignment to exactly one active Company Code in the same tenant; replacement and unassignment are not included.' },
   { ourCode: 'CFG.PLT.CLIENT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PLT', title: 'Tenant administration', route: '/clients', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Create and manage tenants.' },
@@ -271,6 +273,19 @@ async function main() {
       insert into config_activity_status (client, activity_code, status, created_by)
       select client, 'CFG.FIN.PAYMENTMETHOD.DEFINE', 'NOT_STARTED', 'SEED'
         from client
+      on conflict (client, activity_code) do nothing
+    `);
+    // SCR-020 is newly actionable for existing tenants. Derive missing checklist
+    // state from existing Sales Organization definitions rather than the old placeholder.
+    await client.unsafe(`
+      insert into config_activity_status (client, activity_code, status, completed_at, completed_by, created_by)
+      select c.client,
+             'CFG.ORG.SALESORG.DEFINE',
+             case when exists (select 1 from sales_org o where o.client = c.client) then 'COMPLETED' else 'NOT_STARTED' end,
+             (select max(coalesce(o.changed_at, o.created_at)) from sales_org o where o.client = c.client),
+             case when exists (select 1 from sales_org o where o.client = c.client) then 'SEED' else null end,
+             'SEED'
+        from client c
       on conflict (client, activity_code) do nothing
     `);
 

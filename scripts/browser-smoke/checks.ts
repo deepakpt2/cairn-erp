@@ -95,6 +95,19 @@ async function createSupplierRoleThroughUi(page: Page, BASE: string, number: str
   await page.getByText('Partner saved. Status: Created.', { exact: true }).waitFor();
 }
 
+async function createCustomerRoleThroughUi(page: Page, BASE: string, number: string, name: string) {
+  await page.goto(`${BASE}/foundation/partners?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="partnerNumber"]').fill(number);
+  await page.locator('input[name="name"]').fill(name);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="city"]').fill('Kuwait City');
+  await page.locator('[name="roles"][value="CUSTOMER"]').check();
+  await page.locator('[name="roles"][value="SUPPLIER"]').uncheck();
+  await page.locator('[name="reason"]').fill('Browser intercompany-billing Customer prerequisite');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Partner saved. Status: Created.', { exact: true }).waitFor();
+}
+
 export async function onboard(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const NAME = FIXTURE_NAME;
@@ -3040,6 +3053,326 @@ async function purchasingOrgDefinition(ctx: BrowserContext) {
   console.log('  ✓ Auditor can review retained inactive history but direct list/detail/create URLs expose no maintenance controls');
 }
 
+
+async function salesOrgDefinition(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = 'B153';
+  const changedName = 'Global Sales Org Updated';
+  const createReason = 'B-153 Sales Organization create';
+  const changeReason = 'B-153 Sales Organization change';
+  const deactivateReason = 'B-153 Sales Organization deactivation';
+  const vendorNumber = '12345';
+  const customerNumber = 'CUST153';
+  const roleCode = 'B153_SALESORG_DEFINE';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Sales Organizations: verify OVX5 fields, CAM address, logon-language text, exact capability, history and separate Company Code assignment');
+
+  // Business Partner choices are created through the real UI; only test authorization and calendar customizing are fixture rows.
+  await createSupplierRoleThroughUi(page, BASE, vendorNumber, 'B-153 Intercompany Vendor');
+  await createCustomerRoleThroughUi(page, BASE, customerNumber, 'B-153 Intercompany Customer');
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, ${roleCode}, 'B-153 Sales Organization Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, ${roleCode}, 'CFG.ORG.SALESORG.DEFINE', 'BROWSER_FIXTURE')`);
+    const definerId = randomUUID();
+    const viewerId = randomUUID();
+    await tx.execute(sql`insert into app_user
+      (id, client, username, full_name, password_hash, must_change_password, preferences, created_by)
+      values (${definerId}, ${CLIENT}, 'salesorg.definer', 'B-153 Sales Organization Definer', ${passwordHash}, false,
+              ${JSON.stringify({ sapLanguageKey: 'D' })}::jsonb, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+      values (${CLIENT}, ${definerId}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into app_user
+      (id, client, username, full_name, password_hash, must_change_password, created_by)
+      values (${viewerId}, ${CLIENT}, 'salesorg.viewer', 'B-153 Sales Organization Auditor', ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+      values (${CLIENT}, ${viewerId}, 'AUDITOR', 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into factory_calendar (client, calendar_id, name, created_by)
+      values (${CLIENT}, '01', 'B-153 sample factory calendar', 'BROWSER_FIXTURE')
+      on conflict (client, calendar_id) do nothing`);
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = ${roleCode} order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), ['CFG.ORG.SALESORG.DEFINE']);
+
+  const existingTarget = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select sales_org from sales_org where client = ${CLIENT} and sales_org = ${code}
+  `))) as unknown as Array<{ sales_org: string }>;
+  assert.equal(existingTarget.length, 0, 'The reserved B-153 Sales Organization key must be unused in its fresh tenant.');
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+  }
+
+  async function readDefinition(targetCode: string) {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select org.client, org.sales_org, btrim(org.company_code) as company_code,
+             btrim(org.currency) as currency, btrim(org.factory_calendar) as factory_calendar,
+             org.ale_purchase_orders, btrim(org.purchasing_organization) as purchasing_organization,
+             btrim(org.reference_sales_org) as reference_sales_org, org.rebate_processing_active,
+             btrim(org.address_number) as address_number, btrim(org_text.language_key) as language_key,
+             btrim(org_text.name) as name, btrim(org_text.form_text) as form_text,
+             btrim(address.country) as country, address.search_term_1, address.search_term_2,
+             address.street, address.house_number, address.postal_code, address.city, address.region,
+             address.po_box, address.po_box_postal_code, address.company_postal_code,
+             address.telephone, address.telephone_extension, address.mobile_phone,
+             address.fax_number, address.fax_extension, address.email_address,
+             org.intercompany_billing_customer, org.intercompany_billing_vendor,
+             org.is_active, org.created_by, org.changed_by
+        from sales_org org
+        left join sales_org_text org_text
+          on org_text.client = org.client and org_text.sales_org = org.sales_org and org_text.language_key = 'D'
+        left join central_address address
+          on address.client = org.client and address.address_number = org.address_number
+       where org.client = ${CLIENT} and org.sales_org = ${targetCode}
+    `))) as unknown as Array<{
+      client: string; sales_org: string; company_code: string | null; currency: string | null;
+      factory_calendar: string | null; ale_purchase_orders: boolean; purchasing_organization: string | null;
+      reference_sales_org: string | null; rebate_processing_active: boolean; address_number: string | null;
+      language_key: string | null; name: string | null; form_text: string | null; country: string | null;
+      search_term_1: string | null; search_term_2: string | null; street: string | null; house_number: string | null;
+      postal_code: string | null; city: string | null; region: string | null; po_box: string | null;
+      po_box_postal_code: string | null; company_postal_code: string | null; telephone: string | null;
+      telephone_extension: string | null; mobile_phone: string | null; fax_number: string | null;
+      fax_extension: string | null; email_address: string | null; intercompany_billing_customer: string | null;
+      intercompany_billing_vendor: string | null; is_active: boolean; created_by: string; changed_by: string | null;
+    }>;
+    assert.equal(rows.length, 1, `Sales Organization ${targetCode} must be retained exactly once.`);
+    return rows[0];
+  }
+
+  await signInAs('salesorg.definer');
+  await page.goto(`${BASE}/config/sales-orgs`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Change View "Sales Organizations": Overview', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'New Entries', exact: true }).count(), 1);
+
+  // The standard package maintains Sales Organization 1000 and its Company Code separately.
+  const baseline = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select btrim(company_code) as company_code, is_active from sales_org
+     where client = ${CLIENT} and sales_org = '1000'
+  `))) as unknown as Array<{ company_code: string | null; is_active: boolean }>;
+  assert.equal(baseline.length, 1);
+  assert.equal(baseline[0].company_code, '1000');
+  assert.equal(baseline[0].is_active, true);
+  await page.goto(`${BASE}/config/sales-orgs?salesOrg=1000`, { waitUntil: 'commit' });
+  const baselineDetail = page.locator('section.panel').filter({
+    has: page.getByRole('heading', { name: 'Sales Organization · 1000', exact: true }),
+  });
+  await baselineDetail.waitFor();
+  assert.equal((await baselineDetail.locator('dl > div').filter({ hasText: 'Company Code (assigned separately)' }).locator('dd').innerText()).trim(), '1000');
+  assert.equal(await baselineDetail.locator('input[name="companyCode"]').count(), 0);
+  console.log('  ✓ standard Sales Organization is visible and its Company Code is read-only');
+
+  await page.goto(`${BASE}/config/sales-orgs?new=1&client=0100`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'New Sales Organization', exact: true }).waitFor();
+  for (const field of ['client', 'changedBy', 'companyCode', 'isActive']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is outside SCR-020 definition input.`);
+  }
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '0');
+  await page.locator('[name="salesOrg"]').fill(code);
+  await page.locator('[name="name"]').fill('Global Sales Org');
+  await page.getByText('Description is saved in your SAP logon language (D).', { exact: true }).waitFor();
+  await page.locator('[name="currency"]').selectOption('USD');
+  assert.equal(await page.locator('[name="formText"]').inputValue(), 'STANDARD');
+  const calendarOptions = await page.locator('[name="factoryCalendar"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+  assert.ok(calendarOptions.includes('01'), 'The active tenant Factory Calendar is offered by the value help.');
+  assert.equal(await page.locator('[name="factoryCalendar"]').inputValue(), '01', 'Factory Calendar 01 is the default when that customizing exists.');
+  await page.locator('[name="factoryCalendar"]').selectOption('01');
+  await page.locator('[name="purchasingOrganization"]').selectOption('1000');
+  await page.locator('[name="referenceSalesOrg"]').selectOption('1000');
+  await page.locator('[name="intercompanyBillingVendor"]').selectOption(vendorNumber);
+  await page.locator('[name="intercompanyBillingCustomer"]').selectOption(customerNumber);
+  assert.equal(await page.locator('[name="alePurchaseOrders"]').isChecked(), false);
+  assert.equal(await page.locator('[name="rebateProcessingActive"]').isChecked(), false);
+  await page.locator('[name="alePurchaseOrders"]').check();
+  await page.locator('[name="rebateProcessingActive"]').check();
+
+  await page.getByRole('button', { name: 'Maintain Address', exact: true }).click();
+  const addressDialog = page.getByRole('dialog', { name: 'Central Address Management', exact: true });
+  await addressDialog.waitFor();
+  await addressDialog.locator('[name="addressCountry"]').selectOption('KW');
+  for (const [field, value] of Object.entries({
+    searchTerm1: 'NORTH', searchTerm2: 'EAST', street: 'Gulf Road', houseNumber: '12A',
+    postalCode: '70010', city: 'Al Jahra', region: 'JAH', poBox: '123', poBoxPostalCode: '70012',
+    companyPostalCode: '70014', telephone: '+965 2222 0100', telephoneExtension: '101',
+    mobilePhone: '+965 5550 0100', faxNumber: '+965 2222 0199', faxExtension: '199',
+    emailAddress: 'sales@example.test',
+  })) await addressDialog.locator(`[name="${field}"]`).fill(value);
+  await addressDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.locator('[name="reason"]').fill(createReason);
+  const createForm = page.locator('form').filter({ has: page.locator('[name="mode"]') });
+  await createForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({
+      client: '0100', changedBy: 'spoofed.actor', companyCode: '9999', isActive: 'false',
+    })) {
+      const input = document.createElement('input'); input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Sales Organization ${code} created; Company Code assignment remains separate.`, { exact: true },
+  ).waitFor();
+  const created = await readDefinition(code);
+  assert.match(created.address_number ?? '', /^\d{10}$/);
+  assert.deepEqual(created, {
+    client: CLIENT, sales_org: code, company_code: null, currency: 'USD', factory_calendar: '01',
+    ale_purchase_orders: true, purchasing_organization: '1000', reference_sales_org: '1000',
+    rebate_processing_active: true, address_number: created.address_number, language_key: 'D',
+    name: 'Global Sales Org', form_text: 'STANDARD', country: 'KW', search_term_1: 'NORTH',
+    search_term_2: 'EAST', street: 'Gulf Road', house_number: '12A', postal_code: '70010',
+    city: 'Al Jahra', region: 'JAH', po_box: '123', po_box_postal_code: '70012',
+    company_postal_code: '70014', telephone: '+965 2222 0100', telephone_extension: '101',
+    mobile_phone: '+965 5550 0100', fax_number: '+965 2222 0199', fax_extension: '199',
+    email_address: 'sales@example.test', intercompany_billing_customer: customerNumber,
+    intercompany_billing_vendor: vendorNumber, is_active: true, created_by: 'salesorg.definer', changed_by: null,
+  });
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', code));
+  assert.equal(history.length, 1);
+  assert.equal(history[0].changeType, 'CREATE');
+  assert.equal(history[0].changedBy, 'salesorg.definer');
+  assert.equal(history[0].transactionCode, 'CFG.ORG.SALESORG.DEFINE');
+  assert.equal(history[0].reason, createReason);
+  assert.ok(history[0].items.some((item) => item.fieldName === 'street' && item.newValue === 'Gulf Road'));
+  assert.ok(history[0].items.some((item) => item.fieldName === 'formText' && item.newValue === 'STANDARD'));
+  assert.ok(history[0].items.some((item) => item.fieldName === 'factoryCalendar' && item.newValue === '01'));
+  assert.ok(history[0].items.some((item) => item.fieldName === 'intercompanyBillingVendor' && item.newValue === '0000012345'));
+  assert.ok(history[0].items.some((item) => item.fieldName === 'intercompanyBillingCustomer' && item.newValue === customerNumber));
+  assert.ok(!history[0].items.some((item) => item.fieldName === 'companyCode'));
+  let [activity] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = 'CFG.ORG.SALESORG.DEFINE'
+  `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'salesorg.definer');
+  console.log('  ✓ exact-capability create uses logon language, persists OVX5 values/CAM address and ignores forged assignment data');
+
+  await page.goto(`${BASE}/config/sales-orgs?salesOrg=${code}`, { waitUntil: 'commit' });
+  const createdDetail = page.locator('section.panel').filter({
+    has: page.getByRole('heading', { name: `Sales Organization · ${code}`, exact: true }),
+  });
+  await createdDetail.waitFor();
+  assert.equal((await createdDetail.locator('dl > div').filter({ hasText: /^Vendor/ }).locator('dd').innerText()).trim(), '0000012345');
+  assert.equal((await createdDetail.locator('dl > div').filter({ hasText: 'Customer for Intercompany Billing' }).locator('dd').innerText()).trim(), customerNumber);
+  console.log('  ✓ vendor selection preserves canonical BP key while detail and audit show the fixed ten-digit ID');
+
+  await page.goto(`${BASE}/config/sales-orgs?edit=${code}`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Change Sales Organization', exact: true }).waitFor();
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '1');
+  assert.equal(await page.locator('[name="salesOrg"]').getAttribute('readonly'), '');
+  await page.locator('[name="name"]').fill(changedName);
+  await page.locator('[name="formText"]').fill('B153FORM');
+  await page.getByRole('button', { name: 'Change Address', exact: true }).click();
+  const changeAddressDialog = page.getByRole('dialog', { name: 'Central Address Management', exact: true });
+  await changeAddressDialog.waitFor();
+  await changeAddressDialog.locator('[name="street"]').fill('Boulevard 10');
+  await changeAddressDialog.locator('[name="telephone"]').fill('+965 2222 0200');
+  await changeAddressDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.locator('[name="reason"]').fill(changeReason);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(`Sales Organization ${code} saved and its change history recorded.`, { exact: true }).waitFor();
+  const changed = await readDefinition(code);
+  assert.deepEqual(changed, {
+    client: CLIENT, sales_org: code, company_code: null, currency: 'USD', factory_calendar: '01',
+    ale_purchase_orders: true, purchasing_organization: '1000', reference_sales_org: '1000',
+    rebate_processing_active: true, address_number: created.address_number, language_key: 'D',
+    name: changedName, form_text: 'B153FORM', country: 'KW', search_term1: 'NORTH',
+    search_term2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
+    city: 'Al Jahra', region: 'JAH', po_box: '123', po_box_postal_code: '70012',
+    company_postal_code: '70014', telephone: '+965 2222 0200', telephone_extension: '101',
+    mobile_phone: '+965 5550 0100', fax_number: '+965 2222 0199', fax_extension: '199',
+    email_address: 'sales@example.test', intercompany_billing_customer: customerNumber,
+    intercompany_billing_vendor: vendorNumber, is_active: true, created_by: 'salesorg.definer', changed_by: 'salesorg.definer',
+  });
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', code));
+  assert.equal(history.length, 2);
+  assert.equal(history[0].changeType, 'CHANGE');
+  assert.equal(history[0].reason, changeReason);
+  assert.ok(history[0].items.some((item) => item.fieldName === 'name' && item.oldValue === 'Global Sales Org' && item.newValue === changedName));
+  assert.ok(history[0].items.some((item) => item.fieldName === 'street' && item.oldValue === 'Gulf Road' && item.newValue === 'Boulevard 10'));
+  assert.ok(!history.flatMap((entry) => entry.items).some((item) => item.fieldName === 'companyCode'));
+  console.log('  ✓ change retains ADRNR and dependent CAM fields while the language-dependent description/Form Text are versioned');
+
+  await page.goto(`${BASE}/config/sales-orgs?edit=${code}`, { waitUntil: 'commit' });
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '2');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(`No Sales Organization definition data changed for ${code}.`, { exact: true }).waitFor();
+  assert.equal((await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', code))).length, 2);
+  console.log('  ✓ no-op change does not add a change document');
+
+  await page.goto(`${BASE}/config/sales-orgs?salesOrg=${code}`, { waitUntil: 'commit' });
+  const deactivateDetails = page.locator('details').filter({ hasText: 'Deactivate Sales Organization' });
+  await deactivateDetails.locator('summary').click();
+  await deactivateDetails.locator('[name="confirmDeactivation"]').check();
+  await deactivateDetails.locator('[name="reason"]').fill(deactivateReason);
+  await deactivateDetails.locator('form').getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
+  await page.getByRole('status').getByText(`Sales Organization ${code} deactivated and retained with its history.`, { exact: true }).waitFor();
+  assert.deepEqual(await readDefinition(code), {
+    client: CLIENT, sales_org: code, company_code: null, currency: 'USD', factory_calendar: '01',
+    ale_purchase_orders: true, purchasing_organization: '1000', reference_sales_org: '1000',
+    rebate_processing_active: true, address_number: created.address_number, language_key: 'D',
+    name: changedName, form_text: 'B153FORM', country: 'KW', search_term1: 'NORTH',
+    search_term2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
+    city: 'Al Jahra', region: 'JAH', po_box: '123', po_box_postal_code: '70012',
+    company_postal_code: '70014', telephone: '+965 2222 0200', telephone_extension: '101',
+    mobile_phone: '+965 5550 0100', fax_number: '+965 2222 0199', fax_extension: '199',
+    email_address: 'sales@example.test', intercompany_billing_customer: customerNumber,
+    intercompany_billing_vendor: vendorNumber, is_active: false, created_by: 'salesorg.definer', changed_by: 'salesorg.definer',
+  });
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', code));
+  assert.equal(history.length, 3);
+  assert.equal(history[0].changeType, 'CHANGE');
+  assert.equal(history[0].reason, deactivateReason);
+  assert.ok(history[0].items.some((item) => item.fieldName === 'isActive' && item.oldValue === 'true' && item.newValue === 'false'));
+  console.log('  ✓ confirmed soft deactivation keeps one inactive row and full retained history');
+
+  // The standard organisation is referenced by a Sales Area; a blocked deactivation must not change it.
+  await page.goto(`${BASE}/config/sales-orgs?salesOrg=1000`, { waitUntil: 'commit' });
+  const protectedDetails = page.locator('details').filter({ hasText: 'Deactivate Sales Organization' });
+  await protectedDetails.locator('summary').click();
+  await protectedDetails.locator('[name="confirmDeactivation"]').check();
+  await protectedDetails.locator('form').getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
+  await page.getByRole('alert').getByText(/still referenced by sales-area configuration/, { exact: false }).waitFor();
+  const protectedBaseline = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select is_active from sales_org where client = ${CLIENT} and sales_org = '1000'
+  `))) as unknown as Array<{ is_active: boolean }>;
+  assert.equal(protectedBaseline[0].is_active, true);
+  await page.goto(`${BASE}/config/sales-orgs?edit=${code}`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: `Sales Organization · ${code}`, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.locator('details').count(), 0);
+  assert.equal(await page.getByRole('button', { name: /delete|reactivate/i }).count(), 0);
+  console.log('  ✓ dependent Sales Areas block deactivation and inactive definitions cannot be changed or reactivated');
+
+  await signInAs('salesorg.viewer');
+  await page.goto(`${BASE}/config/sales-orgs`, { waitUntil: 'commit' });
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.SALESORG.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'New Entries', exact: true }).count(), 0);
+  await page.goto(`${BASE}/config/sales-orgs?new=1&client=0100`, { waitUntil: 'commit' });
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.SALESORG.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'New Sales Organization', exact: true }).count(), 0);
+  for (const field of ['salesOrg', 'name', 'currency', 'factoryCalendar', 'companyCode', 'isActive']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `Auditor direct-create URL has no ${field} field.`);
+  }
+  await page.goto(`${BASE}/config/sales-orgs?salesOrg=${code}&history=1`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: `Sales Organization · ${code}`, exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Change history', exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.locator('details').count(), 0);
+  assert.equal(await page.getByRole('button', { name: /delete|reactivate|deactivate/i }).count(), 0);
+  assert.equal(await page.locator('[name="salesOrg"], [name="name"], [name="companyCode"]').count(), 0);
+  await page.getByText(deactivateReason, { exact: true }).waitFor();
+  console.log('  ✓ Auditor retains tenant-local review but receives no definition or deactivation controls');
+}
+
 async function purchasingOrgCompanyCodeAssignment(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const code = 'B151PO';
@@ -3186,6 +3519,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchasing-orgs': purchasingOrgDefinition,
   'purchasing-org-company-code': purchasingOrgCompanyCodeAssignment,
   'purchasing-groups': purchasingGroups,
+  'sales-orgs': salesOrgDefinition,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,

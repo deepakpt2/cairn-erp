@@ -141,6 +141,8 @@ export interface AuthenticatedUser {
   email: string | null;
   mustChangePassword: boolean;
   capabilities: string[];
+  /** SAP one-character logon language key used by language-dependent master texts. */
+  logonLanguage?: string;
 }
 
 interface UserRow {
@@ -389,6 +391,19 @@ export interface SessionContext {
   renewed: boolean;
 }
 
+/** Resolve the user's SAP-style one-character logon language from personal preferences. */
+export function sapLanguageKeyFromPreferences(preferences: unknown): string {
+  if (preferences && typeof preferences === 'object' && !Array.isArray(preferences)) {
+    const values = preferences as Record<string, unknown>;
+    const explicit = values.sapLanguageKey ?? values.logonLanguage;
+    if (typeof explicit === 'string' && /^[A-Za-z]$/.test(explicit.trim())) return explicit.trim().toUpperCase();
+    const locale = values.locale ?? values.language;
+    if (typeof locale === 'string' && locale.trim().toLowerCase().split(/[-_]/)[0] === 'en') return 'E';
+  }
+  // English is the only UI locale currently registered; SAP's language key is E (not EN).
+  return 'E';
+}
+
 /**
  * Resolve a cookie into a session, inside the tenant scope the cookie names.
  *
@@ -404,7 +419,7 @@ export async function resolveSession(
   const rows = (await tx.execute(sql`
     select s.user_id, s.expires_at, s.revoked_at, s.token_hash,
            u.username, u.full_name, u.email, u.is_active, u.is_locked,
-           u.must_change_password
+           u.must_change_password, u.preferences
       from user_session s
       join app_user u on u.client = s.client and u.id = s.user_id
      where s.client = ${input.client}
@@ -421,6 +436,7 @@ export async function resolveSession(
     is_active: boolean;
     is_locked: boolean;
     must_change_password: boolean;
+    preferences: unknown;
   }>;
 
   const row = rows[0];
@@ -453,6 +469,7 @@ export async function resolveSession(
         fullName: row.full_name,
         email: row.email,
         mustChangePassword: row.must_change_password,
+        logonLanguage: sapLanguageKeyFromPreferences(row.preferences),
         capabilities: await loadCapabilities(tx, input.client, row.user_id),
       },
       expiresAt: next,
@@ -468,6 +485,7 @@ export async function resolveSession(
       fullName: row.full_name,
       email: row.email,
       mustChangePassword: row.must_change_password,
+      logonLanguage: sapLanguageKeyFromPreferences(row.preferences),
       capabilities: await loadCapabilities(tx, input.client, row.user_id),
     },
     expiresAt,

@@ -1,9 +1,9 @@
 /** Validated customer sales-area defaults (pricing/delivery only). Order, delivery and billing services must snapshot these values. */
 import { z } from 'zod';
-import { and,eq,asc,sql } from 'drizzle-orm';
+import { and,eq,asc,sql,inArray } from 'drizzle-orm';
 import { withTenant,type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
-import { companyCode,salesOrg,salesArea,plant } from './schema';
+import { companyCode,salesOrg,salesArea,plant,salesOrgText } from './schema';
 import { businessPartner,bpRole } from './business-partner-schema';
 import { customerSalesArea } from './customer-sales-area-schema';
 import { requireGeneralPartner } from './business-partners';
@@ -11,7 +11,7 @@ export class CustomerSalesAreaError extends Error{
   constructor(message:string,readonly remedy='Review the customer sales-area defaults and try again.'){super(message);}
 }
 const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partnerNumber:z.string().regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/),
-  salesOrg:z.string().regex(/^[A-Z0-9]{2,10}$/),distributionChannel:z.string().regex(/^[A-Z0-9]{2,4}$/),division:z.string().regex(/^[A-Z0-9]{2,4}$/),
+  salesOrg:z.string().regex(/^[A-Z0-9]{4}$/),distributionChannel:z.string().regex(/^[A-Z0-9]{2,4}$/),division:z.string().regex(/^[A-Z0-9]{2,4}$/),
   expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),
   salesDistrict:z.string().trim().regex(/^([A-Z0-9]{1,6})?$/,'Sales district uses up to six capital letters or digits.'),
   deliveringPlant:z.string().trim().regex(/^([A-Z0-9]{1,10})?$/,'Delivering plant uses up to ten capital letters or digits.'),
@@ -25,6 +25,7 @@ async function validateSalesArea(tx:Tx,client:string,org:string,channel:string,d
   if(!area?.isActive)throw new CustomerSalesAreaError('Sales area is missing or inactive.');
   const [organisation]=await tx.select().from(salesOrg).where(and(eq(salesOrg.client,client),eq(salesOrg.salesOrg,org)));
   if(!organisation?.isActive)throw new CustomerSalesAreaError('Sales organisation is missing or inactive.');
+  if(!organisation.companyCode)throw new CustomerSalesAreaError('Sales organisation has no assigned Company Code.','Assign it through CFG.SALES.SALESORG.ASSIGN_COMPANY before using it for customer sales-area data.');
   const [company]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,organisation.companyCode)));
   if(!company?.isActive)throw new CustomerSalesAreaError('Sales organisation must belong to an active company.');
   if(plantCode){
@@ -79,16 +80,24 @@ export async function requireCustomerSalesArea(tx:Tx,client:string,partner:strin
   return segment;
 }
 /** Active sales areas (organisation and company must be active), the selected area, and plants of its company code. */
-export async function customerSalesAreaChoices(client:string,selectedKey:string){
+export async function customerSalesAreaChoices(client:string,selectedKey:string,languageKey='E'){
   return withTenant(client,async tx=>{
-    const areas=await tx.select({key:sql<string>`${salesArea.salesOrg} || '/' || ${salesArea.distributionChannel} || '/' || ${salesArea.division}`,
-      org:salesArea.salesOrg,channel:salesArea.distributionChannel,division:salesArea.division,name:salesArea.name,organisation:salesOrg.name,companyCode:salesOrg.companyCode,currency:companyCode.currency})
+    const rows=await tx.select({key:sql<string>`${salesArea.salesOrg} || '/' || ${salesArea.distributionChannel} || '/' || ${salesArea.division}`,
+      org:salesArea.salesOrg,channel:salesArea.distributionChannel,division:salesArea.division,name:salesArea.name,companyCode:salesOrg.companyCode,currency:companyCode.currency})
       .from(salesArea).innerJoin(salesOrg,and(eq(salesOrg.client,salesArea.client),eq(salesOrg.salesOrg,salesArea.salesOrg)))
       .innerJoin(companyCode,and(eq(companyCode.client,salesOrg.client),eq(companyCode.companyCode,salesOrg.companyCode)))
       .where(and(eq(salesArea.isActive,true),eq(salesOrg.isActive,true),eq(companyCode.isActive,true)))
       .orderBy(asc(salesArea.salesOrg),asc(salesArea.distributionChannel),asc(salesArea.division));
-    const selected=areas.find(row=>row.key===selectedKey)??areas[0]??null;
+    const translations=rows.length?await tx.select({salesOrg:salesOrgText.salesOrg,languageKey:salesOrgText.languageKey,name:salesOrgText.name})
+      .from(salesOrgText).where(and(eq(salesOrgText.client,client),inArray(salesOrgText.salesOrg,rows.map(row=>row.org)),inArray(salesOrgText.languageKey,[languageKey,'E']))):[];
+    const areas=rows.map(row=>{
+      const local=translations.find(text=>text.salesOrg===row.org&&text.languageKey===languageKey);
+      const english=translations.find(text=>text.salesOrg===row.org&&text.languageKey==='E');
+      return {...row,organisation:local?.name.trim()||english?.name.trim()||row.org.trim()};
+    });
+    const assignedAreas=areas.filter((row): row is typeof row & {companyCode:string} => row.companyCode!==null);
+    const selected=assignedAreas.find(row=>row.key===selectedKey)??assignedAreas[0]??null;
     const plants=selected?await tx.select({code:plant.plant,name:plant.name}).from(plant).where(and(eq(plant.isActive,true),eq(plant.companyCode,selected.companyCode))).orderBy(asc(plant.plant)):[];
-    return {areas,selected,plants};
+    return {areas:assignedAreas,selected,plants};
   });
 }

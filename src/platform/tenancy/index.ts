@@ -339,7 +339,7 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
         'CFG.PROC.PURORG.ASSIGN_COMPANY',
         'CFG.PROC.PURORG.ASSIGN_PLANT',
         'CFG.PROC.PURGROUP.DEFINE',
-        'CFG.SALES.SALESORG.DEFINE',
+        'CFG.ORG.SALESORG.DEFINE',
         'CFG.SALES.SALESORG.ASSIGN_COMPANY',
         'CFG.ORG.DISTCHANNEL.DEFINE',
         'CFG.ORG.DIVISION.DEFINE',

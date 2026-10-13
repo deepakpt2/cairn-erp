@@ -67,7 +67,8 @@ export async function supplierPurchasingChoices(client:string,org:string){return
   const organisations=await tx.select({code:purchasingOrg.purchasingOrg,name:purchasingOrg.name,companyCode:companyCode.companyCode,currency:companyCode.currency}).from(purchasingOrg).innerJoin(companyCode,and(eq(companyCode.client,purchasingOrg.client),eq(companyCode.companyCode,purchasingOrg.companyCode))).where(and(eq(purchasingOrg.isActive,true),eq(companyCode.isActive,true))).orderBy(asc(purchasingOrg.purchasingOrg));
   const selected=organisations.find(row=>row.code===org);
   const groups=await tx.select({code:purchasingGroup.purchasingGroup,name:purchasingGroup.name,org:purchasingGroup.purchasingOrg}).from(purchasingGroup).where(eq(purchasingGroup.isActive,true)).orderBy(asc(purchasingGroup.purchasingGroup));
-  const currencies=await tx.select({code:currency.code,name:currency.name}).from(currency).where(eq(currency.isActive,true)).orderBy(asc(currency.code));
+  const currencies=(await tx.select({code:currency.code,name:currency.name}).from(currency).where(eq(currency.isActive,true)).orderBy(asc(currency.code)))
+    .map(row=>({...row,code:row.code.trim()}));
   const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(eq(paymentTerms.isActive,true)).orderBy(asc(paymentTerms.termsCode));
   return {organisations,selected,groups:groups.filter(row=>!row.org||row.org===org),currencies,terms};
 });}

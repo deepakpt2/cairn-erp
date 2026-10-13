@@ -29,11 +29,11 @@ export default async function CompanyCodesPage() {
           .select({ code: countryReference.code, name: countryReference.name })
           .from(countryReference)
           .orderBy(asc(countryReference.code)),
-        currencies: await tx
+        currencies: (await tx
           .select({ code: currencyReference.code, name: currencyReference.name })
           .from(currencyReference)
           .where(eq(currencyReference.isActive, true))
-          .orderBy(asc(currencyReference.code)),
+          .orderBy(asc(currencyReference.code))).map((row) => ({ ...row, code: row.code.trim() })),
       }))
     : null;
 

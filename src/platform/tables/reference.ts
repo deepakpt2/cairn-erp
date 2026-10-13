@@ -30,11 +30,11 @@ export const country = pgTable(
   (t) => [index('country_name_idx').on(t.name)],
 );
 
-/** ISO 4217 currencies — CAIRN.md §8.2 */
+/** SAP TCURC-style currency keys (up to five characters); ISO 4217 keys are commonly three characters. */
 export const currency = pgTable(
   'currency',
   {
-    code: char('code', { length: 3 }).primaryKey(),
+    code: char('code', { length: 5 }).primaryKey(),
     name: varchar('name', { length: 120 }).notNull(),
     /** Minor units. 2 for USD, 3 for KWD and BHD, 0 for JPY. Matters for rounding. */
     decimalPlaces: integer('decimal_places').notNull().default(2),

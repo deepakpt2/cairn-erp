@@ -62,7 +62,7 @@ export default async function PartnersPage({searchParams}:{searchParams:Promise<
   const banksView=!!detail&&params.view==='BANKS';
   const salesReadable=can(session,'SALES.CUSTOMER.SALESAREA.DISPLAY')||can(session,'SALES.CUSTOMER.SALESAREA.MAINTAIN')||can(session,'AUDIT.WORKSPACE');
   const salesEditable=can(session,'SALES.CUSTOMER.SALESAREA.MAINTAIN');
-  const salesChoices=salesView?await customerSalesAreaChoices(client,params.area??''):null;
+  const salesChoices=salesView?await customerSalesAreaChoices(client,params.area??'',session.user.logonLanguage??'E'):null;
   const salesKey=salesChoices?.selected?.key??'';
   const salesRecord=salesView&&salesReadable&&customerActive&&salesChoices?.selected?await getCustomerSalesArea(client,detail!.general.partnerNumber,salesChoices.selected.org,salesChoices.selected.channel,salesChoices.selected.division):null;
   const bankMetadata=banksView&&detail?await listPartnerBankMetadata(session,detail.general.partnerNumber):null;

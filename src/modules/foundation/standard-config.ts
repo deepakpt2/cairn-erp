@@ -13,6 +13,7 @@ import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../../platform/db/client';
 import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
+import { createCentralAddress } from './central-address-maintenance';
 import { applyPaymentTermDefaults } from './payment-terms';
 import {
   chartOfAccounts,
@@ -34,6 +35,7 @@ import {
   purchasingOrgPlant,
   salesArea,
   salesOrg,
+  salesOrgText,
   storageLocation,
   supplierPartnerFunction,
 } from './schema';
@@ -485,19 +487,24 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
   }
 
-  /* ── Sales organisation, channels, divisions and sales area ──────────────── */
-  await tx
-    .insert(salesOrg)
-    .values({
+  /* ── Sales organisation, CAM address, localized text, channels and divisions ── */
+  const [existingSalesOrg] = await tx.select().from(salesOrg).where(and(
+    eq(salesOrg.client, client), eq(salesOrg.salesOrg, '1000'),
+  ));
+  if (!existingSalesOrg) {
+    const addressNumber = await createCentralAddress(tx, client, activatedBy, { country: input.country });
+    await tx.insert(salesOrg).values({
       client,
       salesOrg: '1000',
-      name: `${input.companyName} — Sales`,
+      addressNumber,
       companyCode: input.companyCode,
       currency: input.currency,
-      country: input.country,
       createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
+    }).onConflictDoNothing();
+  }
+  await tx.insert(salesOrgText).values({
+    client, salesOrg: '1000', languageKey: 'E', name: 'Standard Sales', formText: 'STANDARD', createdBy: activatedBy,
+  }).onConflictDoNothing();
 
   const channels: Array<{ code: string; name: string }> = [
     { code: '01', name: 'Direct sales' },

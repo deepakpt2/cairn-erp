@@ -8,7 +8,8 @@ describe('Company Code definition form contract', () => {
   it('renders the write form and loads reference choices only for the define capability', () => {
     expect(page).toContain("can(session, COMPANY_CODE_DEFINE)");
     expect(page).toContain('{canDefine && references && (');
-    expect(page).toContain('currencies: await tx');
+    expect(page).toContain('currencies: (await tx');
+    expect(page).toContain('row.code.trim()');
     expect(page).toContain('eq(currencyReference.isActive, true)');
     expect(page).toContain("t('auth.readOnly', { authority: COMPANY_CODE_DEFINE })");
   });
