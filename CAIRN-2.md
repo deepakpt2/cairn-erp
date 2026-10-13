@@ -1,6 +1,6 @@
 # CAIRN — Project Log & Technical Specification (continued)
 
-**Part 2 of 2 · Last updated:** 2026-10-12 (v1.52)
+**Part 2 of 2 · Last updated:** 2026-10-13 (v1.56)
 **Continues:** [CAIRN.md](CAIRN.md) · **Sections:** §26.41–§30
 
 ---
@@ -2599,6 +2599,120 @@ Typecheck, browser harness **143/143 across 26 files**, IP lint (**296 files**) 
 seed, service/action, UI, live-browser acceptance, remote DB, commit or push. Hard delete remains deferred.
 
 
+### 26.152 B-135 — Owner-reported walkthrough status `SCR-005/035 PASSED · SCR-036 BLOCKED`
+
+Owner reports the Number Ranges (SCR-005) and Payment Terms (SCR-035) walkthroughs complete on 2026-10-12; no
+step-by-step evidence or environment details were supplied. Treat these as owner-reported passes, not independent
+retests.
+
+The Payment Methods (SCR-036) walkthrough is **not accepted**. The owner clarifies this was production, signed in as
+Administrator, after selecting a country and filtering: the list was empty and Create was absent. Empty data is
+expected because no standard methods are seeded (D-058); current source should show the list and Create to a session
+with Administrator `*` authority. The create form/link exists in source from commit `39e3d35` (B-042) and remains
+on pushed `main` at `9af6011`; production should be at or beyond `39e3d35`. This indicates a deployed-build or
+effective-authority mismatch; it was not independently reproduced and no remote DB was inspected. The development-only
+build marker is intentionally hidden in production, so its absence does not identify the deployed build. No code, capability, role grant, seed or
+production data change was made. SCR-036 remains blocked; SCR-012 walkthrough/sign-off also remains pending.
+
+
+### 26.153 B-136 — SCR-016 Storage Location writer and protected actions `IMPLEMENTED · DB ACCEPTANCE PENDING · UI NEXT`
+
+Implemented the tenant-scoped Storage Location maintenance service in
+`src/modules/foundation/storage-location-maintenance.ts` and protected actions in
+`src/app/config/storage-locations/actions.ts`. This is a service/action batch only: the `/config/storage-locations`
+page/route remains unimplemented and is not registered as a built screen; no UI, route allowlist, migration, seed,
+operational selection or movement behavior was added.
+
+The strict writer accepts only `CREATE`/`CHANGE` for the immutable `(Plant, Storage Location)` key and the approved
+name (required, max 120) plus `allowNegativeStock` (editable, defaults false). New rows are active. Creation locks and
+requires an active Plant visible under the same tenant scope; Company Code assignment is neither queried nor required.
+Plant and Storage Location keys are trimmed and limited to 10 characters, matching their schema/Cairn contract. The
+composite Plant FK remains the final database integrity guard. A per-object advisory transaction lock serializes
+create/change/deactivate; `FOR UPDATE` protects existing rows and the Plant active-state check. Writes, change
+history and workbench activity completion share one tenant transaction. No-op saves write no history; version tokens
+are the object's change-document count, so existing seeded locations start at version 0.
+
+The separate deactivation action changes only `isActive` to false and retains the row/history; repeating deactivation
+with the current version is a no-op. There is no hard-delete service/action or activation control. Hard delete remains
+withheld until durable stock history can prove a location was never stocked and no transaction/configuration
+reference exists. `allowNegativeStock` is stored configuration only and is not used to enforce a stock movement.
+
+Both server actions require a verified session and the exact `CFG.ORG.STORAGELOC.DEFINE` capability, deriving tenant
+and actor solely from the session. They pass only the approved form values, catch configuration/authorization errors,
+return English feedback, and revalidate the future Storage Location route, Plant list, and workbench. Field-level
+create/change/deactivation history is recorded under `storage_location`, including negative-stock and active-state
+fields as security-relevant; the version key is a collision-safe length-prefixed Plant/Storage Location pair.
+
+Added five DB-free action/service contract tests to the browser harness and a separate five-case PostgreSQL lifecycle
+suite covering active/inactive/missing/cross-tenant Plants, no Company Code prerequisite, default false, audits,
+no-op/stale versions, deactivation retention and tenant isolation. `npm run typecheck` passed; the new contract passed
+**5/5**; browser harness passed **148/148 across 27 files**; IP lint scanned **300 files**; `git diff --check`
+passed. The PostgreSQL suite was **not run**; local disposable-PostgreSQL service acceptance remains separate.
+
+One initial focused Vitest invocation used the default config, whose global setup immediately attempted the absent
+local endpoint `127.0.0.1:5432` and received `ECONNREFUSED` before running tests or opening a database transaction. The
+contract was rerun through the DB-free browser-harness config and passed. No database, fixtures, production system,
+remote migration/seed, live-browser acceptance or production build was accessed/run. Temporary `node_modules` used
+for validation were removed. No commit or push; B-137 local PostgreSQL service acceptance and the later UI batch remain
+separate.
+
+
+### 26.154 B-137 — SCR-016 Storage Location local service acceptance `LOCAL POSTGRESQL 17.11 PASSED`
+
+Accepted the B-136 PostgreSQL lifecycle suite on a fresh disposable PostgreSQL 17.11 cluster (system identifier
+`7695913202265618237`) and database `cairn_b137`. The server listened only on loopback `127.0.0.1:55556`; its Unix
+socket was confined to the temporary cluster directory. The fresh database had no Cairn objects or migration journal;
+all **44 migrations** applied successfully, including 0021. A migration rerun skipped all 44. Global configuration and reference fixtures
+were seeded only into this disposable local database (57 capabilities, 52 activities, 11 messages, 25 registry terms,
+21 aliases; 30 countries, 26 currencies and 21 units of measure). No development/owner/production database was used.
+
+The focused DB-backed suite `tests/storage-location-maintenance.test.ts` passed **5/5** using the restricted
+`cairn_app` application role. It exercised creation below a same-tenant active Plant with no Company Code, negative
+stock default false, field-level history and activity completion; refused inactive/missing/cross-tenant Plants;
+name/flag change, no-op and stale versions; retained/idempotent deactivation; and same-key tenant isolation. The
+`cairn_app` role verified as NOSUPERUSER/NOBYPASSRLS. The composite Plant FK was validated with NO ACTION on update
+and delete (`confupdtype/confdeltype = a`). After test cleanup, owner queries found **zero** tenant, Storage Location,
+change-document and tenant activity-status rows.
+
+The initial PostgreSQL start failed because `/var/run/postgresql` did not exist in the sandbox; the cluster was
+restarted with its Unix socket inside the disposable data directory. The database process was then stopped, and its
+cluster/data, extracted PostgreSQL packages and temporary `node_modules` were removed. No remote migration/seed,
+production system, live-browser acceptance or production build was used; no commit or push. B-137 accepts only the
+service/database behavior. SCR-016 UI/page implementation and live-browser acceptance remain separate; hard delete
+remains deferred until durable stock history can prove the never-used and unreferenced condition.
+
+
+### 26.155 B-138 — SCR-016 Storage Location UI/page `BUILT · LIVE-BROWSER ACCEPTANCE PENDING`
+
+Implemented `/config/storage-locations` using the B-136 session-protected actions and B-137-accepted service. The
+server page requires a verified session and uses `session.user.client` for every Plant and Storage Location read.
+Create/change/deactivate controls appear only for the exact `CFG.ORG.STORAGELOC.DEFINE` capability; unauthorized
+users retain a tenant-scoped read-only list/detail/history view, and a direct `?new=1` URL does not reveal the form or
+Plant choices. Creation offers only active Plants from that same tenant. No Company Code field or Company Code
+assignment prerequisite is introduced; the UI flow also describes a new unassigned Plant. The Plant/Storage Location
+composite key remains immutable on change, and inactive definitions stay visible with their history.
+
+The UI contains create and change forms plus soft deactivation only. There is no hard-delete or reactivation control;
+deactivation marks inactive and retains the row and audit history. `allowNegativeStock` remains editable, with explicit
+English-only guidance that it is stored configuration and does not enforce stock movements. Workbench built-route
+registration and the term-registry seed entry point to the new page; the Plant term entry now reserves OX10 for Plant
+definition while OX09 identifies Storage Location definitions. The shared seed was edited but not executed.
+
+Added five DB-free UI contract tests and the independent `storage-locations` browser acceptance target. Its guard
+binds B-139 to `cairn_b139` on loopback port 55525 and fixture client `T981`; it deliberately avoids `T982`, already
+used as B-129's cross-tenant fixture. **The B-139 target is implemented but was not run.** It does not constitute
+browser acceptance, and does not alter B-137's separate service/database result.
+
+**Verification:** `npm run typecheck` passed. `npm run test:browser-harness` passed **155/155 across 28 files**,
+including the new UI contract (**5/5**) and target/guard selection tests. `npm run lint:ip` scanned **304 files** and
+found no reference trademarks in user-facing text; `git diff --check` passed. Dependencies were installed with
+`npm ci` for validation and removed afterward; the lockfile was not changed. npm reported 19 dependency
+vulnerabilities during installation (9 moderate, 8 high, 2 critical); no dependency versions were changed. No PostgreSQL connection, DB-backed suite, migration, seed execution,
+production build, live-browser session, remote endpoint, commit or push occurred. SCR-016 is source-built; B-139
+cookie-backed browser acceptance remains an independent pending gate. Hard delete remains deferred until durable
+stock history can prove a location was never stocked and has no transaction/configuration references.
+
+
 ## §27 · Open items `RESOLVED v0.2`
 
 All ten items below were resolved by the product owner on 2026-10-08. Kept here (never deleted) with
@@ -2772,6 +2886,10 @@ courtesy to experienced users, never part of the product's own naming.
 | 0.53 | 2026-10-11 | **B-037 Payment Methods read services implemented.** Added tenant-scoped, validated get/list reads by country and code; list supports requested `OUTGOING`/`INCOMING` use (including `BOTH`) and optional active-only filtering while retaining inactive rows by default. Added DB-backed read tests for canonicalization, country resolution, filters, tenant isolation and invalid inputs; not run because isolated dev DB credentials are unavailable. No schema, migration, write service, UI, seed, payment execution, or partner-field integration. Typecheck, 65 browser-harness tests, IP lint (179 files) and diff check pass. §26.53 records limits; B-038 write service is next. | Agent |
 | 0.54 | 2026-10-11 | **B-038 Payment Methods audited maintenance service implemented.** Added tenant-scoped, expected-version create/change and non-destructive retire with required actor/reason, same-key advisory transaction locks, optimistic concurrency, no-op silence, and before/after change history (retire is a `CHANGE` to `isActive`, using only supported change types). Added DB-backed lifecycle, stale-version, audit, no-op, soft-retire, and cross-tenant key-reuse tests; not run because isolated dev DB credentials are unavailable. Typecheck, browser harness (65/65), IP lint (179 files), and diff check pass. No action, UI, seed, payment execution, Supplier/Customer integration, migration, or DB access. §26.54 records limits; protected configuration UI is separate. | Agent |
 | 0.55 | 2026-10-11 | **B-036–B-038 isolated PostgreSQL acceptance passed.** Initialized a fresh disposable local PostgreSQL 17.11 cluster; applied all 28 migrations and seeded only shared reference fixtures. Focused schema/RLS and Payment Methods service tests passed 11/11 (3 schema + 8 read/write service); application role check passed. Test tenants were cleaned (zero remained), and the server plus temporary data directory were removed. The pre-existing local cluster and owner/production databases were not accessed. No package, schema, or migration file changed. §26.55 records setup/results; protected configuration UI and Supplier integration remain separate. | Agent |
+| 1.56 | 2026-10-13 | **B-138 implements the SCR-016 Storage Location UI/page.** Exact-capability create/change/deactivate controls, verified-tenant reads, active same-tenant Plant choices, retained read-only history, Company Code separation and stored-only negative-stock guidance. Workbench and registry source registered; DB-free contract 5/5, harness 155/155, typecheck, IP lint (304 files) and diff check pass. B-139 browser target is added but not run; no DB/migration/seed execution, production build or live-browser acceptance. No commit or push (§26.155). | Agent |
+| 1.55 | 2026-10-13 | **B-137 accepts SCR-016 Storage Location service on fresh disposable PostgreSQL 17.11.** All 44 migrations applied and rerun skipped; local global/reference seeds only; app role confirmed NOSUPERUSER/NOBYPASSRLS; focused DB suite 5/5; composite Plant FK validated NO ACTION; cleanup verified zero tenant/location/history/activity fixtures. Temporary cluster/packages removed; no remote/production DB or browser acceptance (§26.154). | Agent |
+| 1.54 | 2026-10-13 | **B-136 implements SCR-016 Storage Location service/actions.** Exact-capability, session-derived tenant/actor; active same-tenant Plant required only for creation; Company Code not required; 10-character immutable key; audit-count version, transaction lock, create/change history and retained soft deactivation. Five DB-free contract tests; PostgreSQL lifecycle suite added but not run. Typecheck, browser harness 148/148, IP lint (300 files), diff check pass. No UI, DB acceptance, migration, seed, live browser, build, commit or push (§26.153). | Agent |
+| 1.53 | 2026-10-12 | **Owner-reported walkthrough update.** SCR-005/035 passed. SCR-036 blocked in production: Administrator filtered a country but saw an empty list/no Create. Empty catalogue is expected; source should show Create to `*`; investigate deployed build/session authority. No code/DB change (§26.152). | Agent |
 | 1.52 | 2026-10-12 | **B-134 accepts SCR-016 migration 0021 on disposable PostgreSQL 17.11.** All 44 migrations applied; valid same-tenant FK behavior, NO ACTION rules and fail-closed orphan preflight verified. Test fixtures, databases and cluster removed. Typecheck, browser harness 143/143, IP lint (296 files), diff check pass. No seed, service/action, UI, remote DB, commit or push (§26.151). | Agent |
 | 1.51 | 2026-10-12 | **B-133 adds same-tenant Storage Location→Plant referential integrity.** Updated Drizzle with the composite FK and added migration 0021 with a fail-closed orphan preflight. Contract 2/2; browser harness 143/143 (26 files), typecheck, IP lint (296 files) and diff check pass. Migration not applied; no database access, seed, service/action, UI, commit or push. Local PostgreSQL acceptance is next (§26.150). | Agent |
 | 1.50 | 2026-10-12 | **B-132 registers `CFG.ORG.STORAGELOC.DEFINE` as a separate non-posting grantable Foundation capability.** No role-specific grants, database access, seed execution, service, UI, migration or deployment. Capability contract 3/3, browser harness 141/141 (25 files), typecheck, IP lint (294 files) and diff check pass; temporary project dependencies removed. §26.149 records scope. | Agent |

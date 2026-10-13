@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-12 (v1.52 — Storage Location migration acceptance)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.56 — SCR-016 Storage Location UI implementation)
 **Document set:** Canonical project log in two linked files; this is Part 1 of 2
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -2110,7 +2110,7 @@ Do not push interim or partial module batches before that trigger.
 | B-042 | Payment Methods create/change editor form only | ≤10 min | **DONE — capability-gated create/change form uses B-039 protected save action, expected version and required reason; retirement UI remains separate** |
 | B-043 | Payment Methods soft-retire confirmation UI only | ≤10 min | **DONE — capability-gated explicit confirmation, required acknowledgment/reason, expected version, and B-039 protected soft-retire action; no deletion** |
 | B-044 | Add dedicated Payment Methods browser acceptance target only | ≤10 min | **DONE — `npm run smoke:browser:payment-methods`, guarded T989 fixture; create/change/retire, audit/activity state, display-only access and forged-query checks implemented; target selection passes** |
-| B-045 | Run Payment Methods browser acceptance on a fresh disposable development DB only | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — fresh PostgreSQL 17.11 fixture completed the target; tenant, method and test user cleanup verified (§26.62); no owner/production data used; product-owner walkthrough/sign-off remains pending (§24.1)** |
+| B-045 | Run Payment Methods browser acceptance on a fresh disposable development DB only | ≤10 min | **AUTOMATED ACCEPTANCE PASSED — fresh PostgreSQL 17.11 fixture completed the target; tenant, method and test user cleanup verified (§26.62); no owner/production data used; owner walkthrough blocked by missing create controls (§26.152)** |
 | B-046 | Capture and approve partner bank/contact v1 page rules only | ≤10 min | **DONE — owner approved partner-wide scope, bank fields, encryption/masking/reveal/audit policy, contact model and retention boundaries (D-059; §26.63); no code or data mutation** |
 | B-047 | Define country-specific requiredness and validation rules for partner bank fields only | ≤10 min | **DONE — owner approved fail-closed country profiles, holder/country requirements, strict country-matched IBAN checksum/length, BIC syntax validation, and inclusive valid-from/to semantics with overlapping records allowed (D-060; §26.64)** |
 | B-048 | Select the initial countries for partner bank validation profiles only | ≤10 min | **DONE — owner selected IN, KW, GB, US and JP; all are in the reference seed; no profile records added (D-061; §26.65)** |
@@ -2198,8 +2198,13 @@ Do not push interim or partial module batches before that trigger.
 | B-130 | Add a development UI build marker to help verify the deployed Plant-assignment UI version | ≤10 min | **DONE — global status bar displays `DEV-SCR015-ASSIGN-20261012` when `NODE_ENV` or `CAIRN_ENV` is explicitly development; hidden in production. Typecheck, browser harness (138/138), IP lint (293 files) and diff check pass. No database/authorization behavior change, production build, browser run, commit or push (§26.147).** |
 | B-131 | Draft SCR-016 Storage Location definition contract before implementation | ≤10 min | **SPEC APPROVED — 10-character Plant-unique code, editable `allow_negative_stock` (no movement enforcement), active same-tenant Plant, immutable code, and soft deactivation when used. Hard delete is deferred until durable stock history exists (§26.148).** |
 | B-132 | Register grantable `CFG.ORG.STORAGELOC.DEFINE` capability only | ≤10 min | **DONE — shared seed registers the non-posting capability; no role-specific grants or seed run (§26.149).** |
-| B-133 | Add the same-tenant Storage Location→Plant FK and orphan preflight; do not apply | ≤10 min | **DONE — Drizzle FK and migration 0021 added. Contract 2/2; harness 143/143 (26 files), typecheck, IP lint (296 files), diff check pass. No DB access; local acceptance next (§26.150).** |
-| B-134 | Accept the Storage Location Plant-FK migration on disposable local PostgreSQL 17 only | ≤10 min | **PASSED — fresh PostgreSQL 17.11; 44 migrations, FK/no-action rules and orphan refusal verified; fixtures/database removed (§26.151).** |
+| B-133 | Add the same-tenant Storage Location→Plant FK and orphan preflight; do not apply | ≤10 min | **DONE — Drizzle composite FK and migration 0021 with fail-closed preflight; contract 2/2 (§26.150).** |
+| B-134 | Accept the Storage Location Plant-FK migration on disposable local PostgreSQL 17 only | ≤10 min | **PASSED — local PG17.11: 44 migrations; same-tenant/no-action FK and orphan guard verified; fixtures removed (§26.151).** |
+| B-135 | Record owner UI walkthrough feedback for SCR-005/035/036 | ≤10 min | **DONE — SCR-005/035 passed; SCR-036 blocked in production: Administrator, filtered country, empty list/no Create. Source expects Create; cause unresolved (§26.152).** |
+| B-136 | Implement SCR-016 Storage Location create/change/deactivate service and protected actions only | ≤10 min | **IMPLEMENTED — audited tenant-scoped writer, exact-capability actions, optimistic audit version, active same-tenant Plant prerequisite for create, no Company Code prerequisite, soft deactivation only. Static contract 5/5; DB lifecycle suite added but not run at this step (§26.153).** |
+| B-137 | Accept SCR-016 Storage Location service on fresh disposable PostgreSQL 17 only | ≤10 min | **PASSED — fresh local PostgreSQL 17.11, 44 migrations, global/reference seeds, restricted app role, five lifecycle tests 5/5, migration rerun skipped 44, all tenant/location/history fixture counts zero; cluster and packages removed (§26.154).** |
+| B-138 | Implement the capability-gated SCR-016 Storage Location UI/page and DB-free contract; define browser target only | ≤10 min | **DONE — `/config/storage-locations` is built for create/change/deactivate only, with exact-capability controls, same-tenant active Plant choices, read-only history/list, and stored-only negative-stock guidance. Workbench route and registry seed entry added; DB-free UI contract 5/5, harness 155/155, typecheck/IP lint/diff check pass. B-139 browser target is defined but not run. No DB, migration, seed execution, production build, or live-browser acceptance (§26.155).** |
+| B-139 | Run separate cookie-backed SCR-016 browser acceptance on a verified disposable PostgreSQL 17 target only | ≤10 min | **PENDING — guarded `storage-locations` target (`T981`, `cairn_b139`, port 55525) is registered; no browser session or acceptance has run. Keep separate from B-137 service/database acceptance (§26.155).** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2436,7 +2441,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-002 | Tenant onboarding wizard | `CFG.PLT.CLIENT.ONBOARD` | — | **BUILT** (single step) |
 | SCR-003 | User administration | `CFG.PLT.USER.CREATE` | SU01 | DRAFT |
 | SCR-004 | Roles and capabilities | `CFG.PLT.ROLE.DEFINE` | PFCG | DRAFT |
-| SCR-005 | Number range maintenance | `CFG.PLT.NUMBERRANGE.DEFINE` | SNRO | **BUILT · automated UI walkthrough passed · owner sign-off pending** |
+| SCR-005 | Number range maintenance | `CFG.PLT.NUMBERRANGE.DEFINE` | SNRO | **BUILT · owner walkthrough reported passed (2026-10-12)** |
 | SCR-006 | Term registry search | `PLT.REGISTRY.SEARCH` | Command field | **BUILT** |
 | SCR-007 | Configuration workbench | `CFG.WORKBENCH` | SPRO | **BUILT** (tree, progress, gating) |
 | SCR-008 | Change document viewer | `AUDIT.TRAIL.DISPLAY` | — | DRAFT |
@@ -2452,7 +2457,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-013 | Company code assign chart of accounts | `CFG.ORG.COMPANYCODE.ASSIGN_COA` | — | **BUILT · automated UI contract and cookie-backed live-browser acceptance passed (B-115)** |
 | SCR-014 | Plant define | `CFG.ORG.PLANT.DEFINE` | OX10 | **BUILT · service/action and disposable PostgreSQL 17 acceptance passed (B-121/B-123); capability-gated UI and live-browser acceptance passed (B-124/B-125)** |
 | SCR-015 | Plant assign to company code | `CFG.ORG.PLANT.ASSIGN_COMPANY` | — | **BUILT · initial-only service/action and capability (B-126), UI (B-127), disposable PostgreSQL service acceptance (B-128) and separate cookie-backed live-browser acceptance (B-129) passed; reassignment deferred per D-090** |
-| SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | **SPEC APPROVED — capability/schema and FK migration locally accepted (B-132–134); writer/action and UI next. Hard delete remains deferred (§26.148–151)** |
+| SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | **BUILT — exact-capability create/change/deactivate UI and DB-free UI contract pass (B-138); migration/FK and service acceptance passed separately (B-132–137). Dedicated cookie-backed browser target is registered but not run (B-139). Hard delete remains deferred (§26.148–155).** |
 | SCR-017 | Purchasing organisation define | `CFG.ORG.PURORG.DEFINE` | OX08 | DRAFT |
 | SCR-018 | Purchasing organisation assign | `CFG.ORG.PURORG.ASSIGN_COMPANY` | — | DRAFT |
 | SCR-019 | Purchasing group define | `CFG.PROC.PURGROUP.DEFINE` | — | DRAFT |
@@ -2504,8 +2509,8 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-032 | Posting period variant assign | `CFG.FIN.PPV.ASSIGN` | OBBP | DRAFT |
 | SCR-033 | Currency and exchange rates | `CFG.FIN.EXRATE.MAINTAIN` | OB08 | DRAFT |
 | SCR-034 | Tax codes | `CFG.FIN.TAXCODE.DEFINE` | FTXP | DRAFT |
-| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **BUILT — backend and maintenance UI tested; owner sign-off pending** |
-| SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | Schema/RLS B-036, reads B-037, audited writes B-038, protected actions/capability B-039, activity/status lifecycle B-040, read-only route/list/detail/history B-041, create/change UI B-042, soft-retire UI B-043; dedicated browser target B-044 and isolated browser acceptance/cleanup B-045 passed (§26.62); DB acceptance passed; product-owner walkthrough/sign-off pending (§24.1) |
+| SCR-035 | Payment terms | `CFG.FIN.PAYTERMS.DEFINE` | OBB8 | **BUILT · owner walkthrough reported passed (2026-10-12)** |
+| SCR-036 | Payment methods | `CFG.FIN.PAYMENTMETHOD.DEFINE` | FBZP | Schema/RLS B-036, reads B-037, audited writes B-038, protected actions/capability B-039, activity/status lifecycle B-040, read-only route/list/detail/history B-041, create/change UI B-042, soft-retire UI B-043; dedicated browser target B-044 and isolated browser acceptance/cleanup B-045 passed (§26.62); DB acceptance passed; production Admin sees no Create after filter; blocked B-135 (§26.152) |
 | SCR-037 | House banks and accounts | `CFG.FIN.HOUSEBANK.DEFINE` | FI12 | DRAFT |
 | SCR-038 | Document types and number ranges | `CFG.FIN.DOCTYPE.DEFINE` | OBA7 | DRAFT |
 | SCR-039 | Tolerances | `CFG.FIN.TOLERANCE.DEFINE` | OBA4 | DRAFT |

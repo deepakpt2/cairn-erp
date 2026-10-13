@@ -51,6 +51,15 @@ describe('bounded browser target selection', () => {
     expect(guard?.database).not.toBe('cairn_b128');
     expect(guard?.port).not.toBe('55521');
   });
+  it('keeps B-139 Storage Location browser acceptance isolated from the cross-tenant fixture key', () => {
+    const storageLocations = TARGETS.find((target) => target.id === 'storage-locations');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['storage-locations'];
+    expect(storageLocations).toMatchObject({ client: 'T981' });
+    expect(guard).toMatchObject({ database: 'cairn_b139', port: '55525', batch: 'B-139' });
+    expect(guard?.database).not.toBe('cairn_b137');
+    expect(guard?.port).not.toBe('55556');
+    expect(storageLocations?.client).not.toBe('T982');
+  });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
   });

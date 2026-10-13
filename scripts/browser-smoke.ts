@@ -73,6 +73,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'foundation') return '/finance/journal/new';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
+  if (target.id === 'storage-locations') return '/config/storage-locations';
   if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
   return '/inventory/materials';
 }

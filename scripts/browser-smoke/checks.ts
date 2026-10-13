@@ -2329,12 +2329,242 @@ async function customerSalesArea(ctx: BrowserContext) {
   await page.screenshot({path:'.arena/customer-sales-area-history-review.png',fullPage:true});
 }
 
+async function storageLocations(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const plantCode = 'STL139';
+  const inactivePlantCode = 'STL139OFF';
+  const locationCode = 'SL139A';
+  const plantName = 'Storage Location Acceptance Plant';
+  const locationName = 'Acceptance Storage Area';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Storage Locations: verify exact capability, active tenant-local Plants, lifecycle, history and read-only access');
+
+  // The admin creates the active, deliberately unassigned Plant through its own UI.
+  await page.goto(`${BASE}/config/plants?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="plant"]').fill(plantCode);
+  await page.locator('[name="name"]').fill(plantName);
+  await page.locator('[name="country"]').selectOption('KW');
+  await page.locator('[name="reason"]').fill('B-139 unassigned Plant prerequisite');
+  await page.getByRole('button', { name: 'Create Plant', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Plant ${plantCode} defined; Company Code assignment remains separate.`,
+    { exact: true },
+  ).waitFor();
+
+  // A disposable inactive Plant proves it is omitted from the create selector.
+  // The test fixture is tenant-scoped; business definitions continue to be created via the UI.
+  await withTenant(CLIENT, (tx) => tx.execute(sql`
+    insert into plant (client, plant, name, country, is_active, created_by)
+    values (${CLIENT}, ${inactivePlantCode}, 'Inactive selector fixture', 'KW', false, 'BROWSER_FIXTURE')
+  `));
+
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B139_STORAGELOC_DEFINE', 'B-139 Storage Location Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B139_STORAGELOC_DEFINE', 'CFG.ORG.STORAGELOC.DEFINE', 'BROWSER_FIXTURE')`);
+    const [definerId, viewerId] = [randomUUID(), randomUUID()];
+    for (const [id, username, fullName, roleCode] of [
+      [definerId, 'storage.definer', 'Storage Location Definition-Only User', 'B139_STORAGELOC_DEFINE'],
+      [viewerId, 'storage.viewer', 'Storage Location Read-Only User', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    await tx.execute(sql`update config_activity_status
+      set status = 'NOT_STARTED', completed_at = null, completed_by = null
+      where client = ${CLIENT} and activity_code = 'CFG.ORG.STORAGELOC.DEFINE'`);
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = 'B139_STORAGELOC_DEFINE' order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), ['CFG.ORG.STORAGELOC.DEFINE']);
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+  }
+
+  await signInAs('storage.definer');
+  await page.goto(`${BASE}/config/storage-locations?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Storage Locations', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Create Storage Location', exact: true }).waitFor();
+  await page.locator('header').getByText('Stored configuration only; this setting does not enforce stock movements.', { exact: true }).waitFor();
+  await page.getByText('Company Code assignment is not a prerequisite.', { exact: false }).waitFor();
+  const plantOptions = await page.locator('select[name="plant"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+  assert.ok(plantOptions.includes(plantCode), 'The active same-tenant, unassigned Plant is offered.');
+  assert.ok(!plantOptions.includes(inactivePlantCode), 'Inactive Plants are excluded from create choices.');
+  for (const field of ['companyCode', 'client', 'changedBy', 'isActive']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is outside the Storage Location definition form.`);
+  }
+  assert.equal(await page.locator('[name="allowNegativeStock"][type="checkbox"]').isChecked(), false);
+  assert.equal(await page.locator('[name="storageLocation"]').getAttribute('maxlength'), '10');
+  await page.locator('[name="plant"]').selectOption(plantCode);
+  await page.locator('[name="storageLocation"]').fill(locationCode);
+  await page.locator('[name="name"]').fill(locationName);
+  await page.locator('[name="reason"]').fill('B-139 Storage Location create');
+  const createForm = page.locator('form').filter({ has: page.locator('[name="expectedVersion"]') });
+  await createForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({
+      client: '0100', changedBy: 'spoofed.actor', companyCode: '1000', isActive: 'false',
+    })) {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await page.getByRole('button', { name: 'Create Storage Location', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Storage Location ${locationCode} created for Plant ${plantCode}. Negative-stock allowance is stored configuration only.`,
+    { exact: true },
+  ).waitFor();
+
+  const readLocation = async () => {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, plant, storage_location, name, allow_negative_stock, is_active, created_by, changed_by
+        from storage_location
+       where client = ${CLIENT} and plant = ${plantCode} and storage_location = ${locationCode}
+    `))) as unknown as Array<{
+      client: string; plant: string; storage_location: string; name: string;
+      allow_negative_stock: boolean; is_active: boolean; created_by: string; changed_by: string | null;
+    }>;
+    assert.equal(rows.length, 1);
+    return rows[0];
+  };
+  const created = await readLocation();
+  assert.deepEqual(created, {
+    client: CLIENT, plant: plantCode, storage_location: locationCode, name: locationName,
+    allow_negative_stock: false, is_active: true, created_by: 'storage.definer', changed_by: null,
+  });
+  const parentRows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select company_code, is_active from plant where client = ${CLIENT} and plant = ${plantCode}
+  `))) as unknown as Array<{ company_code: string | null; is_active: boolean }>;
+  assert.deepEqual(parentRows, [{ company_code: null, is_active: true }]);
+  const objectKey = `${plantCode.length}:${plantCode}${locationCode.length}:${locationCode}`;
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'storage_location', objectKey));
+  assert.equal(history.length, 1);
+  assert.equal(history[0].changeType, 'CREATE');
+  assert.equal(history[0].changedBy, 'storage.definer');
+  assert.equal(history[0].transactionCode, 'CFG.ORG.STORAGELOC.DEFINE');
+  let [activity] = await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = 'CFG.ORG.STORAGELOC.DEFINE'
+  `)) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'storage.definer');
+  console.log('  ✓ exact-capability user creates under the session tenant; only active tenant Plants are selectable, Company Code is not required, and forged fields are ignored');
+
+  await page.goto(`${BASE}/config/storage-locations?plant=${plantCode}&edit=${locationCode}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Change Storage Location', exact: true }).waitFor();
+  assert.equal(await page.locator('[name="storageLocation"]').getAttribute('readonly'), '');
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '1');
+  assert.equal(await page.locator('[name="allowNegativeStock"][type="checkbox"]').isChecked(), false);
+  await page.locator('[name="name"]').fill('Acceptance Storage Area Updated');
+  await page.locator('[name="allowNegativeStock"][type="checkbox"]').check();
+  await page.locator('[name="reason"]').fill('B-139 Storage Location change');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Storage Location ${locationCode} in Plant ${plantCode} saved and its change history recorded.`,
+    { exact: true },
+  ).waitFor();
+  let changed = await readLocation();
+  assert.equal(changed.name, 'Acceptance Storage Area Updated');
+  assert.equal(changed.allow_negative_stock, true);
+  assert.equal(changed.is_active, true);
+  assert.equal(changed.changed_by, 'storage.definer');
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'storage_location', objectKey));
+  assert.equal(history.length, 2);
+  assert.deepEqual(new Set(history.map((entry) => entry.changeType)), new Set(['CREATE', 'CHANGE']));
+  assert.ok(history.every((entry) => entry.changedBy === 'storage.definer'));
+  console.log('  ✓ definition key stays fixed while name and stored-only negative-stock allowance are changed with audit');
+
+  // A no-op form submit must not manufacture a new version or change document.
+  await page.goto(`${BASE}/config/storage-locations?plant=${plantCode}&edit=${locationCode}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `No Storage Location definition data changed for ${plantCode}/${locationCode}.`,
+    { exact: true },
+  ).waitFor();
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'storage_location', objectKey));
+  assert.equal(history.length, 2);
+  console.log('  ✓ unchanged save preserves version and audit count');
+
+  await page.goto(`${BASE}/config/storage-locations?plant=${plantCode}&location=${locationCode}&history=1`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('B-139 Storage Location create', { exact: true }).waitFor();
+  await page.getByText('B-139 Storage Location change', { exact: true }).waitFor();
+  assert.match(await page.locator('body').innerText(), /Name: Acceptance Storage Area → Acceptance Storage Area Updated/);
+  assert.match(await page.locator('body').innerText(), /Allow negative stock \(stored configuration only\): false → true/);
+
+  const deactivateDetails = page.locator('details').filter({ hasText: 'Deactivate Storage Location' });
+  await deactivateDetails.locator('summary').click();
+  await deactivateDetails.locator('[name="reason"]').fill('B-139 Storage Location deactivation');
+  const deactivateForm = deactivateDetails.locator('form');
+  for (const field of ['client', 'changedBy', 'isActive']) {
+    assert.equal(await deactivateForm.locator(`[name="${field}"]`).count(), 0, `${field} is not supplied by the browser.`);
+  }
+  await deactivateForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({ client: '0100', changedBy: 'spoofed.actor' })) {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await deactivateForm.getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Storage Location ${locationCode} in Plant ${plantCode} deactivated and retained with its history.`,
+    { exact: true },
+  ).waitFor();
+  const deactivated = await readLocation();
+  assert.equal(deactivated.is_active, false);
+  assert.equal(deactivated.name, 'Acceptance Storage Area Updated');
+  assert.equal(deactivated.changed_by, 'storage.definer');
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'storage_location', objectKey));
+  assert.equal(history.length, 3);
+  assert.ok(history.every((entry) => entry.changedBy === 'storage.definer'));
+  [activity] = await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = 'CFG.ORG.STORAGELOC.DEFINE'
+  `)) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'storage.definer');
+  console.log('  ✓ deactivation updates status only, retains the row and history, and has no hard-delete route');
+
+  await page.goto(`${BASE}/config`, { waitUntil: 'domcontentloaded' });
+  assert.match(await page.locator('tr').filter({ hasText: 'CFG.ORG.STORAGELOC.DEFINE' }).innerText(), /Completed/i);
+  console.log('  ✓ the built Storage Location activity appears in the workbench and completes after maintenance');
+
+  await signInAs('storage.viewer');
+  await page.goto(`${BASE}/config/storage-locations`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Storage Locations', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.STORAGELOC.DEFINE.', { exact: true }).waitFor();
+  const locationRow = page.locator('tbody tr').filter({ hasText: locationCode });
+  await locationRow.waitFor();
+  assert.ok((await locationRow.innerText()).includes('Inactive'));
+  assert.equal(await page.getByRole('link', { name: 'Create Storage Location', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Confirm deactivation', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: /delete/i }).count(), 0);
+  await page.goto(`${BASE}/config/storage-locations?new=1&client=0100`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.STORAGELOC.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Create Storage Location', exact: true }).count(), 0);
+  assert.equal(await page.locator('select[name="plant"]').count(), 0, 'Direct create URLs do not expose Plant choices to a viewer.');
+  console.log('  ✓ Auditor retains the inactive read view but has no create/change/deactivate controls or form choices');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
+  'storage-locations': storageLocations,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,

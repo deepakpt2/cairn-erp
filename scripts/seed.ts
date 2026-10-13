@@ -188,7 +188,8 @@ const REGISTRY: Array<{
   { ourCode: 'CFG.ORG.COMPANYCODE.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Company code define', route: '/config/company-codes', tier: 'TIER_2_CONFIGURED', conformance: 'A', aliases: ['OX02'], description: 'The legal entity that keeps its own books, with its chart of accounts, fiscal year variant and posting period variant assigned.' },
   { ourCode: 'FIN.GL.MASTER.LIST', termType: 'TRANSACTION', module: 'FIN', title: 'G/L account list', route: '/config/gl-accounts', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FS00', 'FSP0'], description: 'The chart of accounts, grouped the way an accountant reads it.' },
   { ourCode: 'FIN.CLOSE.PERIOD', termType: 'TRANSACTION', module: 'FIN', title: 'Posting periods', route: '/config/posting-periods', tier: 'TIER_1_BUILT', conformance: 'A', aliases: ['OB52'], description: 'Which periods are open, per account type. Closing a period is recorded in the change log.' },
-  { ourCode: 'CFG.ORG.PLANT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Plants and storage locations', route: '/config/plants', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX10', 'OX09'], description: 'Production and storage sites, and the stock areas within them.' },
+  { ourCode: 'CFG.ORG.PLANT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Plant definition', route: '/config/plants', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX10'], description: 'Production and storage sites; Company Code assignment and Storage Location definitions are separate activities.' },
+  { ourCode: 'CFG.ORG.STORAGELOC.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Storage Location definitions', route: '/config/storage-locations', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX09'], description: 'Create, change and deactivate Storage Locations within an active tenant Plant; negative-stock allowance is stored configuration only.' },
   { ourCode: 'CFG.PLT.CLIENT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PLT', title: 'Tenant administration', route: '/clients', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Create and manage tenants.' },
   { ourCode: 'CFG.PLT.CLIENT.ONBOARD', termType: 'CONFIG_ACTIVITY', module: 'PLT', title: 'Tenant onboarding wizard', route: '/clients/new', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Guided setup of a new tenant: structure, accounts, periods, ranges.' },
   { ourCode: 'CFG.WORKBENCH', termType: 'CONFIG_ACTIVITY', module: 'PLT', title: 'Configuration workbench', route: '/config', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['SPRO', 'IMG'], description: 'The define and assign tree that mirrors an implementation plan (R-06).' },
@@ -270,6 +271,16 @@ async function main() {
     `);
 
     console.log('Seeding term registry…');
+    // OX09 now identifies Storage Location maintenance, not the Plant definition screen.
+    // Repair the prior shared-seed alias ownership before inserting the canonical entry below.
+    await client.unsafe(`
+      delete from term_alias a
+       using term_registry t
+       where a.term_id = t.id
+         and a.external_system = 'REFERENCE_ERP'
+         and a.alias = 'OX09'
+         and t.our_code = 'CFG.ORG.PLANT.DEFINE'
+    `);
     for (const r of REGISTRY) {
       const id = crypto.randomUUID();
       // ON CONFLICT must name the constraint that actually applies. A NULL our_code
