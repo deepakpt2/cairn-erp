@@ -68,9 +68,54 @@ Rows continue the register in `CAIRN.md` §2 (through D-092).
 
 ## §26 · Phase 1 screen inventory — continued
 
-*§26.167 onward is reserved for the next completed batches (initially: the pending ledger entries
-for SCR-018, SCR-019 and SCR-020 per §25.4, which are coded and pushed but not yet recorded —
-see §30 v1.70). Section entries here follow the §24.2 template and the §26.36 style.*
+### 26.167 B-154 — Remote test database provisioned (Supavisor session pooler) `COMPLETE · OWNER-SUPPLIED TEST DATABASE · NO CODE CHANGE`
+
+**Scope.** Bring the owner-supplied remote test database to the project's documented development
+state — role split, schema, global/reference seeds and the development tenant — and point the local
+environment at it, per D-096 and the owner's explicit go-ahead of 2026-10-13.
+
+**Target.** Supavisor session pooler `aws-0-ap-northeast-2.pooler.supabase.com:5432` (IPv4), server
+PostgreSQL 17.11; the `public` schema was empty at the start. Login role `postgres.<ref>` is
+NOSUPERUSER with BYPASSRLS, so it serves as the elevated migration/seed role
+(`MIGRATION_DATABASE_URL`, `CAIRN_TEST_DATABASE_URL`). Nothing was written before the owner's
+approval; every prior contact with this database was read-only.
+
+**Role split.** All 50 migrations were applied as the elevated role (`cairn_migration` = 50 files;
+rerun skipped all 50 — idempotent). Migration `9000_policies.sql` created `cairn_app` NOSUPERUSER
+NOBYPASSRLS NOCREATEDB NOCREATEROLE; its password was then replaced with a generated 32-character
+hex value. **Recorded deviation:** the packaged `npm run db:sync-role` helper requires the bare
+username `cairn_app`, which the Supavisor pooler cannot address (pooler roles are addressed as
+`<role>.<project-ref>`), so the equivalent `ALTER ROLE … PASSWORD` DDL was executed directly; the
+helper remains valid for local and self-hosted deployments. Runtime login was verified non-elevated
+(`rolsuper=false`, `rolbypassrls=false`), satisfying the `assertApplicationRole` precondition.
+
+**Seeds.** Global definitions: 60 capabilities, 52 configuration activities, 11 message-catalogue
+entries, 29 registry terms + 22 aliases. Reference data: 30 countries, 26 currencies, 21 units of
+measure.
+
+**Development tenant.** Created through the runtime (non-elevated) connection using the same
+`createTenant()` service the UI uses — tenant `0100` "Cairn Development": company code 1000,
+administrator `dev.admin`, 10 roles, 10 operational + 1 accounting number range, 52 workbench
+steps, package `INTL-STD-2`, 74 G/L accounts, development materials seeded. This exercises the
+application path end-to-end on the new database rather than bypassing it.
+
+**Verification.** Migration rerun skipped 50/50; RLS enabled **and FORCED** on tenant tables; the
+runtime role sees 0 rows with no tenant setting (fail-closed) and 0 rows under a foreign tenant
+setting (isolation), while tenant `0100` reads 10 roles / 11 number ranges / 74 G/L accounts;
+`public` holds 79 base tables and exactly one tenant.
+
+**Boundary.** No repository source, schema, migration, seed or service file was changed by this
+batch (documentation only; local commit only, nothing pushed — the PAT was not used). No owner data
+existed in, or was written to, this database beyond generated reference data and the development
+tenant. `.env.local` now carries `DATABASE_URL` = restricted `cairn_app.<ref>` for the test
+database, and `MIGRATION_DATABASE_URL` / `CAIRN_TEST_DATABASE_URL` = the elevated connection; the
+file remains gitignored (verified) with mode 600, and no secret appears in this log.
+
+**Next.** IP-lint repair (the SCR-020 regression below), then the owed ledger entries and DB-backed
+acceptance for SCR-018/019/020 running against this provisioned database.
+
+*Still owed from v1.70: the ledger entries for the already-pushed SCR-018, SCR-019 and SCR-020
+batches (B-151–B-153). Section entries here follow the §24.2 template and the §26.36 style.*
 
 ---
 
@@ -83,6 +128,7 @@ recorded change, date and reason stated.
 |---|---|---|---|
 | 1.70 | 2026-10-13 | **Document set rotated to a third part and the 2026-10-13 owner instructions registered.** Owner instructions recorded as R-24–R-30 and D-093–D-095: (1) canonical log parts never exceed 400 KB and rotate at 360 KB into the next numbered file with a continuation notice in both directions (§0.3); (2) increments stay small enough to protect the agent web interface from timeouts/out-of-memory (R-25); (3) every completed batch reports main process, current step, next step and required owner data (R-26/D-094); (4) strict SAP functional parity and visual familiarity without copying UI text (R-27); (5) mobile-ready UI at phone width with a new page-cycle check (R-28); (6) repo URL, PAT and DB string live only in the gitignored `.env.local`, and an unreachable remote DB is replaced by a local database and removed from `.env.local` (R-29/D-095); (7) before any UI page is designed, the SAP tcode(s) for the page are presented and the owner supplies the form fields (R-30). **Rotation executed:** at check, `CAIRN.md` was 395,959 bytes and `CAIRN-2.md` 398,255 bytes (both ≈99 % of the ceiling), so both are frozen with pointer-only edits and this file becomes the live part; §0.3 records the sizes. **Environment:** `.env.local` created at repo root (mode 600, verified untracked via `git check-ignore`), holding the repo URL, the owner's temporary PAT and local development connection strings; the Supabase string was removed because `db.yyskxzdytncsatwjkiva.supabase.co` resolves IPv6-only and the sandbox has no IPv6 route (general outbound network verified against GitHub). Local PostgreSQL 17.11 is available for provisioning (matches the documented disposable-acceptance environment). **Pending, not part of this entry:** the ledger entries for the already-pushed SCR-018/SCR-019/SCR-020 batches (B-151–B-153) and the IP-lint regression introduced by the SCR-020 commit (`febccf5`, 16 trademark occurrences; `npm run lint:ip` fails) — both are the next batches. No code, database, migration or seed change in this entry; documentation and local environment files only; no commit or push. | Agent |
 | 1.71 | 2026-10-13 | **Owner-supplied replacement test-database string verified and adopted (D-096).** The new string uses the Supavisor session pooler (`aws-0-ap-northeast-2.pooler.supabase.com:5432`, login `postgres.<ref>`) and works from the workspace sandbox: IPv4 resolution (the earlier direct host is IPv6-only), TCP reachable, login OK, no TLS requirement, PostgreSQL 17.11, `createrole`/`createdb` present, `rolbypassrls=true` (qualifies as the migration runner's elevated role), and the `public` schema empty — no Cairn migration has ever been applied there and no project roles exist yet. The string is now stored in `.env.local` as `CAIRN_TEST_DATABASE_URL` and `MIGRATION_DATABASE_URL` (mode 600, verified untracked); `DATABASE_URL` deliberately remains the local fallback because the application connection must be NOSUPERUSER/NOBYPASSRLS and the test database has no such role yet. No write of any kind was performed against the test database — all checks were read-only (`select`); migrations, seeds and the role split there are the next database batch and require owner go-ahead. No code, schema, migration or seed change; documentation and local environment files only; no commit or push of this entry beyond the local docs commit. | Agent |
+| 1.72 | 2026-10-13 | **Owner-supplied test database provisioned and adopted as the working target (B-154, §26.167).** Applied all 50 migrations as the elevated Supavisor-session connection (rerun skipped 50 — idempotent); migration 9000 created the `cairn_app` runtime role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE) whose password was then replaced with a generated value — the packaged `db:sync-role` helper cannot address pooler usernames (`<role>.<project-ref>`), so the equivalent ALTER ROLE DDL was run directly and the deviation is recorded. Seeded global definitions (60 capabilities, 52 activities, 11 messages, 29 terms + 22 aliases) and reference data (30 countries, 26 currencies, 21 units), then created development tenant `0100` through the runtime connection using the same `createTenant()` service as the UI (company code 1000, `dev.admin`, 10 roles, 11 number ranges, 52 workbench steps, INTL-STD-2, 74 G/L accounts). Verified fail-closed RLS (0 rows without a tenant setting), cross-tenant isolation (0 rows), RLS enabled+FORCED, and a non-elevated runtime role. `.env.local` now points `DATABASE_URL` at the restricted `cairn_app.<ref>` connection and keeps the elevated connection in `MIGRATION_DATABASE_URL`/`CAIRN_TEST_DATABASE_URL`; the file is gitignored (verified) and mode 600. No code, schema, migration or seed change; no owner data; nothing pushed. Still owed: the IP-lint repair and the SCR-018/019/020 ledger entries plus their DB-backed acceptance. | Agent |
 
 ---
 
