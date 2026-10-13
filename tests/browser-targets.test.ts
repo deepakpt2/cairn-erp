@@ -60,6 +60,15 @@ describe('bounded browser target selection', () => {
     expect(guard?.port).not.toBe('55556');
     expect(storageLocations?.client).not.toBe('T982');
   });
+  it('keeps B-150 SCR-017 browser acceptance on a separate reserved fixture and database guard', () => {
+    const purchasingOrgs = TARGETS.find((target) => target.id === 'purchasing-orgs');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-orgs'];
+    expect(purchasingOrgs).toMatchObject({ client: 'T980' });
+    expect(purchasingOrgs?.client).not.toBe('T982');
+    expect(guard).toMatchObject({ database: 'cairn_b150', port: '55527', batch: 'B-150' });
+    expect(guard?.database).not.toBe('cairn_b145');
+    expect(guard?.port).not.toBe('38436');
+  });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
   });

@@ -74,6 +74,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
+  if (target.id === 'purchasing-orgs') return '/config/purchasing-orgs';
   if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
   return '/inventory/materials';
 }
@@ -124,9 +125,11 @@ async function run(target: BrowserTarget) {
           await onboard(ctx);
           await CHECKS[target.id](ctx);
           await page.screenshot({ path: `.arena/${target.id}-review.png`, fullPage: true });
-          await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-          await page.goto(`${BASE}${protectedRouteFor(target)}`, { waitUntil: 'domcontentloaded' });
-          await page.waitForURL(/\/signin\?/);
+          const signOutRedirect = page.waitForURL((url) => url.pathname === '/signin', { waitUntil: 'commit' });
+          await page.getByRole('button', { name: 'Sign out', exact: true }).click({ noWaitAfter: true });
+          await signOutRedirect;
+          await page.goto(`${BASE}${protectedRouteFor(target)}`, { waitUntil: 'commit' });
+          await page.waitForURL(/\/signin\?/, { waitUntil: 'commit' });
           assert.deepEqual(errors, [], 'No browser runtime errors');
           assert.equal(timedOut, false, 'Browser target exceeded its deadline');
           console.log(`\nBrowser target ${target.id} passed; no other target was run.\n`);

@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.63 — B-145 accepts SCR-017 definition service)
+**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.69 — B-150 passes guarded SCR-017 live-browser acceptance)
 **Document set:** Canonical project log in two linked files; this is Part 1 of 2
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -59,7 +59,7 @@
 | 29 | Glossary & alias examples | DRAFT |
 | 30 | Change log | LIVE |
 
-> **Document split:** This file contains §0–§26.36. Section §26.37 onward continues in [CAIRN-2.md](CAIRN-2.md); numbering and change history remain continuous.
+> **Document split:** This file contains §0–§26.35. Section §26.36 onward continues in [CAIRN-2.md](CAIRN-2.md); numbering and change history remain continuous.
 
 ---
 
@@ -210,7 +210,7 @@ Locked decisions. To change one, add a new entry that supersedes it; never edit 
 | D-089 | **Keep Cairn's production-site and storage-site flags as descriptive Plant metadata, not SAP-standard fields or operational gates.** Preserve both defaults as true, permit both false, retain read-view badges, and expose both flags in the future Plant definition/change form. | Owner chose to keep the existing schema fields as Cairn-specific descriptive metadata. They do not currently gate inventory, production, procurement or storage behavior; any future operational meaning requires separate approval/design. They are not represented as standard OX10 fields. | 2026-10-12 |
 | D-090 | **Plant-to-Company-Code assignment is initial-only for the current milestone.** A Plant with no Company Code may receive one active tenant-local Company Code assignment; the same assignment may be retried idempotently. Reassignment and unassignment are disabled. | Owner directed that reassignment not be implemented now and be planned as a future milestone after full application development. The current assignment writer/UI must not expose an overwrite or clear path; replacement semantics require a later reviewed milestone. The assignment remains separate from `CFG.ORG.PLANT.DEFINE`. | 2026-10-12 |
 | D-091 | **SCR-016 Storage Location scope.** Keep Cairn's 10-character Plant-unique key; require an active same-tenant Plant; allow editing `allow_negative_stock` (false by default) without claiming movement enforcement; hard-delete only if never stocked and unreferenced, otherwise deactivate. | Owner specified the Cairn-specific key limit, active-Plant prerequisite, editable field and lifecycle. Deactivation must retain the record/history; hard delete must check stock/history, transactions and configuration references (including Plant default Storage Location). Owner further directed that the first screen defer hard delete until durable stock history exists; deactivation remains available for used locations. §26.148 records the boundary. | 2026-10-12 |
-| D-092 | **SCR-017 Purchasing Organisation define/assign contract.** Keep a tenant-unique 10-character Cairn code (uppercase alphanumeric, 2–10 characters; immutable after creation) and required name up to 160 characters. OX08 defines/changes code and name only; Company Code and Plant assignments remain separate. One active Company Code is required before supplier-purchasing use; an unassigned organisation is pending, not cross-company, and multi-Company-Code scope is excluded. Keep Plant assignment as its own activity/page (`CFG.PROC.PURORG.ASSIGN_PLANT`, SCR-064). Support create/change/deactivate; retain history/references; no hard delete or reactivation. | Product owner explicitly approved the proposed SCR-017 baseline on 2026-10-13. Existing Company Code-definition prerequisite remains; B-142 allows the pending Company Code state and makes supplier-purchasing fail closed until assignment. See §26.157–161. | 2026-10-13 |
+| D-092 | **SCR-017 Purchasing Organisation define/assign contract.** Keep a tenant-unique 10-character Cairn code (uppercase alphanumeric, 2–10 characters; immutable after creation) and required name up to 160 characters. OX08 defines/changes code and name only; Company Code and Plant assignments remain separate. One active Company Code is required before supplier-purchasing use; an unassigned organisation is pending, not cross-company, and multi-Company-Code scope is excluded. Keep Plant assignment as its own activity/page (`CFG.PROC.PURORG.ASSIGN_PLANT`, SCR-064). Support create/change/deactivate; retain history/references; no hard delete or reactivation. | Product owner explicitly approved the proposed SCR-017 baseline on 2026-10-13. Existing Company Code-definition prerequisite remains; B-142 allows the pending Company Code state and makes supplier-purchasing fail closed until assignment. See §26.157–163. | 2026-10-13 |
 
 ---
 
@@ -1742,7 +1742,7 @@ naming. Users can hide reference terms entirely through a preference.
 ```
 cairn/
 ├── CAIRN.md                      ← canonical project log, Part 1
-├── CAIRN-2.md                    ← continuation, Part 2 (from §26.37)
+├── CAIRN-2.md                    ← continuation, Part 2 (from §26.36)
 ├── docker/                       compose files, dockerfiles, entrypoints, backup scripts
 ├── drizzle/                      SQL migrations, versioned
 ├── src/
@@ -2211,8 +2211,12 @@ Do not push interim or partial module batches before that trigger.
 | B-142 | Allow a Purchasing Organisation to remain pending before its separate Company Code assignment | ≤10 min | **IMPLEMENTED — schema/migration 0022 permit null `company_code`; supplier-purchasing rejects unassigned organisations and choice reads exclude them. Static contract 2/2, typecheck, browser harness 157/157, IP lint (306 files) and diff check pass. The DB-backed regression subsequently passed in B-143; no UI/assignment writer/seed change (§26.158–159).** |
 | B-143 | Accept migration 0022 and pending-assignment fail-closed behavior on disposable local PostgreSQL 17 only | ≤10 min | **PASSED — fresh PG 17.11 `cairn_b143` on loopback; 45 migrations and local global/reference seeds; restricted app-role guard passed; `company_code` is nullable; supplier-purchasing suite 21/21 including unassigned refusal and hidden choices; rerun skipped 45; all test tenants/org/supplier-purchasing rows zero. Temporary cluster/data and PostgreSQL packages removed. No browser/remote DB (§26.159).** |
 | B-144 | Implement the audited tenant-scoped SCR-017 definition service (create/change/deactivate) only | ≤10 min | **IMPLEMENTED — approved 2–10 uppercase alphanumeric immutable key and required name; create leaves Company Code pending; change is name-only; deactivation retains assignments/references/history. Audit-count optimistic versions and tenant-scoped transaction locks are used. Typecheck, browser harness 161/161 (30 files), IP lint (309 files) and diff check pass. The five-case DB suite added here passed separately in B-145; service tenant/actor inputs remain explicit pending derivation from the verified session at the protected-action boundary. No UI, action, assignment writer, migration or seed change (§26.160–161).** |
-| B-145 | Accept the SCR-017 definition service on a fresh disposable local PostgreSQL 17 database only | ≤10 min | **PASSED — fresh PostgreSQL 17.11 `cairn_b145`, 45 migrations and local seeds; `cairn_app` NOSUPERUSER/NOBYPASSRLS, pending Company Code nullable, focused service tests 5/5, migration rerun skipped 45, all fixture counts zero; cluster and temporary packages removed. No remote DB or browser (§26.161).** |
-| B-146 | Register `CFG.PROC.PURORG.DEFINE` as the grantable SCR-017 maintenance capability only | ≤10 min | **NEXT — capability catalogue/seed and DB-free contract only; no protected action, UI or database seed execution in this batch.** |
+| B-145 | Accept the SCR-017 definition service on a fresh disposable local PostgreSQL 17 database only | ≤10 min | **PASSED — fresh PostgreSQL 17.11 `cairn_b145`, 45 migrations and local seeds; `cairn_app` NOSUPERUSER/NOBYPASSRLS, pending Company Code nullable, focused service tests 5/5, migration rerun skipped 45, all fixture counts zero; cluster and temporary packages removed. No remote DB or browser; included in push `5898771` (§26.161–162).** |
+| B-146 | Register `CFG.PROC.PURORG.DEFINE` as the grantable SCR-017 maintenance capability only | ≤10 min | **IMPLEMENTED — added `CFG.PROC.PURORG.DEFINE` as a non-posting Procurement `CONFIGURE` capability in the global seed catalogue; no role grants or seed execution. DB-free contract 3/3; typecheck, browser harness 164/164 (31 files), IP lint (310 files) and diff check pass. No database, protected action or UI change (§26.162).** |
+| B-147 | Add session-derived exact-capability SCR-017 create/change/deactivate protected actions only | ≤10 min | **IMPLEMENTED — both actions require a verified session and `CFG.PROC.PURORG.DEFINE` before service calls; tenant/actor derive only from session; request mapping excludes assignment/status fields. English messages and cache revalidation added. Action contract 4/4; typecheck, browser harness 168/168 (32 files), IP lint (312 files) and diff check pass. No UI, DB or assignment writer. Uncommitted/unpushed (§26.163).** |
+| B-148 | Build the capability-gated SCR-017 Purchasing Organisation definition page only | ≤10 min | **IMPLEMENTED — tenant-scoped `/config/purchasing-orgs` create/change for 2–10-character code/name, read-only Company Code/Plant assignments, retained history and soft deactivation; no assignment controls, hard delete or reactivation. Workbench and OX08 registry route added. UI contract 4/4; typecheck, production-mode `next build`, browser harness 172/172 (33 files), IP lint (316 files) and diff check pass. No DB/migration/seed execution or live-browser acceptance; uncommitted/unpushed (§26.164).** |
+| B-149 | Add a guarded, disposable SCR-017 cookie-backed browser-acceptance target only | ≤10 min | **IMPLEMENTED — reserved `purchasing-orgs` target T980 and command; B-150 guard binds `cairn_b150:55527`. Scenario covers exact-capability lifecycle/history, read-only assignments, forged-field resistance, Auditor and signed-out access. Contract 3/3; harness 177/177 (34 files), typecheck, IP lint 317 files and diff check pass. Target not run; no DB/browser/seed activity (§26.165).** |
+| B-150 | Run separate SCR-017 cookie-backed browser acceptance on verified disposable PostgreSQL 17 only | ≤10 min | **PASSED — only `purchasing-orgs`/T980 ran against freshly verified local PostgreSQL 17.11 `cairn_b150` on 127.0.0.1:55527. Applied all 45 migrations and local global/reference seeds as fixture setup only; runtime role stayed NOSUPERUSER/NOBYPASSRLS. Browser assertions passed onboarding, assignment separation, exact-capability create/change/no-op/deactivate, forged-field/session-boundary resistance, retained audit/history, Auditor direct-route read-only access and signed-out protection, with no browser errors. Cleanup verified zero T980 client/organisation/user rows; stopped the app and database and removed the data/credentials, package-created cluster, browser cache, build artifacts, 31 browser dependencies and 11 PostgreSQL packages. No owner/remote/production DB touched; B-145 service acceptance remains separate. Final accepted run used `next dev`; the exploratory `next build` was production-mode, not a development build and not the accepted run (§26.166). B-146–B-150 and ledger changes remain uncommitted/unpushed.** |
 
 The approved dependency-ordered completion roadmap is in §25.5. A roadmap package is not permission
 to combine large work into one batch: before implementation, declare one outcome, split it to fit the
@@ -2466,7 +2470,7 @@ progress tracker. Each row is expanded into a full §24.2 specification when its
 | SCR-014 | Plant define | `CFG.ORG.PLANT.DEFINE` | OX10 | **BUILT · service/action and disposable PostgreSQL 17 acceptance passed (B-121/B-123); capability-gated UI and live-browser acceptance passed (B-124/B-125)** |
 | SCR-015 | Plant assign to company code | `CFG.ORG.PLANT.ASSIGN_COMPANY` | — | **BUILT · initial-only service/action and capability (B-126), UI (B-127), disposable PostgreSQL service acceptance (B-128) and separate cookie-backed live-browser acceptance (B-129) passed; reassignment deferred per D-090** |
 | SCR-016 | Storage location define | `CFG.ORG.STORAGELOC.DEFINE` | OX09 | **BUILT — B-138 UI/contract and separate B-139 cookie-backed browser acceptance passed (§26.155–156); B-132–137 capability, FK, service and DB acceptance passed. Owner walkthrough/sign-off remains pending. Hard delete remains deferred until durable stock history proves never stocked and unreferenced.** |
-| SCR-017 | Purchasing organisation define | `CFG.PROC.PURORG.DEFINE` | OX08 | **IN BUILD — D-092 approved; pending-Company-Code support and the audited definition service passed disposable PostgreSQL acceptance (B-143/B-145). Grantable capability, session-derived protected actions and UI remain pending; live-browser acceptance stays separate (§26.157–161).** |
+| SCR-017 | Purchasing organisation define | `CFG.PROC.PURORG.DEFINE` | OX08 | **UI BUILT — B-148 adds the capability-gated, tenant-scoped code/name definition page, read-only assignments, retained history and deactivation; no assignment controls, hard delete or reactivation. B-143/B-145 service DB acceptance, B-146 capability, B-147 protected actions and B-150 cookie-backed live-browser acceptance are complete. Owner walkthrough/sign-off remains pending (§26.157–166).** |
 | SCR-018 | Purchasing organisation assign to Company Code | `CFG.PROC.PURORG.ASSIGN_COMPANY` | — | **DRAFT — separate assignment; exactly one active Company Code before supplier-purchasing use, per D-092. Assignment writer/UI and detailed page contract pending.** |
 | SCR-019 | Purchasing group define | `CFG.PROC.PURGROUP.DEFINE` | — | DRAFT |
 | SCR-020 | Sales organisation define | `CFG.ORG.SALESORG.DEFINE` | — | DRAFT |
@@ -4137,61 +4141,5 @@ At B-019 close, B-020 was selected and is now complete; B-021 UI is also impleme
 B-019/B-021 automated customer-company browser target passed in B-023 (§26.39). The owner later
 reported the customer-company walkthrough passed (§26.114).
 
-
-### 26.36 B-020 — Customer company interest-indicator and tolerance-group fields, backend only `IMPLEMENTED · DATABASE ACCEPTANCE PASSED IN B-022`
-
-**Scope:** optional code-only defaults on the existing Customer company-code segment, as listed in
-§9.2. This is a backend slice only: no controls were added to the Customer company screen. No interest
-indicator/tolerance master, foreign key, calculation, tolerance enforcement, invoice/open-item/payment
-behavior, capability, transaction code or seed change is implied.
-
-**Schema and migration:** `customer_company_code` now declares nullable `interest_indicator` and
-`tolerance_group`, both varchar(4). The additive migration is
-`drizzle/0010_customer_company_interest_tolerance.sql`; it follows and does not rewrite the existing
-`0009_customer_company_payment_dunning.sql`. The migration runner applies SQL files in lexical order
-and checksum-locks applied files. Tenant RLS, grants, keys and cascades are unchanged.
-
-**Service semantics:**
-- Each field is an optional one-to-four-character alphanumeric code. The service trims and uppercases
-  it (` i1 ` → `I1`); blank/whitespace normalises to `null`; punctuation and values longer than four
-  characters are rejected. No master validation or foreign key exists yet.
-- An explicitly supplied blank clears a stored value. An omitted field is different: it preserves the
-  existing value. The server action checks `FormData.has()` so older Customer company forms that do
-  not submit these new controls cannot accidentally erase data. A new row with an omitted field stores
-  `null`.
-- When supplied, both values use the existing staged-save/optimistic-version/no-op pipeline and are
-  included in before/after change history as security-relevant fields. Case/whitespace-only edits are
-  no-ops; real changes bump the version. The accounting completeness status and operational gate
-  remain based on the existing reconciliation-account/payment-terms rules; these defaults neither
-  complete nor block a segment.
-- The existing `FIN.CUSTOMER.COMPANY.DISPLAY` / `FIN.CUSTOMER.COMPANY.MAINTAIN` authority remains the
-  sole boundary. No UI-visible behavior changes in this batch.
-
-**Tests and verification:** a pure normalization suite was added to the browser harness. The DB-backed
-customer-company tests cover canonical save, security-relevant history, case-only no-op, omitted-value
-preservation, blank clear, invalid values and completeness-gate independence. The action-security test
-also verifies that the existing form path forwards explicit codes and that a legacy form omitting them
-preserves them. **At B-020 implementation time:** `npm run typecheck`, `npm run build`, `npm run lint:ip`
-(164 files), `npm run test:browser-harness` (**64/64**) and `git diff --check` passed; PostgreSQL was
-unavailable then. **Subsequent DB acceptance:** B-022 applied the migrations and ran the customer-company
-and action-security suites against an isolated local PostgreSQL 17.11 database; **65/65 tests passed**
-(§26.38). No owner or production database/tenant was used.
-
-**Owner update:** migration 0010 was applied only to the isolated local test database in B-022. Other
-development/test deployments should apply it through the normal migration service; it is the 24th SQL
-migration when starting from 0000. No reference reseed is required by this schema change. The current
-screen intentionally has no interest/tolerance inputs, so these values became user-maintainable only in
-the later B-021 UI slice. Do not set them through production SQL.
-
-**Limitations:** values are format-checked codes only. There is no master lookup, interest calculation,
-interest posting, tolerance calculation/enforcement, open-item processing, billing or payment use. DB
-migration/service/action acceptance passed in the isolated test database; browser acceptance passed in
-B-023, and the owner-reported walkthrough outcome is recorded in B-097 (§26.114).
-
-At B-020 close, **B-021** was selected and is now implemented (§26.37). B-022 database acceptance
-passed (§26.38), and B-023 automated browser acceptance has since passed (§26.39). The owner walkthrough
-was still pending at this point and was later reported passed in B-097 (§26.114).
-
-
-> **Continuation:** This file continues in [CAIRN-2.md](CAIRN-2.md), beginning at §26.37.
+> **Continuation:** This file continues in [CAIRN-2.md](CAIRN-2.md), beginning at §26.36.
 .

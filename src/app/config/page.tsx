@@ -69,6 +69,7 @@ export default async function WorkbenchPage({
     '/config/posting-periods',
     '/config/plants',
     '/config/storage-locations',
+    '/config/purchasing-orgs',
     '/config/number-ranges',
     '/registry',
     '/finance/journal',
