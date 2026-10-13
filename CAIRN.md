@@ -3,8 +3,8 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.69 — B-150 passes guarded SCR-017 live-browser acceptance)
-**Document set:** Canonical project log in two linked files; this is Part 1 of 2
+**Created:** 2026-10-08 · **Last updated:** 2026-10-13 (v1.70 — requirements R-24–R-30 registered in Part 3)
+**Document set:** Canonical project log in three linked files; this is Part 1 of 3 — **frozen** per §0.3 (400 KB rule); continues in [CAIRN-2.md](CAIRN-2.md), then [CAIRN-3.md](CAIRN-3.md) (live)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
 ---
@@ -22,6 +22,7 @@
 | **Every decision gets an ID** | `D-nnn` for decisions, `DV-nnn` for intentional divergences from SAP, `R-nn` for requirements, `FND-nnn` for defects/findings, `SCR-nnn` for screens, `TST-nnn` for test cases. |
 | **Status markers** | Every section carries one: `DRAFT` · `AGREED` · `FROZEN` · `IN BUILD` · `SIGNED OFF` · `DEFERRED`. |
 | **Update cadence** | The canonical file set is updated in the same turn as any change to code, schema, decision or scope. A code change without a corresponding entry here is not complete. |
+| **File size ceiling** | No part of the log may exceed 400 KB (400,000 bytes); a live part rotates to the next numbered file once it passes 360 KB, with the continuation stated in both directions. Operational detail: §0.3 of the live part (`CAIRN-3.md`). |
 | **Red-line protocol** | The product owner marks up sections in place or replies with the section number. Agent response: apply, log in §30, restate the change. |
 
 ### 0.2 Contents
@@ -59,7 +60,7 @@
 | 29 | Glossary & alias examples | DRAFT |
 | 30 | Change log | LIVE |
 
-> **Document split:** This file contains §0–§26.35. Section §26.36 onward continues in [CAIRN-2.md](CAIRN-2.md); numbering and change history remain continuous.
+> **Document split:** This file contains §0–§26.35. Section §26.36 onward continues in [CAIRN-2.md](CAIRN-2.md), which in turn continues in [CAIRN-3.md](CAIRN-3.md) — the live part from v1.70 (§0.3 of that part records the size-rotation rule); numbering and change history remain continuous.
 
 ---
 

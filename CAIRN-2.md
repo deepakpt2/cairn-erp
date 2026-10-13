@@ -1,7 +1,7 @@
 # CAIRN — Project Log & Technical Specification (continued)
 
-**Part 2 of 2 · Last updated:** 2026-10-13 (v1.69)
-**Continues:** [CAIRN.md](CAIRN.md) · **Sections:** §26.36–§30
+**Part 2 of 3 · Last updated:** 2026-10-13 (v1.69) — **frozen** per §0.3 (400 KB rule)
+**Continues:** [CAIRN.md](CAIRN.md) · **Sections:** §26.36–§30 · **Continues in:** [CAIRN-3.md](CAIRN-3.md) (live)
 
 ---
 
@@ -3358,5 +3358,7 @@ courtesy to experienced users, never part of the product's own naming.
 
 ---
 
-*End of document. This file is updated in the same turn as any change to code, schema, decision or
-scope — a code change without a corresponding entry here is not complete (§0.1).*
+*End of this part. The document set continues in [CAIRN-3.md](CAIRN-3.md), the live part from v1.70;
+this part is frozen except pointer/correction edits (§0.3 of that part). Each part is updated in the
+same turn as any change to code, schema, decision or scope — a code change without a corresponding
+entry in the live part is not complete (§0.1).*
