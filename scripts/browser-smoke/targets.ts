@@ -25,7 +25,36 @@ export const TARGETS = [
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];
 export const FIXTURE_NAME = 'Browser verification tenant';
+/** Contract default deadline for one browser target (see browserRunTimeoutMs for the effective value). */
 export const RUN_TIMEOUT_MS = 120_000;
+/**
+ * A timeout that may be raised — never lowered — through the environment.
+ * Contract defaults stay authoritative for loopback runs; a reviewed run
+ * against the higher-latency static remote test database (D-097) raises them
+ * explicitly. Invalid or smaller values fall back to the contract default.
+ */
+export function browserTimeoutMs(variable: string, fallback: number): number {
+  const raw = process.env[variable];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= fallback ? Math.floor(value) : fallback;
+}
+
+/** Effective per-target deadline (contract default RUN_TIMEOUT_MS). */
+export function browserRunTimeoutMs(): number {
+  return browserTimeoutMs('CAIRN_BROWSER_RUN_TIMEOUT_MS', RUN_TIMEOUT_MS);
+}
+/**
+ * Targets approved by owner instruction (2026-10-13) to run browser acceptance
+ * against the owner-supplied static test database (D-097) instead of a
+ * per-batch disposable cluster. Entries are added only after review; every
+ * other target keeps the disposable, loopback-only guard.
+ */
+export const STATIC_ACCEPTANCE_TARGETS = new Set<BrowserTargetId>([
+  'purchasing-org-company-code',
+  'purchasing-groups',
+  'sales-orgs',
+]);
 export type BrowserCommand = { mode: 'run'; target: BrowserTarget } | { mode: 'help' | 'list' };
 
 export function parseBrowserCommand(args: string[]): BrowserCommand {

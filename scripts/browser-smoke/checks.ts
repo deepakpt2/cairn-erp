@@ -3207,7 +3207,8 @@ async function salesOrgDefinition(ctx: BrowserContext) {
     mobilePhone: '+965 5550 0100', faxNumber: '+965 2222 0199', faxExtension: '199',
     emailAddress: 'sales@example.test',
   })) await addressDialog.locator(`[name="${field}"]`).fill(value);
-  await addressDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  // The dialog offers a header close and a footer close with the same accessible name; pick one deterministically.
+  await addressDialog.getByRole('button', { name: 'Close dialog', exact: true }).first().click();
   await page.locator('[name="reason"]').fill(createReason);
   const createForm = page.locator('form').filter({ has: page.locator('[name="mode"]') });
   await createForm.evaluate((form) => {
@@ -3275,7 +3276,7 @@ async function salesOrgDefinition(ctx: BrowserContext) {
   await changeAddressDialog.waitFor();
   await changeAddressDialog.locator('[name="street"]').fill('Boulevard 10');
   await changeAddressDialog.locator('[name="telephone"]').fill('+965 2222 0200');
-  await changeAddressDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await changeAddressDialog.getByRole('button', { name: 'Close dialog', exact: true }).first().click();
   await page.locator('[name="reason"]').fill(changeReason);
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('status').getByText(`Sales Organization ${code} saved and its change history recorded.`, { exact: true }).waitFor();
@@ -3284,8 +3285,8 @@ async function salesOrgDefinition(ctx: BrowserContext) {
     client: CLIENT, sales_org: code, company_code: null, currency: 'USD', factory_calendar: '01',
     ale_purchase_orders: true, purchasing_organization: '1000', reference_sales_org: '1000',
     rebate_processing_active: true, address_number: created.address_number, language_key: 'D',
-    name: changedName, form_text: 'B153FORM', country: 'KW', search_term1: 'NORTH',
-    search_term2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
+    name: changedName, form_text: 'B153FORM', country: 'KW', search_term_1: 'NORTH',
+    search_term_2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
     city: 'Al Jahra', region: 'JAH', po_box: '123', po_box_postal_code: '70012',
     company_postal_code: '70014', telephone: '+965 2222 0200', telephone_extension: '101',
     mobile_phone: '+965 5550 0100', fax_number: '+965 2222 0199', fax_extension: '199',
@@ -3319,8 +3320,8 @@ async function salesOrgDefinition(ctx: BrowserContext) {
     client: CLIENT, sales_org: code, company_code: null, currency: 'USD', factory_calendar: '01',
     ale_purchase_orders: true, purchasing_organization: '1000', reference_sales_org: '1000',
     rebate_processing_active: true, address_number: created.address_number, language_key: 'D',
-    name: changedName, form_text: 'B153FORM', country: 'KW', search_term1: 'NORTH',
-    search_term2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
+    name: changedName, form_text: 'B153FORM', country: 'KW', search_term_1: 'NORTH',
+    search_term_2: 'EAST', street: 'Boulevard 10', house_number: '12A', postal_code: '70010',
     city: 'Al Jahra', region: 'JAH', po_box: '123', po_box_postal_code: '70012',
     company_postal_code: '70014', telephone: '+965 2222 0200', telephone_extension: '101',
     mobile_phone: '+965 5550 0100', fax_number: '+965 2222 0199', fax_extension: '199',

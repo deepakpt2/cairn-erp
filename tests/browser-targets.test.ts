@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { TARGETS, FIXTURE_NAME, RUN_TIMEOUT_MS, parseBrowserCommand, isOwnedFixture } from '../scripts/browser-smoke/targets';
+import { TARGETS, FIXTURE_NAME, RUN_TIMEOUT_MS, browserRunTimeoutMs, browserTimeoutMs, STATIC_ACCEPTANCE_TARGETS, parseBrowserCommand, isOwnedFixture } from '../scripts/browser-smoke/targets';
 import { ACCEPTANCE_DATABASE_GUARDS } from '../scripts/browser-smoke/database-guards';
 
 describe('bounded browser target selection', () => {
@@ -94,6 +95,44 @@ describe('bounded browser target selection', () => {
   });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
+  });
+});
+
+describe('static-database acceptance mode (D-097)', () => {
+  it('approves only the three owner-directed targets for the static test database', () => {
+    expect([...STATIC_ACCEPTANCE_TARGETS].sort()).toEqual([
+      'purchasing-groups',
+      'purchasing-org-company-code',
+      'sales-orgs',
+    ]);
+    for (const id of STATIC_ACCEPTANCE_TARGETS) {
+      expect(TARGETS.some((target) => target.id === id)).toBe(true);
+    }
+  });
+  it('keeps the 120-second contract deadline as the default and allows only a raise through the environment', () => {
+    delete process.env.CAIRN_BROWSER_RUN_TIMEOUT_MS;
+    expect(browserRunTimeoutMs()).toBe(120_000);
+    process.env.CAIRN_BROWSER_RUN_TIMEOUT_MS = '600000';
+    expect(browserRunTimeoutMs()).toBe(600_000);
+    process.env.CAIRN_BROWSER_RUN_TIMEOUT_MS = '1000';
+    expect(browserRunTimeoutMs()).toBe(120_000);
+    delete process.env.CAIRN_BROWSER_RUN_TIMEOUT_MS;
+  });
+  it('keeps page and navigation timeouts at their contract defaults unless explicitly raised', () => {
+    delete process.env.CAIRN_BROWSER_PAGE_TIMEOUT_MS;
+    delete process.env.CAIRN_BROWSER_NAV_TIMEOUT_MS;
+    expect(browserTimeoutMs('CAIRN_BROWSER_PAGE_TIMEOUT_MS', 30_000)).toBe(30_000);
+    expect(browserTimeoutMs('CAIRN_BROWSER_NAV_TIMEOUT_MS', 60_000)).toBe(60_000);
+    process.env.CAIRN_BROWSER_NAV_TIMEOUT_MS = '5000';
+    expect(browserTimeoutMs('CAIRN_BROWSER_NAV_TIMEOUT_MS', 60_000)).toBe(60_000);
+    process.env.CAIRN_BROWSER_NAV_TIMEOUT_MS = '300000';
+    expect(browserTimeoutMs('CAIRN_BROWSER_NAV_TIMEOUT_MS', 60_000)).toBe(300_000);
+    delete process.env.CAIRN_BROWSER_NAV_TIMEOUT_MS;
+  });
+  it('does not carry static-database connection details in the repository', () => {
+    const source = readFileSync('scripts/browser-smoke.ts', 'utf8');
+    expect(source).toContain('CAIRN_TEST_DATABASE_URL');
+    expect(source).not.toMatch(/supabase|pooler\.supabase|yyskxzdytncsatwjkiva/i);
   });
 });
 

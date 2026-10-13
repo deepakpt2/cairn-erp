@@ -2,7 +2,7 @@
 import { strict as assert } from 'node:assert';
 import { mkdir } from 'node:fs/promises';
 import postgres from 'postgres';
-import { TARGETS, FIXTURE_NAME, RUN_TIMEOUT_MS, parseBrowserCommand, isOwnedFixture, type BrowserTarget } from './browser-smoke/targets';
+import { TARGETS, FIXTURE_NAME, browserRunTimeoutMs, browserTimeoutMs, STATIC_ACCEPTANCE_TARGETS, parseBrowserCommand, isOwnedFixture, type BrowserTarget } from './browser-smoke/targets';
 import { ACCEPTANCE_DATABASE_GUARDS, type BrowserAcceptanceDatabaseGuard } from './browser-smoke/database-guards';
 
 function guardedConnectionUrl(
@@ -23,6 +23,113 @@ function guardedConnectionUrl(
   assert.ok(url.password.length > 0, `${variable} must include the isolated test password.`);
   assert.equal(url.search, '', `${variable} must not include unreviewed connection parameters.`);
   return raw;
+}
+
+/**
+ * Static-database mode (D-097, owner instruction 2026-10-13).
+ *
+ * Browser acceptance may run against the owner-supplied static test database
+ * instead of a per-batch disposable cluster. The mode is explicit
+ * (`CAIRN_BROWSER_DB_MODE=static`) and restricted to reviewed targets; the
+ * connection binding is derived from `CAIRN_TEST_DATABASE_URL`, so no host,
+ * project reference or password is stored in the repository. What is checked:
+ *
+ *  - the target is on the reviewed allowlist;
+ *  - the runtime and migration URLs address exactly the same host, port and
+ *    database as the owner-supplied test URL;
+ *  - the pooler role convention holds (runtime `cairn_app.<ref>`, migration
+ *    `postgres.<ref>`, distinct roles) and no unreviewed parameters are attached;
+ *  - at connection time: both roles reach the same database, the runtime role is
+ *    NOT elevated, the migration role IS elevated, the server is PostgreSQL 17,
+ *    not in recovery, and the schema is provisioned (all migrations recorded).
+ *
+ * Fixture safety is unchanged and applies in both modes: the runner may only
+ * delete the reserved fixture tenant whose key, exact fixture name and
+ * development flag all match (isOwnedFixture), and it refuses the run entirely
+ * if the reserved key belongs to any other tenant.
+ */
+function staticAcceptanceUrls(target: BrowserTarget) {
+  assert.ok(
+    STATIC_ACCEPTANCE_TARGETS.has(target.id),
+    `Browser target ${target.id} is not approved for static-database acceptance; use its disposable guard or extend the reviewed allowlist.`,
+  );
+  const ownerUrl = process.env.CAIRN_TEST_DATABASE_URL;
+  assert.ok(ownerUrl, 'CAIRN_TEST_DATABASE_URL must name the owner-supplied static test database.');
+  let owner: URL;
+  try { owner = new URL(ownerUrl); }
+  catch { throw new Error('CAIRN_TEST_DATABASE_URL is not a valid PostgreSQL URL; refusing browser acceptance.'); }
+
+  const bind = (raw: string | undefined, variable: string, prefix: string) => {
+    assert.ok(raw, `${variable} must be set explicitly for static-database acceptance.`);
+    let url: URL;
+    try { url = new URL(raw); }
+    catch { throw new Error(`${variable} is not a valid PostgreSQL URL; refusing browser acceptance.`); }
+    assert.equal(url.protocol, 'postgresql:', `${variable} must use PostgreSQL.`);
+    assert.equal(url.host, owner.host, `${variable} must address the same host:port as CAIRN_TEST_DATABASE_URL.`);
+    assert.equal(url.pathname, owner.pathname, `${variable} must address the same database as CAIRN_TEST_DATABASE_URL.`);
+    assert.equal(url.search, '', `${variable} must not include unreviewed connection parameters.`);
+    const user = decodeURIComponent(url.username);
+    assert.ok(user === prefix || user.startsWith(`${prefix}.`), `${variable} must use the ${prefix} role (optionally pooler-qualified).`);
+    assert.ok(url.password.length > 0, `${variable} must include a password.`);
+    return { url, user };
+  };
+
+  const runtime = bind(process.env.DATABASE_URL, 'DATABASE_URL', 'cairn_app');
+  const migration = bind(process.env.MIGRATION_DATABASE_URL, 'MIGRATION_DATABASE_URL', 'postgres');
+  assert.notEqual(runtime.user, migration.user, 'Static acceptance requires separated runtime and migration roles.');
+  return { owner: ownerUrl, runtime: process.env.DATABASE_URL as string, migration: process.env.MIGRATION_DATABASE_URL as string };
+}
+
+async function verifyStaticAcceptanceDatabase(target: BrowserTarget) {
+  const { owner, runtime, migration } = staticAcceptanceUrls(target);
+  const identities: Array<{ url: string; state: 'runtime' | 'migration' }> = [
+    { url: runtime, state: 'runtime' },
+    { url: migration, state: 'migration' },
+  ];
+  const seen: Array<{ database: string; role: string; elevated: boolean }> = [];
+  for (const { url, state } of identities) {
+    const connection = postgres(url, { max: 1, prepare: false, connect_timeout: 15, onnotice: () => {} });
+    try {
+      const [identity] = await connection<Array<{
+        database_name: string;
+        role_name: string;
+        elevated: boolean;
+        version_num: number;
+        in_recovery: boolean;
+      }>>`
+        select current_database() as database_name,
+               current_user as role_name,
+               (r.rolsuper or r.rolbypassrls) as elevated,
+               current_setting('server_version_num')::int as version_num,
+               pg_is_in_recovery() as in_recovery
+          from pg_roles r where r.rolname = current_user
+      `;
+      assert.ok(identity, `Static acceptance could not read the ${state} identity.`);
+      assert.equal(identity.elevated, state === 'migration', `${state} role elevation is wrong for static acceptance.`);
+      assert.equal(Math.floor(Number(identity.version_num) / 10_000), 17, 'Acceptance requires PostgreSQL 17.');
+      assert.equal(identity.in_recovery, false);
+      seen.push({ database: identity.database_name, role: identity.role_name, elevated: identity.elevated });
+    } finally {
+      await connection.end({ timeout: 5 });
+    }
+  }
+  assert.equal(seen[0]?.database, seen[1]?.database, 'Runtime and migration URLs must reach the same database.');
+
+  const migrationUrl = new URL(migration);
+  const expectedDatabase = decodeURIComponent(migrationUrl.pathname.replace(/^\//, ''));
+  const connection = postgres(migration, { max: 1, prepare: false, connect_timeout: 15, onnotice: () => {} });
+  try {
+    const [schema] = await connection<Array<{ applied: number }>>`
+      select count(*)::int as applied from cairn_migration
+    `;
+    assert.ok(schema && schema.applied >= 50, `Static acceptance requires a provisioned schema (found ${schema?.applied ?? 0} recorded migrations).`);
+    console.log(
+      `Verified static acceptance database (owner-supplied test target, ${new URL(owner).host}${migrationUrl.pathname}; expected database ${expectedDatabase}): ` +
+        `runtime ${seen[0]?.role} restricted, migration ${seen[1]?.role} elevated, ${schema.applied} migrations recorded.`,
+    );
+  } finally {
+    await connection.end({ timeout: 5 });
+  }
 }
 
 async function verifyAcceptanceDatabase(guard: BrowserAcceptanceDatabaseGuard) {
@@ -84,8 +191,13 @@ function protectedRouteFor(target: BrowserTarget): string {
 
 async function run(target: BrowserTarget) {
   assert.equal(process.env.CAIRN_ENV ?? 'development', 'development', 'Browser smoke runs only against development.');
-  const databaseGuard = ACCEPTANCE_DATABASE_GUARDS[target.id];
-  if (databaseGuard) await verifyAcceptanceDatabase(databaseGuard);
+  const staticMode = process.env.CAIRN_BROWSER_DB_MODE === 'static';
+  if (staticMode) {
+    await verifyStaticAcceptanceDatabase(target);
+  } else {
+    const databaseGuard = ACCEPTANCE_DATABASE_GUARDS[target.id];
+    if (databaseGuard) await verifyAcceptanceDatabase(databaseGuard);
+  }
   const [{ chromium }, { sql }, { withTenant, closeDb }, { listTenants }, { CHECKS, onboard }] = await Promise.all([
     import('@playwright/test'), import('drizzle-orm'), import('../src/platform/db/client'),
     import('../src/platform/tenancy'), import('./browser-smoke/checks'),
@@ -106,19 +218,22 @@ async function run(target: BrowserTarget) {
     const browser = await chromium.launch({ headless: true, timeout: 15_000 });
     try {
       const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-      page.setDefaultTimeout(30_000);
-      page.setDefaultNavigationTimeout(60_000);
+      // Contract defaults (30 s / 60 s) assume a loopback database; a reviewed
+      // static-database run may raise them through the environment (D-097).
+      page.setDefaultTimeout(browserTimeoutMs('CAIRN_BROWSER_PAGE_TIMEOUT_MS', 30_000));
+      page.setDefaultNavigationTimeout(browserTimeoutMs('CAIRN_BROWSER_NAV_TIMEOUT_MS', 60_000));
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       let timedOut = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const runTimeoutMs = browserRunTimeoutMs();
       const deadline = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           timedOut = true;
-          console.error(`Browser target ${target.id} exceeded ${RUN_TIMEOUT_MS / 1000}s; closing the browser, not starting another target.`);
+          console.error(`Browser target ${target.id} exceeded ${runTimeoutMs / 1000}s; closing the browser, not starting another target.`);
           void browser.close().catch(() => {});
           reject(new Error(`Browser target ${target.id} exceeded its deadline`));
-        }, RUN_TIMEOUT_MS);
+        }, runTimeoutMs);
       });
       try {
         await Promise.race([(async () => {

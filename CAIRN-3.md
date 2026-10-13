@@ -206,9 +206,112 @@ SCR-018/019/020 remain the outstanding acceptance runs and are separate heavy ba
 currently bind disposable database names/ports (D-097 note), so they need a reviewed adaptation
 before they can run against the static database. Nothing pushed.
 
-*Still owed: the ledger entries for the B-151–B-153 implementations, and the browser-target
-acceptance runs for SCR-018, SCR-019 and SCR-020 (their service acceptance is complete above). Section entries here follow the §24.2 template
-and the §26.36 style.*
+*Note: from v1.70 this part also carries the batch records for B-151 onward; the §25.4 queue table
+in Part 1 is frozen, so these §26 entries are the authoritative record for those batches.*
+
+### 26.170 B-151 — SCR-018 Purchasing Organisation → Company Code assignment `IMPLEMENTED · BROWSER ACCEPTANCE PASSED · STATIC TEST DATABASE`
+
+**Implementation (commit `c842b6a`).** Migration `0023_purchasing_org_company_code_fk.sql` adds the
+same-tenant Company Code foreign key to `purchasing_org` with a fail-closed orphan preflight; a null
+Company Code stays valid while an organisation is pending (B-142/D-092).
+`purchasing-org-company-code-assignment.ts` implements the audited initial assignment: exactly one
+active tenant-local Company Code, idempotent retry, no replacement or unassignment, workbench
+completion through the shared `markActivityComplete`. Capability `CFG.PROC.PURORG.ASSIGN_COMPANY` is
+separate from OX08 definition; the page is `/config/purchasing-orgs/assign-company`. No service suite
+exists for this screen by design — its runtime proof is the guarded browser target.
+
+**Acceptance (static test database, one production build).** Target `purchasing-org-company-code`,
+reserved fixture **T979**: UI-created tenant has no hidden accounting intervals; OX08 definition
+authority does not grant assignment; the exact-capability initial assignment writes one tenant-local
+link plus a Company Code audit event; the assignment is read-only after save and visible in the OX08
+detail history; the Auditor can review but has no assignment controls. Zero T979 rows remained after
+the runner's guarded cleanup.
+
+### 26.171 B-152 — SCR-019 Purchasing Group definition `IMPLEMENTED · SERVICE 4/4 · BROWSER ACCEPTANCE PASSED · STATIC TEST DATABASE`
+
+**Implementation (commit `c842b6a`).** Migration `0024_purchasing_group_definition.sql` refuses to
+widen the key rather than truncate or rewrite existing references; standalone contacts, definition
+editing and audited deletion with retained history live in `purchasing-group-maintenance.ts` with
+`markActivityComplete` on success. Capability `CFG.PROC.PURGROUP.DEFINE`; page `/config/purchasing-groups`.
+
+**Acceptance.** Service suite `purchasing-group-maintenance` **4/4 pass** on the static test database
+(§26.169). Browser target `purchasing-groups`, reserved fixture **T978**: UI-created tenant clean; a
+new group saves contact fields without organisation assignments and stays visible to existing
+purchasing consumers; inline changes append field-level history; unreferenced deletion preserves its
+audited history; the Auditor can inspect while a forged mutation is rejected server-side. Zero T978
+rows remained.
+
+### 26.172 B-153 — SCR-020 Sales Organization definition `IMPLEMENTED · SERVICE 6/6 · BROWSER ACCEPTANCE PASSED · STATIC TEST DATABASE · ONE PRODUCT DEFECT FIXED (B-157)`
+
+**Implementation (commit `febccf5`).** Migrations `0025_sales_organization_definition.sql` (localized
+`sales_org_text`, CAM address link, optional OVX5 fields; Company Code stays nullable and separate),
+`0026_sales_org_activity_code.sql` (approved exact code `CFG.ORG.SALESORG.DEFINE`, legacy-code merge,
+checklist completion derived from actual rows) and `9022_central_address_sequence_grants.sql`.
+`sales-organization-maintenance.ts` implements create/change/soft-deactivate with retained history,
+logon-language description text, CAM address maintenance and `markActivityComplete`; page
+`/config/sales-orgs`.
+
+**Acceptance.** Service suite `sales-org-maintenance` **6/6 pass** on the static test database after
+its fixture defect was fixed (§26.169). Browser target `sales-orgs`, reserved fixture **T977**:
+**9/9 checks pass** — create with logon-language text and CAM address persisted while forged
+assignment fields are ignored; vendor selection preserving the canonical partner key while detail and
+audit show the ten-digit ID; change retaining ADRNR and dependent CAM fields while the
+language-dependent description and Form Text are versioned; silent no-op; confirmed soft deactivation
+with retained history; dependent Sales Areas blocking deactivation; inactive definitions refusing
+change/reactivation; Auditor read-only separation. Zero T977 rows remained. **The first-ever run of
+this target found the B-157 product defect below.**
+
+### 26.173 B-157 — Static-database browser acceptance and the SCR-020 dialog defect `COMPLETE · PRODUCT DEFECT FIXED · ALL THREE TARGETS PASSED`
+
+**Owner instruction applied (D-097):** browser acceptance runs against the owner-supplied static test
+database instead of a per-batch disposable cluster, with a local database only as fallback.
+
+**Harness adaptation (reviewed; no secrets in the repository).** `CAIRN_BROWSER_DB_MODE=static` selects
+static mode for an explicit allowlist of three targets (`STATIC_ACCEPTANCE_TARGETS`); the binding is
+derived from `CAIRN_TEST_DATABASE_URL` (host, port, database, role convention `cairn_app.<ref>` /
+`postgres.<ref>`, extra connection parameters rejected), and the verifier asserts at connection time
+that both roles reach the same database, the runtime role is not elevated, the migration role is
+elevated, the server is PostgreSQL 17 and the schema is provisioned (≥50 recorded migrations).
+Fixture safety is unchanged in both modes: only the reserved key carrying the exact fixture name and
+the development flag may be deleted, and a foreign tenant on a reserved key aborts the run entirely.
+Timeouts keep their contract defaults but may be raised (never lowered) through
+`CAIRN_BROWSER_RUN_TIMEOUT_MS`, `CAIRN_BROWSER_NAV_TIMEOUT_MS` and `CAIRN_BROWSER_PAGE_TIMEOUT_MS`;
+seven new contract test cases were added (harness 235/235). The application ran as a production build
+(`npm run build` + `npm start`) because the sandbox development server did not survive the long
+remote-database runs.
+
+**Product defect found by the SCR-020 target (first ever execution).** The Central Address dialog
+wrapper combined the HTML `hidden` attribute with the `flex` utility class. Author `display:flex`
+overrides the browser's `[hidden] { display: none }`, so the *closed* full-screen overlay stayed
+rendered on top of the form and swallowed every pointer click — Playwright reported
+`<div hidden="" … class="fixed inset-0 z-50 flex …"> intercepts pointer events` on the first
+coordinate-based interaction, making the page effectively unclickable outside its fields. **Fix:** the
+wrapper now uses a conditional display class (`… : 'hidden'`) with `aria-hidden` mirrored, so a closed
+dialog is truly `display:none` while its inputs stay mounted — closing must not discard a captured
+address (conditional unmounting was tried first and rejected for exactly that reason: the address
+number stopped persisting). A repository-wide guard test
+(`tests/hidden-attribute-display-contract.test.ts`) now fails the suite if any `.tsx` combines
+`hidden={…}` with a display utility, and the SCR-020 UI contract pins the corrected pattern.
+
+**Acceptance-script defects fixed in the same batch (all in never-executed paths).** (1) The dialog
+offers a header and a footer close with the same accessible name; the script now selects one
+deterministically. (2) Four assertions in the change/deactivate deep-equals used `search_term1` while
+the live column is `search_term_1` (the passing create-flow assertions confirmed the correct key).
+(3) The fixture hook and the page/navigation budgets became env-overridable as recorded above.
+
+**Evidence.** All three targets ran against the static test database on the same production build:
+**SCR-018 pass · SCR-019 pass · SCR-020 9/9 checks**; service suites on the same database 15/15
+(§26.169); `lint:ip` clean (350 files); `typecheck` clean; harness **235/235**; the test database was
+left with only development tenant `0100` (no `T###` tenants, sales organisations or purchasing
+groups). Published to `main` on owner instruction.
+
+**Boundary.** One product file changed (`src/app/config/sales-orgs/SalesOrgDefinitionForm.tsx`) plus
+harness, contract tests and this ledger. No schema, migration, seed, capability or service change; no
+owner data touched.
+
+*Still owed: owner walkthrough/sign-off for the screens recorded above, and the remaining roadmap
+(SCR-021 onward). The next UI step waits for the SAP transaction codes and the owner's field list
+(R-30).*
 
 ---
 
@@ -224,6 +327,7 @@ recorded change, date and reason stated.
 | 1.72 | 2026-10-13 | **Owner-supplied test database provisioned and adopted as the working target (B-154, §26.167).** Applied all 50 migrations as the elevated Supavisor-session connection (rerun skipped 50 — idempotent); migration 9000 created the `cairn_app` runtime role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE) whose password was then replaced with a generated value — the packaged `db:sync-role` helper cannot address pooler usernames (`<role>.<project-ref>`), so the equivalent ALTER ROLE DDL was run directly and the deviation is recorded. Seeded global definitions (60 capabilities, 52 activities, 11 messages, 29 terms + 22 aliases) and reference data (30 countries, 26 currencies, 21 units), then created development tenant `0100` through the runtime connection using the same `createTenant()` service as the UI (company code 1000, `dev.admin`, 10 roles, 11 number ranges, 52 workbench steps, INTL-STD-2, 74 G/L accounts). Verified fail-closed RLS (0 rows without a tenant setting), cross-tenant isolation (0 rows), RLS enabled+FORCED, and a non-elevated runtime role. `.env.local` now points `DATABASE_URL` at the restricted `cairn_app.<ref>` connection and keeps the elevated connection in `MIGRATION_DATABASE_URL`/`CAIRN_TEST_DATABASE_URL`; the file is gitignored (verified) and mode 600. No code, schema, migration or seed change; no owner data; nothing pushed. Still owed: the IP-lint repair and the SCR-018/019/020 ledger entries plus their DB-backed acceptance. | Agent |
 | 1.73 | 2026-10-13 | **IP-lint gate repaired for the SCR-020 sources (B-155, §26.168).** Removed all 16 reference-vendor trademark occurrences (10 files, 21/21 lines; comments, one user-visible i18n label and its browser assertion, the seeded SCR-020 registry description, two test titles, migration 0025's comment) and renamed the lowercase vendor-derived identifiers to `logonLanguageKeyFromPreferences` / `logonLanguage`. Comment-only edit to the applied migration 0025 was accompanied by re-registering its stored checksum on the test database (`d7febf21` → `26c1cb86`), after which `db:migrate` reported 50 already applied with no immutability error; no new migration was added. Verified: `lint:ip` 0/350 files, typecheck clean, browser harness 230/230, registry re-seeded with zero vendor marks in browsable seeded data, `git diff --check` clean, no stale test tenants on the test database. Recorded finding: suites with hard-coded 30 s `beforeAll` hooks cannot run against the remote pooler (≈2 min tenant creation); heavy acceptance stays on disposable local PostgreSQL 17.11. Nothing pushed. | Agent |
 | 1.74 | 2026-10-13 | **SCR-017/019/020 service acceptance passed on the static test database; one fixture defect found and fixed (B-156, §26.169; D-097).** Seven DB-backed suites had hard-coded 30 s fixture hooks that the remote pooler cannot satisfy; the hook budget is now env-overridable (`CAIRN_TEST_HOOK_TIMEOUT_MS`, local default unchanged). The SCR-020 suite, run for the first time ever, failed one assertion because fixture tenants carry no `config_activity_status` rows and its UPDATE-only reset (and therefore the correct service completion update) silently matched nothing; fixed the fixture the sibling suites' way (insert-then-update, 8 lines, test-only). Results on the static database: SCR-020 6/6, SCR-019 4/4, SCR-017 5/5 — 15/15, with zero leftover fixture rows, `lint:ip` and `typecheck` clean. No migration, product code, schema or seed change. Browser targets for SCR-018/019/020 remain, pending a reviewed guard adaptation for the static database. Nothing pushed. | Agent |
+| 1.75 | 2026-10-13 | **SCR-018/019/020 implemented, accepted and published; the SCR-020 dialog defect found by browser acceptance was fixed (B-151–B-153, B-157; §§26.170–26.173).** Browser acceptance now runs on the owner-supplied static test database (D-097) through a reviewed static mode derived from `CAIRN_TEST_DATABASE_URL` with an explicit three-target allowlist, unchanged fixture-ownership guards and raise-only timeout overrides; the app ran as a production build for stability. The first-ever `sales-orgs` run found a real product defect: the Central Address dialog combined the HTML `hidden` attribute with the `flex` utility class, so the closed overlay stayed `display:flex` and intercepted every pointer event — fixed with a conditional display class (inputs stay mounted so a captured address still submits) and guarded repository-wide by a new test. Two acceptance-script defects were fixed in the same pass (ambiguous close-button selector; `search_term_1` key typos in the change/deactivate assertions). Results: SCR-018 pass, SCR-019 pass, SCR-020 9/9 checks on the static database against one build; service suites 15/15; lint, typecheck and harness 235/235 clean; the test database left with only development tenant `0100`. Product change limited to one file; no schema, migration or seed change. Published to `main` on owner instruction. | Agent |
 
 ---
 
