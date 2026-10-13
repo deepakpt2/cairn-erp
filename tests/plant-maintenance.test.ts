@@ -90,7 +90,7 @@ beforeAll(async () => {
   beta = await createTenant('b123-plant-maintenance-beta');
   await setPlantActivity(alpha.client);
   await setPlantActivity(beta.client);
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {

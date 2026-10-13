@@ -82,7 +82,7 @@ beforeAll(async () => {
   beta = await createTenant('scr019-purchasing-group-beta');
   await resetActivity(alpha.client);
   await resetActivity(beta.client);
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {

@@ -63,6 +63,7 @@ Rows continue the register in `CAIRN.md` §2 (through D-092).
 | D-094 | **Bounded-batch protocol v2 and the completion-report contract.** (1) Batch sizing must protect the agent interface (no plausible timeout, no out-of-memory): one heavy operation at a time, bounded logs, split long work. (2) Every completed batch reports main process / current step / next step / required owner data (R-26). (3) The §24.1 page cycle gains, before design: the SAP tcode presentation and the owner's form-field data (R-30); and, before acceptance: a mobile-viewport check (R-28). (4) §25.4 remains binding for time budgets, preservation and the publish trigger. | Owner instruction 2026-10-13; operationalises R-25, R-26, R-28 and R-30. | 2026-10-13 |
 | D-095 | **Environment and secret-handling policy.** Repo URL, PAT and database connection string are kept only in `.env.local` (gitignored, permissions 600); no secret is written to the canonical log, commits, output or UI. Where the remote database is unreachable from the working environment, the local development database is used and the unreachable string is removed from `.env.local` (owner retains it in their own records). **Recorded finding (2026-10-13):** `db.yyskxzdytncsatwjkiva.supabase.co:5432` resolves to IPv6 only from the workspace sandbox and no IPv6 route exists there; general outbound network verified working (GitHub reachable). The Supabase string was therefore removed from `.env.local` per R-29, and the local development database (`127.0.0.1:5432/cairn`, split `cairn`/`cairn_app` roles) is the working target. The PAT remains owner-rotated; it is used only when the owner instructs a push. | Owner instruction 2026-10-13; keeps working credentials out of the repository and unblocks local development. | 2026-10-13 |
 | D-096 | **Verified remote test database target (Supavisor session pooler).** The owner-supplied replacement string (`…@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`, login `postgres.<ref>`) is verified working from the workspace sandbox with the project's own postgres.js driver: IPv4 DNS + TCP reachable, login OK, no TLS requirement, server PostgreSQL 17.11, `public` schema empty (no Cairn migrations applied yet), login role NOT superuser but `rolbypassrls=true` with `createrole`/`createdb` — i.e. it satisfies the migration runner's elevated-role check and must never be used as the runtime connection. Consequences: the string is stored in `.env.local` as `CAIRN_TEST_DATABASE_URL` and `MIGRATION_DATABASE_URL`; `DATABASE_URL` stays on the local fallback until a non-elevated application role is provisioned on the test database; migrations/seeds and the role split on the test database are the next database batch and require owner go-ahead because they write to the remote database. This supersedes the local-only interim of D-095 for test purposes (the policy of D-095 itself stands). | Owner instruction 2026-10-13 ("check if this works; if yes add to `.env.local` and use as test database"). Verification evidence recorded in §30 v1.71. | 2026-10-13 |
+| D-097 | **The static remote test database is the standing acceptance environment.** Owner instruction 2026-10-13: stop provisioning a disposable database for every acceptance; run DB-backed service acceptance against the owner-supplied static test database (D-096) and add required migrations to it as the schema evolves; use a local database only if the test database is unavailable. DB-backed suites may therefore raise their fixture hook budget through `CAIRN_TEST_HOOK_TIMEOUT_MS` (default remains 30 s, so fast/local databases keep failing fast); suites are run one file at a time to stay inside the agent-interface limits. Note for the browser-acceptance batches: the guarded browser targets currently bind disposable database names/ports (`cairn_b151` … `cairn_b153`) in their own guards, so their configuration needs a reviewed adaptation (or an explicit owner decision) before they can run against the static database. | Owner instruction 2026-10-13; supersedes the per-batch disposable-database practice for service acceptance while keeping D-095's local fallback for unavailability. | 2026-10-13 |
 
 ---
 
@@ -161,8 +162,52 @@ database (verified: tenant `0100` only).
 **Boundary.** No schema, service, UI-behaviour or seed-content change beyond the renames/rewordings
 above; no new migration; no commit/push beyond the local commit containing this entry.
 
-*Still owed: the ledger entries for the already-pushed SCR-018, SCR-019 and SCR-020 batches
-(B-151–B-153) and their DB/browser acceptance runs. Section entries here follow the §24.2 template
+### 26.169 B-156 — SCR-017/019/020 service acceptance on the static test database `PASSED · 15/15 · ONE FIXTURE DEFECT FOUND AND FIXED`
+
+**Scope.** Run the DB-backed service acceptance for the never-accepted SCR-019 and SCR-020
+implementations and re-run the touched SCR-017 suite against the owner-supplied static test database,
+now the standing acceptance environment (D-097). No migrations were required or added by this batch.
+
+**Enabling change (test infrastructure).** Seven DB-backed suites hard-coded a `30_000` ms `beforeAll`
+hook, which the remote pooler cannot satisfy (tenant creation costs ≈60–90 s there; two-tenant
+fixtures ≈2–3 min). Each is now `Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000)` — the local
+default is unchanged and remote runs set the environment variable. Files: `sales-org-maintenance`,
+`purchasing-group-maintenance`, `purchasing-org-maintenance`, `storage-location-maintenance`,
+`plant-maintenance`, `plant-company-code-assignment`, `company-code-coa-assignment`. No behavioural
+change; DB-free harness and typecheck unaffected.
+
+**Defect found on first execution, fixed (fixture, not product).** On its first-ever run, the SCR-020
+suite failed one assertion (`expected undefined to match object { status: 'COMPLETED' … }`). Root
+cause: fixture tenants from `tests/helpers.createTenant` do not seed `config_activity_status` rows,
+whereas real onboarding seeds one row per activity; the suite's `setActivity()` reset was
+UPDATE-only, so it silently changed nothing, the service's (correct) `markActivityComplete` update
+also matched no row, and the assertion then found no row at all. The product code was confirmed
+correct: `sales-organization-maintenance.ts` completes the workbench activity in the same transaction,
+matching the B-040/B-108 convention. The suite was fixed the way its sibling suites already do —
+`INSERT … ON CONFLICT DO NOTHING` followed by the reset UPDATE (8 added lines, test-only).
+
+**Results (static test database; `CAIRN_TEST_HOOK_TIMEOUT_MS=600000`, `--testTimeout=300000`):**
+
+| Suite | Screen | Result | Wall clock |
+|---|---|---|---|
+| `sales-org-maintenance` | SCR-020 | **6/6 pass** | 3 m 09 s |
+| `purchasing-group-maintenance` | SCR-019 | **4/4 pass** | 2 m 17 s |
+| `purchasing-org-maintenance` | SCR-017 (regression on the new environment) | **5/5 pass** | 2 m 22 s |
+
+**Verification.** After all runs the test database holds only development tenant `0100`, with zero
+`T###` company codes and zero `T###` sales organisations (fixture cleanup proved by query);
+`lint:ip` clean; `typecheck` clean. Covered behaviours include, per suite: normalisation, tenant
+isolation, no-op silence, optimistic-version rejection, retained history, blocked/refused
+deactivation paths and activity completion.
+
+**Boundary and what remains.** No product code, schema, migration or seed changed. SCR-018 has no
+DB-backed service suite — its runtime acceptance is the guarded browser target. Browser targets for
+SCR-018/019/020 remain the outstanding acceptance runs and are separate heavy batches; their guards
+currently bind disposable database names/ports (D-097 note), so they need a reviewed adaptation
+before they can run against the static database. Nothing pushed.
+
+*Still owed: the ledger entries for the B-151–B-153 implementations, and the browser-target
+acceptance runs for SCR-018, SCR-019 and SCR-020 (their service acceptance is complete above). Section entries here follow the §24.2 template
 and the §26.36 style.*
 
 ---
@@ -178,6 +223,7 @@ recorded change, date and reason stated.
 | 1.71 | 2026-10-13 | **Owner-supplied replacement test-database string verified and adopted (D-096).** The new string uses the Supavisor session pooler (`aws-0-ap-northeast-2.pooler.supabase.com:5432`, login `postgres.<ref>`) and works from the workspace sandbox: IPv4 resolution (the earlier direct host is IPv6-only), TCP reachable, login OK, no TLS requirement, PostgreSQL 17.11, `createrole`/`createdb` present, `rolbypassrls=true` (qualifies as the migration runner's elevated role), and the `public` schema empty — no Cairn migration has ever been applied there and no project roles exist yet. The string is now stored in `.env.local` as `CAIRN_TEST_DATABASE_URL` and `MIGRATION_DATABASE_URL` (mode 600, verified untracked); `DATABASE_URL` deliberately remains the local fallback because the application connection must be NOSUPERUSER/NOBYPASSRLS and the test database has no such role yet. No write of any kind was performed against the test database — all checks were read-only (`select`); migrations, seeds and the role split there are the next database batch and require owner go-ahead. No code, schema, migration or seed change; documentation and local environment files only; no commit or push of this entry beyond the local docs commit. | Agent |
 | 1.72 | 2026-10-13 | **Owner-supplied test database provisioned and adopted as the working target (B-154, §26.167).** Applied all 50 migrations as the elevated Supavisor-session connection (rerun skipped 50 — idempotent); migration 9000 created the `cairn_app` runtime role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE) whose password was then replaced with a generated value — the packaged `db:sync-role` helper cannot address pooler usernames (`<role>.<project-ref>`), so the equivalent ALTER ROLE DDL was run directly and the deviation is recorded. Seeded global definitions (60 capabilities, 52 activities, 11 messages, 29 terms + 22 aliases) and reference data (30 countries, 26 currencies, 21 units), then created development tenant `0100` through the runtime connection using the same `createTenant()` service as the UI (company code 1000, `dev.admin`, 10 roles, 11 number ranges, 52 workbench steps, INTL-STD-2, 74 G/L accounts). Verified fail-closed RLS (0 rows without a tenant setting), cross-tenant isolation (0 rows), RLS enabled+FORCED, and a non-elevated runtime role. `.env.local` now points `DATABASE_URL` at the restricted `cairn_app.<ref>` connection and keeps the elevated connection in `MIGRATION_DATABASE_URL`/`CAIRN_TEST_DATABASE_URL`; the file is gitignored (verified) and mode 600. No code, schema, migration or seed change; no owner data; nothing pushed. Still owed: the IP-lint repair and the SCR-018/019/020 ledger entries plus their DB-backed acceptance. | Agent |
 | 1.73 | 2026-10-13 | **IP-lint gate repaired for the SCR-020 sources (B-155, §26.168).** Removed all 16 reference-vendor trademark occurrences (10 files, 21/21 lines; comments, one user-visible i18n label and its browser assertion, the seeded SCR-020 registry description, two test titles, migration 0025's comment) and renamed the lowercase vendor-derived identifiers to `logonLanguageKeyFromPreferences` / `logonLanguage`. Comment-only edit to the applied migration 0025 was accompanied by re-registering its stored checksum on the test database (`d7febf21` → `26c1cb86`), after which `db:migrate` reported 50 already applied with no immutability error; no new migration was added. Verified: `lint:ip` 0/350 files, typecheck clean, browser harness 230/230, registry re-seeded with zero vendor marks in browsable seeded data, `git diff --check` clean, no stale test tenants on the test database. Recorded finding: suites with hard-coded 30 s `beforeAll` hooks cannot run against the remote pooler (≈2 min tenant creation); heavy acceptance stays on disposable local PostgreSQL 17.11. Nothing pushed. | Agent |
+| 1.74 | 2026-10-13 | **SCR-017/019/020 service acceptance passed on the static test database; one fixture defect found and fixed (B-156, §26.169; D-097).** Seven DB-backed suites had hard-coded 30 s fixture hooks that the remote pooler cannot satisfy; the hook budget is now env-overridable (`CAIRN_TEST_HOOK_TIMEOUT_MS`, local default unchanged). The SCR-020 suite, run for the first time ever, failed one assertion because fixture tenants carry no `config_activity_status` rows and its UPDATE-only reset (and therefore the correct service completion update) silently matched nothing; fixed the fixture the sibling suites' way (insert-then-update, 8 lines, test-only). Results on the static database: SCR-020 6/6, SCR-019 4/4, SCR-017 5/5 — 15/15, with zero leftover fixture rows, `lint:ip` and `typecheck` clean. No migration, product code, schema or seed change. Browser targets for SCR-018/019/020 remain, pending a reviewed guard adaptation for the static database. Nothing pushed. | Agent |
 
 ---
 

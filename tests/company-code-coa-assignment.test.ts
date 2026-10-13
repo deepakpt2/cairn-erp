@@ -144,7 +144,7 @@ beforeAll(async () => {
 
   // Exercise real SCR-013 completion rather than inheriting the standard-package fixture.
   await setActivityStatus(ASSIGN_ACTIVITY, 'NOT_STARTED');
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {

@@ -127,7 +127,7 @@ beforeAll(async () => {
   beta = await createTenant('b136-storage-location-beta');
   await setStorageLocationActivity(alpha.client);
   await setStorageLocationActivity(beta.client);
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {

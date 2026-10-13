@@ -102,6 +102,13 @@ async function createDefinition(
 }
 async function setActivity(client: string) {
   await withTenant(client, async (tx) => {
+    // Fixture tenants (unlike real onboarding) have no activity-status rows, so the
+    // reset must create the row first — otherwise both this reset and the service's
+    // completion update are silent no-ops and the assertion sees no row at all.
+    await tx
+      .insert(configActivityStatus)
+      .values({ client, activityCode: ACTIVITY, status: 'NOT_STARTED', createdBy: ACTOR })
+      .onConflictDoNothing();
     await tx.update(configActivityStatus).set({
       status: 'NOT_STARTED', completedAt: null, completedBy: null, changedBy: ACTOR, changedAt: new Date(),
     }).where(and(eq(configActivityStatus.client, client), eq(configActivityStatus.activityCode, ACTIVITY)));
@@ -113,7 +120,7 @@ beforeAll(async () => {
   beta = await createTenant('scr020-sales-org-maintenance-beta');
   await setActivity(alpha.client);
   await setActivity(beta.client);
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {

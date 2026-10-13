@@ -107,7 +107,7 @@ beforeAll(async () => {
   await setActivity(primaryTenant().client, DEFINE_ACTIVITY, 'COMPLETED');
   await setActivity(secondaryTenant().client, DEFINE_ACTIVITY, 'COMPLETED');
   await setActivity(primaryTenant().client, ASSIGN_ACTIVITY, 'NOT_STARTED');
-}, 30_000);
+}, Number(process.env.CAIRN_TEST_HOOK_TIMEOUT_MS ?? 30_000));
 
 afterAll(async () => {
   try {
