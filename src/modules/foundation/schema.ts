@@ -318,7 +318,7 @@ export const purchasingGroup = pgTable(
   ],
 );
 
-/** Tenant-local mirror of SAP factory-calendar customizing used by the OVX5 value help. */
+/** Tenant-local factory-calendar customizing used by the OVX5 value help. */
 export const factoryCalendar = pgTable(
   'factory_calendar',
   {
@@ -346,7 +346,7 @@ export const salesOrg = pgTable(
     salesOrg: varchar('sales_org', { length: 4 }).notNull(),
     /** Set only by the separate SCR-021 assignment activity. */
     companyCode: varchar('company_code', { length: 10 }),
-    /** Optional SAP CUKY key for pricing and reporting in the Sales Organization. */
+    /** Optional currency key for pricing and reporting in the Sales Organization. */
     currency: varchar('currency', { length: 5 }),
     /** Optional CAM address association; address contents live only in central_address. */
     addressNumber: char('address_number', { length: 10 }),
@@ -389,7 +389,7 @@ export const salesOrgText = pgTable(
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
     salesOrg: varchar('sales_org', { length: 4 }).notNull(),
-    /** SAP language key (SPRAS/SY-LANGU), one character; English is E. */
+    /** One-character logon-language key; English is E. */
     languageKey: char('language_key', { length: 1 }).notNull(),
     name: varchar('name', { length: 35 }).notNull(),
     /** Optional language-dependent 12-character standard text-module key. */

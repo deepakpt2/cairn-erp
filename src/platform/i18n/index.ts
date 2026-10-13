@@ -727,7 +727,7 @@ const en: Catalogue = {
   'salesOrg.currency': 'Currency Key',
   'salesOrg.chooseCurrency': 'No currency selected',
   'salesOrg.currencyNote': 'Optional default currency for pricing and reporting within the Sales Organization.',
-  'salesOrg.nameLanguageNote': 'Description is saved in your SAP logon language ({language}).',
+  'salesOrg.nameLanguageNote': 'Description is saved in your logon language ({language}).',
   'salesOrg.formText': 'Form Text',
   'salesOrg.formTextNote': 'Optional 12-character, language-dependent text-module key; document-print integration is not connected yet.',
   'salesOrg.factoryCalendar': 'Factory Calendar',

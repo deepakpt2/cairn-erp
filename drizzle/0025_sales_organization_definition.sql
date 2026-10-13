@@ -180,7 +180,7 @@ CREATE TABLE sales_org_text (
     REFERENCES sales_org(client, sales_org) ON DELETE NO ACTION ON UPDATE NO ACTION
 );
 
--- Existing single-language names migrate to SAP's English language key E.
+-- Existing single-language names migrate to the single-character English language key E.
 INSERT INTO sales_org_text (client, sales_org, language_key, name, form_text, created_by, created_at, changed_by, changed_at)
 SELECT client, sales_org, 'E', btrim(name), 'STANDARD', created_by, created_at, changed_by, changed_at
   FROM sales_org;

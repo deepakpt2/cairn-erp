@@ -30,7 +30,7 @@ export const country = pgTable(
   (t) => [index('country_name_idx').on(t.name)],
 );
 
-/** SAP TCURC-style currency keys (up to five characters); ISO 4217 keys are commonly three characters. */
+/** Currency keys (up to five characters); ISO 4217 keys are commonly three characters. */
 export const currency = pgTable(
   'currency',
   {

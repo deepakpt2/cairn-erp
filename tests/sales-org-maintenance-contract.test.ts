@@ -76,7 +76,7 @@ describe('SCR-020 Sales Organization definition contract', () => {
     expect(service).not.toMatch(/'ACTIVATE'|'REACTIVATE'/);
   });
 
-  it('stores SAP-language text separately, stores address details in CAM and preserves the canonical partner key', () => {
+  it('stores logon-language text separately, stores address details in CAM and preserves the canonical partner key', () => {
     expect(service).toContain('languageKey: string');
     expect(service).toContain('salesOrgText');
     expect(service).toContain('createCentralAddress(tx, client, changedBy');

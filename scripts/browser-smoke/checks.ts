@@ -3080,7 +3080,7 @@ async function salesOrgDefinition(ctx: BrowserContext) {
     await tx.execute(sql`insert into app_user
       (id, client, username, full_name, password_hash, must_change_password, preferences, created_by)
       values (${definerId}, ${CLIENT}, 'salesorg.definer', 'B-153 Sales Organization Definer', ${passwordHash}, false,
-              ${JSON.stringify({ sapLanguageKey: 'D' })}::jsonb, 'BROWSER_FIXTURE')`);
+              ${JSON.stringify({ logonLanguage: 'D' })}::jsonb, 'BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
       values (${CLIENT}, ${definerId}, ${roleCode}, 'BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into app_user
@@ -3178,7 +3178,7 @@ async function salesOrgDefinition(ctx: BrowserContext) {
   assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '0');
   await page.locator('[name="salesOrg"]').fill(code);
   await page.locator('[name="name"]').fill('Global Sales Org');
-  await page.getByText('Description is saved in your SAP logon language (D).', { exact: true }).waitFor();
+  await page.getByText('Description is saved in your logon language (D).', { exact: true }).waitFor();
   await page.locator('[name="currency"]').selectOption('USD');
   assert.equal(await page.locator('[name="formText"]').inputValue(), 'STANDARD');
   const calendarOptions = await page.locator('[name="factoryCalendar"] option').evaluateAll((options) =>

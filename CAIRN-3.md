@@ -114,8 +114,56 @@ file remains gitignored (verified) with mode 600, and no secret appears in this 
 **Next.** IP-lint repair (the SCR-020 regression below), then the owed ledger entries and DB-backed
 acceptance for SCR-018/019/020 running against this provisioned database.
 
-*Still owed from v1.70: the ledger entries for the already-pushed SCR-018, SCR-019 and SCR-020
-batches (B-151–B-153). Section entries here follow the §24.2 template and the §26.36 style.*
+### 26.168 B-155 — IP-lint vendor-mark repair for the SCR-020 sources `COMPLETE · GATE GREEN · REWORDING ONLY`
+
+**Cause.** The SCR-020 commit (`febccf5`) left 16 reference-vendor trademark occurrences across 15
+lines in 10 files — the only failing gate at HEAD (`npm run lint:ip` exit 1). Occurrences: developer
+comments in the new sales-organisation service and schema, `session.ts`, `reference.ts`; **one
+user-visible i18n label** (`salesOrg.nameLanguageNote`); the browser assertion of that label; the
+Term Registry's seeded description for SCR-020; two test titles; and a comment inside migration
+`0025`. Lowercase vendor-derived identifiers (`sapLanguageKeyFromPreferences`, `sapLanguageKey`,
+the `sapLanguageKey` preference key) also existed; the gate is case-sensitive to the trademarks, but
+these conflicted with R-01 ("no proprietary identifiers in the product's own naming") and were
+renamed in the same pass.
+
+**Fix (rewording/renaming only; no behaviour change).** The user-visible label became
+"Description is saved in your logon language ({language})." with its browser assertion updated. The
+preference key is now `logonLanguage` (the reader previously accepted `logonLanguage` as an
+alternative, so the acceptance fixture simply writes the canonical key); the resolver function is
+`logonLanguageKeyFromPreferences`. Comments were reworded to describe the concept (one-character
+logon language; currency key) without naming a vendor or its field/table identifiers. The migration
+`0025` comment was reworded to "single-character English language key E".
+
+**Migration integrity.** `0025` is a **comment-only** edit to an already-applied migration, so the
+stored checksum was re-registered on the affected database before any further migration run.
+Verified on the test database: stored checksum `d7febf21` → `26c1cb86`, then `db:migrate` reported
+"50 migration(s) already applied" with no immutability error. **No new migration was added** (the
+change carries no DDL). Any other environment that has already applied `0025` must refresh its
+stored checksum the same way before its next `db:migrate`; the test database was the only known such
+environment and was refreshed in this batch.
+
+**Evidence.** `npm run lint:ip` — 350 files scanned, **0 occurrences** (previously 16). `npm run
+typecheck` clean. `npm run test:browser-harness` **230/230** across 45 files. The registry was
+re-seeded and the database now contains **0** vendor marks in `term_registry`, `config_activity` and
+`message_catalog` descriptions (checked by query); the SCR-020 registry description reads "…Exact
+on-prem GUI field parity with the reference product remains under review." `git diff --check` clean;
+diff is 10 files, 21 insertions / 21 deletions. Vendor names remain only where the lint exempts
+them by content: the Term Registry alias data and `scripts/lint-ip.ts` itself.
+
+**Finding for later batches (not a defect).** DB-backed suites that hard-code a `30_000` ms
+`beforeAll` hook (e.g. `tests/sales-org-maintenance.test.ts`) cannot complete against the remote
+Supavisor pooler, where tenant creation takes ≈2 minutes; the hook cannot be overridden from the
+CLI. Consistent with documented practice, heavy DB/browser acceptance continues on a **disposable
+local PostgreSQL 17.11** with only the service/browser assertions targeted, while the remote test
+database serves the application runtime, schema and seeds. No stale test tenants remain on the test
+database (verified: tenant `0100` only).
+
+**Boundary.** No schema, service, UI-behaviour or seed-content change beyond the renames/rewordings
+above; no new migration; no commit/push beyond the local commit containing this entry.
+
+*Still owed: the ledger entries for the already-pushed SCR-018, SCR-019 and SCR-020 batches
+(B-151–B-153) and their DB/browser acceptance runs. Section entries here follow the §24.2 template
+and the §26.36 style.*
 
 ---
 
@@ -129,6 +177,7 @@ recorded change, date and reason stated.
 | 1.70 | 2026-10-13 | **Document set rotated to a third part and the 2026-10-13 owner instructions registered.** Owner instructions recorded as R-24–R-30 and D-093–D-095: (1) canonical log parts never exceed 400 KB and rotate at 360 KB into the next numbered file with a continuation notice in both directions (§0.3); (2) increments stay small enough to protect the agent web interface from timeouts/out-of-memory (R-25); (3) every completed batch reports main process, current step, next step and required owner data (R-26/D-094); (4) strict SAP functional parity and visual familiarity without copying UI text (R-27); (5) mobile-ready UI at phone width with a new page-cycle check (R-28); (6) repo URL, PAT and DB string live only in the gitignored `.env.local`, and an unreachable remote DB is replaced by a local database and removed from `.env.local` (R-29/D-095); (7) before any UI page is designed, the SAP tcode(s) for the page are presented and the owner supplies the form fields (R-30). **Rotation executed:** at check, `CAIRN.md` was 395,959 bytes and `CAIRN-2.md` 398,255 bytes (both ≈99 % of the ceiling), so both are frozen with pointer-only edits and this file becomes the live part; §0.3 records the sizes. **Environment:** `.env.local` created at repo root (mode 600, verified untracked via `git check-ignore`), holding the repo URL, the owner's temporary PAT and local development connection strings; the Supabase string was removed because `db.yyskxzdytncsatwjkiva.supabase.co` resolves IPv6-only and the sandbox has no IPv6 route (general outbound network verified against GitHub). Local PostgreSQL 17.11 is available for provisioning (matches the documented disposable-acceptance environment). **Pending, not part of this entry:** the ledger entries for the already-pushed SCR-018/SCR-019/SCR-020 batches (B-151–B-153) and the IP-lint regression introduced by the SCR-020 commit (`febccf5`, 16 trademark occurrences; `npm run lint:ip` fails) — both are the next batches. No code, database, migration or seed change in this entry; documentation and local environment files only; no commit or push. | Agent |
 | 1.71 | 2026-10-13 | **Owner-supplied replacement test-database string verified and adopted (D-096).** The new string uses the Supavisor session pooler (`aws-0-ap-northeast-2.pooler.supabase.com:5432`, login `postgres.<ref>`) and works from the workspace sandbox: IPv4 resolution (the earlier direct host is IPv6-only), TCP reachable, login OK, no TLS requirement, PostgreSQL 17.11, `createrole`/`createdb` present, `rolbypassrls=true` (qualifies as the migration runner's elevated role), and the `public` schema empty — no Cairn migration has ever been applied there and no project roles exist yet. The string is now stored in `.env.local` as `CAIRN_TEST_DATABASE_URL` and `MIGRATION_DATABASE_URL` (mode 600, verified untracked); `DATABASE_URL` deliberately remains the local fallback because the application connection must be NOSUPERUSER/NOBYPASSRLS and the test database has no such role yet. No write of any kind was performed against the test database — all checks were read-only (`select`); migrations, seeds and the role split there are the next database batch and require owner go-ahead. No code, schema, migration or seed change; documentation and local environment files only; no commit or push of this entry beyond the local docs commit. | Agent |
 | 1.72 | 2026-10-13 | **Owner-supplied test database provisioned and adopted as the working target (B-154, §26.167).** Applied all 50 migrations as the elevated Supavisor-session connection (rerun skipped 50 — idempotent); migration 9000 created the `cairn_app` runtime role (NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE) whose password was then replaced with a generated value — the packaged `db:sync-role` helper cannot address pooler usernames (`<role>.<project-ref>`), so the equivalent ALTER ROLE DDL was run directly and the deviation is recorded. Seeded global definitions (60 capabilities, 52 activities, 11 messages, 29 terms + 22 aliases) and reference data (30 countries, 26 currencies, 21 units), then created development tenant `0100` through the runtime connection using the same `createTenant()` service as the UI (company code 1000, `dev.admin`, 10 roles, 11 number ranges, 52 workbench steps, INTL-STD-2, 74 G/L accounts). Verified fail-closed RLS (0 rows without a tenant setting), cross-tenant isolation (0 rows), RLS enabled+FORCED, and a non-elevated runtime role. `.env.local` now points `DATABASE_URL` at the restricted `cairn_app.<ref>` connection and keeps the elevated connection in `MIGRATION_DATABASE_URL`/`CAIRN_TEST_DATABASE_URL`; the file is gitignored (verified) and mode 600. No code, schema, migration or seed change; no owner data; nothing pushed. Still owed: the IP-lint repair and the SCR-018/019/020 ledger entries plus their DB-backed acceptance. | Agent |
+| 1.73 | 2026-10-13 | **IP-lint gate repaired for the SCR-020 sources (B-155, §26.168).** Removed all 16 reference-vendor trademark occurrences (10 files, 21/21 lines; comments, one user-visible i18n label and its browser assertion, the seeded SCR-020 registry description, two test titles, migration 0025's comment) and renamed the lowercase vendor-derived identifiers to `logonLanguageKeyFromPreferences` / `logonLanguage`. Comment-only edit to the applied migration 0025 was accompanied by re-registering its stored checksum on the test database (`d7febf21` → `26c1cb86`), after which `db:migrate` reported 50 already applied with no immutability error; no new migration was added. Verified: `lint:ip` 0/350 files, typecheck clean, browser harness 230/230, registry re-seeded with zero vendor marks in browsable seeded data, `git diff --check` clean, no stale test tenants on the test database. Recorded finding: suites with hard-coded 30 s `beforeAll` hooks cannot run against the remote pooler (≈2 min tenant creation); heavy acceptance stays on disposable local PostgreSQL 17.11. Nothing pushed. | Agent |
 
 ---
 

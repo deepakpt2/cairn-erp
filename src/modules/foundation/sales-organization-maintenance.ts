@@ -68,7 +68,7 @@ export const salesOrgAddressValuesSchema = z.object({
   emailAddress: nullableText(241),
 }).strict();
 
-/** Definition-only fields; localized descriptions are keyed by SAP logon language, and Company Code remains SCR-021. */
+/** Definition-only fields; localized descriptions are keyed by the one-character logon language, and Company Code remains SCR-021. */
 export const salesOrgDefinitionValuesSchema = z.object({
   name: z.string().trim().min(1).max(35),
   formText: nullableText(12),
@@ -89,7 +89,7 @@ export const salesOrgMaintenanceModeSchema = z.enum(['CREATE', 'CHANGE']);
 export const salesOrgMaintenanceInputSchema = z.object({
   client: tenantKeySchema,
   changedBy: z.string().trim().min(1).max(60),
-  /** One-character SAP SPRAS/SY-LANGU supplied from the verified logon session. */
+  /** One-character logon-language key supplied from the verified session. */
   languageKey: z.string().trim().regex(/^[A-Z]$/).default('E'),
   mode: salesOrgMaintenanceModeSchema,
   salesOrg: salesOrgCodeSchema,

@@ -23,14 +23,14 @@ function fieldMarkup(name: string, source = form) {
 }
 
 describe('SCR-020 Sales Organization definition UI and action contract', () => {
-  it('derives tenant, actor and SAP logon language from the verified session and protects both writes', () => {
+  it('derives tenant, actor and logon language from the verified session and protects both writes', () => {
     expect(page).toContain(`const SALES_ORG_DEFINE = '${capability}'`);
     expect(page).toContain("requireSession('/config/sales-orgs')");
     expect(page).toContain('const client = session.user.client');
     expect(page).toContain('can(session, SALES_ORG_DEFINE)');
     expect(page).toContain('where(eq(salesOrgTable.client, client))');
     expect(page).toContain('const languageKey = session.user.logonLanguage ?? \'E\'');
-    expect(session).toContain('sapLanguageKeyFromPreferences(row.preferences)');
+    expect(session).toContain('logonLanguageKeyFromPreferences(row.preferences)');
     expect(page).not.toContain('params.client');
     for (const action of ['saveSalesOrgDefinitionAction', 'deactivateSalesOrgAction']) {
       const start = actions.indexOf(`export async function ${action}`);

@@ -141,7 +141,7 @@ export interface AuthenticatedUser {
   email: string | null;
   mustChangePassword: boolean;
   capabilities: string[];
-  /** SAP one-character logon language key used by language-dependent master texts. */
+  /** One-character logon-language key used by language-dependent master texts. */
   logonLanguage?: string;
 }
 
@@ -391,16 +391,16 @@ export interface SessionContext {
   renewed: boolean;
 }
 
-/** Resolve the user's SAP-style one-character logon language from personal preferences. */
-export function sapLanguageKeyFromPreferences(preferences: unknown): string {
+/** Resolve the user's one-character logon language from personal preferences. */
+export function logonLanguageKeyFromPreferences(preferences: unknown): string {
   if (preferences && typeof preferences === 'object' && !Array.isArray(preferences)) {
     const values = preferences as Record<string, unknown>;
-    const explicit = values.sapLanguageKey ?? values.logonLanguage;
+    const explicit = values.logonLanguage;
     if (typeof explicit === 'string' && /^[A-Za-z]$/.test(explicit.trim())) return explicit.trim().toUpperCase();
     const locale = values.locale ?? values.language;
     if (typeof locale === 'string' && locale.trim().toLowerCase().split(/[-_]/)[0] === 'en') return 'E';
   }
-  // English is the only UI locale currently registered; SAP's language key is E (not EN).
+  // English is the only UI locale currently registered; its one-character key is E (not EN).
   return 'E';
 }
 
@@ -469,7 +469,7 @@ export async function resolveSession(
         fullName: row.full_name,
         email: row.email,
         mustChangePassword: row.must_change_password,
-        logonLanguage: sapLanguageKeyFromPreferences(row.preferences),
+        logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
         capabilities: await loadCapabilities(tx, input.client, row.user_id),
       },
       expiresAt: next,
@@ -485,7 +485,7 @@ export async function resolveSession(
       fullName: row.full_name,
       email: row.email,
       mustChangePassword: row.must_change_password,
-      logonLanguage: sapLanguageKeyFromPreferences(row.preferences),
+      logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
       capabilities: await loadCapabilities(tx, input.client, row.user_id),
     },
     expiresAt,
