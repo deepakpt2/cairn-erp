@@ -12,7 +12,7 @@ import { requireGeneralPartner } from './business-partners';
 export const DELIVERY_TERMS=['EXW','FCA','FAS','FOB','CFR','CIF','CPT','CIP','DAP','DPU','DDP'] as const;
 export class SupplierPurchasingError extends Error {constructor(message:string,readonly remedy='Review the supplier purchasing defaults and try again.'){super(message);}}
 const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partnerNumber:z.string().regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/),purchasingOrg:z.string().regex(/^[A-Z0-9]{2,10}$/),
-  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),orderCurrency:z.string().regex(/^([A-Z]{3})?$/),purchasingGroup:z.string().trim().max(6),
+  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),orderCurrency:z.string().regex(/^([A-Z]{3})?$/),purchasingGroup:z.string().trim().max(3),
   incotermsCode:z.union([z.literal(''),z.enum(DELIVERY_TERMS)]),incotermsLocation:z.string().trim().max(160),paymentTermsCode:z.string().trim().max(12),isBlocked:z.boolean()});
 export type SupplierPurchasingInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string)=>and(eq(supplierPurchasing.client,client),eq(supplierPurchasing.partnerNumber,partner),eq(supplierPurchasing.purchasingOrg,org));

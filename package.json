@@ -40,7 +40,9 @@
     "smoke:browser:plant-definition": "tsx scripts/browser-smoke.ts --target plant-definition",
     "smoke:browser:plant-company-assignment": "tsx scripts/browser-smoke.ts --target plant-company-code-assignment",
     "smoke:browser:storage-locations": "tsx scripts/browser-smoke.ts --target storage-locations",
-    "smoke:browser:purchasing-orgs": "tsx scripts/browser-smoke.ts --target purchasing-orgs"
+    "smoke:browser:purchasing-orgs": "tsx scripts/browser-smoke.ts --target purchasing-orgs",
+    "smoke:browser:purchasing-org-company-code": "tsx scripts/browser-smoke.ts --target purchasing-org-company-code",
+    "smoke:browser:purchasing-groups": "tsx scripts/browser-smoke.ts --target purchasing-groups"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

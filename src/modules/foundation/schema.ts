@@ -20,7 +20,9 @@ import {
   uniqueIndex,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
 
 /* ══ Enterprise structure ═══════════════════════════════════════════════════ */
@@ -260,7 +262,15 @@ export const purchasingOrg = pgTable(
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.purchasingOrg] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.purchasingOrg] }),
+    index('purchasing_org_company_code_idx').on(t.client, t.companyCode),
+    foreignKey({
+      name: 'purchasing_org_client_company_code_fk',
+      columns: [t.client, t.companyCode],
+      foreignColumns: [companyCode.client, companyCode.companyCode],
+    }),
+  ],
 );
 
 /** Assignment: which purchasing organisations may buy for which plants. */
@@ -277,21 +287,33 @@ export const purchasingOrgPlant = pgTable(
   (t) => [primaryKey({ columns: [t.client, t.purchasingOrg, t.plant] })],
 );
 
-/** Purchasing group — the buyer or buying team responsible for a category. */
+/** Buyer/team definition. New groups have no Company Code, Plant or Purchasing Organisation assignment. */
 export const purchasingGroup = pgTable(
   'purchasing_group',
   {
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    purchasingGroup: varchar('purchasing_group', { length: 6 }).notNull(),
+    /** Three-character uppercase alphanumeric Purchasing Group key. */
+    purchasingGroup: varchar('purchasing_group', { length: 3 }).notNull(),
+    /** Retain legacy Cairn description width; starter labels exceed the published 18-character T024 field length. */
     name: varchar('name', { length: 120 }).notNull(),
+    /** Contact columns shown on the overview; all are optional. */
+    telNoPurchGroup: varchar('tel_no_purch_group', { length: 12 }),
+    faxNumber: varchar('fax_number', { length: 31 }),
+    telephone: varchar('telephone', { length: 30 }),
+    extension: varchar('extension', { length: 10 }),
+    emailAddress: varchar('email_address', { length: 241 }),
+    /** Legacy compatibility fields are retained for existing consumers; new definitions do not set them. */
     purchasingOrg: varchar('purchasing_org', { length: 10 }),
     responsibleBuyer: varchar('responsible_buyer', { length: 80 }),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.purchasingGroup] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.purchasingGroup] }),
+    check('purchasing_group_key_format_ck', sql`${t.purchasingGroup} ~ '^[A-Z0-9]{3}$'`),
+  ],
 );
 
 /** Sales organisation — legally responsible for sales (§6.1). */

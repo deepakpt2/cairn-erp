@@ -63,7 +63,7 @@ export const material = pgTable('material', {
 export const materialPlant = pgTable('material_plant', {
   client: tenant(), materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
-  purchasingGroup: varchar('purchasing_group', { length: 6 }),
+  purchasingGroup: varchar('purchasing_group', { length: 3 }),
   orderUnit: varchar('order_unit', { length: 6 }).references(() => unitOfMeasure.code),
   overdeliveryTolerance: numeric('overdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
   underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),

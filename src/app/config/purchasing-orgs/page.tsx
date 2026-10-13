@@ -12,6 +12,7 @@ import { PurchasingOrgDefinitionForm, type PurchasingOrgDefinitionDraft } from '
 export const dynamic = 'force-dynamic';
 
 const PURCHASING_ORG_DEFINE = 'CFG.PROC.PURORG.DEFINE';
+const PURCHASING_ORG_ASSIGN_COMPANY = 'CFG.PROC.PURORG.ASSIGN_COMPANY';
 
 type PageParams = {
   new?: string;
@@ -39,6 +40,7 @@ export default async function PurchasingOrgsPage({
   // Tenant scope is always taken from the verified session, never from request parameters.
   const client = session.user.client;
   const canMaintain = can(session, PURCHASING_ORG_DEFINE);
+  const canAssignCompany = can(session, PURCHASING_ORG_ASSIGN_COMPANY);
 
   const organisations = await withTenant(client, async (tx) =>
     tx
@@ -91,6 +93,11 @@ export default async function PurchasingOrgsPage({
           <h1 className="text-xl font-semibold tracking-tight">{t('purchasingOrg.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>
+            {canAssignCompany && (
+              <Link href="/config/purchasing-orgs/assign-company" className="btn btn-default">
+                {t('purchasingOrg.assignCompanyCode')}
+              </Link>
+            )}
             {canMaintain && (
               <Link href="/config/purchasing-orgs?new=1" className="btn btn-primary">
                 {t('purchasingOrg.create')}

@@ -25,7 +25,7 @@ const materialInput = z.discriminatedUnion('view', [
   common.extend({ view: z.literal('BASIC'), description: z.string().trim().max(200), materialType: z.string().min(1).max(12),
     materialGroup: z.string().max(20), baseUnit: z.string().max(6), industrySector: z.string().max(20), barcode: z.string().max(32),
     grossWeight: quantity, netWeight: quantity, weightUnit: z.string().max(6), isBlocked: z.boolean() }),
-  common.extend({ view: z.literal('PURCHASING'), plant: z.string().min(1).max(10), purchasingGroup: z.string().max(6),
+  common.extend({ view: z.literal('PURCHASING'), plant: z.string().min(1).max(10), purchasingGroup: z.string().max(3),
     orderUnit: z.string().max(6), overdeliveryTolerance: percent, underdeliveryTolerance: percent, manufacturerPartNumber: z.string().max(80) }),
   common.extend({ view: z.literal('MRP'), plant: z.string().min(1).max(10), mrpType: z.enum(MRP_TYPES), mrpController: z.string().max(3),
     procurementType: z.enum(PROCUREMENT_TYPES), lotSizing: z.enum(LOT_PROCEDURES), fixedLotSize: quantity,

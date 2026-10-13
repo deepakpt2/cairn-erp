@@ -70,6 +70,8 @@ export default async function WorkbenchPage({
     '/config/plants',
     '/config/storage-locations',
     '/config/purchasing-orgs',
+    '/config/purchasing-orgs/assign-company',
+    '/config/purchasing-groups',
     '/config/number-ranges',
     '/registry',
     '/finance/journal',

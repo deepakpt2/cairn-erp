@@ -14,4 +14,6 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'plant-company-code-assignment': { database: 'cairn_b129', port: '55523', batch: 'B-129' },
   'storage-locations': { database: 'cairn_b139', port: '55525', batch: 'B-139' },
   'purchasing-orgs': { database: 'cairn_b150', port: '55527', batch: 'B-150' },
+  'purchasing-org-company-code': { database: 'cairn_b151', port: '55528', batch: 'B-151' },
+  'purchasing-groups': { database: 'cairn_b152', port: '55529', batch: 'B-152' },
 };

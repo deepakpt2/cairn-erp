@@ -17,7 +17,7 @@ import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
 import { getPaymentMethod, savePaymentMethod } from '../../src/modules/foundation/payment-methods';
 import { getBusinessPartner } from '../../src/modules/foundation/business-partners';
 import { getSupplierCompany } from '../../src/modules/foundation/supplier-companies';
-import { getSupplierPurchasing } from '../../src/modules/foundation/supplier-purchasing';
+import { getSupplierPurchasing, supplierPurchasingChoices } from '../../src/modules/foundation/supplier-purchasing';
 import { listSupplierPurchasingPartners } from '../../src/modules/foundation/supplier-purchasing-partners';
 import { getCustomerCompany } from '../../src/modules/foundation/customer-companies';
 import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sales-areas';
@@ -2561,6 +2561,202 @@ async function storageLocations(ctx: BrowserContext) {
   console.log('  ✓ Auditor retains the inactive read view but has no create/change/deactivate controls or form choices');
 }
 
+async function purchasingGroups(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = 'B52';
+  const initialName = 'B-152 Buyers';
+  const updatedName = 'B-152 Updated';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Purchasing Groups: verify standalone contact maintenance, audit, consumer visibility and exact-capability access');
+
+  const capabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B152_PGROUP_DEF', 'B-152 Purchasing Group Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B152_PGROUP_DEF', 'CFG.PROC.PURGROUP.DEFINE', 'BROWSER_FIXTURE')`);
+    const [definerId, viewerId] = [randomUUID(), randomUUID()];
+    for (const [id, username, fullName, roleCode] of [
+      [definerId, 'pg.definer', 'Purchasing Group Definition-Only User', 'B152_PGROUP_DEF'],
+      [viewerId, 'pg.viewer', 'Purchasing Group Read-Only User', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = 'B152_PGROUP_DEF' order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(capabilities.map((row) => row.capability_code), ['CFG.PROC.PURGROUP.DEFINE']);
+
+  const existing = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select purchasing_group from purchasing_group
+     where client = ${CLIENT} and purchasing_group = ${code}
+  `))) as unknown as Array<{ purchasing_group: string }>;
+  assert.equal(existing.length, 0, 'The reserved B-152 group key must be unused in its fresh tenant.');
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/');
+  }
+
+  async function groupRow(groupCode: string) {
+    const rows = page.locator('tbody tr');
+    for (let index = 0; index < await rows.count(); index++) {
+      const row = rows.nth(index);
+      const codeInput = row.locator('input[aria-label="Purchasing Group"]');
+      if (await codeInput.count() && await codeInput.inputValue() === groupCode) return row;
+    }
+    return null;
+  }
+
+  await signInAs('pg.definer');
+  await page.waitForLoadState('networkidle');
+  await page.goto(`${BASE}/config/purchasing-groups`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Change View "Purchasing Groups": Overview', exact: true }).waitFor();
+  await page.getByText('Purchasing Groups', { exact: true }).waitFor();
+  await page.waitForLoadState('networkidle');
+  assert.equal(await page.getByRole('button', { name: 'New Entries', exact: true }).count(), 1);
+  for (const field of ['purchasingOrg', 'responsibleBuyer', 'companyCode', 'plant']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is outside the standalone definition form.`);
+  }
+  for (const field of ['Desc. Pur. Grp', 'Tel.No. Pur.Grp', 'Fax Number', 'Telephone', 'Extension', 'E-Mail Address']) {
+    await page.getByRole('columnheader', { name: field, exact: true }).waitFor();
+  }
+
+  const baselineRowCount = await page.locator('tbody tr').count();
+  await page.getByRole('button', { name: 'New Entries', exact: true }).click();
+  await page.waitForFunction((expectedCount) => document.querySelectorAll('tbody tr').length === expectedCount, baselineRowCount + 1);
+  const newRow = page.locator('tbody tr').last();
+  await newRow.locator('input[aria-label="Purchasing Group"]').fill('b52');
+  await newRow.locator('input[aria-label="Purchasing Group Description"]').fill(initialName);
+  await newRow.locator('input[aria-label="Tel.No. Pur.Grp"]').fill('55501001122');
+  await newRow.locator('input[aria-label="Fax Number"]').fill('555010011223344');
+  await newRow.locator('input[aria-label="Telephone"]').fill('00965550100');
+  await newRow.locator('input[aria-label="Extension"]').fill('314');
+  await newRow.locator('input[aria-label="E-Mail Address"]').fill('buyers@example.test');
+  assert.equal(await newRow.locator('input[aria-label="Purchasing Group"]').inputValue(), code, 'The overview normalizes the key to uppercase.');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Purchasing Group overview saved. 1 entry changed; change history recorded.', { exact: true }).waitFor();
+
+  const created = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select purchasing_group, name, tel_no_purch_group, fax_number, telephone, extension,
+           email_address, purchasing_org, responsible_buyer, created_by
+      from purchasing_group
+     where client = ${CLIENT} and purchasing_group = ${code}
+  `))) as unknown as Array<{
+    purchasing_group: string; name: string; tel_no_purch_group: string; fax_number: string;
+    telephone: string; extension: string; email_address: string;
+    purchasing_org: string | null; responsible_buyer: string | null; created_by: string;
+  }>;
+  assert.deepEqual(Array.from(created), [{
+    purchasing_group: code,
+    name: initialName,
+    tel_no_purch_group: '55501001122',
+    fax_number: '555010011223344',
+    telephone: '00965550100',
+    extension: '314',
+    email_address: 'buyers@example.test',
+    purchasing_org: null,
+    responsible_buyer: null,
+    created_by: 'pg.definer',
+  }]);
+  const createHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'purchasing_group', code));
+  assert.equal(createHistory.length, 1);
+  assert.equal(createHistory[0].changeType, 'CREATE');
+  assert.equal(createHistory[0].changedBy, 'pg.definer');
+  assert.ok(createHistory[0].items.some((item) => item.fieldName === 'telNoPurchGroup'));
+  const choices = await supplierPurchasingChoices(CLIENT, '1000');
+  assert.ok(choices.groups.some((group) => group.code === code && group.org === null), 'Unassigned group is available for supplier purchasing choices.');
+  console.log('  ✓ new group saves contact fields without organisation assignments and is visible to existing purchasing consumers');
+
+  // Search, copy and undo are client-side table actions; they must not write a second definition.
+  await page.getByRole('button', { name: 'Find in Purchasing Groups', exact: true }).click();
+  const search = page.getByRole('textbox', { name: 'Search group or description' });
+  await search.fill(code);
+  assert.equal(await page.locator('tbody tr').count(), 1);
+  await search.fill('');
+  await page.getByRole('button', { name: 'Find in Purchasing Groups', exact: true }).click();
+  const createdRow = await groupRow(code);
+  assert.ok(createdRow);
+  await createdRow.getByRole('checkbox', { name: `Select Purchasing Group ${code}`, exact: true }).check();
+  await page.getByRole('button', { name: 'Copy selected row', exact: true }).click();
+  await page.waitForFunction((expectedCount) => document.querySelectorAll('tbody tr').length === expectedCount, baselineRowCount + 2);
+  const copiedRow = page.locator('tbody tr').last();
+  assert.equal(await copiedRow.locator('input[aria-label="Purchasing Group"]').inputValue(), '');
+  assert.equal(await copiedRow.locator('input[aria-label="Purchasing Group Description"]').inputValue(), initialName);
+  await page.getByRole('button', { name: 'Undo unsaved changes', exact: true }).click();
+  await page.waitForFunction((expectedCount) => document.querySelectorAll('tbody tr').length === expectedCount, baselineRowCount + 1);
+  assert.equal(await page.locator('tbody tr').count(), baselineRowCount + 1, 'Undo removes the unsaved copied row.');
+
+  const rowToChange = await groupRow(code);
+  assert.ok(rowToChange);
+  await rowToChange.locator('input[aria-label="Purchasing Group Description"]').fill(updatedName);
+  await rowToChange.locator('input[aria-label="Telephone"]').fill('00965550200');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Purchasing Group overview saved. 1 entry changed; change history recorded.', { exact: true }).waitFor();
+  const updated = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select name, telephone, purchasing_org from purchasing_group
+     where client = ${CLIENT} and purchasing_group = ${code}
+  `))) as unknown as Array<{ name: string; telephone: string; purchasing_org: string | null }>;
+  assert.deepEqual(Array.from(updated), [{ name: updatedName, telephone: '00965550200', purchasing_org: null }]);
+  const updateHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'purchasing_group', code));
+  assert.equal(updateHistory.length, 2);
+  assert.equal(updateHistory[0].changeType, 'CHANGE');
+  assert.ok(updateHistory[0].items.some((item) => item.fieldName === 'name' && item.oldValue === initialName && item.newValue === updatedName));
+  console.log('  ✓ inline changes update the definition and append field-level history');
+
+  const rowToDelete = await groupRow(code);
+  assert.ok(rowToDelete);
+  await rowToDelete.getByRole('checkbox', { name: `Select Purchasing Group ${code}`, exact: true }).check();
+  await page.getByRole('button', { name: 'Delete selected row', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Purchasing Group overview saved. 1 entry changed; change history recorded.', { exact: true }).waitFor();
+  const deleted = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select count(*)::int as count from purchasing_group
+     where client = ${CLIENT} and purchasing_group = ${code}
+  `))) as unknown as Array<{ count: number }>;
+  assert.equal(deleted[0].count, 0);
+  const deleteHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'purchasing_group', code));
+  assert.equal(deleteHistory.length, 3);
+  assert.equal(deleteHistory[0].changeType, 'DELETE');
+  console.log('  ✓ unreferenced deletion preserves its audited history');
+
+  await signInAs('pg.viewer');
+  await page.goto(`${BASE}/config/purchasing-groups`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Change View "Purchasing Groups": Overview', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.PROC.PURGROUP.DEFINE.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'New Entries', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Delete selected row', exact: true }).count(), 0);
+
+  // Forge a valid create request in the DOM to prove the server-side capability check is authoritative.
+  const forgedCode = 'V01';
+  await page.locator('form:has(input[name="changes"])').evaluate((form, payload) => {
+    const input = form.querySelector<HTMLInputElement>('input[name="changes"]');
+    if (!input) throw new Error('Expected the pending change-set field.');
+    input.value = JSON.stringify(payload);
+    const button = document.createElement('button');
+    button.type = 'submit';
+    button.textContent = 'Submit forged change';
+    form.appendChild(button);
+  }, [{ mode: 'CREATE', purchasingGroup: forgedCode, expectedVersion: 0, values: { name: 'Forged group' } }]);
+  await page.getByRole('button', { name: 'Submit forged change', exact: true }).click();
+  await page.getByText('User pg.viewer does not hold the authority CFG.PROC.PURGROUP.DEFINE.', { exact: true }).waitFor();
+  const forged = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select count(*)::int as count from purchasing_group
+     where client = ${CLIENT} and purchasing_group = ${forgedCode}
+  `))) as unknown as Array<{ count: number }>;
+  assert.equal(forged[0].count, 0, 'A forged form submission cannot create a group without its activity capability.');
+  console.log('  ✓ Auditor can inspect the overview but the forged mutation is rejected server-side');
+}
+
 async function purchasingOrgDefinition(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const code = 'B149PO';
@@ -2844,6 +3040,142 @@ async function purchasingOrgDefinition(ctx: BrowserContext) {
   console.log('  ✓ Auditor can review retained inactive history but direct list/detail/create URLs expose no maintenance controls');
 }
 
+async function purchasingOrgCompanyCodeAssignment(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const code = 'B151PO';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('Purchasing Organisation -> Company Code: verify separate initial-assignment activity, exact capability, tenant scope and audit');
+
+  // Create a pending Purchasing Organisation through OX08, using the real browser form.
+  await page.goto(`${BASE}/config/purchasing-orgs?new=1`, { waitUntil: 'commit' });
+  await page.locator('[name="purchasingOrg"]').fill(code);
+  await page.locator('[name="name"]').fill('B-151 Purchasing Organisation');
+  await page.locator('[name="reason"]').fill('B-151 SCR-018 pending organisation');
+  await page.getByRole('button', { name: 'Create Purchasing Organisation', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Purchasing Organisation ${code} defined; Company Code and Plant assignments remain separate.`,
+    { exact: true },
+  ).waitFor();
+
+  // Assign-only, definition-only and Auditor users prove the authorities do not bleed together.
+  await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B151_ASSIGN', 'B-151 Purchasing Organisation Assignment Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B151_ASSIGN', 'CFG.PROC.PURORG.ASSIGN_COMPANY', 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B151_DEFINE', 'B-151 Purchasing Organisation Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B151_DEFINE', 'CFG.PROC.PURORG.DEFINE', 'BROWSER_FIXTURE')`);
+    const [assignerId, definerId, viewerId] = [randomUUID(), randomUUID(), randomUUID()];
+    for (const [id, username, fullName, roleCode] of [
+      [assignerId, 'purchasing.assigner', 'Purchasing Organisation Assigner', 'B151_ASSIGN'],
+      [definerId, 'purchasing.definer', 'Purchasing Organisation Definer', 'B151_DEFINE'],
+      [viewerId, 'purchasing.viewer', 'Purchasing Organisation Auditor', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    await tx.execute(sql`update config_activity_status
+      set status = 'NOT_STARTED', completed_at = null, completed_by = null
+      where client = ${CLIENT} and activity_code = 'CFG.PROC.PURORG.ASSIGN_COMPANY'`);
+  });
+
+  const signInAs = async (username: string) => {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'commit' });
+  };
+
+  const pendingRows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select company_code from purchasing_org
+     where client = ${CLIENT} and purchasing_org = ${code}
+  `))) as unknown as Array<{ company_code: string | null }>;
+  assert.deepEqual(Array.from(pendingRows), [{ company_code: null }], 'OX08 must leave the new organisation pending.');
+
+  await signInAs('purchasing.definer');
+  await page.goto(`${BASE}/config/purchasing-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Purchasing Organisation to Company Code', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.PROC.PURORG.ASSIGN_COMPANY.', { exact: true }).waitFor();
+  assert.equal(await page.locator('select[name="companyCode"]').count(), 0, 'Definition-only authority cannot assign.');
+  console.log('  ✓ OX08 definition authority does not grant Company Code assignment');
+
+  await signInAs('purchasing.assigner');
+  await page.goto(`${BASE}/config/purchasing-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Purchasing Organisation to Company Code', exact: true }).waitFor();
+  const orgRow = page.locator('tbody tr').filter({ hasText: code });
+  await orgRow.waitFor();
+  const companyChoices = await orgRow.locator('select[name="companyCode"] option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value),
+  );
+  assert.ok(companyChoices.includes('1000'), 'The active same-tenant standard Company Code is offered.');
+  assert.equal(companyChoices.includes(''), true, 'The select begins with its placeholder.');
+  for (const field of ['client', 'changedBy', 'isActive']) {
+    assert.equal(await orgRow.locator(`[name="${field}"]`).count(), 0, `${field} is outside the assignment form.`);
+  }
+  const assignmentForm = orgRow.locator('form');
+  await assignmentForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({ client: '0100', changedBy: 'spoofed.actor', isActive: 'false' })) {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await orgRow.locator('select[name="companyCode"]').selectOption('1000');
+  await orgRow.getByRole('button', { name: 'Assign Company Code', exact: true }).click();
+  await orgRow.getByRole('link', { name: 'View', exact: true }).waitFor();
+
+  const assigned = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select client, purchasing_org, name, company_code, is_active, created_by, changed_by
+      from purchasing_org where client = ${CLIENT} and purchasing_org = ${code}
+  `))) as unknown as Array<{
+    client: string; purchasing_org: string; name: string; company_code: string | null;
+    is_active: boolean; created_by: string; changed_by: string | null;
+  }>;
+  assert.deepEqual(Array.from(assigned), [{
+    client: CLIENT, purchasing_org: code, name: 'B-151 Purchasing Organisation', company_code: '1000',
+    is_active: true, created_by: 'browser.admin', changed_by: 'purchasing.assigner',
+  }]);
+  const history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'purchasing_org', code));
+  assert.equal(history.length, 2);
+  const assignmentEvent = history.find((entry) => entry.transactionCode === 'CFG.PROC.PURORG.ASSIGN_COMPANY');
+  assert.ok(assignmentEvent);
+  assert.equal(assignmentEvent.changedBy, 'purchasing.assigner');
+  assert.deepEqual(assignmentEvent.items.map((item) => [item.fieldName, item.oldValue, item.newValue]), [
+    ['companyCode', null, '1000'],
+  ]);
+  const [activity] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = 'CFG.PROC.PURORG.ASSIGN_COMPANY'
+  `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'purchasing.assigner');
+  console.log('  ✓ exact-capability initial assignment writes one tenant-local link and a Company Code audit event');
+
+  await page.goto(`${BASE}/config/purchasing-orgs/assign-company`, { waitUntil: 'commit' });
+  const assignedRow = page.locator('tbody tr').filter({ hasText: code });
+  assert.equal(await assignedRow.locator('select[name="companyCode"]').count(), 0, 'Assigned organisations have no replacement or clear control.');
+  const baselineRow = page.locator('tbody tr').filter({ hasText: '1000' }).first();
+  assert.equal(await baselineRow.locator('select[name="companyCode"]').count(), 0, 'The preassigned standard organisation is read-only here.');
+  await page.goto(`${BASE}/config/purchasing-orgs?purchasingOrg=${code}&history=1`, { waitUntil: 'commit' });
+  await page.getByText('Company Code: — → 1000', { exact: false }).waitFor();
+  console.log('  ✓ assignment remains read-only after save and is visible in OX08 detail history');
+
+  await signInAs('purchasing.viewer');
+  await page.goto(`${BASE}/config/purchasing-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Purchasing Organisation to Company Code', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.PROC.PURORG.ASSIGN_COMPANY.', { exact: true }).waitFor();
+  assert.equal(await page.locator('select[name="companyCode"]').count(), 0, 'Auditor has no assignment choices.');
+  assert.equal(await page.getByRole('button', { name: 'Assign Company Code', exact: true }).count(), 0);
+  console.log('  ✓ Auditor can review assignments but has no assignment controls');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
@@ -2852,6 +3184,8 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'plant-company-code-assignment': plantCompanyCodeAssignment,
   'storage-locations': storageLocations,
   'purchasing-orgs': purchasingOrgDefinition,
+  'purchasing-org-company-code': purchasingOrgCompanyCodeAssignment,
+  'purchasing-groups': purchasingGroups,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,

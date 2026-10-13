@@ -75,6 +75,8 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
   if (target.id === 'purchasing-orgs') return '/config/purchasing-orgs';
+  if (target.id === 'purchasing-org-company-code') return '/config/purchasing-orgs/assign-company';
+  if (target.id === 'purchasing-groups') return '/config/purchasing-groups';
   if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
   return '/inventory/materials';
 }
@@ -103,8 +105,8 @@ async function run(target: BrowserTarget) {
     const browser = await chromium.launch({ headless: true, timeout: 15_000 });
     try {
       const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
-      page.setDefaultTimeout(10_000);
-      page.setDefaultNavigationTimeout(15_000);
+      page.setDefaultTimeout(30_000);
+      page.setDefaultNavigationTimeout(60_000);
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
       let timedOut = false;

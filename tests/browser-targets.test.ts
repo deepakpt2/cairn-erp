@@ -58,7 +58,7 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn_b139', port: '55525', batch: 'B-139' });
     expect(guard?.database).not.toBe('cairn_b137');
     expect(guard?.port).not.toBe('55556');
-    expect(storageLocations?.client).not.toBe('T982');
+    expect(storageLocations?.client).not.toBe('T980');
   });
   it('keeps B-150 SCR-017 browser acceptance on a separate reserved fixture and database guard', () => {
     const purchasingOrgs = TARGETS.find((target) => target.id === 'purchasing-orgs');
@@ -68,6 +68,29 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn_b150', port: '55527', batch: 'B-150' });
     expect(guard?.database).not.toBe('cairn_b145');
     expect(guard?.port).not.toBe('38436');
+  });
+  it('keeps B-151 SCR-018 assignment acceptance isolated from OX08 browser acceptance', () => {
+    const assignment = TARGETS.find((target) => target.id === 'purchasing-org-company-code');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-org-company-code'];
+    expect(assignment).toMatchObject({ client: 'T979' });
+    expect(assignment?.client).not.toBe('T980');
+    expect(guard).toMatchObject({ database: 'cairn_b151', port: '55528', batch: 'B-151' });
+    expect(guard?.database).not.toBe('cairn_b150');
+    expect(guard?.port).not.toBe('55527');
+  });
+  it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
+    const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];
+    expect(groups).toMatchObject({ client: 'T978' });
+    expect(groups?.client).not.toBe('T982');
+    expect(groups?.client).not.toBe('T979');
+    expect(groups?.client).not.toBe('T980');
+    expect(groups?.client).not.toBe('T981');
+    expect(guard).toMatchObject({ database: 'cairn_b152', port: '55529', batch: 'B-152' });
+    expect(guard?.database).not.toBe('cairn_b150');
+    expect(guard?.database).not.toBe('cairn_b151');
+    expect(guard?.port).not.toBe('55527');
+    expect(guard?.port).not.toBe('55528');
   });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
