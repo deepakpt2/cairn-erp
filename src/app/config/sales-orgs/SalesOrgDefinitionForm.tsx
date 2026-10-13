@@ -258,7 +258,16 @@ export function SalesOrgDefinitionForm({
             {initial.addressNumber ? t('salesOrg.changeAddress') : t('salesOrg.maintainAddress')}
           </button>
         </div>
-        <div hidden={!addressDialogOpen} aria-hidden={!addressDialogOpen} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6">
+        {/* B-157: the wrapper must be truly hidden when closed. The HTML `hidden`
+            attribute loses to any author `display` utility (the closed overlay kept
+            `display:flex` and intercepted every pointer event over the whole form — found
+            by SCR-020 browser acceptance). The display class is conditional instead:
+            display:none while closed, so nothing is clickable, while the dialog's inputs
+            stay mounted so a captured address still submits with the form. */}
+        <div
+          className={addressDialogOpen ? 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6' : 'hidden'}
+          aria-hidden={!addressDialogOpen}
+        >
           <section role="dialog" aria-modal={addressDialogOpen} aria-labelledby="sales-org-address-dialog-title" className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-md border border-line bg-white p-4 shadow-xl sm:p-6">
             <div className="flex items-start justify-between gap-3 border-b border-line pb-3">
               <div>

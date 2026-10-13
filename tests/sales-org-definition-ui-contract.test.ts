@@ -73,6 +73,14 @@ describe('SCR-020 Sales Organization definition UI and action contract', () => {
     expect(form).toContain("t('salesOrg.nameLanguageNote', { language: languageKey })");
     expect(form).toContain("t('salesOrg.addressDialogTitle')");
     expect(form).toContain('aria-modal={addressDialogOpen}');
+    // B-157 regression guard: the closed dialog must be display:none. The earlier
+    // markup combined the HTML `hidden` attribute with the `flex` utility class, so
+    // author display:flex beat the browser's [hidden] rule, the closed overlay stayed
+    // on top of the form and swallowed every click (found by browser acceptance).
+    // (lookbehind keeps this from matching the legitimate aria-hidden attribute)
+    expect(form).not.toMatch(/(?<![\w-])hidden=\{!addressDialogOpen\}/);
+    expect(form).toContain(": 'hidden'}");
+    expect(form).toContain('aria-hidden={!addressDialogOpen}');
     expect(form).toContain('setAddressDialogOpen(true)');
     expect(form).not.toMatch(/name="(client|changedBy|companyCode|isActive)"/);
     expect(form).toContain("t('salesOrg.assignmentSeparationNote')");
