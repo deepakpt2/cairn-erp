@@ -186,6 +186,8 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'purchasing-groups') return '/config/purchasing-groups';
   if (target.id === 'sales-orgs') return '/config/sales-orgs';
   if (target.id === 'sales-org-company-code') return '/config/sales-orgs/assign-company';
+  if (target.id === 'distribution-channels') return '/config/distribution-channels';
+  if (target.id === 'divisions') return '/config/divisions';
   if (target.id === 'business-partners' || target.id === 'supplier-company' || target.id === 'supplier-purchasing' || target.id === 'customer-company' || target.id === 'customer-sales-area') return '/foundation/partners';
   return '/inventory/materials';
 }

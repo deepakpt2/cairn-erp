@@ -34,7 +34,7 @@ describe('SCR-020 isolated live-browser target contract', () => {
   });
 
   it('renders the current UI build marker in every environment, including production', () => {
-    expect(statusBar).toContain("const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR021-SALESORG-COMPANY-20261014'");
+    expect(statusBar).toContain("const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR022-DISTCHANNEL-DIVISION-20261014'");
     expect(statusBar).toContain('data-testid="development-ui-build-code"');
     expect(statusBar).not.toContain('showDevelopmentBuildCode');
     expect(statusBar).toContain('Intentionally visible in every environment, including production');

@@ -44,7 +44,9 @@
     "smoke:browser:purchasing-org-company-code": "tsx scripts/browser-smoke.ts --target purchasing-org-company-code",
     "smoke:browser:purchasing-groups": "tsx scripts/browser-smoke.ts --target purchasing-groups",
     "smoke:browser:sales-orgs": "tsx scripts/browser-smoke.ts --target sales-orgs",
-    "smoke:browser:sales-org-company-code": "tsx scripts/browser-smoke.ts --target sales-org-company-code"
+    "smoke:browser:sales-org-company-code": "tsx scripts/browser-smoke.ts --target sales-org-company-code",
+    "smoke:browser:distribution-channels": "tsx scripts/browser-smoke.ts --target distribution-channels",
+    "smoke:browser:divisions": "tsx scripts/browser-smoke.ts --target divisions"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

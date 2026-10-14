@@ -2,7 +2,7 @@ import { t } from '@/platform/i18n';
 import { getSession } from '@/platform/auth/current';
 
 // Intentionally visible in every environment, including production, for build verification.
-const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR021-SALESORG-COMPANY-20261014';
+const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR022-DISTCHANNEL-DIVISION-20261014';
 
 /**
  * Status bar — CAIRN.md §19.1.

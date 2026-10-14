@@ -109,6 +109,8 @@ describe('bounded browser target selection', () => {
 describe('static-database acceptance mode (D-097)', () => {
   it('approves only the owner-directed static-database browser targets', () => {
     expect([...STATIC_ACCEPTANCE_TARGETS].sort()).toEqual([
+      'distribution-channels',
+      'divisions',
       'purchasing-groups',
       'purchasing-org-company-code',
       'sales-org-company-code',

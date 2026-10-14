@@ -524,7 +524,7 @@ export async function applyStandardPackage(
   }
 
   const divisions: Array<{ code: string; name: string }> = [
-    { code: '01', name: 'Manufactured products' },
+    { code: '01', name: 'Manufactured goods' },
     { code: '02', name: 'Traded goods' },
     { code: '03', name: 'Services' },
   ];

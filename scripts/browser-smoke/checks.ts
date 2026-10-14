@@ -3748,6 +3748,265 @@ async function salesOrgCompanyCodeAssignment(ctx: BrowserContext) {
   console.log('  ✓ exact-capability assignment persists and Auditor can review the list without maintenance controls');
 }
 
+type DistributionDimensionKind = 'distributionChannel' | 'division';
+type DistributionDimensionRecord = {
+  client: string; code: string; name: string; is_active: boolean; created_by: string; changed_by: string | null;
+};
+
+async function distributionDimensionDefinition(ctx: BrowserContext, kind: DistributionDimensionKind) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const channel = kind === 'distributionChannel';
+  const singular = channel ? 'Distribution Channel' : 'Division';
+  const plural = channel ? 'Distribution Channels' : 'Divisions';
+  const codeField = channel ? 'distributionChannel' : 'division';
+  const route = channel ? '/config/distribution-channels' : '/config/divisions';
+  const otherRoute = channel ? '/config/divisions' : '/config/distribution-channels';
+  const activity = channel ? 'CFG.ORG.DISTCHANNEL.DEFINE' : 'CFG.ORG.DIVISION.DEFINE';
+  const otherActivity = channel ? 'CFG.ORG.DIVISION.DEFINE' : 'CFG.ORG.DISTCHANNEL.DEFINE';
+  const capabilityRole = channel ? 'B164_CHANNEL' : 'B164_DIVISION';
+  const actor = channel ? 'channel.definer' : 'division.definer';
+  const viewer = channel ? 'channel.viewer' : 'division.viewer';
+  const capability = activity;
+  const codeOne = channel ? 'C1' : 'D1';
+  const codeTwo = channel ? 'C2' : 'D2';
+  const initialName = channel ? 'Wholesale' : 'Bicycles';
+  const changedName = channel ? 'Retail' : 'Components';
+  const createReason = `SCR-022 ${singular} create`;
+  const copyReason = `SCR-022 ${singular} copy`;
+  const changeReason = `SCR-022 ${singular} name change`;
+  const deactivateReason = `SCR-022 ${singular} deactivation`;
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log(`${plural}: verify exact capability, create/copy/name-only change, guarded deactivation, history and responsive access`);
+
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, ${capabilityRole}, ${`SCR-022 ${singular} Definition Only`}, false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, ${capabilityRole}, ${capability}, 'BROWSER_FIXTURE')`);
+    const [definerId, viewerId] = [randomUUID(), randomUUID()];
+    for (const [id, username, fullName, roleCode] of [
+      [definerId, actor, `SCR-022 ${singular} Definition-Only User`, capabilityRole],
+      [viewerId, viewer, `SCR-022 ${singular} Read-Only User`, 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    await tx.execute(sql`insert into config_activity_status (client, activity_code, status, created_by)
+      values (${CLIENT}, ${activity}, 'NOT_STARTED', 'BROWSER_FIXTURE') on conflict do nothing`);
+    await tx.execute(sql`update config_activity_status
+      set status = 'NOT_STARTED', completed_at = null, completed_by = null
+      where client = ${CLIENT} and activity_code = ${activity}`);
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = ${capabilityRole} order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), [capability]);
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'commit' });
+  }
+
+  async function readDefinition(code: string): Promise<DistributionDimensionRecord | undefined> {
+    const rows = await withTenant(CLIENT, async (tx) => channel
+      ? tx.execute(sql`select client, distribution_channel as code, name, is_active, created_by, changed_by
+          from distribution_channel where client = ${CLIENT} and distribution_channel = ${code}`)
+      : tx.execute(sql`select client, division as code, name, is_active, created_by, changed_by
+          from division where client = ${CLIENT} and division = ${code}`)) as unknown as DistributionDimensionRecord[];
+    assert.ok(rows.length <= 1, `${singular} ${code} must be tenant-local and unique.`);
+    return rows[0];
+  }
+
+  async function referenceCount(code: string): Promise<number> {
+    const rows = await withTenant(CLIENT, async (tx) => channel
+      ? tx.execute(sql`select count(*)::int as count from sales_area
+          where client = ${CLIENT} and distribution_channel = ${code}`)
+      : tx.execute(sql`select count(*)::int as count from sales_area
+          where client = ${CLIENT} and division = ${code}`)) as unknown as Array<{ count: number }>;
+    return rows[0]?.count ?? 0;
+  }
+
+  async function readActivityStatus() {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select status, completed_by from config_activity_status
+       where client = ${CLIENT} and activity_code = ${activity}
+    `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+    return rows[0];
+  }
+
+  await signInAs(actor);
+  await page.goto(`${BASE}${route}`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { level: 1, name: plural, exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: `Create definition · ${singular}`, exact: true }).count(), 1);
+
+  // A definition-only role must not inherit the other dimension's capability.
+  await page.goto(`${BASE}${otherRoute}?new=1`, { waitUntil: 'commit' });
+  await page.getByText(`Read-only view. Changes require authority ${otherActivity}.`, { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: /Create definition ·/ }).count(), 0);
+  await page.goto(`${BASE}${route}`, { waitUntil: 'commit' });
+
+  // Exercise the responsive create form at a phone-sized viewport before the desktop lifecycle checks.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${BASE}${route}?new=1&client=0100`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: `Create definition · ${singular}`, exact: true }).waitFor();
+  const horizontalOverflow = await page.evaluate(() => Math.max(
+    document.documentElement.scrollWidth,
+    document.body.scrollWidth,
+  ) - document.documentElement.clientWidth);
+  assert.ok(horizontalOverflow <= 1, `${plural} mobile page must not overflow horizontally (overflow ${horizontalOverflow}px).`);
+  assert.equal(await page.locator(`[name="${codeField}"]`).getAttribute('maxlength'), '2');
+  assert.equal(await page.locator(`[name="${codeField}"]`).getAttribute('pattern'), '[A-Za-z0-9]{2}');
+  assert.equal(await page.locator('[name="name"]').getAttribute('maxlength'), '20');
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '0');
+  for (const field of ['client', 'changedBy', 'isActive', 'companyCode', 'salesOrg']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is outside the ${singular} definition contract.`);
+  }
+  const standard = await readDefinition('01');
+  assert.ok(standard?.is_active, `Standard ${singular} 01 must remain active.`);
+  assert.ok(await referenceCount('01') > 0, `Standard ${singular} 01 must be referenced by a Sales Area.`);
+
+  await page.locator(`[name="${codeField}"]`).fill(codeOne.toLowerCase());
+  await page.locator('[name="name"]').fill(initialName);
+  await page.locator('[name="reason"]').fill(createReason);
+  const createForm = page.locator('form').filter({ has: page.locator(`[name="${codeField}"]`) });
+  await createForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({ client: '0100', changedBy: 'spoofed.actor', isActive: 'false' })) {
+      const input = document.createElement('input'); input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await page.getByRole('button', { name: 'Create definition', exact: true }).click();
+  await page.getByRole('status').getByText(`${singular} ${codeOne} defined; change history recorded.`, { exact: true }).waitFor();
+  assert.deepEqual(await readDefinition(codeOne), {
+    client: CLIENT, code: codeOne, name: initialName, is_active: true, created_by: actor, changed_by: null,
+  });
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, channel ? 'distribution_channel' : 'division', codeOne));
+  assert.equal(history.length, 1);
+  assert.equal(history[0].changeType, 'CREATE');
+  assert.equal(history[0].changedBy, actor);
+  assert.equal(history[0].transactionCode, activity);
+  assert.equal(history[0].reason, createReason);
+  assert.ok(history[0].items.some((item) => item.fieldName === 'name' && item.newValue === initialName));
+  assert.deepEqual(await readActivityStatus(), { status: 'COMPLETED', completed_by: actor });
+  console.log(`  ✓ lowercase key normalized; session tenant/actor and active state override forged create fields`);
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('link', { name: 'Open saved definition', exact: true }).click();
+  const detail = page.locator('section.panel').filter({ has: page.getByRole('heading', { name: `Definition · ${codeOne}`, exact: true }) });
+  await detail.waitFor();
+  await detail.getByRole('link', { name: 'Copy as new', exact: true }).click();
+  await page.getByRole('heading', { name: `Create definition · ${singular}`, exact: true }).waitFor();
+  assert.equal(await page.locator(`[name="${codeField}"]`).inputValue(), '', 'Copy must require a new, immutable key.');
+  assert.equal(await page.locator('[name="name"]').inputValue(), initialName, 'Copy carries only the source name.');
+  await page.locator(`[name="${codeField}"]`).fill(codeTwo.toLowerCase());
+  await page.locator('[name="reason"]').fill(copyReason);
+  await page.getByRole('button', { name: 'Create definition', exact: true }).click();
+  await page.getByRole('status').getByText(`${singular} ${codeTwo} defined; change history recorded.`, { exact: true }).waitFor();
+  assert.deepEqual(await readDefinition(codeTwo), {
+    client: CLIENT, code: codeTwo, name: initialName, is_active: true, created_by: actor, changed_by: null,
+  });
+  const copyHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, channel ? 'distribution_channel' : 'division', codeTwo));
+  assert.equal(copyHistory.length, 1);
+  assert.equal(copyHistory[0].changeType, 'CREATE', 'A copy is a distinct new definition, not an update to its source.');
+  assert.equal(copyHistory[0].reason, copyReason);
+  console.log('  ✓ copy-as-new leaves the source intact and records an independent create');
+
+  await page.goto(`${BASE}${route}?edit=${codeOne}`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: `Change definition · ${singular}`, exact: true }).waitFor();
+  assert.equal(await page.locator('[name="expectedVersion"]').inputValue(), '1');
+  assert.equal(await page.locator('input[readonly]').inputValue(), codeOne, 'The created key is read-only on change.');
+  await page.getByText('The key is immutable after creation.', { exact: true }).waitFor();
+  await page.locator('[name="name"]').fill(changedName);
+  await page.locator('[name="reason"]').fill(changeReason);
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('status').getByText(`${singular} ${codeOne} saved and change history recorded.`, { exact: true }).waitFor();
+  assert.deepEqual(await readDefinition(codeOne), {
+    client: CLIENT, code: codeOne, name: changedName, is_active: true, created_by: actor, changed_by: actor,
+  });
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, channel ? 'distribution_channel' : 'division', codeOne));
+  assert.equal(history.length, 2);
+  assert.equal(history[0].changeType, 'CHANGE');
+  assert.equal(history[0].reason, changeReason);
+  assert.deepEqual(history[0].items.map((item) => item.fieldName), ['name'], 'Name is the only changeable definition field.');
+  assert.deepEqual(await readActivityStatus(), { status: 'COMPLETED', completed_by: actor });
+  console.log('  ✓ name-only change increments the audit version without changing the key');
+
+  await page.goto(`${BASE}${route}?${codeField}=${codeTwo}`, { waitUntil: 'commit' });
+  const deactivatePanel = page.locator('details').filter({ hasText: `Deactivate definition · ${singular}` });
+  await deactivatePanel.locator('summary').click();
+  await deactivatePanel.locator('[name="reason"]').fill(deactivateReason);
+  await deactivatePanel.getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
+  await page.getByRole('status').getByText(`${singular} ${codeTwo} deactivated and retained with its history.`, { exact: true }).waitFor();
+  assert.deepEqual(await readDefinition(codeTwo), {
+    client: CLIENT, code: codeTwo, name: initialName, is_active: false, created_by: actor, changed_by: actor,
+  });
+  const deactivationHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, channel ? 'distribution_channel' : 'division', codeTwo));
+  assert.equal(deactivationHistory.length, 2);
+  assert.equal(deactivationHistory[0].changeType, 'CHANGE');
+  assert.equal(deactivationHistory[0].reason, deactivateReason);
+  assert.ok(deactivationHistory[0].items.some((item) => item.fieldName === 'isActive' && item.oldValue === 'true' && item.newValue === 'false' && item.isSecurityRelevant === 'true'));
+  assert.equal(await readActivityStatus().then((status) => status?.completed_by), actor);
+  console.log('  ✓ unused definition is soft-deactivated and retained with security-relevant history');
+
+  await page.goto(`${BASE}${route}?${codeField}=01`, { waitUntil: 'commit' });
+  const protectedPanel = page.locator('details').filter({ hasText: `Deactivate definition · ${singular}` });
+  await protectedPanel.locator('summary').click();
+  await protectedPanel.locator('form').getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
+  await page.getByRole('alert').getByText(/still referenced by Sales Area configuration/).waitFor();
+  assert.equal((await readDefinition('01'))?.is_active, true, 'A referenced standard definition remains active after rejection.');
+  assert.equal(await referenceCount('01') > 0, true);
+  console.log('  ✓ Sales Area dependency prevents deactivation without changing the definition');
+
+  await page.goto(`${BASE}${route}?${codeField}=${codeTwo}&history=1`, { waitUntil: 'commit' });
+  await page.getByText('This definition is inactive and retained with its history.', { exact: true }).waitFor();
+  const inactiveDetail = page.locator('section.panel').filter({ has: page.getByRole('heading', { name: `Definition · ${codeTwo}`, exact: true }) });
+  assert.equal(await inactiveDetail.getByRole('link', { name: 'Copy as new', exact: true }).count(), 0, 'Inactive entries cannot be copied.');
+  assert.equal(await page.locator('details').count(), 0, 'Inactive entries have no deactivation/reactivation form.');
+  assert.equal(await page.getByRole('button', { name: /delete|reactivate/i }).count(), 0);
+  await page.getByText(deactivateReason, { exact: true }).waitFor();
+
+  await signInAs(viewer);
+  await page.goto(`${BASE}${route}`, { waitUntil: 'commit' });
+  await page.getByText(`Read-only view. Changes require authority ${activity}.`, { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: `Create definition · ${singular}`, exact: true }).count(), 0);
+  await page.goto(`${BASE}${route}?new=1&client=0100`, { waitUntil: 'commit' });
+  await page.getByText(`Read-only view. Changes require authority ${activity}.`, { exact: true }).waitFor();
+  await page.goto(`${BASE}${route}?${codeField}=${codeOne}&history=1`, { waitUntil: 'commit' });
+  await page.getByText(createReason, { exact: true }).waitFor();
+  await page.getByText(changeReason, { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'Copy as new', exact: true }).count(), 0);
+  assert.equal(await page.locator('details').count(), 0);
+  for (const field of [codeField, 'name', 'expectedVersion', 'reason']) {
+    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `Read-only user receives no ${field} maintenance control.`);
+  }
+  console.log('  ✓ Auditor can inspect history but cannot create, change, copy or deactivate');
+
+  await signInAs(actor);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${BASE}${route}`, { waitUntil: 'commit' });
+  const finalMobileOverflow = await page.evaluate(() => Math.max(
+    document.documentElement.scrollWidth,
+    document.body.scrollWidth,
+  ) - document.documentElement.clientWidth);
+  assert.ok(finalMobileOverflow <= 1, `${plural} mobile list must not overflow horizontally (overflow ${finalMobileOverflow}px).`);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+}
+
+async function distributionChannels(ctx: BrowserContext) {
+  await distributionDimensionDefinition(ctx, 'distributionChannel');
+}
+
+async function divisions(ctx: BrowserContext) {
+  await distributionDimensionDefinition(ctx, 'division');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
@@ -3760,6 +4019,8 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchasing-groups': purchasingGroups,
   'sales-orgs': salesOrgDefinition,
   'sales-org-company-code': salesOrgCompanyCodeAssignment,
+  'distribution-channels': distributionChannels,
+  divisions,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,
