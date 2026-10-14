@@ -631,6 +631,15 @@ Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `
 
 **Next:** SCR-024 UI for SAP T-code OKKP / Controlling Area Definition, using the already supplied exact labels and help copy. No UI work is included here.
 
+
+### 26.207 B-191 — SCR-024 / OKKP Controlling Area UI `IMPLEMENTED · UI TESTS DEFERRED`
+
+**Screen and copy.** Added the responsive `/config/controlling-area` form for SAP T-code OKKP, gated by `CFG.COST.CONTROLLINGAREA.DEFINE`. The owner-supplied “Description of Controlling Area’s Purpose” heading, field description, both option labels/descriptions, and all scope explanation lines are rendered verbatim through the English catalogue. Assignment maintenance remains separate in OX19; the workbench opens the Define activity while the Assign activity remains pending.
+
+**Controls.** The create form normalizes a four-character key, requires Name, supports the optional 30-character “Name of Controlling Area”, defaults Assignment Control to SINGLE, and uses F4 dialogs for active currencies and all existing Fiscal Year Variants (including inactive). Existing keys are shown read-only; audited editable fields are maintained per row with optimistic versions. Financial inputs become read-only from the backend activity flag. The 1:1 choice is unavailable while more than one Company Code remains assigned; the page displays assignment counts but provides no OX19 assignment or deactivate/reactivate controls. Capability-gated server actions use only session tenant/user identity and surface duplicate-create no-op feedback.
+
+**Verification boundary.** `npm run typecheck` and `git diff --check` passed. No UI tests, browser acceptance, behavioral tests or database changes were made. UI tests remain deferred until after implementation publication.
+
 ---
 
 ## §30 · Change log (continued)
@@ -679,6 +688,7 @@ recorded change, date and reason stated.
 | 2.06 | 2026-10-14 | **SCR-024 backend services published (B-188; R-40/D-111).** Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `origin/main` as a fast-forward from `227511d`. The backend and SCR-024 log are published before UI testing, per the standing owner instruction. Typecheck passed; no behavioral/UI tests or acceptance ran. | Agent |
 | 2.07 | 2026-10-14 | **SCR-024 Assignment Control UI copy preserved (B-189; R-42; D-115).** Recorded the owner-supplied heading, control description, both option labels and descriptions, and the general scope explanation verbatim for the later OKKP UI stage. No UI changes or tests were made. | Agent |
 | 2.08 | 2026-10-15 | **SCR-024 supporting functions implemented (B-190, §26.206).** Journal posting now acquires the shared Controlling Area row lock before database reads/writes; the standard package explicitly seeds A000 as SINGLE. Existing journal indexing was confirmed; code comments define the required early lock plus same-transaction indexing contract for future non-journal operational documents. No such non-journal transaction path currently exists in `src`. Typecheck passed; no behavioral/UI tests or database changes. | Agent |
+| 2.09 | 2026-10-15 | **SCR-024 / OKKP UI implemented; UI tests deferred (B-191, §26.207; D-112–D-115).** Added the responsive Controlling Area definition and maintenance page using the exact owner-supplied Assignment Control copy, active-only Currency F4, all-definition Fiscal Year Variant F4, audited edits, immutable keys and server-provided financial-field lock state. The OX19 assignment activity remains explicitly pending. Typecheck passed; no browser/UI/behavioral tests, acceptance or database changes. | Agent |
 
 ---
 

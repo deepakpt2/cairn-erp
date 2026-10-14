@@ -58,11 +58,15 @@ export default async function WorkbenchPage({
    * the workbench never offers a step that leads to a 404 — an unimplemented step
    * says so plainly instead of pretending.
    */
+  // OX19 uses the same registry route today, but its assignment form remains a separate, unbuilt activity.
+  const PENDING_ACTIVITY_CODES = new Set(['CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY']);
+
   const BUILT_ROUTES = new Set([
     '/clients',
     '/clients/new',
     '/config',
     '/config/company-codes',
+    '/config/controlling-area',
     '/config/gl-accounts',
     '/config/payment-terms',
     '/config/payment-methods',
@@ -187,7 +191,7 @@ export default async function WorkbenchPage({
                         {missing.length === 0 ? '—' : missing.join(', ')}
                       </td>
                       <td className="text-end">
-                        {item.route_path && BUILT_ROUTES.has(item.route_path) ? (
+                        {item.route_path && BUILT_ROUTES.has(item.route_path) && !PENDING_ACTIVITY_CODES.has(item.code) ? (
                           <Link href={item.route_path} className="text-accent hover:underline">
                             Open
                           </Link>
