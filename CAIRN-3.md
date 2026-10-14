@@ -601,6 +601,11 @@ A000` row and assignment unless a later owner-approved supporting-functions chan
 Commit `9a7a82c` (`feat: add SCR-024 controlling area schema`) was pushed to `origin/main` as a fast-forward from `b5f923b`. It contains the database/schema stage, migration `0031`, the recorded field decisions, and the design log. Migration `0031` was applied only to local `cairn`; no remote database was used. No backend/UI work, UI test or acceptance has run. **Next:** SCR-024 backend services.
 ation, application-code change, database connection/write, seed, test, commit, or push. Finalize the open items with the owner, then complete the SCR-024 database stage as its own batch. The separate SCR-025 / OX19 assignment form remains after the definition stage.
 
+
+### 26.204 B-188 — SCR-024 backend services published `PUSHED · UI TEST DEFERRED`
+
+Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `origin/main` as a fast-forward from `227511d`. It contains the SCR-024 backend functions and the logged owner clarifications. `npm run typecheck` passed; no behavioral test, UI test or acceptance ran. The next distinct stage is supporting functions.
+
 ---
 
 ## §30 · Change log (continued)
@@ -646,6 +651,7 @@ recorded change, date and reason stated.
 | 2.03 | 2026-10-14 | **SCR-024 / OKKP database stage completed (B-185, §26.201; R-39; D-106–D-110).** Reused the existing Controlling Area master; added the optional 30-character organization name, required single/multiple Company Code scope with count-based backfill, 30-character Name limit, two-character Fiscal Year Variant, checks and currency/variant references. Migration `0031_controlling_area_definition.sql` applied only to local `cairn`; read-only checks found zero Controlling Areas/assignment rows. Typecheck and diff check passed. No backend, supporting functions, UI or tests. Owner also set a standing pre-test publication rule (D-111): push changes without waiting for UI tests, which remain deferred. | Agent |
 | 2.04 | 2026-10-14 | **SCR-024 database stage published (B-186; R-40/D-111).** Commit `9a7a82c` (`feat: add SCR-024 controlling area schema`) was pushed to `origin/main` as a fast-forward from `b5f923b`. The change includes the schema/migration and design log; only the local `cairn` database received migration `0031`. No UI test or acceptance ran, per the standing owner instruction. | Agent |
 | 2.05 | 2026-10-14 | **SCR-024 Assignment Control and activity-lock contract clarified; backend services implemented (B-187, §26.203; R-41; D-112–D-114).** Owner supplied the exact 1:1 and 1:N dropdown wording, the cross-company Operational Chart of Accounts/Fiscal Year Variant prerequisite, the post-transaction Currency/Fiscal Year Variant lock, and duplicate-create no-op semantics. Added tenant-scoped list/F4/create/change services with audit versions, scope/cardinality guards, reference validation and activity checks over assigned Company Codes. Typecheck passed after restoring dependencies; no behavioral/UI tests ran. Supporting-function and UI stages remain separate; UI tests are deferred. | Agent |
+| 2.06 | 2026-10-14 | **SCR-024 backend services published (B-188; R-40/D-111).** Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `origin/main` as a fast-forward from `227511d`. The backend and SCR-024 log are published before UI testing, per the standing owner instruction. Typecheck passed; no behavioral/UI tests or acceptance ran. | Agent |
 
 ---
 
