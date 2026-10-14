@@ -11,6 +11,7 @@ import { loadBankDataKeyring } from '../../src/platform/security/bank-data-keyri
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
 import { changeHistory } from '../../src/platform/change';
+import { indexDocument } from '../../src/platform/document';
 import { listCompanyCodes } from '../../src/modules/foundation/services';
 import { getMaterialDetail } from '../../src/modules/inventory/materials';
 import { getPaymentTerms } from '../../src/modules/foundation/payment-terms';
@@ -22,6 +23,7 @@ import { listSupplierPurchasingPartners } from '../../src/modules/foundation/sup
 import { getCustomerCompany } from '../../src/modules/foundation/customer-companies';
 import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sales-areas';
 import { defineCompanyCode } from '../../src/modules/foundation/company-code-definition';
+import { listControllingAreas } from '../../src/modules/foundation/controlling-area-maintenance';
 import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/foundation/sales-organization-maintenance';
 import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
 import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
@@ -186,6 +188,280 @@ async function foundation(ctx: BrowserContext) {
   console.log('  ✓ change history and number-allocation evidence drill into the document');
   await mkdir('.arena', { recursive: true });
   await page.screenshot({ path: '.arena/number-ranges-review.png', fullPage: true });
+}
+
+async function controllingAreaDefinition(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const route = `${BASE}/config/controlling-area`;
+  const areaCode = 'B201';
+
+  // The fresh standard-package tenant has K4 only. Mark it inactive inside this
+  // owned fixture so the UI proves Fiscal Year Variant F4 still includes it.
+  const deactivatedVariant = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    update fiscal_year_variant set is_active = false
+     where client = ${CLIENT} and variant = 'K4'
+     returning variant, is_active
+  `))) as unknown as Array<{ variant: string; is_active: boolean }>;
+  assert.equal(deactivatedVariant.length, 1);
+  assert.equal(deactivatedVariant[0]?.variant, 'K4');
+  assert.equal(deactivatedVariant[0]?.is_active, false);
+
+  await page.goto(route, { waitUntil: 'load' });
+  // Server-rendered markup can be visible before React wires the F4 dialogs and forms.
+  await page.waitForLoadState('load');
+  await page.getByRole('heading', { level: 1, name: 'Controlling Areas', exact: true }).waitFor();
+  await page.getByText('Company Code assignments are maintained separately in OX19.', { exact: true }).first().waitFor();
+
+  // Keep the owner-provided Assignment Control heading, choices and help copy verbatim.
+  const assignmentCopy = await page.locator('#scr024-create-assignment-control-control-copy').innerText();
+  for (const copy of [
+    'Description of Controlling Area’s Purpose',
+    'Controls the relationship between Controlling Area and Company Code',
+    'Controlling area same as company code (1:1 Relationship)',
+    'This maps Controlling Area to a single Company Code in a strict 1:1 relationship, where only one Company Code may be assigned to the Controlling Area.',
+    'Cross-company-code cost accounting (1:N Relationship)',
+    'This enables one Controlling Area to be assigned to multiple Company Codes, allowing cost accounting to be performed across all assigned Company Codes.',
+    'The scope controls whether a Controlling Area can be assigned to one or multiple Company Codes in the system.',
+    '1:1 Relationship: Exactly one Company Code must be assigned to the Controlling Area.',
+    '1:N Relationship: One Controlling Area can be assigned to multiple Company Codes.',
+    'This will determine whether cost accounting for a Controlling Area is restricted to a single Company Code or includes all cross-company costs.',
+  ]) {
+    assert.ok(assignmentCopy.includes(copy), `Missing exact Assignment Control copy: ${copy}`);
+  }
+
+  const initialList = page.getByRole('list', { name: 'Current Controlling Areas', exact: true });
+  const standardRow = initialList.locator('li').filter({ hasText: 'A000' });
+  assert.equal(await standardRow.count(), 1);
+  assert.equal(await standardRow.locator('[name="companyCodeScope"]').inputValue(), 'SINGLE');
+  assert.equal(await standardRow.locator('[name="currency"]').inputValue(), 'KWD');
+  assert.equal(await standardRow.locator('[name="fiscalYearVariant"]').inputValue(), 'K4');
+  const initialAreas = await listControllingAreas(CLIENT);
+  const standardArea = initialAreas.find((area) => area.controllingArea === 'A000');
+  assert.ok(standardArea, 'The standard A000 Controlling Area must be present.');
+  assert.equal(standardArea.companyCodeCount, 1);
+  assert.equal(standardArea.currencyLocked, false);
+  assert.equal(standardArea.fiscalYearVariantLocked, false);
+  console.log('  ✓ standard A000 starts 1:1 and financial settings are editable before activity');
+
+  const createPanel = page.locator('section[aria-labelledby="controlling-area-create-title"]');
+  const createForm = createPanel.locator('form');
+  await createForm.getByRole('button', { name: 'Open Currency Key lookup (F4)', exact: true }).click();
+  const currencyDialog = page.getByRole('dialog', { name: 'Currency Key lookup', exact: true });
+  await currencyDialog.waitFor();
+  const kwdChoice = currencyDialog.getByRole('button', { name: /KWD.*Kuwaiti Dinar.*Active/i });
+  await kwdChoice.waitFor();
+  await kwdChoice.click();
+  assert.equal(await createForm.locator('[name="currency"]').inputValue(), 'KWD');
+
+  await createForm.getByRole('button', { name: 'Open Fiscal Year Variant lookup (F4)', exact: true }).click();
+  const fiscalYearDialog = page.getByRole('dialog', { name: 'Fiscal Year Variant lookup', exact: true });
+  await fiscalYearDialog.waitFor();
+  const k4Choice = fiscalYearDialog.getByRole('button', { name: /K4.*Calendar year, 4 special periods.*Inactive/i });
+  await k4Choice.waitFor();
+  assert.match(await k4Choice.innerText(), /Inactive/i);
+  await k4Choice.click();
+  assert.equal(await createForm.locator('[name="fiscalYearVariant"]').inputValue(), 'K4');
+
+  // Restore the standard variant before the posting part of this acceptance run.
+  const activatedVariant = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    update fiscal_year_variant set is_active = true
+     where client = ${CLIENT} and variant = 'K4'
+     returning variant, is_active
+  `))) as unknown as Array<{ variant: string; is_active: boolean }>;
+  assert.equal(activatedVariant.length, 1);
+  assert.equal(activatedVariant[0]?.is_active, true);
+
+  // Use the hydrated client form to verify key normalization and Assignment Control.
+  await createForm.locator('[name="controllingArea"]').fill('b201');
+  assert.equal(await createForm.locator('[name="controllingArea"]').inputValue(), areaCode);
+  await createForm.locator('[name="name"]').fill('OKKP Browser Area');
+  await createForm.locator('[name="organizationName"]').fill('Browser Controlling');
+  assert.equal(await createForm.locator('[name="companyCodeScope"]').inputValue(), 'SINGLE');
+  await createForm.locator('[name="companyCodeScope"]').selectOption('MULTIPLE');
+
+  await createPanel.getByRole('button', { name: 'Create Controlling Area', exact: true }).click();
+  await createPanel.getByRole('status').getByText(
+    'Controlling Area B201 created; change history recorded.', { exact: true },
+  ).waitFor();
+  let areas = await listControllingAreas(CLIENT);
+  let createdArea = areas.find((area) => area.controllingArea === areaCode);
+  assert.ok(createdArea);
+  assert.equal(createdArea.name, 'OKKP Browser Area');
+  assert.equal(createdArea.organizationName, 'Browser Controlling');
+  assert.equal(createdArea.companyCodeScope, 'MULTIPLE');
+  assert.equal(createdArea.currency, 'KWD');
+  assert.equal(createdArea.fiscalYearVariant, 'K4');
+  assert.equal(createdArea.companyCodeCount, 0);
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'controlling_area', areaCode));
+  assert.equal(history.length, 1);
+  assert.equal(history[0]?.changeType, 'CREATE');
+  assert.equal(history[0]?.changedBy, 'browser.admin');
+  assert.equal(history[0]?.transactionCode, 'CFG.COST.CONTROLLINGAREA.DEFINE');
+  console.log('  ✓ create uses active Currency F4 and includes an inactive Fiscal Year Variant in F4');
+
+  // Repeating a key with conflicting field values must be an idempotent no-op.
+  await createForm.locator('[name="name"]').fill('Ignored Duplicate Name');
+  await createForm.locator('[name="organizationName"]').fill('Ignored Duplicate');
+  await createForm.locator('[name="companyCodeScope"]').selectOption('SINGLE');
+  await createForm.locator('[name="currency"]').fill('USD');
+  await createPanel.getByRole('button', { name: 'Create Controlling Area', exact: true }).click();
+  await createPanel.getByRole('status').getByText(
+    'Controlling Area B201 already exists; no change made.', { exact: true },
+  ).waitFor();
+  areas = await listControllingAreas(CLIENT);
+  createdArea = areas.find((area) => area.controllingArea === areaCode);
+  assert.ok(createdArea);
+  assert.equal(createdArea.name, 'OKKP Browser Area');
+  assert.equal(createdArea.organizationName, 'Browser Controlling');
+  assert.equal(createdArea.companyCodeScope, 'MULTIPLE');
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'controlling_area', areaCode));
+  assert.equal(history.length, 1, 'Duplicate create must not add a history event.');
+  console.log('  ✓ duplicate key leaves persisted values and change history untouched');
+
+  const areaList = page.getByRole('list', { name: 'Current Controlling Areas', exact: true });
+  const areaRow = areaList.locator('li').filter({ hasText: areaCode });
+  assert.equal(await areaRow.count(), 1);
+  await areaRow.locator('summary').click();
+  const changeForm = areaRow.locator('form');
+  await changeForm.locator('[name="expectedVersion"]').waitFor({ state: 'attached' });
+  assert.equal(await changeForm.locator('[name="controllingArea"]').getAttribute('type'), 'hidden');
+  assert.equal(await changeForm.locator('[name="controllingArea"]').inputValue(), areaCode);
+  await changeForm.locator('[name="name"]').fill('OKKP Browser Revised');
+  await changeForm.locator('[name="organizationName"]').fill('Browser Organization Updated');
+  await changeForm.locator('[name="companyCodeScope"]').selectOption('SINGLE');
+  await changeForm.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  await changeForm.getByRole('status').getByText(
+    'Controlling Area B201 saved; change history recorded.', { exact: true },
+  ).waitFor();
+  areas = await listControllingAreas(CLIENT);
+  createdArea = areas.find((area) => area.controllingArea === areaCode);
+  assert.ok(createdArea);
+  assert.equal(createdArea.name, 'OKKP Browser Revised');
+  assert.equal(createdArea.organizationName, 'Browser Organization Updated');
+  assert.equal(createdArea.companyCodeScope, 'SINGLE');
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'controlling_area', areaCode));
+  assert.equal(history.length, 2);
+  assert.equal(history[0]?.changeType, 'CHANGE');
+  assert.equal(history[0]?.changedBy, 'browser.admin');
+  const changedFields = new Map(history[0]?.items.map((item) => [item.fieldName, [item.oldValue, item.newValue]]));
+  assert.deepEqual(changedFields.get('name'), ['OKKP Browser Area', 'OKKP Browser Revised']);
+  assert.deepEqual(changedFields.get('organizationName'), ['Browser Controlling', 'Browser Organization Updated']);
+  assert.deepEqual(changedFields.get('companyCodeScope'), ['MULTIPLE', 'SINGLE']);
+  console.log('  ✓ key stays immutable while both names and Assignment Control change with audit history');
+
+  // Verify the default area remains unlocked before the first actual transaction.
+  await page.goto(route, { waitUntil: 'domcontentloaded' });
+  const preTransactionList = page.getByRole('list', { name: 'Current Controlling Areas', exact: true });
+  const preTransactionRow = preTransactionList.locator('li').filter({ hasText: 'A000' });
+  await preTransactionRow.locator('summary').click();
+  const preTransactionForm = preTransactionRow.locator('form');
+  assert.equal(await preTransactionForm.locator('[name="currency"]').getAttribute('readonly'), null);
+  assert.equal(await preTransactionForm.locator('[name="fiscalYearVariant"]').getAttribute('readonly'), null);
+  assert.equal(await preTransactionForm.getByRole('button', { name: 'Open Currency Key lookup (F4)', exact: true }).isEnabled(), true);
+  assert.equal(await preTransactionForm.getByRole('button', { name: 'Open Fiscal Year Variant lookup (F4)', exact: true }).isEnabled(), true);
+
+  // No non-journal operational writer exists in the repository yet. Use a
+  // synthetic OPEN document-index row to exercise that lock source, then remove it.
+  const nonJournalFixtureKey = 'OKKP-NON-JE-FIXTURE';
+  await withTenant(CLIENT, (tx) => indexDocument(tx, {
+    client: CLIENT,
+    document: { documentClass: 'browser_fixture', documentKey: nonJournalFixtureKey },
+    displayNumber: nonJournalFixtureKey,
+    companyCode: '1000',
+    status: 'OPEN',
+    summary: 'Synthetic pre-ledger fixture only; not an actual business transaction.',
+  }));
+  let indexedAreas = await listControllingAreas(CLIENT);
+  let indexedStandard = indexedAreas.find((area) => area.controllingArea === 'A000');
+  assert.ok(indexedStandard);
+  assert.equal(indexedStandard.currencyLocked, true);
+  assert.equal(indexedStandard.fiscalYearVariantLocked, true);
+  await page.goto(route, { waitUntil: 'load' });
+  const indexedList = page.getByRole('list', { name: 'Current Controlling Areas', exact: true });
+  const indexedRow = indexedList.locator('li').filter({ hasText: 'A000' });
+  await indexedRow.getByRole('status').getByText(
+    'Currency Key and Fiscal Year Variant are read-only because an actual operational transaction exists under an assigned Company Code.',
+    { exact: true },
+  ).waitFor();
+  await indexedRow.locator('summary').click();
+  const indexedForm = indexedRow.locator('form');
+  assert.equal(await indexedForm.locator('[name="currency"]').getAttribute('readonly'), '');
+  assert.equal(await indexedForm.locator('[name="fiscalYearVariant"]').getAttribute('readonly'), '');
+
+  const removedIndexFixture = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    delete from document_index
+     where client = ${CLIENT} and document_class = 'browser_fixture'
+       and document_key = ${nonJournalFixtureKey}
+     returning id
+  `))) as unknown as Array<{ id: string }>;
+  assert.equal(removedIndexFixture.length, 1);
+  indexedAreas = await listControllingAreas(CLIENT);
+  indexedStandard = indexedAreas.find((area) => area.controllingArea === 'A000');
+  assert.ok(indexedStandard);
+  assert.equal(indexedStandard.currencyLocked, false);
+  console.log('  ✓ synthetic non-journal document-index fixture exercises and then releases the activity lock');
+
+  await page.goto(`${BASE}/config/number-ranges?new=1`, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="reason"]').fill('SCR-024 browser transaction-lock verification');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('Interval saved and change evidence recorded.', { exact: true }).waitFor();
+
+  await page.goto(`${BASE}/finance/journal/new`, { waitUntil: 'domcontentloaded' });
+  assert.equal(await page.locator('[name="currency"]').inputValue(), 'KWD');
+  await page.locator('[name="postingDate"]').fill(`${year}-04-15`);
+  await page.locator('[name="reference"]').fill('OKKP-LOCK-001');
+  await page.locator('[name="headerText"]').fill('Actual transaction for OKKP activity lock');
+  for (const [name, value] of Object.entries({
+    line_0_account: '100000', line_0_amount: '100',
+    line_1_account: '200000', line_1_amount: '100',
+  })) {
+    await page.locator(`[name="${name}"]`).fill(value);
+  }
+  await page.getByRole('button', { name: 'Post', exact: true }).click();
+  await page.getByText(/Document JE-\d{4}-000001 posted/).waitFor();
+  const posted = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select document_number, status, created_by, local_currency
+      from journal_entry
+     where client = ${CLIENT} and reference = 'OKKP-LOCK-001'
+  `))) as unknown as Array<{ document_number: string; status: string; created_by: string; local_currency: string }>;
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0]?.status, 'POSTED');
+  assert.equal(posted[0]?.created_by, 'browser.admin');
+  assert.equal(posted[0]?.local_currency, 'KWD');
+  console.log('  ✓ actual journal transaction posts under the assigned Company Code');
+
+  await page.goto(route, { waitUntil: 'domcontentloaded' });
+  const postTransactionAreas = await listControllingAreas(CLIENT);
+  const lockedStandard = postTransactionAreas.find((area) => area.controllingArea === 'A000');
+  const stillEditableArea = postTransactionAreas.find((area) => area.controllingArea === areaCode);
+  assert.ok(lockedStandard);
+  assert.ok(stillEditableArea);
+  assert.equal(lockedStandard.companyCodeCount, 1);
+  assert.equal(lockedStandard.currencyLocked, true);
+  assert.equal(lockedStandard.fiscalYearVariantLocked, true);
+  assert.equal(stillEditableArea.companyCodeCount, 0);
+  assert.equal(stillEditableArea.currencyLocked, false);
+  assert.equal(stillEditableArea.fiscalYearVariantLocked, false);
+
+  const postTransactionList = page.getByRole('list', { name: 'Current Controlling Areas', exact: true });
+  const lockedRow = postTransactionList.locator('li').filter({ hasText: 'A000' });
+  await lockedRow.getByRole('status').getByText(
+    'Currency Key and Fiscal Year Variant are read-only because an actual operational transaction exists under an assigned Company Code.',
+    { exact: true },
+  ).waitFor();
+  await lockedRow.locator('summary').click();
+  const lockedForm = lockedRow.locator('form');
+  assert.equal(await lockedForm.locator('[name="currency"]').getAttribute('readonly'), '');
+  assert.equal(await lockedForm.locator('[name="fiscalYearVariant"]').getAttribute('readonly'), '');
+  assert.equal(await lockedForm.getByRole('button', { name: 'Open Currency Key lookup (F4)', exact: true }).isDisabled(), true);
+  assert.equal(await lockedForm.getByRole('button', { name: 'Open Fiscal Year Variant lookup (F4)', exact: true }).isDisabled(), true);
+
+  const unlockedRow = postTransactionList.locator('li').filter({ hasText: areaCode });
+  await unlockedRow.locator('summary').click();
+  const unlockedForm = unlockedRow.locator('form');
+  assert.equal(await unlockedForm.locator('[name="currency"]').getAttribute('readonly'), null);
+  assert.equal(await unlockedForm.locator('[name="fiscalYearVariant"]').getAttribute('readonly'), null);
+  console.log('  ✓ Currency Key and Fiscal Year Variant become read-only only for areas assigned to posted activity');
 }
 
 async function basic(ctx: BrowserContext) {
@@ -4281,6 +4557,7 @@ async function salesOrgDivisionAssignment(ctx: BrowserContext) {
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
+  'controlling-area': controllingAreaDefinition,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

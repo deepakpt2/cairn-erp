@@ -97,6 +97,14 @@ describe('bounded browser target selection', () => {
     expect(assignment?.client).not.toBe('T977');
     expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'OVXA local loopback' });
   });
+  it('reserves T972 for SCR-024 OKKP and binds it only to local PostgreSQL', () => {
+    const okkp = TARGETS.find((target) => target.id === 'controlling-area');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['controlling-area'];
+    expect(okkp).toMatchObject({ client: 'T972' });
+    expect(okkp?.client).not.toBe('T973');
+    expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' });
+    expect(STATIC_ACCEPTANCE_TARGETS.has('controlling-area')).toBe(false);
+  });
   it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];

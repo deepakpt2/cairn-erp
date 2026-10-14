@@ -12,6 +12,7 @@ export const TARGETS = [
   { id: 'customer-company', client: 'T988', label: 'Customer company AR settings and financial authority' },
   { id: 'customer-sales-area', client: 'T987', label: 'Customer sales-area maintenance, persistence and history' },
   { id: 'company-code-definition', client: 'T986', label: 'Company Code definition capability gate and create-only form' },
+  { id: 'controlling-area', client: 'T972', label: 'SCR-024 OKKP Controlling Area definition, F4, history and transaction lock' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
