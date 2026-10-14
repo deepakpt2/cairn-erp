@@ -20,8 +20,11 @@ const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partne
 export type CustomerSalesAreaInput=z.input<typeof inputSchema>;
 const key=(client:string,partner:string,org:string,channel:string,division:string)=>and(eq(customerSalesArea.client,client),eq(customerSalesArea.partnerNumber,partner),eq(customerSalesArea.salesOrg,org),eq(customerSalesArea.distributionChannel,channel),eq(customerSalesArea.division,division));
 /** Sales area, its organisation and company must be active; a delivering plant must belong to that company code. */
-async function validateSalesArea(tx:Tx,client:string,org:string,channel:string,division:string,plantCode:string|null){
-  const [area]=await tx.select().from(salesArea).where(and(eq(salesArea.client,client),eq(salesArea.salesOrg,org),eq(salesArea.distributionChannel,channel),eq(salesArea.division,division)));
+async function validateSalesArea(tx:Tx,client:string,org:string,channel:string,division:string,plantCode:string|null,lockForMaintenance=false){
+  const areaRows=lockForMaintenance
+    ? await tx.select().from(salesArea).where(and(eq(salesArea.client,client),eq(salesArea.salesOrg,org),eq(salesArea.distributionChannel,channel),eq(salesArea.division,division))).for('share')
+    : await tx.select().from(salesArea).where(and(eq(salesArea.client,client),eq(salesArea.salesOrg,org),eq(salesArea.distributionChannel,channel),eq(salesArea.division,division)));
+  const [area]=areaRows;
   if(!area?.isActive)throw new CustomerSalesAreaError('Sales area is missing or inactive.');
   const [organisation]=await tx.select().from(salesOrg).where(and(eq(salesOrg.client,client),eq(salesOrg.salesOrg,org)));
   if(!organisation?.isActive)throw new CustomerSalesAreaError('Sales organisation is missing or inactive.');
@@ -48,7 +51,7 @@ export async function saveCustomerSalesArea(raw:CustomerSalesAreaInput){
     if(!partner||!role?.isActive)throw new CustomerSalesAreaError('An existing active customer role is required.','Create/activate the general Customer role first.');
     const values={salesDistrict:input.salesDistrict||null,deliveringPlant:input.deliveringPlant||null,pricingProcedure:input.pricingProcedure||null,
       completeDelivery:input.completeDelivery,orderCombination:input.orderCombination,isBlocked:input.isBlocked};
-    await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant);
+    await validateSalesArea(tx,client,org,channel,division,values.deliveringPlant,true);
     const [before]=await tx.select().from(customerSalesArea).where(key(client,partnerNumber,org,channel,division)).for('update');
     if((before?.version??0)!==expectedVersion)throw new CustomerSalesAreaError('Customer sales-area view changed after it was opened.','Reload the current sales-area view before saving.');
     if(before&&Object.entries(values).every(([k,v])=>(before as Record<string,unknown>)[k]===v))return {changed:false,version:before.version,status:before.salesStatus};

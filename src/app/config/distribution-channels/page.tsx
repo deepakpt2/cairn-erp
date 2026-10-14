@@ -11,6 +11,7 @@ import { DistributionChannelDefinitionForm, type DistributionChannelDraft } from
 
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
+const SALES_AREA_DEFINE = 'CFG.ORG.SALESAREA.DEFINE';
 type PageParams = { new?: string; edit?: string; distributionChannel?: string; history?: string; q?: string; copy?: string };
 
 function detailHref(code: string) { return `/config/distribution-channels?distributionChannel=${encodeURIComponent(code)}`; }
@@ -22,6 +23,7 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
   const session = await requireSession('/config/distribution-channels');
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
+  const canDefineSalesArea = can(session, SALES_AREA_DEFINE);
   const rows = await withTenant(client, (tx) => tx.select().from(distributionChannelTable)
     .where(eq(distributionChannelTable.client, client)).orderBy(asc(distributionChannelTable.distributionChannel)));
   const entries = rows.map((row) => ({ ...row, distributionChannel: row.distributionChannel.trim() }));
@@ -54,6 +56,7 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
           <h1 className="text-xl font-semibold tracking-tight">{t('distributionChannel.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.workbench')}</Link>
+            {canDefineSalesArea && <Link href="/config/sales-areas" className="btn btn-default min-h-11 sm:min-h-8">{t('salesArea.navLink')}</Link>}
             {canMaintain && <Link href="/config/distribution-channels?new=1" className="btn btn-primary min-h-11 sm:min-h-8">{t('orgDefinition.create')} · {t('distributionChannel.singular')}</Link>}
           </div>
         </div>

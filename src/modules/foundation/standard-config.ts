@@ -593,7 +593,7 @@ export async function applyStandardPackage(
     if (!mappingChangeId) throw new Error('Standard Sales Organization/Division assignment could not be recorded.');
   }
 
-  await tx
+  const [defaultSalesArea] = await tx
     .insert(salesArea)
     .values({
       client,
@@ -603,7 +603,34 @@ export async function applyStandardPackage(
       name: 'Direct sales — manufactured products',
       createdBy: activatedBy,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ salesOrg: salesArea.salesOrg });
+  if (defaultSalesArea) {
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: 'sales_area',
+      objectKey: '1000/01/01',
+      changeType: 'CREATE',
+      changedBy: activatedBy,
+      transactionCode: 'CFG.ORG.SALESAREA.DEFINE',
+      after: {
+        salesOrg: '1000',
+        distributionChannel: '01',
+        division: '01',
+        name: 'Direct sales — manufactured products',
+        isActive: true,
+      },
+      securityRelevantFields: ['salesOrg', 'distributionChannel', 'division', 'isActive'],
+      fieldLabels: {
+        salesOrg: 'Sales Organization',
+        distributionChannel: 'Distribution Channel',
+        division: 'Division',
+        name: 'Sales Area Name',
+        isActive: 'Active',
+      },
+    });
+    if (!changeId) throw new Error('Standard Sales Area creation could not be recorded.');
+  }
 
   /* ── Document types ──────────────────────────────────────────────────────── */
   for (const documentTypeSpec of DOCUMENT_TYPES) {

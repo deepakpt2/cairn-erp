@@ -499,8 +499,8 @@ export const salesArea = pgTable(
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
     salesOrg: varchar('sales_org', { length: 4 }).notNull(),
-    distributionChannel: varchar('distribution_channel', { length: 4 }).notNull(),
-    division: varchar('division', { length: 4 }).notNull(),
+    distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+    division: varchar('division', { length: 2 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
@@ -508,7 +508,20 @@ export const salesArea = pgTable(
   (t) => [
     primaryKey({ columns: [t.client, t.salesOrg, t.distributionChannel, t.division] }),
     check('sales_area_sales_org_key_format_ck', sql`${t.salesOrg} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_area_distribution_channel_key_format_ck', sql`${t.distributionChannel} ~ '^[A-Z0-9]{2}$'`),
+    check('sales_area_division_key_format_ck', sql`${t.division} ~ '^[A-Z0-9]{2}$'`),
+    check('sales_area_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
     foreignKey({ name: 'sales_area_sales_org_fk', columns: [t.client, t.salesOrg], foreignColumns: [salesOrg.client, salesOrg.salesOrg] }),
+    foreignKey({
+      name: 'sales_area_sales_org_distribution_channel_assignment_fk',
+      columns: [t.client, t.salesOrg, t.distributionChannel],
+      foreignColumns: [salesOrgDistributionChannel.client, salesOrgDistributionChannel.salesOrg, salesOrgDistributionChannel.distributionChannel],
+    }),
+    foreignKey({
+      name: 'sales_area_sales_org_division_assignment_fk',
+      columns: [t.client, t.salesOrg, t.division],
+      foreignColumns: [salesOrgDivision.client, salesOrgDivision.salesOrg, salesOrgDivision.division],
+    }),
   ],
 );
 

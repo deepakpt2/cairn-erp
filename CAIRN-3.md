@@ -78,6 +78,7 @@ Rows continue the register in `CAIRN.md` §2 (through D-092).
 | D-102 | **OVXK assignment semantics.** Sales Organizations and Distribution Channels form a tenant-local many-to-many mapping; the `(client, sales_org, distribution_channel)` pair is unique. Repeating an existing pair is an idempotent no-op. F4 selects active definitions only. A mapping may be removed only when no Sales Area references the pair; removal must retain change-document history. | Owner selections for OVXK on 2026-10-14; defines the assignment lifecycle and lookup behavior. | 2026-10-14 |
 | D-103 | **OVXK-only publication before browser acceptance.** The owner directs that OVXK browser testing remain deferred until renewed approval, but explicitly authorizes pushing the current implementation now. This is a one-time exception for OVXK; R-35/D-101 remain in effect for subsequent UI work. | Owner instruction on 2026-10-14. Preserves the owner's test gate while following their explicit push instruction. | 2026-10-14 |
 | D-104 | **OVXA assignment lifecycle.** Sales Organization ↔ Division is many-to-many; duplicate assignment is an idempotent no-op. F4 and assignment accept active definitions only, and both Sales Organization and Division definition activities must be complete. An unused pair may be hard-removed with change history retained; removal is blocked while any Sales Area uses the Sales Organization/Division pair, regardless of Distribution Channel. | Owner selections for OVXA on 2026-10-14; sets the relation and dependency semantics for its DB/backend stages. | 2026-10-14 |
+| D-105 | **OVXG Sales Area contract.** Required VKORG (`CHAR 4`), VTWEG (`CHAR 2`) and SPART (`CHAR 2`) plus required Name (max 160). Value help includes existing definitions (including inactive ones), with VTWEG constrained by the selected Sales Organization's OVXK mapping and SPART by its OVXA mapping. Create and name-only change; key tuple is immutable; duplicate creation is an idempotent no-op. Soft deactivation retains the row/history, is blocked while any customer Sales Area refers to it, and reactivation is allowed. | Owner selections on 2026-10-14; defines OVXG storage and lifecycle before backend/UI work. | 2026-10-14 |
 
 ---
 
@@ -518,6 +519,37 @@ No browser test, build, typecheck or acceptance result is claimed. The UI remain
 **Implementation.** Added `/config/sales-orgs/assign-division` with the required Sales Organization (`CHAR 4`) and Division (`CHAR 2`) fields, active-only F4 choices with searchable lookup dialogs, duplicate-safe assignment feedback, current assignment display, active/inactive definition status, and confirmed removal messaging. The layout adapts to phone and desktop widths. Capability-gated links are available from both Sales Organization and Division definitions; list-only access remains available without the assignment capability. The registry remains `TIER_3_MAPPED` pending acceptance.
 
 **Verification and boundary.** `npm run typecheck`, `git diff --check`, and whitespace checks passed. No behavioral tests, browser acceptance or production build were run; no commit or push. The separate tests/acceptance stage is next. OVXG remains paused until OVXA is implemented and accepted.
+
+### 26.196 B-180 — OVXA accepted and published `ACCEPTED · PUSHED`
+
+**Verification.** `npm run typecheck` passed; `npm run test:browser-harness` passed 274/274 tests across 52 files; `npm test -- tests/sales-org-division-assignment.test.ts` passed 7/7. The guarded `sales-org-division` browser target passed against local PostgreSQL 17.11 database `cairn`, including active-only F4, idempotence, cross-channel dependency blocking, audited removal/history and exact-capability access. Browser fixture `T973` was removed after the run; no remote database was used.
+
+**Publication and prerequisites.** Commit `7f79695` was pushed to `main`; working tree was clean after push. The owner reported that local OVXK acceptance passed; OVXK was not run in this VM. OVXG is now eligible to proceed with its owner-supplied form contract.
+
+### 26.197 B-181 — OVXG fields/lifecycle captured; database stage complete `DATABASE COMPLETE · BACKEND NOT STARTED`
+
+**Owner contract (D-105).** Required VKORG (`CHAR 4`), VTWEG (`CHAR 2`) and SPART (`CHAR 2`) plus required Name (the existing table's 160-character limit). F4 includes existing definitions, including inactive ones; VTWEG must be linked to the selected Sales Organization via OVXK and SPART via OVXA. Create and name-only change are allowed, the three-part key is immutable, repeated creation is an idempotent no-op, and an existing Sales Area can be soft-deactivated and reactivated. Deactivation is blocked while any customer Sales Area references the tuple; records/history are retained.
+
+**Database implementation.** Updated `sales_area` to store two-character VTWEG/SPART values, check both code formats and nonblank Name, and enforce composite foreign keys to the OVXK and OVXA mapping relations. Existing primary-key, audit columns, `is_active` and Name storage are reused; no table or RLS policy was added. Migration `0030_sales_area_assignment_constraints.sql` was applied only to the local `cairn` database. Read-only verification confirmed the column lengths, format/name checks, pair-assignment foreign keys, and migration record; the local database currently had no Sales Area rows.
+
+**Verification and boundary.** `npm run typecheck` passed. No backend service/action, supporting-function, UI, behavioral test, browser run, commit or push was included in this stage. The next bounded stage is OVXG backend business functions.
+
+
+### 26.198 B-182 — OVXG backend business functions implemented `BACKEND COMPLETE · SUPPORTING NOT STARTED`
+
+**Implementation.** Added `src/modules/foundation/sales-area-maintenance.ts` with tenant-validated F4 choices (including inactive definitions, restricted by the selected Sales Organization's OVXK/OVXA mappings), retained Sales Area listing, prerequisite and direct-link validation, composite-key locking, idempotent create, name-only change, audited soft deactivation/reactivation, and audit-count optimistic versions. Creation acquires the shared OVXK and OVXA pair locks so a mapping cannot be removed concurrently. Deactivation is blocked by any dependent customer Sales Area.
+
+**Concurrency boundary.** Updated `saveCustomerSalesArea` to take a shared row lock on the Sales Area while validating it, so customer-area creation/update serializes against OVXG deactivation.
+
+**Verification and boundary.** `npm run typecheck` passed. No supporting seed/capability/action registration, UI, behavioral tests, browser acceptance, commit or push was included. The next bounded stage is OVXG supporting functions.
+
+
+### 26.199 B-183 — OVXG supporting functions implemented `SUPPORTING COMPLETE · UI NOT STARTED`
+
+**Implementation.** Registered the exact non-posting capability `CFG.ORG.SALESAREA.DEFINE`, term-registry entry and `OVXG` search alias (`TIER_3_MAPPED` pending acceptance). Added existing-tenant activity-status backfill derived from retained Sales Area rows without overwriting prior progress. Standard tenant setup now records the default `1000/01/01` Sales Area creation in change history when newly inserted. The existing workbench activity, its OVXK/OVXA prerequisites, onboarding completion and `/config/sales-areas` route path were already present.
+
+**Verification and boundary.** `npm run typecheck` passed. The global seed ran on the local `cairn` database; read-only checks confirmed the capability, activity prerequisites/route, OVXG alias and registry entry. The local database has no tenant rows, so the onboarding-default audit path remains for later behavioral testing. No UI, behavioral/browser tests, commit or push was included. The next stage is OVXG UI.
+
 ---
 
 ## §30 · Change log (continued)
@@ -555,6 +587,10 @@ recorded change, date and reason stated.
 | 1.95 | 2026-10-14 | **OVXA backend assignment services implemented (B-177, §26.193).** Added tenant validation, active-only F4 choices, assignment listing, active-definition and prerequisite checks, idempotent pair creation, audited removal blocked by Sales Areas across all channels, and the shared pair-lock contract for future Sales Area creation. `npm run typecheck` passed. Behavioral tests remain for their distinct later stage; supporting functions, UI, commit and push are not done. | Agent |
 | 1.96 | 2026-10-14 | **OVXA supporting functions implemented (B-178, §26.194).** Registered exact activity/capability, OVXA registry alias, and Sales Area prerequisite; backfilled existing Division/assignment statuses; added audited standard-tenant `1000/01` mapping/completion; guarded OVX5/OVXB deactivation while assigned; added capability-protected server actions and localized messages without a page. Global seed applied to static test DB; read-only verification confirmed the metadata, prerequisite, tenant `0100` completion, one mapping, and no Sales Area missing its pair. Typecheck and whitespace checks passed; no behavioral tests, UI, commit or push. | Agent |
 | 1.97 | 2026-10-14 | **OVXA UI implemented (B-179, §26.195).** Added responsive Division assignment page, active-only F4 search dialogs, required field validation, assignment/current-list views, inactive-definition indicators and confirmed removal flow; added capability-gated navigation from Sales Organization and Division definitions. `npm run typecheck` passed. Browser acceptance and other behavioral tests remain the next stage; registry stays `TIER_3_MAPPED`. No production build, commit or push. | Agent |
+| 1.98 | 2026-10-14 | **OVXA tests/acceptance passed and code published (B-180, §26.196).** Typecheck passed, browser-harness 274/274 across 52 files, OVXA service tests 7/7, and the guarded local-PostgreSQL browser target passed with `T973` cleanup verified. Commit `7f79695` pushed to `main`; no remote DB used. Owner reports OVXK local acceptance passed; the VM did not run OVXK. | Agent |
+| 1.99 | 2026-10-14 | **OVXG owner rules captured and database stage implemented (B-181, §26.197; D-105).** Recorded the three required keys, Name limit/edit policy, all-existing linked F4, idempotent duplicate, soft deactivation/reactivation and customer-Sales-Area dependency guard. Added Sales Area key-format/name checks and composite OVXK/OVXA assignment FKs; migration `0030` applied to local `cairn` only. Typecheck passed; no backend/UI/tests/commit/push. | Agent |
+| 2.00 | 2026-10-14 | **OVXG backend functions implemented (B-182, §26.198).** Added tenant-local F4/list/create/name-change/deactivate/reactivate functions with linked OVXK/OVXA validation, pair locking, prerequisite checks, idempotency, audit history and optimistic versions; customer Sales Area saves now serialize against deactivation. Typecheck passed; supporting functions, UI and tests remain separate later stages. No commit or push. | Agent |
+| 2.01 | 2026-10-14 | **OVXG supporting functions implemented (B-183, §26.199).** Registered the sales-area capability and OVXG term/alias, backfilled existing tenant checklist state from existing rows without overwriting progress, and audited the onboarding default area on insertion. Typecheck and local seed/read-only metadata checks passed; no UI/tests/commit/push. | Agent |
 
 ---
 

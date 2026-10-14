@@ -12,6 +12,7 @@ import { DivisionDefinitionForm, type DivisionDraft } from './DivisionDefinition
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
 const ASSIGN_SALES_ORG = 'CFG.ORG.SALESORG.ASSIGN_DIVISION';
+const SALES_AREA_DEFINE = 'CFG.ORG.SALESAREA.DEFINE';
 type PageParams = { new?: string; edit?: string; division?: string; history?: string; q?: string; copy?: string };
 
 function detailHref(code: string) { return `/config/divisions?division=${encodeURIComponent(code)}`; }
@@ -24,6 +25,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
   const canAssignSalesOrg = can(session, ASSIGN_SALES_ORG);
+  const canDefineSalesArea = can(session, SALES_AREA_DEFINE);
   const rows = await withTenant(client, (tx) => tx.select().from(divisionTable)
     .where(eq(divisionTable.client, client)).orderBy(asc(divisionTable.division)));
   const entries = rows.map((row) => ({ ...row, division: row.division.trim() }));
@@ -56,6 +58,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           <h1 className="text-xl font-semibold tracking-tight">{t('division.title')}</h1>
           <div className="flex flex-wrap gap-2">
             {canAssignSalesOrg && <Link href="/config/sales-orgs/assign-division" className="btn btn-default min-h-11 sm:min-h-8">{t('salesOrgDivision.navLink')}</Link>}
+            {canDefineSalesArea && <Link href="/config/sales-areas" className="btn btn-default min-h-11 sm:min-h-8">{t('salesArea.navLink')}</Link>}
             <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.workbench')}</Link>
             {canMaintain && <Link href="/config/divisions?new=1" className="btn btn-primary min-h-11 sm:min-h-8">{t('orgDefinition.create')} · {t('division.singular')}</Link>}
           </div>

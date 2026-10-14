@@ -106,6 +106,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CFG.ORG.DISTCHANNEL.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change, copy and deactivate tenant-scoped Distribution Channels' },
   { code: 'CFG.ORG.DIVISION.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change, copy and deactivate tenant-scoped Divisions' },
   { code: 'CFG.ORG.SALESORG.ASSIGN_DIVISION', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Assign or remove tenant Sales Organization and Division pairs' },
+  { code: 'CFG.ORG.SALESAREA.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Create, change, deactivate and reactivate tenant Sales Areas' },
   { code: 'CFG.PROC.PURORG.DEFINE', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Purchasing Organisations' },
   { code: 'CFG.PROC.PURORG.ASSIGN_COMPANY', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Assign an active tenant Purchasing Organisation to one active Company Code' },
   { code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign a chart of accounts to a Company Code' },
@@ -206,6 +207,7 @@ const REGISTRY: Array<{
   { ourCode: 'CFG.ORG.DISTCHANNEL.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Distribution Channel definitions', route: '/config/distribution-channels', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OVXI'], description: 'Maintain tenant-local Distribution Channels; Sales Organization assignments and Sales Area combinations are separate.' },
   { ourCode: 'CFG.ORG.DIVISION.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Division definitions', route: '/config/divisions', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OVXB'], description: 'Maintain tenant-local Divisions; Sales Organization assignments and Sales Area combinations are separate.' },
   { ourCode: 'CFG.ORG.SALESORG.ASSIGN_DIVISION', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Assign Division to Sales Organization', route: '/config/sales-orgs/assign-division', tier: 'TIER_3_MAPPED', conformance: 'B', aliases: ['OVXA'], description: 'Maintain tenant-local many-to-many Sales Organization/Division pairs; duplicate assignment is a no-op and removal is audited but blocked while any Sales Area uses the pair across all channels.' },
+  { ourCode: 'CFG.ORG.SALESAREA.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Sales Area', route: '/config/sales-areas', tier: 'TIER_3_MAPPED', conformance: 'B', aliases: ['OVXG'], description: 'Maintain tenant-local Sales Area combinations; Distribution Channel and Division must be assigned to the selected Sales Organization through OVXK and OVXA.' },
   { ourCode: 'CFG.PROC.PURORG.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PROC', title: 'Purchasing Organisation definitions', route: '/config/purchasing-orgs', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX08'], description: 'Define the tenant-local code and name, retain change history and deactivate; Company Code and Plant assignments remain separate, and supplier-purchasing use requires one Company Code.' },
   { ourCode: 'CFG.PROC.PURORG.ASSIGN_COMPANY', termType: 'CONFIG_ACTIVITY', module: 'PROC', title: 'Assign Purchasing Organisation to Company Code', route: '/config/purchasing-orgs/assign-company', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Make the initial assignment to exactly one active Company Code in the same tenant; replacement and unassignment are not included.' },
   { ourCode: 'CFG.PLT.CLIENT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PLT', title: 'Tenant administration', route: '/clients', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Create and manage tenants.' },
@@ -359,6 +361,24 @@ async function main() {
              (select max(a.created_at) from sales_org_division a where a.client = c.client),
              case when exists (
                select 1 from sales_org_division a where a.client = c.client
+             ) then 'SEED' else null end,
+             'SEED'
+        from client c
+      on conflict (client, activity_code) do nothing
+    `);
+
+    // OVXG is newly actionable for existing tenants. Derive completion from
+    // retained Sales Area rows without overwriting any in-progress checklist state.
+    await client.unsafe(`
+      insert into config_activity_status (client, activity_code, status, completed_at, completed_by, created_by)
+      select c.client,
+             'CFG.ORG.SALESAREA.DEFINE',
+             case when exists (
+               select 1 from sales_area a where a.client = c.client
+             ) then 'COMPLETED' else 'NOT_STARTED' end,
+             (select max(coalesce(a.changed_at, a.created_at)) from sales_area a where a.client = c.client),
+             case when exists (
+               select 1 from sales_area a where a.client = c.client
              ) then 'SEED' else null end,
              'SEED'
         from client c

@@ -16,6 +16,7 @@ const SALES_ORG_DEFINE = 'CFG.ORG.SALESORG.DEFINE';
 const SALES_ORG_ASSIGN_COMPANY = 'CFG.ORG.SALESORG.ASSIGN_COMPANY';
 const SALES_ORG_ASSIGN_DISTCHANNEL = 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL';
 const SALES_ORG_ASSIGN_DIVISION = 'CFG.ORG.SALESORG.ASSIGN_DIVISION';
+const SALES_AREA_DEFINE = 'CFG.ORG.SALESAREA.DEFINE';
 type PageParams = { new?: string; edit?: string; salesOrg?: string; history?: string; q?: string; copy?: string };
 
 function detailHref(code: string) { return `/config/sales-orgs?salesOrg=${encodeURIComponent(code)}`; }
@@ -36,6 +37,7 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
   const canAssignCompany = can(session, SALES_ORG_ASSIGN_COMPANY);
   const canAssignDistributionChannel = can(session, SALES_ORG_ASSIGN_DISTCHANNEL);
   const canAssignDivision = can(session, SALES_ORG_ASSIGN_DIVISION);
+  const canDefineSalesArea = can(session, SALES_AREA_DEFINE);
   const languageKey = session.user.logonLanguage ?? 'E';
   const organisationRows = await withTenant(client, (tx) => tx.select().from(salesOrgTable)
     .where(eq(salesOrgTable.client, client)).orderBy(asc(salesOrgTable.salesOrg)));
@@ -199,6 +201,7 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
           {canAssignCompany && <Link href="/config/sales-orgs/assign-company" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrg.assignCompanyCode')}</Link>}
           {canAssignDistributionChannel && <Link href="/config/sales-orgs/assign-distribution-channel" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrgChannel.navLink')}</Link>}
           {canAssignDivision && <Link href="/config/sales-orgs/assign-division" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesOrgDivision.navLink')}</Link>}
+          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
           <form action="/config/sales-orgs" className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
             <input className="field-input h-11 min-w-0 flex-1 sm:h-8 sm:w-52 sm:flex-none" name="q" defaultValue={params.q ?? ''} placeholder={t('salesOrg.findPlaceholder')} aria-label={t('salesOrg.findPlaceholder')} />
             <button type="submit" className="btn btn-default h-11 shrink-0 sm:h-8">{t('salesOrg.find')}</button>

@@ -15,12 +15,14 @@ export const dynamic = 'force-dynamic';
 
 const ACTIVITY = 'CFG.ORG.SALESORG.ASSIGN_DIVISION';
 const ROUTE = '/config/sales-orgs/assign-division';
+const SALES_AREA_ACTIVITY = 'CFG.ORG.SALESAREA.DEFINE';
 
 /** OVXA tenant-local many-to-many Sales Organization / Division assignment. */
 export default async function AssignDivisionPage() {
   const session = await requireSession(ROUTE);
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
+  const canDefineSalesArea = can(session, SALES_AREA_ACTIVITY);
   const languageKey = session.user.logonLanguage ?? 'E';
 
   const assignments = await listSalesOrgDivisionAssignments(client);
@@ -92,6 +94,7 @@ export default async function AssignDivisionPage() {
           <Link href="/config/divisions" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
             {t('division.title')}
           </Link>
+          {canDefineSalesArea && <Link href="/config/sales-areas" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('salesArea.navLink')}</Link>}
         </div>
         <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">{t('salesOrgDivision.subtitle')}</p>
         <p className="border-b border-[#cbd5de] bg-[#f7f9fa] px-3 py-2 text-xs text-ink-soft sm:px-4">{t('salesOrgDivision.assignmentRule')}</p>
