@@ -21,6 +21,8 @@ import { getSupplierPurchasing, supplierPurchasingChoices } from '../../src/modu
 import { listSupplierPurchasingPartners } from '../../src/modules/foundation/supplier-purchasing-partners';
 import { getCustomerCompany } from '../../src/modules/foundation/customer-companies';
 import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sales-areas';
+import { defineCompanyCode } from '../../src/modules/foundation/company-code-definition';
+import { saveSalesOrgDefinition } from '../../src/modules/foundation/sales-organization-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
@@ -3510,6 +3512,242 @@ async function purchasingOrgCompanyCodeAssignment(ctx: BrowserContext) {
   console.log('  ✓ Auditor can review assignments but has no assignment controls');
 }
 
+
+async function salesOrgCompanyCodeAssignment(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const salesOrgCode = 'B216';
+  const reassignmentCode = '2000';
+  const tooLongCompanyCode = '99999';
+  const passwordHash = await hashPassword(PASSWORD);
+  const assignmentActivity = 'CFG.ORG.SALESORG.ASSIGN_COMPANY';
+  console.log('Sales Organization -> Company Code (OVX3): verify four-character F4 fields, audited reassignment, exact capability and mobile layout');
+
+  // Prepare a pending Sales Organization and two valid Company Codes through the product services.
+  const definedSalesOrg = await saveSalesOrgDefinition({
+    client: CLIENT,
+    changedBy: 'browser.admin',
+    mode: 'CREATE',
+    salesOrg: salesOrgCode,
+    expectedVersion: 0,
+    values: { name: 'B-216 Sales Organization', address: { country: 'KW' } },
+  });
+  assert.equal(definedSalesOrg.created, true);
+  await defineCompanyCode({
+    client: CLIENT, changedBy: 'browser.admin', companyCode: reassignmentCode,
+    name: 'B-216 Secondary Company', country: 'KW', currency: 'KWD',
+  });
+  // A five-character definition may exist in the wider data model but is outside OVX3's Char 4 help.
+  await defineCompanyCode({
+    client: CLIENT, changedBy: 'browser.admin', companyCode: tooLongCompanyCode,
+    name: 'B-216 Non-OVX3 Company', country: 'KW', currency: 'KWD',
+  });
+
+  // Create three distinct personas: assignment-only, definition-only, and Auditor.
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B216_ASSIGN', 'B-216 Sales Company Assignment Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B216_ASSIGN', ${assignmentActivity}, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'B216_DEFINE', 'B-216 Sales Organization Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'B216_DEFINE', 'CFG.ORG.SALESORG.DEFINE', 'BROWSER_FIXTURE')`);
+    const assignerId = randomUUID();
+    const definerId = randomUUID();
+    const viewerId = randomUUID();
+    for (const [id, username, fullName, roleCode] of [
+      [assignerId, 'sales.assigner', 'B-216 Sales Company Assigner', 'B216_ASSIGN'],
+      [definerId, 'sales.definer', 'B-216 Sales Organization Definer', 'B216_DEFINE'],
+      [viewerId, 'sales.viewer', 'B-216 Sales Organization Auditor', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    await tx.execute(sql`update config_activity_status
+      set status = 'NOT_STARTED', completed_at = null, completed_by = null, changed_by = 'BROWSER_FIXTURE', changed_at = now()
+      where client = ${CLIENT} and activity_code = ${assignmentActivity}`);
+    const capabilities = await tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = 'B216_ASSIGN' order by capability_code`);
+    return capabilities;
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), [assignmentActivity]);
+
+  const signInAs = async (username: string) => {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'commit' });
+  };
+
+  async function assignmentRow() {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, sales_org, btrim(company_code) as company_code, is_active, created_by, changed_by
+        from sales_org where client = ${CLIENT} and sales_org = ${salesOrgCode}
+    `))) as unknown as Array<{
+      client: string; sales_org: string; company_code: string | null; is_active: boolean;
+      created_by: string; changed_by: string | null;
+    }>;
+    assert.equal(rows.length, 1, 'A Sales Organization occupies one row and therefore one current Company Code only.');
+    return rows[0];
+  }
+
+  async function signInAsAssigner() {
+    await signInAs('sales.assigner');
+    await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+    await page.getByRole('heading', { name: 'Assign Sales Organization to Company Code', exact: true }).waitFor();
+  }
+
+  async function selectSalesOrgWithF4(code: string, expectedCurrentCompanyCode?: string) {
+    const field = page.locator('[name="salesOrg"]');
+    await field.press('F4');
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('heading', { name: 'Sales Organization lookup', exact: true }).waitFor();
+    await dialog.locator('[type="search"]').fill(code);
+    const choice = dialog.getByRole('button', { name: new RegExp(code) });
+    await choice.waitFor();
+    assert.equal(await choice.isEnabled(), true, `Active Sales Organization ${code} is selectable even when it already has a Company Code.`);
+    if (expectedCurrentCompanyCode) {
+      await choice.getByText(`Current: ${expectedCurrentCompanyCode}`, { exact: true }).waitFor();
+    }
+    await choice.click();
+    assert.equal(await field.inputValue(), code);
+  }
+
+  async function selectCompanyCodeWithF4(code: string) {
+    const field = page.locator('[name="companyCode"]');
+    await page.getByRole('button', { name: 'Open Company Code lookup (F4)', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('heading', { name: 'Company Code lookup', exact: true }).waitFor();
+    await dialog.locator('[type="search"]').fill(code);
+    const choice = dialog.getByRole('button', { name: new RegExp(code) });
+    await choice.waitFor();
+    await choice.click();
+    assert.equal(await field.inputValue(), code);
+  }
+
+  // The user with only the SCR-020 definition authority cannot see or invoke OVX3 controls.
+  await signInAs('sales.definer');
+  await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Sales Organization to Company Code', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.SALESORG.ASSIGN_COMPANY.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[name="salesOrg"], [name="companyCode"]').count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Open Sales Organization lookup (F4)', exact: true }).count(), 0);
+  console.log('  ✓ Sales Organization definition authority does not grant assignment authority');
+
+  await signInAsAssigner();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Open Sales Organization lookup (F4)', exact: true }).waitFor();
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(pageWidth <= 391, `OVX3 assignment screen must fit a 390px viewport (document width ${pageWidth}px).`);
+  await selectSalesOrgWithF4(salesOrgCode);
+
+  // Verify the F4 list enforces the OVX3 four-character destination format, even if longer codes exist in data.
+  await page.getByRole('button', { name: 'Open Company Code lookup (F4)', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByRole('heading', { name: 'Company Code lookup', exact: true }).waitFor();
+  await dialog.locator('[type="search"]').fill(tooLongCompanyCode);
+  await dialog.getByText('No matching active Company Codes are available.', { exact: true }).waitFor();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await selectCompanyCodeWithF4('1000');
+
+  const firstForm = page.locator('form').filter({ has: page.locator('[name="salesOrg"]') });
+  await firstForm.evaluate((form) => {
+    for (const [field, value] of Object.entries({ client: '0100', changedBy: 'spoofed.actor', companyCode: '3000' })) {
+      if (field === 'companyCode') continue;
+      const input = document.createElement('input'); input.type = 'hidden'; input.name = field; input.value = value; form.appendChild(input);
+    }
+  });
+  await firstForm.getByRole('button', { name: 'Assign Company Code', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Sales Organization ${salesOrgCode} assigned to Company Code 1000; change history recorded.`,
+    { exact: true },
+  ).waitFor();
+  assert.deepEqual(await assignmentRow(), {
+    client: CLIENT, sales_org: salesOrgCode, company_code: '1000', is_active: true,
+    created_by: 'browser.admin', changed_by: 'sales.assigner',
+  });
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', salesOrgCode));
+  assert.equal(history.length, 2);
+  const initialAssignment = history.find((entry) => entry.transactionCode === assignmentActivity);
+  assert.ok(initialAssignment);
+  assert.equal(initialAssignment.changedBy, 'sales.assigner');
+  assert.deepEqual(initialAssignment.items.map((item) => [item.fieldName, item.oldValue, item.newValue]), [
+    ['companyCode', null, '1000'],
+  ]);
+  console.log('  ✓ F4 selection creates one tenant-local assignment under the session actor and records the first audit event');
+
+  // An already-assigned Sales Organization remains selectable; repeating the same pair adds no history.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Sales Organization to Company Code', exact: true }).waitFor();
+  await selectSalesOrgWithF4(salesOrgCode, '1000');
+  await selectCompanyCodeWithF4('1000');
+  await page.getByRole('button', { name: 'Assign Company Code', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Sales Organization ${salesOrgCode} is already assigned to Company Code 1000.`,
+    { exact: true },
+  ).waitFor();
+  assert.equal((await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', salesOrgCode))).length, 2);
+  console.log('  ✓ repeating the same assignment is idempotent and the current value remains visible in F4');
+
+  // A different active Company Code may replace the current assignment; old/new values remain audited.
+  await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Sales Organization to Company Code', exact: true }).waitFor();
+  await selectSalesOrgWithF4(salesOrgCode, '1000');
+  await selectCompanyCodeWithF4(reassignmentCode);
+  const reassignmentForm = page.locator('form').filter({ has: page.locator('[name="salesOrg"]') });
+  assert.equal(await reassignmentForm.locator('button').filter({ hasText: /clear|unassign/i }).count(), 0);
+  await reassignmentForm.getByRole('button', { name: 'Assign Company Code', exact: true }).click();
+  await page.getByRole('status').getByText(
+    `Sales Organization ${salesOrgCode} reassigned to Company Code ${reassignmentCode}; the previous value and this change are recorded in history.`,
+    { exact: true },
+  ).waitFor();
+  assert.deepEqual(await assignmentRow(), {
+    client: CLIENT, sales_org: salesOrgCode, company_code: reassignmentCode, is_active: true,
+    created_by: 'browser.admin', changed_by: 'sales.assigner',
+  });
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org', salesOrgCode));
+  assert.equal(history.length, 3);
+  const reassignmentEvent = history.find((entry) => entry.transactionCode === assignmentActivity
+    && entry.items.some((item) => item.oldValue === '1000' && item.newValue === reassignmentCode));
+  assert.ok(reassignmentEvent);
+  assert.equal(reassignmentEvent.changedBy, 'sales.assigner');
+  assert.ok(reassignmentEvent.items.some((item) => item.fieldName === 'companyCode'
+    && item.oldValue === '1000' && item.newValue === reassignmentCode && item.isSecurityRelevant === 'true'));
+  const [activity] = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = ${assignmentActivity}
+  `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity?.status, 'COMPLETED');
+  assert.equal(activity?.completed_by, 'sales.assigner');
+  const afterRows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select count(*)::int as n, count(distinct company_code)::int as company_count
+      from sales_org where client = ${CLIENT} and sales_org = ${salesOrgCode}
+  `))) as unknown as Array<{ n: number; company_count: number }>;
+  assert.deepEqual(Array.from(afterRows), [{ n: 1, company_count: 1 }]);
+  console.log('  ✓ reassignment replaces the single current Company Code and records the old/new values as security-relevant history');
+
+  // The exact-capability user sees current state, while the Auditor remains display-only.
+  await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+  const orgRow = page.locator('tbody tr').filter({ hasText: salesOrgCode });
+  await orgRow.waitFor();
+  assert.match(await orgRow.innerText(), new RegExp(`${salesOrgCode}.*${reassignmentCode}`));
+  await signInAs('sales.viewer');
+  await page.goto(`${BASE}/config/sales-orgs/assign-company`, { waitUntil: 'commit' });
+  await page.getByRole('heading', { name: 'Assign Sales Organization to Company Code', exact: true }).waitFor();
+  await page.getByText('Read-only view. Changes require authority CFG.ORG.SALESORG.ASSIGN_COMPANY.', { exact: true }).waitFor();
+  assert.equal(await page.locator('[name="salesOrg"], [name="companyCode"]').count(), 0);
+  assert.equal(await page.getByRole('button', { name: /lookup \(F4\)/i }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Assign Company Code', exact: true }).count(), 0);
+  console.log('  ✓ exact-capability assignment persists and Auditor can review the list without maintenance controls');
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
@@ -3521,6 +3759,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchasing-org-company-code': purchasingOrgCompanyCodeAssignment,
   'purchasing-groups': purchasingGroups,
   'sales-orgs': salesOrgDefinition,
+  'sales-org-company-code': salesOrgCompanyCodeAssignment,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
   'business-partners': businessPartners,

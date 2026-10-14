@@ -43,7 +43,8 @@
     "smoke:browser:purchasing-orgs": "tsx scripts/browser-smoke.ts --target purchasing-orgs",
     "smoke:browser:purchasing-org-company-code": "tsx scripts/browser-smoke.ts --target purchasing-org-company-code",
     "smoke:browser:purchasing-groups": "tsx scripts/browser-smoke.ts --target purchasing-groups",
-    "smoke:browser:sales-orgs": "tsx scripts/browser-smoke.ts --target sales-orgs"
+    "smoke:browser:sales-orgs": "tsx scripts/browser-smoke.ts --target sales-orgs",
+    "smoke:browser:sales-org-company-code": "tsx scripts/browser-smoke.ts --target sales-org-company-code"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

@@ -20,6 +20,7 @@ export const TARGETS = [
   { id: 'purchasing-org-company-code', client: 'T979', label: 'SCR-018 initial Purchasing Organisation to Company Code assignment and exact-capability access' },
   { id: 'purchasing-groups', client: 'T978', label: 'SCR-019 Purchasing Group create/change/delete, standalone contacts, history and exact-capability access' },
   { id: 'sales-orgs', client: 'T977', label: 'SCR-020 Sales Organization create/change/deactivate, retained history, separate Company Code assignment and exact-capability access' },
+  { id: 'sales-org-company-code', client: 'T976', label: 'SCR-021 OVX3 Sales Organization to Company Code F4 assignment, audited reassignment and exact-capability access' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
@@ -54,6 +55,7 @@ export const STATIC_ACCEPTANCE_TARGETS = new Set<BrowserTargetId>([
   'purchasing-org-company-code',
   'purchasing-groups',
   'sales-orgs',
+  'sales-org-company-code',
 ]);
 export type BrowserCommand = { mode: 'run'; target: BrowserTarget } | { mode: 'help' | 'list' };
 

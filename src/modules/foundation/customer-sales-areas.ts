@@ -25,7 +25,7 @@ async function validateSalesArea(tx:Tx,client:string,org:string,channel:string,d
   if(!area?.isActive)throw new CustomerSalesAreaError('Sales area is missing or inactive.');
   const [organisation]=await tx.select().from(salesOrg).where(and(eq(salesOrg.client,client),eq(salesOrg.salesOrg,org)));
   if(!organisation?.isActive)throw new CustomerSalesAreaError('Sales organisation is missing or inactive.');
-  if(!organisation.companyCode)throw new CustomerSalesAreaError('Sales organisation has no assigned Company Code.','Assign it through CFG.SALES.SALESORG.ASSIGN_COMPANY before using it for customer sales-area data.');
+  if(!organisation.companyCode)throw new CustomerSalesAreaError('Sales organisation has no assigned Company Code.','Assign it through CFG.ORG.SALESORG.ASSIGN_COMPANY before using it for customer sales-area data.');
   const [company]=await tx.select().from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.companyCode,organisation.companyCode)));
   if(!company?.isActive)throw new CustomerSalesAreaError('Sales organisation must belong to an active company.');
   if(plantCode){

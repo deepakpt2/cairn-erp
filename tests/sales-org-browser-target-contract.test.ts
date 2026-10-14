@@ -24,8 +24,17 @@ describe('SCR-020 isolated live-browser target contract', () => {
     expect(runner).toContain("if (target.id === 'sales-orgs') return '/config/sales-orgs'");
   });
 
+  it('registers the SCR-021 static-database browser target for OVX3 assignment and reassignment', () => {
+    const target = TARGETS.find((item) => item.id === 'sales-org-company-code');
+    expect(target).toMatchObject({ client: 'T976' });
+    expect(checks).toContain("'sales-org-company-code': salesOrgCompanyCodeAssignment,");
+    expect(packageJson.scripts['smoke:browser:sales-org-company-code'])
+      .toBe('tsx scripts/browser-smoke.ts --target sales-org-company-code');
+    expect(runner).toContain("if (target.id === 'sales-org-company-code') return '/config/sales-orgs/assign-company'");
+  });
+
   it('renders the current UI build marker in every environment, including production', () => {
-    expect(statusBar).toContain("const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR020-SALESORG-20261013'");
+    expect(statusBar).toContain("const DEVELOPMENT_UI_BUILD_CODE = 'DEV-SCR021-SALESORG-COMPANY-20261014'");
     expect(statusBar).toContain('data-testid="development-ui-build-code"');
     expect(statusBar).not.toContain('showDevelopmentBuildCode');
     expect(statusBar).toContain('Intentionally visible in every environment, including production');

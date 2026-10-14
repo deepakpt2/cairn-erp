@@ -139,6 +139,6 @@ describe('SCR-020 Sales Organization definition UI and action contract', () => {
     expect(seed).toContain("'CFG.ORG.SALESORG.DEFINE'");
     expect(seed).toContain("then 'COMPLETED' else 'NOT_STARTED' end");
     expect(tenancy).toContain("'CFG.ORG.SALESORG.DEFINE'");
-    expect(tenancy).toContain("'CFG.SALES.SALESORG.ASSIGN_COMPANY'");
+    expect(tenancy).toContain("'CFG.ORG.SALESORG.ASSIGN_COMPANY'");
   });
 });

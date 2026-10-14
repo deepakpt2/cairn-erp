@@ -79,6 +79,14 @@ describe('bounded browser target selection', () => {
     expect(guard?.database).not.toBe('cairn_b150');
     expect(guard?.port).not.toBe('55527');
   });
+  it('reserves T976 for SCR-021 Sales Organization Company Code assignment', () => {
+    const assignment = TARGETS.find((target) => target.id === 'sales-org-company-code');
+    expect(assignment).toMatchObject({ client: 'T976' });
+    expect(assignment?.client).not.toBe('T977');
+    expect(assignment?.client).not.toBe('T978');
+    expect(assignment?.client).not.toBe('T979');
+    expect(assignment?.client).not.toBe('T980');
+  });
   it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];
@@ -99,10 +107,11 @@ describe('bounded browser target selection', () => {
 });
 
 describe('static-database acceptance mode (D-097)', () => {
-  it('approves only the three owner-directed targets for the static test database', () => {
+  it('approves only the owner-directed static-database browser targets', () => {
     expect([...STATIC_ACCEPTANCE_TARGETS].sort()).toEqual([
       'purchasing-groups',
       'purchasing-org-company-code',
+      'sales-org-company-code',
       'sales-orgs',
     ]);
     for (const id of STATIC_ACCEPTANCE_TARGETS) {
