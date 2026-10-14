@@ -640,6 +640,11 @@ Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `
 
 **Verification boundary.** `npm run typecheck` and `git diff --check` passed. No UI tests, browser acceptance, behavioral tests or database changes were made. UI tests remain deferred until after implementation publication.
 
+
+### 26.208 B-192 — SCR-024 / OKKP UI published `PUSHED · UI TESTS DEFERRED`
+
+Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. It contains the `/config/controlling-area` UI and its log. The typecheck passed before publication; no UI/browser tests or acceptance ran, in accordance with R-40/D-111.
+
 ---
 
 ## §30 · Change log (continued)
@@ -689,6 +694,7 @@ recorded change, date and reason stated.
 | 2.07 | 2026-10-14 | **SCR-024 Assignment Control UI copy preserved (B-189; R-42; D-115).** Recorded the owner-supplied heading, control description, both option labels and descriptions, and the general scope explanation verbatim for the later OKKP UI stage. No UI changes or tests were made. | Agent |
 | 2.08 | 2026-10-15 | **SCR-024 supporting functions implemented (B-190, §26.206).** Journal posting now acquires the shared Controlling Area row lock before database reads/writes; the standard package explicitly seeds A000 as SINGLE. Existing journal indexing was confirmed; code comments define the required early lock plus same-transaction indexing contract for future non-journal operational documents. No such non-journal transaction path currently exists in `src`. Typecheck passed; no behavioral/UI tests or database changes. | Agent |
 | 2.09 | 2026-10-15 | **SCR-024 / OKKP UI implemented; UI tests deferred (B-191, §26.207; D-112–D-115).** Added the responsive Controlling Area definition and maintenance page using the exact owner-supplied Assignment Control copy, active-only Currency F4, all-definition Fiscal Year Variant F4, audited edits, immutable keys and server-provided financial-field lock state. The OX19 assignment activity remains explicitly pending. Typecheck passed; no browser/UI/behavioral tests, acceptance or database changes. | Agent |
+| 2.10 | 2026-10-15 | **SCR-024 / OKKP UI published before UI tests (B-192; R-40/D-111).** Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. The UI implementation is published; UI/browser tests remain deferred. | Agent |
 
 ---
 
