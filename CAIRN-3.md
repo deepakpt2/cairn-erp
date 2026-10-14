@@ -401,6 +401,10 @@ The existing standard Division name `Manufactured products` (21 characters) exce
 **Acceptance defects corrected.** Initial runs exposed strict-mode locator issues in the new smoke script (duplicate list headings and global copy-link counting); locators were narrowed to the intended page/detail. Review also exposed a duplicated inactive-retention notice for maintainers; both pages now render one notice and a UI contract pins the behaviour. No business-data or service-contract change resulted from these corrections.
 
 **Final gates.** Production build passed; typecheck passed; browser harness **262/262 across 50 files**; IP lint scanned 371 files with no trademark findings; `git diff --check` passed. `CAIRN-3.md` remains well below the rotation threshold; `.env.local` is ignored and mode 600. No owner data beyond the authorized global seed and temporary owned browser tenants was touched. No commit or push yet; owner-authorized publication may follow this accepted batch.
+
+### 26.182 B-166 — SCR-022 code published to `origin/main` `PUSHED · POST-ACCEPTANCE`
+
+After both static-database browser targets passed and guarded cleanup was verified, code and the acceptance log were committed as `5ad742c` (`feat: add SCR-022 distribution channel and division maintenance`) and pushed to `origin/main` as a fast-forward from `5b7d3bf`. The follow-up entry records publication; no credentials were committed. `.env.local` remains gitignored and mode 600.
 ---
 
 ## §30 · Change log (continued)
@@ -424,6 +428,7 @@ recorded change, date and reason stated.
 | 1.81 | 2026-10-14 | **SCR-022 capabilities and registry terms added (B-163, §26.179).** Registered the separate non-posting Distribution Channel and Division capabilities and search aliases; added the DB-free contract guard to the browser harness. Harness 251/251 across 48 files, typecheck and diff check clean. No seed run, database, migration or UI change. | Agent |
 | 1.82 | 2026-10-14 | **SCR-022 protected pages and browser acceptance harness added (B-164, §26.180).** Implemented separate exact-capability, tenant-scoped responsive forms/actions with create, name-only change, copy-as-new and audited guarded deactivation; added UI and isolated static-DB browser contract coverage. Shortened the standard Division name to 18 characters to comply with the approved limit. Verification: typecheck, browser harness 261/261 across 50 files, IP lint 371 files clean, and diff check clean. No seed, migration or live browser run, commit or push. | Agent |
 | 1.83 | 2026-10-14 | **SCR-022 seeded and accepted in production-browser tests (B-165, §26.181).** Verified the static test DB’s exact capabilities, activity/registry routes and search aliases; no migration was needed. Both Distribution Channel (T975) and Division (T974) browser targets passed individually, including 390px checks, exact-capability separation, audit, copy/change/deactivation, dependency blocks and Auditor access. Guarded cleanup left only tenant `0100`. Production build, typecheck, harness 262/262 across 50 files, IP lint and diff check passed. Publication remains the next action. | Agent |
+| 1.84 | 2026-10-14 | **SCR-022 published after browser acceptance (B-166, §26.182).** Pushed code commit `5ad742c` to `origin/main` as a fast-forward from `5b7d3bf` after both static-test-database browser targets passed and fixture cleanup was verified. The global seed and temporary browser fixtures were the only owner-test-data writes; `.env.local` remains ignored and mode 600. | Agent |
 
 ---
 
