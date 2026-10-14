@@ -12,6 +12,7 @@ const action = readFileSync('src/app/config/sales-orgs/assign-company/actions.ts
 const page = readFileSync('src/app/config/sales-orgs/assign-company/page.tsx', 'utf8');
 const form = readFileSync('src/app/config/sales-orgs/assign-company/SalesOrgCompanyCodeAssignmentForm.tsx', 'utf8');
 const overview = readFileSync('src/app/config/sales-orgs/page.tsx', 'utf8');
+const i18n = readFileSync('src/platform/i18n/index.ts', 'utf8');
 const seedActivities = seed.slice(seed.indexOf('const ACTIVITIES'), seed.indexOf('const CAPABILITIES'));
 const seedCapabilities = seed.slice(seed.indexOf('const CAPABILITIES'), seed.indexOf('const REGISTRY'));
 
@@ -35,6 +36,13 @@ describe('SCR-021 Sales Organization -> Company Code assignment contract', () =>
     expect(service).toContain('is inactive.');
     expect(service).toContain('does not exist in this tenant.');
     expect(service).toContain('Active Company Code');
+  });
+
+  it('uses Cairn field names only in the application and keeps source-system codes out of UI text', () => {
+    expect(i18n).toContain("'salesOrg.salesOrgField': 'Sales Organization'");
+    expect(i18n).toContain("'salesOrg.companyCodeField': 'Company Code'");
+    const appSources = [service, action, page, form, overview, i18n].join('\n');
+    expect(appSources).not.toMatch(/\b(?:VKORG|BUKRS)\b/i);
   });
 
   it('enforces OVX3 four-character codes and keeps assignment inputs separate from tenant and actor', () => {
