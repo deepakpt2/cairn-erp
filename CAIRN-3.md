@@ -645,6 +645,15 @@ Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `
 
 Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. It contains the `/config/controlling-area` UI and its log. The typecheck passed before publication; no UI/browser tests or acceptance ran, in accordance with R-40/D-111.
 
+
+### 26.209 B-193 — SCR-024 test stage partial `STATIC CONTRACTS PASS · BROWSER ACCEPTANCE BLOCKED`
+
+**Executed.** Added `tests/controlling-area-ui-contract.test.ts` to the no-DB browser-harness configuration. Its targeted run passed **7/7** (schema normalization/limits, owner copy, capability/session contract, F4 source rules, financial-field lock display, and OX19 separation). Typecheck and `git diff --check` passed.
+
+**Harness regression run.** `npm run test:browser-harness` reported **51/53 files and 279/281 tests passing**. Two unrelated existing source-code scans failed because the global i18n file already contained Sales Area terms `VKORG`, `VTWEG`, and `SPART`; those strings were present at baseline commit `debe23a`, and the SCR-024 UI diff adds none of them. No unrelated source/test behavior was changed to mask those failures.
+
+**Browser/DB boundary.** No live Playwright or DB-backed acceptance ran. Preflight found no `.env.local`/database environment variables, no PostgreSQL server or binaries, and connection refused at local `127.0.0.1:5432`. The configured test target remains local; uploaded remote database credentials were not used or changed, and no DB writes were attempted. Actual OKKP browser acceptance remains blocked pending restoration/start of the local test database.
+
 ---
 
 ## §30 · Change log (continued)
@@ -695,6 +704,7 @@ recorded change, date and reason stated.
 | 2.08 | 2026-10-15 | **SCR-024 supporting functions implemented (B-190, §26.206).** Journal posting now acquires the shared Controlling Area row lock before database reads/writes; the standard package explicitly seeds A000 as SINGLE. Existing journal indexing was confirmed; code comments define the required early lock plus same-transaction indexing contract for future non-journal operational documents. No such non-journal transaction path currently exists in `src`. Typecheck passed; no behavioral/UI tests or database changes. | Agent |
 | 2.09 | 2026-10-15 | **SCR-024 / OKKP UI implemented; UI tests deferred (B-191, §26.207; D-112–D-115).** Added the responsive Controlling Area definition and maintenance page using the exact owner-supplied Assignment Control copy, active-only Currency F4, all-definition Fiscal Year Variant F4, audited edits, immutable keys and server-provided financial-field lock state. The OX19 assignment activity remains explicitly pending. Typecheck passed; no browser/UI/behavioral tests, acceptance or database changes. | Agent |
 | 2.10 | 2026-10-15 | **SCR-024 / OKKP UI published before UI tests (B-192; R-40/D-111).** Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. The UI implementation is published; UI/browser tests remain deferred. | Agent |
+| 2.11 | 2026-10-15 | **SCR-024 static UI contract tests added and run; browser acceptance blocked by unavailable local DB (B-193).** The targeted no-database contract suite passed 7/7. Full browser-harness suite reported 279/281 passed; 2 unrelated legacy vendor-code scans fail on `VKORG`/`VTWEG`/`SPART` entries already present before the SCR-024 UI. No Playwright/browser run or DB test was possible: `.env.local`/database environment variables are absent, local PostgreSQL is not installed/listening at `127.0.0.1:5432`, and no remote DB was contacted. Typecheck passed. | Agent |
 
 ---
 
