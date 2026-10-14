@@ -659,6 +659,24 @@ Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin
 
 Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/main` as a fast-forward from `574e364`. It adds the 7 passing no-DB Controlling Area UI/schema contract tests to the browser-harness suite and records B-193. No UI implementation changes were part of this test publication. Live browser acceptance remains blocked by the unavailable local PostgreSQL service; no remote database was used.
 
+
+### 26.211 B-195 — SCR-024 change-form event defect fixed and published `FIX PUSHED · RETEST PASS`
+
+**Finding and correction.** The first live browser acceptance exposed a client exception when changing Name or Name of Controlling Area: the React state updater read `event.currentTarget` after event dispatch. The form now captures both field values synchronously before calling `setValues`, preserving the existing 30-character limits and behavior.
+
+**Publication.** Commit `1b3b888` (`fix: preserve OKKP change form values`) was pushed before the acceptance rerun. `npm run typecheck` and `git diff --check` passed; the later live run completed the edit and audit-history path without a browser runtime error.
+
+
+### 26.212 B-196 — SCR-024 / OKKP local browser acceptance `PASS · OX19 SEPARATE`
+
+**Isolated setup.** With owner authorization, provisioned disposable local PostgreSQL 17.11 database `cairn`, applied 57 migrations, seeded global/reference data and the local development tenant, and used separate loopback-only restricted runtime and elevated migration roles. Added the guarded `controlling-area` browser target on reserved fixture `T972`; only `npm run smoke:browser:controlling-area` was invoked. The guard verified `127.0.0.1:5432`, database `cairn`, and role separation. Uploaded remote DB credentials were not used or changed; no OVXK/OVXA target ran.
+
+**Acceptance evidence.** The target passed with no browser runtime errors. It verified the standard `A000` starts Same Company Code (1:1) with one Company Code and remains editable before activity; exact owner-supplied Assignment Control copy; lowercase key normalization; active Currency F4 and inactive Fiscal Year Variant F4; create and duplicate-key no-op with no extra history; immutable key; audited changes to both names and Assignment Control; and the financial-field lock for both an indexed-document case and an actual posted journal under the assigned Company Code. After the real journal, `A000` currency/Fiscal Year Variant were read-only, while unassigned `B201` remained editable.
+
+**Non-journal boundary and cleanup.** No non-journal operational transaction writer currently exists in `src`. A synthetic `OPEN` document-index fixture was therefore used only to exercise the generic pre-ledger lock path, then removed; it is not claimed as an actual business transaction. The browser target and OX19/SCR-025 assignment maintenance remain separate. Cleanup verification found no `T972` tenant and no synthetic document-index row. No remote database was contacted.
+
+**Other tests.** `npm run typecheck`, `git diff --check`, and the targeted no-DB suite (**65/65**) passed. The full `npm run test:browser-harness` run reported **51/53 files and 281/283 tests passing**. Its same two unrelated legacy source scans fail on Sales Organization / Distribution Channel terms already present at baseline `debe23a`; no unrelated code was changed. The guarded browser-target test code is committed in `8a5e8fb` (`test: add SCR-024 OKKP browser acceptance target`) and is ready for publication with this log.
+
 ---
 
 ## §30 · Change log (continued)
@@ -711,6 +729,8 @@ recorded change, date and reason stated.
 | 2.10 | 2026-10-15 | **SCR-024 / OKKP UI published before UI tests (B-192; R-40/D-111).** Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. The UI implementation is published; UI/browser tests remain deferred. | Agent |
 | 2.11 | 2026-10-15 | **SCR-024 static UI contract tests added and run; browser acceptance blocked by unavailable local DB (B-193).** The targeted no-database contract suite passed 7/7. Full browser-harness suite reported 279/281 passed; 2 unrelated legacy vendor-code scans fail on `VKORG`/`VTWEG`/`SPART` entries already present before the SCR-024 UI. No Playwright/browser run or DB test was possible: `.env.local`/database environment variables are absent, local PostgreSQL is not installed/listening at `127.0.0.1:5432`, and no remote DB was contacted. Typecheck passed. | Agent |
 | 2.12 | 2026-10-15 | **SCR-024 contract-test results published (B-194).** Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/main` as a fast-forward from `574e364`. It contains the targeted no-DB contract tests and their harness registration. Browser acceptance remains pending local database availability. | Agent |
+| 2.13 | 2026-10-15 | **SCR-024 edit-form event defect corrected and pushed (B-195).** Live browser testing exposed a React `currentTarget` timing error in OKKP name edits; values are now captured synchronously before state updates. Commit `1b3b888` was pushed before acceptance was rerun. Typecheck and diff checks passed. | Agent |
+| 2.14 | 2026-10-15 | **SCR-024 / OKKP local browser acceptance passed (B-196).** The isolated `controlling-area` target passed on PostgreSQL 17.11 with local-only roles; `T972` and the synthetic document-index fixture were cleaned. Targeted no-DB tests passed 65/65; full browser-harness result was 281/283 with the same two unrelated baseline Sales Area-code scans failing. No remote DB, OVXK or OVXA target was used. Target code is in commit `8a5e8fb`; OX19/SCR-025 remains separate. | Agent |
 
 ---
 
