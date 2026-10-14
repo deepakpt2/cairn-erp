@@ -17,4 +17,5 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'purchasing-org-company-code': { database: 'cairn_b151', port: '55528', batch: 'B-151' },
   'purchasing-groups': { database: 'cairn_b152', port: '55529', batch: 'B-152' },
   'sales-orgs': { database: 'cairn_b153', port: '55530', batch: 'B-153' },
+  'sales-org-division': { database: 'cairn', port: '5432', batch: 'OVXA local loopback' },
 };

@@ -10,6 +10,7 @@ import {
   distributionChannel as distributionChannelTable,
   salesArea,
   salesOrgDistributionChannel,
+  salesOrgDivision,
 } from './schema';
 
 const DISTRIBUTION_CHANNEL_ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
@@ -220,6 +221,18 @@ async function hasSalesOrgAssignmentReference(tx: Tx, client: string, code: stri
   return Boolean(reference);
 }
 
+async function hasSalesOrgDivisionAssignmentReference(tx: Tx, client: string, code: string): Promise<boolean> {
+  const [reference] = await tx
+    .select({ salesOrg: salesOrgDivision.salesOrg })
+    .from(salesOrgDivision)
+    .where(and(
+      eq(salesOrgDivision.client, client),
+      eq(salesOrgDivision.division, code),
+    ))
+    .limit(1);
+  return Boolean(reference);
+}
+
 async function saveDefinition(kind: DefinitionKind, payload: SavePayload) {
   const { client, changedBy, mode, code, expectedVersion, reason, name } = payload;
   return withTenant(client, async (tx) => {
@@ -306,6 +319,12 @@ async function deactivateDefinition(kind: DefinitionKind, payload: DeactivationP
       throw new DistributionDimensionMaintenanceError(
         `Distribution Channel ${code} is still assigned to one or more Sales Organizations and cannot be deactivated.`,
         'Remove its Sales Organization assignments first; retain the Distribution Channel while any assignment depends on it.',
+      );
+    }
+    if (kind === 'division' && await hasSalesOrgDivisionAssignmentReference(tx, client, code)) {
+      throw new DistributionDimensionMaintenanceError(
+        `Division ${code} is still assigned to one or more Sales Organizations and cannot be deactivated.`,
+        'Remove its Sales Organization assignments first; retain the Division while any assignment depends on it.',
       );
     }
 

@@ -461,6 +461,36 @@ export const division = pgTable(
   (t) => [primaryKey({ columns: [t.client, t.division] })],
 );
 
+/** Sales Organization ↔ Division assignment — OVXA. */
+export const salesOrgDivision = pgTable(
+  'sales_org_division',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+    // Match the existing definition column width; the OVXB Char 2 contract is checked below.
+    division: varchar('division', { length: 4 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.salesOrg, t.division] }),
+    check('sales_org_division_sales_org_format_ck', sql`${t.salesOrg} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_org_division_division_format_ck', sql`${t.division} ~ '^[A-Z0-9]{2}$'`),
+    foreignKey({
+      name: 'sales_org_division_sales_org_fk',
+      columns: [t.client, t.salesOrg],
+      foreignColumns: [salesOrg.client, salesOrg.salesOrg],
+    }),
+    foreignKey({
+      name: 'sales_org_division_definition_fk',
+      columns: [t.client, t.division],
+      foreignColumns: [division.client, division.division],
+    }),
+    index('sales_org_division_division_idx').on(t.client, t.division, t.salesOrg),
+  ],
+);
+
 /** Sales area — the combination sales data is maintained against (§9.1). */
 export const salesArea = pgTable(
   'sales_area',

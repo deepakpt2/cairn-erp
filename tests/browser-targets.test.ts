@@ -87,6 +87,16 @@ describe('bounded browser target selection', () => {
     expect(assignment?.client).not.toBe('T979');
     expect(assignment?.client).not.toBe('T980');
   });
+  it('reserves T973 and loopback PostgreSQL for OVXA Sales Organization / Division acceptance', () => {
+    const assignment = TARGETS.find((target) => target.id === 'sales-org-division');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['sales-org-division'];
+    expect(assignment).toMatchObject({ client: 'T973' });
+    expect(assignment?.client).not.toBe('T974');
+    expect(assignment?.client).not.toBe('T975');
+    expect(assignment?.client).not.toBe('T976');
+    expect(assignment?.client).not.toBe('T977');
+    expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'OVXA local loopback' });
+  });
   it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];

@@ -344,6 +344,7 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
         'CFG.ORG.DISTCHANNEL.DEFINE',
         'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
         'CFG.ORG.DIVISION.DEFINE',
+        'CFG.ORG.SALESORG.ASSIGN_DIVISION',
         'CFG.ORG.SALESAREA.DEFINE',
         'CFG.COST.CONTROLLINGAREA.DEFINE',
         'CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY',

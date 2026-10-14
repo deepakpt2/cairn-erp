@@ -36,6 +36,7 @@ import {
   salesArea,
   salesOrg,
   salesOrgDistributionChannel,
+  salesOrgDivision,
   salesOrgText,
   storageLocation,
   supplierPartnerFunction,
@@ -562,6 +563,34 @@ export async function applyStandardPackage(
       },
     });
     if (!mappingChangeId) throw new Error('Standard Sales Organization/Distribution Channel assignment could not be recorded.');
+  }
+
+  const [defaultSalesOrgDivision] = await tx
+    .insert(salesOrgDivision)
+    .values({
+      client,
+      salesOrg: '1000',
+      division: '01',
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing()
+    .returning({ salesOrg: salesOrgDivision.salesOrg });
+  if (defaultSalesOrgDivision) {
+    const mappingChangeId = await recordChange(tx, {
+      client,
+      objectClass: 'sales_org_division',
+      objectKey: '1000/01',
+      changeType: 'CREATE',
+      changedBy: activatedBy,
+      transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DIVISION',
+      after: { salesOrg: '1000', division: '01' },
+      securityRelevantFields: ['salesOrg', 'division'],
+      fieldLabels: {
+        salesOrg: 'Sales Organization',
+        division: 'Division',
+      },
+    });
+    if (!mappingChangeId) throw new Error('Standard Sales Organization/Division assignment could not be recorded.');
   }
 
   await tx

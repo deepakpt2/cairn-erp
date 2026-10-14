@@ -16,6 +16,7 @@ import {
   salesArea,
   salesOrg as salesOrgTable,
   salesOrgDistributionChannel,
+  salesOrgDivision,
   salesOrgText,
 } from './schema';
 
@@ -557,9 +558,16 @@ export async function deactivateSalesOrg(raw: SalesOrgDeactivationInput) {
         eq(salesOrgDistributionChannel.salesOrg, code),
       ))
       .limit(1);
-    if (area || customerArea || distributionChannelAssignment) throw new SalesOrgMaintenanceError(
-      `Sales Organization ${code} is still referenced by sales-area configuration or Distribution Channel assignments and cannot be deactivated.`,
-      'Retain the organization while any Sales Area or Distribution Channel assignment depends on it.',
+    const [divisionAssignment] = await tx.select({ salesOrg: salesOrgDivision.salesOrg })
+      .from(salesOrgDivision)
+      .where(and(
+        eq(salesOrgDivision.client, client),
+        eq(salesOrgDivision.salesOrg, code),
+      ))
+      .limit(1);
+    if (area || customerArea || distributionChannelAssignment || divisionAssignment) throw new SalesOrgMaintenanceError(
+      `Sales Organization ${code} is still referenced by sales-area configuration or Distribution Channel/Division assignments and cannot be deactivated.`,
+      'Retain the organization while any Sales Area or Distribution Channel/Division assignment depends on it.',
     );
 
     await tx.update(salesOrgTable).set({ isActive: false, changedBy, changedAt: new Date() }).where(and(

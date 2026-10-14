@@ -22,7 +22,9 @@ import { listSupplierPurchasingPartners } from '../../src/modules/foundation/sup
 import { getCustomerCompany } from '../../src/modules/foundation/customer-companies';
 import { getCustomerSalesArea } from '../../src/modules/foundation/customer-sales-areas';
 import { defineCompanyCode } from '../../src/modules/foundation/company-code-definition';
-import { saveSalesOrgDefinition } from '../../src/modules/foundation/sales-organization-maintenance';
+import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/foundation/sales-organization-maintenance';
+import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
+import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 
 const PASSWORD = 'browser-check-2026';
@@ -4007,6 +4009,275 @@ async function divisions(ctx: BrowserContext) {
   await distributionDimensionDefinition(ctx, 'division');
 }
 
+async function salesOrgDivisionAssignment(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const route = `${BASE}/config/sales-orgs/assign-division`;
+  const assignmentActivity = 'CFG.ORG.SALESORG.ASSIGN_DIVISION';
+  const passwordHash = await hashPassword(PASSWORD);
+  console.log('OVXA: verify tenant-local Division assignment, active-only F4, duplicate no-op, cross-channel removal guard, audit and exact authority');
+
+  // Create inactive definitions through the supported services. They must remain
+  // retained but must not appear in either assignment value-help dialog.
+  const inactiveSalesOrg = await saveSalesOrgDefinition({
+    client: CLIENT,
+    changedBy: 'browser.admin',
+    mode: 'CREATE',
+    salesOrg: 'Z900',
+    expectedVersion: 0,
+    values: { name: 'OVXA Inactive Organization', address: { country: 'KW' } },
+  });
+  assert.equal(inactiveSalesOrg.created, true);
+  await deactivateSalesOrg({
+    client: CLIENT, changedBy: 'browser.admin', salesOrg: 'Z900', expectedVersion: 1,
+    reason: 'OVXA browser acceptance inactive F4 fixture',
+  });
+  const inactiveDivision = await saveDivisionDefinition({
+    client: CLIENT,
+    changedBy: 'browser.admin',
+    mode: 'CREATE',
+    division: 'Z9',
+    expectedVersion: 0,
+    values: { name: 'Inactive OVXA div' },
+  });
+  assert.equal(inactiveDivision.created, true);
+  await deactivateDivision({
+    client: CLIENT, changedBy: 'browser.admin', division: 'Z9', expectedVersion: 1,
+    reason: 'OVXA browser acceptance inactive F4 fixture',
+  });
+
+  const roleCapabilities = await withTenant(CLIENT, async (tx) => {
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'OVXA_ASSIGN', 'OVXA Division Assignment Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'OVXA_ASSIGN', ${assignmentActivity}, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role (client, code, name, is_read_only, created_by)
+      values (${CLIENT}, 'OVXA_DIV_DEF', 'OVXA Division Definition Only', false, 'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability (client, role_code, capability_code, created_by)
+      values (${CLIENT}, 'OVXA_DIV_DEF', 'CFG.ORG.DIVISION.DEFINE', 'BROWSER_FIXTURE')`);
+    const assignerId = randomUUID();
+    const definerId = randomUUID();
+    const viewerId = randomUUID();
+    for (const [id, username, fullName, roleCode] of [
+      [assignerId, 'division.assigner', 'OVXA Division Assigner', 'OVXA_ASSIGN'],
+      [definerId, 'division.definer', 'OVXA Division Definition-Only User', 'OVXA_DIV_DEF'],
+      [viewerId, 'division.viewer', 'OVXA Auditor', 'AUDITOR'],
+    ]) {
+      await tx.execute(sql`insert into app_user
+        (id, client, username, full_name, password_hash, must_change_password, created_by)
+        values (${id}, ${CLIENT}, ${username}, ${fullName}, ${passwordHash}, false, 'BROWSER_FIXTURE')`);
+      await tx.execute(sql`insert into user_role (client, user_id, role_code, created_by)
+        values (${CLIENT}, ${id}, ${roleCode}, 'BROWSER_FIXTURE')`);
+    }
+    await tx.execute(sql`insert into config_activity_status (client, activity_code, status, created_by)
+      values (${CLIENT}, ${assignmentActivity}, 'NOT_STARTED', 'BROWSER_FIXTURE') on conflict do nothing`);
+    await tx.execute(sql`update config_activity_status
+      set status = 'NOT_STARTED', completed_at = null, completed_by = null,
+          changed_by = 'BROWSER_FIXTURE', changed_at = now()
+      where client = ${CLIENT} and activity_code = ${assignmentActivity}`);
+    return tx.execute(sql`select capability_code from role_capability
+      where client = ${CLIENT} and role_code = 'OVXA_ASSIGN' order by capability_code`);
+  }) as unknown as Array<{ capability_code: string }>;
+  assert.deepEqual(roleCapabilities.map((row) => row.capability_code), [assignmentActivity]);
+
+  const standardSetup = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select count(*)::int as pair_count,
+           (select count(*)::int from sales_area
+             where client = ${CLIENT} and sales_org = '1000'
+               and distribution_channel = '01' and division = '01') as area_count
+      from sales_org_division
+     where client = ${CLIENT} and sales_org = '1000' and division = '01'
+  `))) as unknown as Array<{ pair_count: number; area_count: number }>;
+  assert.deepEqual(Array.from(standardSetup), [{ pair_count: 1, area_count: 1 }]);
+  const defaultPairHistory = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org_division', '1000/01'));
+  assert.equal(defaultPairHistory.length, 1);
+  assert.equal(defaultPairHistory[0].transactionCode, assignmentActivity);
+  console.log('  ✓ onboarding creates the default Sales Organization/Division pair before the dependent Sales Area and records history');
+
+  async function signInAs(username: string) {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.goto(`${BASE}/signin`, { waitUntil: 'commit' });
+    await page.locator('[name="client"]').fill(CLIENT);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/', { waitUntil: 'commit' });
+  }
+
+  async function assignmentRow() {
+    const rows = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+      select client, sales_org, division, created_by
+        from sales_org_division
+       where client = ${CLIENT} and sales_org = '1000' and division = '02'
+    `))) as unknown as Array<{ client: string; sales_org: string; division: string; created_by: string }>;
+    assert.ok(rows.length <= 1, 'OVXA pair is tenant-local and unique.');
+    return rows[0];
+  }
+
+  async function chooseSalesOrg(code: string) {
+    const field = page.locator('#ovxa-sales-org');
+    await page.getByRole('button', { name: 'Open Sales Organization lookup (F4)', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('heading', { name: 'Sales Organization lookup', exact: true }).waitFor();
+    const search = dialog.getByLabel('Search by code or name');
+    await search.fill('Z900');
+    await dialog.getByText('No matching active Sales Organizations are available.', { exact: true }).waitFor();
+    await search.fill(code);
+    const choice = dialog.getByRole('button', { name: new RegExp(code) });
+    await choice.waitFor();
+    await choice.click();
+    assert.equal(await field.inputValue(), code);
+  }
+
+  async function chooseDivision(code: string) {
+    const field = page.locator('#ovxa-division');
+    await page.getByRole('button', { name: 'Open Division lookup (F4)', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('heading', { name: 'Division lookup', exact: true }).waitFor();
+    const search = dialog.getByLabel('Search by code or name');
+    await search.fill('Z9');
+    await dialog.getByText('No matching active Divisions are available.', { exact: true }).waitFor();
+    await search.fill(code);
+    const choice = dialog.getByRole('button', { name: new RegExp(code) });
+    await choice.waitFor();
+    await choice.click();
+    assert.equal(await field.inputValue(), code);
+  }
+
+  await signInAs('division.assigner');
+  await page.goto(route, { waitUntil: 'commit' });
+  // The server-rendered shell can arrive before the client form hydrates.
+  await page.waitForLoadState('load');
+  await page.getByRole('heading', { level: 1, name: 'Sales Organization / Division assignments', exact: true }).waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(mobileWidth <= 391, `OVXA must fit a 390px viewport (document width ${mobileWidth}px).`);
+  await chooseSalesOrg('1000');
+  await chooseDivision('02');
+  console.log('  ✓ active-only Sales Organization and Division F4 lists are keyboard/button accessible and fit mobile');
+
+  // F4 excludes inactive rows, and direct form submissions cannot bypass that rule.
+  await page.locator('#ovxa-sales-org').fill('Z900');
+  await page.getByRole('button', { name: 'Assign Division', exact: true }).click();
+  await page.getByRole('alert').getByText(/Sales Organization Z900 is inactive/).waitFor();
+  await page.locator('#ovxa-sales-org').fill('1000');
+  await page.locator('#ovxa-division').fill('Z9');
+  await page.getByRole('button', { name: 'Assign Division', exact: true }).click();
+  await page.getByRole('alert').getByText(/Division Z9 is inactive/).waitFor();
+  await page.locator('#ovxa-division').fill('02');
+
+  // Forge tenant and actor values; the action must use the authenticated session instead.
+  const assignmentForm = page.locator('form').filter({ has: page.locator('#ovxa-sales-org') });
+  await assignmentForm.evaluate((form) => {
+    for (const [name, value] of Object.entries({ client: '0100', changedBy: 'spoofed.actor' })) {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = name; input.value = value; form.appendChild(input);
+    }
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await assignmentForm.getByRole('button', { name: 'Assign Division', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Division 02 assigned to Sales Organization 1000; change history recorded.', { exact: true },
+  ).waitFor();
+  assert.deepEqual(await assignmentRow(), {
+    client: CLIENT, sales_org: '1000', division: '02', created_by: 'division.assigner',
+  });
+  let history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org_division', '1000/02'));
+  assert.equal(history.length, 1);
+  assert.equal(history[0].changedBy, 'division.assigner');
+  assert.equal(history[0].transactionCode, assignmentActivity);
+  assert.deepEqual(history[0].items.map((item) => [item.fieldName, item.oldValue, item.newValue, item.isSecurityRelevant]), [
+    ['salesOrg', null, '1000', 'true'],
+    ['division', null, '02', 'true'],
+  ]);
+  let activity = (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select status, completed_by from config_activity_status
+     where client = ${CLIENT} and activity_code = ${assignmentActivity}
+  `))) as unknown as Array<{ status: string; completed_by: string | null }>;
+  assert.equal(activity[0]?.status, 'COMPLETED');
+  assert.equal(activity[0]?.completed_by, 'division.assigner');
+  console.log('  ✓ assignment uses the session tenant/actor and records a security-relevant create event');
+
+  await assignmentForm.getByRole('button', { name: 'Assign Division', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Division 02 is already assigned to Sales Organization 1000; no change made.', { exact: true },
+  ).waitFor();
+  assert.equal((await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org_division', '1000/02'))).length, 1);
+  console.log('  ✓ repeating a pair is an idempotent no-op with no duplicate history');
+
+  // Add a valid second channel and a dependent area solely as a guarded browser fixture.
+  const channelAssignment = await assignSalesOrgDistributionChannel({
+    client: CLIENT, changedBy: 'browser.admin', salesOrg: '1000', distributionChannel: '02',
+  });
+  assert.equal(channelAssignment.assigned, true);
+  await withTenant(CLIENT, (tx) => tx.execute(sql`
+    insert into sales_area (client, sales_org, distribution_channel, division, name, created_by)
+    values (${CLIENT}, '1000', '02', '02', 'OVXA cross-channel dependency fixture', 'BROWSER_FIXTURE')
+  `));
+
+  const list = page.getByRole('list', { name: 'Current assignments', exact: true });
+  const pairItem = list.locator('li').filter({ hasText: /1000/ }).filter({ hasText: /02/ });
+  assert.equal(await pairItem.count(), 1);
+  await pairItem.getByRole('button', { name: 'Remove assignment', exact: true }).click();
+  await pairItem.getByText(/Remove Division 02 from Sales Organization 1000\?.*across any Distribution Channel/).waitFor();
+  await pairItem.getByRole('button', { name: 'Confirm removal', exact: true }).click();
+  await page.getByRole('alert').getByText(/while a Sales Area uses the pair/).waitFor();
+  assert.ok(await assignmentRow());
+  assert.equal((await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org_division', '1000/02'))).length, 1);
+  await pairItem.getByRole('button', { name: 'Keep assignment', exact: true }).click();
+  console.log('  ✓ removal is blocked by a dependent Sales Area on another channel, with no audit or data loss');
+
+  await withTenant(CLIENT, (tx) => tx.execute(sql`
+    delete from sales_area
+     where client = ${CLIENT} and sales_org = '1000'
+       and distribution_channel = '02' and division = '02'
+  `));
+  const channelRemoval = await unassignSalesOrgDistributionChannel({
+    client: CLIENT, changedBy: 'browser.admin', salesOrg: '1000', distributionChannel: '02',
+  });
+  assert.equal(channelRemoval.removed, true);
+
+  const removableItem = page.getByRole('list', { name: 'Current assignments', exact: true })
+    .locator('li').filter({ hasText: /1000/ }).filter({ hasText: /02/ });
+  await removableItem.getByRole('button', { name: 'Remove assignment', exact: true }).click();
+  await removableItem.getByRole('button', { name: 'Confirm removal', exact: true }).click();
+  await page.getByRole('status').getByText(
+    'Division 02 removed from Sales Organization 1000; change history retained.', { exact: true },
+  ).waitFor();
+  assert.equal(await assignmentRow(), undefined);
+  history = await withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'sales_org_division', '1000/02'));
+  assert.equal(history.length, 2);
+  const deletion = history.find((entry) => entry.changeType === 'DELETE');
+  assert.ok(deletion);
+  assert.equal(deletion.changedBy, 'division.assigner');
+  assert.equal(deletion.transactionCode, assignmentActivity);
+  assert.deepEqual(deletion.items.map((item) => [item.fieldName, item.oldValue, item.newValue, item.isSecurityRelevant]), [
+    ['salesOrg', '1000', null, 'true'],
+    ['division', '02', null, 'true'],
+  ]);
+  assert.ok(await withTenant(CLIENT, async (tx) => {
+    const rows = await tx.execute(sql`select 1 from sales_org_division
+      where client = ${CLIENT} and sales_org = '1000' and division = '01'`);
+    return (rows as unknown as unknown[]).length === 1;
+  }), 'The default 1000/01 pair must remain intact.');
+  console.log('  ✓ unused pair can be removed with actor-attributed delete history retained');
+
+  // OVX5 or OVXB definition rights alone do not confer the OVXA assignment capability.
+  for (const username of ['division.definer', 'division.viewer']) {
+    await signInAs(username);
+    await page.goto(route, { waitUntil: 'commit' });
+    await page.getByRole('heading', { level: 1, name: 'Sales Organization / Division assignments', exact: true }).waitFor();
+    await page.getByText('Read-only view. Changes require authority CFG.ORG.SALESORG.ASSIGN_DIVISION.', { exact: true }).waitFor();
+    assert.equal(await page.locator('[name="salesOrg"], [name="division"]').count(), 0);
+    assert.equal(await page.getByRole('button', { name: /lookup \(F4\)/i }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Remove assignment', exact: true }).count(), 0);
+    console.log(`  ✓ ${username} is display-only without the exact OVXA assignment authority`);
+  }
+
+  await signInAs('division.assigner');
+  await page.goto(route, { waitUntil: 'commit' });
+  await page.getByRole('heading', { level: 1, name: 'Sales Organization / Division assignments', exact: true }).waitFor();
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
@@ -4019,6 +4290,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchasing-groups': purchasingGroups,
   'sales-orgs': salesOrgDefinition,
   'sales-org-company-code': salesOrgCompanyCodeAssignment,
+  'sales-org-division': salesOrgDivisionAssignment,
   'distribution-channels': distributionChannels,
   divisions,
   'payment-terms': paymentTerms,

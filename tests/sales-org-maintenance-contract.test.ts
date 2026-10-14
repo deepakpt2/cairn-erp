@@ -99,7 +99,8 @@ describe('SCR-020 Sales Organization definition contract', () => {
     expect(service).toContain('eq(businessPartner.isBlocked, false)');
     expect(service).toContain('from(salesArea)');
     expect(service).toContain('from(customerSalesArea)');
-    expect(service).toContain('Retain the organization while sales-area records depend on it.');
+    expect(service).toContain('Retain the organization while any Sales Area or Distribution Channel/Division assignment depends on it.');
+    expect(service).toContain('from(salesOrgDivision)');
   });
 
   it('aligns Drizzle definitions and preflights legacy migration data before DDL', () => {

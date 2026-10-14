@@ -21,6 +21,7 @@ export const TARGETS = [
   { id: 'purchasing-groups', client: 'T978', label: 'SCR-019 Purchasing Group create/change/delete, standalone contacts, history and exact-capability access' },
   { id: 'sales-orgs', client: 'T977', label: 'SCR-020 Sales Organization create/change/deactivate, retained history, separate Company Code assignment and exact-capability access' },
   { id: 'sales-org-company-code', client: 'T976', label: 'SCR-021 OVX3 Sales Organization to Company Code F4 assignment, audited reassignment and exact-capability access' },
+  { id: 'sales-org-division', client: 'T973', label: 'OVXA Sales Organization / Division assignment, active F4, idempotence, cross-channel removal guard, history and exact-capability access' },
   { id: 'distribution-channels', client: 'T975', label: 'SCR-022 OVXI Distribution Channel create/change/copy/deactivate and exact-capability access' },
   { id: 'divisions', client: 'T974', label: 'SCR-022 OVXB Division create/change/copy/deactivate and exact-capability access' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
