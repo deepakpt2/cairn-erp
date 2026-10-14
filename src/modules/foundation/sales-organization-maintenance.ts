@@ -10,7 +10,14 @@ import { businessPartner, bpRole } from './business-partner-schema';
 import { customerSalesArea } from './customer-sales-area-schema';
 import { createCentralAddress } from './central-address-maintenance';
 import { centralAddress } from './central-address-schema';
-import { factoryCalendar as factoryCalendarTable, purchasingOrg as purchasingOrgTable, salesArea, salesOrg as salesOrgTable, salesOrgText } from './schema';
+import {
+  factoryCalendar as factoryCalendarTable,
+  purchasingOrg as purchasingOrgTable,
+  salesArea,
+  salesOrg as salesOrgTable,
+  salesOrgDistributionChannel,
+  salesOrgText,
+} from './schema';
 
 const SALES_ORG_ACTIVITY = 'CFG.ORG.SALESORG.DEFINE';
 const SALES_ORG_OBJECT_CLASS = 'sales_org';
@@ -543,9 +550,16 @@ export async function deactivateSalesOrg(raw: SalesOrgDeactivationInput) {
     const [customerArea] = await tx.select({ salesOrg: customerSalesArea.salesOrg }).from(customerSalesArea).where(and(
       eq(customerSalesArea.client, client), eq(customerSalesArea.salesOrg, code),
     )).limit(1);
-    if (area || customerArea) throw new SalesOrgMaintenanceError(
-      `Sales Organization ${code} is still referenced by sales-area configuration and cannot be deactivated.`,
-      'Retain the organization while sales-area records depend on it.',
+    const [distributionChannelAssignment] = await tx.select({ salesOrg: salesOrgDistributionChannel.salesOrg })
+      .from(salesOrgDistributionChannel)
+      .where(and(
+        eq(salesOrgDistributionChannel.client, client),
+        eq(salesOrgDistributionChannel.salesOrg, code),
+      ))
+      .limit(1);
+    if (area || customerArea || distributionChannelAssignment) throw new SalesOrgMaintenanceError(
+      `Sales Organization ${code} is still referenced by sales-area configuration or Distribution Channel assignments and cannot be deactivated.`,
+      'Retain the organization while any Sales Area or Distribution Channel assignment depends on it.',
     );
 
     await tx.update(salesOrgTable).set({ isActive: false, changedBy, changedAt: new Date() }).where(and(

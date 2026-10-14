@@ -61,8 +61,9 @@ const ACTIVITIES: Activity[] = [
   { code: 'CFG.ORG.SALESORG.DEFINE', area: 'SALES', title: 'Define Sales Organizations', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Selling and Sales Areas', wizardStage: 'ONBOARDING', route: '/config/sales-orgs' },
   { code: 'CFG.ORG.SALESORG.ASSIGN_COMPANY', area: 'SALES', title: 'Assign Sales Organization to Company Code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.ORG.SALESORG.DEFINE'], enables: 'Sales accounting', wizardStage: 'ONBOARDING', route: '/config/sales-orgs/assign-company' },
   { code: 'CFG.ORG.DISTCHANNEL.DEFINE', area: 'SALES', title: 'Define distribution channel', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Sales areas', wizardStage: 'ONBOARDING', route: '/config/distribution-channels' },
+  { code: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL', area: 'SALES', title: 'Assign Distribution Channel to Sales Organization', kind: 'ASSIGN', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE'], enables: 'Sales Area eligibility', wizardStage: 'ONBOARDING', route: '/config/sales-orgs/assign-distribution-channel' },
   { code: 'CFG.ORG.DIVISION.DEFINE', area: 'SALES', title: 'Define division', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE'], enables: 'Product line reporting', wizardStage: 'ONBOARDING', route: '/config/divisions' },
-  { code: 'CFG.ORG.SALESAREA.DEFINE', area: 'SALES', title: 'Define sales area', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.DIVISION.DEFINE'], enables: 'Sales master data and documents', wizardStage: 'ONBOARDING', route: '/config/sales-areas' },
+  { code: 'CFG.ORG.SALESAREA.DEFINE', area: 'SALES', title: 'Define sales area', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESORG.DEFINE', 'CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL', 'CFG.ORG.DIVISION.DEFINE'], enables: 'Sales master data and documents', wizardStage: 'ONBOARDING', route: '/config/sales-areas' },
   { code: 'CFG.SALES.PRICING.DEFINE', area: 'SALES', title: 'Define pricing procedure', kind: 'DEFINE', prerequisites: ['CFG.ORG.SALESAREA.DEFINE'], enables: 'Price determination', wizardStage: 'ONBOARDING', route: '/config/pricing-procedures' },
   { code: 'CFG.SALES.CONDITION.MAINTAIN', area: 'SALES', title: 'Maintain condition records', kind: 'DEFINE', prerequisites: ['CFG.SALES.PRICING.DEFINE'], enables: 'Actual prices on documents', wizardStage: 'STANDARD', route: '/config/conditions' },
 
@@ -100,6 +101,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'CFG.ORG.STORAGELOC.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Storage Locations' },
   { code: 'CFG.ORG.SALESORG.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change and deactivate tenant-scoped Sales Organizations' },
   { code: 'CFG.ORG.SALESORG.ASSIGN_COMPANY', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Assign an active tenant Sales Organization to one active Company Code' },
+  { code: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Assign or remove tenant Sales Organization and Distribution Channel pairs' },
   { code: 'CFG.ORG.DISTCHANNEL.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change, copy and deactivate tenant-scoped Distribution Channels' },
   { code: 'CFG.ORG.DIVISION.DEFINE', module: 'SALES', action: 'CONFIGURE', posting: false, description: 'Define, change, copy and deactivate tenant-scoped Divisions' },
   { code: 'CFG.PROC.PURORG.DEFINE', module: 'PROC', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Purchasing Organisations' },
@@ -198,6 +200,7 @@ const REGISTRY: Array<{
   { ourCode: 'CFG.ORG.STORAGELOC.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Storage Location definitions', route: '/config/storage-locations', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX09'], description: 'Create, change and deactivate Storage Locations within an active tenant Plant; negative-stock allowance is stored configuration only.' },
   { ourCode: 'CFG.ORG.SALESORG.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Sales Organization definition', route: '/config/sales-orgs', tier: 'TIER_2_CONFIGURED', conformance: 'B', description: 'Create, change and soft-deactivate tenant Sales Organizations with retained history; Company Code assignment is separate in SCR-021. Exact on-prem GUI field parity with the reference product remains under review.' },
   { ourCode: 'CFG.ORG.SALESORG.ASSIGN_COMPANY', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Assign Sales Organization to Company Code', route: '/config/sales-orgs/assign-company', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OVX3'], description: 'Assign one active tenant Sales Organization to one active Company Code; reassignment is audited and unassignment is not included.' },
+  { ourCode: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Assign Distribution Channel to Sales Organization', route: '/config/sales-orgs/assign-distribution-channel', tier: 'TIER_3_MAPPED', conformance: 'B', aliases: ['OVXK'], description: 'Maintain tenant-local Sales Organization and Distribution Channel pairs; duplicate assignment is an idempotent no-op and removal is blocked while any Sales Area uses the pair.' },
   { ourCode: 'CFG.ORG.DISTCHANNEL.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Distribution Channel definitions', route: '/config/distribution-channels', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OVXI'], description: 'Maintain tenant-local Distribution Channels; Sales Organization assignments and Sales Area combinations are separate.' },
   { ourCode: 'CFG.ORG.DIVISION.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'SALES', title: 'Division definitions', route: '/config/divisions', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OVXB'], description: 'Maintain tenant-local Divisions; Sales Organization assignments and Sales Area combinations are separate.' },
   { ourCode: 'CFG.PROC.PURORG.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'PROC', title: 'Purchasing Organisation definitions', route: '/config/purchasing-orgs', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX08'], description: 'Define the tenant-local code and name, retain change history and deactivate; Company Code and Plant assignments remain separate, and supplier-purchasing use requires one Company Code.' },
@@ -304,6 +307,24 @@ async function main() {
              case when exists (select 1 from sales_org o where o.client = c.client and o.company_code is not null) then 'COMPLETED' else 'NOT_STARTED' end,
              (select max(coalesce(o.changed_at, o.created_at)) from sales_org o where o.client = c.client and o.company_code is not null),
              case when exists (select 1 from sales_org o where o.client = c.client and o.company_code is not null) then 'SEED' else null end,
+             'SEED'
+        from client c
+      on conflict (client, activity_code) do nothing
+    `);
+
+    // OVXK is newly actionable for existing tenants. Backfill completion only
+    // when a real Sales Organization/Distribution Channel pair already exists.
+    await client.unsafe(`
+      insert into config_activity_status (client, activity_code, status, completed_at, completed_by, created_by)
+      select c.client,
+             'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
+             case when exists (
+               select 1 from sales_org_distribution_channel a where a.client = c.client
+             ) then 'COMPLETED' else 'NOT_STARTED' end,
+             (select max(a.created_at) from sales_org_distribution_channel a where a.client = c.client),
+             case when exists (
+               select 1 from sales_org_distribution_channel a where a.client = c.client
+             ) then 'SEED' else null end,
              'SEED'
         from client c
       on conflict (client, activity_code) do nothing

@@ -35,6 +35,7 @@ import {
   purchasingOrgPlant,
   salesArea,
   salesOrg,
+  salesOrgDistributionChannel,
   salesOrgText,
   storageLocation,
   supplierPartnerFunction,
@@ -533,6 +534,34 @@ export async function applyStandardPackage(
       .insert(division)
       .values({ client, division: div.code, name: div.name, createdBy: activatedBy })
       .onConflictDoNothing();
+  }
+
+  const [defaultSalesOrgChannel] = await tx
+    .insert(salesOrgDistributionChannel)
+    .values({
+      client,
+      salesOrg: '1000',
+      distributionChannel: '01',
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing()
+    .returning({ salesOrg: salesOrgDistributionChannel.salesOrg });
+  if (defaultSalesOrgChannel) {
+    const mappingChangeId = await recordChange(tx, {
+      client,
+      objectClass: 'sales_org_distribution_channel',
+      objectKey: '1000/01',
+      changeType: 'CREATE',
+      changedBy: activatedBy,
+      transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
+      after: { salesOrg: '1000', distributionChannel: '01' },
+      securityRelevantFields: ['salesOrg', 'distributionChannel'],
+      fieldLabels: {
+        salesOrg: 'Sales Organization',
+        distributionChannel: 'Distribution Channel',
+      },
+    });
+    if (!mappingChangeId) throw new Error('Standard Sales Organization/Distribution Channel assignment could not be recorded.');
   }
 
   await tx

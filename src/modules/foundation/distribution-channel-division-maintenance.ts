@@ -5,7 +5,12 @@ import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { changeDocument } from '../../platform/tables/audit-trail';
-import { division as divisionTable, distributionChannel as distributionChannelTable, salesArea } from './schema';
+import {
+  division as divisionTable,
+  distributionChannel as distributionChannelTable,
+  salesArea,
+  salesOrgDistributionChannel,
+} from './schema';
 
 const DISTRIBUTION_CHANNEL_ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
 const DIVISION_ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
@@ -203,6 +208,18 @@ async function hasSalesAreaReference(tx: Tx, kind: DefinitionKind, client: strin
   return reference.length > 0;
 }
 
+async function hasSalesOrgAssignmentReference(tx: Tx, client: string, code: string): Promise<boolean> {
+  const [reference] = await tx
+    .select({ salesOrg: salesOrgDistributionChannel.salesOrg })
+    .from(salesOrgDistributionChannel)
+    .where(and(
+      eq(salesOrgDistributionChannel.client, client),
+      eq(salesOrgDistributionChannel.distributionChannel, code),
+    ))
+    .limit(1);
+  return Boolean(reference);
+}
+
 async function saveDefinition(kind: DefinitionKind, payload: SavePayload) {
   const { client, changedBy, mode, code, expectedVersion, reason, name } = payload;
   return withTenant(client, async (tx) => {
@@ -283,6 +300,13 @@ async function deactivateDefinition(kind: DefinitionKind, payload: DeactivationP
     if (!current.isActive) {
       await markActivityComplete(tx, client, activity(kind), changedBy);
       return { code, changed: false as const, isActive: false, version };
+    }
+
+    if (kind === 'distributionChannel' && await hasSalesOrgAssignmentReference(tx, client, code)) {
+      throw new DistributionDimensionMaintenanceError(
+        `Distribution Channel ${code} is still assigned to one or more Sales Organizations and cannot be deactivated.`,
+        'Remove its Sales Organization assignments first; retain the Distribution Channel while any assignment depends on it.',
+      );
     }
 
     if (await hasSalesAreaReference(tx, kind, client, code)) {

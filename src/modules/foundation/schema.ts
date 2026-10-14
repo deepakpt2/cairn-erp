@@ -417,6 +417,36 @@ export const distributionChannel = pgTable(
   (t) => [primaryKey({ columns: [t.client, t.distributionChannel] })],
 );
 
+/** Sales Organization ↔ Distribution Channel assignment — OVXK. */
+export const salesOrgDistributionChannel = pgTable(
+  'sales_org_distribution_channel',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+    // Match the existing master key type; the OVXI contract is enforced as CHAR 2 below.
+    distributionChannel: varchar('distribution_channel', { length: 4 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.salesOrg, t.distributionChannel] }),
+    check('sales_org_distribution_channel_sales_org_format_ck', sql`${t.salesOrg} ~ '^[A-Z0-9]{4}$'`),
+    check('sales_org_distribution_channel_channel_format_ck', sql`${t.distributionChannel} ~ '^[A-Z0-9]{2}$'`),
+    foreignKey({
+      name: 'sales_org_distribution_channel_sales_org_fk',
+      columns: [t.client, t.salesOrg],
+      foreignColumns: [salesOrg.client, salesOrg.salesOrg],
+    }),
+    foreignKey({
+      name: 'sales_org_distribution_channel_definition_fk',
+      columns: [t.client, t.distributionChannel],
+      foreignColumns: [distributionChannel.client, distributionChannel.distributionChannel],
+    }),
+    index('sales_org_distribution_channel_channel_idx').on(t.client, t.distributionChannel, t.salesOrg),
+  ],
+);
+
 export const division = pgTable(
   'division',
   {
