@@ -654,6 +654,11 @@ Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin
 
 **Browser/DB boundary.** No live Playwright or DB-backed acceptance ran. Preflight found no `.env.local`/database environment variables, no PostgreSQL server or binaries, and connection refused at local `127.0.0.1:5432`. The configured test target remains local; uploaded remote database credentials were not used or changed, and no DB writes were attempted. Actual OKKP browser acceptance remains blocked pending restoration/start of the local test database.
 
+
+### 26.210 B-194 — SCR-024 UI contract tests published `PUSHED · BROWSER ACCEPTANCE BLOCKED`
+
+Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/main` as a fast-forward from `574e364`. It adds the 7 passing no-DB Controlling Area UI/schema contract tests to the browser-harness suite and records B-193. No UI implementation changes were part of this test publication. Live browser acceptance remains blocked by the unavailable local PostgreSQL service; no remote database was used.
+
 ---
 
 ## §30 · Change log (continued)
@@ -705,6 +710,7 @@ recorded change, date and reason stated.
 | 2.09 | 2026-10-15 | **SCR-024 / OKKP UI implemented; UI tests deferred (B-191, §26.207; D-112–D-115).** Added the responsive Controlling Area definition and maintenance page using the exact owner-supplied Assignment Control copy, active-only Currency F4, all-definition Fiscal Year Variant F4, audited edits, immutable keys and server-provided financial-field lock state. The OX19 assignment activity remains explicitly pending. Typecheck passed; no browser/UI/behavioral tests, acceptance or database changes. | Agent |
 | 2.10 | 2026-10-15 | **SCR-024 / OKKP UI published before UI tests (B-192; R-40/D-111).** Commit `bf7c552` (`feat: add SCR-024 OKKP maintenance UI`) was pushed to `origin/main` as a fast-forward from `debe23a`. The UI implementation is published; UI/browser tests remain deferred. | Agent |
 | 2.11 | 2026-10-15 | **SCR-024 static UI contract tests added and run; browser acceptance blocked by unavailable local DB (B-193).** The targeted no-database contract suite passed 7/7. Full browser-harness suite reported 279/281 passed; 2 unrelated legacy vendor-code scans fail on `VKORG`/`VTWEG`/`SPART` entries already present before the SCR-024 UI. No Playwright/browser run or DB test was possible: `.env.local`/database environment variables are absent, local PostgreSQL is not installed/listening at `127.0.0.1:5432`, and no remote DB was contacted. Typecheck passed. | Agent |
+| 2.12 | 2026-10-15 | **SCR-024 contract-test results published (B-194).** Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/main` as a fast-forward from `574e364`. It contains the targeted no-DB contract tests and their harness registration. Browser acceptance remains pending local database availability. | Agent |
 
 ---
 
