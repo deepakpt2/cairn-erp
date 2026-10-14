@@ -24,7 +24,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
-import { country } from '../../platform/tables/reference';
+import { country, currency as currencyReference } from '../../platform/tables/reference';
 import { centralAddress } from './central-address-schema';
 
 /* ══ Enterprise structure ═══════════════════════════════════════════════════ */
@@ -525,7 +525,7 @@ export const salesArea = pgTable(
   ],
 );
 
-/** Controlling area — the cost accounting boundary, may span company codes. */
+/** Controlling Area — the cost-accounting boundary, which may span Company Codes. */
 export const controllingArea = pgTable(
   'controlling_area',
   {
@@ -533,13 +533,34 @@ export const controllingArea = pgTable(
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
     controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
-    name: varchar('name', { length: 160 }).notNull(),
+    name: varchar('name', { length: 30 }).notNull(),
+    organizationName: varchar('organization_name', { length: 30 }),
+    /** SINGLE permits one assigned Company Code; MULTIPLE permits several. */
+    companyCodeScope: varchar('company_code_scope', { length: 8 }).notNull().default('SINGLE'),
     currency: char('currency', { length: 3 }).notNull(),
-    fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }).notNull(),
+    fiscalYearVariant: varchar('fiscal_year_variant', { length: 2 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.controllingArea] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea] }),
+    check('controlling_area_key_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('controlling_area_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
+    check('controlling_area_organization_name_not_blank_ck', sql`${t.organizationName} is null or length(btrim(${t.organizationName})) > 0`),
+    check('controlling_area_company_code_scope_ck', sql`${t.companyCodeScope} in ('SINGLE', 'MULTIPLE')`),
+    check('controlling_area_currency_format_ck', sql`btrim(${t.currency}) ~ '^[A-Z]{3}$'`),
+    check('controlling_area_fiscal_year_variant_format_ck', sql`${t.fiscalYearVariant} ~ '^[A-Z0-9]{2}$'`),
+    foreignKey({
+      name: 'controlling_area_fiscal_year_variant_fk',
+      columns: [t.client, t.fiscalYearVariant],
+      foreignColumns: [fiscalYearVariant.client, fiscalYearVariant.variant],
+    }),
+    foreignKey({
+      name: 'controlling_area_currency_reference_fk',
+      columns: [t.currency],
+      foreignColumns: [currencyReference.code],
+    }),
+  ],
 );
 
 /** Assignment: company codes participating in a controlling area. */
