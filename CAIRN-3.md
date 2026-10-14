@@ -621,6 +621,16 @@ ation, application-code change, database connection/write, seed, test, commit, o
 
 Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `origin/main` as a fast-forward from `227511d`. It contains the SCR-024 backend functions and the logged owner clarifications. `npm run typecheck` passed; no behavioral test, UI test or acceptance ran. The next distinct stage is supporting functions.
 
+
+### 26.206 B-190 — SCR-024 supporting functions `COMPLETE · UI NOT STARTED`
+
+- `src/platform/posting/index.ts` takes `FOR SHARE` on the assigned Controlling Area row(s) before reading posting configuration or writing a journal document. OKKP maintenance takes `FOR UPDATE`, so the activity check and financial-field change serialize against postings until commit.
+- Journal posts already call `indexDocument` in the same transaction; their Company Code is indexed, so the SCR-024 activity query sees them. Updated the document-index contract: future non-journal operational writers must call `lockControllingAreaForCompanyCode` before configuration-dependent reads/business writes and index the document in that same transaction. Repository inspection found no non-journal operational document writers in current `src` (inventory files currently maintain master data, not operational transactions); no fictitious caller was added.
+- `src/modules/foundation/standard-config.ts` now explicitly seeds default Controlling Area `A000` with `companyCodeScope: 'SINGLE'`. The database migration already backfills zero/one assignments to SINGLE and two-or-more to MULTIPLE; no new migration or database write was needed.
+- `npm run typecheck` passed after restoring locked dependencies with `npm ci` (including the retained `@playwright/test`). No behavioral/UI tests ran; the tests stage remains separate.
+
+**Next:** SCR-024 UI for SAP T-code OKKP / Controlling Area Definition, using the already supplied exact labels and help copy. No UI work is included here.
+
 ---
 
 ## §30 · Change log (continued)
@@ -668,6 +678,7 @@ recorded change, date and reason stated.
 | 2.05 | 2026-10-14 | **SCR-024 Assignment Control and activity-lock contract clarified; backend services implemented (B-187, §26.203; R-41; D-112–D-114).** Owner supplied the exact 1:1 and 1:N dropdown wording, the cross-company Operational Chart of Accounts/Fiscal Year Variant prerequisite, the post-transaction Currency/Fiscal Year Variant lock, and duplicate-create no-op semantics. Added tenant-scoped list/F4/create/change services with audit versions, scope/cardinality guards, reference validation and activity checks over assigned Company Codes. Typecheck passed after restoring dependencies; no behavioral/UI tests ran. Supporting-function and UI stages remain separate; UI tests are deferred. | Agent |
 | 2.06 | 2026-10-14 | **SCR-024 backend services published (B-188; R-40/D-111).** Commit `ffb8a02` (`feat: add SCR-024 controlling area services`) was pushed to `origin/main` as a fast-forward from `227511d`. The backend and SCR-024 log are published before UI testing, per the standing owner instruction. Typecheck passed; no behavioral/UI tests or acceptance ran. | Agent |
 | 2.07 | 2026-10-14 | **SCR-024 Assignment Control UI copy preserved (B-189; R-42; D-115).** Recorded the owner-supplied heading, control description, both option labels and descriptions, and the general scope explanation verbatim for the later OKKP UI stage. No UI changes or tests were made. | Agent |
+| 2.08 | 2026-10-15 | **SCR-024 supporting functions implemented (B-190, §26.206).** Journal posting now acquires the shared Controlling Area row lock before database reads/writes; the standard package explicitly seeds A000 as SINGLE. Existing journal indexing was confirmed; code comments define the required early lock plus same-transaction indexing contract for future non-journal operational documents. No such non-journal transaction path currently exists in `src`. Typecheck passed; no behavioral/UI tests or database changes. | Agent |
 
 ---
 

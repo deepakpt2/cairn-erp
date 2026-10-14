@@ -74,7 +74,16 @@ export async function recordStatusChange(
   });
 }
 
-/** Add a document to the cross-class index so global search and drill-through find it. */
+/**
+ * Add a document to the cross-class index so global search and drill-through find it.
+ *
+ * Operational document writers that carry a Company Code must, in the same
+ * transaction, call `lockControllingAreaForCompanyCode` from foundation
+ * maintenance *before* their first configuration-dependent read or business
+ * write, then index the document here. Indexing alone is not a substitute for
+ * the early shared row lock: it is what lets OKKP serialize its activity check
+ * against a transaction that has not committed yet.
+ */
 export async function indexDocument(
   tx: Tx,
   input: {

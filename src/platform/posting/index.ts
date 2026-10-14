@@ -13,6 +13,7 @@
  * whole ledger rests on.
  */
 import { and, eq } from 'drizzle-orm';
+import { lockControllingAreaForCompanyCode } from '../../modules/foundation/controlling-area-maintenance';
 import { documentType } from '../../modules/foundation/schema';
 import {
   describeMissingCompanyCodeAssignments,
@@ -106,6 +107,15 @@ export async function postJournalEntry(
   const totals = computeTotals(input.lines);
   assertBalanced(totals);
   assertAccountsPresent(input.lines);
+
+  // Protect the Controlling Area's financial settings for the full transaction.
+  // Configuration maintenance takes FOR UPDATE; every journal posting takes
+  // FOR SHARE before reading company-code period/currency settings or writing
+  // the accounting document. The shared lock is held until this transaction
+  // commits, so a concurrent OKKP save cannot slip between its activity check
+  // and a posting. Non-journal operational document writers must take this same
+  // lock before their first config-dependent read or business-data write.
+  await lockControllingAreaForCompanyCode(tx, input.client, input.companyCode);
 
   // ── Phase 2 · Locking ───────────────────────────────────────────────────────
   // Lock the company code's posting period for the date being posted to, which is

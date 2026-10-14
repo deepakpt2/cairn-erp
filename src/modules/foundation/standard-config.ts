@@ -393,6 +393,7 @@ export async function applyStandardPackage(
       client,
       controllingArea: 'A000',
       name: 'Standard controlling area',
+      companyCodeScope: 'SINGLE',
       currency: input.currency,
       fiscalYearVariant: fyvKey,
       createdBy: activatedBy,
