@@ -149,7 +149,10 @@ function ControllingAreaItem({
                     minLength={1}
                     maxLength={30}
                     value={values.name}
-                    onChange={(event) => setValues((current) => ({ ...current, name: event.currentTarget.value.slice(0, 30) }))}
+                    onChange={(event) => {
+                      const name = event.currentTarget.value.slice(0, 30);
+                      setValues((current) => ({ ...current, name }));
+                    }}
                     className="field-input mt-1 min-h-11 w-full sm:min-h-9"
                     disabled={pending}
                   />
@@ -164,7 +167,10 @@ function ControllingAreaItem({
                     type="text"
                     maxLength={30}
                     value={values.organizationName}
-                    onChange={(event) => setValues((current) => ({ ...current, organizationName: event.currentTarget.value.slice(0, 30) }))}
+                    onChange={(event) => {
+                      const organizationName = event.currentTarget.value.slice(0, 30);
+                      setValues((current) => ({ ...current, organizationName }));
+                    }}
                     className="field-input mt-1 min-h-11 w-full sm:min-h-9"
                     disabled={pending}
                   />
