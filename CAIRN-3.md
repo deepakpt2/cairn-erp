@@ -804,6 +804,56 @@ After commit `97f733a` (`fix: expose OX19 assignment in workbench`) was pushed, 
 
 ---
 
+### 26.227 B-211 — Local disposable PostgreSQL acceptance environment established; SCR-026 / OB13 base accepted `ACCEPTED · ENVIRONMENT UNBLOCKED`
+
+B-210 recorded that no local PostgreSQL client or server was available. A disposable local cluster is now in use: PostgreSQL 17.11 on `127.0.0.1:5432`, database `cairn_b210`, runtime role `cairn_app` under forced row-level security and elevated migration role `cairn`. The runner has applied all 61 migrations through `0034`/`9025` — including `0032` (OX19) and `0033` (OB13) — and the global seed, leaving tenant `0100` with chart `CA01` and 74 G/L accounts. The owner-supplied remote test strings in `.env.local` remain unmodified and unused; the one authorized read-only attempt returned PostgreSQL `28P01`.
+
+This entry also records the SCR-026 / OB13 base build retroactively, because it was completed after the last log write: commits `fe1a523` (maintenance UI, service and schema `0033`), `430fa30`, `1fdebca`, `2f78c9a`, `9b61308` (superseded) and `6ed428c`. The isolated `chart-of-accounts` browser target (client `T969`) passed three times against `cairn_b210`, covering create defaults (`CA01`/`EN`/length 10/Automatic/unblocked), the immutable four-character key, Language and Group CoA F4 value helps, CREATE and CHANGE history, the derived `10 LOCKED` / `74 G/L accounts` state, account-number length locking after G/L use, one block flag gating both new G/L accounts and Company Code segments, exclusion of a blocked chart from the `/config/company-codes` F4, and the sign-out redirect. `CFG.FIN.COA.DEFINE` is `COMPLETED` with capability `FIN`/`CONFIGURE` and alias `OB13`. OVXK browser acceptance was not run, per standing owner instruction.
+
+**Next.** Settle the two open OB13 questions — the Group CoA F4 source and the Chart of Accounts lifecycle — and take the field contract for the next UI target.
+
+---
+
+### 26.228 B-212 — Owner settled the OB13 Group CoA registry and lifecycle contract `OWNER CONTRACT COMPLETE · AMENDMENT APPROVED`
+
+Rather than defer, the owner settled both open OB13 questions immediately and selected SCR-028 / `FS00` as the next target (R-49/D-121):
+
+1. Group Chart of Accounts entries live in a **separate registry table**, maintained as a **second panel inside the OB13 screen** under the same capability and activity `CFG.FIN.COA.DEFINE` — no new route, activity or capability.
+2. A four-character key is **reserved tenant-wide across both registries**: a code may be an operational Chart of Accounts or a Group CoA, never both.
+3. Registry entry fields are **Code (Char 4), Description (Char 50), Language Key (`SPRAS`, default `EN`, supported locales only) and the active flag** — no accounting attributes.
+4. **Deactivate and Reactivate are always permitted**, each written to change history with a **mandatory reason**; existing G/L accounts, Company Code assignments and Group CoA references are retained and remain readable; F4 lists exclude deactivated entries; there is no hard delete.
+5. SCR-028 / `FS00` scope is **chart-level data only**.
+
+**Next.** Implement the amendment in the standing stage order and publish it before browser tests.
+
+---
+
+### 26.229 B-213 — SCR-026 / OB13 amendment implemented and published before browser tests `PUSHED · ACCEPTANCE PENDING`
+
+Implemented UI → DB/schema → backend → supporting → tests and published as commit `a030d23`, a fast-forward from `6ed428c`, before any browser test ran (D-111 / R-35).
+
+- **UI.** New `GroupChartOfAccounts.tsx` registry panel and shared `ChartLifecycleControl.tsx`; `page.tsx` loads defined charts, registry rows and F4 choices in one pass; three new capability-gated server actions plus `revalidateChartRoutes`; a `Deactivated` chip, per-row lifecycle control and `Change settings` summary in the chart list.
+- **DB/schema.** `group_chart_of_accounts` (`0034`): primary key `(client, group_chart_of_accounts)`, key format `^[A-Z0-9]{4}$`, 1–50 description, `SPRAS` two-letter and `= 'EN'` checks with an `EN` default, active flag defaulting true, cascading tenant foreign key and an active-lookup index. The chart's `group_chart` foreign key is re-pointed at the registry. `public.coa_key_registry_exclusive()` with triggers on both tables enforces tenant-wide key reservation by raising `unique_violation`; EXECUTE is revoked from PUBLIC and granted to `cairn_app`. `0034` refuses to run when any `group_chart` reference already exists rather than converting accounting structure. `9025` enables and forces RLS with a `tenant_isolation` policy, revokes PUBLIC and grants DML to `cairn_app`. Both were applied to `cairn_b210` and verified by a read-only structural script.
+- **Backend.** `listGroupChartsOfAccounts`, `saveGroupChartOfAccounts` (CREATE/CHANGE, version-checked, refuses edits to deactivated entries, reserves keys against the operational registry), and `setChartOfAccountsActive` / `setGroupChartOfAccountsActive` under an advisory lock and `FOR UPDATE`, no-op when already in the requested state, recorded as `'CHANGE'` history with `isActive` as a security-relevant field and a mandatory 1–500 character reason. The Group CoA reference is validated **only when it changes**, so deactivating a registry entry can never strand an existing chart; the Group CoA F4 offers active registry rows only.
+- **Supporting.** Seed term `CFG.FIN.COA.DEFINE` description restated for both registries; roughly 31 catalogue keys added.
+- **Verification before publication.** Typecheck exit 0; `npm run build` exit 0; DB-backed `chart-of-accounts-maintenance` 8/8; targeted DB-free harness 76/76 across `browser-targets`, `chart-of-accounts-ui-contract` and `chart-of-accounts-migration-contract`; related DB regressions 86/86 across 7 files.
+
+**Next.** Run the isolated `chart-of-accounts` browser acceptance against `cairn_b210`.
+
+---
+
+### 26.230 B-214 — SCR-026 / OB13 amendment browser acceptance passed `ACCEPTED · PUBLISHED`
+
+The isolated `chart-of-accounts` target passed on `cairn_b210` (client `T969`) covering registry create with tenant-wide key reservation refused in both directions; OB13 create defaults with Language and Group CoA F4 value helps, the Group CoA offered from the registry only; account-number length locking after G/L use and one block flag gating both new G/L accounts and Company Code segments; deactivate/reactivate requiring an audited reason, retaining records and gating new use; and Group CoA lifecycle with F4 exclusion, a retained non-stranding reference on `B001`, reactivation and `group_chart_of_accounts` history. The harness epilogue passed — full-page review screenshot, sign-out redirect and protected-route redirect with no browser runtime errors. Fixture `T969` was cleaned to zero rows in `client`, both registries, `gl_account` and `change_document`; seed tenant `0100` was left with `CA01` active and unblocked and 74 G/L accounts.
+
+Two acceptance-script defects were found and corrected, published as `0b9cf7e` (fast-forward from `a030d23`). The modal lifecycle dialog left open at the end of the scenario hid the header Sign out button, so the click timed out after 30 s and the still-pending `waitForURL` rejected during `browser.close()` — an unhandled rejection that masked the real error; the script now closes it, matching on the entry key because the control re-labels itself to the opposite action after a save. Separately, the script asserted the Group CoA F4 while the reserved key `GR01` was still in the create form's key field, which the F4 correctly excludes as the chart's own key; it now clears that field first, and sends the current version when proving the inactive guard rather than the stale-version guard. The UI contract was corrected to assert the amended group-specific submit labels.
+
+**Environment note.** `next dev` was OOM-killed twice by the kernel on this 2 GB host (`next-server` RSS 1.07 GB) during the epilogue, so acceptance was run against the production build — `npm run build` then `npm run start` with `CAIRN_ENV=development`, 189 MB RSS. That gates identically because the application reads `CAIRN_ENV` and never `NODE_ENV`. The target then completed in 9.3 s, well inside the unchanged 120 s contract deadline; a temporary per-target deadline raise used while diagnosing the masked timeout was reverted, so no harness contract was weakened.
+
+**Next.** Request the owner field contract for SCR-028 / `FS00` G/L account master maintenance, chart-level scope per B-212. Do not run OVXK browser acceptance.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-2.md` §30 from version 1.69. Same rules: append only, one row per
@@ -870,6 +920,10 @@ recorded change, date and reason stated.
 | 2.26 | 2026-10-15 | **B-207 OX19 implementation published (B-208, §26.224).** Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to the explicit GitHub remote as a fast-forward from `484ea69` to `main`. The published code is implementation only; no tests or acceptance ran, and migration `0032` remains unapplied. | Agent |
 | 2.27 | 2026-10-15 | **OX19 workbench discovery corrected and DB-free contract suite prepared (B-209, §26.225).** Added the OX19 route to the workbench's built routes and global activity seed, removed its stale unbuilt exclusion, updated the OKKP contract assertion, and registered targeted OX19 contract coverage in the DB-free harness. Typecheck and diff check passed; the new suite has not yet run. No local PostgreSQL/client or DB environment is present, so no DB-backed tests/browser acceptance or migration application; no uploaded remote DB credentials were used. | Agent |
 | 2.28 | 2026-10-15 | **OX19 DB-free test stage partially verified (B-210, §26.226).** Targeted OX19/OKKP/Company Code CoA contract suites passed 18/18. Full no-database browser harness passed 288/290 across 54 files; the two known unrelated SCR-021/SCR-022 legacy code-scan failures remain. Corrected one stale CoA lock assertion found on the first harness run. Typecheck and diff check passed. No local database tests or browser acceptance; `0032` remains unapplied and OX19 is not accepted. | Agent |
+| 2.29 | 2026-10-15 | **Local PostgreSQL acceptance environment established and SCR-026/OB13 base accepted (B-211, §26.227).** Recorded retroactively: PostgreSQL 17.11 on `127.0.0.1:5432`, database `cairn_b210`, roles `cairn_app`/`cairn`, 61 migrations applied through `0034`/`9025`, seed leaving tenant `0100` with `CA01` and 74 G/L accounts. Base OB13 commits `fe1a523`–`6ed428c` passed the isolated `T969` browser target three times; `CFG.FIN.COA.DEFINE` is `COMPLETED`. Owner remote test strings were left unmodified and unused. OVXK acceptance was not run. | Agent |
+| 2.30 | 2026-10-15 | **Owner settled the OB13 Group CoA registry and lifecycle contract (B-212, §26.228; R-49/D-121).** Separate registry table shown as a second OB13 panel under the same capability; tenant-wide four-character key reservation across both registries; Code/Description/Language Key/active-flag fields only; deactivate and reactivate always allowed with a mandatory audited reason, records retained and F4 excluding deactivated entries; no hard delete. SCR-028 / `FS00` confirmed chart-level only and chosen as the next target. | Agent |
+| 2.31 | 2026-10-15 | **SCR-026/OB13 amendment implemented and published before browser tests (B-213, §26.229).** Added the Group CoA registry panel, shared lifecycle control, three protected actions, migrations `0034`/`9025` (registry, re-pointed foreign key, tenant-wide key-reservation trigger, forced RLS and least-privilege grants), the registry/lifecycle services with version checks and reference-change-only validation, and the restated seed term. Applied to `cairn_b210` and verified read-only. Typecheck and build exit 0; 8/8 service, 76/76 targeted harness, 86/86 related DB regressions. Commit `a030d23` pushed as a fast-forward from `6ed428c`. | Agent |
+| 2.32 | 2026-10-15 | **SCR-026/OB13 amendment browser acceptance passed (B-214, §26.230).** The isolated `T969` target passed on `cairn_b210`, including bidirectional key reservation, Group CoA F4 from the registry, length and block gates, both audited lifecycles and the sign-out epilogue; fixture cleaned to zero rows and tenant `0100` left intact. Two acceptance-script defects (a modal dialog left open masking the failure as an unhandled rejection, and an F4 assertion against a still-reserved key) were fixed with the group-specific label contract, published as `0b9cf7e`. Dev-server OOM kills on the 2 GB host moved acceptance to the production build under `CAIRN_ENV=development`; the 120 s deadline contract is unchanged. Next: request the `FS00` field contract. | Agent |
 
 ---
 
