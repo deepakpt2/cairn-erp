@@ -1,7 +1,9 @@
 'use client';
 
 import { t } from '@/platform/i18n';
+import { setChartOfAccountsActiveAction } from './actions';
 import { ChartOfAccountsForm, type ChartOfAccountsRecord } from './ChartOfAccountsForm';
+import { ChartLifecycleControl } from './ChartLifecycleControl';
 import type { ChartOfAccountsChoice, LanguageChoice } from './ChartOfAccountsValueHelp';
 
 export function ChartOfAccountsList({
@@ -54,12 +56,13 @@ export function ChartOfAccountsList({
                   <td>{t(`chartOfAccounts.costElementMode.${chart.costElementIntegration.toLowerCase()}`)}</td>
                   <td>
                     <div className="flex flex-wrap gap-1">
-                      <span className={`chip ${chart.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(chart.isActive ? 'chartOfAccounts.active' : 'chartOfAccounts.inactive')}</span>
+                      <span className={`chip ${chart.isActive ? 'chip-ok' : 'chip-neutral'}`}>{t(chart.isActive ? 'chartOfAccounts.active' : 'chartOfAccounts.deactivated')}</span>
                       {chart.isBlocked && <span className="chip chip-warn">{t('chartOfAccounts.blocked')}</span>}
                     </div>
                   </td>
                   {canMaintain && (
                     <td>
+                      <div className="flex flex-col gap-2">
                       {chart.isActive ? (
                         <details className="min-w-44">
                           <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">{t('chartOfAccounts.changeSettings')}</summary>
@@ -76,6 +79,16 @@ export function ChartOfAccountsList({
                       ) : (
                         <span className="text-xs text-ink-faint">{t('chartOfAccounts.inactiveRetained')}</span>
                       )}
+                      <ChartLifecycleControl
+                        action={setChartOfAccountsActiveAction}
+                        codeField="chartOfAccounts"
+                        code={chart.chartOfAccounts}
+                        isActive={chart.isActive}
+                        version={chart.version}
+                        canMaintain={canMaintain}
+                        idPrefix={`ob13-${chart.chartOfAccounts.toLowerCase()}`}
+                      />
+                      </div>
                     </td>
                   )}
                 </tr>

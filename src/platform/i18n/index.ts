@@ -1199,10 +1199,10 @@ const en: Catalogue = {
   'chartOfAccounts.accountNumberLengthRule': 'Enter a maximum length from 1 to 10 digits. Default: 10.',
   'chartOfAccounts.accountLengthLocked': 'Locked: G/L accounts or transactional data exist for this Chart of Accounts.',
   'chartOfAccounts.groupChart': 'Group Chart of Accounts',
-  'chartOfAccounts.groupChartRule': 'Optional. Select an existing four-character Group CoA for consolidation.',
+  'chartOfAccounts.groupChartRule': 'Optional. Select an active Group CoA from the Group Chart of Accounts registry maintained below.',
   'chartOfAccounts.groupChartLookup': 'Group Chart of Accounts lookup',
   'chartOfAccounts.openGroupLookup': 'Open Group Chart of Accounts lookup',
-  'chartOfAccounts.noGroupChartsMatch': 'No other Chart of Accounts match this search.',
+  'chartOfAccounts.noGroupChartsMatch': 'No active Group CoA entries match this search. Create one in the Group Charts of Accounts panel.',
   'chartOfAccounts.costElementIntegration': 'Cost Element Integration',
   'chartOfAccounts.costElementAutomatic': 'Automatic',
   'chartOfAccounts.costElementManual': 'Manual',
@@ -1215,7 +1215,7 @@ const en: Catalogue = {
   'chartOfAccounts.createButton': 'Create Chart of Accounts',
   'chartOfAccounts.saveButton': 'Save changes',
   'chartOfAccounts.listTitle': 'Defined Charts of Accounts',
-  'chartOfAccounts.listRule': 'Blocked charts are retained and remain visible; block status prevents new G/L account and Company Code segment creation.',
+  'chartOfAccounts.listRule': 'Blocked and deactivated charts are retained and remain visible. Blocking prevents new G/L account and Company Code segment creation; deactivation also removes the chart from every F4 list.',
   'chartOfAccounts.empty': 'No Charts of Accounts are defined in this tenant yet.',
   'chartOfAccounts.status': 'Status',
   'chartOfAccounts.active': 'Active',
@@ -1226,7 +1226,7 @@ const en: Catalogue = {
   'chartOfAccounts.transactionLock': 'Transaction data exists',
   'chartOfAccounts.actions': 'Actions',
   'chartOfAccounts.changeSettings': 'Change settings',
-  'chartOfAccounts.inactiveRetained': 'Inactive Chart of Accounts are retained for history and cannot be changed.',
+  'chartOfAccounts.inactiveRetained': 'Deactivated Charts of Accounts are retained for history and cannot be changed; use Reactivate to make one active again.',
   'chartOfAccounts.lookupSearch': 'Search by code or description',
   'chartOfAccounts.costElementMode.automatic': 'Automatic',
   'chartOfAccounts.costElementMode.manual': 'Manual',
@@ -1237,6 +1237,45 @@ const en: Catalogue = {
   'chartOfAccounts.alreadyExists': 'Chart of Accounts {code} already exists in this SAP client.',
   'chartOfAccounts.capabilityRequired': 'The required authority {capability} is missing.',
   'chartOfAccounts.capabilityRemedy': 'Ask an administrator to add {capability} to one of your roles.',
+
+  // Group CoA registry (OB13 amendment): maintained in its own tenant-local registry.
+  'chartOfAccounts.groupPanelTitle': 'Group Charts of Accounts',
+  'chartOfAccounts.groupPanelRule':
+    'Group CoA entries are kept in their own registry. A four-character key is reserved tenant-wide: it may be an ' +
+    'operational Chart of Accounts or a Group CoA, never both.',
+  'chartOfAccounts.groupListTitle': 'Defined Group Charts of Accounts',
+  'chartOfAccounts.groupListRule': 'Only active Group CoA entries appear in the Group CoA F4 of an operational chart.',
+  'chartOfAccounts.groupCreateTitle': 'Create Group Chart of Accounts',
+  'chartOfAccounts.groupChangeTitle': 'Change Group Chart of Accounts',
+  'chartOfAccounts.groupCode': 'Group CoA (KTOKL)',
+  'chartOfAccounts.groupCodeRule':
+    'Enter exactly four letters or numbers. The key is unique within this SAP client across operational charts and Group CoA entries, and cannot be changed after creation.',
+  'chartOfAccounts.groupEmpty': 'No Group Charts of Accounts are defined in this tenant yet.',
+  'chartOfAccounts.groupReferencedBy': '{count} operational charts reference this Group CoA',
+  'chartOfAccounts.groupCreateButton': 'Create Group CoA',
+  'chartOfAccounts.groupCreated': 'Group CoA {code} created and change history recorded.',
+  'chartOfAccounts.groupChanged': 'Group CoA {code} saved and change history recorded.',
+  'chartOfAccounts.groupUnchanged': 'No Group CoA definition data changed for {code}.',
+  'chartOfAccounts.groupAlreadyExists': 'Group CoA {code} already exists in this SAP client.',
+
+  // Chart of Accounts lifecycle (OB13 amendment): deactivate and reactivate.
+  'chartOfAccounts.lifecycleRule':
+    'Deactivate stops all new use and removes the chart from F4 lists. Existing G/L accounts, Company Code ' +
+    'assignments and change history are retained and stay readable. Reactivate restores it.',
+  'chartOfAccounts.lifecycleReason': 'Reason / change note (required)',
+  'chartOfAccounts.lifecycleReasonRule': 'A reason is mandatory for every lifecycle change; it is written to the change history.',
+  'chartOfAccounts.deactivate': 'Deactivate',
+  'chartOfAccounts.reactivate': 'Reactivate',
+  'chartOfAccounts.deactivated': 'Deactivated',
+  'chartOfAccounts.deactivateButton': 'Deactivate Chart of Accounts',
+  'chartOfAccounts.reactivateButton': 'Reactivate Chart of Accounts',
+  'chartOfAccounts.deactivatedMessage': 'Chart of Accounts {code} deactivated and change history recorded.',
+  'chartOfAccounts.reactivatedMessage': 'Chart of Accounts {code} reactivated and change history recorded.',
+  'chartOfAccounts.groupDeactivateButton': 'Deactivate Group CoA',
+  'chartOfAccounts.groupReactivateButton': 'Reactivate Group CoA',
+  'chartOfAccounts.groupDeactivatedMessage': 'Group CoA {code} deactivated and change history recorded.',
+  'chartOfAccounts.groupReactivatedMessage': 'Group CoA {code} reactivated and change history recorded.',
+  'chartOfAccounts.alreadyInState': 'Chart of Accounts {code} is already {state}.',
 
   // ── Posting periods ───────────────────────────────────────────────────────
   'pp.title': 'Posting periods',

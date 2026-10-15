@@ -13,8 +13,13 @@ import {
   chartOfAccountsHasAccountsOrTransactions,
   ChartOfAccountsMaintenanceError,
   listChartOfAccounts,
+  listGroupChartsOfAccounts,
   saveChartOfAccounts,
+  saveGroupChartOfAccounts,
+  setChartOfAccountsActive,
+  setGroupChartOfAccountsActive,
   type ChartOfAccountsMaintenanceInput,
+  type GroupChartOfAccountsMaintenanceInput,
 } from '@/modules/foundation/chart-of-accounts-maintenance';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -47,6 +52,24 @@ function input(
     costElementIntegration: 'AUTOMATIC',
     isBlocked: false,
     reason: 'SCR-026 automated maintenance test',
+    ...overrides,
+  };
+}
+
+function groupInput(
+  code: string,
+  overrides: Partial<GroupChartOfAccountsMaintenanceInput> = {},
+): GroupChartOfAccountsMaintenanceInput {
+  const fixture = currentTenant();
+  return {
+    client: fixture.client,
+    changedBy: TEST_ACTOR,
+    mode: 'CREATE',
+    expectedVersion: 0,
+    groupChartOfAccounts: code,
+    name: `SCR-026 Group CoA ${code}`,
+    language: 'EN',
+    reason: 'SCR-026 automated registry test',
     ...overrides,
   };
 }
@@ -107,14 +130,18 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
 
     const choices = await chartOfAccountsF4Choices(fixture.client);
     expect(choices.languages).toEqual([{ code: 'EN', name: 'English' }]);
-    expect(choices.groupCharts).toContainEqual(expect.objectContaining({ code: 'CA01' }));
+    // Group CoA F4 reads the separate registry: a fresh tenant has no entries, and an
+    // operational chart such as CA01 is never offered as a Group CoA.
+    expect(choices.groupCharts).toEqual([]);
   });
 
   it('creates a tenant-unique four-character chart, validates Group CoA, and records field-level history', async () => {
     const fixture = currentTenant();
+    // Group CoA resolves to the registry, so the referenced key is created there first.
+    await saveGroupChartOfAccounts(groupInput('GR01', { name: 'Cairn Group Consolidation' }));
     const created = await saveChartOfAccounts(input('A001', {
       name: 'International Chart of Accounts',
-      groupChart: 'CA01',
+      groupChart: 'GR01',
       costElementIntegration: 'MANUAL',
     }));
     expect(created).toMatchObject({ created: true, changed: true, version: 1, chartOfAccounts: 'A001' });
@@ -126,12 +153,12 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
     expect(history[0]?.changeType).toBe('CREATE');
     expect(history[0]?.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ fieldName: 'chartOfAccounts', newValue: 'A001' }),
-      expect.objectContaining({ fieldName: 'groupChart', newValue: 'CA01' }),
+      expect.objectContaining({ fieldName: 'groupChart', newValue: 'GR01' }),
       expect.objectContaining({ fieldName: 'costElementIntegration', newValue: 'MANUAL' }),
     ]));
 
     await expect(saveChartOfAccounts(input('B001', { groupChart: 'ZZZZ' })))
-      .rejects.toThrow(/Active Group CoA ZZZZ is not defined/);
+      .rejects.toThrow(/Active Group CoA ZZZZ is not defined in this tenant's Group Chart of Accounts registry/);
     await expect(saveChartOfAccounts(input('S001', { groupChart: 'S001' })))
       .rejects.toThrow(/cannot be its own Group CoA/);
     await expect(saveChartOfAccounts(input('TOOL', { name: 'x'.repeat(51) })))
@@ -255,4 +282,251 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
     const rows = await listChartOfAccounts(fixture.client);
     expect(rows.find((row) => row.chartOfAccounts === 'B001')).toMatchObject({ isBlocked: true });
   });
+
+  it('maintains the Group CoA registry separately and reserves four-character keys tenant-wide', async () => {
+    const fixture = currentTenant();
+    const created = await saveGroupChartOfAccounts(groupInput('GR02', { name: 'Regional Consolidation' }));
+    expect(created).toMatchObject({
+      created: true, changed: true, version: 1, groupChartOfAccounts: 'GR02', isActive: true,
+    });
+
+    // A key may be an operational Chart of Accounts or a Group CoA, never both.
+    await expect(saveGroupChartOfAccounts(groupInput('A001')))
+      .rejects.toThrow(/reserved as an operational Chart of Accounts/);
+    await expect(saveChartOfAccounts(input('GR02')))
+      .rejects.toThrow(/reserved as a Group CoA/);
+
+    const changed = await saveGroupChartOfAccounts(groupInput('GR02', {
+      mode: 'CHANGE', expectedVersion: 1, name: 'Regional Consolidation Group',
+    }));
+    expect(changed).toMatchObject({ created: false, changed: true, version: 2, name: 'Regional Consolidation Group' });
+
+    const unchanged = await saveGroupChartOfAccounts(groupInput('GR02', {
+      mode: 'CHANGE', expectedVersion: 2, name: 'Regional Consolidation Group',
+    }));
+    expect(unchanged).toMatchObject({ changed: false, version: 2 });
+
+    await expect(saveGroupChartOfAccounts(groupInput('GR02', {
+      mode: 'CHANGE', expectedVersion: 1, name: 'Stale registry edit',
+    }))).rejects.toBeInstanceOf(ChartOfAccountsMaintenanceError);
+
+    const history = await withTenant(fixture.client, (tx) =>
+      changeHistory(tx, fixture.client, 'group_chart_of_accounts', 'GR02'),
+    );
+    expect(history).toHaveLength(2);
+    const rename = history.find((entry) => entry.changeType === 'CHANGE');
+    expect(rename?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        fieldName: 'name',
+        oldValue: 'Regional Consolidation',
+        newValue: 'Regional Consolidation Group',
+      }),
+    ]));
+
+    const entries = await listGroupChartsOfAccounts(fixture.client);
+    expect(entries.find((row) => row.groupChartOfAccounts === 'GR01')).toMatchObject({ referencedBy: 1, isActive: true });
+    expect(entries.find((row) => row.groupChartOfAccounts === 'GR02')).toMatchObject({ referencedBy: 0, isActive: true });
+  });
+
+  it('offers only active registry entries in Group CoA F4 and never strands an existing reference', async () => {
+    const fixture = currentTenant();
+    const choices = await chartOfAccountsF4Choices(fixture.client);
+    expect(choices.groupCharts.map((row) => row.code)).toEqual(expect.arrayContaining(['GR01', 'GR02']));
+
+    await setGroupChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      groupChartOfAccounts: 'GR02',
+      isActive: false,
+      expectedVersion: 2,
+      reason: 'SCR-026 retire the unused Group CoA',
+    });
+    const afterDeactivation = await chartOfAccountsF4Choices(fixture.client);
+    expect(afterDeactivation.groupCharts.map((row) => row.code)).not.toContain('GR02');
+
+    // A new reference to a deactivated entry is refused.
+    await expect(saveChartOfAccounts(input('C001', { groupChart: 'GR02' })))
+      .rejects.toThrow(/Active Group CoA GR02 is not defined/);
+
+    // Deactivating the entry an existing chart already uses must not strand that chart:
+    // an unchanged reference is not re-validated, so unrelated edits still save.
+    await setGroupChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      groupChartOfAccounts: 'GR01',
+      isActive: false,
+      expectedVersion: 1,
+      reason: 'SCR-026 deactivate a referenced Group CoA',
+    });
+    const retained = await saveChartOfAccounts(input('A001', {
+      mode: 'CHANGE',
+      expectedVersion: 1,
+      groupChart: 'GR01',
+      name: 'International Chart of Accounts (renamed)',
+    }));
+    expect(retained).toMatchObject({ changed: true, groupChart: 'GR01', version: 2 });
+
+    const entries = await listGroupChartsOfAccounts(fixture.client);
+    expect(entries.find((row) => row.groupChartOfAccounts === 'GR01'))
+      .toMatchObject({ isActive: false, referencedBy: 1 });
+
+    await setGroupChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      groupChartOfAccounts: 'GR01',
+      isActive: true,
+      expectedVersion: 2,
+      reason: 'SCR-026 reactivate the referenced Group CoA',
+    });
+    expect((await listGroupChartsOfAccounts(fixture.client))
+      .find((row) => row.groupChartOfAccounts === 'GR01')).toMatchObject({ isActive: true, referencedBy: 1 });
+  });
+
+  it('deactivates and reactivates a chart only with a reason, retaining accounts, assignments and history', async () => {
+    const fixture = currentTenant();
+    await saveChartOfAccounts(input('D001', { name: 'Lifecycle fixture chart' }));
+    await upsertGlAccount({
+      client: fixture.client,
+      chartOfAccounts: 'D001',
+      accountNumber: '4000',
+      name: 'Existing account before deactivation',
+      accountType: 'EXPENSE',
+      isBalanceSheet: false,
+      isOpenItemManaged: false,
+      requiresCostObject: false,
+      isTaxRelevant: false,
+      changedBy: TEST_ACTOR,
+    });
+    await defineCompanyCode({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      companyCode: '2077',
+      name: 'SCR-026 lifecycle assignment fixture',
+      country: 'KW',
+      currency: 'KWD',
+    });
+    await assignCompanyCodeCoa({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      companyCode: '2077',
+      chartOfAccounts: 'D001',
+    });
+
+    // A lifecycle change without an explanation is not an audit record.
+    await expect(setChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      chartOfAccounts: 'D001',
+      isActive: false,
+      expectedVersion: 1,
+      reason: '   ',
+    })).rejects.toThrow(/reason is required/i);
+
+    const deactivated = await setChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      chartOfAccounts: 'D001',
+      isActive: false,
+      expectedVersion: 1,
+      reason: 'SCR-026 decommission the fixture chart',
+    });
+    expect(deactivated).toMatchObject({ changed: true, isActive: false, version: 2 });
+
+    // Existing records stay readable and keep their reference; only new use stops.
+    const rows = await listChartOfAccounts(fixture.client);
+    expect(rows.find((row) => row.chartOfAccounts === 'D001'))
+      .toMatchObject({ isActive: false, glAccountCount: 1, accountNumberLengthLocked: true });
+    const [assigned] = await withTenant(fixture.client, (tx) => tx.select().from(companyCode).where(
+      and(eq(companyCode.client, fixture.client), eq(companyCode.companyCode, '2077')),
+    ));
+    expect(assigned?.chartOfAccounts).toBe('D001');
+
+    await expect(upsertGlAccount({
+      client: fixture.client,
+      chartOfAccounts: 'D001',
+      accountNumber: '4001',
+      name: 'Account attempted after deactivation',
+      accountType: 'EXPENSE',
+      isBalanceSheet: false,
+      isOpenItemManaged: false,
+      requiresCostObject: false,
+      isTaxRelevant: false,
+      changedBy: TEST_ACTOR,
+    })).rejects.toThrow(/Active Chart of Accounts D001 is not defined/);
+
+    await defineCompanyCode({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      companyCode: '2066',
+      name: 'SCR-026 deactivated assignment attempt',
+      country: 'KW',
+      currency: 'KWD',
+    });
+    await expect(assignCompanyCodeCoa({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      companyCode: '2066',
+      chartOfAccounts: 'D001',
+    })).rejects.toBeInstanceOf(CompanyCodeCoaAssignmentError);
+
+    // A deactivated chart cannot be changed until it is reactivated.
+    await expect(saveChartOfAccounts(input('D001', {
+      mode: 'CHANGE',
+      expectedVersion: 2,
+      groupChart: '',
+      name: 'Changed while deactivated',
+    }))).rejects.toThrow(/cannot be changed/i);
+
+    // Repeating the current lifecycle state writes nothing at all.
+    const repeated = await setChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      chartOfAccounts: 'D001',
+      isActive: false,
+      expectedVersion: 2,
+      reason: 'SCR-026 repeat deactivation',
+    });
+    expect(repeated).toMatchObject({ changed: false, isActive: false, version: 2 });
+
+    const reactivated = await setChartOfAccountsActive({
+      client: fixture.client,
+      changedBy: TEST_ACTOR,
+      chartOfAccounts: 'D001',
+      isActive: true,
+      expectedVersion: 2,
+      reason: 'SCR-026 bring the fixture chart back',
+    });
+    expect(reactivated).toMatchObject({ changed: true, isActive: true, version: 3 });
+
+    await upsertGlAccount({
+      client: fixture.client,
+      chartOfAccounts: 'D001',
+      accountNumber: '4001',
+      name: 'Account created after reactivation',
+      accountType: 'EXPENSE',
+      isBalanceSheet: false,
+      isOpenItemManaged: false,
+      requiresCostObject: false,
+      isTaxRelevant: false,
+      changedBy: TEST_ACTOR,
+    });
+
+    const history = await withTenant(fixture.client, (tx) =>
+      changeHistory(tx, fixture.client, 'chart_of_accounts', 'D001'),
+    );
+    expect(history).toHaveLength(3);
+    const off = history.find((entry) => entry.items.some((item) => item.fieldName === 'isActive' && item.newValue === 'false'));
+    const on = history.find((entry) => entry.items.some((item) => item.fieldName === 'isActive' && item.newValue === 'true'));
+    expect(off?.reason).toBe('SCR-026 decommission the fixture chart');
+    expect(on?.reason).toBe('SCR-026 bring the fixture chart back');
+    expect(off?.items).toEqual([expect.objectContaining({
+      fieldName: 'isActive',
+      oldValue: 'true',
+      newValue: 'false',
+      isSecurityRelevant: 'true',
+    })]);
+    // The repeat no-op left no document behind.
+    expect(history.filter((entry) => entry.reason === 'SCR-026 repeat deactivation')).toHaveLength(0);
+  });
+
 });

@@ -29,6 +29,36 @@ import { centralAddress } from './central-address-schema';
 
 /* ══ Enterprise structure ═══════════════════════════════════════════════════ */
 
+/**
+ * Group Chart of Accounts registry (OB13 amendment, SCR-026).
+ *
+ * Consolidation keys live in their own tenant-local registry instead of being derived
+ * from operational charts, so the Group CoA F4 can never offer a chart that is also used
+ * for posting. A four-character key is reserved tenant-wide across both registries: the
+ * mutual-exclusion trigger `coa_key_registry_exclusive` rejects a code that already exists
+ * on the other side.
+ */
+export const groupChartOfAccounts = pgTable(
+  'group_chart_of_accounts',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    groupChartOfAccounts: varchar('group_chart_of_accounts', { length: 4 }).notNull(),
+    name: varchar('name', { length: 50 }).notNull(),
+    language: char('language', { length: 2 }).notNull().default('EN'),
+    isActive: boolean('is_active').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.groupChartOfAccounts] }),
+    check('group_chart_of_accounts_key_format', sql`${t.groupChartOfAccounts} ~ '^[A-Z0-9]{4}$'`),
+    check('group_chart_of_accounts_name_nonempty', sql`length(btrim(${t.name})) between 1 and 50`),
+    check('group_chart_of_accounts_language_format', sql`${t.language} ~ '^[A-Z]{2}$'`),
+    check('group_chart_of_accounts_language_supported', sql`${t.language} in ('EN')`),
+  ],
+);
+
 /** Chart of accounts — the list of accounts a company code keeps (§8.2). */
 export const chartOfAccounts = pgTable(
   'chart_of_accounts',
@@ -41,7 +71,7 @@ export const chartOfAccounts = pgTable(
     language: char('language', { length: 2 }).notNull().default('EN'),
     /** Numeric account-number length (1–10). Locked after accounts or transactions exist. */
     accountNumberLength: integer('account_number_length').notNull().default(10),
-    /** Optional Group CoA reference for consolidation. */
+    /** Optional Group CoA reference for consolidation; resolves to the Group CoA registry. */
     groupChart: varchar('group_chart', { length: 4 }),
     /** Stored only in SCR-026; operational cost-element generation is deferred. */
     costElementIntegration: varchar('cost_element_integration', { length: 12 }).notNull().default('AUTOMATIC'),
@@ -63,7 +93,7 @@ export const chartOfAccounts = pgTable(
     foreignKey({
       name: 'chart_of_accounts_client_group_chart_fk',
       columns: [t.client, t.groupChart],
-      foreignColumns: [t.client, t.chartOfAccounts],
+      foreignColumns: [groupChartOfAccounts.client, groupChartOfAccounts.groupChartOfAccounts],
     }),
   ],
 );

@@ -7,10 +7,12 @@ import { markActivityComplete } from '../../platform/tenancy';
 import { changeDocument, documentIndex } from '../../platform/tables/audit-trail';
 import { configActivityStatus } from '../../platform/tables/registry';
 import { glAccount, journalEntry } from '../finance/schema';
-import { chartOfAccounts, companyCode } from './schema';
+import { chartOfAccounts, companyCode, groupChartOfAccounts } from './schema';
 
 const ACTIVITY = 'CFG.FIN.COA.DEFINE';
 const OBJECT_CLASS = 'chart_of_accounts';
+/** Group CoA entries keep their own audit trail so registry history is separable. */
+const GROUP_OBJECT_CLASS = 'group_chart_of_accounts';
 const PREREQUISITES = ['CFG.ORG.COMPANYCODE.DEFINE'] as const;
 const SUPPORTED_LANGUAGES = [{ code: 'EN', name: 'English' }] as const;
 
@@ -71,14 +73,16 @@ export async function chartOfAccountsF4Choices(client: string) {
   const tenant = parsed.data;
 
   return withTenant(tenant, async (tx) => {
+    // Group CoA F4 offers registry entries only, and only active ones: a deactivated
+    // Group CoA stays readable on existing charts but cannot be newly selected.
     const groupCharts = await tx.select({
-      code: chartOfAccounts.chartOfAccounts,
-      name: chartOfAccounts.name,
-      isActive: chartOfAccounts.isActive,
+      code: groupChartOfAccounts.groupChartOfAccounts,
+      name: groupChartOfAccounts.name,
+      isActive: groupChartOfAccounts.isActive,
     })
-      .from(chartOfAccounts)
-      .where(and(eq(chartOfAccounts.client, tenant), eq(chartOfAccounts.isActive, true)))
-      .orderBy(asc(chartOfAccounts.chartOfAccounts));
+      .from(groupChartOfAccounts)
+      .where(and(eq(groupChartOfAccounts.client, tenant), eq(groupChartOfAccounts.isActive, true)))
+      .orderBy(asc(groupChartOfAccounts.groupChartOfAccounts));
 
     return {
       languages: SUPPORTED_LANGUAGES.map((row) => ({ ...row })),
@@ -190,7 +194,13 @@ export async function saveChartOfAccounts(raw: ChartOfAccountsMaintenanceInput) 
     }
 
     await requirePrerequisites(tx, client);
-    if (values.groupChart) await requireGroupChart(tx, client, values.chartOfAccounts, values.groupChart);
+    // A Group CoA that is unchanged is left alone, so deactivating a registry entry
+    // cannot strand an existing chart: only a newly selected reference is validated.
+    const groupChartChanged = !current || (current.groupChart?.trim() || null) !== values.groupChart;
+    if (values.groupChart && groupChartChanged) {
+      await requireGroupChart(tx, client, values.chartOfAccounts, values.groupChart);
+    }
+    if (!current) await requireKeyNotReservedByGroup(tx, client, values.chartOfAccounts);
 
     if (current && current.accountNumberLength !== values.accountNumberLength) {
       if (await hasAccountsOrTransactions(tx, client, values.chartOfAccounts)) {
@@ -276,6 +286,302 @@ export async function chartOfAccountsHasAccountsOrTransactions(client: string, c
   return withTenant(parsed.data.client, (tx) => hasAccountsOrTransactions(tx, parsed.data.client, parsed.data.chartOfAccounts));
 }
 
+/* ══ Group CoA registry and lifecycle (SCR-026 / OB13 amendment) ══════════════ */
+
+export const groupChartOfAccountsValuesSchema = z.object({
+  groupChartOfAccounts: chartCodeSchema,
+  name: descriptionSchema,
+  language: languageSchema,
+}).strict();
+
+export const groupChartOfAccountsMaintenanceInputSchema = groupChartOfAccountsValuesSchema.extend({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1).max(60),
+  mode: z.enum(['CREATE', 'CHANGE']),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: reasonSchema,
+}).strict();
+
+/** A lifecycle change is only auditable with an explanation, so the reason is mandatory. */
+const lifecycleReasonSchema = z.string().trim()
+  .min(1, 'A reason is required for a Chart of Accounts lifecycle change.')
+  .max(500);
+
+export const chartLifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1).max(60),
+  chartOfAccounts: chartCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: lifecycleReasonSchema,
+}).strict();
+
+export const groupLifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1).max(60),
+  groupChartOfAccounts: chartCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: lifecycleReasonSchema,
+}).strict();
+
+export type GroupChartOfAccountsValues = z.output<typeof groupChartOfAccountsValuesSchema>;
+export type GroupChartOfAccountsMaintenanceInput = z.input<typeof groupChartOfAccountsMaintenanceInputSchema>;
+export type ChartLifecycleInput = z.input<typeof chartLifecycleInputSchema>;
+export type GroupLifecycleInput = z.input<typeof groupLifecycleInputSchema>;
+
+/** Registry entries, each with the number of operational charts still referencing it. */
+export async function listGroupChartsOfAccounts(client: string) {
+  const parsed = clientSchema.safeParse(client);
+  if (!parsed.success) throw invalidInput(parsed.error);
+  const tenant = parsed.data;
+
+  return withTenant(tenant, async (tx) => {
+    const [rows, references, versions] = await Promise.all([
+      tx.select().from(groupChartOfAccounts)
+        .where(eq(groupChartOfAccounts.client, tenant))
+        .orderBy(asc(groupChartOfAccounts.groupChartOfAccounts)),
+      tx.select({
+        groupChart: chartOfAccounts.groupChart,
+        count: sql<number>`count(*)::int`,
+      })
+        .from(chartOfAccounts)
+        .where(and(eq(chartOfAccounts.client, tenant), isNotNull(chartOfAccounts.groupChart)))
+        .groupBy(chartOfAccounts.groupChart),
+      tx.select({ objectKey: changeDocument.objectKey, count: sql<number>`count(*)::int` })
+        .from(changeDocument)
+        .where(and(
+          eq(changeDocument.client, tenant),
+          eq(changeDocument.objectClass, GROUP_OBJECT_CLASS),
+        ))
+        .groupBy(changeDocument.objectKey),
+    ]);
+
+    const referencesByCode = new Map(references.map((row) => [(row.groupChart ?? '').trim(), row.count]));
+    const versionByCode = new Map(versions.map((row) => [row.objectKey, row.count]));
+
+    return rows.map((row) => {
+      const code = row.groupChartOfAccounts.trim();
+      return {
+        groupChartOfAccounts: code,
+        name: row.name.trim(),
+        language: row.language.trim(),
+        isActive: row.isActive,
+        // References survive deactivation: nothing is rewritten behind an auditor's back.
+        referencedBy: referencesByCode.get(code) ?? 0,
+        version: versionByCode.get(code) ?? 0,
+      };
+    });
+  });
+}
+
+/** Create or change a Group CoA registry entry. The key is immutable after creation. */
+export async function saveGroupChartOfAccounts(raw: GroupChartOfAccountsMaintenanceInput) {
+  const parsed = groupChartOfAccountsMaintenanceInputSchema.safeParse(raw);
+  if (!parsed.success) throw invalidInput(parsed.error);
+  const { client, changedBy, mode, expectedVersion, reason, ...values } = parsed.data;
+
+  return withTenant(client, async (tx) => {
+    await lockGroupChart(tx, client, values.groupChartOfAccounts);
+    const [current] = await tx.select().from(groupChartOfAccounts)
+      .where(groupKey(client, values.groupChartOfAccounts))
+      .for('update');
+    const version = await groupAuditVersion(tx, client, values.groupChartOfAccounts);
+
+    if (mode === 'CREATE' && current) {
+      return { created: false as const, changed: false as const, ...groupSnapshot(current), version };
+    }
+    if (mode === 'CHANGE' && !current) throw groupNotFound(values.groupChartOfAccounts);
+    if (mode === 'CREATE' && (expectedVersion !== 0 || version !== 0)) throw staleVersion(values.groupChartOfAccounts);
+    if (mode === 'CHANGE' && expectedVersion !== version) throw staleVersion(values.groupChartOfAccounts);
+    if (current && !current.isActive) {
+      throw new ChartOfAccountsMaintenanceError(
+        `Group CoA ${values.groupChartOfAccounts} is deactivated and cannot be changed.`,
+        'Reactivate the Group CoA before changing its definition.',
+      );
+    }
+    if (!current) await requireKeyNotReservedByChart(tx, client, values.groupChartOfAccounts);
+
+    if (current) {
+      const before = groupSnapshot(current);
+      const after = { ...before, name: values.name, language: values.language };
+      if (before.name === after.name && before.language === after.language) {
+        return { created: false as const, changed: false as const, ...before, version };
+      }
+
+      await tx.update(groupChartOfAccounts).set({
+        name: values.name,
+        language: values.language,
+        changedBy,
+        changedAt: new Date(),
+      }).where(groupKey(client, values.groupChartOfAccounts));
+
+      const changeId = await recordChange(tx, {
+        client,
+        objectClass: GROUP_OBJECT_CLASS,
+        objectKey: values.groupChartOfAccounts,
+        changeType: 'CHANGE',
+        changedBy,
+        transactionCode: ACTIVITY,
+        reason,
+        before,
+        after,
+        securityRelevantFields: ['language'],
+        fieldLabels: GROUP_FIELD_LABELS,
+      });
+      if (!changeId) throw new ChartOfAccountsMaintenanceError('Group CoA change could not be recorded in change history.');
+      return { created: false as const, changed: true as const, ...after, version: version + 1 };
+    }
+
+    await tx.insert(groupChartOfAccounts).values({
+      client,
+      groupChartOfAccounts: values.groupChartOfAccounts,
+      name: values.name,
+      language: values.language,
+      isActive: true,
+      createdBy: changedBy,
+    });
+
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: GROUP_OBJECT_CLASS,
+      objectKey: values.groupChartOfAccounts,
+      changeType: 'CREATE',
+      changedBy,
+      transactionCode: ACTIVITY,
+      reason,
+      after: { ...values, isActive: true },
+      securityRelevantFields: ['groupChartOfAccounts', 'language'],
+      fieldLabels: GROUP_FIELD_LABELS,
+    });
+    if (!changeId) throw new ChartOfAccountsMaintenanceError('Group CoA creation could not be recorded in change history.');
+    return { created: true as const, changed: true as const, ...values, isActive: true, version: version + 1 };
+  });
+}
+
+/**
+ * Deactivate or reactivate an operational Chart of Accounts.
+ *
+ * Always allowed and always audited: existing G/L accounts, Company Code assignments and
+ * change history are retained and stay readable, while every write path that reads
+ * `is_active` (G/L account creation, Company Code assignment, all F4 lists) stops offering
+ * the chart. A deactivated chart cannot be changed until it is reactivated.
+ */
+export async function setChartOfAccountsActive(raw: ChartLifecycleInput) {
+  const parsed = chartLifecycleInputSchema.safeParse(raw);
+  if (!parsed.success) throw invalidInput(parsed.error);
+  const { client, changedBy, chartOfAccounts: code, isActive, expectedVersion, reason } = parsed.data;
+
+  return withTenant(client, async (tx) => {
+    await lockChart(tx, client, code);
+    const [current] = await tx.select().from(chartOfAccounts)
+      .where(chartKey(client, code))
+      .for('update');
+    if (!current) throw notFound(code);
+    const version = await auditVersion(tx, client, code);
+    if (expectedVersion !== version) throw staleVersion(code);
+    if (current.isActive === isActive) {
+      return { chartOfAccounts: code, isActive, changed: false as const, version };
+    }
+
+    const before = snapshot(current);
+    await tx.update(chartOfAccounts).set({ isActive, changedBy, changedAt: new Date() })
+      .where(chartKey(client, code));
+
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: OBJECT_CLASS,
+      objectKey: code,
+      changeType: 'CHANGE',
+      changedBy,
+      transactionCode: ACTIVITY,
+      reason,
+      before,
+      after: { ...before, isActive },
+      securityRelevantFields: ['isActive'],
+      fieldLabels: FIELD_LABELS,
+    });
+    if (!changeId) throw new ChartOfAccountsMaintenanceError('Chart of Accounts lifecycle change could not be recorded in change history.');
+    await markActivityComplete(tx, client, ACTIVITY, changedBy);
+    return { chartOfAccounts: code, isActive, changed: true as const, version: version + 1 };
+  });
+}
+
+/** Deactivate or reactivate a Group CoA registry entry; references are retained. */
+export async function setGroupChartOfAccountsActive(raw: GroupLifecycleInput) {
+  const parsed = groupLifecycleInputSchema.safeParse(raw);
+  if (!parsed.success) throw invalidInput(parsed.error);
+  const { client, changedBy, groupChartOfAccounts: code, isActive, expectedVersion, reason } = parsed.data;
+
+  return withTenant(client, async (tx) => {
+    await lockGroupChart(tx, client, code);
+    const [current] = await tx.select().from(groupChartOfAccounts)
+      .where(groupKey(client, code))
+      .for('update');
+    if (!current) throw groupNotFound(code);
+    const version = await groupAuditVersion(tx, client, code);
+    if (expectedVersion !== version) throw staleVersion(code);
+    if (current.isActive === isActive) {
+      return { groupChartOfAccounts: code, isActive, changed: false as const, version };
+    }
+
+    const before = groupSnapshot(current);
+    await tx.update(groupChartOfAccounts).set({ isActive, changedBy, changedAt: new Date() })
+      .where(groupKey(client, code));
+
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: GROUP_OBJECT_CLASS,
+      objectKey: code,
+      changeType: 'CHANGE',
+      changedBy,
+      transactionCode: ACTIVITY,
+      reason,
+      before,
+      after: { ...before, isActive },
+      securityRelevantFields: ['isActive'],
+      fieldLabels: GROUP_FIELD_LABELS,
+    });
+    if (!changeId) throw new ChartOfAccountsMaintenanceError('Group CoA lifecycle change could not be recorded in change history.');
+    return { groupChartOfAccounts: code, isActive, changed: true as const, version: version + 1 };
+  });
+}
+
+async function lockGroupChart(tx: Tx, client: string, code: string) {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/group_chart_of_accounts/${code}`}, 0))`);
+}
+
+function groupKey(client: string, code: string) {
+  return and(eq(groupChartOfAccounts.client, client), eq(groupChartOfAccounts.groupChartOfAccounts, code));
+}
+
+function groupSnapshot(row: typeof groupChartOfAccounts.$inferSelect) {
+  return {
+    groupChartOfAccounts: row.groupChartOfAccounts.trim(),
+    name: row.name.trim(),
+    language: row.language.trim(),
+    isActive: row.isActive,
+  };
+}
+
+async function groupAuditVersion(tx: Tx, client: string, code: string): Promise<number> {
+  const [row] = await tx.select({ version: sql<number>`count(*)::int` })
+    .from(changeDocument)
+    .where(and(
+      eq(changeDocument.client, client),
+      eq(changeDocument.objectClass, GROUP_OBJECT_CLASS),
+      eq(changeDocument.objectKey, code),
+    ));
+  return row?.version ?? 0;
+}
+
+function groupNotFound(code: string) {
+  return new ChartOfAccountsMaintenanceError(
+    `Group CoA ${code} was not found.`,
+    'Return to the Group Charts of Accounts panel and select an existing entry.',
+  );
+}
+
 async function requirePrerequisites(tx: Tx, client: string) {
   const rows = await tx.select({ activityCode: configActivityStatus.activityCode })
     .from(configActivityStatus)
@@ -292,24 +598,58 @@ async function requirePrerequisites(tx: Tx, client: string) {
   );
 }
 
+/** Group CoA resolves to the registry, never to another operational chart. */
 async function requireGroupChart(tx: Tx, client: string, chart: string, groupChart: string) {
   if (chart === groupChart) {
     throw new ChartOfAccountsMaintenanceError(
       `Chart of Accounts ${chart} cannot be its own Group CoA.`,
-      'Choose a different existing Chart of Accounts or leave Group CoA blank.',
+      'Choose a different Group CoA from the registry, or leave the field blank.',
     );
   }
-  const [existing] = await tx.select({ code: chartOfAccounts.chartOfAccounts })
-    .from(chartOfAccounts)
+  const [existing] = await tx.select({ code: groupChartOfAccounts.groupChartOfAccounts })
+    .from(groupChartOfAccounts)
     .where(and(
-      eq(chartOfAccounts.client, client),
-      eq(chartOfAccounts.chartOfAccounts, groupChart),
-      eq(chartOfAccounts.isActive, true),
+      eq(groupChartOfAccounts.client, client),
+      eq(groupChartOfAccounts.groupChartOfAccounts, groupChart),
+      eq(groupChartOfAccounts.isActive, true),
     ))
     .limit(1);
   if (!existing) throw new ChartOfAccountsMaintenanceError(
-    `Active Group CoA ${groupChart} is not defined in this tenant.`,
-    'Choose an existing active Chart of Accounts from Group CoA F4, or leave the field blank.',
+    `Active Group CoA ${groupChart} is not defined in this tenant's Group Chart of Accounts registry.`,
+    'Create the Group CoA in the Group Charts of Accounts panel, choose an active entry from Group CoA F4, or leave the field blank.',
+  );
+}
+
+/**
+ * Tenant-wide key reservation: a code may be an operational Chart of Accounts or a
+ * Group CoA, never both. The database trigger is the backstop; these checks give the
+ * user a readable remedy instead of a unique-violation error.
+ */
+async function requireKeyNotReservedByGroup(tx: Tx, client: string, code: string) {
+  const [reserved] = await tx.select({ code: groupChartOfAccounts.groupChartOfAccounts })
+    .from(groupChartOfAccounts)
+    .where(and(
+      eq(groupChartOfAccounts.client, client),
+      eq(groupChartOfAccounts.groupChartOfAccounts, code),
+    ))
+    .limit(1);
+  if (reserved) throw new ChartOfAccountsMaintenanceError(
+    `Key ${code} is reserved as a Group CoA in this SAP client.`,
+    'Choose a different four-character Chart of Accounts key, or deactivate and remove the Group CoA reservation first.',
+  );
+}
+
+async function requireKeyNotReservedByChart(tx: Tx, client: string, code: string) {
+  const [reserved] = await tx.select({ code: chartOfAccounts.chartOfAccounts })
+    .from(chartOfAccounts)
+    .where(and(
+      eq(chartOfAccounts.client, client),
+      eq(chartOfAccounts.chartOfAccounts, code),
+    ))
+    .limit(1);
+  if (reserved) throw new ChartOfAccountsMaintenanceError(
+    `Key ${code} is reserved as an operational Chart of Accounts in this SAP client.`,
+    'Choose a different four-character Group CoA key.',
   );
 }
 
@@ -425,6 +765,13 @@ function notFound(code: string) {
     'Return to the overview and select an existing Chart of Accounts.',
   );
 }
+
+const GROUP_FIELD_LABELS = {
+  groupChartOfAccounts: 'Group CoA (KTOKL)',
+  name: 'Description (KTPLT)',
+  language: 'Language Key (SPRAS)',
+  isActive: 'Active',
+};
 
 const FIELD_LABELS = {
   chartOfAccounts: 'Chart of Accounts (KTOPL)',
