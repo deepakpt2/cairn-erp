@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 
 import { changeHistory } from '../../src/platform/change';
 import { withTenant } from '../../src/platform/db/client';
+import { journalEntryLine } from '../../src/modules/finance/schema';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
@@ -15,6 +16,9 @@ function scope(ctx: Context) {
 const ROUTE = '/config/gl-accounts';
 /** Created through the UI in this run; the fixture tenant is disposable. */
 const CREATED_ACCOUNT = '9990001111';
+/** Created for the deletion guard: an account that has carried a posting cannot go. */
+const USED_ACCOUNT = '9990002222';
+const USED_DOCUMENT = 'FS00ACC01';
 const CHART = 'CA01';
 const GROUP = 'GENL';
 
@@ -191,5 +195,241 @@ export async function glAccountMasterFs00(ctx: Context) {
   assert.equal(await displayFields.locator('[name="isBlockedPosting"]').isDisabled(), true, 'The posting block cannot be flipped in Display mode.');
   console.log('  ✓ Display mode shows the stored record with no way to write it');
 
-  console.log('SCR-028 FS00 part 1 passed: hub, registry aliases, Create mode and Display mode');
+  console.log('  ✓ part 1: hub, registry aliases, Create mode and Display mode');
+
+  // ── 6. Change mode keeps the key immutable and writes what was typed ──────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await rowFor(list, CREATED_ACCOUNT).getByRole('link', { name: 'Change', exact: true }).click();
+  await page.waitForURL(`${BASE}${ROUTE}/edit?**`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+
+  const edit = page.locator('section[aria-labelledby="fs00-field-title"]');
+  await edit.waitFor();
+  assert.ok(
+    await edit.locator('[name="accountNumber"]').getAttribute('readonly') !== null,
+    'Change mode shows the account number read-only.',
+  );
+  await edit
+    .getByText('The account number is immutable; changing it requires a new account.', { exact: true })
+    .waitFor();
+
+  await edit.locator('[name="name"]').fill('Browser acceptance clearing account, renamed');
+  await edit.locator('[name="sortKey"]').fill('001');
+  await edit.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByText(`G/L account ${CREATED_ACCOUNT} saved.`, { exact: true }).waitFor();
+
+  const renamed = await storedAccount(CLIENT, CREATED_ACCOUNT);
+  assert.equal(renamed?.name, 'Browser acceptance clearing account, renamed');
+  assert.equal(renamed?.sort_key, '001');
+  const afterChange = await historyFor(CLIENT, CREATED_ACCOUNT);
+  assert.equal(afterChange.length, 2, 'Create and change each wrote one change document.');
+  console.log('  ✓ Change mode renamed the account, moved the sort key and wrote a second change document');
+
+  // ── 7. A stale form is refused, not merged ────────────────────────────────
+  // The version the form carries is the version it was rendered with; posting a stale
+  // one is what two consultants changing the same account produce.
+  // Typed first, then the version is forced stale: expectedVersion is a React-controlled
+  // hidden input, so any re-render — filling a field is one — restores the rendered value.
+  await edit.locator('[name="name"]').fill('This write must be refused');
+  await edit.locator('[name="expectedVersion"]').evaluate((element) => {
+    (element as HTMLInputElement).value = '99';
+  });
+  await edit.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await page.getByRole('alert').filter({ hasText: /changed after it was opened/i }).first().waitFor();
+  assert.equal((await storedAccount(CLIENT, CREATED_ACCOUNT))?.name, 'Browser acceptance clearing account, renamed');
+  assert.equal(await historyFor(CLIENT, CREATED_ACCOUNT).then((rows) => rows.length), 2, 'A refused write leaves no evidence behind.');
+  console.log('  ✓ a stale version is refused and writes nothing');
+
+  // ── 8. Block flags need a reason, in both directions ──────────────────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  // The label appears twice in a row — on the <summary> that opens the dialog and on the
+  // checkbox inside it — so address the summary, not the text.
+  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block (XSPEB)' }).click();
+
+  const blockDialog = page.getByRole('dialog', { name: `Change blocks for ${CREATED_ACCOUNT}` });
+  await blockDialog.waitFor();
+  assert.ok(
+    await blockDialog.locator('[name="reason"]').getAttribute('required') !== null,
+    'The block dialog marks its reason required.',
+  );
+  await blockDialog.locator('[name="isBlockedPosting"]').check();
+  await blockDialog.locator('[name="reason"]').fill('Blocked while the year-end close is reviewed');
+  await blockDialog.getByRole('button', { name: 'Save block status', exact: true }).click();
+  await blockDialog
+    .getByRole('status')
+    .filter({ hasText: `Block status saved for G/L account ${CREATED_ACCOUNT}.` })
+    .waitFor();
+
+  assert.equal((await storedAccount(CLIENT, CREATED_ACCOUNT))?.is_blocked_posting, true);
+  const blockHistory = await historyFor(CLIENT, CREATED_ACCOUNT);
+  assert.equal(blockHistory[0].changeType, 'BLOCK');
+  assert.equal(blockHistory[0].reason, 'Blocked while the year-end close is reviewed');
+  console.log('  ✓ the posting block was set with its reason recorded as a BLOCK change');
+
+  // Unblock again, because a blocked account cannot be deleted and part 2 ends by deleting it.
+  await blockDialog.locator('[name="isBlockedPosting"]').uncheck();
+  await blockDialog.locator('[name="reason"]').fill('Year-end close reviewed; posting allowed again');
+  await blockDialog.getByRole('button', { name: 'Save block status', exact: true }).click();
+  await blockDialog
+    .getByRole('status')
+    .filter({ hasText: `Block status saved for G/L account ${CREATED_ACCOUNT}.` })
+    .waitFor();
+  assert.equal((await storedAccount(CLIENT, CREATED_ACCOUNT))?.is_blocked_posting, false);
+  assert.equal((await historyFor(CLIENT, CREATED_ACCOUNT))[0].changeType, 'UNBLOCK');
+
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await rowFor(list, CREATED_ACCOUNT).getByText('Active', { exact: true }).waitFor();
+  console.log('  ✓ unblocking is a change of its own and the list shows the account active again');
+
+  // ── 9. An account that carried a posting cannot be deleted ────────────────
+  await createThroughUi(page, BASE, USED_ACCOUNT, 'Browser acceptance posted account', 'ASSET');
+  await postAgainst(CLIENT, USED_ACCOUNT);
+
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await rowFor(list, USED_ACCOUNT).locator('summary').filter({ hasText: 'Delete' }).click();
+  const usedDelete = page.getByRole('dialog', { name: `Delete ${USED_ACCOUNT}` });
+  await usedDelete.waitFor();
+  await usedDelete.locator('[name="reason"]').fill('Trying to delete an account that carried a posting');
+  await usedDelete.getByRole('button', { name: 'Delete G/L Account', exact: true }).click();
+
+  // One refusal naming every fact, rather than three guards racing to refuse first.
+  const refusal = page.getByRole('alert').filter({ hasText: /document line/i }).first();
+  await refusal.waitFor();
+  assert.match(await refusal.innerText(), /document line/i);
+  assert.match(await refusal.innerText(), /open item/i);
+  assert.match(await refusal.innerText(), /balance of/i);
+  assert.ok(await storedAccount(CLIENT, USED_ACCOUNT), 'The refused account is still there.');
+  console.log('  ✓ deletion of a posted account is refused, naming lines, open items and the balance');
+
+  // ── 10. An unused account is deleted, and its evidence outlives it ────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Delete' }).click();
+  const deleteDialog = page.getByRole('dialog', { name: `Delete ${CREATED_ACCOUNT}` });
+  await deleteDialog.waitFor();
+  await deleteDialog.locator('[name="reason"]').fill('Created for browser acceptance and no longer needed');
+  await deleteDialog.getByRole('button', { name: 'Delete G/L Account', exact: true }).click();
+  // The dialog cannot confirm its own success: revalidating the hub removes the row the
+  // dialog lives in, so the action redirects and the hub renders the confirmation.
+  await page.waitForURL(`${BASE}${ROUTE}?deleted=${CREATED_ACCOUNT}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('status').filter({ hasText: `G/L account ${CREATED_ACCOUNT} deleted.` }).first().waitFor();
+
+  assert.equal(await storedAccount(CLIENT, CREATED_ACCOUNT), undefined, 'The account row is gone.');
+  const deletionHistory = await historyFor(CLIENT, CREATED_ACCOUNT);
+  assert.equal(deletionHistory[0].changeType, 'DELETE');
+  assert.equal(deletionHistory[0].reason, 'Created for browser acceptance and no longer needed');
+  assert.equal(
+    await page.locator('section[aria-labelledby="fs00-list-title"] tbody tr').filter({ hasText: CREATED_ACCOUNT }).count(),
+    0,
+    'The deleted account is off the list the redirect rendered.',
+  );
+  console.log('  ✓ an unused account is deleted, confirmed on the hub, and its reason survives the row');
+
+  console.log('SCR-028 FS00 part 2 passed: Change mode, stale-version refusal, blocks and deletion guards');
+}
+
+/** One row of the account list, addressed by its account number. */
+function rowFor(list: ReturnType<Page['locator']>, account: string) {
+  return list.locator('tbody tr').filter({ hasText: account }).first();
+}
+
+type StoredAccount = {
+  name: string;
+  sort_key: string | null;
+  is_blocked_posting: boolean;
+  is_blocked_creation: boolean;
+};
+
+async function storedAccount(client: string, account: string): Promise<StoredAccount | undefined> {
+  const rows = (await withTenant(client, (tx) =>
+    tx.execute(
+      sql`select name, sort_key, is_blocked_posting, is_blocked_creation
+            from gl_account
+           where chart_of_accounts = ${CHART} and account_number = ${account}`,
+    ),
+  )) as unknown as StoredAccount[];
+  return rows[0];
+}
+
+type HistoryRow = { changeType: string; reason: string | null };
+
+/** Newest first, and still readable after the account row itself is gone. */
+async function historyFor(client: string, account: string): Promise<HistoryRow[]> {
+  return withTenant(client, (tx) => changeHistory(tx, client, 'gl_account', `${CHART}/${account}`)) as unknown as HistoryRow[];
+}
+
+/** Create an account through Create mode, the way part 1 does, for use as a fixture. */
+async function createThroughUi(page: Page, BASE: string, account: string, name: string, accountType: string) {
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const initial = page.locator('section[aria-labelledby="fs00-initial-title"]');
+  await initial.locator('[name="chart"]').fill(CHART);
+  await initial.getByRole('radio', { name: 'Create', exact: true }).check();
+  await initial.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.waitForURL(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+
+  const fields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  await fields.waitFor();
+  await fields.locator('[name="accountNumber"]').fill(account);
+  await fields.locator('[name="name"]').fill(name);
+  await fields.locator('[name="accountType"]').selectOption(accountType);
+  await fields.locator('[name="accountGroup"]').selectOption(GROUP);
+  await fields.getByRole('button', { name: 'Create G/L Account', exact: true }).click();
+  await page.getByText(`G/L account ${account} created.`, { exact: true }).waitFor();
+}
+
+/**
+ * Give an account a posting, so the deletion guard has something to refuse.
+ *
+ * Two lines, because the database refuses a document that does not balance: a fixture
+ * that breaks a product rule tests a state no posting could ever produce.
+ */
+async function postAgainst(client: string, account: string) {
+  const company = (await withTenant(client, (tx) =>
+    tx.execute(sql`select company_code from company_code where client = ${client} order by company_code limit 1`),
+  )) as unknown as Array<{ company_code: string }>;
+  assert.ok(company[0], 'The fixture tenant has a Company Code.');
+  const offsetting = (await withTenant(client, (tx) =>
+    tx.execute(
+      sql`select account_number from gl_account
+           where chart_of_accounts = ${CHART} and account_number <> ${account}
+           order by rpad(account_number, 10, '0') limit 1`,
+    ),
+  )) as unknown as Array<{ account_number: string }>;
+  assert.ok(offsetting[0], 'The chart has another account to balance against.');
+
+  const year = new Date().getFullYear();
+  await withTenant(client, async (tx) => {
+    await tx.insert(journalEntryLine).values([
+      {
+        client,
+        documentNumber: USED_DOCUMENT,
+        fiscalYear: year,
+        lineNumber: 1,
+        glAccount: account,
+        companyCode: company[0].company_code,
+        debitCredit: 'S',
+        amountLocal: '100.0000',
+        amountDocument: '100.0000',
+        currency: 'KWD',
+      },
+      {
+        client,
+        documentNumber: USED_DOCUMENT,
+        fiscalYear: year,
+        lineNumber: 2,
+        glAccount: offsetting[0].account_number,
+        companyCode: company[0].company_code,
+        debitCredit: 'H',
+        amountLocal: '100.0000',
+        amountDocument: '100.0000',
+        currency: 'KWD',
+      },
+    ]);
+  });
 }
