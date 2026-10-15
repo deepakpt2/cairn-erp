@@ -1323,6 +1323,7 @@ const en: Catalogue = {
   'glAccount.groupRangeLockedRule':
     'The range cannot be narrowed past the accounts already in the group, and cannot overlap another group of this chart.',
   'glAccount.matrixSave': 'Save field status',
+  'glAccount.matrixSaved': 'Field status saved for Account Group {group}.',
   'glAccount.matrixRule':
     'A suppressed field is not rendered and cannot be posted; a mandatory field refuses the save until it carries a value. Short Text and Account Type cannot be relaxed: the account cannot be stored without them.',
   'glAccount.blockFlagsRule':

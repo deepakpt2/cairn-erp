@@ -543,12 +543,15 @@ function FieldStatusDialog({
                     className="field-input code min-h-11 w-full sm:min-h-9"
                     value={statuses[field]}
                     disabled={pending || locked || !editable}
-                    onChange={(event) =>
-                      setStatuses((previous) => ({
-                        ...previous,
-                        [field]: event.currentTarget.value as FieldStatus,
-                      }))
-                    }
+                    onChange={(event) => {
+                      // Read the value before the updater runs. React nulls
+                      // event.currentTarget once the handler returns, and a functional
+                      // updater runs during the re-render — reading it there crashed the
+                      // whole hub on the first matrix change, which is why this dialog
+                      // could never be used in a browser until acceptance found it.
+                      const status = event.currentTarget.value as FieldStatus;
+                      setStatuses((previous) => ({ ...previous, [field]: status }));
+                    }}
                   >
                     {FIELD_STATUSES.map((status) => (
                       <option key={status} value={status}>
