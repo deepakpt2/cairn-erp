@@ -208,7 +208,7 @@ describe('posting period control', () => {
     expect(error).toBeInstanceOf(PostingError);
     expect(error.message).toContain('999999');
     expect(error.message).toContain('does not exist');
-    expect(error.remedy).toContain('FIN.GL.MASTER.CREATE');
+    expect(error.remedy).toContain('CFG.FIN.GLACCOUNT.CREATE');
   });
 
   it('reports the open-period picture for the close cockpit', async () => {

@@ -136,7 +136,9 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.JOURNAL.POST', module: 'FIN', action: 'POST', posting: true, description: 'Post a journal entry' },
   { code: 'FIN.JOURNAL.REVERSE', module: 'FIN', action: 'REVERSE', posting: true, description: 'Reverse an accounting document' },
   { code: 'FIN.JOURNAL.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display an accounting document' },
-  { code: 'FIN.GL.MASTER.CREATE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Create or change a G/L account' },
+  { code: 'CFG.FIN.GLACCOUNT.CREATE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Create a G/L account master record in an active, unblocked chart of accounts' },
+  { code: 'CFG.FIN.GLACCOUNT.CHANGE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Change a G/L account master record, its posting and creation blocks, the account group registry and its field status matrix' },
+  { code: 'CFG.FIN.GLACCOUNT.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display G/L account master records, the account group registry and their change history' },
   { code: 'FIN.AP.PAYMENTRUN.EXECUTE', module: 'FIN', action: 'EXECUTE', posting: true, description: 'Execute a payment run' },
   { code: 'PROC.PO.CREATE', module: 'PROC', action: 'CREATE', posting: false, description: 'Create a purchase order' },
   { code: 'PROC.PO.RELEASE', module: 'PROC', action: 'APPROVE', posting: false, description: 'Release a purchase order' },
@@ -199,7 +201,9 @@ const REGISTRY: Array<{
   { ourCode: 'PROD.MRP.SETTINGS', termType: 'TRANSACTION', module: 'PROD', title: 'Material planning settings', route: '/inventory/materials?view=MRP', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Planning parameters and net-change file, not yet an executable planning run.' },
   { ourCode: 'CFG.ORG.COMPANYCODE.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Company code define', route: '/config/company-codes', tier: 'TIER_2_CONFIGURED', conformance: 'A', aliases: ['OX02'], description: 'The legal entity that keeps its own books, with its chart of accounts, fiscal year variant and posting period variant assigned.' },
   { ourCode: 'CFG.FIN.COA.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'Chart of Accounts definition', route: '/config/chart-of-accounts', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OB13'], description: 'Maintain tenant-local Charts of Accounts, language, account-number length, cost-element integration policy, the block flag, deactivate/reactivate lifecycle, and the separate Group CoA registry that feeds the Group CoA F4.' },
-  { ourCode: 'FIN.GL.MASTER.LIST', termType: 'TRANSACTION', module: 'FIN', title: 'G/L account list', route: '/config/gl-accounts', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FS00', 'FSP0'], description: 'The chart of accounts, grouped the way an accountant reads it.' },
+  { ourCode: 'CFG.FIN.GLACCOUNT.CREATE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'G/L account master create', route: '/config/gl-accounts/new', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['FS00'], description: 'Create a G/L account in an active, unblocked chart of accounts. The account number is validated against the chart length and the account group range, stays immutable for the life of the account, and every other field takes its status from the account group field status matrix.' },
+  { ourCode: 'CFG.FIN.GLACCOUNT.CHANGE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'G/L account master change', route: '/config/gl-accounts/edit', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['FSP0'], description: 'Change a G/L account, its posting and creation blocks, the account group registry with its from/to ranges, and the per-field Suppress/Optional/Mandatory matrix. A reason is mandatory for a block change and for deletion, and deletion is refused while any balance, line item, open item or reconciliation assignment still uses the account.' },
+  { ourCode: 'CFG.FIN.GLACCOUNT.DISPLAY', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'G/L account master display', route: '/config/gl-accounts', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['FSS0'], description: 'Read G/L account master records, the account group registry and their change history. A blocked chart of accounts keeps its read-only display while refusing new accounts. Display mode itself is /config/gl-accounts/view; this hub route is the entry point that needs no selection.' },
   { ourCode: 'FIN.CLOSE.PERIOD', termType: 'TRANSACTION', module: 'FIN', title: 'Posting periods', route: '/config/posting-periods', tier: 'TIER_1_BUILT', conformance: 'A', aliases: ['OB52'], description: 'Which periods are open, per account type. Closing a period is recorded in the change log.' },
   { ourCode: 'CFG.ORG.PLANT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Plant definition', route: '/config/plants', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX10'], description: 'Production and storage sites; Company Code assignment and Storage Location definitions are separate activities.' },
   { ourCode: 'CFG.ORG.STORAGELOC.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Storage Location definitions', route: '/config/storage-locations', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX09'], description: 'Create, change and deactivate Storage Locations within an active tenant Plant; negative-stock allowance is stored configuration only.' },
@@ -402,6 +406,19 @@ async function main() {
     `);
 
     console.log('Seeding term registry…');
+    // SCR-028 (FS00) replaced the read-only G/L account list with three maintenance
+    // activities. Retire the legacy entry before the new ones claim its aliases:
+    // term_alias is unique on (external_system, alias), so FS00 and FSP0 have to be
+    // released first, and term_alias.term_id cascades so the aliases leave with it.
+    // Migration 0037 does the same for a database that is migrated rather than reseeded.
+    await client.unsafe(`
+      delete from term_registry where our_code = 'FIN.GL.MASTER.LIST'
+    `);
+    await client.unsafe(`
+      delete from capability
+       where code = 'FIN.GL.MASTER.CREATE'
+         and exists (select 1 from capability where code = 'CFG.FIN.GLACCOUNT.CREATE')
+    `);
     // OX09 now identifies Storage Location maintenance, not the Plant definition screen.
     // Repair the prior shared-seed alias ownership before inserting the canonical entry below.
     await client.unsafe(`

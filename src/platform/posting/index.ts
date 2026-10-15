@@ -573,7 +573,7 @@ async function accountTypeFor(
   if (rows.length === 0) {
     throw new PostingError(
       `G/L account ${accountNumber} does not exist in this chart of accounts.`,
-      'Create it in G/L Account Master (FIN.GL.MASTER.CREATE) or correct the account number.',
+      'Create it in G/L Account Master (CFG.FIN.GLACCOUNT.CREATE) or correct the account number.',
     );
   }
 
