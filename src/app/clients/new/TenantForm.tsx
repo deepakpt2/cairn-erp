@@ -77,8 +77,8 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
         </Section>
 
         <Section title={t('onboard.section.finance')}>
-          <Field label={t('onboard.chartOfAccounts')} width="w-40">
-            <input name="chartOfAccounts" defaultValue="CAIRN" className="field-input code" />
+          <Field label={t('onboard.chartOfAccounts')} hint={t('onboard.chartOfAccounts.hint')} required width="w-40">
+            <input name="chartOfAccounts" required minLength={4} maxLength={4} pattern="[A-Za-z0-9]{4}" autoCapitalize="characters" defaultValue="CA01" className="field-input code" />
           </Field>
           <Field label={t('onboard.fiscalYearVariant')} width="w-64">
             <select name="fiscalYearVariant" defaultValue="K4" className="field-input">

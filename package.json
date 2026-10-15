@@ -48,7 +48,9 @@
     "smoke:browser:distribution-channels": "tsx scripts/browser-smoke.ts --target distribution-channels",
     "smoke:browser:divisions": "tsx scripts/browser-smoke.ts --target divisions",
     "smoke:browser:sales-org-division": "tsx scripts/browser-smoke.ts --target sales-org-division",
-    "smoke:browser:controlling-area": "tsx scripts/browser-smoke.ts --target controlling-area"
+    "smoke:browser:controlling-area": "tsx scripts/browser-smoke.ts --target controlling-area",
+    "smoke:browser:controlling-area-company-assignment": "tsx scripts/browser-smoke.ts --target controlling-area-company-assignment",
+    "smoke:browser:chart-of-accounts": "tsx scripts/browser-smoke.ts --target chart-of-accounts"
   },
   "dependencies": {
     "drizzle-orm": "^0.38.4",

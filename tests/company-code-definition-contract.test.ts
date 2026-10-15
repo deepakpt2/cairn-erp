@@ -39,7 +39,7 @@ describe('protected Company Code define contract', () => {
     expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, name: 'N'.repeat(161) })).toThrow();
     expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, currency: 'US' })).toThrow();
     expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, country: 'KWT' })).toThrow();
-    expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, chartOfAccounts: 'CAIRN' })).toThrow();
+    expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, chartOfAccounts: 'CA01' })).toThrow();
     expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, fiscalYearVariant: 'K4' })).toThrow();
     expect(() => companyCodeDefinitionInputSchema.parse({ ...valid, postingPeriodVariant: 'C001' })).toThrow();
   });

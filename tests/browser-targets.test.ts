@@ -105,6 +105,23 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' });
     expect(STATIC_ACCEPTANCE_TARGETS.has('controlling-area')).toBe(false);
   });
+  it('reserves T970 for SCR-025 OX19 and binds acceptance to a guarded local PostgreSQL database', () => {
+    const ox19 = TARGETS.find((target) => target.id === 'controlling-area-company-assignment');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['controlling-area-company-assignment'];
+    expect(ox19).toMatchObject({ client: 'T970' });
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' });
+    expect(guard?.database).not.toBe('cairn');
+    expect(guard?.database).not.toBe('cairn_b115');
+    expect(STATIC_ACCEPTANCE_TARGETS.has('controlling-area-company-assignment')).toBe(false);
+  });
+  it('reserves T969 for SCR-026 OB13 on the guarded local acceptance database', () => {
+    const ob13 = TARGETS.find((target) => target.id === 'chart-of-accounts');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['chart-of-accounts'];
+    expect(ob13).toMatchObject({ client: 'T969' });
+    expect(ob13?.client).not.toBe('T970');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' });
+    expect(STATIC_ACCEPTANCE_TARGETS.has('chart-of-accounts')).toBe(false);
+  });
   it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];

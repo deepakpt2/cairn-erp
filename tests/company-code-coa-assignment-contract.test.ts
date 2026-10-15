@@ -46,7 +46,9 @@ describe('protected Company Code CoA assignment contract', () => {
     expect(service).toContain('lockCompanyCodeOxxAssignments(tx, client, values.companyCode)');
     expect(service).toContain(".for('update')");
     expect(service).toContain("'CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'");
-    expect(service).toContain("eq(chartOfAccounts.isActive, true)");
+    expect(service).toContain('isActive: chartOfAccounts.isActive');
+    expect(service).toContain('isBlocked: chartOfAccounts.isBlocked');
+    expect(service).toContain('if (chart.isBlocked)');
     expect(service).toContain('isNull(companyCode.chartOfAccounts)');
     expect(service).toContain('This initial assignment action does not replace an existing chart of accounts.');
   });

@@ -78,7 +78,7 @@ describe('unassigned Company Code behavior', () => {
   it('accepts a valid chart assignment on its own, while the later assignments remain pending', async () => {
     await withTenant(tenant.client, (tx) =>
       tx.update(companyCode)
-        .set({ chartOfAccounts: 'CAIRN' })
+        .set({ chartOfAccounts: 'CA01' })
         .where(
           and(
             eq(companyCode.client, tenant.client),
@@ -87,7 +87,7 @@ describe('unassigned Company Code behavior', () => {
         ),
     );
     const detail = await getCompanyCodeDetail(tenant.client, unassignedCode);
-    expect(detail?.company.chartOfAccounts).toBe('CAIRN');
+    expect(detail?.company.chartOfAccounts).toBe('CA01');
     expect(detail?.company.fiscalYearVariant).toBeNull();
     expect(detail?.company.postingPeriodVariant).toBeNull();
     await expect(
@@ -111,7 +111,7 @@ describe('unassigned Company Code behavior', () => {
     await expect(
       withTenant(tenant.client, (tx) =>
         tx.update(companyCode)
-          .set({ chartOfAccounts: 'NOTREAL' })
+          .set({ chartOfAccounts: 'NORE' })
           .where(
             and(
               eq(companyCode.client, tenant.client),

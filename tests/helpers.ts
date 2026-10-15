@@ -115,7 +115,7 @@ export async function seedAccounts(tenant: TestTenant, accounts: string[]): Prom
         .insert(glAccount)
         .values({
           client: tenant.client,
-          chartOfAccounts: 'CAIRN',
+          chartOfAccounts: 'CA01',
           accountNumber,
           name: `Custom test account ${accountNumber}`,
           accountType: 'EXPENSE',

@@ -136,7 +136,7 @@ describe('tenant isolation', () => {
           insert into gl_account
             (client, chart_of_accounts, account_number, name, account_type, is_balance_sheet, created_by)
           values
-            (${beta.client}, 'CAIRN', '999999', 'Smuggled account', 'ASSET', true, 'ATTACKER')
+            (${beta.client}, 'CA01', '999999', 'Smuggled account', 'ASSET', true, 'ATTACKER')
         `),
       ),
     ).rejects.toThrow(/row-level security|policy/i);

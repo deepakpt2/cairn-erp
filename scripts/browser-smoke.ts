@@ -179,6 +179,8 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'plant-definition' || target.id === 'plant-company-code-assignment') return '/config/plants';
   if (target.id === 'foundation') return '/finance/journal/new';
   if (target.id === 'controlling-area') return '/config/controlling-area';
+  if (target.id === 'controlling-area-company-assignment') return '/config/controlling-area/assign-company-code';
+  if (target.id === 'chart-of-accounts') return '/config/chart-of-accounts';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';

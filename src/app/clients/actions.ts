@@ -46,7 +46,7 @@ export async function createTenantAction(
       companyCode: read('companyCode'),
       companyName: read('companyName'),
       fiscalYearVariant: read('fiscalYearVariant') || 'K4',
-      chartOfAccounts: read('chartOfAccounts') || 'CAIRN',
+      chartOfAccounts: read('chartOfAccounts') || 'CA01',
       administrator: {
         username: read('username'),
         fullName: read('fullName'),

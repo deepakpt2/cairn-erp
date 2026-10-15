@@ -57,7 +57,7 @@ describe('number range maintenance', () => {
   });
 
   it('issues the same display number in different companies without identity collisions', async () => {
-    await upsertCompanyCode({ client: tenant.client, companyCode: '2000', name: 'Second company', chartOfAccounts: 'CAIRN', fiscalYearVariant: 'K4', postingPeriodVariant: 'C001', currency: 'USD', country: 'KW', changedBy: 'TEST' });
+    await upsertCompanyCode({ client: tenant.client, companyCode: '2000', name: 'Second company', chartOfAccounts: 'CA01', fiscalYearVariant: 'K4', postingPeriodVariant: 'C001', currency: 'USD', country: 'KW', changedBy: 'TEST' });
     await maintainNumberRange(input());
     await maintainNumberRange(input({ companyCode: '2000' }));
     const first = await post('1000'); const second = await post('2000');

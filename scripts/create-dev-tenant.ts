@@ -44,7 +44,7 @@ async function main() {
     companyCode: '1000',
     companyName: 'Cairn Development Company',
     fiscalYearVariant: 'K4',
-    chartOfAccounts: 'CAIRN',
+    chartOfAccounts: 'CA01',
     administrator: {
       username: 'dev.admin',
       fullName: 'Development Administrator',

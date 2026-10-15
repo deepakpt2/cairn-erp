@@ -43,7 +43,11 @@ export default async function CompanyCodesPage() {
         tx
           .select({ code: chartOfAccountsTable.chartOfAccounts, name: chartOfAccountsTable.name })
           .from(chartOfAccountsTable)
-          .where(and(eq(chartOfAccountsTable.client, client), eq(chartOfAccountsTable.isActive, true)))
+          .where(and(
+            eq(chartOfAccountsTable.client, client),
+            eq(chartOfAccountsTable.isActive, true),
+            eq(chartOfAccountsTable.isBlocked, false),
+          ))
           .orderBy(asc(chartOfAccountsTable.chartOfAccounts)),
       )
     : [];

@@ -125,6 +125,10 @@ export interface CompanyCodeInput {
 
 export async function upsertCompanyCode(input: CompanyCodeInput) {
   const { client, companyCode: code, changedBy } = input;
+  const chartKey = input.chartOfAccounts.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(chartKey)) {
+    throw new ConfigError('Chart of Accounts must be exactly four letters or numbers.', 'Choose a valid four-character Chart of Accounts key.');
+  }
 
   return withTenant(client, async (tx) => {
     const linkedAreas = await lockCompanyCodeOxxAssignments(tx, client, code);
@@ -135,11 +139,25 @@ export async function upsertCompanyCode(input: CompanyCodeInput) {
       .limit(1)
       .for('update');
 
+    const [chart] = await tx.select({
+      isActive: chartOfAccounts.isActive,
+      isBlocked: chartOfAccounts.isBlocked,
+    }).from(chartOfAccounts)
+      .where(and(eq(chartOfAccounts.client, client), eq(chartOfAccounts.chartOfAccounts, chartKey)))
+      .limit(1)
+      .for('share');
+    if (!chart || !chart.isActive) {
+      throw new ConfigError(`Active Chart of Accounts ${chartKey} is not defined in this tenant.`, 'Define and activate the Chart of Accounts first.');
+    }
+    if (chart.isBlocked && (existing.length === 0 || existing[0].chartOfAccounts !== chartKey)) {
+      throw new ConfigError(`Chart of Accounts ${chartKey} is blocked and cannot be assigned to a Company Code.`, 'Remove the Chart of Accounts block before creating a new Company Code segment.');
+    }
+
     const values = {
       client,
       companyCode: code,
       name: input.name,
-      chartOfAccounts: input.chartOfAccounts,
+      chartOfAccounts: chartKey,
       fiscalYearVariant: input.fiscalYearVariant,
       postingPeriodVariant: input.postingPeriodVariant,
       currency: input.currency,
@@ -242,9 +260,35 @@ export interface GlAccountInput {
 }
 
 export async function upsertGlAccount(input: GlAccountInput) {
-  const { client, chartOfAccounts: coa, accountNumber, changedBy } = input;
+  const { client, changedBy } = input;
+  const coa = input.chartOfAccounts.trim().toUpperCase();
+  const accountNumber = input.accountNumber.trim();
+  if (!/^[A-Z0-9]{4}$/.test(coa)) {
+    throw new ConfigError('Chart of Accounts must be exactly four letters or numbers.', 'Choose an existing four-character Chart of Accounts key.');
+  }
+  if (accountNumber.length < 1 || accountNumber.length > 10) {
+    throw new ConfigError('G/L Account Number must be between 1 and 10 characters.', 'Enter an account number within the Chart of Accounts length limit.');
+  }
 
   return withTenant(client, async (tx) => {
+    const [chart] = await tx.select({
+      accountNumberLength: chartOfAccounts.accountNumberLength,
+      isActive: chartOfAccounts.isActive,
+      isBlocked: chartOfAccounts.isBlocked,
+    }).from(chartOfAccounts)
+      .where(and(eq(chartOfAccounts.client, client), eq(chartOfAccounts.chartOfAccounts, coa)))
+      .limit(1)
+      .for('share');
+    if (!chart || !chart.isActive) {
+      throw new ConfigError(`Active Chart of Accounts ${coa} is not defined in this tenant.`, 'Define and activate the Chart of Accounts before maintaining G/L accounts.');
+    }
+    if (accountNumber.length > chart.accountNumberLength) {
+      throw new ConfigError(
+        `G/L Account Number ${accountNumber} exceeds the ${chart.accountNumberLength}-character limit for Chart of Accounts ${coa}.`,
+        'Use an account number no longer than the chart’s configured maximum.',
+      );
+    }
+
     const existing = await tx
       .select()
       .from(glAccount)
@@ -256,6 +300,12 @@ export async function upsertGlAccount(input: GlAccountInput) {
         ),
       )
       .limit(1);
+    if (existing.length === 0 && chart.isBlocked) {
+      throw new ConfigError(
+        `Chart of Accounts ${coa} is blocked; new G/L accounts cannot be created.`,
+        'Remove the Chart of Accounts block before creating a G/L account.',
+      );
+    }
 
     const values = {
       client,

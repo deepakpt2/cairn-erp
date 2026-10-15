@@ -24,7 +24,7 @@ describe('customer company-code settings',()=>{
   });
   it('derives the assigned company chart and validates customer reconciliation',async()=>{
     await saveCustomerCompany(input('READY'));
-    const row=await getCustomerCompany(alpha.client,'READY','1000');expect(row?.chartOfAccounts).toBe('CAIRN');expect(row?.reconciliationAccount).toBe('110000');
+    const row=await getCustomerCompany(alpha.client,'READY','1000');expect(row?.chartOfAccounts).toBe('CA01');expect(row?.reconciliationAccount).toBe('110000');
     await expect(withTenant(alpha.client,tx=>requireCustomerCompany(tx,alpha.client,'READY','1000'))).resolves.toMatchObject({paymentTermsCode:'NET30'});
   });
   it('refuses a supplier-only partner or unknown partner',async()=>{

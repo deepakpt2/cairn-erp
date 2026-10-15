@@ -36,17 +36,36 @@ export const chartOfAccounts = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    chartOfAccounts: varchar('chart_of_accounts', { length: 8 }).notNull(),
-    name: varchar('name', { length: 120 }).notNull(),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+    name: varchar('name', { length: 50 }).notNull(),
     language: char('language', { length: 2 }).notNull().default('EN'),
-    /** Account number length. Changing this after accounts exist is refused. */
-    accountNumberLength: integer('account_number_length').notNull().default(6),
-    /** Whether a group chart exists above this one (structural; consolidation). */
-    groupChart: varchar('group_chart', { length: 8 }),
+    /** Numeric account-number length (1–10). Locked after accounts or transactions exist. */
+    accountNumberLength: integer('account_number_length').notNull().default(10),
+    /** Optional Group CoA reference for consolidation. */
+    groupChart: varchar('group_chart', { length: 4 }),
+    /** Stored only in SCR-026; operational cost-element generation is deferred. */
+    costElementIntegration: varchar('cost_element_integration', { length: 12 }).notNull().default('AUTOMATIC'),
+    /** Blocks new G/L master records and Company Code assignment. */
+    isBlocked: boolean('is_blocked').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.chartOfAccounts] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.chartOfAccounts] }),
+    check('chart_of_accounts_key_format', sql`${t.chartOfAccounts} ~ '^[A-Z0-9]{4}$'`),
+    check('chart_of_accounts_name_nonempty', sql`length(btrim(${t.name})) between 1 and 50`),
+    check('chart_of_accounts_language_format', sql`${t.language} ~ '^[A-Z]{2}$'`),
+    check('chart_of_accounts_language_supported', sql`${t.language} in ('EN')`),
+    check('chart_of_accounts_account_length', sql`${t.accountNumberLength} between 1 and 10`),
+    check('chart_of_accounts_group_key_format', sql`${t.groupChart} is null or ${t.groupChart} ~ '^[A-Z0-9]{4}$'`),
+    check('chart_of_accounts_group_not_self', sql`${t.groupChart} is null or ${t.groupChart} <> ${t.chartOfAccounts}`),
+    check('chart_of_accounts_cost_element_integration', sql`${t.costElementIntegration} in ('AUTOMATIC', 'MANUAL', 'NONE')`),
+    foreignKey({
+      name: 'chart_of_accounts_client_group_chart_fk',
+      columns: [t.client, t.groupChart],
+      foreignColumns: [t.client, t.chartOfAccounts],
+    }),
+  ],
 );
 
 /** Fiscal year variant — how the year is split into periods (§8.2, §14.3). */
@@ -161,7 +180,7 @@ export const companyCode = pgTable(
     companyCode: varchar('company_code', { length: 10 }).notNull(),
     name: varchar('name', { length: 160 }).notNull(),
     /** Assignments — the "assign" half of the define/assign chain. */
-    chartOfAccounts: varchar('chart_of_accounts', { length: 8 }),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 4 }),
     fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }),
     postingPeriodVariant: varchar('posting_period_variant', { length: 4 }),
     /** Local currency: the books are kept in this currency (§14.4). */
@@ -174,13 +193,18 @@ export const companyCode = pgTable(
     /** Credit control area for credit management (D-029). */
     creditControlArea: varchar('credit_control_area', { length: 4 }),
     /** Intercompany clearing account used when this company trades with affiliates. */
-    intercompanyClearingAccount: varchar('intercompany_clearing_account', { length: 20 }),
+    intercompanyClearingAccount: varchar('intercompany_clearing_account', { length: 10 }),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
   (t) => [
     primaryKey({ columns: [t.client, t.companyCode] }),
     index('company_code_coa_idx').on(t.client, t.chartOfAccounts),
+    foreignKey({
+      name: 'company_code_client_chart_of_accounts_fk',
+      columns: [t.client, t.chartOfAccounts],
+      foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
+    }),
   ],
 );
 

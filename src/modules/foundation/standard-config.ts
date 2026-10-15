@@ -64,6 +64,8 @@ export interface PackageInput {
   country: string;
   city?: string;
   timezone?: string;
+  /** Tenant-local operational chart key. Defaults to CA01 for the standard package. */
+  chartOfAccounts?: string;
   /** Fiscal year variant key to create. Defaults to K4 (calendar + 4 special). */
   fiscalYearVariant?: string;
   /** Local-language name of the chart of accounts. */
@@ -214,7 +216,10 @@ export async function applyStandardPackage(
   input: PackageInput,
 ): Promise<PackageResult> {
   const { client, activatedBy } = input;
-  const coaKey = 'CAIRN';
+  const coaKey = (input.chartOfAccounts ?? 'CA01').trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(coaKey)) {
+    throw new Error('Chart of Accounts key must be exactly four letters or numbers.');
+  }
   const fyvKey = input.fiscalYearVariant ?? 'K4';
   // Configuration keys are four characters throughout, as users expect.
   const ppvKey = 'C001';
@@ -227,10 +232,32 @@ export async function applyStandardPackage(
       chartOfAccounts: coaKey,
       name: 'Cairn International Standard Chart of Accounts',
       language: 'EN',
-      accountNumberLength: 6,
+      accountNumberLength: 10,
       createdBy: activatedBy,
     })
     .onConflictDoNothing();
+
+  const [chartDefinition] = await tx.select({
+    accountNumberLength: chartOfAccounts.accountNumberLength,
+    isBlocked: chartOfAccounts.isBlocked,
+  }).from(chartOfAccounts)
+    .where(and(eq(chartOfAccounts.client, client), eq(chartOfAccounts.chartOfAccounts, coaKey)))
+    .limit(1)
+    .for('share');
+  if (!chartDefinition) throw new Error(`Standard Chart of Accounts ${coaKey} was not created.`);
+
+  const existingStandardAccounts = await tx.select({ accountNumber: glAccount.accountNumber })
+    .from(glAccount)
+    .where(and(eq(glAccount.client, client), eq(glAccount.chartOfAccounts, coaKey)));
+  const existingAccountNumbers = new Set(existingStandardAccounts.map((row) => row.accountNumber.trim()));
+  const missingStandardAccounts = CHART_OF_ACCOUNTS.filter((spec) => !existingAccountNumbers.has(spec.number));
+  if (chartDefinition.isBlocked && missingStandardAccounts.length > 0) {
+    throw new Error(`Chart of Accounts ${coaKey} is blocked; the standard package cannot create its missing G/L accounts.`);
+  }
+  const overlengthStandardAccounts = CHART_OF_ACCOUNTS.filter((spec) => spec.number.length > chartDefinition.accountNumberLength);
+  if (overlengthStandardAccounts.length > 0) {
+    throw new Error(`Chart of Accounts ${coaKey} has a ${chartDefinition.accountNumberLength}-character limit, shorter than standard G/L account ${overlengthStandardAccounts[0].number}.`);
+  }
 
   let accounts = 0;
   for (const spec of CHART_OF_ACCOUNTS) {
@@ -348,6 +375,13 @@ export async function applyStandardPackage(
     .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, input.companyCode)))
     .limit(1)
     .for('update');
+
+  if (
+    chartDefinition.isBlocked
+    && (existingCompany.length === 0 || existingCompany[0].chartOfAccounts?.trim() !== coaKey)
+  ) {
+    throw new Error(`Chart of Accounts ${coaKey} is blocked; the standard package cannot create a new Company Code segment.`);
+  }
 
   if (existingCompany.length === 0) {
     await tx.insert(companyCode).values({

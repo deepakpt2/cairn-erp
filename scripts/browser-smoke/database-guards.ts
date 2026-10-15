@@ -6,7 +6,7 @@ export type BrowserAcceptanceDatabaseGuard = {
   batch: string;
 };
 
-/** Each acceptance target is bound to its own verified disposable loopback database. */
+/** Each local acceptance target is bound to an explicitly reviewed loopback database and port. */
 export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, BrowserAcceptanceDatabaseGuard>> = {
   'company-code-definition': { database: 'cairn_b110', port: '55496', batch: 'B-110' },
   'company-code-coa-assignment': { database: 'cairn_b115', port: '55498', batch: 'B-115' },
@@ -19,4 +19,6 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'sales-orgs': { database: 'cairn_b153', port: '55530', batch: 'B-153' },
   'sales-org-division': { database: 'cairn', port: '5432', batch: 'OVXA local loopback' },
   'controlling-area': { database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' },
+  'controlling-area-company-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' },
+  'chart-of-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' },
 };

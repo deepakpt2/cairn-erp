@@ -13,6 +13,8 @@ export const TARGETS = [
   { id: 'customer-sales-area', client: 'T987', label: 'Customer sales-area maintenance, persistence and history' },
   { id: 'company-code-definition', client: 'T986', label: 'Company Code definition capability gate and create-only form' },
   { id: 'controlling-area', client: 'T972', label: 'SCR-024 OKKP Controlling Area definition, F4, history and transaction lock' },
+  { id: 'controlling-area-company-assignment', client: 'T970', label: 'SCR-025 OX19 assignment, compatibility, duplicate no-op, unassign history and dual-capability access' },
+  { id: 'chart-of-accounts', client: 'T969', label: 'SCR-026 OB13 Chart of Accounts fields, F4, audit, account-length lock and block behavior' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

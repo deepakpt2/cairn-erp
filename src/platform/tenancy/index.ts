@@ -169,6 +169,13 @@ export class TenancyError extends Error {
 export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx) => Promise<void>): Promise<CreatedTenant> {
   validateKey(input.clientKey);
   validateKey(input.companyCode, 'Company code');
+  const chartOfAccounts = input.chartOfAccounts.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(chartOfAccounts)) {
+    throw new TenancyError(
+      'Chart of Accounts key must be exactly four letters or numbers.',
+      'Enter a four-character alphanumeric Chart of Accounts key.',
+    );
+  }
 
   const policyIssue = checkPasswordPolicy(input.administrator.password);
   if (policyIssue) {
@@ -315,6 +322,7 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
         currency: input.currency.toUpperCase(),
         country: input.country.toUpperCase(),
         city: undefined,
+        chartOfAccounts,
         fiscalYearVariant: input.fiscalYearVariant,
         activatedBy: input.createdBy,
       });

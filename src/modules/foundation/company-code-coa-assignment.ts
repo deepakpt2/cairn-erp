@@ -18,7 +18,7 @@ const PREREQUISITES = ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'] as co
 /** Values accepted for the one-time, initial Company Code → CoA assignment. */
 export const companyCodeCoaAssignmentValuesSchema = z.object({
   companyCode: z.string().trim().min(1).max(10),
-  chartOfAccounts: z.string().trim().min(1).max(8),
+  chartOfAccounts: z.string().trim().transform((value) => value.toUpperCase()).pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'Chart of Accounts must be exactly four letters or numbers.')),
 });
 
 /** Tenant and actor are service inputs; the protected server action supplies them from its session. */
@@ -107,20 +107,28 @@ export async function assignCompanyCodeCoa(raw: CompanyCodeCoaAssignmentInput) {
     }
 
     const [chart] = await tx
-      .select({ chartOfAccounts: chartOfAccounts.chartOfAccounts })
+      .select({
+        chartOfAccounts: chartOfAccounts.chartOfAccounts,
+        isActive: chartOfAccounts.isActive,
+        isBlocked: chartOfAccounts.isBlocked,
+      })
       .from(chartOfAccounts)
-      .where(
-        and(
-          eq(chartOfAccounts.client, client),
-          eq(chartOfAccounts.chartOfAccounts, values.chartOfAccounts),
-          eq(chartOfAccounts.isActive, true),
-        ),
-      )
-      .limit(1);
-    if (!chart) {
+      .where(and(
+        eq(chartOfAccounts.client, client),
+        eq(chartOfAccounts.chartOfAccounts, values.chartOfAccounts),
+      ))
+      .limit(1)
+      .for('share');
+    if (!chart || !chart.isActive) {
       throw new CompanyCodeCoaAssignmentError(
         `Active chart of accounts ${values.chartOfAccounts} is not defined in this tenant.`,
         'Define and activate the chart of accounts first (CFG.FIN.COA.DEFINE).',
+      );
+    }
+    if (chart.isBlocked) {
+      throw new CompanyCodeCoaAssignmentError(
+        `Chart of accounts ${values.chartOfAccounts} is blocked and cannot be assigned to a Company Code.`,
+        'Remove the Chart of Accounts block before creating a new Company Code segment.',
       );
     }
 

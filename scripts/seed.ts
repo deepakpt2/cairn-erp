@@ -97,6 +97,7 @@ const ACTIVITIES: Activity[] = [
 const CAPABILITIES: Array<{ code: string; module: string; action: string; posting: boolean; description: string }> = [
   { code: 'CFG.PLT.CLIENT.ONBOARD', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Provision a tenant with deployment-owner authorization' },
   { code: 'CFG.ORG.COMPANYCODE.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define tenant-scoped company-code records' },
+  { code: 'CFG.FIN.COA.DEFINE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Chart of Accounts settings' },
   { code: 'CFG.ORG.PLANT.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and change tenant-scoped Plant records' },
   { code: 'CFG.ORG.PLANT.ASSIGN_COMPANY', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign an unassigned Plant to a Company Code' },
   { code: 'CFG.ORG.STORAGELOC.DEFINE', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Define and maintain tenant-scoped Storage Locations' },
@@ -197,6 +198,7 @@ const REGISTRY: Array<{
   { ourCode: 'INV.MATERIAL.DISPLAY', termType: 'TRANSACTION', module: 'INV', title: 'Material master list', route: '/inventory/materials', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['MM02', 'MM03'], description: 'Find a material and maintain its organisational views.' },
   { ourCode: 'PROD.MRP.SETTINGS', termType: 'TRANSACTION', module: 'PROD', title: 'Material planning settings', route: '/inventory/materials?view=MRP', tier: 'TIER_1_BUILT', conformance: 'B', description: 'Planning parameters and net-change file, not yet an executable planning run.' },
   { ourCode: 'CFG.ORG.COMPANYCODE.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Company code define', route: '/config/company-codes', tier: 'TIER_2_CONFIGURED', conformance: 'A', aliases: ['OX02'], description: 'The legal entity that keeps its own books, with its chart of accounts, fiscal year variant and posting period variant assigned.' },
+  { ourCode: 'CFG.FIN.COA.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FIN', title: 'Chart of Accounts definition', route: '/config/chart-of-accounts', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OB13'], description: 'Maintain tenant-local Charts of Accounts, language, account-number length, Group CoA, cost-element integration policy and the block flag.' },
   { ourCode: 'FIN.GL.MASTER.LIST', termType: 'TRANSACTION', module: 'FIN', title: 'G/L account list', route: '/config/gl-accounts', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FS00', 'FSP0'], description: 'The chart of accounts, grouped the way an accountant reads it.' },
   { ourCode: 'FIN.CLOSE.PERIOD', termType: 'TRANSACTION', module: 'FIN', title: 'Posting periods', route: '/config/posting-periods', tier: 'TIER_1_BUILT', conformance: 'A', aliases: ['OB52'], description: 'Which periods are open, per account type. Closing a period is recorded in the change log.' },
   { ourCode: 'CFG.ORG.PLANT.DEFINE', termType: 'CONFIG_ACTIVITY', module: 'FND', title: 'Plant definition', route: '/config/plants', tier: 'TIER_2_CONFIGURED', conformance: 'B', aliases: ['OX10'], description: 'Production and storage sites; Company Code assignment and Storage Location definitions are separate activities.' },
@@ -280,6 +282,20 @@ async function main() {
         ],
       );
     }
+
+    // OB13 is newly actionable for existing tenants. Derive completion from an
+    // existing Chart of Accounts while preserving any status on seed reapplication.
+    await client.unsafe(`
+      insert into config_activity_status (client, activity_code, status, completed_at, completed_by, created_by)
+      select c.client,
+             'CFG.FIN.COA.DEFINE',
+             case when exists (select 1 from chart_of_accounts coa where coa.client = c.client) then 'COMPLETED' else 'NOT_STARTED' end,
+             (select max(coalesce(coa.changed_at, coa.created_at)) from chart_of_accounts coa where coa.client = c.client),
+             case when exists (select 1 from chart_of_accounts coa where coa.client = c.client) then 'SEED' else null end,
+             'SEED'
+        from client c
+      on conflict (client, activity_code) do nothing
+    `);
 
     // Existing tenants predate this activity; add only a missing NOT_STARTED row.
     // ON CONFLICT DO NOTHING preserves any tenant progress on seed reapplication.

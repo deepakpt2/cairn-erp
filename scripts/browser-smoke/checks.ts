@@ -28,6 +28,8 @@ import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/fo
 import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
 import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
+import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assignment';
+import { chartOfAccountsDefinition as ob13ChartOfAccounts } from './chart-of-accounts';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -1483,7 +1485,7 @@ async function companyCodeCoaAssignment(ctx: BrowserContext) {
   const beforeCharts = (await withTenant(CLIENT, (tx) =>
     tx.execute(sql`select chart_of_accounts, is_active from chart_of_accounts where client = ${CLIENT}`),
   )) as unknown as Array<{ chart_of_accounts: string; is_active: boolean }>;
-  assert.ok(beforeCharts.some((chart) => chart.chart_of_accounts === 'CAIRN' && chart.is_active));
+  assert.ok(beforeCharts.some((chart) => chart.chart_of_accounts === 'CA01' && chart.is_active));
   assert.equal(beforeCharts.some((chart) => [activeChart, inactiveChart].includes(chart.chart_of_accounts)), false);
   await withTenant(CLIENT, async (tx) => {
     await tx.execute(sql`
@@ -2061,7 +2063,7 @@ async function supplierCompany(ctx: BrowserContext) {
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Supplier company view saved. Status: Created.',{exact:true}).waitFor();
   const completedSupplierCompany=await getSupplierCompany(CLIENT,'TESTSUPP01','1000');
-  assert.equal(completedSupplierCompany?.chartOfAccounts,'CAIRN');
+  assert.equal(completedSupplierCompany?.chartOfAccounts,'CA01');
   assert.equal(completedSupplierCompany?.paymentMethods,savedPaymentMethods);
   await page.reload({waitUntil:'domcontentloaded'});
   await page.locator('input[name="paymentMethods"]').waitFor({state:'attached'});
@@ -2424,7 +2426,7 @@ async function customerCompany(ctx: BrowserContext) {
   await page.locator('[name="reason"]').fill('Browser customer accounting completion');
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await page.getByText('Customer company view saved. Status: Created.',{exact:true}).waitFor();
-  assert.equal((await getCustomerCompany(CLIENT,'TESTCUST01','1000'))?.chartOfAccounts,'CAIRN');
+  assert.equal((await getCustomerCompany(CLIENT,'TESTCUST01','1000'))?.chartOfAccounts,'CA01');
   await page.locator('[name="paymentTermsCode"]').selectOption('NET15');
   await page.locator('[name="reason"]').fill('Browser customer accounting maintenance');
   await page.getByRole('button',{name:'Save',exact:true}).click();
@@ -4558,6 +4560,8 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   foundation,
   'company-code-definition': companyCodeDefinition,
   'controlling-area': controllingAreaDefinition,
+  'controlling-area-company-assignment': ox19Assignment,
+  'chart-of-accounts': ob13ChartOfAccounts,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

@@ -2,15 +2,15 @@
 import { pgTable,varchar,boolean,integer,primaryKey,foreignKey,check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client,auditColumns } from '../../platform/tables/tenancy';
-import { companyCode } from './schema';
+import { chartOfAccounts, companyCode } from './schema';
 import { bpRole } from './business-partner-schema';
 import { glAccount } from '../finance/schema';
 import { paymentTerms } from './payment-terms-schema';
 export const supplierCompany=pgTable('supplier_company_code',{
   client:varchar('client',{length:4}).notNull().references(()=>client.client,{onDelete:'cascade'}),
   partnerNumber:varchar('partner_number',{length:40}).notNull(),roleCode:varchar('role_code',{length:16}).notNull().default('SUPPLIER'),
-  companyCode:varchar('company_code',{length:10}).notNull(),chartOfAccounts:varchar('chart_of_accounts',{length:8}).notNull(),
-  reconciliationAccount:varchar('reconciliation_account',{length:20}),paymentTermsCode:varchar('payment_terms_code',{length:12}),
+  companyCode:varchar('company_code',{length:10}).notNull(),chartOfAccounts:varchar('chart_of_accounts',{length:4}).notNull(),
+  reconciliationAccount:varchar('reconciliation_account',{length:10}),paymentTermsCode:varchar('payment_terms_code',{length:12}),
   paymentMethods:varchar('payment_methods',{length:40}),
   companyStatus:varchar('company_status',{length:16}).notNull().default('INCOMPLETE'),
   isBlocked:boolean('is_blocked').notNull().default(false),version:integer('version').notNull().default(1),...auditColumns,
@@ -18,6 +18,7 @@ export const supplierCompany=pgTable('supplier_company_code',{
   primaryKey({columns:[t.client,t.partnerNumber,t.companyCode]}),
   foreignKey({columns:[t.client,t.partnerNumber,t.roleCode],foreignColumns:[bpRole.client,bpRole.partnerNumber,bpRole.roleCode]}).onDelete('cascade'),
   foreignKey({columns:[t.client,t.companyCode],foreignColumns:[companyCode.client,companyCode.companyCode]}),
+  foreignKey({name:'supplier_company_chart_of_accounts_fk',columns:[t.client,t.chartOfAccounts],foreignColumns:[chartOfAccounts.client,chartOfAccounts.chartOfAccounts]}),
   foreignKey({columns:[t.client,t.chartOfAccounts,t.reconciliationAccount],foreignColumns:[glAccount.client,glAccount.chartOfAccounts,glAccount.accountNumber]}),
   foreignKey({columns:[t.client,t.paymentTermsCode],foreignColumns:[paymentTerms.client,paymentTerms.termsCode]}),
   check('supplier_company_role',sql`${t.roleCode}='SUPPLIER'`),

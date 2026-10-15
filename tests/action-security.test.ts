@@ -61,7 +61,7 @@ describe('server action security', () => {
     expect((await saveCustomerCompanyAction({ok:true},data)).ok).toBe(true);
     const customerCompany=await getCustomerCompany(alpha.client,'SEC-CUSTOMER','1000');
     expect(customerCompany?.createdBy).toBe('real.operator');
-    expect(customerCompany?.chartOfAccounts).toBe('CAIRN');
+    expect(customerCompany?.chartOfAccounts).toBe('CA01');
     expect(customerCompany?.paymentMethods).toBe('C,T');
     expect(customerCompany?.dunningProcedure).toBe('MA04');
     expect(customerCompany?.interestIndicator).toBe('I1');
@@ -113,7 +113,7 @@ describe('server action security', () => {
     // General partner is created by the earlier real general action security test.
     expect((await saveSupplierCompanyAction({ok:true},data)).ok).toBe(true);
     expect((await getSupplierCompany(alpha.client,'SEC-PARTNER','1000'))?.createdBy).toBe('real.operator');
-    expect((await getSupplierCompany(alpha.client,'SEC-PARTNER','1000'))?.chartOfAccounts).toBe('CAIRN');
+    expect((await getSupplierCompany(alpha.client,'SEC-PARTNER','1000'))?.chartOfAccounts).toBe('CA01');
     expect(await getSupplierCompany(beta.client,'SEC-PARTNER','1000')).toBeNull();
   });
   it('refuses supplier accounting writes with only general master authority',async()=>{

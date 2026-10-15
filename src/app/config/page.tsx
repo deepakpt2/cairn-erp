@@ -63,6 +63,7 @@ export default async function WorkbenchPage({
     '/clients/new',
     '/config',
     '/config/company-codes',
+    '/config/chart-of-accounts',
     '/config/controlling-area',
     '/config/controlling-area/assign-company-code',
     '/config/gl-accounts',

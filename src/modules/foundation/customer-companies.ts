@@ -13,7 +13,7 @@ export class CustomerCompanyError extends Error{
   constructor(message:string,readonly remedy='Review customer company settings and try again.'){super(message);}
 }
 const inputSchema=z.object({client:z.string().regex(/^[A-Za-z0-9]{2,4}$/),partnerNumber:z.string().regex(/^[A-Z0-9][A-Z0-9_.-]{0,39}$/),companyCode:z.string().regex(/^[A-Z0-9]{2,10}$/),
-  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),reconciliationAccount:z.string().trim().max(20),paymentTermsCode:z.string().trim().max(12),
+  expectedVersion:z.number().int().nonnegative(),changedBy:z.string().min(1).max(60),reason:z.string().trim().min(3).max(500),reconciliationAccount:z.string().trim().max(10),paymentTermsCode:z.string().trim().max(12),
   paymentMethods:z.string().trim().max(60),dunningProcedure:z.string().trim().max(8),interestIndicator:z.string().trim().max(8).optional(),toleranceGroup:z.string().trim().max(8).optional(),isBlocked:z.boolean()});
 export type CustomerCompanyInput=z.input<typeof inputSchema>;
 /** Payment-method set: up to ten one-or-two-character capital/digit codes, deduplicated and sorted so reordered input is a no-op. Codes only — the method master does not exist yet. */

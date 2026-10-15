@@ -96,7 +96,7 @@ async function main() {
   console.log('\nRendered content');
   const companyCodes = await get('/config/company-codes');
   check('company code 1000 listed', companyCodes.body.includes('1000'));
-  check('assigned chart of accounts shown', companyCodes.body.includes('CAIRN'));
+  check('assigned chart of accounts shown', companyCodes.body.includes('CA01'));
 
   const accounts = await get('/config/gl-accounts');
   check('trade payables account present', accounts.body.includes('200000'));

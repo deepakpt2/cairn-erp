@@ -33,7 +33,7 @@ describe('supplier company-code settings',()=>{
   });
   it('derives the assigned company chart and validates supplier reconciliation',async()=>{
     await saveSupplierCompany(input('READY'));
-    const row=await getSupplierCompany(alpha.client,'READY','1000');expect(row?.chartOfAccounts).toBe('CAIRN');expect(row?.reconciliationAccount).toBe('200000');
+    const row=await getSupplierCompany(alpha.client,'READY','1000');expect(row?.chartOfAccounts).toBe('CA01');expect(row?.reconciliationAccount).toBe('200000');
     await expect(withTenant(alpha.client,tx=>requireSupplierCompany(tx,alpha.client,'READY','1000'))).resolves.toMatchObject({paymentTermsCode:'NET30'});
   });
   it('saves canonical active outbound methods and records a security-relevant no-op-safe history item',async()=>{

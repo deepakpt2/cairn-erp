@@ -111,7 +111,7 @@ beforeAll(async () => {
     tx.insert(chartOfAccounts).values([
       {
         client: tenant!.client,
-        chartOfAccounts: 'ALT',
+        chartOfAccounts: 'ALT1',
         name: 'B-113 alternate active chart',
         language: 'EN',
         accountNumberLength: 6,
@@ -120,7 +120,7 @@ beforeAll(async () => {
       },
       {
         client: tenant!.client,
-        chartOfAccounts: 'OFF',
+        chartOfAccounts: 'OFF1',
         name: 'B-113 inactive chart',
         language: 'EN',
         accountNumberLength: 6,
@@ -133,7 +133,7 @@ beforeAll(async () => {
   await withTenant(otherTenant.client, (tx) =>
     tx.insert(chartOfAccounts).values({
       client: otherTenant!.client,
-      chartOfAccounts: 'REMOTE',
+      chartOfAccounts: 'RM01',
       name: 'B-113 other-tenant chart',
       language: 'EN',
       accountNumberLength: 6,
@@ -165,12 +165,12 @@ describe('protected initial Company Code CoA assignment', () => {
       client: fixture.client,
       changedBy: TEST_ACTOR,
       companyCode: '2000',
-      chartOfAccounts: 'CAIRN',
+      chartOfAccounts: 'CA01',
     });
 
-    expect(result).toEqual({ assigned: true, companyCode: '2000', chartOfAccounts: 'CAIRN' });
+    expect(result).toEqual({ assigned: true, companyCode: '2000', chartOfAccounts: 'CA01' });
     expect(await readCompanyCode('2000')).toMatchObject({
-      chartOfAccounts: 'CAIRN',
+      chartOfAccounts: 'CA01',
       fiscalYearVariant: null,
       postingPeriodVariant: null,
       changedBy: TEST_ACTOR,
@@ -187,7 +187,7 @@ describe('protected initial Company Code CoA assignment', () => {
         expect.objectContaining({
           fieldName: 'chartOfAccounts',
           oldValue: null,
-          newValue: 'CAIRN',
+          newValue: 'CA01',
           isSecurityRelevant: 'true',
         }),
       ]),
@@ -210,17 +210,17 @@ describe('protected initial Company Code CoA assignment', () => {
       client: fixture.client,
       changedBy: TEST_ACTOR,
       companyCode: '2000',
-      chartOfAccounts: 'CAIRN',
-    })).resolves.toEqual({ assigned: false, companyCode: '2000', chartOfAccounts: 'CAIRN' });
+      chartOfAccounts: 'CA01',
+    })).resolves.toEqual({ assigned: false, companyCode: '2000', chartOfAccounts: 'CA01' });
 
     await expect(assignCompanyCodeCoa({
       client: fixture.client,
       changedBy: TEST_ACTOR,
       companyCode: '2000',
-      chartOfAccounts: 'ALT',
+      chartOfAccounts: 'ALT1',
     })).rejects.toBeInstanceOf(CompanyCodeCoaAssignmentError);
 
-    expect((await readCompanyCode('2000'))?.chartOfAccounts).toBe('CAIRN');
+    expect((await readCompanyCode('2000'))?.chartOfAccounts).toBe('CA01');
     expect(await readCompanyCodeHistory('2000')).toHaveLength(2);
   });
 
@@ -230,13 +230,13 @@ describe('protected initial Company Code CoA assignment', () => {
       client: fixture.client,
       changedBy: TEST_ACTOR,
       companyCode: '9999',
-      chartOfAccounts: 'CAIRN',
+      chartOfAccounts: 'CA01',
     })).rejects.toThrow(/does not exist in this tenant/);
 
     for (const [code, chart, message] of [
-      ['2001', 'MISSING', /not defined in this tenant/],
-      ['2002', 'OFF', /not defined in this tenant/],
-      ['2003', 'REMOTE', /not defined in this tenant/],
+      ['2001', 'MISS', /not defined in this tenant/],
+      ['2002', 'OFF1', /not defined in this tenant/],
+      ['2003', 'RM01', /not defined in this tenant/],
     ] as const) {
       await expect(assignCompanyCodeCoa({
         client: fixture.client,
@@ -258,7 +258,7 @@ describe('protected initial Company Code CoA assignment', () => {
           client: fixture.client,
           changedBy: TEST_ACTOR,
           companyCode: '2004',
-          chartOfAccounts: 'CAIRN',
+          chartOfAccounts: 'CA01',
         })).rejects.toThrow(prerequisite);
         expect((await readCompanyCode('2004'))?.chartOfAccounts).toBeNull();
         expect(await readCompanyCodeHistory('2004')).toHaveLength(1);

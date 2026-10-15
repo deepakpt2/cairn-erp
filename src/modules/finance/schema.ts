@@ -19,8 +19,10 @@ import {
   primaryKey,
   uniqueIndex,
   index,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, client } from '../../platform/tables/tenancy';
+import { chartOfAccounts } from '../foundation/schema';
 
 /** Chart-of-accounts level account definition, plus the company-code segment (§8.2). */
 export const glAccount = pgTable(
@@ -29,8 +31,8 @@ export const glAccount = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    chartOfAccounts: varchar('chart_of_accounts', { length: 8 }).notNull(),
-    accountNumber: varchar('account_number', { length: 20 }).notNull(),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+    accountNumber: varchar('account_number', { length: 10 }).notNull(),
     name: varchar('name', { length: 200 }).notNull(),
     /** ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE — drives statement placement. */
     accountType: varchar('account_type', { length: 16 }).notNull(),
@@ -50,6 +52,11 @@ export const glAccount = pgTable(
   (t) => [
     primaryKey({ columns: [t.client, t.chartOfAccounts, t.accountNumber] }),
     index('gl_account_type_idx').on(t.client, t.accountType),
+    foreignKey({
+      name: 'gl_account_client_chart_of_accounts_fk',
+      columns: [t.client, t.chartOfAccounts],
+      foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
+    }),
   ],
 );
 
@@ -109,7 +116,7 @@ export const journalEntryLine = pgTable(
     documentNumber: varchar('document_number', { length: 40 }).notNull(),
     fiscalYear: integer('fiscal_year').notNull(),
     lineNumber: integer('line_number').notNull(),
-    glAccount: varchar('gl_account', { length: 20 }).notNull(),
+    glAccount: varchar('gl_account', { length: 10 }).notNull(),
     companyCode: varchar('company_code', { length: 10 }).notNull(),
     /** S = debit, H = credit. Stored explicitly rather than as a sign. */
     debitCredit: char('debit_credit', { length: 1 }).notNull(),
