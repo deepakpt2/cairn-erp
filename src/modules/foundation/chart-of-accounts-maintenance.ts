@@ -634,7 +634,7 @@ async function requireKeyNotReservedByGroup(tx: Tx, client: string, code: string
     ))
     .limit(1);
   if (reserved) throw new ChartOfAccountsMaintenanceError(
-    `Key ${code} is reserved as a Group CoA in this SAP client.`,
+    `Key ${code} is reserved as a Group CoA in this tenant.`,
     'Choose a different four-character Chart of Accounts key, or deactivate and remove the Group CoA reservation first.',
   );
 }
@@ -648,7 +648,7 @@ async function requireKeyNotReservedByChart(tx: Tx, client: string, code: string
     ))
     .limit(1);
   if (reserved) throw new ChartOfAccountsMaintenanceError(
-    `Key ${code} is reserved as an operational Chart of Accounts in this SAP client.`,
+    `Key ${code} is reserved as an operational Chart of Accounts in this tenant.`,
     'Choose a different four-character Group CoA key.',
   );
 }

@@ -81,8 +81,8 @@ describe('SCR-026 / OB13 amendment: Group CoA registry and lifecycle UI contract
     expect(maintenance).toContain('eq(groupChartOfAccounts.isActive, true)');
     expect(maintenance).toContain('async function requireKeyNotReservedByGroup');
     expect(maintenance).toContain('async function requireKeyNotReservedByChart');
-    expect(maintenance).toContain('is reserved as a Group CoA in this SAP client');
-    expect(maintenance).toContain('is reserved as an operational Chart of Accounts in this SAP client');
+    expect(maintenance).toContain('is reserved as a Group CoA in this tenant');
+    expect(maintenance).toContain('is reserved as an operational Chart of Accounts in this tenant');
     // An unchanged reference is never re-validated, so a deactivated entry cannot strand a chart.
     expect(maintenance).toContain('const groupChartChanged = !current || (current.groupChart?.trim() || null) !== values.groupChart;');
     expect(maintenance).toContain('if (values.groupChart && groupChartChanged)');
