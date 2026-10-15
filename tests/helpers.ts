@@ -9,7 +9,7 @@ import { client as clientTable, clientSettings } from '@/platform/tables/tenancy
 import { defineRange } from '@/platform/numbering';
 import { applyStandardPackage, STANDARD_ACCOUNT_GROUP } from '@/modules/foundation/standard-config';
 import { glAccountGroup } from '@/modules/finance/gl-account-group-schema';
-import { chartOfAccounts } from '@/modules/foundation/schema';
+import { chartOfAccounts, distributionChannel, division, salesOrgDistributionChannel, salesOrgDivision } from '@/modules/foundation/schema';
 import { deriveGlAccountType, deriveIsBalanceSheet } from '@/modules/finance/gl-account-vocabulary';
 
 /** Four-character tenant key, T + three digits. The reference model uses three characters; ours is longer and its own. */
@@ -169,6 +169,71 @@ export async function ensureAccountGroup(
       .onConflictDoNothing();
   });
   return code;
+}
+
+/**
+ * Give a Sales Area fixture the assignments it needs.
+ *
+ * Migration 0030 (OVXG) made a Sales Area reference both assignment sets — the
+ * (sales organization, distribution channel) pair from OVXK and the (sales
+ * organization, division) pair from OVXA — and each assignment in turn references its
+ * own definition. The standard package defines channels and divisions `01`–`03` but
+ * assigns only `1000`/`01`/`01`, so a fixture that inserts a Sales Area directly has to
+ * supply its own dimensions first. Without them the insert fails on the foreign key, and
+ * where it happens at module scope it takes the whole file's tests with it.
+ *
+ * Definitions are created only when missing and are never updated, so a test that owns
+ * a definition — its name, version and lifecycle — keeps ownership of it.
+ */
+export async function assignSalesAreaDimensions(
+  tenant: TestTenant,
+  salesOrg: string,
+  dimensions: Array<{ distributionChannel?: string; division?: string }>,
+): Promise<void> {
+  await withTenant(tenant.client, async (tx) => {
+    for (const dimension of dimensions) {
+      if (dimension.distributionChannel) {
+        await tx
+          .insert(distributionChannel)
+          .values({
+            client: tenant.client,
+            distributionChannel: dimension.distributionChannel,
+            name: `Test channel ${dimension.distributionChannel}`,
+            createdBy: 'TEST',
+          })
+          .onConflictDoNothing();
+        await tx
+          .insert(salesOrgDistributionChannel)
+          .values({
+            client: tenant.client,
+            salesOrg,
+            distributionChannel: dimension.distributionChannel,
+            createdBy: 'TEST',
+          })
+          .onConflictDoNothing();
+      }
+      if (dimension.division) {
+        await tx
+          .insert(division)
+          .values({
+            client: tenant.client,
+            division: dimension.division,
+            name: `Test division ${dimension.division}`,
+            createdBy: 'TEST',
+          })
+          .onConflictDoNothing();
+        await tx
+          .insert(salesOrgDivision)
+          .values({
+            client: tenant.client,
+            salesOrg,
+            division: dimension.division,
+            createdBy: 'TEST',
+          })
+          .onConflictDoNothing();
+      }
+    }
+  });
 }
 
 /**

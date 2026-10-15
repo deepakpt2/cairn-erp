@@ -23,7 +23,7 @@ import {
   deactivateSalesOrg,
   saveSalesOrgDefinition,
 } from '@/modules/foundation/sales-organization-maintenance';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { assignSalesAreaDimensions, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const SALES_ORG_ACTIVITY = 'CFG.ORG.SALESORG.DEFINE';
 const DIVISION_ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
@@ -247,6 +247,9 @@ describe('OVXA Sales Organization / Division assignment on the static test datab
     const tenant = primaryTenant();
     const pair = { salesOrg: '1000', division: '03' };
     await assignSalesOrgDivision({ client: tenant.client, changedBy: ACTOR, ...pair });
+    // The area below spans a different channel, so that channel needs its own OVXK
+    // assignment; the division under test is assigned by the service call above.
+    await assignSalesAreaDimensions(tenant, pair.salesOrg, [{ distributionChannel: '02' }]);
     await withTenant(tenant.client, (tx) => tx.insert(salesArea).values({
       client: tenant.client,
       salesOrg: pair.salesOrg,

@@ -1,6 +1,6 @@
 import { beforeAll,afterAll,describe,expect,it } from 'vitest';
 import { sql } from 'drizzle-orm';
-import { createTenant,destroyTenant,withTenant,closeDb,type TestTenant } from './helpers';
+import { assignSalesAreaDimensions,createTenant,destroyTenant,withTenant,closeDb,type TestTenant } from './helpers';
 import { db } from '../src/platform/db/client';
 import { saveBusinessPartner } from '../src/modules/foundation/business-partners';
 import { saveCustomerSalesArea,getCustomerSalesArea,listCustomerSalesAreas,requireCustomerSalesArea,customerSalesAreaChoices,type CustomerSalesAreaInput } from '../src/modules/foundation/customer-sales-areas';
@@ -12,6 +12,9 @@ beforeAll(async()=>{
   alpha=await createTenant('customer-sales-area-alpha');beta=await createTenant('customer-sales-area-beta');
   for(const number of ['STAGED','READY','NOOP','RACE','BLOCK','INVALID','FOREIGN','MULTI','HISTORY','GATE','ROLEOFF','UNASSIGNEDPLANT'])await partner(alpha,number);
   await partner(alpha,'SUPPLIERONLY',['SUPPLIER']);
+  // Migration 0030 made a Sales Area reference both assignment sets, so the extra
+  // areas below need their (org, channel) and (org, division) pairs assigned first.
+  await assignSalesAreaDimensions(alpha,'1000',[{distributionChannel:'03',division:'01'},{distributionChannel:'02',division:'02'}]);
   // Extra fixtures, explicitly test-only: a second company with its own plant, a second sales area, and an inactive sales area.
   await withTenant(alpha.client,async tx=>{
     await tx.execute(sql`insert into company_code(client,company_code,name,chart_of_accounts,fiscal_year_variant,posting_period_variant,currency,country,created_by) select client,'2000','Second test company',chart_of_accounts,fiscal_year_variant,posting_period_variant,currency,country,'TEST' from company_code where company_code='1000'`);

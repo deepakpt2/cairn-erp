@@ -13,7 +13,7 @@ import {
   saveSalesOrgDefinition,
   type SalesOrgDefinitionValuesInput,
 } from '@/modules/foundation/sales-organization-maintenance';
-import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
+import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 
 const ACTIVITY = 'CFG.ORG.SALESORG.DEFINE';
 const ACTOR = 'SCR020_MAINT_TEST';
@@ -273,6 +273,7 @@ describe('SCR-020 Sales Organization definition service on disposable PostgreSQL
 
     const dependentCode = 'S204';
     await createDefinition(tenant, dependentCode);
+    await assignSalesAreaDimensions(tenant, dependentCode, [{ distributionChannel: '10', division: '00' }]);
     await withTenant(tenant.client, (tx) => tx.insert(salesArea).values({
       client: tenant.client, salesOrg: dependentCode, distributionChannel: '10', division: '00',
       name: 'SCR-020 dependent area', createdBy: ACTOR,
@@ -360,6 +361,7 @@ describe('SCR-020 Sales Organization definition service on disposable PostgreSQL
     const code = 'S211';
     const customerCode = 'CUST0211';
     await createDefinition(tenant, code);
+    await assignSalesAreaDimensions(tenant, code, [{ distributionChannel: '11', division: '00' }]);
     await withTenant(tenant.client, async (tx) => {
       await tx.insert(salesArea).values({
         client: tenant.client, salesOrg: code, distributionChannel: '11', division: '00',

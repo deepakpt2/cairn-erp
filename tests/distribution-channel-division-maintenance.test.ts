@@ -12,7 +12,7 @@ import {
   saveDivisionDefinition,
   saveDistributionChannelDefinition,
 } from '@/modules/foundation/distribution-channel-division-maintenance';
-import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
+import { assignSalesAreaDimensions, closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 
 const ACTIVITY_CODES = ['CFG.ORG.DISTCHANNEL.DEFINE', 'CFG.ORG.DIVISION.DEFINE'] as const;
 const ACTOR = 'SCR022_DIMENSION_TEST';
@@ -157,7 +157,7 @@ describe('SCR-022 Distribution Channel and Division definition services', () => 
     expect(definitionChange?.items.map((item) => item.fieldName)).toEqual(['name']);
   });
 
-  it('soft-deactivates unused entries with history and refuses entries referenced by any Sales Area', async () => {
+  it('soft-deactivates unused entries with history and refuses entries a Sales Area still depends on', async () => {
     const tenant = tenantA();
     await createChannel(tenant, 'S1', 'Unused');
     await expect(deactivateDistributionChannel({
@@ -171,23 +171,32 @@ describe('SCR-022 Distribution Channel and Division definition services', () => 
     await expect(createChannel(tenant, 'S1', 'Reactivated')).rejects.toBeInstanceOf(DistributionDimensionMaintenanceError);
 
     await createChannel(tenant, 'S2', 'Referenced');
+    await assignSalesAreaDimensions(tenant, '1000', [{ distributionChannel: 'S2' }]);
     await withTenant(tenant.client, (tx) => tx.insert(salesArea).values({
       client: tenant.client, salesOrg: '1000', distributionChannel: 'S2', division: '01',
       name: 'SCR-022 channel dependency', createdBy: ACTOR,
     }));
+    // A Sales Area may only use a channel its Sales Organization is assigned to — the
+    // foreign key migration 0030 added — so a Sales Area dependency always arrives
+    // together with an assignment, and the assignment guard is the one that refuses.
+    // The guarantee under test is unchanged: an entry a Sales Area still uses cannot be
+    // deactivated. The Sales Area guard below it in the service is unreachable while
+    // that foreign key holds.
     await expect(deactivateDistributionChannel({
       client: tenant.client, changedBy: ACTOR, distributionChannel: 'S2', expectedVersion: 1,
-    })).rejects.toMatchObject({ message: expect.stringContaining('still referenced by Sales Area') });
+    })).rejects.toMatchObject({ message: expect.stringContaining('still assigned to one or more Sales Organizations') });
     expect(await readChannel(tenant.client, 'S2')).toMatchObject({ isActive: true });
 
     await createDivision(tenant, 'S3', 'Referenced line');
+    await assignSalesAreaDimensions(tenant, '1000', [{ division: 'S3' }]);
     await withTenant(tenant.client, (tx) => tx.insert(salesArea).values({
       client: tenant.client, salesOrg: '1000', distributionChannel: '01', division: 'S3',
       name: 'SCR-022 division dependency', createdBy: ACTOR,
     }));
+    // Same shape as the channel case above: the OVXA assignment guard refuses first.
     await expect(deactivateDivision({
       client: tenant.client, changedBy: ACTOR, division: 'S3', expectedVersion: 1,
-    })).rejects.toMatchObject({ message: expect.stringContaining('still referenced by Sales Area') });
+    })).rejects.toMatchObject({ message: expect.stringContaining('still assigned to one or more Sales Organizations') });
     expect(await readDivision(tenant.client, 'S3')).toMatchObject({ isActive: true });
   });
 });
