@@ -748,6 +748,15 @@ Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/m
 
 The owner specified a four-character alphanumeric Company Code lookup but did not require uppercase normalization. The shared Controlling Area F4 component now preserves source-key case when used for OX19 Company Codes; all existing records remain visible, and keys that cannot fit the four-character field stay nonselectable. The Controlling Area key continues using its own uppercase-normalized behavior. No DB, backend or support-function changes.
 
+
+### 26.221 B-205 — SCR-025 / OX19 DB/schema stage implemented `SCHEMA/MIGRATION ADDED · NOT APPLIED`
+
+**Schema.** Extended the existing `controlling_area_company` relation with a tenant-local unique Company Code index, a four-character alphanumeric key check, and composite same-tenant foreign keys to the existing Controlling Area and Company Code masters. The migration preflight refuses existing orphan rows, duplicate Company Code links, invalid scope cardinality, missing/mismatched Chart of Accounts/Fiscal Year Variant/Currency, or inconsistent current OCA baselines; it does not silently repair data. The relation remains under its existing forced-RLS policy. Dynamic assignment and compatibility checks remain for the separate backend stage.
+
+**Verification/boundary.** `npm run typecheck` and `git diff --check` passed. The migration was not applied: no local PostgreSQL client/cluster or `.env.local` is present. No remote DB credentials were read or used; no database or test ran. The migration must be applied and verified against disposable local data during the final test stage.
+
+**Next.** Implement the OX19 backend assignment functions as a separate stage. Supporting functions and tests follow later.
+
 ---
 
 ## §30 · Change log (continued)
@@ -810,6 +819,7 @@ recorded change, date and reason stated.
 | 2.20 | 2026-10-15 | **SCR-025/OX19 UI stage implemented (B-202, §26.218).** Added a tenant-local, responsive assignment screen with both F4 fields, all-existing value helps, current assignment display, compatibility guidance and separate disabled mutation affordances pending later service stages. Typecheck and diff checks passed; no UI tests or database/backend/supporting work. DB design is blocked on owner decision for the Controlling Area’s Operational Chart of Accounts source because the existing OKKP table has no CoA field. | Agent |
 | 2.21 | 2026-10-15 | **OX19 Operational Chart of Accounts source resolved (B-203, §26.219; R-48/D-120).** Owner rejects adding a CoA field to OKKP; the current assignment set is authoritative. The first Company Code assigned when the set is empty establishes the baseline; subsequent Company Codes must match; if all links are removed, a later first assignment establishes a new baseline. DB/schema stage is unblocked. | Agent |
 | 2.22 | 2026-10-15 | **OX19 Company Code lookup preserves the source key's case (B-204, §26.220).** The owner contract does not normalize Company Code keys; the F4 component preserves exact key case and only disables existing values that do not fit the four-character alphanumeric assignment field. No database/backend changes. | Agent |
+| 2.23 | 2026-10-15 | **SCR-025/OX19 DB/schema stage implemented (B-205, §26.221).** Added relation format/FK/unique constraints and a fail-safe compatibility preflight migration. Typecheck and diff checks passed; migration not applied because PostgreSQL/local environment is absent, and no remote DB was contacted. The backend stage is next; tests remain last. | Agent |
 
 ---
 

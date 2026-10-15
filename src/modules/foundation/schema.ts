@@ -574,7 +574,21 @@ export const controllingAreaCompany = pgTable(
     companyCode: varchar('company_code', { length: 10 }).notNull(),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.controllingArea, t.companyCode] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.companyCode] }),
+    uniqueIndex('controlling_area_company_code_unique_idx').on(t.client, t.companyCode),
+    check('controlling_area_company_code_format_ck', sql`${t.companyCode} ~ '^[A-Za-z0-9]{4}$'`),
+    foreignKey({
+      name: 'controlling_area_company_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+    foreignKey({
+      name: 'controlling_area_company_company_code_fk',
+      columns: [t.client, t.companyCode],
+      foreignColumns: [companyCode.client, companyCode.companyCode],
+    }),
+  ],
 );
 
 /** Credit control area — shared credit limit boundary (D-029). */
