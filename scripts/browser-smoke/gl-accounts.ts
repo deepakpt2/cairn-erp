@@ -17,8 +17,19 @@ const ROUTE = '/config/gl-accounts';
 /** Created through the UI in this run; the fixture tenant is disposable. */
 const CREATED_ACCOUNT = '9990001111';
 /** Created for the deletion guard: an account that has carried a posting cannot go. */
-const USED_ACCOUNT = '9990002222';
+/**
+ * Created for the deletion guard: an account that has carried a posting cannot go.
+ * It sits inside the span GENL is narrowed to in part 3, because an account outside a
+ * group's range is exactly what the narrowing guard refuses to leave behind.
+ */
+const USED_ACCOUNT = '6100000002';
 const USED_DOCUMENT = 'FS00ACC01';
+/** A second group, created through the panel in part 3, with its own matrix. */
+const GROUP_B = 'GENB';
+const GROUP_ACCOUNT = '6300000001';
+/** GENL is seeded spanning the whole chart; part 3 narrows it to the accounts it holds. */
+const GENL_NARROW_FROM = '1000000000';
+const GENL_NARROW_TO = '6200000000';
 const CHART = 'CA01';
 const GROUP = 'GENL';
 
@@ -268,14 +279,26 @@ export async function glAccountMasterFs00(ctx: Context) {
   assert.equal(blockHistory[0].reason, 'Blocked while the year-end close is reviewed');
   console.log('  ✓ the posting block was set with its reason recorded as a BLOCK change');
 
-  // Unblock again, because a blocked account cannot be deleted and part 2 ends by deleting it.
-  await blockDialog.locator('[name="isBlockedPosting"]').uncheck();
-  await blockDialog.locator('[name="reason"]').fill('Year-end close reviewed; posting allowed again');
-  await blockDialog.getByRole('button', { name: 'Save block status', exact: true }).click();
-  await blockDialog
+  // Unblock again, because a blocked account cannot be deleted and part 2 ends by deleting
+  // it — from a freshly rendered dialog. Saving revalidates the hub, which remounts the row
+  // and its dialog, so a second submit in the same dialog races the render that replaces it
+  // and carries the version the form was opened with.
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block (XSPEB)' }).click();
+  const unblockDialog = page.getByRole('dialog', { name: `Change blocks for ${CREATED_ACCOUNT}` });
+  await unblockDialog.waitFor();
+  assert.equal(await unblockDialog.locator('[name="isBlockedPosting"]').isChecked(), true, 'The block the last save stored is rendered back.');
+  await unblockDialog.locator('[name="isBlockedPosting"]').uncheck();
+  await unblockDialog.locator('[name="reason"]').fill('Year-end close reviewed; posting allowed again');
+  await unblockDialog.getByRole('button', { name: 'Save block status', exact: true }).click();
+  await unblockDialog
     .getByRole('status')
     .filter({ hasText: `Block status saved for G/L account ${CREATED_ACCOUNT}.` })
     .waitFor();
+  // A refusal would leave the previous success message on screen, so the absence of an
+  // alert is part of the assertion, not a courtesy.
+  assert.equal(await unblockDialog.getByRole('alert').count(), 0, 'Unblocking was not refused.');
   assert.equal((await storedAccount(CLIENT, CREATED_ACCOUNT))?.is_blocked_posting, false);
   assert.equal((await historyFor(CLIENT, CREATED_ACCOUNT))[0].changeType, 'UNBLOCK');
 
@@ -329,7 +352,275 @@ export async function glAccountMasterFs00(ctx: Context) {
   );
   console.log('  ✓ an unused account is deleted, confirmed on the hub, and its reason survives the row');
 
-  console.log('SCR-028 FS00 part 2 passed: Change mode, stale-version refusal, blocks and deletion guards');
+  console.log('  ✓ part 2: Change mode, stale-version refusal, blocks and deletion guards');
+
+  // ── 11. The Account Group registry is maintained inside FS00 ──────────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const groupCreate = page.locator('section[aria-labelledby="fs00-group-create-title"]');
+  await groupCreate.waitFor();
+
+  // The package seeds GENL spanning the whole chart width, and a range may not overlap a
+  // sibling's, so a second group needs room: GENL is narrowed first, through its own
+  // Change dialog, to the span its accounts actually occupy.
+  await groupRow(groupList, GROUP).locator('summary').filter({ hasText: 'Change' }).click();
+  const changeGroup = page.getByRole('dialog', { name: `Change Account Group ${GROUP}` });
+  await changeGroup.waitFor();
+
+  // Narrowing past the accounts already in the group is refused, and names them.
+  await changeGroup.locator('[name="fromAccountNumber"]').fill(GENL_NARROW_FROM);
+  await changeGroup.locator('[name="toAccountNumber"]').fill('1999999999');
+  await changeGroup.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await changeGroup.getByRole('alert').filter({ hasText: /cannot be narrowed/ }).first().waitFor();
+  assert.equal((await storedGroup(CLIENT, GROUP))?.to_account_number, '9999999999', 'A refused narrowing changes nothing.');
+
+  await changeGroup.locator('[name="toAccountNumber"]').fill(GENL_NARROW_TO);
+  await changeGroup.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await changeGroup
+    .getByRole('status')
+    .filter({ hasText: `Account Group ${GROUP} saved.` })
+    .waitFor();
+  const narrowed = await storedGroup(CLIENT, GROUP);
+  assert.equal(narrowed?.from_account_number, GENL_NARROW_FROM);
+  assert.equal(narrowed?.to_account_number, GENL_NARROW_TO);
+  assert.ok((narrowed?.version ?? 0) >= 2, 'Changing a group bumps its version.');
+  console.log(`  ✓ ${GROUP} was narrowed to the accounts it holds, after the same dialog refused to narrow past them`);
+
+  // The narrowing save revalidated the hub; type into the rendered form, not the one that
+  // is about to be replaced, or the client-side range check keeps the submit disabled.
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await groupCreate.locator('[name="chartOfAccounts"]').selectOption(CHART);
+  await groupCreate.locator('[name="accountGroup"]').fill(GROUP_B);
+  await groupCreate.locator('[name="description"]').fill('Browser acceptance liabilities');
+  await groupCreate.locator('[name="fromAccountNumber"]').fill('6300000000');
+  await groupCreate.locator('[name="toAccountNumber"]').fill('6999999999');
+  await groupCreate.getByRole('button', { name: 'Create Account Group', exact: true }).click();
+  await groupCreate.getByRole('status').filter({ hasText: `Account Group ${GROUP_B} created.` }).waitFor();
+
+  const createdGroup = await storedGroup(CLIENT, GROUP_B);
+  assert.equal(createdGroup?.is_active, true);
+  assert.equal(createdGroup?.from_account_number, '6300000000');
+  assert.equal(createdGroup?.to_account_number, '6999999999');
+  assert.equal(createdGroup?.version, 1);
+  await groupRow(groupList, GROUP_B).waitFor();
+  console.log(`  ✓ Account Group ${GROUP_B} created through the panel and stored with its range`);
+
+  // ── 12. A range may not overlap a sibling's, active or not ────────────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await groupCreate.locator('[name="chartOfAccounts"]').selectOption(CHART);
+  await groupCreate.locator('[name="accountGroup"]').fill('GENC');
+  await groupCreate.locator('[name="description"]').fill('Overlapping range, must be refused');
+  await groupCreate.locator('[name="fromAccountNumber"]').fill('6500000000');
+  await groupCreate.locator('[name="toAccountNumber"]').fill('7500000000');
+  await groupCreate.getByRole('button', { name: 'Create Account Group', exact: true }).click();
+  await groupCreate
+    .getByRole('alert')
+    .filter({ hasText: `overlaps Account Group ${GROUP_B}` })
+    .first()
+    .waitFor();
+  assert.equal(await storedGroup(CLIENT, 'GENC'), undefined, 'The overlapping group was not stored.');
+  console.log(`  ✓ an overlapping range is refused and names the group it overlaps`);
+
+  // ── 13. The field status matrix stores only what differs from the baseline ─
+  await groupRow(groupList, GROUP_B).locator('summary').filter({ hasText: 'Field status' }).click();
+  const matrixDialog = page.getByRole('dialog', { name: `Field status matrix for ${GROUP_B}` });
+  await matrixDialog.waitFor();
+  // Twelve fields are offered; two are moved and the rest stay at the baseline.
+  assert.equal(await matrixDialog.locator('select[name^="status_"]').count(), 12);
+  await matrixDialog.locator('[name="status_sortKey"]').selectOption('MANDATORY');
+  await matrixDialog.locator('[name="status_languageKey"]').selectOption('SUPPRESS');
+  await matrixDialog.getByRole('button', { name: 'Save field status', exact: true }).click();
+  await matrixDialog
+    .getByRole('status')
+    .filter({ hasText: `Field status saved for Account Group ${GROUP_B}.` })
+    .waitFor();
+
+  const storedRows = await storedMatrix(CLIENT, GROUP_B);
+  assert.deepEqual(
+    storedRows.map((row) => [row.field_key, row.status]),
+    [['languageKey', 'SUPPRESS'], ['sortKey', 'MANDATORY']],
+    'Only the two fields that differ from the baseline are stored.',
+  );
+  assert.equal((await storedGroup(CLIENT, GROUP_B))?.version, 2, 'A matrix write bumps the group version.');
+
+  // Read the effective matrix the way a consultant does when they come back, not from the
+  // dialog that just saved: its state is initialised once, so the revalidated tree can
+  // briefly render it with the values it was opened with.
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await groupRow(groupList, GROUP_B).locator('summary').filter({ hasText: 'Field status' }).click();
+  const reopened = page.getByRole('dialog', { name: `Field status matrix for ${GROUP_B}` });
+  await reopened.waitFor();
+  assert.equal(await reopened.locator('[name="status_sortKey"]').inputValue(), 'MANDATORY');
+  assert.equal(await reopened.locator('[name="status_languageKey"]').inputValue(), 'SUPPRESS');
+  // The two fields no group may relax, and an untouched field at its baseline.
+  assert.equal(await reopened.locator('[name="status_name"]').inputValue(), 'MANDATORY');
+  assert.equal(await reopened.locator('[name="status_isTaxRelevant"]').inputValue(), 'OPTIONAL');
+  console.log('  ✓ the matrix stored two rows, bumped the version and reopens as the effective matrix');
+
+  // ── 14. The group decides what an account write may carry ─────────────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const initialScreen = page.locator('section[aria-labelledby="fs00-initial-title"]');
+  await initialScreen.locator('[name="chart"]').fill(CHART);
+  await initialScreen.getByRole('radio', { name: 'Create', exact: true }).check();
+  await initialScreen.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.waitForURL(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+
+  const groupFields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  await groupFields.waitFor();
+  await groupFields.locator('[name="accountGroup"]').selectOption(GROUP_B);
+  // A suppressed field is not rendered at all, so it cannot be posted.
+  assert.equal(await groupFields.locator('[name="languageKey"]').count(), 0, 'The suppressed Language Key is not rendered.');
+  await groupFields
+    .getByText(`Field status matrix for ${GROUP_B}`, { exact: true })
+    .waitFor();
+  // A mandatory field is marked as one before the server has to refuse anything.
+  assert.ok(
+    await groupFields.locator('[name="sortKey"]').getAttribute('required') !== null,
+    'The matrix makes Sort Key mandatory.',
+  );
+
+  await groupFields.locator('[name="accountNumber"]').fill(GROUP_ACCOUNT);
+  await groupFields.locator('[name="name"]').fill('Browser acceptance group account');
+  await groupFields.locator('[name="accountType"]').selectOption('LIABILITY');
+  await groupFields.locator('[name="sortKey"]').fill('002');
+  await groupFields.getByRole('button', { name: 'Create G/L Account', exact: true }).click();
+  await page.getByText(`G/L account ${GROUP_ACCOUNT} created.`, { exact: true }).waitFor();
+
+  const groupAccount = (await withTenant(CLIENT, (tx) =>
+    tx.execute(
+      sql`select account_group, sort_key, language_key
+            from gl_account
+           where chart_of_accounts = ${CHART} and account_number = ${GROUP_ACCOUNT}`,
+    ),
+  )) as unknown as Array<{ account_group: string; sort_key: string; language_key: string }>;
+  assert.equal(groupAccount[0].account_group, GROUP_B);
+  assert.equal(groupAccount[0].sort_key, '002');
+  // Suppressed means the contract default, never whatever a post might have carried.
+  assert.equal(groupAccount[0].language_key, 'EN');
+  console.log(`  ✓ ${GROUP_ACCOUNT} was written under the ${GROUP_B} matrix: mandatory sort key kept, suppressed language key defaulted`);
+
+  // ── 15. Deactivating a group needs a reason and leaves the F4 ─────────────
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await groupRow(groupList, GROUP_B).locator('summary').filter({ hasText: 'Deactivate' }).click();
+  const lifecycle = page.getByRole('dialog', { name: `Deactivate ${GROUP_B}` });
+  await lifecycle.waitFor();
+  assert.ok(
+    await lifecycle.locator('[name="reason"]').getAttribute('required') !== null,
+    'Deactivating a group requires a reason.',
+  );
+  await lifecycle.locator('[name="reason"]').fill('Rollout of the liability groups is complete');
+  await lifecycle.getByRole('button', { name: 'Deactivate', exact: true }).click();
+  // Read the answer from the registry panel, not from the dialog addressed by its old
+  // name: deactivating flips the row in place, so the dialog that answers is now the
+  // Reactivate one and a locator pinned to "Deactivate GENB" finds nothing.
+  const outcome = groupList.getByRole('status').or(groupList.getByRole('alert')).first();
+  await outcome.waitFor();
+  assert.equal(
+    (await outcome.innerText()).trim(),
+    `Account Group ${GROUP_B} deactivated. 1 account(s) keep it as their Account Group.`,
+  );
+  // The group stays in the registry — deactivation removes a choice, not a record — and
+  // the same row now offers the way back.
+  await groupRow(groupList, GROUP_B).getByText('Deactivated', { exact: true }).waitFor();
+  await groupRow(groupList, GROUP_B).locator('summary').filter({ hasText: 'Reactivate' }).waitFor();
+
+  assert.equal((await storedGroup(CLIENT, GROUP_B))?.is_active, false);
+  // The account keeps the group it was created in: deactivation removes a choice, not a fact.
+  const kept = (await withTenant(CLIENT, (tx) =>
+    tx.execute(
+      sql`select account_group from gl_account
+           where chart_of_accounts = ${CHART} and account_number = ${GROUP_ACCOUNT}`,
+    ),
+  )) as unknown as Array<{ account_group: string }>;
+  assert.equal(kept[0].account_group, GROUP_B);
+
+  await page.goto(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const options = await page.locator('section[aria-labelledby="fs00-field-title"] [name="accountGroup"] option').allInnerTexts();
+  assert.equal(options.some((option) => option.includes(GROUP_B)), false, 'A deactivated group leaves the choice list.');
+  assert.equal(options.some((option) => option.includes(GROUP)), true, 'The active group is still offered.');
+  console.log(`  ✓ deactivation recorded its reason, kept the account's group and left the choice list`);
+
+  // ── 16. A blocked chart keeps its display and refuses new work ────────────
+  await setChartBlocked(CLIENT, CHART, true);
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+
+  // The accounts of a blocked chart stay readable — a block stops writes, not sight.
+  await list.locator('tbody tr').filter({ hasText: GROUP_ACCOUNT }).first().waitFor();
+  // With no selectable chart the create panel says so and the initial screen's F4 is disabled.
+  await groupCreate.getByRole('status').filter({ hasText: /No active Chart of Accounts/ }).waitFor();
+  assert.equal(
+    await initialScreen2(page).getByRole('button', { name: /Chart of Accounts lookup/ }).isDisabled(),
+    true,
+    'A blocked chart is not offered for new accounts.',
+  );
+
+  await setChartBlocked(CLIENT, CHART, false);
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  // An <option> inside a closed <select> is never "visible" to Playwright; count it.
+  assert.equal(await groupCreate.locator('[name="chartOfAccounts"] option[value="CA01"]').count(), 1);
+  console.log('  ✓ a blocked chart kept its accounts readable, offered nothing to create against, and recovered');
+
+  console.log('SCR-028 FS00 part 3 passed: Account Group registry, field status matrix and the blocked-chart gate');
+}
+
+function initialScreen2(page: Page) {
+  return page.locator('section[aria-labelledby="fs00-initial-title"]');
+}
+
+/** One row of the Account Group registry, addressed by its group code. */
+function groupRow(groupList: ReturnType<Page['locator']>, group: string) {
+  return groupList.locator('tbody tr').filter({ hasText: group }).first();
+}
+
+type StoredGroup = {
+  description: string;
+  from_account_number: string;
+  to_account_number: string;
+  is_active: boolean;
+  version: number;
+};
+
+async function storedGroup(client: string, group: string): Promise<StoredGroup | undefined> {
+  const rows = (await withTenant(client, (tx) =>
+    tx.execute(
+      sql`select description, from_account_number, to_account_number, is_active, version
+            from gl_account_group
+           where chart_of_accounts = ${CHART} and account_group = ${group}`,
+    ),
+  )) as unknown as StoredGroup[];
+  return rows[0];
+}
+
+async function storedMatrix(client: string, group: string) {
+  return (await withTenant(client, (tx) =>
+    tx.execute(
+      sql`select field_key, status
+            from gl_account_group_field_status
+           where chart_of_accounts = ${CHART} and account_group = ${group}
+           order by field_key`,
+    ),
+  )) as unknown as Array<{ field_key: string; status: string }>;
+}
+
+/**
+ * Block and unblock the chart behind the screen's back, because the point is what FS00
+ * does when OB13 has blocked it — and OB13 is a different screen with its own acceptance.
+ */
+async function setChartBlocked(client: string, chart: string, blocked: boolean) {
+  await withTenant(client, (tx) =>
+    tx.execute(
+      sql`update chart_of_accounts set is_blocked = ${blocked} where chart_of_accounts = ${chart}`,
+    ),
+  );
 }
 
 /** One row of the account list, addressed by its account number. */
