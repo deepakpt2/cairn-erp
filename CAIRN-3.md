@@ -723,6 +723,17 @@ Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/m
 
 **Stage status.** The owner-supplied contract and clarifications are complete. Per R-43, the next separate batch is the UI stage, before DB/schema, backend, supporting functions and tests. No OX19 product code or database change has been made in this contract-intake batch.
 
+
+### 26.218 B-202 — SCR-025 / OX19 UI stage implemented `UI STAGE COMPLETE · DATA/SERVICE STAGES NEXT`
+
+**UI stage.** Added `/config/controlling-area/assign-company-code`, a responsive OX19 assignment screen linked from the separate OKKP definition page. It provides required four-character Controlling Area and Company Code fields with keyboard/button F4, tenant-local all-existing value helps (including inactive records), a responsive current-assignment list, scope/currency/Fiscal Year Variant/Company Code Chart of Accounts context, and the owner’s blocking compatibility guidance. Existing master-data permissions are both required for edit controls. Company Code records outside the required four-character key format remain visible in F4 but cannot be selected. Add and unassign controls are deliberately disabled until the later database and business-function stages; no fake mutation was added. The workbench’s activity remains pending until the supporting stage registers the completed route and activity.
+
+**Verification and boundaries.** `npm run typecheck` and `git diff --check` passed. `npm ci --ignore-scripts` restored locked dependencies because `node_modules` was absent; npm reported 19 audit advisories (9 moderate, 8 high, 2 critical), and no dependency or lockfile change/fix was made. No UI/browser/behavioral tests, database writes, schema/migration, backend functions, or supporting functions were included; this UI batch is not accepted pending the final test stage.
+
+**DB-stage owner input found during repository review.** The existing `controlling_area` definition stores Currency Key and Fiscal Year Variant but has no Operational Chart of Accounts field; the Company Code master stores its own Chart of Accounts. The accepted OX19 rule requires an exact match “with the Controlling Area,” so the DB stage must not guess the source value. Owner decision is required: add a required Chart of Accounts to OKKP (scope change to the accepted SCR-024 contract), or define another authoritative source for the Controlling Area’s Chart of Accounts (for example, derive it from an existing assignment). No DB work started.
+
+**Next.** Begin the separate DB/schema stage after the owner specifies how the Controlling Area’s Operational Chart of Accounts is established. Backend, supporting functions and tests remain later distinct stages.
+
 ---
 
 ## §30 · Change log (continued)
@@ -782,6 +793,7 @@ recorded change, date and reason stated.
 | 2.17 | 2026-10-15 | **OX19 assignment semantics selected and captured (B-199, §26.215; R-45/D-117).** Recorded add/unassign/reassign, duplicate no-op, old/new history, OKKP-controlled 1:1/1:N cardinality, one Controlling Area per Company Code, all-existing tenant-local F4 and multi-company local-currency equality to the Controlling Area Currency Key; use existing master-data permissions. UI remains gated on mapping removal representation, atomic reassign semantics, duplicate-attempt audit, 1:1 currency scope, and permission-combination details. | Agent |
 | 2.18 | 2026-10-15 | **OX19 audit, currency and permission rules clarified (B-200, §26.216; R-46/D-118).** Duplicate assignments are state no-ops but create audit events; reassignment is separate unassign then assign; currency-key equality applies in both 1:1 and 1:N; both existing master-data permissions are required. Whether unassignment removes the current row or retains it inactive remains owner-confirmation pending. No UI or implementation work began. | Agent |
 | 2.19 | 2026-10-15 | **SCR-025/OX19 contract completed (B-201, §26.217; R-47/D-119).** Owner confirms unassignment removes the current relationship while immutable audit history is retained. The full assignment, compatibility, cardinality, F4, duplicate, currency and authorization rules are now closed. No product code or DB work in this intake batch; the UI stage is next under R-43. | Agent |
+| 2.20 | 2026-10-15 | **SCR-025/OX19 UI stage implemented (B-202, §26.218).** Added a tenant-local, responsive assignment screen with both F4 fields, all-existing value helps, current assignment display, compatibility guidance and separate disabled mutation affordances pending later service stages. Typecheck and diff checks passed; no UI tests or database/backend/supporting work. DB design is blocked on owner decision for the Controlling Area’s Operational Chart of Accounts source because the existing OKKP table has no CoA field. | Agent |
 
 ---
 

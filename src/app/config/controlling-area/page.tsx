@@ -56,8 +56,15 @@ export default async function ControllingAreaPage() {
             <span className="code text-2xs text-[#3e6078]">{ACTIVITY} · OKKP</span>
             <h1 className="text-sm font-semibold leading-tight sm:text-base">{t('controllingArea.title')}</h1>
           </div>
-          <Link href="/config/company-codes" className="hidden shrink-0 text-xs text-[#28445b] underline sm:inline">{t('controllingArea.companyCodesLink')}</Link>
         </header>
+        <nav aria-label={t('nav.workbench')} className="flex flex-wrap items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4 sm:py-2">
+          <Link href="/config/controlling-area/assign-company-code" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
+            {t('controllingArea.assignmentLink')}
+          </Link>
+          <Link href="/config/company-codes" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">
+            {t('controllingArea.companyCodesLink')}
+          </Link>
+        </nav>
         <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">{t('controllingArea.subtitle')}</p>
         <p className="border-b border-[#cbd5de] bg-[#f7f9fa] px-3 py-2 text-xs text-ink-soft">{t('controllingArea.assignmentSeparate')}</p>
       </section>

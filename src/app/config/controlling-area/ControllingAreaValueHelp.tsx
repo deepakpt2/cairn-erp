@@ -7,6 +7,8 @@ export interface ControllingAreaChoice {
   code: string;
   name: string;
   isActive?: boolean;
+  /** Existing records remain visible in F4 but may be nonselectable for a field's format. */
+  selectable?: boolean;
 }
 
 interface ControllingAreaValueHelpProps {
@@ -139,7 +141,8 @@ export function ControllingAreaValueHelp({
                   <li key={choice.code}>
                     <button
                       type="button"
-                      className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-[#f4f8fa]"
+                      className="flex min-h-14 w-full flex-wrap items-center gap-2 px-4 py-3 text-left hover:bg-[#f4f8fa] disabled:cursor-not-allowed disabled:bg-[#f6f7f8] disabled:text-ink-faint"
+                      disabled={choice.selectable === false}
                       onClick={() => {
                         onChange(choice.code);
                         setOpen(false);
@@ -151,6 +154,9 @@ export function ControllingAreaValueHelp({
                         <span className={`chip ${choice.isActive ? 'chip-ok' : 'chip-neutral'}`}>
                           {t(choice.isActive ? 'controllingArea.active' : 'controllingArea.inactive')}
                         </span>
+                      )}
+                      {choice.selectable === false && (
+                        <span className="chip chip-warn">{t('controllingArea.valueHelpFormatUnavailable')}</span>
                       )}
                     </button>
                   </li>
