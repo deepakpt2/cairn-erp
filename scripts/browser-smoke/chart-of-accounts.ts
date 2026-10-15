@@ -114,6 +114,8 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     isTaxRelevant: false,
     changedBy: 'browser.admin',
   });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
   assert.equal(await chartOfAccountsHasAccountsOrTransactions(CLIENT, 'B001'), true);
   records = await listChartOfAccounts(CLIENT);
   chart = records.find((row) => row.chartOfAccounts === 'B001');
