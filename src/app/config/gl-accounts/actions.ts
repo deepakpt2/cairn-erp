@@ -14,6 +14,7 @@
  * hand-built request edit a suppressed field the screen never showed.
  */
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
@@ -198,10 +199,25 @@ export async function deleteGlAccountAction(
 
     revalidateGlAccountRoutes();
 
-    return { ok: true, message: t('glAccount.deleted', { account: accountNumber }) };
+    // The confirmation cannot be returned to the dialog: revalidating the hub removes the
+    // deleted account's row, and the dialog lives in that row, so the state carrying the
+    // message unmounts before it can render. Deleting is the one FS00 write whose dialog
+    // does not survive its own success, so it confirms through the hub instead.
+    redirect(`${ROUTE}?deleted=${encodeURIComponent(accountNumber)}`);
   } catch (error) {
+    if (isRedirect(error)) throw error;
     return mapGlAccountError(error);
   }
+}
+
+/**
+ * `redirect()` throws to unwind, and the catch above would otherwise turn that control
+ * flow into an error message — the classic way a redirect gets swallowed. Next marks it
+ * with a `NEXT_REDIRECT` digest rather than a type we can import stably.
+ */
+function isRedirect(error: unknown): boolean {
+  const digest = (error as { digest?: unknown })?.digest;
+  return typeof digest === 'string' && digest.startsWith('NEXT_REDIRECT');
 }
 
 /** Create or change one Account Group registry row. */

@@ -33,7 +33,8 @@ const ROUTE = '/config/gl-accounts';
 export default async function GlAccountsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  /** `deleted` carries the confirmation a delete dialog cannot render: its own row is gone. */
+  searchParams: Promise<{ q?: string; deleted?: string }>;
 }) {
   const params = await searchParams;
   // The tenant comes from the session, never from the query string: a `?client=`
@@ -134,6 +135,12 @@ export default async function GlAccountsPage({
           {t('auth.readOnly', { authority: DISPLAY_ACTIVITY })}
         </p>
       )}
+
+      {params.deleted ? (
+        <p role="status" className="mt-3 border border-line bg-sunken px-4 py-3 text-sm text-ink-soft">
+          {t('glAccount.deleted', { account: params.deleted })}
+        </p>
+      ) : null}
 
       <GlAccountInitialScreen
         charts={chartChoices}
