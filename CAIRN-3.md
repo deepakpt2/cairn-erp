@@ -854,6 +854,19 @@ Two acceptance-script defects were found and corrected, published as `0b9cf7e` (
 
 ---
 
+### 26.231 B-215 — Owner directed production-build browser acceptance; FS00 fields to be owner-supplied `OWNER DECISION · AWAITING FIELD CONTRACT`
+
+The owner confirmed two points after B-214 (R-50/D-122):
+
+1. **Browser acceptance runs against the production build.** Each round uses `npm run build` followed by `npm run start` with `CAIRN_ENV=development`, instead of `npm run dev`. This is a verification-environment decision, not a change to any acceptance criterion: the same isolated targets, the same guarded loopback database, the same fixture ownership checks and the same 120 s contract deadline apply. It is adopted because `next dev` grew to 1.07 GB RSS and was OOM-killed by the kernel twice on this 2 GB host during the harness epilogue, while the production server holds 189 MB and gates identically — the application reads `CAIRN_ENV` and contains no `NODE_ENV` reference in `src` or `scripts`. A rebuild is required after every application-code change so the served bundle matches the committed source.
+2. **SCR-028 / `FS00` field contract will be owner-supplied.** The owner will provide the required fields, lengths, F4 sources and rules, as for OB13 and OX19; no draft contract is to be written first, and no `FS00` implementation begins before those fields arrive.
+
+No application, schema, seed, migration or database change in this batch.
+
+**Next.** Receive the owner's `FS00` chart-level field contract, then implement SCR-028 in the standing stage order UI → DB/schema → backend → supporting → tests/acceptance, publishing before browser tests. Do not run OVXK browser acceptance.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-2.md` §30 from version 1.69. Same rules: append only, one row per
@@ -924,6 +937,7 @@ recorded change, date and reason stated.
 | 2.30 | 2026-10-15 | **Owner settled the OB13 Group CoA registry and lifecycle contract (B-212, §26.228; R-49/D-121).** Separate registry table shown as a second OB13 panel under the same capability; tenant-wide four-character key reservation across both registries; Code/Description/Language Key/active-flag fields only; deactivate and reactivate always allowed with a mandatory audited reason, records retained and F4 excluding deactivated entries; no hard delete. SCR-028 / `FS00` confirmed chart-level only and chosen as the next target. | Agent |
 | 2.31 | 2026-10-15 | **SCR-026/OB13 amendment implemented and published before browser tests (B-213, §26.229).** Added the Group CoA registry panel, shared lifecycle control, three protected actions, migrations `0034`/`9025` (registry, re-pointed foreign key, tenant-wide key-reservation trigger, forced RLS and least-privilege grants), the registry/lifecycle services with version checks and reference-change-only validation, and the restated seed term. Applied to `cairn_b210` and verified read-only. Typecheck and build exit 0; 8/8 service, 76/76 targeted harness, 86/86 related DB regressions. Commit `a030d23` pushed as a fast-forward from `6ed428c`. | Agent |
 | 2.32 | 2026-10-15 | **SCR-026/OB13 amendment browser acceptance passed (B-214, §26.230).** The isolated `T969` target passed on `cairn_b210`, including bidirectional key reservation, Group CoA F4 from the registry, length and block gates, both audited lifecycles and the sign-out epilogue; fixture cleaned to zero rows and tenant `0100` left intact. Two acceptance-script defects (a modal dialog left open masking the failure as an unhandled rejection, and an F4 assertion against a still-reserved key) were fixed with the group-specific label contract, published as `0b9cf7e`. Dev-server OOM kills on the 2 GB host moved acceptance to the production build under `CAIRN_ENV=development`; the 120 s deadline contract is unchanged. Next: request the `FS00` field contract. | Agent |
+| 2.33 | 2026-10-15 | **Owner directed production-build browser acceptance and owner-supplied FS00 fields (B-215, §26.231; R-50/D-122).** Future rounds verify with `npm run build` + `npm run start` under `CAIRN_ENV=development` rather than `npm run dev`, with all targets, guards, fixture checks and the 120 s deadline unchanged; adopted because dev-mode `next-server` reached 1.07 GB and was OOM-killed twice on this 2 GB host, while the production server holds 189 MB and gates identically. SCR-028 / `FS00` fields will be owner-supplied before implementation. No code, schema, seed or database change. | Agent |
 
 ---
 
