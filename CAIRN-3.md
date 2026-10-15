@@ -777,6 +777,13 @@ Added tenant-scoped `assignCompanyCodeToControllingArea` and `unassignCompanyCod
 
 **Next.** Publish this implementation batch, then run the separate OX19 test/acceptance stage. Do not run OVXK browser acceptance. Report results before requesting details for the next UI T-code.
 
+
+### 26.224 B-208 — SCR-025 / OX19 implementation batch published `PUSHED · TESTS PENDING`
+
+Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to the explicit `https://github.com/deepakpt2/cairn-erp.git` remote as a fast-forward from `484ea69` to `main`, before the separate UI-test/acceptance stage per D-111. The published commit includes B-207's shared source-write guards, protected OX19 server actions, UI mutation wiring, translations and B-207's implementation record. No tests, UI/browser acceptance, database writes or migration application were performed; migration `0032` remains unapplied.
+
+**Next.** Begin the separate SCR-025/OX19 test and acceptance stage. Do not run OVXK browser acceptance. Report results before requesting details for the next UI T-code.
+
 ---
 
 ## §30 · Change log (continued)
@@ -842,6 +849,7 @@ recorded change, date and reason stated.
 | 2.23 | 2026-10-15 | **SCR-025/OX19 DB/schema stage implemented (B-205, §26.221).** Added relation format/FK/unique constraints and a fail-safe compatibility preflight migration. Typecheck and diff checks passed; migration not applied because PostgreSQL/local environment is absent, and no remote DB was contacted. The backend stage is next; tests remain last. | Agent |
 | 2.24 | 2026-10-15 | **SCR-025/OX19 assignment backend implemented (B-206, §26.222).** Added tenant-scoped add/unassign operations with scope, currency/FYV, derived-CoA-baseline, and audit behavior, including an explicit duplicate no-op event. Typecheck passed; no tests, database writes, UI wiring or acceptance. Both permissions and guards on source-master edits remain for the supporting-functions stage. | Agent |
 | 2.25 | 2026-10-15 | **SCR-025/OX19 supporting functions and mutation wiring implemented (B-207, §26.223).** Added shared assignment/source-write locking and compatibility guards across OX19, OKKP, Company Code CoA/upsert writes and standard package provisioning; standard A000 assignment now uses the OX19 transaction service. Added protected Add/Unassign server actions requiring both owner-approved capabilities and wired the existing UI with translated result/error states. Typecheck and diff check passed. No tests, UI/browser acceptance, database writes or migration application; `0032` remains unapplied. Implementation is published before tests per D-111. | Agent |
+| 2.26 | 2026-10-15 | **B-207 OX19 implementation published (B-208, §26.224).** Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to the explicit GitHub remote as a fast-forward from `484ea69` to `main`. The published code is implementation only; no tests or acceptance ran, and migration `0032` remains unapplied. | Agent |
 
 ---
 
