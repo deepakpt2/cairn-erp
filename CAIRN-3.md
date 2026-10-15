@@ -757,6 +757,15 @@ The owner specified a four-character alphanumeric Company Code lookup but did no
 
 **Next.** Implement the OX19 backend assignment functions as a separate stage. Supporting functions and tests follow later.
 
+
+### 26.222 B-206 — SCR-025 / OX19 assignment backend implemented `SERVICE COMPLETE · NOT ACTION-WIRED`
+
+Added tenant-scoped `assignCompanyCodeToControllingArea` and `unassignCompanyCodeFromControllingArea` business functions. They require existing source records but permit inactive ones; preserve Company Code key case; lock the Controlling Area/Company Code resources; enforce SINGLE cardinality, one-area-per-Company-Code, exact Fiscal Year Variant and Currency Key matching, and the current-assignment-derived Operational Chart of Accounts baseline in both scopes. Add/unassign writes append-only change documents; a duplicate leaves the relation unchanged but writes an explicit duplicate-no-op audit event. Reassignment is never implicit: the current link must first be removed.
+
+**Boundary/verification.** Service functions are not yet wired to server actions or UI. The supporting-functions stage must enforce both owner-required permissions at the action boundary and protect Company Code CoA/FYV and OKKP currency/FYV edits from breaking existing links. The DB migration remains unapplied. `npm run typecheck` passed; no tests, DB writes, or acceptance were run.
+
+**Next.** Implement the separate OX19 supporting-function stage; tests/acceptance remain last.
+
 ---
 
 ## §30 · Change log (continued)
@@ -820,6 +829,7 @@ recorded change, date and reason stated.
 | 2.21 | 2026-10-15 | **OX19 Operational Chart of Accounts source resolved (B-203, §26.219; R-48/D-120).** Owner rejects adding a CoA field to OKKP; the current assignment set is authoritative. The first Company Code assigned when the set is empty establishes the baseline; subsequent Company Codes must match; if all links are removed, a later first assignment establishes a new baseline. DB/schema stage is unblocked. | Agent |
 | 2.22 | 2026-10-15 | **OX19 Company Code lookup preserves the source key's case (B-204, §26.220).** The owner contract does not normalize Company Code keys; the F4 component preserves exact key case and only disables existing values that do not fit the four-character alphanumeric assignment field. No database/backend changes. | Agent |
 | 2.23 | 2026-10-15 | **SCR-025/OX19 DB/schema stage implemented (B-205, §26.221).** Added relation format/FK/unique constraints and a fail-safe compatibility preflight migration. Typecheck and diff checks passed; migration not applied because PostgreSQL/local environment is absent, and no remote DB was contacted. The backend stage is next; tests remain last. | Agent |
+| 2.24 | 2026-10-15 | **SCR-025/OX19 assignment backend implemented (B-206, §26.222).** Added tenant-scoped add/unassign operations with scope, currency/FYV, derived-CoA-baseline, and audit behavior, including an explicit duplicate no-op event. Typecheck passed; no tests, database writes, UI wiring or acceptance. Both permissions and guards on source-master edits remain for the supporting-functions stage. | Agent |
 
 ---
 
