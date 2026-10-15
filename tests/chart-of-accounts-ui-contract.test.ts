@@ -103,8 +103,16 @@ describe('SCR-026 / OB13 amendment: Group CoA registry and lifecycle UI contract
     expect(lifecycle).toContain('maxLength={500}');
     // The stored flag is inverted server-side from the current state, never supplied freely.
     expect(lifecycle).toContain('value={isActive ? \'false\' : \'true\'}');
-    expect(lifecycle).toContain("t('chartOfAccounts.deactivateButton')");
-    expect(lifecycle).toContain("t('chartOfAccounts.reactivateButton')");
+    // Submit labels come from the catalogue, and a Group CoA entry is told it is a
+    // Group CoA: the shared control discriminates on its key field, never on the row.
+    expect(lifecycle).toContain("const isGroupEntry = codeField === 'groupChartOfAccounts';");
+    expect(lifecycle).toContain(
+      "t(isGroupEntry ? 'chartOfAccounts.groupDeactivateButton' : 'chartOfAccounts.deactivateButton')",
+    );
+    expect(lifecycle).toContain(
+      "t(isGroupEntry ? 'chartOfAccounts.groupReactivateButton' : 'chartOfAccounts.reactivateButton')",
+    );
+    expect(lifecycle).not.toMatch(/>(Deactivate|Reactivate) (Chart of Accounts|Group CoA)</);
     expect(maintenance).toContain('.min(1, \'A reason is required for a Chart of Accounts lifecycle change.\')');
 
     expect(list).toContain('ChartLifecycleControl');

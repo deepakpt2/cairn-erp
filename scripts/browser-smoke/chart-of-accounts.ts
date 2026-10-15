@@ -93,7 +93,10 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   );
   console.log('  ✓ Group CoA registry create and tenant-wide key reservation in both directions');
 
-  // Group CoA F4 now offers the registry entry, and only the registry entry.
+  // Group CoA F4 now offers the registry entry, and only the registry entry. The key
+  // field still holds GR01 from the refused reservation attempt, and F4 never offers the
+  // chart's own key, so clear it first — that exclusion is the behaviour under test.
+  await createPanel.locator('[name="chartOfAccounts"]').fill('');
   assert.equal(await groupF4.isDisabled(), false);
   await groupF4.click();
   const groupDialog = page.getByRole('dialog').filter({ hasText: 'Group Chart of Accounts lookup' });
@@ -139,8 +142,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   console.log('  ✓ OB13 create defaults, four-character key, Language/Group CoA F4 and CREATE history');
 
   // An unused chart may change its configured account-number limit.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   let chartRow = chartList.locator('tbody tr').filter({ hasText: 'B001' });
   await chartRow.getByText('Change settings', { exact: true }).click();
   let changeDialog = page.getByRole('dialog', { name: 'Change Chart of Accounts B001' });
@@ -154,8 +156,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     { exact: true },
   ).waitFor();
   await changeDialog.getByRole('button', { name: 'Close', exact: true }).click();
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
 
   await upsertGlAccount({
     client: CLIENT,
@@ -169,8 +170,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     isTaxRelevant: false,
     changedBy: 'browser.admin',
   });
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   assert.equal(await chartOfAccountsHasAccountsOrTransactions(CLIENT, 'B001'), true);
   records = await listChartOfAccounts(CLIENT);
   chart = records.find((row) => row.chartOfAccounts === 'B001');
@@ -204,8 +204,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   }), /length.*locked/i);
 
   // A single block flag gates both new G/L master creation and Company Code assignment.
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   chartRow = chartList.locator('tbody tr').filter({ hasText: 'B001' });
   await chartRow.getByText('Change settings', { exact: true }).click();
   changeDialog = page.getByRole('dialog', { name: 'Change Chart of Accounts B001' });
@@ -277,8 +276,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     { exact: true },
   ).waitFor();
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   let lifecycleRow = chartList.locator('tbody tr').filter({ hasText: 'D001' });
   await lifecycleRow.getByText('Deactivate', { exact: true }).click();
   let lifecycleDialog = page.getByRole('dialog', { name: 'Deactivate D001' });
@@ -338,11 +336,13 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     chartOfAccounts: 'D001',
   }), /is not defined in this tenant/);
 
+  // Version 2 is current: CREATE plus the audited deactivation. Sending it proves the
+  // inactive guard, not the stale-version guard, is what refuses the edit.
   await assert.rejects(saveChartOfAccounts({
     client: CLIENT,
     changedBy: 'browser.admin',
     mode: 'CHANGE',
-    expectedVersion: 1,
+    expectedVersion: 2,
     chartOfAccounts: 'D001',
     name: 'Changed while deactivated',
     language: 'EN',
@@ -398,8 +398,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   console.log('  ✓ deactivate/reactivate need an audited reason, retain records, and gate new use');
 
   // ── Group CoA lifecycle: references are retained and never strand a chart ────────
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   let groupRow = groupList.locator('tbody tr').filter({ hasText: 'GR01' });
   await groupRow.waitFor();
   assert.match(await groupRow.innerText(), /1 operational charts reference this Group CoA/i);
@@ -414,8 +413,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     { exact: true },
   ).waitFor();
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   // Removed from F4, but the existing reference on B001 is retained and still editable.
   assert.equal(await groupF4.isDisabled(), true, 'Deactivated Group CoA entries are removed from the F4 list.');
   const b001Row = chartList.locator('tbody tr').filter({ hasText: 'B001' });
@@ -438,8 +436,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     'An unchanged Group CoA reference survives deactivation of the registry entry.',
   );
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
+  await page.reload({ waitUntil: 'load' });
   groupRow = groupList.locator('tbody tr').filter({ hasText: 'GR01' });
   await groupRow.getByText('Reactivate', { exact: true }).click();
   groupLifecycleDialog = page.getByRole('dialog', { name: 'Reactivate GR01' });
@@ -468,5 +465,11 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     (await listGroupChartsOfAccounts(CLIENT)).map((row) => [row.groupChartOfAccounts, row.isActive, row.referencedBy]),
     [['GR01', true, 1]],
   );
+  // Leave the screen tidy: a lifecycle dialog is modal, so one left open would block the
+  // harness from reaching the header Sign out button. The control re-labels itself to the
+  // opposite action after a save, so match the entry key rather than the action verb.
+  const openGroupDialog = page.getByRole('dialog', { name: /GR01/ });
+  await openGroupDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await openGroupDialog.waitFor({ state: 'hidden' });
   console.log('  ✓ Group CoA lifecycle: F4 exclusion, retained references and audited reactivation');
 }
