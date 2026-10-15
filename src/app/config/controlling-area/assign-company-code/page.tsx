@@ -78,7 +78,7 @@ export default async function ControllingAreaCompanyCodeAssignmentPage() {
       code,
       name: row.name.trim(),
       isActive: row.isActive,
-      selectable: /^[A-Z0-9]{4}$/.test(code),
+      selectable: /^[A-Za-z0-9]{4}$/.test(code),
     };
   });
   const assignments = assignmentRows.map((row) => ({

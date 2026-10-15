@@ -67,6 +67,7 @@ Rows continue the register in `CAIRN.md` §1.1–§1.2. Owner instructions of 20
 | R-45 | **SCR-025 / OX19 owner-selected assignment rules** | Allow add, unassign and reassignment; duplicate assignments are no-ops and actual changes retain the old/new Controlling Area–Company Code relationships in history. Enforce OKKP scope: Same Company Code permits at most one Company Code per Controlling Area; Multiple Company Codes permits several; each Company Code belongs to at most one Controlling Area. F4 includes all existing tenant-local Controlling Areas and Company Codes. For the multi-company currency rule, require the Company Code local-currency key to equal the Controlling Area Currency Key. Reuse existing Controlling Area and Company Code master-data permissions; AND/OR composition, unassignment storage semantics, duplicate-attempt audit behavior, and whether currency equality also applies to 1:1 remain pending confirmation. |
 | R-46 | **SCR-025 / OX19 remaining assignment rules** | Duplicate assignments leave current state unchanged but create an audit/history event. Reassignment is performed as two separate operations: unassign, then assign to the other Controlling Area. Company Code local currency must equal the Controlling Area Currency Key for both 1:1 and 1:N assignments. Both existing Controlling Area and Company Code master-data permissions are required. The active-row representation after unassignment remains pending; see B-200. |
 | R-47 | **SCR-025 / OX19 unassignment representation** | Unassignment removes the relationship from the current assignments; the assignment/unassignment history remains available through immutable audit events. Reassignment remains two separate operations: unassign first, then assign to the other Controlling Area. |
+| R-48 | **SCR-025 / OX19 Operational Chart of Accounts source** | Do not add a Chart of Accounts field to the accepted OKKP contract. Derive the Controlling Area's Chart of Accounts from its current Company Code assignments: a new assignment must match the Chart of Accounts on existing assignments; when none exist, the first assignment establishes the current baseline. If all assignments are removed, a later first assignment establishes a new baseline. |
 
 ---
 
@@ -103,6 +104,7 @@ Rows continue the register in `CAIRN.md` §2 (through D-092).
 | D-117 | **SCR-025 / OX19 assignment rules.** Permit adding, unassigning and reassigning Controlling Area–Company Code relationships; duplicate assignment is a no-op and actual changes retain the old/new relationship in history. Enforce the OKKP 1:1/1:N scope and allow each Company Code to belong to at most one Controlling Area. F4 includes all existing tenant-local records. For multi-company areas, the Company Code local-currency key must match the Controlling Area Currency Key. Reuse the existing master-data permissions; see B-199 for remaining implementation details requiring confirmation. | Owner selections received on 2026-10-15. | 2026-10-15 |
 | D-118 | **SCR-025 / OX19 audit, currency and permission clarifications.** A duplicate assignment leaves mapping state unchanged but creates an audit/history event. Reassignment requires a separate unassign followed by a separate assign. Company Code local currency must equal the Controlling Area Currency Key in both 1:1 and 1:N scopes. Both existing Controlling Area and Company Code master-data permissions are required. Unassignment's active-row representation is still pending (B-200). | Owner selections received on 2026-10-15. | 2026-10-15 |
 | D-119 | **SCR-025 / OX19 unassignment representation.** Unassigning removes the relationship from the current assignment set while retaining immutable assignment/unassignment audit events. Reassignment remains two separate user operations: unassign, then assign to the other Controlling Area. | Owner selection received on 2026-10-15. | 2026-10-15 |
+| D-120 | **SCR-025 / OX19 Chart of Accounts baseline.** Do not add a new OKKP Chart of Accounts field. Derive the Controlling Area's Operational Chart of Accounts from its current assignment set: each new Company Code must match the OCA of existing assignments; with no current assignment, the first assignment establishes the baseline. Removing all assignments clears that derived baseline, so the next first assignment establishes a new one. | Owner selection received on 2026-10-15. | 2026-10-15 |
 
 ---
 
@@ -734,6 +736,18 @@ Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/m
 
 **Next.** Begin the separate DB/schema stage after the owner specifies how the Controlling Area’s Operational Chart of Accounts is established. Backend, supporting functions and tests remain later distinct stages.
 
+
+### 26.219 B-203 — OX19 Chart of Accounts source resolved `OWNER DECISION · DB STAGE UNBLOCKED`
+
+**Owner selection (R-48/D-120).** Do not add a Chart of Accounts field to OKKP. Derive the Controlling Area's Operational Chart of Accounts from its current Company Code assignments: the first assignment to an empty group establishes the current baseline, and each later assignment must match. If all Company Codes are unassigned, the next first assignment establishes a new baseline.
+
+**Next.** The OX19 DB/schema stage is now unblocked. Backend functions, supporting functions and tests remain separate later stages.
+
+
+### 26.220 B-204 — OX19 Company Code key case preserved `UI CONTRACT ALIGNMENT · NO MUTATION`
+
+The owner specified a four-character alphanumeric Company Code lookup but did not require uppercase normalization. The shared Controlling Area F4 component now preserves source-key case when used for OX19 Company Codes; all existing records remain visible, and keys that cannot fit the four-character field stay nonselectable. The Controlling Area key continues using its own uppercase-normalized behavior. No DB, backend or support-function changes.
+
 ---
 
 ## §30 · Change log (continued)
@@ -794,6 +808,8 @@ recorded change, date and reason stated.
 | 2.18 | 2026-10-15 | **OX19 audit, currency and permission rules clarified (B-200, §26.216; R-46/D-118).** Duplicate assignments are state no-ops but create audit events; reassignment is separate unassign then assign; currency-key equality applies in both 1:1 and 1:N; both existing master-data permissions are required. Whether unassignment removes the current row or retains it inactive remains owner-confirmation pending. No UI or implementation work began. | Agent |
 | 2.19 | 2026-10-15 | **SCR-025/OX19 contract completed (B-201, §26.217; R-47/D-119).** Owner confirms unassignment removes the current relationship while immutable audit history is retained. The full assignment, compatibility, cardinality, F4, duplicate, currency and authorization rules are now closed. No product code or DB work in this intake batch; the UI stage is next under R-43. | Agent |
 | 2.20 | 2026-10-15 | **SCR-025/OX19 UI stage implemented (B-202, §26.218).** Added a tenant-local, responsive assignment screen with both F4 fields, all-existing value helps, current assignment display, compatibility guidance and separate disabled mutation affordances pending later service stages. Typecheck and diff checks passed; no UI tests or database/backend/supporting work. DB design is blocked on owner decision for the Controlling Area’s Operational Chart of Accounts source because the existing OKKP table has no CoA field. | Agent |
+| 2.21 | 2026-10-15 | **OX19 Operational Chart of Accounts source resolved (B-203, §26.219; R-48/D-120).** Owner rejects adding a CoA field to OKKP; the current assignment set is authoritative. The first Company Code assigned when the set is empty establishes the baseline; subsequent Company Codes must match; if all links are removed, a later first assignment establishes a new baseline. DB/schema stage is unblocked. | Agent |
+| 2.22 | 2026-10-15 | **OX19 Company Code lookup preserves the source key's case (B-204, §26.220).** The owner contract does not normalize Company Code keys; the F4 component preserves exact key case and only disables existing values that do not fit the four-character alphanumeric assignment field. No database/backend changes. | Agent |
 
 ---
 

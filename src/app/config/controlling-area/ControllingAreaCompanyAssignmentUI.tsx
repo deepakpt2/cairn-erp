@@ -93,6 +93,7 @@ export function ControllingAreaCompanyAssignmentUI({
               maxLength={4}
               pattern="[A-Za-z0-9]{4}"
               disabled={!canMaintain}
+              normalizeUppercase={false}
             />
           </div>
 

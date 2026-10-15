@@ -27,6 +27,8 @@ interface ControllingAreaValueHelpProps {
   required?: boolean;
   readOnly?: boolean;
   disabled?: boolean;
+  /** Existing-key lookups preserve case when the source master does not normalize keys. */
+  normalizeUppercase?: boolean;
 }
 
 /** Keyboard F4 and button-based value help, usable at both desktop and phone widths. */
@@ -46,6 +48,7 @@ export function ControllingAreaValueHelp({
   required = true,
   readOnly = false,
   disabled = false,
+  normalizeUppercase = true,
 }: ControllingAreaValueHelpProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -79,18 +82,21 @@ export function ControllingAreaValueHelp({
             pattern={pattern}
             title={rule}
             autoComplete="off"
-            autoCapitalize="characters"
+            autoCapitalize={normalizeUppercase ? 'characters' : 'none'}
             value={value}
             readOnly={readOnly}
             disabled={disabled}
-            onChange={(event) => onChange(event.currentTarget.value.toUpperCase().slice(0, maxLength))}
+            onChange={(event) => {
+              const rawValue = event.currentTarget.value.slice(0, maxLength);
+              onChange(normalizeUppercase ? rawValue.toUpperCase() : rawValue);
+            }}
             onKeyDown={(event) => {
               if (event.key === 'F4') {
                 event.preventDefault();
                 openDialog();
               }
             }}
-            className={`field-input code min-h-11 min-w-0 flex-1 uppercase sm:min-h-9 ${readOnly ? 'cursor-not-allowed bg-sunken text-ink-soft' : ''}`}
+            className={`field-input code min-h-11 min-w-0 flex-1 sm:min-h-9 ${normalizeUppercase ? 'uppercase' : ''} ${readOnly ? 'cursor-not-allowed bg-sunken text-ink-soft' : ''}`}
             aria-label={label}
           />
           <button
