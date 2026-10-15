@@ -21,4 +21,5 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'controlling-area': { database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' },
   'controlling-area-company-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' },
   'chart-of-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' },
+  'gl-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' },
 };

@@ -122,6 +122,14 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' });
     expect(STATIC_ACCEPTANCE_TARGETS.has('chart-of-accounts')).toBe(false);
   });
+  it('keeps SCR-028 FS00 acceptance on its own reserved client and the loopback guard OB13 uses', () => {
+    const fs00 = TARGETS.find((target) => target.id === 'gl-accounts');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['gl-accounts'];
+    expect(fs00).toMatchObject({ client: 'T968' });
+    expect(fs00?.client).not.toBe('T969');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' });
+    expect(STATIC_ACCEPTANCE_TARGETS.has('gl-accounts')).toBe(false);
+  });
   it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];

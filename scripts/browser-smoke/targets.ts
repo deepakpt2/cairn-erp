@@ -15,6 +15,7 @@ export const TARGETS = [
   { id: 'controlling-area', client: 'T972', label: 'SCR-024 OKKP Controlling Area definition, F4, history and transaction lock' },
   { id: 'controlling-area-company-assignment', client: 'T970', label: 'SCR-025 OX19 assignment, compatibility, duplicate no-op, unassign history and dual-capability access' },
   { id: 'chart-of-accounts', client: 'T969', label: 'SCR-026 OB13 Chart of Accounts fields, F4, audit, account-length lock, block behavior, Group CoA registry and lifecycle' },
+  { id: 'gl-accounts', client: 'T968', label: 'SCR-028 FS00 G/L account hub, moved registry aliases, Create and Display modes' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
