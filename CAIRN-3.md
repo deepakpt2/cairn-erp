@@ -63,6 +63,7 @@ Rows continue the register in `CAIRN.md` §1.1–§1.2. Owner instructions of 20
 | R-41 | **SCR-024 Assignment Control form and scope semantics** | Show “Controlling area same as company code (1:1 Relationship)” for exactly one Company Code and “Cross-company-code cost accounting (1:N Relationship)” for multiple Company Codes. In cross-company mode, all assigned Company Codes must share the same Operational Chart of Accounts and Fiscal Year Variant. Currency and Fiscal Year Variant become read-only after any actual operational transaction for an assigned Company Code; both remain editable before then. Duplicate creation is an idempotent no-op. See D-112–D-114. |
 | R-42 | **SCR-024 Assignment Control copy** | Preserve the owner-provided heading, control description, option descriptions, and scope help text verbatim in the OKKP UI; do not paraphrase or substitute copy. The full copy is recorded in D-115. |
 | R-43 | **UI-first staged delivery order** | For future T-code pages, deliver separate bounded stages in this order: (1) UI, (2) DB/schema, (3) backend business functions, (4) supporting functions, (5) tests/acceptance. This supersedes the stage sequence in R-34 only. The pre-UI T-code/form and owner-field intake gate, no-bundling rule, implementation publication before UI tests (R-40), no acceptance claim before tests pass, and post-test report/request for the next UI T-code remain in force. |
+| R-44 | **SCR-025 / OX19 owner-supplied fields and compatibility prerequisites** | Required Controlling Area lookup (traceability `KOKRS`): Char 4 alphanumeric; F4 from previously created Controlling Areas in OKKP. Required Company Code lookup (traceability `BUKRS`): Char 4 alphanumeric; F4 from legal Company Codes in OX02. Both records must exist. For every assignment, the Company Code and Controlling Area must use the exact same Operational Chart of Accounts and the exact same Fiscal Year Variant, in either 1:1 or 1:N scope. For multiple Company Codes assigned to one Controlling Area, their currency setups must align with the Controlling Area's currency-type rules. Exact currency validation, reverse cardinality, assignment lifecycle/audit, value-help eligibility and authorization remain pending; do not infer them. |
 
 ---
 
@@ -686,6 +687,15 @@ Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/m
 
 **Next page status.** SCR-025 / OX19 remains the next planned UI. The owner confirmed the T-code but has not yet supplied its form-field and behavior contract; no OX19 UI or implementation stage has started. Await those details before beginning the UI-first sequence.
 
+
+### 26.214 B-198 — SCR-025 / OX19 form fields and compatibility rules captured `PARTIAL CONTRACT · CLARIFICATIONS PENDING`
+
+**Owner-supplied fields.** The form has two required lookups: Controlling Area (Char 4 alphanumeric, F4 from definitions created via OKKP; sample `1000`) and Company Code (Char 4 alphanumeric, F4 from legal Company Codes in OX02; sample `1000`). Both source records must exist before assignment.
+
+**Compatibility rules.** Each assignment must match the Controlling Area's exact Operational Chart of Accounts and Fiscal Year Variant, whether the Controlling Area uses 1:1 or 1:N assignment scope. When multiple Company Codes are assigned to one Controlling Area, their currency setups must align with currency-type rules in the Controlling Area definition. The OX19 UI is expected to present Cairn-native labels; source field identifiers are traceability only.
+
+**Open gates before UI design.** The owner has not yet specified the exact currency comparison (the current OKKP definition stores a Currency Key, not a currency-type rule set), Company Code reverse-cardinality, add/remove/reassignment lifecycle, duplicate semantics, removal/history behavior, value-help eligibility filters, or authorization boundary. No UI, DB/schema, backend, supporting-function, or test work has started. Under R-30/R-43, collect these decisions before starting the UI stage.
+
 ---
 
 ## §30 · Change log (continued)
@@ -741,6 +751,7 @@ recorded change, date and reason stated.
 | 2.13 | 2026-10-15 | **SCR-024 edit-form event defect corrected and pushed (B-195).** Live browser testing exposed a React `currentTarget` timing error in OKKP name edits; values are now captured synchronously before state updates. Commit `1b3b888` was pushed before acceptance was rerun. Typecheck and diff checks passed. | Agent |
 | 2.14 | 2026-10-15 | **SCR-024 / OKKP local browser acceptance passed (B-196).** The isolated `controlling-area` target passed on PostgreSQL 17.11 with local-only roles; `T972` and the synthetic document-index fixture were cleaned. Targeted no-DB tests passed 65/65; full browser-harness result was 281/283 with the same two unrelated baseline Sales Area-code scans failing. No remote DB, OVXK or OVXA target was used. Target code is in commit `8a5e8fb`; OX19/SCR-025 remains separate. | Agent |
 | 2.15 | 2026-10-15 | **Owner changed the future T-code delivery order to UI-first (B-197, §26.213; R-43/D-116).** Future page work now proceeds UI → DB/schema → backend → supporting functions → tests/acceptance in separate stages. The pre-UI owner-field gate and all publication/test safeguards remain. SCR-025/OX19 is still awaiting its owner-supplied field contract. | Agent |
+| 2.16 | 2026-10-15 | **SCR-025/OX19 form fields and prerequisite rules recorded (B-198, §26.214; R-44).** Captured both required Char 4 lookups and the Company Code/Controlling Area existence, exact Operational Chart of Accounts and Fiscal Year Variant matching rules, plus the multi-company currency-alignment rule. Exact currency comparison, relationship reverse-cardinality, assignment lifecycle/audit, F4 eligibility and authorization remain owner-confirmation gates; no UI or implementation work began. | Agent |
 
 ---
 
