@@ -43,7 +43,7 @@ describe('protected Company Code CoA assignment contract', () => {
 
   it('checks tenant-local prerequisites and active CoA, and refuses a different existing assignment', () => {
     expect(service).toContain('.strict()');
-    expect(service).toContain('pg_advisory_xact_lock');
+    expect(service).toContain('lockCompanyCodeOxxAssignments(tx, client, values.companyCode)');
     expect(service).toContain(".for('update')");
     expect(service).toContain("'CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'");
     expect(service).toContain("eq(chartOfAccounts.isActive, true)");

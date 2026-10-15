@@ -793,6 +793,15 @@ While preparing OX19 acceptance, repository review found the workbench still cla
 
 **Next.** Publish the workbench correction and contract tests before executing the DB-free suite. Seek a disposable local PostgreSQL environment for migration/service/browser acceptance; never use the uploaded remote DB credentials and do not run OVXK acceptance.
 
+
+### 26.226 B-210 — SCR-025 / OX19 DB-free contract verification `PARTIAL PASS · DB/BROWSER ACCEPTANCE BLOCKED`
+
+After commit `97f733a` (`fix: expose OX19 assignment in workbench`) was pushed, the focused contract run passed: 3 files / 18 tests (OX19 7/7, OKKP 7/7, Company Code CoA 4/4). The full `npm run test:browser-harness` rerun finished with 288/290 tests passing across 54 files. Two failures remain in the unrelated legacy source-code scans for SCR-021 Sales Organization → Company Code and SCR-022 Distribution Channel/Division UI; these are the same baseline failures previously recorded in §26.193. The first full run also found a now-corrected stale CoA lock assertion after the service adopted the shared OX19 lock helper; its focused suite now passes 4/4.
+
+**Acceptance boundary.** These are database-free contract checks, not OX19 service or browser acceptance. No local PostgreSQL client/server or database environment is available, and migration `0032` remains unapplied; therefore DB-backed service tests and live-browser acceptance were not run. No uploaded remote DB credentials were read or used, and no database writes occurred. OX19 is not yet accepted.
+
+**Next.** Obtain a disposable local PostgreSQL target, apply and verify `0032` there, then run OX19 service and browser acceptance. Do not run OVXK browser acceptance. After acceptance results are reported, request the owner fields for the next planned UI target, SCR-026 / OB13 Chart of Accounts define.
+
 ---
 
 ## §30 · Change log (continued)
@@ -860,6 +869,7 @@ recorded change, date and reason stated.
 | 2.25 | 2026-10-15 | **SCR-025/OX19 supporting functions and mutation wiring implemented (B-207, §26.223).** Added shared assignment/source-write locking and compatibility guards across OX19, OKKP, Company Code CoA/upsert writes and standard package provisioning; standard A000 assignment now uses the OX19 transaction service. Added protected Add/Unassign server actions requiring both owner-approved capabilities and wired the existing UI with translated result/error states. Typecheck and diff check passed. No tests, UI/browser acceptance, database writes or migration application; `0032` remains unapplied. Implementation is published before tests per D-111. | Agent |
 | 2.26 | 2026-10-15 | **B-207 OX19 implementation published (B-208, §26.224).** Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to the explicit GitHub remote as a fast-forward from `484ea69` to `main`. The published code is implementation only; no tests or acceptance ran, and migration `0032` remains unapplied. | Agent |
 | 2.27 | 2026-10-15 | **OX19 workbench discovery corrected and DB-free contract suite prepared (B-209, §26.225).** Added the OX19 route to the workbench's built routes and global activity seed, removed its stale unbuilt exclusion, updated the OKKP contract assertion, and registered targeted OX19 contract coverage in the DB-free harness. Typecheck and diff check passed; the new suite has not yet run. No local PostgreSQL/client or DB environment is present, so no DB-backed tests/browser acceptance or migration application; no uploaded remote DB credentials were used. | Agent |
+| 2.28 | 2026-10-15 | **OX19 DB-free test stage partially verified (B-210, §26.226).** Targeted OX19/OKKP/Company Code CoA contract suites passed 18/18. Full no-database browser harness passed 288/290 across 54 files; the two known unrelated SCR-021/SCR-022 legacy code-scan failures remain. Corrected one stale CoA lock assertion found on the first harness run. Typecheck and diff check passed. No local database tests or browser acceptance; `0032` remains unapplied and OX19 is not accepted. | Agent |
 
 ---
 
