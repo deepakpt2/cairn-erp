@@ -62,6 +62,7 @@ Rows continue the register in `CAIRN.md` §1.1–§1.2. Owner instructions of 20
 | R-40 | **Pre-test publication; UI tests deferred** | Owner directs that implementation changes be pushed without waiting for UI tests; UI tests are deferred until later. This applies to future process, and untested work must not be described as accepted (D-111). |
 | R-41 | **SCR-024 Assignment Control form and scope semantics** | Show “Controlling area same as company code (1:1 Relationship)” for exactly one Company Code and “Cross-company-code cost accounting (1:N Relationship)” for multiple Company Codes. In cross-company mode, all assigned Company Codes must share the same Operational Chart of Accounts and Fiscal Year Variant. Currency and Fiscal Year Variant become read-only after any actual operational transaction for an assigned Company Code; both remain editable before then. Duplicate creation is an idempotent no-op. See D-112–D-114. |
 | R-42 | **SCR-024 Assignment Control copy** | Preserve the owner-provided heading, control description, option descriptions, and scope help text verbatim in the OKKP UI; do not paraphrase or substitute copy. The full copy is recorded in D-115. |
+| R-43 | **UI-first staged delivery order** | For future T-code pages, deliver separate bounded stages in this order: (1) UI, (2) DB/schema, (3) backend business functions, (4) supporting functions, (5) tests/acceptance. This supersedes the stage sequence in R-34 only. The pre-UI T-code/form and owner-field intake gate, no-bundling rule, implementation publication before UI tests (R-40), no acceptance claim before tests pass, and post-test report/request for the next UI T-code remain in force. |
 
 ---
 
@@ -94,6 +95,7 @@ Rows continue the register in `CAIRN.md` §2 (through D-092).
 | D-113 | **Financial field lock after actual activity.** Currency Key and Fiscal Year Variant remain editable before activity; both become read-only once any actual operational document exists for any Company Code assigned to the Controlling Area. The backend must enforce this as well as the UI, and posting/document paths must serialize with configuration changes. | Owner selection on 2026-10-14. | 2026-10-14 |
 | D-114 | **Duplicate SCR-024 creation.** Repeating a Controlling Area key is an idempotent no-op: do not change values or write a change-history event; report that the key already exists. | Owner selection on 2026-10-14. | 2026-10-14 |
 | D-115 | **Verbatim SCR-024 Assignment Control UI copy.** Heading: “Description of Controlling Area’s Purpose”. Control description: “Controls the relationship between Controlling Area and Company Code”. Option 1: “Controlling area same as company code (1:1 Relationship)” with “This maps Controlling Area to a single Company Code in a strict 1:1 relationship, where only one Company Code may be assigned to the Controlling Area.” Option 2: “Cross-company-code cost accounting (1:N Relationship)” with “This enables one Controlling Area to be assigned to multiple Company Codes, allowing cost accounting to be performed across all assigned Company Codes.” General help: “The scope controls whether a Controlling Area can be assigned to one or multiple Company Codes in the system.” Then “1:1 Relationship: Exactly one Company Code must be assigned to the Controlling Area.”; “1:N Relationship: One Controlling Area can be assigned to multiple Company Codes.”; and “This will determine whether cost accounting for a Controlling Area is restricted to a single Company Code or includes all cross-company costs.” Preserve the copy and punctuation verbatim in the UI. | Owner-supplied wording in the 2026-10-14 clarification. | 2026-10-14 |
+| D-116 | **UI-first stage order.** Deliver each future T-code page in separate stages: UI → DB/schema → backend functions → supporting functions → tests/acceptance. This replaces only the earlier DB-first sequence in R-34/D-100. The T-code/form and owner-field gate, bounded/no-bundling discipline, R-40 publication-before-test instruction, and post-test report/request for the next T-code remain unchanged. | Owner instruction in the 2026-10-15 conversation. | 2026-10-15 |
 
 ---
 
@@ -677,6 +679,13 @@ Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/m
 
 **Other tests.** `npm run typecheck`, `git diff --check`, and the targeted no-DB suite (**65/65**) passed. The full `npm run test:browser-harness` run reported **51/53 files and 281/283 tests passing**. Its same two unrelated legacy source scans fail on Sales Organization / Distribution Channel terms already present at baseline `debe23a`; no unrelated code was changed. The guarded browser-target test code is committed in `8a5e8fb` (`test: add SCR-024 OKKP browser acceptance target`) and is ready for publication with this log.
 
+
+### 26.213 B-197 — Owner changes delivery sequence to UI-first `ORDER UPDATED · OX19 INTAKE PENDING`
+
+**New standing order (R-43/D-116).** Future T-code page work proceeds through separate bounded stages in this order: **UI → DB/schema → backend → supporting functions → tests/acceptance**. This supersedes only the earlier DB-first stage sequence recorded in R-34/D-100. The requirement to present the T-code/form and wait for owner-supplied fields before UI work, the no-bundling rule, R-40 publication-before-test instruction, and the post-test report/request for the next UI T-code remain in force.
+
+**Next page status.** SCR-025 / OX19 remains the next planned UI. The owner confirmed the T-code but has not yet supplied its form-field and behavior contract; no OX19 UI or implementation stage has started. Await those details before beginning the UI-first sequence.
+
 ---
 
 ## §30 · Change log (continued)
@@ -731,6 +740,7 @@ recorded change, date and reason stated.
 | 2.12 | 2026-10-15 | **SCR-024 contract-test results published (B-194).** Commit `c820b95` (`test: add SCR-024 OKKP UI contracts`) was pushed to `origin/main` as a fast-forward from `574e364`. It contains the targeted no-DB contract tests and their harness registration. Browser acceptance remains pending local database availability. | Agent |
 | 2.13 | 2026-10-15 | **SCR-024 edit-form event defect corrected and pushed (B-195).** Live browser testing exposed a React `currentTarget` timing error in OKKP name edits; values are now captured synchronously before state updates. Commit `1b3b888` was pushed before acceptance was rerun. Typecheck and diff checks passed. | Agent |
 | 2.14 | 2026-10-15 | **SCR-024 / OKKP local browser acceptance passed (B-196).** The isolated `controlling-area` target passed on PostgreSQL 17.11 with local-only roles; `T972` and the synthetic document-index fixture were cleaned. Targeted no-DB tests passed 65/65; full browser-harness result was 281/283 with the same two unrelated baseline Sales Area-code scans failing. No remote DB, OVXK or OVXA target was used. Target code is in commit `8a5e8fb`; OX19/SCR-025 remains separate. | Agent |
+| 2.15 | 2026-10-15 | **Owner changed the future T-code delivery order to UI-first (B-197, §26.213; R-43/D-116).** Future page work now proceeds UI → DB/schema → backend → supporting functions → tests/acceptance in separate stages. The pre-UI owner-field gate and all publication/test safeguards remain. SCR-025/OX19 is still awaiting its owner-supplied field contract. | Agent |
 
 ---
 
