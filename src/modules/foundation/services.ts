@@ -13,6 +13,10 @@ import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
 import { glAccount } from '../finance/schema';
 import {
+  assertCompanyCodeFinancialSettingsCompatible,
+  lockCompanyCodeOxxAssignments,
+} from './controlling-area-company-compatibility';
+import {
   chartOfAccounts,
   companyCode,
   fiscalYearVariant,
@@ -123,11 +127,13 @@ export async function upsertCompanyCode(input: CompanyCodeInput) {
   const { client, companyCode: code, changedBy } = input;
 
   return withTenant(client, async (tx) => {
+    const linkedAreas = await lockCompanyCodeOxxAssignments(tx, client, code);
     const existing = await tx
       .select()
       .from(companyCode)
       .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, code)))
-      .limit(1);
+      .limit(1)
+      .for('update');
 
     const values = {
       client,
@@ -158,6 +164,11 @@ export async function upsertCompanyCode(input: CompanyCodeInput) {
     }
 
     const before = existing[0];
+    await assertCompanyCodeFinancialSettingsCompatible(tx, client, code, {
+      chartOfAccounts: values.chartOfAccounts,
+      fiscalYearVariant: values.fiscalYearVariant,
+      currency: values.currency,
+    }, linkedAreas);
     await tx
       .update(companyCode)
       .set({ ...values, changedBy, changedAt: new Date() })

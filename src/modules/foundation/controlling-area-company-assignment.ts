@@ -4,12 +4,13 @@
  * owns tenant-scoped validation, atomic mapping changes, and audit history.
  */
 import { randomUUID } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-trail';
+import { lockCompanyCodeOxxAssignments } from './controlling-area-company-compatibility';
 import {
   chartOfAccounts,
   companyCode,
@@ -65,12 +66,115 @@ export async function assignCompanyCodeToControllingArea(
   const parsed = controllingAreaCompanyAssignmentInputSchema.safeParse(raw);
   if (!parsed.success) throw invalidInput(parsed.error);
 
-  const { client, changedBy, ...values } = parsed.data;
-  return withTenant(client, async (tx) => {
-    await lockAssignmentResources(tx, client, values.controllingArea, values.companyCode);
-    const { area, company } = await requireSourceRows(tx, client, values.controllingArea, values.companyCode);
+  return withTenant(parsed.data.client, (tx) =>
+    assignCompanyCodeToControllingAreaInTransaction(tx, parsed.data),
+  );
+}
 
-    const [currentOwner] = await tx.select({
+/** Same atomic operation for a caller that already owns a tenant transaction (e.g. initial package setup). */
+export async function assignCompanyCodeToControllingAreaInTransaction(
+  tx: Tx,
+  raw: ControllingAreaCompanyAssignmentInput,
+) {
+  const parsed = controllingAreaCompanyAssignmentInputSchema.safeParse(raw);
+  if (!parsed.success) throw invalidInput(parsed.error);
+  const { client, changedBy, ...values } = parsed.data;
+
+  await lockAssignmentResources(tx, client, values.controllingArea, values.companyCode);
+  const { area, company } = await requireSourceRows(tx, client, values.controllingArea, values.companyCode);
+
+  const [currentOwner] = await tx.select({
+    controllingArea: controllingAreaCompany.controllingArea,
+  }).from(controllingAreaCompany)
+    .where(and(
+      eq(controllingAreaCompany.client, client),
+      eq(controllingAreaCompany.companyCode, values.companyCode),
+    ))
+    .for('update');
+
+  if (currentOwner?.controllingArea.trim() === values.controllingArea) {
+    await recordDuplicateAssignmentEvent(tx, client, changedBy, values.controllingArea, values.companyCode);
+    await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
+    return {
+      assigned: false as const,
+      duplicate: true as const,
+      controllingArea: values.controllingArea,
+      companyCode: values.companyCode,
+    };
+  }
+  if (currentOwner) throw alreadyAssignedElsewhere(values.companyCode, currentOwner.controllingArea.trim());
+
+  const areaCurrency = area.currency.trim();
+  const areaFiscalYearVariant = area.fiscalYearVariant.trim();
+  const companyCurrency = company.currency.trim();
+  if (companyCurrency !== areaCurrency) {
+    throw new ControllingAreaCompanyAssignmentError(
+      `Company Code ${values.companyCode} local currency ${companyCurrency} does not match Controlling Area ${values.controllingArea} currency ${areaCurrency}.`,
+      'Choose a Company Code whose local currency exactly matches the Controlling Area Currency Key.',
+    );
+  }
+
+  const companyFiscalYearVariant = requiredValue(
+    company.fiscalYearVariant,
+    `Company Code ${values.companyCode} has no Fiscal Year Variant assigned.`,
+    'Assign an existing Fiscal Year Variant to the Company Code before OX19.',
+  );
+  if (companyFiscalYearVariant !== areaFiscalYearVariant) {
+    throw new ControllingAreaCompanyAssignmentError(
+      `Company Code ${values.companyCode} Fiscal Year Variant ${companyFiscalYearVariant} does not match Controlling Area ${values.controllingArea} Fiscal Year Variant ${areaFiscalYearVariant}.`,
+      'Use the same Fiscal Year Variant on the Company Code and Controlling Area.',
+    );
+  }
+  const companyChartOfAccounts = requiredValue(
+    company.chartOfAccounts,
+    `Company Code ${values.companyCode} has no Operational Chart of Accounts assigned.`,
+    'Assign an existing Operational Chart of Accounts to the Company Code before OX19.',
+  );
+  await requireChartOfAccounts(tx, client, companyChartOfAccounts, values.companyCode);
+  await requireFiscalYearVariant(tx, client, companyFiscalYearVariant, values.companyCode);
+
+  const currentAssignments = await readAreaAssignments(tx, client, values.controllingArea);
+  if (area.companyCodeScope === 'SINGLE' && currentAssignments.length > 0) {
+    throw new ControllingAreaCompanyAssignmentError(
+      `Controlling Area ${values.controllingArea} is configured for Same Company Code and already has a Company Code assignment.`,
+      'Unassign the current Company Code before assigning another one, or change the Controlling Area scope through OKKP.',
+    );
+  }
+  if (area.companyCodeScope !== 'SINGLE' && area.companyCodeScope !== 'MULTIPLE') {
+    throw new ControllingAreaCompanyAssignmentError(
+      `Controlling Area ${values.controllingArea} has an unsupported Company Code assignment scope.`,
+      'Correct the Controlling Area scope through OKKP before assigning Company Codes.',
+    );
+  }
+
+  const chartBaseline = await validateCurrentAreaAssignments(
+    tx,
+    client,
+    values.controllingArea,
+    areaCurrency,
+    areaFiscalYearVariant,
+    currentAssignments,
+  );
+  if (chartBaseline !== null && chartBaseline !== companyChartOfAccounts) {
+    throw new ControllingAreaCompanyAssignmentError(
+      `Company Code ${values.companyCode} Operational Chart of Accounts ${companyChartOfAccounts} does not match the current assignment baseline ${chartBaseline} for Controlling Area ${values.controllingArea}.`,
+      'Use the same Operational Chart of Accounts as the Controlling Area’s current Company Code assignments. If the assignment set is empty, the first new assignment establishes the baseline.',
+    );
+  }
+
+  const [created] = await tx.insert(controllingAreaCompany).values({
+    client,
+    controllingArea: values.controllingArea,
+    companyCode: values.companyCode,
+    createdBy: changedBy,
+  }).onConflictDoNothing().returning({
+    controllingArea: controllingAreaCompany.controllingArea,
+  });
+
+  if (!created) {
+    // The advisory lock serializes Cairn OX19 writes. Keep the unique index as
+    // the final guard for any other writer and record a racing duplicate too.
+    const [racedOwner] = await tx.select({
       controllingArea: controllingAreaCompany.controllingArea,
     }).from(controllingAreaCompany)
       .where(and(
@@ -78,8 +182,7 @@ export async function assignCompanyCodeToControllingArea(
         eq(controllingAreaCompany.companyCode, values.companyCode),
       ))
       .for('update');
-
-    if (currentOwner?.controllingArea.trim() === values.controllingArea) {
+    if (racedOwner?.controllingArea.trim() === values.controllingArea) {
       await recordDuplicateAssignmentEvent(tx, client, changedBy, values.controllingArea, values.companyCode);
       await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
       return {
@@ -89,135 +192,44 @@ export async function assignCompanyCodeToControllingArea(
         companyCode: values.companyCode,
       };
     }
-    if (currentOwner) throw alreadyAssignedElsewhere(values.companyCode, currentOwner.controllingArea.trim());
-
-    const areaCurrency = area.currency.trim();
-    const areaFiscalYearVariant = area.fiscalYearVariant.trim();
-    const companyCurrency = company.currency.trim();
-    if (companyCurrency !== areaCurrency) {
-      throw new ControllingAreaCompanyAssignmentError(
-        `Company Code ${values.companyCode} local currency ${companyCurrency} does not match Controlling Area ${values.controllingArea} currency ${areaCurrency}.`,
-        'Choose a Company Code whose local currency exactly matches the Controlling Area Currency Key.',
-      );
-    }
-
-    const companyFiscalYearVariant = requiredValue(
-      company.fiscalYearVariant,
-      `Company Code ${values.companyCode} has no Fiscal Year Variant assigned.`,
-      'Assign an existing Fiscal Year Variant to the Company Code before OX19.',
+    if (racedOwner) throw alreadyAssignedElsewhere(values.companyCode, racedOwner.controllingArea.trim());
+    throw new ControllingAreaCompanyAssignmentError(
+      `The Company Code ${values.companyCode} assignment could not be saved.`,
+      'Reload OX19 and review the current assignments before retrying.',
     );
-    if (companyFiscalYearVariant !== areaFiscalYearVariant) {
-      throw new ControllingAreaCompanyAssignmentError(
-        `Company Code ${values.companyCode} Fiscal Year Variant ${companyFiscalYearVariant} does not match Controlling Area ${values.controllingArea} Fiscal Year Variant ${areaFiscalYearVariant}.`,
-        'Use the same Fiscal Year Variant on the Company Code and Controlling Area.',
-      );
-    }
-    const companyChartOfAccounts = requiredValue(
-      company.chartOfAccounts,
-      `Company Code ${values.companyCode} has no Operational Chart of Accounts assigned.`,
-      'Assign an existing Operational Chart of Accounts to the Company Code before OX19.',
-    );
-    await requireChartOfAccounts(tx, client, companyChartOfAccounts, values.companyCode);
-    await requireFiscalYearVariant(tx, client, companyFiscalYearVariant, values.companyCode);
+  }
 
-    const currentAssignments = await readAreaAssignments(tx, client, values.controllingArea);
-    if (area.companyCodeScope === 'SINGLE' && currentAssignments.length > 0) {
-      throw new ControllingAreaCompanyAssignmentError(
-        `Controlling Area ${values.controllingArea} is configured for Same Company Code and already has a Company Code assignment.`,
-        'Unassign the current Company Code before assigning another one, or change the Controlling Area scope through OKKP.',
-      );
-    }
-    if (area.companyCodeScope !== 'SINGLE' && area.companyCodeScope !== 'MULTIPLE') {
-      throw new ControllingAreaCompanyAssignmentError(
-        `Controlling Area ${values.controllingArea} has an unsupported Company Code assignment scope.`,
-        'Correct the Controlling Area scope through OKKP before assigning Company Codes.',
-      );
-    }
-
-    const chartBaseline = await validateCurrentAreaAssignments(
-      tx,
-      client,
-      values.controllingArea,
-      areaCurrency,
-      areaFiscalYearVariant,
-      currentAssignments,
-    );
-    if (chartBaseline !== null && chartBaseline !== companyChartOfAccounts) {
-      throw new ControllingAreaCompanyAssignmentError(
-        `Company Code ${values.companyCode} Operational Chart of Accounts ${companyChartOfAccounts} does not match the current assignment baseline ${chartBaseline} for Controlling Area ${values.controllingArea}.`,
-        'Use the same Operational Chart of Accounts as the Controlling Area’s current Company Code assignments. If the assignment set is empty, the first new assignment establishes the baseline.',
-      );
-    }
-
-    const [created] = await tx.insert(controllingAreaCompany).values({
-      client,
+  const changeId = await recordChange(tx, {
+    client,
+    objectClass: OBJECT_CLASS,
+    objectKey: assignmentObjectKey(values.controllingArea, values.companyCode),
+    changeType: 'CREATE',
+    changedBy,
+    transactionCode: ASSIGNMENT_ACTIVITY,
+    after: {
       controllingArea: values.controllingArea,
       companyCode: values.companyCode,
-      createdBy: changedBy,
-    }).onConflictDoNothing().returning({
-      controllingArea: controllingAreaCompany.controllingArea,
-    });
-
-    if (!created) {
-      // The advisory lock serializes Cairn OX19 writes. Keep the unique index as
-      // the final guard for any other writer and record a racing duplicate too.
-      const [racedOwner] = await tx.select({
-        controllingArea: controllingAreaCompany.controllingArea,
-      }).from(controllingAreaCompany)
-        .where(and(
-          eq(controllingAreaCompany.client, client),
-          eq(controllingAreaCompany.companyCode, values.companyCode),
-        ))
-        .for('update');
-      if (racedOwner?.controllingArea.trim() === values.controllingArea) {
-        await recordDuplicateAssignmentEvent(tx, client, changedBy, values.controllingArea, values.companyCode);
-        await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
-        return {
-          assigned: false as const,
-          duplicate: true as const,
-          controllingArea: values.controllingArea,
-          companyCode: values.companyCode,
-        };
-      }
-      if (racedOwner) throw alreadyAssignedElsewhere(values.companyCode, racedOwner.controllingArea.trim());
-      throw new ControllingAreaCompanyAssignmentError(
-        `The Company Code ${values.companyCode} assignment could not be saved.`,
-        'Reload OX19 and review the current assignments before retrying.',
-      );
-    }
-
-    const changeId = await recordChange(tx, {
-      client,
-      objectClass: OBJECT_CLASS,
-      objectKey: assignmentObjectKey(values.controllingArea, values.companyCode),
-      changeType: 'CREATE',
-      changedBy,
-      transactionCode: ASSIGNMENT_ACTIVITY,
-      after: {
-        controllingArea: values.controllingArea,
-        companyCode: values.companyCode,
-      },
-      securityRelevantFields: ['controllingArea', 'companyCode'],
-      fieldLabels: ASSIGNMENT_FIELD_LABELS,
-    });
-    if (!changeId) {
-      throw new ControllingAreaCompanyAssignmentError(
-        'The Company Code assignment could not be recorded in change history.',
-        'Retry the assignment. If the problem continues, contact an administrator.',
-      );
-    }
-
-    await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
-    return {
-      assigned: true as const,
-      duplicate: false as const,
-      controllingArea: values.controllingArea,
-      companyCode: values.companyCode,
-      chartOfAccounts: companyChartOfAccounts,
-      fiscalYearVariant: companyFiscalYearVariant,
-      currency: companyCurrency,
-    };
+    },
+    securityRelevantFields: ['controllingArea', 'companyCode'],
+    fieldLabels: ASSIGNMENT_FIELD_LABELS,
   });
+  if (!changeId) {
+    throw new ControllingAreaCompanyAssignmentError(
+      'The Company Code assignment could not be recorded in change history.',
+      'Retry the assignment. If the problem continues, contact an administrator.',
+    );
+  }
+
+  await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
+  return {
+    assigned: true as const,
+    duplicate: false as const,
+    controllingArea: values.controllingArea,
+    companyCode: values.companyCode,
+    chartOfAccounts: companyChartOfAccounts,
+    fiscalYearVariant: companyFiscalYearVariant,
+    currency: companyCurrency,
+  };
 }
 
 /**
@@ -475,15 +487,9 @@ async function recordDuplicateAssignmentEvent(
 }
 
 async function lockAssignmentResources(tx: Tx, client: string, areaCode: string, companyCodeKey: string) {
-  // Stable ordering prevents deadlocks between assignments that share either source row.
-  // The Controlling Area key intentionally matches the OKKP maintenance lock.
-  const resources = [
-    `${client}/controlling_area/${areaCode}`,
-    `${client}/controlling_area_company_code/${companyCodeKey}`,
-  ].sort();
-  for (const resource of resources) {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${resource}, 0))`);
-  }
+  // Company Code first, then the current and destination Controlling Area locks.
+  // Source-setting updates use the same order; the area resource matches OKKP.
+  await lockCompanyCodeOxxAssignments(tx, client, companyCodeKey, [areaCode]);
 }
 
 function assignmentObjectKey(areaCode: string, companyCodeKey: string) {

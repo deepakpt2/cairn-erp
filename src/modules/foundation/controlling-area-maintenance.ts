@@ -9,6 +9,7 @@ import { changeDocument, documentIndex } from '../../platform/tables/audit-trail
 import { configActivityStatus } from '../../platform/tables/registry';
 import { journalEntry } from '../finance/schema';
 import {
+  chartOfAccounts,
   companyCode,
   controllingArea,
   controllingAreaCompany,
@@ -217,8 +218,16 @@ export async function saveControllingArea(raw: ControllingAreaMaintenanceInput) 
       if (
         current.companyCodeScope !== values.companyCodeScope
         || oldVariant !== values.fiscalYearVariant
+        || oldCurrency !== values.currency
       ) {
-        await assertScopeCompatible(tx, client, values.controllingArea, values.companyCodeScope, values.fiscalYearVariant);
+        await assertScopeCompatible(
+          tx,
+          client,
+          values.controllingArea,
+          values.companyCodeScope,
+          values.fiscalYearVariant,
+          values.currency,
+        );
       }
       const before = snapshot(current);
       const after = { ...values, isActive: current.isActive };
@@ -252,7 +261,14 @@ export async function saveControllingArea(raw: ControllingAreaMaintenanceInput) 
       return { created: false as const, changed: true as const, version: version + 1, ...values };
     }
 
-    await assertScopeCompatible(tx, client, values.controllingArea, values.companyCodeScope, values.fiscalYearVariant);
+    await assertScopeCompatible(
+      tx,
+      client,
+      values.controllingArea,
+      values.companyCodeScope,
+      values.fiscalYearVariant,
+      values.currency,
+    );
     const [created] = await tx.insert(controllingArea).values({
       client,
       controllingArea: values.controllingArea,
@@ -372,15 +388,27 @@ async function assertScopeCompatible(
   areaCode: string,
   scope: 'SINGLE' | 'MULTIPLE',
   areaFiscalYearVariant: string,
+  areaCurrency: string,
 ) {
   const assignments = await tx.select({
     companyCode: controllingAreaCompany.companyCode,
     chartOfAccounts: companyCode.chartOfAccounts,
     fiscalYearVariant: companyCode.fiscalYearVariant,
+    currency: companyCode.currency,
+    chartMaster: chartOfAccounts.chartOfAccounts,
+    fiscalYearVariantMaster: fiscalYearVariant.variant,
   }).from(controllingAreaCompany)
     .innerJoin(companyCode, and(
       eq(companyCode.client, controllingAreaCompany.client),
       eq(companyCode.companyCode, controllingAreaCompany.companyCode),
+    ))
+    .leftJoin(chartOfAccounts, and(
+      eq(chartOfAccounts.client, companyCode.client),
+      eq(chartOfAccounts.chartOfAccounts, companyCode.chartOfAccounts),
+    ))
+    .leftJoin(fiscalYearVariant, and(
+      eq(fiscalYearVariant.client, companyCode.client),
+      eq(fiscalYearVariant.variant, companyCode.fiscalYearVariant),
     ))
     .where(and(
       eq(controllingAreaCompany.client, client),
@@ -395,21 +423,35 @@ async function assertScopeCompatible(
     );
   }
 
-  if (scope === 'MULTIPLE' && assignments.length > 0) {
-    if (assignments.some((row) => !row.chartOfAccounts || !row.fiscalYearVariant)) {
+  let chartBaseline: string | null = null;
+  for (const row of assignments) {
+    const chart = row.chartOfAccounts?.trim();
+    const year = row.fiscalYearVariant?.trim();
+    if (!chart || !row.chartMaster || !year || !row.fiscalYearVariantMaster) {
       throw new ControllingAreaMaintenanceError(
-        `Company Code assignments for Controlling Area ${areaCode} lack an Operational Chart of Accounts or Fiscal Year Variant.`,
-        'Complete each Company Code financial assignment before enabling cross-company cost accounting.',
+        `Company Code assignments for Controlling Area ${areaCode} lack a defined Operational Chart of Accounts or Fiscal Year Variant.`,
+        'Complete each Company Code financial assignment before changing the Controlling Area settings.',
       );
     }
-    const charts = new Set(assignments.map((row) => row.chartOfAccounts!.trim()));
-    const years = new Set(assignments.map((row) => row.fiscalYearVariant!.trim()));
-    if (charts.size !== 1 || years.size !== 1 || years.values().next().value !== areaFiscalYearVariant) {
+    if (year !== areaFiscalYearVariant) {
       throw new ControllingAreaMaintenanceError(
-        `Company Codes assigned to Controlling Area ${areaCode} must share its Operational Chart of Accounts and Fiscal Year Variant.`,
-        'Use the same Operational Chart of Accounts and Fiscal Year Variant for every Company Code in a cross-company Controlling Area.',
+        `Company Codes assigned to Controlling Area ${areaCode} must use Fiscal Year Variant ${areaFiscalYearVariant}.`,
+        'Keep the Controlling Area Fiscal Year Variant exactly aligned with every assigned Company Code.',
       );
     }
+    if (row.currency.trim() !== areaCurrency) {
+      throw new ControllingAreaMaintenanceError(
+        `Company Codes assigned to Controlling Area ${areaCode} must use Currency Key ${areaCurrency}.`,
+        'Keep the Controlling Area Currency Key exactly aligned with every assigned Company Code local currency.',
+      );
+    }
+    if (scope === 'MULTIPLE' && chartBaseline !== null && chartBaseline !== chart) {
+      throw new ControllingAreaMaintenanceError(
+        `Company Codes assigned to Controlling Area ${areaCode} must share one Operational Chart of Accounts.`,
+        'Keep every Company Code in a Multiple Company Codes Controlling Area on the same Operational Chart of Accounts.',
+      );
+    }
+    chartBaseline = chart;
   }
 }
 

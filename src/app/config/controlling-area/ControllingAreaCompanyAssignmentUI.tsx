@@ -1,7 +1,12 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
+import {
+  assignControllingAreaCompanyAction,
+  unassignControllingAreaCompanyAction,
+  type ControllingAreaCompanyAssignmentActionState,
+} from './assign-company-code/actions';
 import { ControllingAreaValueHelp, type ControllingAreaChoice } from './ControllingAreaValueHelp';
 
 export interface ControllingAreaAssignmentRow {
@@ -29,9 +34,9 @@ interface ControllingAreaCompanyAssignmentUIProps {
 type HelpField = 'controllingArea' | 'companyCode';
 
 /**
- * SCR-025 / OX19 presentation stage. Value help and current assignments are wired
- * to tenant-local read data; mutation controls remain deliberately disabled until
- * the separate schema and business-function stages are delivered.
+ * SCR-025 / OX19 assignment screen. Tenant-local value help and current links are
+ * connected to protected add/unassign actions; mutation authority is still checked
+ * again at the server-action boundary.
  */
 export function ControllingAreaCompanyAssignmentUI({
   controllingAreas,
@@ -39,12 +44,23 @@ export function ControllingAreaCompanyAssignmentUI({
   assignments,
   canMaintain,
 }: ControllingAreaCompanyAssignmentUIProps) {
+  const [assignmentState, assignAction, assignmentPending] = useActionState<ControllingAreaCompanyAssignmentActionState, FormData>(
+    assignControllingAreaCompanyAction,
+    { ok: true },
+  );
+  const [unassignmentState, unassignAction, unassignmentPending] = useActionState<ControllingAreaCompanyAssignmentActionState, FormData>(
+    unassignControllingAreaCompanyAction,
+    { ok: true },
+  );
   const [controllingAreaValue, setControllingAreaValue] = useState('');
   const [companyCodeValue, setCompanyCodeValue] = useState('');
 
-  function keepPreviewLocal(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-  }
+  useEffect(() => {
+    if (assignmentState.ok && assignmentState.message) {
+      setControllingAreaValue('');
+      setCompanyCodeValue('');
+    }
+  }, [assignmentState]);
 
   return (
     <div className="space-y-4">
@@ -62,7 +78,19 @@ export function ControllingAreaCompanyAssignmentUI({
           </p>
         )}
 
-        <form onSubmit={keepPreviewLocal} className="space-y-4 p-3 sm:p-5">
+        {assignmentState.message && (
+          <div
+            role={assignmentState.ok ? 'status' : 'alert'}
+            className={`mx-3 mt-3 border p-3 text-sm ${assignmentState.ok
+              ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+              : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
+          >
+            <p>{assignmentState.message}</p>
+            {assignmentState.remedy && <p className="mt-1">{assignmentState.remedy}</p>}
+          </div>
+        )}
+
+        <form action={assignAction} className="space-y-4 p-3 sm:p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <ControllingAreaValueHelp
               id="ox19-controlling-area"
@@ -77,7 +105,7 @@ export function ControllingAreaCompanyAssignmentUI({
               rule={t('controllingArea.assignmentAreaRule')}
               maxLength={4}
               pattern="[A-Za-z0-9]{4}"
-              disabled={!canMaintain}
+              disabled={!canMaintain || assignmentPending}
             />
             <ControllingAreaValueHelp
               id="ox19-company-code"
@@ -92,7 +120,7 @@ export function ControllingAreaCompanyAssignmentUI({
               rule={t('controllingArea.assignmentCompanyRule')}
               maxLength={4}
               pattern="[A-Za-z0-9]{4}"
-              disabled={!canMaintain}
+              disabled={!canMaintain || assignmentPending}
               normalizeUppercase={false}
             />
           </div>
@@ -106,10 +134,10 @@ export function ControllingAreaCompanyAssignmentUI({
             <button
               type="submit"
               className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
-              disabled
+              disabled={!canMaintain || assignmentPending}
               aria-describedby="ox19-assignment-actions-pending"
             >
-              {t('controllingArea.assignmentAddButton')}
+              {assignmentPending ? t('common.saving') : t('controllingArea.assignmentAddButton')}
             </button>
           </div>
           <span id="ox19-assignment-actions-pending" className="sr-only">
@@ -125,6 +153,18 @@ export function ControllingAreaCompanyAssignmentUI({
           </h2>
           <span className="code text-xs tabular text-ink-faint">{assignments.length}</span>
         </div>
+
+        {unassignmentState.message && (
+          <div
+            role={unassignmentState.ok ? 'status' : 'alert'}
+            className={`border-b px-3 py-3 text-sm sm:px-4 ${unassignmentState.ok
+              ? 'border-[#a8c9b1] bg-[#f3faf4] text-[#285d37]'
+              : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}
+          >
+            <p>{unassignmentState.message}</p>
+            {unassignmentState.remedy && <p className="mt-1">{unassignmentState.remedy}</p>}
+          </div>
+        )}
 
         {assignments.length === 0 ? (
           <p role="status" className="p-4 text-sm text-ink-soft">{t('controllingArea.assignmentListEmpty')}</p>
@@ -171,9 +211,17 @@ export function ControllingAreaCompanyAssignmentUI({
                     </dl>
                   </div>
                   <div className="flex justify-end border-t border-[#e1e5e8] pt-2">
-                    <button type="button" className="btn btn-default min-h-11" disabled>
-                      {t('controllingArea.assignmentUnassignButton')}
-                    </button>
+                    <form action={unassignAction}>
+                      <input type="hidden" name="controllingArea" value={item.controllingArea} />
+                      <input type="hidden" name="companyCode" value={item.companyCode} />
+                      <button
+                        type="submit"
+                        className="btn btn-default min-h-11"
+                        disabled={!canMaintain || unassignmentPending}
+                      >
+                        {unassignmentPending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}
+                      </button>
+                    </form>
                   </div>
                 </article>
               ))}
@@ -208,9 +256,17 @@ export function ControllingAreaCompanyAssignmentUI({
                       <td className="px-3 py-2 font-mono">{item.companyCodeFiscalYearVariant || '—'} / {item.controllingAreaFiscalYearVariant || '—'}</td>
                       <td className="px-3 py-2 font-mono">{item.companyCodeCurrency || '—'} / {item.controllingAreaCurrency || '—'}</td>
                       <td className="px-3 py-2 text-right">
-                        <button type="button" className="btn btn-default min-h-11 sm:min-h-9" disabled>
-                          {t('controllingArea.assignmentUnassignButton')}
-                        </button>
+                        <form action={unassignAction}>
+                          <input type="hidden" name="controllingArea" value={item.controllingArea} />
+                          <input type="hidden" name="companyCode" value={item.companyCode} />
+                          <button
+                            type="submit"
+                            className="btn btn-default min-h-11 sm:min-h-9"
+                            disabled={!canMaintain || unassignmentPending}
+                          >
+                            {unassignmentPending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}
+                          </button>
+                        </form>
                       </td>
                     </tr>
                   ))}

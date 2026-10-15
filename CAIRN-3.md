@@ -766,6 +766,17 @@ Added tenant-scoped `assignCompanyCodeToControllingArea` and `unassignCompanyCod
 
 **Next.** Implement the separate OX19 supporting-function stage; tests/acceptance remain last.
 
+
+### 26.223 B-207 — SCR-025 / OX19 supporting functions and mutation wiring implemented `TYPECHECK COMPLETE · UI ACCEPTANCE PENDING`
+
+**Shared compatibility coordination.** Added a shared Company Code → current/target Controlling Area lock order and financial-settings guard. OX19 assignment/removal, Company Code CoA/upsert changes, OKKP scope/Currency/Fiscal Year Variant updates, and standard-package provisioning now coordinate against the same current links. OKKP validates exact Currency Key and Fiscal Year Variant compatibility for every assigned Company Code in both scopes and preserves the derived Operational Chart of Accounts baseline for Multiple Company Codes. Existing Company Code CoA/Fiscal Year Variant/currency writes are rejected if they would invalidate an OX19 link. The initial standard-package A000 link now uses the OX19 transaction service and its compatibility, cardinality, lock and audit path.
+
+**Protected actions and UI wiring.** Added tenant/actor-from-session server actions that require both `CFG.COST.CONTROLLINGAREA.DEFINE` and `CFG.ORG.COMPANYCODE.DEFINE`; wired Add assignment and Unassign forms to them, including pending/error/success states and translated duplicate/no-op messaging. Company Code keys remain case-preserving. Unassignment removes the current row while the service retains append-only audit history.
+
+**Verification/boundary.** `npm run typecheck` and `git diff --cached --check` passed. This is implementation only, not accepted behavior: no tests, UI/browser acceptance, database writes or migration application were run. Migration `0032` remains unapplied. The change will be committed and pushed before the separate UI-test/acceptance stage, per D-111.
+
+**Next.** Publish this implementation batch, then run the separate OX19 test/acceptance stage. Do not run OVXK browser acceptance. Report results before requesting details for the next UI T-code.
+
 ---
 
 ## §30 · Change log (continued)
@@ -830,6 +841,7 @@ recorded change, date and reason stated.
 | 2.22 | 2026-10-15 | **OX19 Company Code lookup preserves the source key's case (B-204, §26.220).** The owner contract does not normalize Company Code keys; the F4 component preserves exact key case and only disables existing values that do not fit the four-character alphanumeric assignment field. No database/backend changes. | Agent |
 | 2.23 | 2026-10-15 | **SCR-025/OX19 DB/schema stage implemented (B-205, §26.221).** Added relation format/FK/unique constraints and a fail-safe compatibility preflight migration. Typecheck and diff checks passed; migration not applied because PostgreSQL/local environment is absent, and no remote DB was contacted. The backend stage is next; tests remain last. | Agent |
 | 2.24 | 2026-10-15 | **SCR-025/OX19 assignment backend implemented (B-206, §26.222).** Added tenant-scoped add/unassign operations with scope, currency/FYV, derived-CoA-baseline, and audit behavior, including an explicit duplicate no-op event. Typecheck passed; no tests, database writes, UI wiring or acceptance. Both permissions and guards on source-master edits remain for the supporting-functions stage. | Agent |
+| 2.25 | 2026-10-15 | **SCR-025/OX19 supporting functions and mutation wiring implemented (B-207, §26.223).** Added shared assignment/source-write locking and compatibility guards across OX19, OKKP, Company Code CoA/upsert writes and standard package provisioning; standard A000 assignment now uses the OX19 transaction service. Added protected Add/Unassign server actions requiring both owner-approved capabilities and wired the existing UI with translated result/error states. Typecheck and diff check passed. No tests, UI/browser acceptance, database writes or migration application; `0032` remains unapplied. Implementation is published before tests per D-111. | Agent |
 
 ---
 

@@ -20,7 +20,6 @@ import {
   companyCode,
   creditControlArea,
   controllingArea,
-  controllingAreaCompany,
   distributionChannel,
   division,
   documentType,
@@ -42,6 +41,11 @@ import {
   supplierPartnerFunction,
 } from './schema';
 import { glAccount } from '../finance/schema';
+import { assignCompanyCodeToControllingAreaInTransaction } from './controlling-area-company-assignment';
+import {
+  assertCompanyCodeFinancialSettingsCompatible,
+  lockCompanyCodeOxxAssignments,
+} from './controlling-area-company-compatibility';
 
 export const STANDARD_PACKAGE_VERSION = 'INTL-STD-2';
 
@@ -337,11 +341,13 @@ export async function applyStandardPackage(
   }
 
   /* ── Company code ────────────────────────────────────────────────────────── */
+  const currentOxxAreas = await lockCompanyCodeOxxAssignments(tx, client, input.companyCode, ['A000']);
   const existingCompany = await tx
     .select()
     .from(companyCode)
     .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, input.companyCode)))
-    .limit(1);
+    .limit(1)
+    .for('update');
 
   if (existingCompany.length === 0) {
     await tx.insert(companyCode).values({
@@ -360,7 +366,12 @@ export async function applyStandardPackage(
     });
   } else {
     // Keep an existing company code in step with the package rather than
-    // overwriting its identity.
+    // overwriting its identity, but never break a current OX19 financial match.
+    await assertCompanyCodeFinancialSettingsCompatible(tx, client, input.companyCode, {
+      chartOfAccounts: coaKey,
+      fiscalYearVariant: fyvKey,
+      currency: existingCompany[0].currency,
+    }, currentOxxAreas);
     await tx
       .update(companyCode)
       .set({
@@ -400,15 +411,13 @@ export async function applyStandardPackage(
     })
     .onConflictDoNothing();
 
-  await tx
-    .insert(controllingAreaCompany)
-    .values({
-      client,
-      controllingArea: 'A000',
-      companyCode: input.companyCode,
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
+  // Initial package assignment shares OX19's compatibility, cardinality, lock and audit path.
+  await assignCompanyCodeToControllingAreaInTransaction(tx, {
+    client,
+    changedBy: activatedBy,
+    controllingArea: 'A000',
+    companyCode: input.companyCode,
+  });
 
   /* ── Plant and storage locations ─────────────────────────────────────────── */
   await tx

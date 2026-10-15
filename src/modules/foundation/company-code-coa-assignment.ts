@@ -1,11 +1,16 @@
 /** Protected initial CoA assignment — SCR-013 / CAIRN.md §6.2. */
 import { z } from 'zod';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
 import { configActivityStatus } from '../../platform/tables/registry';
 import { chartOfAccounts, companyCode } from './schema';
+import {
+  assertCompanyCodeFinancialSettingsCompatible,
+  ControllingAreaCompanyCompatibilityError,
+  lockCompanyCodeOxxAssignments,
+} from './controlling-area-company-compatibility';
 
 const ASSIGNMENT_ACTIVITY = 'CFG.ORG.COMPANYCODE.ASSIGN_COA';
 const PREREQUISITES = ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'] as const;
@@ -52,10 +57,8 @@ export async function assignCompanyCodeCoa(raw: CompanyCodeCoaAssignmentInput) {
 
   const { client, changedBy, ...values } = parsed.data;
   return withTenant(client, async (tx) => {
-    // Serialize simultaneous attempts before locking and inspecting the target row.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/company_code_coa/${values.companyCode}`}, 0))`,
-    );
+    // Use the OX19 lock order before reading the row or changing its CoA assignment.
+    const linkedAreas = await lockCompanyCodeOxxAssignments(tx, client, values.companyCode);
 
     const [current] = await tx
       .select()
@@ -119,6 +122,19 @@ export async function assignCompanyCodeCoa(raw: CompanyCodeCoaAssignmentInput) {
         `Active chart of accounts ${values.chartOfAccounts} is not defined in this tenant.`,
         'Define and activate the chart of accounts first (CFG.FIN.COA.DEFINE).',
       );
+    }
+
+    try {
+      await assertCompanyCodeFinancialSettingsCompatible(tx, client, values.companyCode, {
+        chartOfAccounts: values.chartOfAccounts,
+        fiscalYearVariant: current.fiscalYearVariant,
+        currency: current.currency,
+      }, linkedAreas);
+    } catch (error) {
+      if (error instanceof ControllingAreaCompanyCompatibilityError) {
+        throw new CompanyCodeCoaAssignmentError(error.message, error.remedy);
+      }
+      throw error;
     }
 
     const [updated] = await tx
