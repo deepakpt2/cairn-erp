@@ -6,17 +6,19 @@ import {
   chartOfAccountsF4Choices,
   listChartOfAccounts,
 } from '@/modules/foundation/chart-of-accounts-maintenance';
-import { listGlAccounts } from '@/modules/foundation/services';
+import { glAccountAuditVersion, listGlAccounts } from '@/modules/foundation/services';
+import {
+  accountGroupChoices,
+  accountGroupFieldStatusMatrices,
+  groupAccountChoices,
+} from '@/modules/finance/gl-account-group-maintenance';
 import { GlAccountFields, type GlAccountMode, type GlAccountValues } from './GlAccountFields';
 import {
   RECONCILIATION_TYPES,
-  type AccountGroupChoice,
   type AccountType,
-  type FieldStatusMatrix,
   type GlAccountType,
   type ReconciliationType,
 } from './fieldStatus';
-import type { AccountChoice } from './GlAccountValueHelp';
 
 const ROUTE = '/config/gl-accounts';
 
@@ -74,11 +76,6 @@ export async function GlAccountModeScreen({
     : [];
   const existing = mode === 'CREATE' ? undefined : accounts.find((row) => row.accountNumber === accountKey);
 
-  // The Account Group registry, its field status matrices and the group-side account
-  // master arrive with the schema and service stages.
-  const accountGroupChoices: AccountGroupChoice[] = [];
-  const groupMatrices: Record<string, FieldStatusMatrix> = {};
-  const groupAccounts: AccountChoice[] = [];
 
   const shell = (body: ReactNode) => (
     <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
@@ -127,6 +124,21 @@ export async function GlAccountModeScreen({
     return notice(t('glAccount.notFound', { account: accountKey || '—', chart: chart.chartOfAccounts }));
   }
 
+  // The Account Group registry drives the field screen twice over: its rows are the F4
+  // for `KTOKS`, and the selected group's matrix decides which fields are rendered at all.
+  // The group-side account master is looked up through the chart's Group CoA and is empty
+  // until a consolidation round fills it (R-51/D-123).
+  const [groups, groupMatrices, groupAccounts] = await Promise.all([
+    accountGroupChoices(client, chart.chartOfAccounts),
+    accountGroupFieldStatusMatrices(client, chart.chartOfAccounts),
+    groupAccountChoices(client, chart.chartOfAccounts),
+  ]);
+  // The version a Change must post back; Create starts at zero because nothing is stored.
+  const version =
+    mode === 'CHANGE' && existing
+      ? await glAccountAuditVersion(client, chart.chartOfAccounts, existing.accountNumber)
+      : 0;
+
   // Only a stored record can seed the form; Create mode starts from the contract
   // defaults plus the number carried over from the initial screen.
   const stored: GlAccountValues | null = existing
@@ -157,12 +169,12 @@ export async function GlAccountModeScreen({
       costElementPolicy={chart.costElementIntegration as 'AUTOMATIC' | 'MANUAL' | 'NONE'}
       account={stored}
       initialAccountNumber={accountKey}
-      groups={accountGroupChoices}
+      groups={groups}
       groupMatrices={groupMatrices}
       groupAccounts={groupAccounts}
       languages={choices.languages}
       canSave={canWrite}
-      mutationReady={false}
+      version={version}
     />,
   );
 }

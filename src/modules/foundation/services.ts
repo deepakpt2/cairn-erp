@@ -11,19 +11,29 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
-import { glAccount } from '../finance/schema';
+import { changeDocument } from '../../platform/tables/audit-trail';
+import { glAccount, journalEntryLine } from '../finance/schema';
 import { glAccountGroup } from '../finance/gl-account-group-schema';
 import {
+  ACCOUNT_TYPES,
   accountNumberInRange,
   DEFAULT_LANGUAGE_KEY,
   DEFAULT_SORT_KEY,
   deriveGlAccountType,
   deriveIsBalanceSheet,
+  GL_ACCOUNT_FIELD_LABELS,
+  GL_ACCOUNT_TYPES,
+  RECONCILIATION_TYPES,
+  resolveFieldStatus,
   SUPPORTED_LANGUAGE_KEYS,
   type AccountType,
+  type FieldStatusMatrix,
+  type GlAccountField,
   type GlAccountType,
   type ReconciliationType,
 } from '../finance/gl-account-vocabulary';
+import { customerCompany } from './customer-company-schema';
+import { supplierCompany } from './supplier-company-schema';
 import {
   assertCompanyCodeFinancialSettingsCompatible,
   lockCompanyCodeOxxAssignments,
@@ -265,6 +275,9 @@ export async function listGlAccounts(
  * indicator the screen shows. The Account Group is mandatory — it owns the number range
  * the account must fall inside and the field status matrix the screen renders from.
  */
+/** A G/L account row as stored, so a suppressed field can be read back by field key. */
+type GlAccountRow = typeof glAccount.$inferSelect;
+
 export interface GlAccountInput {
   client: string;
   chartOfAccounts: string;
@@ -291,6 +304,24 @@ export interface GlAccountInput {
   /** Creation block (`XSPEA`). */
   isBlockedCreation?: boolean;
   changedBy: string;
+  /**
+   * FS00 mode. `CREATE` refuses an account number that already exists and `CHANGE`
+   * refuses one that does not, because the number is immutable: a different number is a
+   * different account, never an edit. Omitted by provisioning and seed callers, which
+   * genuinely upsert.
+   */
+  mode?: 'CREATE' | 'CHANGE';
+  /** Change-history count for this account; omit to skip the concurrency check. */
+  expectedVersion?: number;
+  /** Audit note. Mandatory when a block flag changes, per the FS00 contract. */
+  reason?: string;
+  /**
+   * The Account Group's effective field status matrix. When present, a MANDATORY field
+   * must carry a value and a SUPPRESSED field is taken from the stored record (or the
+   * contract default on create) rather than from the post — a field the screen never
+   * showed must not be editable by hand either.
+   */
+  fieldStatus?: FieldStatusMatrix;
 }
 
 export async function upsertGlAccount(input: GlAccountInput) {
@@ -303,10 +334,51 @@ export async function upsertGlAccount(input: GlAccountInput) {
   if (accountNumber.length < 1 || accountNumber.length > 10) {
     throw new ConfigError('G/L Account Number must be between 1 and 10 characters.', 'Enter an account number within the Chart of Accounts length limit.');
   }
+  if (!(ACCOUNT_TYPES as readonly string[]).includes(input.accountType)) {
+    throw new ConfigError(`Account Type ${input.accountType} is not valid.`, `Use one of: ${ACCOUNT_TYPES.join(', ')}.`);
+  }
+  if (input.glAccountType !== undefined && !(GL_ACCOUNT_TYPES as readonly string[]).includes(input.glAccountType)) {
+    throw new ConfigError(`G/L Account Type ${input.glAccountType} is not valid.`, `Use one of: ${GL_ACCOUNT_TYPES.join(', ')}.`);
+  }
+  if (input.reconciliationType != null && !(RECONCILIATION_TYPES as readonly string[]).includes(input.reconciliationType)) {
+    throw new ConfigError(`Reconciliation Account ${input.reconciliationType} is not valid.`, `Use one of: ${RECONCILIATION_TYPES.join(', ')}, or leave it empty.`);
+  }
   const accountGroup = input.accountGroup.trim().toUpperCase();
   if (!/^[A-Z0-9]{4}$/.test(accountGroup)) {
     throw new ConfigError('Account Group must be exactly four letters or numbers.', 'Choose an Account Group defined for this Chart of Accounts.');
   }
+
+  // The matrix belongs to the caller, not to the database, so its rules are applied before
+  // the per-field normalizations below: a field the group demands is reported as missing
+  // rather than as malformed, which is the difference between "you must fill this in" and
+  // "the value you left out is the wrong shape".
+  const statusOf = (field: GlAccountField) => resolveFieldStatus(input.fieldStatus, field);
+  const suppressed = (field: GlAccountField) => statusOf(field) === 'SUPPRESS';
+  const missingMandatory: string[] = [];
+  if (statusOf('name') === 'MANDATORY' && input.name.trim() === '') {
+    missingMandatory.push(GL_ACCOUNT_FIELD_LABELS.name);
+  }
+  if (statusOf('reconciliationType') === 'MANDATORY' && !input.reconciliationType) {
+    missingMandatory.push(GL_ACCOUNT_FIELD_LABELS.reconciliationType);
+  }
+  if (statusOf('groupAccountNumber') === 'MANDATORY' && !(input.groupAccountNumber ?? '').trim()) {
+    missingMandatory.push(GL_ACCOUNT_FIELD_LABELS.groupAccountNumber);
+  }
+  if (statusOf('languageKey') === 'MANDATORY' && !(input.languageKey ?? '').trim()) {
+    missingMandatory.push(GL_ACCOUNT_FIELD_LABELS.languageKey);
+  }
+  if (statusOf('sortKey') === 'MANDATORY' && !(input.sortKey ?? '').trim()) {
+    missingMandatory.push(GL_ACCOUNT_FIELD_LABELS.sortKey);
+  }
+  // Booleans are not checked for presence: `false` is a value, not an omission, and a
+  // suppressed checkbox posts nothing either way — the stored default is the answer.
+  if (missingMandatory.length > 0) {
+    throw new ConfigError(
+      `Account Group ${accountGroup} makes ${missingMandatory.join(', ')} mandatory.`,
+      'Complete the mandatory fields, or change the field status in the Account Groups panel.',
+    );
+  }
+
   const languageKey = (input.languageKey ?? DEFAULT_LANGUAGE_KEY).trim().toUpperCase();
   if (!(SUPPORTED_LANGUAGE_KEYS as readonly string[]).includes(languageKey)) {
     throw new ConfigError(`Language Key ${languageKey} is not supported.`, `Use one of: ${SUPPORTED_LANGUAGE_KEYS.join(', ')}.`);
@@ -339,6 +411,8 @@ export async function upsertGlAccount(input: GlAccountInput) {
       );
     }
 
+    // Locked, so two saves of the same account serialize instead of overwriting each
+    // other: the block-change reason rule and the matrix both read the stored row.
     const existing = await tx
       .select()
       .from(glAccount)
@@ -349,7 +423,8 @@ export async function upsertGlAccount(input: GlAccountInput) {
           eq(glAccount.accountNumber, accountNumber),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (existing.length === 0 && chart.isBlocked) {
       throw new ConfigError(
         `Chart of Accounts ${coa} is blocked; new G/L accounts cannot be created.`,
@@ -386,46 +461,112 @@ export async function upsertGlAccount(input: GlAccountInput) {
       );
     }
 
+    const stored: GlAccountRow | undefined = existing[0];
+    const version = await glAccountVersion(tx, client, coa, accountNumber);
+    if (input.expectedVersion !== undefined && input.expectedVersion !== version) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} changed after it was opened.`,
+        'Reload the account before saving your changes.',
+      );
+    }
+    if (input.mode === 'CREATE' && stored) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} already exists in Chart of Accounts ${coa}.`,
+        'Open the account in Change mode. The account number is immutable, so another number is another account.',
+      );
+    }
+    if (input.mode === 'CHANGE' && !stored) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} does not exist in Chart of Accounts ${coa}.`,
+        'Create the account first, or choose an existing account number.',
+      );
+    }
 
-    const glAccountType = input.glAccountType ?? deriveGlAccountType(input.accountType);
+    const accountType = suppressed('accountType')
+      ? (stored?.accountType as AccountType | undefined) ?? input.accountType
+      : input.accountType;
+    const glAccountType = suppressed('glAccountType')
+      ? (stored?.glAccountType as GlAccountType | undefined) ?? deriveGlAccountType(accountType)
+      : input.glAccountType ?? deriveGlAccountType(accountType);
     const values = {
       client,
       chartOfAccounts: coa,
       accountNumber,
-      name: input.name,
-      accountType: input.accountType,
+      name: suppressed('name') ? (stored?.name ?? input.name) : input.name,
+      accountType,
       accountGroup,
       glAccountType,
       // Derived, never supplied by a caller: the stored flag follows the statement type
       // and a database check pins the two together.
       isBalanceSheet: deriveIsBalanceSheet(glAccountType),
-      isOpenItemManaged: input.isOpenItemManaged,
-      reconciliationType: input.reconciliationType ?? null,
-      requiresCostObject: input.requiresCostObject,
-      isTaxRelevant: input.isTaxRelevant,
-      groupAccountNumber,
-      languageKey,
-      sortKey,
-      isBlockedPosting: input.isBlockedPosting ?? false,
-      isBlockedCreation: input.isBlockedCreation ?? false,
+      // A suppressed field is not a field the user chose: on change it keeps the stored
+      // value, on create it takes the contract default, and in neither case the posted
+      // one. Falling back to the post here would let a hand-built request edit a field the
+      // screen was told never to render — which is the whole reason the matrix is checked
+      // on the server rather than in the browser.
+      isOpenItemManaged: suppressed('isOpenItemManaged')
+        ? (stored?.isOpenItemManaged ?? false)
+        : input.isOpenItemManaged,
+      reconciliationType: suppressed('reconciliationType')
+        ? (stored?.reconciliationType as ReconciliationType | null | undefined) ?? null
+        : input.reconciliationType ?? null,
+      requiresCostObject: suppressed('requiresCostObject')
+        ? (stored?.requiresCostObject ?? false)
+        : input.requiresCostObject,
+      isTaxRelevant: suppressed('isTaxRelevant')
+        ? (stored?.isTaxRelevant ?? false)
+        : input.isTaxRelevant,
+      groupAccountNumber: suppressed('groupAccountNumber')
+        ? (stored?.groupAccountNumber ?? null)
+        : groupAccountNumber,
+      languageKey: suppressed('languageKey')
+        ? (stored?.languageKey ?? DEFAULT_LANGUAGE_KEY)
+        : languageKey,
+      sortKey: suppressed('sortKey') ? (stored?.sortKey ?? DEFAULT_SORT_KEY) : sortKey,
+      isBlockedPosting: suppressed('isBlockedPosting')
+        ? (stored?.isBlockedPosting ?? false)
+        : input.isBlockedPosting ?? false,
+      isBlockedCreation: suppressed('isBlockedCreation')
+        ? (stored?.isBlockedCreation ?? false)
+        : input.isBlockedCreation ?? false,
     };
 
-    if (existing.length === 0) {
+    const reason = input.reason?.trim() || undefined;
+    const blocksChanged =
+      stored !== undefined &&
+      (stored.isBlockedPosting !== values.isBlockedPosting ||
+        stored.isBlockedCreation !== values.isBlockedCreation);
+    if (blocksChanged && !reason) {
+      throw new ConfigError(
+        'A reason is required to change a G/L account block.',
+        'Explain the block change; the note is stored with the change history.',
+      );
+    }
+
+    if (!stored) {
       await tx.insert(glAccount).values({ ...values, createdBy: changedBy });
-      await recordChange(tx, {
+      const changeId = await recordChange(tx, {
         client,
         objectClass: 'gl_account',
         objectKey: `${coa}/${accountNumber}`,
         changeType: 'CREATE',
         changedBy,
-        transactionCode: 'FIN.GL.MASTER.CREATE',
+        transactionCode: 'CFG.FIN.GLACCOUNT.CREATE',
+        reason,
         after: values,
+        fieldLabels: GL_ACCOUNT_FIELD_LABELS,
       });
+      if (!changeId) {
+        throw new ConfigError(
+          'G/L account creation could not be recorded in change history.',
+          'Retry the save. If the problem continues, contact an administrator.',
+        );
+      }
       await markActivityComplete(tx, client, 'CFG.FIN.GLACCOUNT.CREATE', changedBy);
-      return { created: true };
+      return { created: true, changed: true, version: version + 1 };
     }
 
-    const before = existing[0];
+    const before = stored;
     await tx
       .update(glAccount)
       .set({ ...values, changedBy, changedAt: new Date() })
@@ -437,15 +578,23 @@ export async function upsertGlAccount(input: GlAccountInput) {
         ),
       );
 
-    await recordChange(tx, {
+    const changeId = await recordChange(tx, {
       client,
       objectClass: 'gl_account',
       objectKey: `${coa}/${accountNumber}`,
-      changeType: 'CHANGE',
+      // A block change is recorded as BLOCK/UNBLOCK so an auditor filtering on blocking
+      // sees it without reading every field diff.
+      changeType: blocksChanged
+        ? values.isBlockedPosting || values.isBlockedCreation
+          ? 'BLOCK'
+          : 'UNBLOCK'
+        : 'CHANGE',
       changedBy,
-      transactionCode: 'FIN.GL.MASTER.CREATE',
+      transactionCode: 'CFG.FIN.GLACCOUNT.CHANGE',
+      reason,
       before: before as unknown as Record<string, unknown>,
       after: values,
+      fieldLabels: GL_ACCOUNT_FIELD_LABELS,
       // Blocking an account or changing its type changes what may be posted
       // where. An auditor cares; these are not cosmetic edits.
       securityRelevantFields: [
@@ -456,9 +605,338 @@ export async function upsertGlAccount(input: GlAccountInput) {
         'reconciliationType',
       ],
     });
+    if (!changeId && blocksChanged) {
+      // Nothing differed but a block flag moved: that is exactly the change the contract
+      // demands a reason for, so a missing history row is a failure, not a no-op.
+      throw new ConfigError(
+        'G/L account block change could not be recorded in change history.',
+        'Retry the save. If the problem continues, contact an administrator.',
+      );
+    }
 
-    return { created: false };
+    await markActivityComplete(tx, client, 'CFG.FIN.GLACCOUNT.CHANGE', changedBy);
+    // recordChange returns null when every field already held this value, so "changed"
+    // is a fact about the row rather than about the request having been accepted.
+    return { created: false, changed: Boolean(changeId), version: version + 1 };
   });
+}
+
+/**
+ * Change the two block flags of one account (FS00, `XSPEB`/`XSPEA`).
+ *
+ * The list screen offers blocking without opening the whole field screen, so this reads
+ * and writes the flags inside one transaction rather than accepting a full row back from
+ * the browser: a partial post cannot silently blank a field it never mentioned. A reason
+ * is mandatory whenever a flag actually moves, which is the contract's rule for block
+ * changes, and the change is recorded as BLOCK or UNBLOCK so an auditor can filter on it.
+ */
+export interface GlAccountBlockInput {
+  client: string;
+  chartOfAccounts: string;
+  accountNumber: string;
+  isBlockedPosting: boolean;
+  isBlockedCreation: boolean;
+  reason?: string;
+  expectedVersion?: number;
+  changedBy: string;
+}
+
+export async function setGlAccountBlocks(input: GlAccountBlockInput) {
+  const { client, changedBy } = input;
+  const coa = input.chartOfAccounts.trim().toUpperCase();
+  const accountNumber = input.accountNumber.trim();
+  const reason = input.reason?.trim() || undefined;
+  if (!/^[A-Z0-9]{4}$/.test(coa)) {
+    throw new ConfigError('Chart of Accounts must be exactly four letters or numbers.', 'Choose an existing four-character Chart of Accounts key.');
+  }
+  if (!/^[A-Za-z0-9]{1,10}$/.test(accountNumber)) {
+    throw new ConfigError('G/L Account Number must be one to ten letters or numbers.', 'Choose an existing account number.');
+  }
+
+  return withTenant(client, async (tx) => {
+    await lockGlAccount(tx, client, coa, accountNumber);
+    const [before] = await tx
+      .select()
+      .from(glAccount)
+      .where(glAccountKey(client, coa, accountNumber))
+      .for('update');
+    if (!before) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} does not exist in Chart of Accounts ${coa}.`,
+        'Choose an existing account number.',
+      );
+    }
+    const version = await glAccountVersion(tx, client, coa, accountNumber);
+    if (input.expectedVersion !== undefined && input.expectedVersion !== version) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} changed after it was opened.`,
+        'Reload the account list before changing its blocks.',
+      );
+    }
+    if (
+      before.isBlockedPosting === input.isBlockedPosting &&
+      before.isBlockedCreation === input.isBlockedCreation
+    ) {
+      return { chartOfAccounts: coa, accountNumber, changed: false, version };
+    }
+    if (!reason) {
+      throw new ConfigError(
+        'A reason is required to change a G/L account block.',
+        'Explain the block change; the note is stored with the change history.',
+      );
+    }
+
+    await tx
+      .update(glAccount)
+      .set({
+        isBlockedPosting: input.isBlockedPosting,
+        isBlockedCreation: input.isBlockedCreation,
+        changedBy,
+        changedAt: new Date(),
+      })
+      .where(glAccountKey(client, coa, accountNumber));
+
+    const blocked = input.isBlockedPosting || input.isBlockedCreation;
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: 'gl_account',
+      objectKey: `${coa}/${accountNumber}`,
+      changeType: blocked ? 'BLOCK' : 'UNBLOCK',
+      changedBy,
+      transactionCode: 'CFG.FIN.GLACCOUNT.CHANGE',
+      reason,
+      before: before as unknown as Record<string, unknown>,
+      after: {
+        ...(before as unknown as Record<string, unknown>),
+        isBlockedPosting: input.isBlockedPosting,
+        isBlockedCreation: input.isBlockedCreation,
+      },
+      fieldLabels: GL_ACCOUNT_FIELD_LABELS,
+      securityRelevantFields: ['isBlockedPosting', 'isBlockedCreation'],
+    });
+    if (!changeId) {
+      throw new ConfigError(
+        'G/L account block change could not be recorded in change history.',
+        'Retry the change. If the problem continues, contact an administrator.',
+      );
+    }
+    await markActivityComplete(tx, client, 'CFG.FIN.GLACCOUNT.CHANGE', changedBy);
+    return { chartOfAccounts: coa, accountNumber, changed: true, blocked, version: version + 1 };
+  });
+}
+
+/**
+ * Delete a G/L account (FS00, SCR-028).
+ *
+ * Deletion is a hard delete and only ever of an account that was never used: no document
+ * line, no open item, a zero balance, and no Customer or Supplier company record pointing
+ * at it as a reconciliation account. Anything else keeps the account and blocks it for
+ * posting instead, because removing an account that carried postings would remove the
+ * explanation of a balance that still exists.
+ *
+ * The reason is mandatory. It is the only thing that survives the row.
+ */
+export interface GlAccountDeletionInput {
+  client: string;
+  chartOfAccounts: string;
+  accountNumber: string;
+  changedBy: string;
+  reason: string;
+  /** Change-history count for this account; omit to skip the concurrency check. */
+  expectedVersion?: number;
+}
+
+export async function deleteGlAccount(input: GlAccountDeletionInput) {
+  const { client, changedBy } = input;
+  const coa = input.chartOfAccounts.trim().toUpperCase();
+  const accountNumber = input.accountNumber.trim();
+  const reason = input.reason.trim();
+  if (!/^[A-Z0-9]{4}$/.test(coa)) {
+    throw new ConfigError('Chart of Accounts must be exactly four letters or numbers.', 'Choose an existing four-character Chart of Accounts key.');
+  }
+  if (!/^[A-Za-z0-9]{1,10}$/.test(accountNumber)) {
+    throw new ConfigError('G/L Account Number must be one to ten letters or numbers.', 'Choose an existing account number.');
+  }
+  if (reason === '') {
+    throw new ConfigError(
+      'A reason is required to delete a G/L account.',
+      'Explain the deletion; the note is stored with the change history.',
+    );
+  }
+
+  return withTenant(client, async (tx) => {
+    await lockGlAccount(tx, client, coa, accountNumber);
+    const [before] = await tx
+      .select()
+      .from(glAccount)
+      .where(glAccountKey(client, coa, accountNumber))
+      .for('update');
+    if (!before) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} does not exist in Chart of Accounts ${coa}.`,
+        'Choose an existing account number.',
+      );
+    }
+    const version = await glAccountVersion(tx, client, coa, accountNumber);
+    if (input.expectedVersion !== undefined && input.expectedVersion !== version) {
+      throw new ConfigError(
+        `G/L Account ${accountNumber} changed after it was opened.`,
+        'Reload the account before deleting it.',
+      );
+    }
+
+    const usage = await glAccountUsage(tx, client, coa, accountNumber);
+    if (usage.facts.length > 0) {
+      throw new ConfigError(
+        `G/L Account ${coa}/${accountNumber} cannot be deleted while it still has ${usage.facts.join(', ')}.`,
+        'Block the account for posting instead; an account with history is never removed.',
+      );
+    }
+
+    const changeId = await recordChange(tx, {
+      client,
+      objectClass: 'gl_account',
+      objectKey: `${coa}/${accountNumber}`,
+      changeType: 'DELETE',
+      changedBy,
+      transactionCode: 'CFG.FIN.GLACCOUNT.CHANGE',
+      reason,
+      before: before as unknown as Record<string, unknown>,
+      fieldLabels: GL_ACCOUNT_FIELD_LABELS,
+      securityRelevantFields: ['accountNumber', 'accountType', 'reconciliationType'],
+    });
+    if (!changeId) {
+      throw new ConfigError(
+        'G/L account deletion could not be recorded in change history.',
+        'Retry the deletion. If the problem continues, contact an administrator.',
+      );
+    }
+    // Recorded before the row goes: the history is the only trace left of the account.
+    await tx.delete(glAccount).where(glAccountKey(client, coa, accountNumber));
+    await markActivityComplete(tx, client, 'CFG.FIN.GLACCOUNT.CHANGE', changedBy);
+    return { deleted: true, accountNumber, chartOfAccounts: coa, version: version + 1 };
+  });
+}
+
+/**
+ * What still depends on one account, as the facts a refusal should name.
+ *
+ * Document lines are reached through the Company Code, because a line carries the account
+ * number and the Company Code, and the Company Code carries the chart. One guard reports
+ * every fact at once rather than three guards racing to be the first to refuse: an
+ * accountant told "it has postings" and then "it also has open items" on the next attempt
+ * learns nothing from either message.
+ */
+async function glAccountUsage(tx: Tx, client: string, coa: string, accountNumber: string) {
+  const [lines] = await tx
+    .select({
+      lineCount: sql<number>`count(*)::int`,
+      openLineCount: sql<number>`count(*) filter (where ${journalEntryLine.clearingDocument} is null)::int`,
+      balance: sql<string>`coalesce(sum(case when ${journalEntryLine.debitCredit} = 'S' then ${journalEntryLine.amountLocal} else -${journalEntryLine.amountLocal} end), 0)`,
+    })
+    .from(journalEntryLine)
+    .innerJoin(
+      companyCode,
+      and(
+        eq(companyCode.client, journalEntryLine.client),
+        eq(companyCode.companyCode, journalEntryLine.companyCode),
+      ),
+    )
+    .where(and(
+      eq(journalEntryLine.client, client),
+      eq(journalEntryLine.glAccount, accountNumber),
+      eq(companyCode.chartOfAccounts, coa),
+    ));
+
+  const [customers] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(customerCompany)
+    .where(and(
+      eq(customerCompany.client, client),
+      eq(customerCompany.chartOfAccounts, coa),
+      eq(customerCompany.reconciliationAccount, accountNumber),
+    ));
+  const [suppliers] = await tx
+    .select({ count: sql<number>`count(*)::int` })
+    .from(supplierCompany)
+    .where(and(
+      eq(supplierCompany.client, client),
+      eq(supplierCompany.chartOfAccounts, coa),
+      eq(supplierCompany.reconciliationAccount, accountNumber),
+    ));
+
+  const lineCount = lines?.lineCount ?? 0;
+  const openLineCount = lines?.openLineCount ?? 0;
+  const balanceIsZero = Number(lines?.balance ?? '0') === 0;
+  const facts: string[] = [];
+  if (lineCount > 0) {
+    facts.push(`${lineCount} document ${lineCount === 1 ? 'line' : 'lines'}`);
+  }
+  if (openLineCount > 0) {
+    facts.push(`${openLineCount} open ${openLineCount === 1 ? 'item' : 'items'}`);
+  }
+  if (!balanceIsZero) {
+    facts.push(`a balance of ${lines?.balance ?? '0'}`);
+  }
+  const customerCount = customers?.count ?? 0;
+  if (customerCount > 0) {
+    facts.push(`${customerCount} Customer company ${customerCount === 1 ? 'record' : 'records'} using it as a reconciliation account`);
+  }
+  const supplierCount = suppliers?.count ?? 0;
+  if (supplierCount > 0) {
+    facts.push(`${supplierCount} Supplier company ${supplierCount === 1 ? 'record' : 'records'} using it as a reconciliation account`);
+  }
+  return { lineCount, openLineCount, balanceIsZero, facts };
+}
+
+/**
+ * The version a screen must post back to change one account.
+ *
+ * Exported so FS00 can render it as a hidden field: the account has no version column, so
+ * its version is the count of change documents recorded against it, and a save is refused
+ * when that count has moved since the screen was opened.
+ */
+export async function glAccountAuditVersion(
+  client: string,
+  chartOfAccounts: string,
+  accountNumber: string,
+): Promise<number> {
+  const coa = chartOfAccounts.trim().toUpperCase();
+  const number = accountNumber.trim();
+  return withTenant(client, (tx) => glAccountVersion(tx, client, coa, number));
+}
+
+/**
+ * Change-history count for one account.
+ *
+ * `gl_account` has no version column — the account is written by provisioning as well as
+ * by FS00 — so its version is the number of change documents recorded against it, which
+ * is the same optimistic-concurrency read OB13 uses for a chart.
+ */
+async function glAccountVersion(tx: Tx, client: string, coa: string, accountNumber: string) {
+  const [row] = await tx
+    .select({ version: sql<number>`count(*)::int` })
+    .from(changeDocument)
+    .where(and(
+      eq(changeDocument.client, client),
+      eq(changeDocument.objectClass, 'gl_account'),
+      eq(changeDocument.objectKey, `${coa}/${accountNumber}`),
+    ));
+  return row?.version ?? 0;
+}
+
+function glAccountKey(client: string, coa: string, accountNumber: string) {
+  return and(
+    eq(glAccount.client, client),
+    eq(glAccount.chartOfAccounts, coa),
+    eq(glAccount.accountNumber, accountNumber),
+  );
+}
+
+function lockGlAccount(tx: Tx, client: string, coa: string, accountNumber: string) {
+  return tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/gl_account/${coa}/${accountNumber}`}, 0))`,
+  );
 }
 
 /* ── Posting periods ───────────────────────────────────────────────────────── */

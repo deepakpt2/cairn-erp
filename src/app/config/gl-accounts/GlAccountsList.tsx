@@ -1,8 +1,14 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useActionState, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
+import {
+  deleteGlAccountAction,
+  setGlAccountBlocksAction,
+  type GlAccountActionState,
+} from './actions';
+import { GlAccountDialog, ReasonField } from './GlAccountDialog';
 
 /** One G/L account as the list renders it. */
 export interface GlAccountListRow {
@@ -10,7 +16,7 @@ export interface GlAccountListRow {
   accountNumber: string;
   name: string;
   accountType: string;
-  /** Empty until the Account Group column exists. */
+  /** Account Group (`KTOKS`) the account belongs to. */
   accountGroup: string;
   isOpenItemManaged: boolean;
   reconciliationType: string | null;
@@ -37,85 +43,128 @@ const TYPE_GROUP: Record<string, string> = {
 
 const ROUTE = '/config/gl-accounts';
 
-/** Row dialog for a change that always owes an explanation: blocks and deletion. */
-function RowDialog({
-  label,
-  dialogLabel,
-  bodyText,
-  submitLabel,
-  idPrefix,
-  disabled,
+/**
+ * The two account changes that always owe an explanation: blocks and deletion.
+ *
+ * Each is its own dialog rather than one generic form, because they post different things
+ * — a block change carries the two flags and writes only them, a deletion carries nothing
+ * but the reason — and a shared form would have to guess which fields to render.
+ */
+function BlockDialog({
+  chartOfAccounts,
+  account,
+  isBlockedPosting,
+  isBlockedCreation,
 }: {
-  label: string;
-  dialogLabel: string;
-  bodyText: string;
-  submitLabel: string;
-  idPrefix: string;
-  disabled: boolean;
+  chartOfAccounts: string;
+  account: string;
+  isBlockedPosting: boolean;
+  isBlockedCreation: boolean;
 }) {
-  return (
-    <details className="min-w-44">
-      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
-        {label}
-      </summary>
-      {/* Browser-controlled on purpose: a React-controlled `open` would let a save or
-          refresh close the dialog before the outcome has been read. */}
-      <div
-        role="dialog"
-        aria-label={dialogLabel}
-        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
-      >
-        <div className="mx-auto max-w-2xl">
-          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
-            <p className="font-semibold">{dialogLabel}</p>
-            <button
-              type="button"
-              className="btn btn-default min-h-11 sm:min-h-9"
-              onClick={(event) => {
-                const details = event.currentTarget.closest('details');
-                if (details) details.open = false;
-              }}
-            >
-              {t('common.close')}
-            </button>
-          </div>
+  const [state, formAction, pending] = useActionState<GlAccountActionState, FormData>(
+    setGlAccountBlocksAction,
+    { ok: true },
+  );
+  const [reason, setReason] = useState('');
+  const idPrefix = `fs00-block-${chartOfAccounts}-${account}`;
 
-          <section className="panel overflow-hidden">
-            <div className="border-b border-line bg-sunken px-4 py-3">
-              <p className="text-sm text-ink-soft">{bodyText}</p>
-            </div>
-            <form
-              className="space-y-4 p-3 sm:p-5"
-              onSubmit={(event) => {
-                event.preventDefault();
-              }}
-            >
-              <div>
-                <label htmlFor={`${idPrefix}-reason`} className="field-label">
-                  {t('glAccount.reason')}
-                  <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
-                </label>
-                <textarea
-                  id={`${idPrefix}-reason`}
-                  name="reason"
-                  rows={3}
-                  required
-                  minLength={1}
-                  maxLength={500}
-                  className="field-input mt-1 min-h-20 w-full"
-                />
-                <p className="mt-1 text-xs text-ink-faint">{t('glAccount.reasonRule')}</p>
-              </div>
-              <div className="flex justify-end border-t border-line pt-4">
-                <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={disabled}>
-                  {submitLabel}
-                </button>
-              </div>
-            </form>
-          </section>
-        </div>
-      </div>
-    </details>
+  return (
+    <GlAccountDialog
+      label={t('glAccount.blockedPosting')}
+      dialogLabel={t('glAccount.blockTitle', { account })}
+      codeLine={`FS00 · ${chartOfAccounts}/${account}`}
+      bodyText={t('glAccount.blockFlagsRule')}
+      state={state}
+      formAction={formAction}
+      pending={pending}
+      submitLabel={t('glAccount.blockButton')}
+    >
+      <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
+      <input type="hidden" name="accountNumber" value={account} />
+
+      <label
+        htmlFor={`${idPrefix}-posting`}
+        className="flex items-start gap-2 border border-line bg-white p-3 text-sm"
+      >
+        <input
+          id={`${idPrefix}-posting`}
+          name="isBlockedPosting"
+          type="checkbox"
+          defaultChecked={isBlockedPosting}
+          disabled={pending}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>
+          <span className="font-medium">{t('glAccount.blockedPosting')}</span>
+          <span className="mt-0.5 block text-xs text-ink-faint">{t('glAccount.blockedPostingRule')}</span>
+        </span>
+      </label>
+
+      <label
+        htmlFor={`${idPrefix}-creation`}
+        className="flex items-start gap-2 border border-line bg-white p-3 text-sm"
+      >
+        <input
+          id={`${idPrefix}-creation`}
+          name="isBlockedCreation"
+          type="checkbox"
+          defaultChecked={isBlockedCreation}
+          disabled={pending}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>
+          <span className="font-medium">{t('glAccount.blockedCreation')}</span>
+          <span className="mt-0.5 block text-xs text-ink-faint">{t('glAccount.blockedCreationRule')}</span>
+        </span>
+      </label>
+
+      <ReasonField
+        id={`${idPrefix}-reason`}
+        hint={t('glAccount.reasonRequired')}
+        pending={pending}
+        value={reason}
+        onChange={setReason}
+      />
+    </GlAccountDialog>
+  );
+}
+
+/** Hard delete, offered only because the service refuses an account that was ever used. */
+function DeleteDialog({
+  chartOfAccounts,
+  account,
+}: {
+  chartOfAccounts: string;
+  account: string;
+}) {
+  const [state, formAction, pending] = useActionState<GlAccountActionState, FormData>(
+    deleteGlAccountAction,
+    { ok: true },
+  );
+  const [reason, setReason] = useState('');
+  const idPrefix = `fs00-delete-${chartOfAccounts}-${account}`;
+
+  return (
+    <GlAccountDialog
+      label={t('glAccount.delete')}
+      dialogLabel={t('glAccount.deleteTitle', { account })}
+      codeLine={`FS00 · ${chartOfAccounts}/${account}`}
+      bodyText={t('glAccount.deleteRule')}
+      state={state}
+      formAction={formAction}
+      pending={pending}
+      submitLabel={t('glAccount.deleteButton')}
+    >
+      <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
+      <input type="hidden" name="accountNumber" value={account} />
+      <ReasonField
+        id={`${idPrefix}-reason`}
+        hint={t('glAccount.reasonRequired')}
+        pending={pending}
+        value={reason}
+        onChange={setReason}
+      />
+    </GlAccountDialog>
   );
 }
 
@@ -128,12 +177,9 @@ function RowDialog({
 export function GlAccountsList({
   accounts,
   canChange,
-  mutationReady,
 }: {
   accounts: GlAccountListRow[];
   canChange: boolean;
-  /** False until the FS00 service stage publishes real writes. */
-  mutationReady: boolean;
 }) {
   const groups = new Map<string, GlAccountListRow[]>();
   for (const account of accounts) {
@@ -213,23 +259,17 @@ export function GlAccountsList({
                               </Link>
                             )}
                             {canChange && (
-                              <RowDialog
-                                label={t('glAccount.blockedPosting')}
-                                dialogLabel={t('glAccount.blockTitle', { account: account.accountNumber })}
-                                bodyText={t('glAccount.blockedPostingRule')}
-                                submitLabel={t('glAccount.blockButton')}
-                                idPrefix={`fs00-block-${account.chartOfAccounts}-${account.accountNumber}`}
-                                disabled={!mutationReady}
+                              <BlockDialog
+                                chartOfAccounts={account.chartOfAccounts}
+                                account={account.accountNumber}
+                                isBlockedPosting={account.isBlockedPosting}
+                                isBlockedCreation={account.isBlockedCreation}
                               />
                             )}
                             {canChange && (
-                              <RowDialog
-                                label={t('glAccount.delete')}
-                                dialogLabel={t('glAccount.deleteTitle', { account: account.accountNumber })}
-                                bodyText={t('glAccount.deleteRule')}
-                                submitLabel={t('glAccount.deleteButton')}
-                                idPrefix={`fs00-delete-${account.chartOfAccounts}-${account.accountNumber}`}
-                                disabled={!mutationReady}
+                              <DeleteDialog
+                                chartOfAccounts={account.chartOfAccounts}
+                                account={account.accountNumber}
                               />
                             )}
                           </div>

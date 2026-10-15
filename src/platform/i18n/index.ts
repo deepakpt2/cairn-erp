@@ -1254,8 +1254,6 @@ const en: Catalogue = {
   'glAccount.fieldStatusMandatory': 'Mandatory by Account Group {group}.',
   'glAccount.save': 'Create G/L Account',
   'glAccount.saveChange': 'Save changes',
-  'glAccount.pendingBackend':
-    'Maintenance is published with the FS00 schema and service stages; this screen cannot save until then.',
   'glAccount.immutableKey': 'The account number is immutable; changing it requires a new account.',
   'glAccount.backToList': 'G/L account list',
   'glAccount.notFound': 'G/L account {account} does not exist in Chart of Accounts {chart}.',
@@ -1294,11 +1292,41 @@ const en: Catalogue = {
   'glAccount.groupRange': 'Number range',
   'glAccount.groupMatrix': 'Field status',
   'glAccount.groupMatrixTitle': 'Field status matrix for {group}',
-  'glAccount.groupPending':
-    'Account Group maintenance is published with the FS00 schema and service stages.',
   'glAccount.statusSuppress': 'Suppress',
   'glAccount.statusOptional': 'Optional',
   'glAccount.statusMandatory': 'Mandatory',
+  'glAccount.created': 'G/L account {account} created.',
+  'glAccount.changed': 'G/L account {account} saved.',
+  'glAccount.unchanged': 'G/L account {account} already held these values.',
+  'glAccount.deleted': 'G/L account {account} deleted.',
+  'glAccount.blocksSaved': 'Block status saved for G/L account {account}.',
+  'glAccount.blocksUnchanged': 'G/L account {account} already held these block flags.',
+  'glAccount.capabilityRequired': 'You do not hold {capability} in this tenant.',
+  'glAccount.capabilityRemedy': 'Ask an administrator to grant {capability} for this tenant.',
+  'glAccount.groupCreated': 'Account Group {group} created.',
+  'glAccount.groupAlreadyExists':
+    'Account Group {group} is already defined for this Chart of Accounts. Open it in Change.',
+  'glAccount.groupChanged': 'Account Group {group} saved.',
+  'glAccount.groupUnchanged': 'Account Group {group} already held these values.',
+  'glAccount.groupDeactivated':
+    'Account Group {group} deactivated. {count} account(s) keep it as their Account Group.',
+  'glAccount.groupReactivated': 'Account Group {group} reactivated.',
+  'glAccount.groupAlreadyInState': 'Account Group {group} is already {state}.',
+  'glAccount.groupChangeTitle': 'Change Account Group {group}',
+  'glAccount.groupDeactivate': 'Deactivate',
+  'glAccount.groupReactivate': 'Reactivate',
+  'glAccount.groupLifecycleRule':
+    'A deactivated Account Group leaves the F4 and refuses new accounts, but keeps the accounts already assigned to it and their history. There is no delete.',
+  'glAccount.groupAccounts': 'Accounts',
+  'glAccount.groupAccountsRule':
+    'These accounts keep this Account Group. Deactivating does not move or delete them.',
+  'glAccount.groupRangeLockedRule':
+    'The range cannot be narrowed past the accounts already in the group, and cannot overlap another group of this chart.',
+  'glAccount.matrixSave': 'Save field status',
+  'glAccount.matrixRule':
+    'A suppressed field is not rendered and cannot be posted; a mandatory field refuses the save until it carries a value. Short Text and Account Type cannot be relaxed: the account cannot be stored without them.',
+  'glAccount.blockFlagsRule':
+    'A posting block stops postings to the account; a creation block stops extending it to Company Codes. Both owe a reason.',
 
   // ── Chart of Accounts definition — OB13 ───────────────────────────────────
   'chartOfAccounts.title': 'Chart of Accounts',

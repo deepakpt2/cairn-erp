@@ -6,10 +6,10 @@ import {
   listChartOfAccounts,
 } from '@/modules/foundation/chart-of-accounts-maintenance';
 import { listGlAccounts } from '@/modules/foundation/services';
+import { listAccountGroups } from '@/modules/finance/gl-account-group-maintenance';
 import { AccountGroupsPanel } from './AccountGroups';
 import { GlAccountInitialScreen } from './GlAccountInitialScreen';
 import { GlAccountsList, type GlAccountListRow } from './GlAccountsList';
-import type { AccountGroupRow } from './fieldStatus';
 import type { ChartOfAccountsChoice } from '../chart-of-accounts/ChartOfAccountsValueHelp';
 import type { AccountChoice } from './GlAccountValueHelp';
 
@@ -27,9 +27,8 @@ const ROUTE = '/config/gl-accounts';
  * initial screen, the defined accounts and the Account Group registry that decides
  * every field's status. Company Code segment data is out of scope by owner decision.
  *
- * Writes are published with the schema and service stages; until then the screen is
- * complete and read-only rather than partially editable, so nothing here can be
- * mistaken for a working save.
+ * The registry is chart-scoped but the hub is not — it lists every account of the tenant —
+ * so the panel carries the chart on each row and asks for one when a group is created.
  */
 export default async function GlAccountsPage({
   searchParams,
@@ -46,10 +45,11 @@ export default async function GlAccountsPage({
   const canDisplay = can(session, DISPLAY_ACTIVITY);
 
   const search = params.q ?? '';
-  const [charts, choices, accounts] = await Promise.all([
+  const [charts, choices, accounts, accountGroups] = await Promise.all([
     listChartOfAccounts(client),
     chartOfAccountsF4Choices(client),
     listGlAccounts(client, { search }),
+    listAccountGroups(client),
   ]);
 
   // Only active, unblocked charts may be selected; accounts of a blocked chart stay
@@ -84,11 +84,6 @@ export default async function GlAccountsPage({
     isBlockedPosting: account.isBlockedPosting,
     isBlockedCreation: account.isBlockedCreation,
   }));
-
-  // The Account Group registry, its field status matrices and the group-side account
-  // master now exist in the schema; the FS00 service stage loads them. Until then the
-  // panel renders its empty state honestly instead of inventing rows.
-  const accountGroups: AccountGroupRow[] = [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 px-3 py-4 sm:p-6">
@@ -162,9 +157,14 @@ export default async function GlAccountsPage({
         </button>
       </form>
 
-      <GlAccountsList accounts={rows} canChange={canChange} mutationReady={false} />
+      <GlAccountsList accounts={rows} canChange={canChange} />
 
-      <AccountGroupsPanel groups={accountGroups} canMaintain={canCreate} mutationReady={false} />
+      <AccountGroupsPanel
+        groups={accountGroups}
+        charts={chartChoices.map((chart) => ({ code: chart.code, name: chart.name }))}
+        canCreate={canCreate}
+        canChange={canChange}
+      />
     </div>
   );
 }

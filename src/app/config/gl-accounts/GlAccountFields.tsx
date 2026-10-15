@@ -1,7 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useActionState, useMemo, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { saveGlAccountAction, type GlAccountActionState } from './actions';
+import { GlAccountActionMessage } from './GlAccountDialog';
 import { ChartLanguageField, type LanguageChoice } from '../chart-of-accounts/ChartOfAccountsValueHelp';
 import { GlAccountValueHelp, type AccountChoice } from './GlAccountValueHelp';
 import {
@@ -86,7 +88,7 @@ export function GlAccountFields({
   groupAccounts,
   languages,
   canSave,
-  mutationReady,
+  version,
 }: {
   mode: GlAccountMode;
   chartOfAccounts: string;
@@ -102,9 +104,13 @@ export function GlAccountFields({
   groupAccounts: AccountChoice[];
   languages: LanguageChoice[];
   canSave: boolean;
-  /** False until the FS00 service stage publishes real writes. */
-  mutationReady: boolean;
+  /** Change-history version the save must match; 0 for an account that does not exist. */
+  version: number;
 }) {
+  const [state, formAction, pending] = useActionState<GlAccountActionState, FormData>(
+    saveGlAccountAction,
+    { ok: true },
+  );
   const [values, setValues] = useState<GlAccountValues>(
     account ?? { ...EMPTY_ACCOUNT, accountNumber: initialAccountNumber ?? '' },
   );
@@ -157,11 +163,6 @@ export function GlAccountFields({
         </p>
       </div>
 
-      {!mutationReady && !readOnly && (
-        <p role="status" className="border-b border-line bg-white px-4 py-3 text-sm text-ink-soft">
-          {t('glAccount.pendingBackend')}
-        </p>
-      )}
       {!canSave && !readOnly && (
         <p role="status" className="border-b border-line bg-white px-4 py-3 text-sm text-ink-soft">
           {t('glAccount.modeDenied', {
@@ -170,16 +171,12 @@ export function GlAccountFields({
         </p>
       )}
 
-      <form
-        className="space-y-4 p-3 sm:p-5"
-        onSubmit={(event) => {
-          // No service exists to write through yet; never let the browser navigate away
-          // and lose the entered values.
-          event.preventDefault();
-        }}
-      >
+      {state.message && <GlAccountActionMessage state={state} />}
+
+      <form action={formAction} className="space-y-4 p-3 sm:p-5">
         <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
         <input type="hidden" name="mode" value={mode} />
+        <input type="hidden" name="expectedVersion" value={version} />
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="min-w-0">
@@ -530,6 +527,7 @@ export function GlAccountFields({
               value={reason}
               onChange={(event) => setReason(event.currentTarget.value.slice(0, 500))}
               className="field-input mt-1 min-h-20 w-full"
+              disabled={pending}
             />
             <p className="mt-1 text-xs text-ink-faint">{reasonRequired ? t('glAccount.reasonRequired') : reasonHint}</p>
           </div>
@@ -540,9 +538,9 @@ export function GlAccountFields({
             <button
               type="submit"
               className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
-              disabled={!canSave || !mutationReady}
+              disabled={!canSave || pending}
             >
-              {submitLabel}
+              {pending ? t('common.saving') : submitLabel}
             </button>
           </div>
         )}

@@ -98,3 +98,74 @@ export function accountNumberInRange(
   const pad = (value: string) => value.padEnd(width, '0');
   return pad(accountNumber) >= pad(fromAccountNumber) && pad(accountNumber) <= pad(toAccountNumber);
 }
+
+/* ── Field status matrix (SCR-028) ─────────────────────────────────────────── */
+
+/** Field statuses for one Account Group; an absent field falls back to the baseline. */
+export type FieldStatusMatrix = Partial<Record<GlAccountField, FieldStatus>>;
+
+/**
+ * Baseline field status, applied where a group defines no row for a field.
+ *
+ * It lives here rather than in the screen because the services validate against the same
+ * baseline: a group with no matrix rows still demands a short text and an account type,
+ * and the write must agree with what the screen showed. The keys (`account_number`,
+ * `chart_of_accounts`, `account_group`) are mandatory by contract and are not
+ * matrix-controlled: without them there is no record to store, so no group may suppress
+ * them.
+ */
+export const DEFAULT_FIELD_STATUS: Readonly<Record<GlAccountField, FieldStatus>> = {
+  name: 'MANDATORY',
+  accountType: 'MANDATORY',
+  glAccountType: 'MANDATORY',
+  isOpenItemManaged: 'OPTIONAL',
+  reconciliationType: 'OPTIONAL',
+  requiresCostObject: 'OPTIONAL',
+  isTaxRelevant: 'OPTIONAL',
+  groupAccountNumber: 'OPTIONAL',
+  languageKey: 'OPTIONAL',
+  sortKey: 'OPTIONAL',
+  isBlockedPosting: 'OPTIONAL',
+  isBlockedCreation: 'OPTIONAL',
+};
+
+/** Status of one field for one group: the group's row, else the baseline. */
+export function resolveFieldStatus(
+  matrix: FieldStatusMatrix | undefined,
+  field: GlAccountField,
+): FieldStatus {
+  return matrix?.[field] ?? DEFAULT_FIELD_STATUS[field];
+}
+
+/**
+ * Fields the matrix may not relax below MANDATORY.
+ *
+ * Both are `NOT NULL` with no database default and mandatory by contract, so a group that
+ * suppressed them would leave the write with nothing to store. Every other controlled
+ * field either carries a default or is nullable, so suppressing it is honest: the screen
+ * does not ask and the stored value is the default.
+ */
+export const STORAGE_MANDATORY_FIELDS: readonly GlAccountField[] = ['name', 'accountType'];
+
+/**
+ * Human labels for the twelve controlled fields.
+ *
+ * One map serves the change log and the validation messages, so an auditor and the person
+ * who just got refused a save read the same name for the same field. The source-system
+ * equivalent stays in the label because that is how the field contract names it.
+ */
+export const GL_ACCOUNT_FIELD_LABELS: Readonly<Record<GlAccountField, string>> = {
+  name: 'Short Text (TXT20)',
+  accountType: 'Account Type',
+  glAccountType: 'G/L Account Type (XBILK)',
+  isOpenItemManaged: 'Open Item Management (XOPVW)',
+  reconciliationType: 'Reconciliation Account (MITKZ)',
+  requiresCostObject: 'Cost Object Required',
+  isTaxRelevant: 'Tax Relevant',
+  groupAccountNumber: 'Group Account Number',
+  languageKey: 'Language Key (SPRAS)',
+  sortKey: 'Sort Key (ZUAWE)',
+  isBlockedPosting: 'Posting Block (XSPEB)',
+  isBlockedCreation: 'Creation Block (XSPEA)',
+};
+
