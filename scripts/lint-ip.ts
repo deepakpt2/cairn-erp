@@ -75,6 +75,69 @@ const EXEMPT_FILES = [
   'scripts/lint-ip.ts',
 ];
 
+/**
+ * Applied migrations whose text may never change.
+ *
+ * `src/platform/db/migrate.ts` records a checksum per file and refuses to run one that
+ * changed since it was applied, so an applied migration is a record of what actually
+ * happened to a database — editing it to satisfy a lint would falsify that record and
+ * desynchronise every environment that already ran it. Where such a file carries a
+ * trademark, the deployed effect is corrected by a *new* migration (0035 restates the
+ * key-reservation function with compliant message text) and the historical line is
+ * allowlisted here.
+ *
+ * The allowlist is deliberately narrow and self-verifying:
+ * - entries may name only `drizzle/NNNN_*.sql` files, so it can never exempt app code;
+ * - matching is on exact line content, so adding a new occurrence to those files, or
+ *   editing an existing one, fails the lint again instead of passing quietly.
+ */
+const HISTORICAL_MIGRATION_ALLOWLIST: Array<{ file: string; text: string; rationale: string }> = [
+  {
+    file: 'drizzle/0033_chart_of_accounts_ob13.sql',
+    text: "-- SCR-026 / OB13: migrate Chart of Accounts to SAP's four-character key and",
+    rationale: 'Applied migration header comment; immutable once run, no deployed effect.',
+  },
+  {
+    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    text: '-- role, so forced row-level security keeps it scoped to the current SAP client.',
+    rationale: 'Applied migration comment; immutable once run, no deployed effect.',
+  },
+  {
+    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    text: "RAISE EXCEPTION 'Chart of Accounts key % is reserved as a Group CoA in this SAP client', reserved_key",
+    rationale: 'Superseded by 0035, which restates the function with compliant message text.',
+  },
+  {
+    file: 'drizzle/0034_group_coa_registry_ob13.sql',
+    text: "RAISE EXCEPTION 'Group CoA key % is reserved as an operational Chart of Accounts in this SAP client', reserved_key",
+    rationale: 'Superseded by 0035, which restates the function with compliant message text.',
+  },
+];
+
+/** The allowlist may only ever name applied migration files. */
+const ALLOWLIST_FILE_PATTERN = /^drizzle\/\d{4}_[a-z0-9_]+\.sql$/;
+
+/** True when this exact line of this exact applied migration is on the allowlist. */
+function isAllowlistedHistoricalLine(file: string, trimmedLine: string): boolean {
+  return HISTORICAL_MIGRATION_ALLOWLIST.some(
+    (entry) => entry.file === file && entry.text === trimmedLine,
+  );
+}
+
+/** Fails loudly rather than silently widening the allowlist beyond migrations. */
+function assertAllowlistShape(): void {
+  for (const entry of HISTORICAL_MIGRATION_ALLOWLIST) {
+    if (!ALLOWLIST_FILE_PATTERN.test(entry.file)) {
+      throw new Error(
+        `IP lint allowlist entry names ${entry.file}; only applied migrations under drizzle/ may be allowlisted.`,
+      );
+    }
+    if (!entry.rationale) {
+      throw new Error(`IP lint allowlist entry for ${entry.file} has no rationale.`);
+    }
+  }
+}
+
 /** Lines that are part of the alias registry's own definition. */
 const EXEMPT_LINE_PATTERNS = [
   // The seeded alias rows in the Term Registry — a user may type these to find us.
@@ -118,8 +181,11 @@ function isExemptLine(line: string): boolean {
 }
 
 async function main() {
+  assertAllowlistShape();
+
   const hits: Hit[] = [];
   let scanned = 0;
+  let allowlisted = 0;
 
   for (const dir of SCAN_DIRS) {
     for (const file of await walk(join(ROOT, dir))) {
@@ -144,6 +210,10 @@ async function main() {
           const pattern = new RegExp(`(?<![A-Za-z])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Za-z])`, 'g');
           if (!pattern.test(line)) continue;
           if (isExemptLine(line)) continue;
+          if (isAllowlistedHistoricalLine(rel, line.trim())) {
+            allowlisted += 1;
+            continue;
+          }
 
           hits.push({ file: rel, line: index + 1, term, text: line.trim().slice(0, 160) });
         }
@@ -152,6 +222,11 @@ async function main() {
   }
 
   console.log(`\nIP lint — scanned ${scanned} file(s) across ${SCAN_DIRS.join(', ')}`);
+  if (allowlisted > 0) {
+    console.log(
+      `${allowlisted} historical line(s) allowlisted in applied migrations — see HISTORICAL_MIGRATION_ALLOWLIST in scripts/lint-ip.ts.`,
+    );
+  }
 
   if (hits.length === 0) {
     console.log('No reference trademarks in user-facing text.\n');
