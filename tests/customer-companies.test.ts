@@ -39,7 +39,7 @@ describe('customer company-code settings',()=>{
     await expect(saveCustomerCompany(input('INVALID',{paymentTermsCode:'NET60'}))).rejects.toThrow('inactive');
   });
   it('rejects blocked reconciliation account',async()=>{
-    await withTenant(alpha.client,tx=>tx.execute(sql`update gl_account set is_blocked=true where account_number='110100'`));
+    await withTenant(alpha.client,tx=>tx.execute(sql`update gl_account set is_blocked_posting=true where account_number='110100'`));
     await expect(saveCustomerCompany(input('INVALID',{reconciliationAccount:'110100'}))).rejects.toThrow('unblocked');
   });
   it('preserves no-op and rejects stale maintenance',async()=>{
@@ -83,7 +83,7 @@ describe('customer company-code settings',()=>{
     await saveCustomerCompany(input('HISTORY'));
     await defineTestRanges(alpha);
     await withTenant(alpha.client,tx=>postJournalEntry(tx,{client:alpha.client,companyCode:'1000',documentType:'SA',documentDate:'2026-10-10',postingDate:'2026-10-10',fiscalYear:2026,postingPeriod:10,currency:'USD',localCurrency:'USD',postedBy:'TEST',lines:[{glAccount:'100000',debitCredit:'S',amount:'10.0000'},{glAccount:'110000',debitCredit:'H',amount:'10.0000',businessPartner:'HISTORY'}]}));
-    await withTenant(alpha.client,tx=>tx.execute(sql`update gl_account set is_blocked=false where account_number='110100'`));
+    await withTenant(alpha.client,tx=>tx.execute(sql`update gl_account set is_blocked_posting=false where account_number='110100'`));
     await expect(saveCustomerCompany(input('HISTORY',{expectedVersion:1,reconciliationAccount:'110100'}))).rejects.toThrow('linked accounting');
     expect((await getCustomerCompany(alpha.client,'HISTORY','1000'))?.reconciliationAccount).toBe('110000');
   });

@@ -12,6 +12,18 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
 import { glAccount } from '../finance/schema';
+import { glAccountGroup } from '../finance/gl-account-group-schema';
+import {
+  accountNumberInRange,
+  DEFAULT_LANGUAGE_KEY,
+  DEFAULT_SORT_KEY,
+  deriveGlAccountType,
+  deriveIsBalanceSheet,
+  SUPPORTED_LANGUAGE_KEYS,
+  type AccountType,
+  type GlAccountType,
+  type ReconciliationType,
+} from '../finance/gl-account-vocabulary';
 import {
   assertCompanyCodeFinancialSettingsCompatible,
   lockCompanyCodeOxxAssignments,
@@ -245,17 +257,39 @@ export async function listGlAccounts(
   });
 }
 
+/**
+ * Chart-level G/L account values (SCR-028 / FS00).
+ *
+ * `is_balance_sheet` is not an input: it is derived from the G/L Account Type (`XBILK`)
+ * and pinned by a database check, so a caller cannot store a flag that contradicts the
+ * indicator the screen shows. The Account Group is mandatory — it owns the number range
+ * the account must fall inside and the field status matrix the screen renders from.
+ */
 export interface GlAccountInput {
   client: string;
   chartOfAccounts: string;
   accountNumber: string;
   name: string;
-  accountType: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
-  isBalanceSheet: boolean;
+  accountType: AccountType;
+  /** Account Group (`KTOKS`) this account belongs to. */
+  accountGroup: string;
+  /** Statement placement (`XBILK`); derived from the account type when omitted. */
+  glAccountType?: GlAccountType;
   isOpenItemManaged: boolean;
-  reconciliationType?: 'VENDOR' | 'CUSTOMER' | 'ASSET' | 'MATERIAL';
+  /** Reconciliation account (`MITKZ`); null when the account reconciles nothing. */
+  reconciliationType?: ReconciliationType | null;
   requiresCostObject: boolean;
   isTaxRelevant: boolean;
+  /** Optional group-side account for consolidation roll-up. */
+  groupAccountNumber?: string | null;
+  /** Language Key (`SPRAS`). */
+  languageKey?: string;
+  /** Sort Key (`ZUAWE`). */
+  sortKey?: string;
+  /** Posting block (`XSPEB`). */
+  isBlockedPosting?: boolean;
+  /** Creation block (`XSPEA`). */
+  isBlockedCreation?: boolean;
   changedBy: string;
 }
 
@@ -268,6 +302,22 @@ export async function upsertGlAccount(input: GlAccountInput) {
   }
   if (accountNumber.length < 1 || accountNumber.length > 10) {
     throw new ConfigError('G/L Account Number must be between 1 and 10 characters.', 'Enter an account number within the Chart of Accounts length limit.');
+  }
+  const accountGroup = input.accountGroup.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(accountGroup)) {
+    throw new ConfigError('Account Group must be exactly four letters or numbers.', 'Choose an Account Group defined for this Chart of Accounts.');
+  }
+  const languageKey = (input.languageKey ?? DEFAULT_LANGUAGE_KEY).trim().toUpperCase();
+  if (!(SUPPORTED_LANGUAGE_KEYS as readonly string[]).includes(languageKey)) {
+    throw new ConfigError(`Language Key ${languageKey} is not supported.`, `Use one of: ${SUPPORTED_LANGUAGE_KEYS.join(', ')}.`);
+  }
+  const sortKey = (input.sortKey ?? DEFAULT_SORT_KEY).trim();
+  if (!/^[A-Za-z0-9]{3}$/.test(sortKey)) {
+    throw new ConfigError('Sort Key must be exactly three letters or numbers.', 'Enter a three-character sort key, or leave the default 000.');
+  }
+  const groupAccountNumber = input.groupAccountNumber?.trim() ? input.groupAccountNumber.trim() : null;
+  if (groupAccountNumber !== null && !/^[A-Za-z0-9]{1,10}$/.test(groupAccountNumber)) {
+    throw new ConfigError('Group Account Number must be between 1 and 10 letters or numbers.', 'Enter the group-side account number, or leave it empty.');
   }
 
   return withTenant(client, async (tx) => {
@@ -306,18 +356,58 @@ export async function upsertGlAccount(input: GlAccountInput) {
         'Remove the Chart of Accounts block before creating a G/L account.',
       );
     }
+    // The Account Group registry is chart-scoped: the group must exist for this chart,
+    // be active, and own a range that contains the account number. Ranges are read
+    // right-padded, exactly as the screen reads them.
+    const [group] = await tx.select().from(glAccountGroup)
+      .where(and(
+        eq(glAccountGroup.client, client),
+        eq(glAccountGroup.chartOfAccounts, coa),
+        eq(glAccountGroup.accountGroup, accountGroup),
+      ))
+      .limit(1)
+      .for('share');
+    if (!group) {
+      throw new ConfigError(
+        `Account Group ${accountGroup} is not defined for Chart of Accounts ${coa} in this tenant.`,
+        'Maintain the Account Group in the Account Groups panel before assigning accounts to it.',
+      );
+    }
+    if (!group.isActive) {
+      throw new ConfigError(
+        `Account Group ${accountGroup} is deactivated.`,
+        'Reactivate the Account Group or choose an active one.',
+      );
+    }
+    if (!accountNumberInRange(accountNumber, group.fromAccountNumber, group.toAccountNumber)) {
+      throw new ConfigError(
+        `G/L Account Number ${accountNumber} is outside the ${group.fromAccountNumber} to ${group.toAccountNumber} range of Account Group ${accountGroup}.`,
+        'Use a number inside the group range, or widen the range in the Account Groups panel.',
+      );
+    }
 
+
+    const glAccountType = input.glAccountType ?? deriveGlAccountType(input.accountType);
     const values = {
       client,
       chartOfAccounts: coa,
       accountNumber,
       name: input.name,
       accountType: input.accountType,
-      isBalanceSheet: input.isBalanceSheet,
+      accountGroup,
+      glAccountType,
+      // Derived, never supplied by a caller: the stored flag follows the statement type
+      // and a database check pins the two together.
+      isBalanceSheet: deriveIsBalanceSheet(glAccountType),
       isOpenItemManaged: input.isOpenItemManaged,
-      reconciliationType: input.reconciliationType,
+      reconciliationType: input.reconciliationType ?? null,
       requiresCostObject: input.requiresCostObject,
       isTaxRelevant: input.isTaxRelevant,
+      groupAccountNumber,
+      languageKey,
+      sortKey,
+      isBlockedPosting: input.isBlockedPosting ?? false,
+      isBlockedCreation: input.isBlockedCreation ?? false,
     };
 
     if (existing.length === 0) {
@@ -358,7 +448,13 @@ export async function upsertGlAccount(input: GlAccountInput) {
       after: values,
       // Blocking an account or changing its type changes what may be posted
       // where. An auditor cares; these are not cosmetic edits.
-      securityRelevantFields: ['accountType', 'isBlocked', 'reconciliationType'],
+      securityRelevantFields: [
+        'accountType',
+        'glAccountType',
+        'isBlockedPosting',
+        'isBlockedCreation',
+        'reconciliationType',
+      ],
     });
 
     return { created: false };

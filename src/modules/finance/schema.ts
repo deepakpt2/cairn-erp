@@ -20,9 +20,12 @@ import {
   uniqueIndex,
   index,
   foreignKey,
+  check,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
 import { chartOfAccounts } from '../foundation/schema';
+import { glAccountGroup } from './gl-account-group-schema';
 
 /** Chart-of-accounts level account definition, plus the company-code segment (§8.2). */
 export const glAccount = pgTable(
@@ -36,27 +39,77 @@ export const glAccount = pgTable(
     name: varchar('name', { length: 200 }).notNull(),
     /** ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE — drives statement placement. */
     accountType: varchar('account_type', { length: 16 }).notNull(),
-    /** Balance sheet accounts carry forward; profit and loss accounts reset at year end. */
+    /** Account Group (`KTOKS`): owns the number range and the field status matrix. */
+    accountGroup: varchar('account_group', { length: 4 }).notNull(),
+    /** G/L Account Type (`XBILK`): balance sheet accounts carry forward, P/L accounts close. */
+    glAccountType: varchar('gl_account_type', { length: 16 }).notNull().default('BALANCE_SHEET'),
+    /**
+     * Derived from `glAccountType` and pinned by a check, so the stored flag can never
+     * drift from the indicator the screen shows (FS00 contract: computed, not entered).
+     */
     isBalanceSheet: boolean('is_balance_sheet').notNull(),
     /** Open item management: items stay open until explicitly cleared (§14.2). */
     isOpenItemManaged: boolean('is_open_item_managed').notNull().default(false),
-    /** Reconciliation account for a subledger (vendor / customer) — §14.2. */
+    /** Reconciliation account (`MITKZ`): CUSTOMERS | VENDORS | ASSETS | MATERIAL — §14.2. */
     reconciliationType: varchar('reconciliation_type', { length: 16 }),
     /** Whether postings to this account require a cost object. */
     requiresCostObject: boolean('requires_cost_object').notNull().default(false),
     /** Tax-relevant accounts participate in tax determination. */
     isTaxRelevant: boolean('is_tax_relevant').notNull().default(false),
-    isBlocked: boolean('is_blocked').notNull().default(false),
+    /**
+     * Optional group-side account for consolidation roll-up. No declarative foreign key:
+     * the group chart is resolved through `chart_of_accounts.group_chart` rather than
+     * stored here, so the service layer validates the number against that registry.
+     */
+    groupAccountNumber: varchar('group_account_number', { length: 10 }),
+    /** Language Key (`SPRAS`). */
+    languageKey: varchar('language_key', { length: 2 }).notNull().default('EN'),
+    /** Sort Key (`ZUAWE`) — three-character line item sort assignment. */
+    sortKey: varchar('sort_key', { length: 3 }).notNull().default('000'),
+    /** Posting block (`XSPEB`): the account exists but may not be posted to. */
+    isBlockedPosting: boolean('is_blocked_posting').notNull().default(false),
+    /** Creation block (`XSPEA`): the master record may not be created. */
+    isBlockedCreation: boolean('is_blocked_creation').notNull().default(false),
     ...auditColumns,
   },
   (t) => [
     primaryKey({ columns: [t.client, t.chartOfAccounts, t.accountNumber] }),
     index('gl_account_type_idx').on(t.client, t.accountType),
+    index('gl_account_group_idx').on(t.client, t.chartOfAccounts, t.accountGroup),
     foreignKey({
       name: 'gl_account_client_chart_of_accounts_fk',
       columns: [t.client, t.chartOfAccounts],
       foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
     }),
+    foreignKey({
+      name: 'gl_account_client_group_fk',
+      columns: [t.client, t.chartOfAccounts, t.accountGroup],
+      foreignColumns: [
+        glAccountGroup.client,
+        glAccountGroup.chartOfAccounts,
+        glAccountGroup.accountGroup,
+      ],
+    }),
+    check('gl_account_number_format', sql`${t.accountNumber} ~ '^[A-Za-z0-9]{1,10}$'`),
+    check(
+      'gl_account_type_vocabulary',
+      sql`${t.accountType} in ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')`,
+    ),
+    check(
+      'gl_account_gl_account_type_vocabulary',
+      sql`${t.glAccountType} in ('BALANCE_SHEET', 'PL_STATEMENT')`,
+    ),
+    check(
+      'gl_account_reconciliation_vocabulary',
+      sql`${t.reconciliationType} is null or ${t.reconciliationType} in ('CUSTOMERS', 'VENDORS', 'ASSETS', 'MATERIAL')`,
+    ),
+    check(
+      'gl_account_balance_sheet_derived',
+      sql`${t.isBalanceSheet} = (${t.glAccountType} = 'BALANCE_SHEET')`,
+    ),
+    check('gl_account_language_format', sql`${t.languageKey} ~ '^[A-Z]{2}$'`),
+    check('gl_account_language_supported', sql`${t.languageKey} in ('EN')`),
+    check('gl_account_sort_key_format', sql`${t.sortKey} ~ '^[A-Za-z0-9]{3}$'`),
   ],
 );
 

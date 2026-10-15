@@ -11,6 +11,9 @@ import {
   saveChartOfAccounts,
 } from '../../src/modules/foundation/chart-of-accounts-maintenance';
 import { upsertGlAccount } from '../../src/modules/foundation/services';
+import { glAccountGroup } from '../../src/modules/finance/gl-account-group-schema';
+import { chartOfAccounts as chartOfAccountsTable } from '../../src/modules/foundation/schema';
+import { and, eq } from 'drizzle-orm';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
@@ -27,6 +30,36 @@ function scope(ctx: Context) {
  * Group CoA registry (tenant-wide key reservation) and the deactivate/reactivate
  * lifecycle with its mandatory audited reason.
  */
+/**
+ * FS00 needs an Account Group before it can store an account: `account_group` is
+ * mandatory and the group owns the number range the account must fall inside. This
+ * acceptance fixture creates its charts ad hoc, so it creates their group ad hoc too —
+ * spanning the chart's whole account-number width, exactly as migration 0036 and the
+ * standard package do.
+ */
+async function ensureAccountGroup(client: string, chart: string, code = 'GENL'): Promise<void> {
+  await withTenant(client, async (tx) => {
+    const [definition] = await tx
+      .select({ accountNumberLength: chartOfAccountsTable.accountNumberLength })
+      .from(chartOfAccountsTable)
+      .where(and(eq(chartOfAccountsTable.client, client), eq(chartOfAccountsTable.chartOfAccounts, chart)))
+      .limit(1);
+    assert.ok(definition, `Chart of Accounts ${chart} was not created for ${client}.`);
+    await tx
+      .insert(glAccountGroup)
+      .values({
+        client,
+        chartOfAccounts: chart,
+        accountGroup: code,
+        description: 'SCR-026 acceptance fixture group',
+        fromAccountNumber: '0'.repeat(definition!.accountNumberLength),
+        toAccountNumber: '9'.repeat(definition!.accountNumberLength),
+        createdBy: 'browser.admin',
+      })
+      .onConflictDoNothing();
+  });
+}
+
 export async function chartOfAccountsDefinition(ctx: Context) {
   const { page, BASE, CLIENT } = scope(ctx);
   const route = `${BASE}/config/chart-of-accounts`;
@@ -158,13 +191,14 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   await changeDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload({ waitUntil: 'load' });
 
+  await ensureAccountGroup(CLIENT, 'B001');
   await upsertGlAccount({
     client: CLIENT,
     chartOfAccounts: 'B001',
     accountNumber: '1234567',
     name: 'SCR-026 account-length fixture',
     accountType: 'EXPENSE',
-    isBalanceSheet: false,
+    accountGroup: 'GENL',
     isOpenItemManaged: false,
     requiresCostObject: false,
     isTaxRelevant: false,
@@ -224,7 +258,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     accountNumber: '7654321',
     name: 'Blocked account creation attempt',
     accountType: 'EXPENSE',
-    isBalanceSheet: false,
+    accountGroup: 'GENL',
     isOpenItemManaged: false,
     requiresCostObject: false,
     isTaxRelevant: false,
@@ -314,7 +348,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     accountNumber: '4000',
     name: 'Account attempted while deactivated',
     accountType: 'EXPENSE',
-    isBalanceSheet: false,
+    accountGroup: 'GENL',
     isOpenItemManaged: false,
     requiresCostObject: false,
     isTaxRelevant: false,
@@ -374,13 +408,14 @@ export async function chartOfAccountsDefinition(ctx: Context) {
     { exact: true },
   ).waitFor();
 
+  await ensureAccountGroup(CLIENT, 'D001');
   await upsertGlAccount({
     client: CLIENT,
     chartOfAccounts: 'D001',
     accountNumber: '4000',
     name: 'Account created after reactivation',
     accountType: 'EXPENSE',
-    isBalanceSheet: false,
+    accountGroup: 'GENL',
     isOpenItemManaged: false,
     requiresCostObject: false,
     isTaxRelevant: false,

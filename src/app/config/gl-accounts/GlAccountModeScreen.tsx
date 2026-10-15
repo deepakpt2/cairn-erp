@@ -9,11 +9,12 @@ import {
 import { listGlAccounts } from '@/modules/foundation/services';
 import { GlAccountFields, type GlAccountMode, type GlAccountValues } from './GlAccountFields';
 import {
-  LEGACY_RECONCILIATION_TYPES,
+  RECONCILIATION_TYPES,
   type AccountGroupChoice,
   type AccountType,
   type FieldStatusMatrix,
   type GlAccountType,
+  type ReconciliationType,
 } from './fieldStatus';
 import type { AccountChoice } from './GlAccountValueHelp';
 
@@ -26,22 +27,18 @@ const MODE_ACTIVITY: Record<GlAccountMode, { activity: string; alias: string }> 
 };
 
 /**
- * Stored `MITKZ` vocabulary to the FS00 contract vocabulary.
+ * Stored `MITKZ` to the screen's value.
  *
- * Existing rows hold singular values, and four hold `MATERIAL`, which the contracted
- * list omits. Singular values are read into their plural contract form; the material
- * value is carried through unchanged so it stays visible and is never rewritten by a
- * Change. Whether to migrate or extend the list is an owner decision for the schema stage.
+ * Migration 0036 moved stored values to the contracted plural vocabulary and kept
+ * `MATERIAL` as a fourth contracted value (R-52/D-124), so a stored value is either
+ * contracted or absent. Anything else is left unselected rather than silently rewritten
+ * into a different subledger.
  */
-const RECONCILIATION_TO_CONTRACT: Record<string, GlAccountValues['reconciliationType']> = {
-  VENDORS: 'VENDORS',
-  CUSTOMERS: 'CUSTOMERS',
-  ASSETS: 'ASSETS',
-  VENDOR: 'VENDORS',
-  CUSTOMER: 'CUSTOMERS',
-  ASSET: 'ASSETS',
-  ...Object.fromEntries(LEGACY_RECONCILIATION_TYPES.map((type) => [type, type])),
-};
+function toContractReconciliation(stored: string | null): GlAccountValues['reconciliationType'] {
+  return stored !== null && (RECONCILIATION_TYPES as readonly string[]).includes(stored)
+    ? (stored as ReconciliationType)
+    : '';
+}
 
 /**
  * One FS00 mode screen: Create, Change or Display.
@@ -137,21 +134,17 @@ export async function GlAccountModeScreen({
         accountNumber: existing.accountNumber,
         name: existing.name,
         accountType: existing.accountType as AccountType,
-        // The Account Group column arrives with the schema stage.
-        accountGroup: '',
-        glAccountType: (existing.isBalanceSheet ? 'BALANCE_SHEET' : 'PL_STATEMENT') as GlAccountType,
+        accountGroup: existing.accountGroup,
+        glAccountType: existing.glAccountType as GlAccountType,
         isOpenItemManaged: existing.isOpenItemManaged,
-        reconciliationType: RECONCILIATION_TO_CONTRACT[existing.reconciliationType ?? ''] ?? '',
+        reconciliationType: toContractReconciliation(existing.reconciliationType),
         requiresCostObject: existing.requiresCostObject,
         isTaxRelevant: existing.isTaxRelevant,
-        groupAccountNumber: '',
-        // Language Key and Sort Key columns arrive with the schema stage.
-        languageKey: 'EN',
-        sortKey: '000',
-        // The single legacy block flag stands for both blocks until XSPEB and XSPEA are
-        // split into their own columns.
-        isBlockedPosting: existing.isBlocked,
-        isBlockedCreation: existing.isBlocked,
+        groupAccountNumber: existing.groupAccountNumber ?? '',
+        languageKey: existing.languageKey,
+        sortKey: existing.sortKey,
+        isBlockedPosting: existing.isBlockedPosting,
+        isBlockedCreation: existing.isBlockedCreation,
       }
     : null;
 

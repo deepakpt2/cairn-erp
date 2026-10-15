@@ -21,7 +21,8 @@ import {
   type ChartOfAccountsMaintenanceInput,
   type GroupChartOfAccountsMaintenanceInput,
 } from '@/modules/foundation/chart-of-accounts-maintenance';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { STANDARD_ACCOUNT_GROUP } from '@/modules/foundation/standard-config';
+import { createTenant, destroyTenant, ensureAccountGroup, type TestTenant } from './helpers';
 
 const TEST_ACTOR = 'SCR026_TEST';
 const DEFINE_ACTIVITY = 'CFG.ORG.COMPANYCODE.DEFINE';
@@ -185,13 +186,14 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
   it('locks account-number length after either a G/L account or transaction data exists', async () => {
     const fixture = currentTenant();
     await saveChartOfAccounts(input('L001', { accountNumberLength: 4 }));
+    await ensureAccountGroup(fixture, 'L001');
     await expect(upsertGlAccount({
       client: fixture.client,
       chartOfAccounts: 'L001',
       accountNumber: '12345',
       name: 'Too long for chart',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,
@@ -204,7 +206,7 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
       accountNumber: '1234',
       name: 'Length boundary account',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,
@@ -250,6 +252,8 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
 
   it('blocks new G/L accounts and Company Code CoA assignment without affecting existing records', async () => {
     const fixture = currentTenant();
+    // No Account Group on purpose: a blocked chart refuses a new account before the
+    // group is ever consulted, which is the order this assertion pins.
     await saveChartOfAccounts(input('B001', { isBlocked: true }));
     await expect(upsertGlAccount({
       client: fixture.client,
@@ -257,7 +261,7 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
       accountNumber: '7000',
       name: 'Blocked chart account',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,
@@ -385,13 +389,14 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
   it('deactivates and reactivates a chart only with a reason, retaining accounts, assignments and history', async () => {
     const fixture = currentTenant();
     await saveChartOfAccounts(input('D001', { name: 'Lifecycle fixture chart' }));
+    await ensureAccountGroup(fixture, 'D001');
     await upsertGlAccount({
       client: fixture.client,
       chartOfAccounts: 'D001',
       accountNumber: '4000',
       name: 'Existing account before deactivation',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,
@@ -447,7 +452,7 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
       accountNumber: '4001',
       name: 'Account attempted after deactivation',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,
@@ -504,7 +509,7 @@ describe('SCR-026 / OB13 Chart of Accounts definition', () => {
       accountNumber: '4001',
       name: 'Account created after reactivation',
       accountType: 'EXPENSE',
-      isBalanceSheet: false,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
       isOpenItemManaged: false,
       requiresCostObject: false,
       isTaxRelevant: false,

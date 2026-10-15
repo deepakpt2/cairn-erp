@@ -38,7 +38,7 @@ async function validateAssignments(tx:Tx,client:string,company:string,account:st
   const chartOfAccounts=site.chartOfAccounts;
   if(!chartOfAccounts)throw new SupplierCompanyError('Company code chart of accounts is not assigned.','Assign a chart of accounts before maintaining supplier company data (CFG.ORG.COMPANYCODE.ASSIGN_COA).');
   if(account){const [gl]=await tx.select().from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,chartOfAccounts),eq(glAccount.accountNumber,account)));
-    if(!gl||gl.isBlocked||gl.reconciliationType!=='VENDOR')throw new SupplierCompanyError('Use an unblocked supplier reconciliation account in the company chart.');}
+    if(!gl||gl.isBlockedPosting||gl.reconciliationType!=='VENDORS')throw new SupplierCompanyError('Use an unblocked supplier reconciliation account in the company chart.');}
   if(terms){const [term]=await tx.select().from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.termsCode,terms)));if(!term?.isActive)throw new SupplierCompanyError('Payment terms are missing or inactive.');}
   return { ...site, chartOfAccounts };
 }
@@ -96,7 +96,7 @@ export async function supplierCompanyChoices(client:string,company:string){retur
   const rows=await tx.select({code:companyCode.companyCode,name:companyCode.name,chartOfAccounts:companyCode.chartOfAccounts,currency:companyCode.currency,country:companyCode.country}).from(companyCode).where(and(eq(companyCode.client,client),eq(companyCode.isActive,true),isNotNull(companyCode.chartOfAccounts))).orderBy(asc(companyCode.companyCode));
   const companies=rows.filter((row):row is (typeof rows)[number]&{chartOfAccounts:string}=>row.chartOfAccounts!==null);
   const selected=companies.find(row=>row.code===company);
-  const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'VENDOR'),eq(glAccount.isBlocked,false))).orderBy(asc(glAccount.accountNumber)):[];
+  const accounts=selected?await tx.select({number:glAccount.accountNumber,name:glAccount.name}).from(glAccount).where(and(eq(glAccount.client,client),eq(glAccount.chartOfAccounts,selected.chartOfAccounts),eq(glAccount.reconciliationType,'VENDORS'),eq(glAccount.isBlockedPosting,false))).orderBy(asc(glAccount.accountNumber)):[];
   const terms=await tx.select({code:paymentTerms.termsCode,description:paymentTerms.description}).from(paymentTerms).where(and(eq(paymentTerms.client,client),eq(paymentTerms.isActive,true))).orderBy(asc(paymentTerms.termsCode));
   const paymentMethods=selected?await tx.select({code:paymentMethod.methodCode,description:paymentMethod.description}).from(paymentMethod).where(and(eq(paymentMethod.client,client),eq(paymentMethod.country,selected.country),eq(paymentMethod.isActive,true),or(eq(paymentMethod.allowedDirection,'OUTGOING'),eq(paymentMethod.allowedDirection,'BOTH')))).orderBy(asc(paymentMethod.methodCode)):[];
   return {companies,selected,accounts,terms,paymentMethods};

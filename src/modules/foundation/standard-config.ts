@@ -41,6 +41,13 @@ import {
   supplierPartnerFunction,
 } from './schema';
 import { glAccount } from '../finance/schema';
+import { glAccountGroup } from '../finance/gl-account-group-schema';
+import {
+  deriveGlAccountType,
+  deriveIsBalanceSheet,
+  isBalanceSheetAccountType,
+  type ReconciliationType,
+} from '../finance/gl-account-vocabulary';
 import { assignCompanyCodeToControllingAreaInTransaction } from './controlling-area-company-assignment';
 import {
   assertCompanyCodeFinancialSettingsCompatible,
@@ -48,6 +55,14 @@ import {
 } from './controlling-area-company-compatibility';
 
 export const STANDARD_PACKAGE_VERSION = 'INTL-STD-2';
+
+/**
+ * The Account Group the standard package defines for its chart (FS00).
+ *
+ * `account_group` is mandatory on every account and the group owns the number range, so
+ * a package that defines accounts must define a group first.
+ */
+export const STANDARD_ACCOUNT_GROUP = 'GENL';
 
 /** Tenant-seeded supplier partner functions; cardinality is explicit, not inferred. */
 const SUPPLIER_PARTNER_FUNCTIONS = [
@@ -94,7 +109,7 @@ interface AccountSpec {
   type: 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
   isBalanceSheet: boolean;
   openItem?: boolean;
-  reconciliation?: 'VENDOR' | 'CUSTOMER' | 'ASSET' | 'MATERIAL';
+  reconciliation?: ReconciliationType;
   requiresCostObject?: boolean;
   taxRelevant?: boolean;
   /** A short note used by the posting trace to explain what this account is for. */
@@ -106,8 +121,8 @@ const CHART_OF_ACCOUNTS: AccountSpec[] = [
   { number: '100000', name: 'Cash on hand', type: 'ASSET', isBalanceSheet: true },
   { number: '101000', name: 'Bank — current account', type: 'ASSET', isBalanceSheet: true },
   { number: '101100', name: 'Bank — foreign currency account', type: 'ASSET', isBalanceSheet: true },
-  { number: '110000', name: 'Trade receivables', type: 'ASSET', isBalanceSheet: true, openItem: true, reconciliation: 'CUSTOMER', purpose: 'Customer reconciliation account. Its balance must equal the sum of customer open items (tie-out §16.4).' },
-  { number: '110100', name: 'Intercompany receivables', type: 'ASSET', isBalanceSheet: true, openItem: true, reconciliation: 'CUSTOMER', purpose: 'Separate from trade receivables so intercompany balances are identifiable at all times (D-028).' },
+  { number: '110000', name: 'Trade receivables', type: 'ASSET', isBalanceSheet: true, openItem: true, reconciliation: 'CUSTOMERS', purpose: 'Customer reconciliation account. Its balance must equal the sum of customer open items (tie-out §16.4).' },
+  { number: '110100', name: 'Intercompany receivables', type: 'ASSET', isBalanceSheet: true, openItem: true, reconciliation: 'CUSTOMERS', purpose: 'Separate from trade receivables so intercompany balances are identifiable at all times (D-028).' },
   { number: '110200', name: 'Other receivables', type: 'ASSET', isBalanceSheet: true },
   { number: '120000', name: 'Raw materials inventory', type: 'ASSET', isBalanceSheet: true, reconciliation: 'MATERIAL' },
   { number: '120100', name: 'Semi-finished goods inventory', type: 'ASSET', isBalanceSheet: true, reconciliation: 'MATERIAL' },
@@ -115,17 +130,17 @@ const CHART_OF_ACCOUNTS: AccountSpec[] = [
   { number: '120300', name: 'Goods in transit', type: 'ASSET', isBalanceSheet: true, reconciliation: 'MATERIAL' },
   { number: '130000', name: 'Prepaid expenses', type: 'ASSET', isBalanceSheet: true },
   { number: '140000', name: 'Input tax receivable', type: 'ASSET', isBalanceSheet: true, taxRelevant: true },
-  { number: '150000', name: 'Plant and machinery', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSET' },
+  { number: '150000', name: 'Plant and machinery', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSETS' },
   { number: '150100', name: 'Accumulated depreciation — plant and machinery', type: 'ASSET', isBalanceSheet: true },
-  { number: '151000', name: 'Office equipment', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSET' },
+  { number: '151000', name: 'Office equipment', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSETS' },
   { number: '151100', name: 'Accumulated depreciation — office equipment', type: 'ASSET', isBalanceSheet: true },
-  { number: '152000', name: 'Motor vehicles', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSET' },
+  { number: '152000', name: 'Motor vehicles', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSETS' },
   { number: '152100', name: 'Accumulated depreciation — motor vehicles', type: 'ASSET', isBalanceSheet: true },
-  { number: '160000', name: 'Intangible assets', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSET' },
+  { number: '160000', name: 'Intangible assets', type: 'ASSET', isBalanceSheet: true, reconciliation: 'ASSETS' },
 
   // ── 2 · Liabilities and equity ────────────────────────────────────────────
-  { number: '200000', name: 'Trade payables', type: 'LIABILITY', isBalanceSheet: true, openItem: true, reconciliation: 'VENDOR', purpose: 'Vendor reconciliation account. Its balance must equal the sum of vendor open items (tie-out §16.4).' },
-  { number: '200100', name: 'Intercompany payables', type: 'LIABILITY', isBalanceSheet: true, openItem: true, reconciliation: 'VENDOR' },
+  { number: '200000', name: 'Trade payables', type: 'LIABILITY', isBalanceSheet: true, openItem: true, reconciliation: 'VENDORS', purpose: 'Vendor reconciliation account. Its balance must equal the sum of vendor open items (tie-out §16.4).' },
+  { number: '200100', name: 'Intercompany payables', type: 'LIABILITY', isBalanceSheet: true, openItem: true, reconciliation: 'VENDORS' },
   { number: '201000', name: 'Other payables', type: 'LIABILITY', isBalanceSheet: true, openItem: true },
   { number: '210000', name: 'Goods received not invoiced', type: 'LIABILITY', isBalanceSheet: true, openItem: true, purpose: 'The GR/IR clearing account. Goods receipt credits it; the supplier invoice debits it. A residual balance at period end is reclassified (FIN.GRIR.RECLASS).' },
   { number: '220000', name: 'Output tax payable', type: 'LIABILITY', isBalanceSheet: true, taxRelevant: true },
@@ -259,8 +274,37 @@ export async function applyStandardPackage(
     throw new Error(`Chart of Accounts ${coaKey} has a ${chartDefinition.accountNumberLength}-character limit, shorter than standard G/L account ${overlengthStandardAccounts[0].number}.`);
   }
 
+  // The balance-sheet flag is derived from the G/L Account Type (FS00), so a spec that
+  // disagrees with its own account type is a package defect, not a data choice.
+  const mislabelledStandardAccounts = CHART_OF_ACCOUNTS.filter(
+    (spec) => spec.isBalanceSheet !== isBalanceSheetAccountType(spec.type),
+  );
+  if (mislabelledStandardAccounts.length > 0) {
+    const spec = mislabelledStandardAccounts[0];
+    throw new Error(`Standard G/L account ${spec.number} is labelled ${spec.isBalanceSheet ? 'balance sheet' : 'profit and loss'} but its account type derives the opposite; the flag is derived from the G/L Account Type.`);
+  }
+
+  /* ── Account Group registry ───────────────────────────────────────────────── */
+  // One group spanning the chart's whole account-number width is the honest standard:
+  // the package's own numbers run across three leading digits for expenses and two for
+  // revenue, so no narrower range describes them. A consultant defines narrower groups
+  // in FS00 and re-assigns accounts in Change mode afterwards.
+  await tx
+    .insert(glAccountGroup)
+    .values({
+      client,
+      chartOfAccounts: coaKey,
+      accountGroup: STANDARD_ACCOUNT_GROUP,
+      description: 'General ledger accounts',
+      fromAccountNumber: '0'.repeat(chartDefinition.accountNumberLength),
+      toAccountNumber: '9'.repeat(chartDefinition.accountNumberLength),
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
+
   let accounts = 0;
   for (const spec of CHART_OF_ACCOUNTS) {
+    const glAccountType = deriveGlAccountType(spec.type);
     await tx
       .insert(glAccount)
       .values({
@@ -269,7 +313,9 @@ export async function applyStandardPackage(
         accountNumber: spec.number,
         name: spec.name,
         accountType: spec.type,
-        isBalanceSheet: spec.isBalanceSheet,
+        accountGroup: STANDARD_ACCOUNT_GROUP,
+        glAccountType,
+        isBalanceSheet: deriveIsBalanceSheet(glAccountType),
         isOpenItemManaged: spec.openItem ?? false,
         reconciliationType: spec.reconciliation,
         requiresCostObject: spec.requiresCostObject ?? false,

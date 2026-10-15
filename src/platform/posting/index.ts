@@ -23,6 +23,7 @@ import {
 import { numberRangeAllocation } from '../tables/numbering';
 import type { Tx } from '../db/client';
 import { glAccount, journalEntry, journalEntryLine } from '../../modules/finance/schema';
+import type { ReconciliationType } from '../../modules/finance/gl-account-vocabulary';
 import { allocateNumber } from '../numbering';
 import { acquireLocks } from '../lock';
 import { recordChange } from '../change';
@@ -490,8 +491,8 @@ function assertBalanced(totals: { debit: string; credit: string }) {
  * problem at once: a vendor line in a closed vendor period and a GL line in an
  * open one should produce one clear message, not a partially validated document.
  *
- * Account type per line comes from the account's reconciliation type:
- *   VENDOR -> K, CUSTOMER -> D, ASSET -> A, MATERIAL -> M, otherwise S.
+ * Account type per line comes from the account's reconciliation indicator (`MITKZ`):
+ *   VENDORS -> K, CUSTOMERS -> D, ASSETS -> A, MATERIAL -> M, otherwise S.
  */
 async function assertPostingPeriodOpen(tx: Tx, input: PostJournalInput): Promise<void> {
   const company = await getCompanyCode(tx, input.client, input.companyCode);
@@ -576,19 +577,25 @@ async function accountTypeFor(
     );
   }
 
-  switch (rows[0].reconciliationType) {
-    case 'VENDOR':
-      return 'K';
-    case 'CUSTOMER':
-      return 'D';
-    case 'ASSET':
-      return 'A';
-    case 'MATERIAL':
-      return 'M';
-    default:
-      return 'S';
-  }
+  const reconciliation = rows[0].reconciliationType as ReconciliationType | null;
+  return reconciliation !== null && reconciliation in PERIOD_ACCOUNT_TYPE
+    ? PERIOD_ACCOUNT_TYPE[reconciliation]
+    : 'S';
 }
+
+/**
+ * Period-control account type per reconciliation indicator.
+ *
+ * A `Record` over the contracted vocabulary rather than a switch, so widening `MITKZ`
+ * is a compile error here instead of a line silently classified as a general ledger
+ * posting — which would let it into a period closed for its own account type.
+ */
+const PERIOD_ACCOUNT_TYPE: Record<ReconciliationType, 'K' | 'D' | 'A' | 'M'> = {
+  VENDORS: 'K',
+  CUSTOMERS: 'D',
+  ASSETS: 'A',
+  MATERIAL: 'M',
+};
 
 export class PostingError extends Error {
   readonly code = 'CAIRN_POSTING';

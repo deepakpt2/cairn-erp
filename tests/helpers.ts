@@ -7,7 +7,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { closeDb, db, withTenant } from '@/platform/db/client';
 import { client as clientTable, clientSettings } from '@/platform/tables/tenancy';
 import { defineRange } from '@/platform/numbering';
-import { applyStandardPackage } from '@/modules/foundation/standard-config';
+import { applyStandardPackage, STANDARD_ACCOUNT_GROUP } from '@/modules/foundation/standard-config';
+import { glAccountGroup } from '@/modules/finance/gl-account-group-schema';
+import { chartOfAccounts } from '@/modules/foundation/schema';
+import { deriveGlAccountType, deriveIsBalanceSheet } from '@/modules/finance/gl-account-vocabulary';
 
 /** Four-character tenant key, T + three digits. The reference model uses three characters; ours is longer and its own. */
 export function testClientId(seed: string): string {
@@ -109,6 +112,8 @@ export async function defineTestRanges(
  */
 export async function seedAccounts(tenant: TestTenant, accounts: string[]): Promise<void> {
   const { glAccount } = await import('@/modules/finance/schema');
+  const accountType = 'EXPENSE' as const;
+  const glAccountType = deriveGlAccountType(accountType);
   await withTenant(tenant.client, async (tx) => {
     for (const accountNumber of accounts) {
       await tx
@@ -118,13 +123,52 @@ export async function seedAccounts(tenant: TestTenant, accounts: string[]): Prom
           chartOfAccounts: 'CA01',
           accountNumber,
           name: `Custom test account ${accountNumber}`,
-          accountType: 'EXPENSE',
-          isBalanceSheet: false,
+          accountType,
+          accountGroup: STANDARD_ACCOUNT_GROUP,
+          glAccountType,
+          isBalanceSheet: deriveIsBalanceSheet(glAccountType),
           createdBy: 'TEST',
         })
         .onConflictDoNothing();
     }
   });
+}
+
+/**
+ * Give an ad-hoc chart an Account Group, because FS00 cannot store an account without
+ * one: `account_group` is mandatory and the group owns the number range the account must
+ * fall inside.
+ *
+ * The group spans the chart's whole account-number width, which is what migration 0036
+ * and the standard package both do, so any account number the chart accepts also falls
+ * inside the range. Returns the group code to pass to `upsertGlAccount`.
+ */
+export async function ensureAccountGroup(
+  tenant: TestTenant,
+  chart: string,
+  code: string = STANDARD_ACCOUNT_GROUP,
+): Promise<string> {
+  await withTenant(tenant.client, async (tx) => {
+    const [definition] = await tx
+      .select({ accountNumberLength: chartOfAccounts.accountNumberLength })
+      .from(chartOfAccounts)
+      .where(and(eq(chartOfAccounts.client, tenant.client), eq(chartOfAccounts.chartOfAccounts, chart)))
+      .limit(1);
+    if (!definition) throw new Error(`Chart of Accounts ${chart} was not created for ${tenant.client}.`);
+    await tx
+      .insert(glAccountGroup)
+      .values({
+        client: tenant.client,
+        chartOfAccounts: chart,
+        accountGroup: code,
+        description: `Test Account Group ${code}`,
+        fromAccountNumber: '0'.repeat(definition.accountNumberLength),
+        toAccountNumber: '9'.repeat(definition.accountNumberLength),
+        createdBy: 'TEST',
+      })
+      .onConflictDoNothing();
+  });
+  return code;
 }
 
 /**

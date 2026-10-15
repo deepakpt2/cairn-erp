@@ -77,17 +77,17 @@ export default async function GlAccountsPage({
     accountNumber: account.accountNumber,
     name: account.name,
     accountType: account.accountType,
-    accountGroup: '',
+    accountGroup: account.accountGroup,
     isOpenItemManaged: account.isOpenItemManaged,
     reconciliationType: account.reconciliationType,
     requiresCostObject: account.requiresCostObject,
-    isBlockedPosting: account.isBlocked,
-    isBlockedCreation: account.isBlocked,
+    isBlockedPosting: account.isBlockedPosting,
+    isBlockedCreation: account.isBlockedCreation,
   }));
 
   // The Account Group registry, its field status matrices and the group-side account
-  // master arrive with the FS00 schema and service stages; until then the panel renders
-  // its empty state honestly instead of inventing rows.
+  // master now exist in the schema; the FS00 service stage loads them. Until then the
+  // panel renders its empty state honestly instead of inventing rows.
   const accountGroups: AccountGroupRow[] = [];
 
   return (

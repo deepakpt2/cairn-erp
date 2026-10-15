@@ -12,7 +12,6 @@ import {
   deriveIsBalanceSheet,
   resolveFieldStatus,
   type AccountGroupChoice,
-  type LegacyReconciliationType,
   type AccountType,
   type FieldStatusMatrix,
   type GlAccountField,
@@ -30,7 +29,7 @@ export interface GlAccountValues {
   accountGroup: string;
   glAccountType: GlAccountType;
   isOpenItemManaged: boolean;
-  reconciliationType: ReconciliationType | LegacyReconciliationType | '';
+  reconciliationType: ReconciliationType | '';
   requiresCostObject: boolean;
   isTaxRelevant: boolean;
   groupAccountNumber: string;
@@ -127,7 +126,8 @@ export function GlAccountFields({
   }
 
   const balanceSheet = deriveIsBalanceSheet(values.glAccountType);
-  // A stored legacy value stays selectable, so opening a Change can never drop it.
+  // A stored value outside the contracted list stays selectable, so opening a Change can
+  // never drop it silently.
   const reconciliationOptions: readonly string[] =
     values.reconciliationType !== '' &&
     !RECONCILIATION_TYPES.includes(values.reconciliationType as ReconciliationType)
@@ -403,7 +403,7 @@ export function GlAccountFields({
                 onChange={(event) =>
                   set(
                     'reconciliationType',
-                    event.currentTarget.value as ReconciliationType | LegacyReconciliationType | '',
+                    event.currentTarget.value as ReconciliationType | '',
                   )
                 }
                 className="field-input mt-1 min-h-11 w-full sm:min-h-9"

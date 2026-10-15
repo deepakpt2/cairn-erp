@@ -2,44 +2,55 @@
  * FS00 field status control (SCR-028).
  *
  * The Account Group (`KTOKS`) decides, per field, whether the screen suppresses it,
- * offers it or demands it. The matrix itself is data — a row per (group, field) —
- * so a consultant can tighten a group without a release. This module holds only the
- * vocabulary and the baseline applied where a group defines no row for a field.
+ * offers it or demands it. The matrix itself is data — a row per (group, field) in
+ * `gl_account_group_field_status` — so a consultant can tighten a group without a
+ * release. This module holds the baseline applied where a group defines no row, and the
+ * shapes the screen renders.
+ *
+ * The vocabulary (fields, statuses, account types, statement types, reconciliation
+ * values) and the derivations live in `@/modules/finance/gl-account-vocabulary`, which
+ * is dependency-free so a client component may import it without dragging the database
+ * layer into the browser bundle. It is re-exported here so the screen has one import to
+ * reach for, and so the database, the services and the screen share one list each.
  *
  * Two contract fields are deliberately absent from the matrix:
- * - `is_balance_sheet` is computed from the G/L Account Type (XBILK) and is never
+ * - `is_balance_sheet` is computed from the G/L Account Type (`XBILK`) and is never
  *   stored independently, so there is nothing for a group to suppress.
  * - the audit reason is conditional on the change itself (a block change or a
  *   deletion), not on the group.
  */
+import type { FieldStatus, GlAccountField } from '@/modules/finance/gl-account-vocabulary';
 
-export type FieldStatus = 'SUPPRESS' | 'OPTIONAL' | 'MANDATORY';
-
-/** Every field an Account Group may control. Order is the order the screen renders. */
-export const GL_ACCOUNT_FIELDS = [
-  'name',
-  'accountType',
-  'glAccountType',
-  'isOpenItemManaged',
-  'reconciliationType',
-  'requiresCostObject',
-  'isTaxRelevant',
-  'groupAccountNumber',
-  'languageKey',
-  'sortKey',
-  'isBlockedPosting',
-  'isBlockedCreation',
-] as const;
-
-export type GlAccountField = (typeof GL_ACCOUNT_FIELDS)[number];
+export {
+  ACCOUNT_TYPES,
+  DEFAULT_LANGUAGE_KEY,
+  DEFAULT_SORT_KEY,
+  FIELD_STATUSES,
+  GL_ACCOUNT_FIELDS,
+  GL_ACCOUNT_TYPES,
+  RECONCILIATION_TYPES,
+  SUPPORTED_LANGUAGE_KEYS,
+  accountNumberInRange,
+  deriveGlAccountType,
+  deriveIsBalanceSheet,
+  isBalanceSheetAccountType,
+} from '@/modules/finance/gl-account-vocabulary';
+export type {
+  AccountType,
+  FieldStatus,
+  GlAccountField,
+  GlAccountType,
+  ReconciliationType,
+} from '@/modules/finance/gl-account-vocabulary';
 
 /** Field statuses for one Account Group; an absent field falls back to the baseline. */
 export type FieldStatusMatrix = Partial<Record<GlAccountField, FieldStatus>>;
 
 /**
- * Baseline field status. The keys (`account_number`, `chart_of_accounts`,
- * `account_group`) are mandatory by contract and are not matrix-controlled: without
- * them there is no record to store, so no group may suppress them.
+ * Baseline field status, applied where a group defines no row for a field. The keys
+ * (`account_number`, `chart_of_accounts`, `account_group`) are mandatory by contract and
+ * are not matrix-controlled: without them there is no record to store, so no group may
+ * suppress them.
  */
 export const DEFAULT_FIELD_STATUS: Readonly<Record<GlAccountField, FieldStatus>> = {
   name: 'MANDATORY',
@@ -65,43 +76,13 @@ export function resolveFieldStatus(
 }
 
 /**
- * Stored reconciliation vocabulary that predates the FS00 contract.
+ * One Account Group registry row as the screen consumes it.
  *
- * Existing rows hold `MATERIAL`, which the contracted `MITKZ` list does not name even
- * though the source system's indicator does. Rendering it keeps the stored value visible
- * and stops a Change from silently rewriting an account into a different subledger;
- * whether to migrate or extend the list is an owner decision, not a display choice.
+ * The registry is chart-scoped, because a chart owns the account-number length (`KTKTB`)
+ * its ranges are read against, so the chart key is part of the row's identity.
  */
-export const LEGACY_RECONCILIATION_TYPES = ['MATERIAL'] as const;
-export type LegacyReconciliationType = (typeof LEGACY_RECONCILIATION_TYPES)[number];
-
-export const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const;
-export type AccountType = (typeof ACCOUNT_TYPES)[number];
-
-export const GL_ACCOUNT_TYPES = ['BALANCE_SHEET', 'PL_STATEMENT'] as const;
-export type GlAccountType = (typeof GL_ACCOUNT_TYPES)[number];
-
-export const RECONCILIATION_TYPES = ['CUSTOMERS', 'VENDORS', 'ASSETS'] as const;
-export type ReconciliationType = (typeof RECONCILIATION_TYPES)[number];
-
-/**
- * XBILK follows the account type: assets, liabilities and equity carry forward,
- * revenue and expense close at year end. The screen offers this as the default and
- * lets a group's field status decide whether the indicator stays editable.
- */
-export function deriveGlAccountType(accountType: AccountType): GlAccountType {
-  return accountType === 'ASSET' || accountType === 'LIABILITY' || accountType === 'EQUITY'
-    ? 'BALANCE_SHEET'
-    : 'PL_STATEMENT';
-}
-
-/** The stored balance-sheet flag is derived, never supplied freely by the browser. */
-export function deriveIsBalanceSheet(glAccountType: GlAccountType): boolean {
-  return glAccountType === 'BALANCE_SHEET';
-}
-
-/** One Account Group registry row as the screen consumes it. */
 export interface AccountGroupRow {
+  chartOfAccounts: string;
   accountGroup: string;
   description: string;
   fromAccountNumber: string;
@@ -115,20 +96,4 @@ export interface AccountGroupRow {
 export interface AccountGroupChoice {
   code: string;
   name: string;
-}
-
-/**
- * An account number belongs to a group only inside its range. Ranges are compared as
- * text of equal length, so `0010`–`0099` never swallows `1000`; a number shorter than
- * the range bounds is padded on the right, matching the reference reading of character
- * ranges.
- */
-export function accountNumberInRange(
-  accountNumber: string,
-  fromAccountNumber: string,
-  toAccountNumber: string,
-): boolean {
-  const width = Math.max(accountNumber.length, fromAccountNumber.length, toAccountNumber.length);
-  const pad = (value: string) => value.padEnd(width, '0');
-  return pad(accountNumber) >= pad(fromAccountNumber) && pad(accountNumber) <= pad(toAccountNumber);
 }
