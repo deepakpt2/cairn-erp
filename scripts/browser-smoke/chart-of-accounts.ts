@@ -91,6 +91,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   let chartRow = page.locator('tbody tr').filter({ hasText: 'B001' });
   await chartRow.locator('summary').click();
   let changeDialog = page.getByRole('dialog', { name: 'Change Chart of Accounts B001' });
+  await changeDialog.waitFor();
   await changeDialog.locator('[name="accountNumberLength"]').fill('7');
   await changeDialog.locator('[name="costElementIntegration"]').selectOption('NONE');
   await changeDialog.locator('[name="reason"]').fill('SCR-026 browser change before use');
@@ -101,6 +102,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   ).waitFor();
   await changeDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
 
   await upsertGlAccount({
     client: CLIENT,
@@ -130,6 +132,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   chartRow = page.locator('tbody tr').filter({ hasText: 'B001' });
   await chartRow.locator('summary').click();
   changeDialog = page.getByRole('dialog', { name: 'Change Chart of Accounts B001' });
+  await changeDialog.waitFor();
   assert.notEqual(await changeDialog.locator('[name="accountNumberLength"]').getAttribute('readonly'), null);
   await changeDialog.getByRole('button', { name: 'Close', exact: true }).click();
   await assert.rejects(
@@ -152,9 +155,11 @@ export async function chartOfAccountsDefinition(ctx: Context) {
 
   // A single block flag gates both new G/L master creation and Company Code assignment.
   await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
   chartRow = page.locator('tbody tr').filter({ hasText: 'B001' });
   await chartRow.locator('summary').click();
   changeDialog = page.getByRole('dialog', { name: 'Change Chart of Accounts B001' });
+  await changeDialog.waitFor();
   await changeDialog.locator('[name="isBlocked"]').check();
   await changeDialog.locator('[name="reason"]').fill('SCR-026 browser block');
   await changeDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
