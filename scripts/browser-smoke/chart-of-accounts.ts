@@ -24,6 +24,8 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   console.log('SCR-026 OB13: verify tenant-local Chart of Accounts definition, F4, audit, length lock and block gates');
 
   await page.goto(route, { waitUntil: 'domcontentloaded' });
+  // Client-side F4 dialogs attach their event handlers during hydration; wait for page assets before interacting.
+  await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Chart of Accounts', exact: true }).waitFor();
   const createPanel = page.locator('section[aria-labelledby="ob13-create-title"]');
   await createPanel.waitFor();
