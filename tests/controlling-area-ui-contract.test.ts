@@ -107,6 +107,8 @@ describe('SCR-024 OKKP UI contract', () => {
     expect(createForm).not.toMatch(/name="companyCode"/);
     expect(list).not.toMatch(/name="companyCode"/);
     expect(list).not.toMatch(/deactivateControllingArea|reactivateControllingArea/);
-    expect(workbench).toContain("new Set(['CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY'])");
+    expect(workbench).toContain("'/config/controlling-area/assign-company-code'");
+    expect(workbench).toContain('item.route_path && BUILT_ROUTES.has(item.route_path)');
+    expect(workbench).not.toContain('PENDING_ACTIVITY_CODES');
   });
 });

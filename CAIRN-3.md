@@ -784,6 +784,15 @@ Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to th
 
 **Next.** Begin the separate SCR-025/OX19 test and acceptance stage. Do not run OVXK browser acceptance. Report results before requesting details for the next UI T-code.
 
+
+### 26.225 B-209 — SCR-025 / OX19 workbench discovery correction and contract suite prepared `NOT TESTED`
+
+While preparing OX19 acceptance, repository review found the workbench still classified the assignment activity as unbuilt and omitted the OX19 route from its built-route list. Removed that stale pending exclusion and registered `/config/controlling-area/assign-company-code` as available; updated the `CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY` seed route so rerunning the global seed points the workbench at OX19 rather than OKKP. Updated the OKKP contract assertion accordingly. Added a database-free OX19 contract suite covering key case/format, inactive-source F4, dual-capability actions, UI action wiring/statuses, compatibility and audit guards, source-write locks, workbench discovery, and migration constraints; registered it in the no-database harness.
+
+**Boundary.** `npm run typecheck` and `git diff --check` passed. The new contract suite has not yet been run. No database was available locally (`psql`, PostgreSQL server tools and DB environment variables are absent); no uploaded remote DB credentials were read or used. Migration `0032` remains unapplied, so database-backed service tests and browser acceptance cannot yet run safely.
+
+**Next.** Publish the workbench correction and contract tests before executing the DB-free suite. Seek a disposable local PostgreSQL environment for migration/service/browser acceptance; never use the uploaded remote DB credentials and do not run OVXK acceptance.
+
 ---
 
 ## §30 · Change log (continued)
@@ -850,6 +859,7 @@ recorded change, date and reason stated.
 | 2.24 | 2026-10-15 | **SCR-025/OX19 assignment backend implemented (B-206, §26.222).** Added tenant-scoped add/unassign operations with scope, currency/FYV, derived-CoA-baseline, and audit behavior, including an explicit duplicate no-op event. Typecheck passed; no tests, database writes, UI wiring or acceptance. Both permissions and guards on source-master edits remain for the supporting-functions stage. | Agent |
 | 2.25 | 2026-10-15 | **SCR-025/OX19 supporting functions and mutation wiring implemented (B-207, §26.223).** Added shared assignment/source-write locking and compatibility guards across OX19, OKKP, Company Code CoA/upsert writes and standard package provisioning; standard A000 assignment now uses the OX19 transaction service. Added protected Add/Unassign server actions requiring both owner-approved capabilities and wired the existing UI with translated result/error states. Typecheck and diff check passed. No tests, UI/browser acceptance, database writes or migration application; `0032` remains unapplied. Implementation is published before tests per D-111. | Agent |
 | 2.26 | 2026-10-15 | **B-207 OX19 implementation published (B-208, §26.224).** Commit `3877eb8` (`feat: complete OX19 assignment integration`) was pushed to the explicit GitHub remote as a fast-forward from `484ea69` to `main`. The published code is implementation only; no tests or acceptance ran, and migration `0032` remains unapplied. | Agent |
+| 2.27 | 2026-10-15 | **OX19 workbench discovery corrected and DB-free contract suite prepared (B-209, §26.225).** Added the OX19 route to the workbench's built routes and global activity seed, removed its stale unbuilt exclusion, updated the OKKP contract assertion, and registered targeted OX19 contract coverage in the DB-free harness. Typecheck and diff check passed; the new suite has not yet run. No local PostgreSQL/client or DB environment is present, so no DB-backed tests/browser acceptance or migration application; no uploaded remote DB credentials were used. | Agent |
 
 ---
 
