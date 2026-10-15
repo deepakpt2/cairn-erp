@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { saveChartOfAccountsAction, type ChartOfAccountsActionState } from './actions';
 import { ChartLanguageField, ChartOfAccountsValueHelp, type ChartOfAccountsChoice, type LanguageChoice } from './ChartOfAccountsValueHelp';
@@ -43,6 +43,26 @@ export function ChartOfAccountsForm({ mode, initial, languages, groupCharts, can
   const [costElementIntegration, setCostElementIntegration] = useState<CostElementIntegration>(initial?.costElementIntegration ?? 'AUTOMATIC');
   const [isBlocked, setIsBlocked] = useState(initial?.isBlocked ?? false);
   const [reason, setReason] = useState('');
+  useEffect(() => {
+    if (!initial) return;
+    setCode(initial.chartOfAccounts);
+    setName(initial.name);
+    setLanguage(initial.language);
+    setAccountNumberLength(String(initial.accountNumberLength));
+    setGroupChart(initial.groupChart ?? '');
+    setCostElementIntegration(initial.costElementIntegration);
+    setIsBlocked(initial.isBlocked);
+    setReason('');
+  }, [
+    initial?.chartOfAccounts,
+    initial?.name,
+    initial?.language,
+    initial?.accountNumberLength,
+    initial?.groupChart,
+    initial?.costElementIntegration,
+    initial?.isBlocked,
+    initial?.version,
+  ]);
   const editing = mode === 'CHANGE' && initial !== undefined;
   const idPrefix = editing ? `ob13-change-${initial.chartOfAccounts.toLowerCase()}` : 'ob13-create';
   const lengthLocked = editing && initial.accountNumberLengthLocked;

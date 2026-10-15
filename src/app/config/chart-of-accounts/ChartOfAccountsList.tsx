@@ -69,7 +69,7 @@ export function ChartOfAccountsList({
                                 <div><span className="code text-xs text-ink-faint">OB13 · {chart.chartOfAccounts}</span><p className="font-semibold">{t('chartOfAccounts.changeTitle')}</p></div>
                                 <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; }}>{t('common.close')}</button>
                               </div>
-                              <ChartOfAccountsForm key={`${chart.chartOfAccounts}/${chart.version}`} mode="CHANGE" initial={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} />
+                              <ChartOfAccountsForm key={chart.chartOfAccounts} mode="CHANGE" initial={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} />
                             </div>
                           </div>
                         </details>

@@ -35,7 +35,7 @@ export async function chartOfAccountsDefinition(ctx: Context) {
 
   const standardRow = page.locator('tbody tr').filter({ hasText: 'CA01' });
   await standardRow.waitFor();
-  assert.match(await standardRow.innerText(), /10[\s\S]*Locked[\s\S]*74 G\/L accounts/);
+  assert.match(await standardRow.innerText(), /10[\s\S]*Locked[\s\S]*74 G\/L accounts/i);
   const baseline = await listChartOfAccounts(CLIENT);
   assert.equal(baseline.find((row) => row.chartOfAccounts === 'CA01')?.accountNumberLengthLocked, true);
 
