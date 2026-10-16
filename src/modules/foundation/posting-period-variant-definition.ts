@@ -534,12 +534,13 @@ export async function deletePostingPeriodVariant(
 
     if (referencing.length > 0) {
       const codes = referencing.map((row) => row.companyCode);
-      const plural = codes.length === 1;
       throw new PostingPeriodVariantError(
         `Posting Period Variant ${variant} cannot be deleted: Company Code ${describeUsedBy(codes)} ` +
-          `${plural ? 'posts' : 'post'} against it.`,
-        `Assign ${plural ? 'that Company Code' : 'those Company Codes'} to another posting period ` +
-          'variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), then delete this one.',
+          `${codes.length === 1 ? 'posts' : 'post'} against it.`,
+        // The same sentence the screen shows before the click, so an operator reads one
+        // instruction rather than two that happen to agree today.
+        'Assign them to another posting period variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), ' +
+          'then delete this one.',
       );
     }
 
