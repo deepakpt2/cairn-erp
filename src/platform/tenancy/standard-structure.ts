@@ -24,12 +24,21 @@
  *    `created: false`. That is what lets it be wired into fixtures before the package
  *    stops writing structure: today it finds the rows already there and does nothing.
  *
- * The rows are inserted directly rather than through the configuration services
+ * Most rows are inserted directly rather than through the configuration services,
  * because the services enforce what a person at a screen must supply — a reason for
  * every change, a version to compare against, retirement guards — and a fixture has
  * none of those to give. Four of these objects (the credit control area, the
  * purchasing organisation to plant link, the sales organisation text and the sales
  * organisation address) have no service at all.
+ *
+ * Two things are deliberately *not* direct inserts, because the package did not write
+ * them directly either and a snapshot comparison says so. The controlling area to
+ * company code link goes through `assignCompanyCodeToControllingAreaInTransaction`,
+ * which validates the chart of accounts against the area's existing assignments and
+ * records its own change document; and the two sales organisation assignment links and
+ * the sales area each get a change document from `recordChange`, exactly as the package
+ * gave them. Omitting either would leave a fixture tenant with rows the old package
+ * provided and the new one does not.
  */
 
 import {
@@ -47,6 +56,8 @@ import {
   storageLocation,
 } from '../../modules/foundation/schema';
 import { createCentralAddress } from '../../modules/foundation/central-address-maintenance';
+import { assignCompanyCodeToControllingAreaInTransaction } from '../../modules/foundation/controlling-area-company-assignment';
+import { recordChange } from '../change';
 import { withTenant, type Tx } from '../db/client';
 import { eq, and } from 'drizzle-orm';
 
@@ -200,6 +211,16 @@ export async function applyStandardStructureInTransaction(
     createdBy: changedBy,
   }).onConflictDoNothing();
 
+  // The package created this link through the OX19 service rather than by insert, and
+  // the service records a change document and checks the company code's chart against
+  // the area's other assignments. Calling it keeps both.
+  await assignCompanyCodeToControllingAreaInTransaction(tx, {
+    client,
+    changedBy,
+    controllingArea: STANDARD_STRUCTURE.controllingArea,
+    companyCode: company,
+  });
+
   await tx.insert(plant).values({
     client,
     plant: STANDARD_STRUCTURE.plant,
@@ -276,12 +297,45 @@ export async function applyStandardStructureInTransaction(
     createdBy: changedBy,
   }).onConflictDoNothing();
 
+  await recordChange(tx, {
+    client,
+    objectClass: 'sales_org_distribution_channel',
+    objectKey: `${STANDARD_STRUCTURE.salesOrg}/${STANDARD_STRUCTURE.distributionChannel}`,
+    changeType: 'CREATE',
+    changedBy,
+    transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
+    after: {
+      salesOrg: STANDARD_STRUCTURE.salesOrg,
+      distributionChannel: STANDARD_STRUCTURE.distributionChannel,
+    },
+    securityRelevantFields: ['salesOrg', 'distributionChannel'],
+    fieldLabels: {
+      salesOrg: 'Sales Organization',
+      distributionChannel: 'Distribution Channel',
+    },
+  });
+
   await tx.insert(salesOrgDivision).values({
     client,
     salesOrg: STANDARD_STRUCTURE.salesOrg,
     division: STANDARD_STRUCTURE.division,
     createdBy: changedBy,
   }).onConflictDoNothing();
+
+  await recordChange(tx, {
+    client,
+    objectClass: 'sales_org_division',
+    objectKey: `${STANDARD_STRUCTURE.salesOrg}/${STANDARD_STRUCTURE.division}`,
+    changeType: 'CREATE',
+    changedBy,
+    transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DIVISION',
+    after: { salesOrg: STANDARD_STRUCTURE.salesOrg, division: STANDARD_STRUCTURE.division },
+    securityRelevantFields: ['salesOrg', 'division'],
+    fieldLabels: {
+      salesOrg: 'Sales Organization',
+      division: 'Division',
+    },
+  });
 
   await tx.insert(salesArea).values({
     client,
@@ -291,6 +345,30 @@ export async function applyStandardStructureInTransaction(
     name: 'Direct sales — manufactured products',
     createdBy: changedBy,
   }).onConflictDoNothing();
+
+  await recordChange(tx, {
+    client,
+    objectClass: 'sales_area',
+    objectKey: `${STANDARD_STRUCTURE.salesOrg}/${STANDARD_STRUCTURE.distributionChannel}/${STANDARD_STRUCTURE.division}`,
+    changeType: 'CREATE',
+    changedBy,
+    transactionCode: 'CFG.ORG.SALESAREA.DEFINE',
+    after: {
+      salesOrg: STANDARD_STRUCTURE.salesOrg,
+      distributionChannel: STANDARD_STRUCTURE.distributionChannel,
+      division: STANDARD_STRUCTURE.division,
+      name: 'Direct sales — manufactured products',
+      isActive: true,
+    },
+    securityRelevantFields: ['salesOrg', 'distributionChannel', 'division', 'isActive'],
+    fieldLabels: {
+      salesOrg: 'Sales Organization',
+      distributionChannel: 'Distribution Channel',
+      division: 'Division',
+      name: 'Sales Area Name',
+      isActive: 'Active',
+    },
+  });
 
   return result;
 }
