@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
+import { mkdir } from 'node:fs/promises';
 import { sql } from 'drizzle-orm';
 
 import { changeHistory } from '../../src/platform/change';
@@ -32,6 +33,12 @@ const GENL_NARROW_FROM = '1000000000';
 const GENL_NARROW_TO = '6200000000';
 const CHART = 'CA01';
 const GROUP = 'GENL';
+/**
+ * A second usable chart, created in part 4 by copying the seeded one. The owner reported this
+ * screen claiming no chart was defined in a tenant that held two, so two is the state the
+ * assertions are written against.
+ */
+const SECOND_CHART = 'CA02';
 
 /**
  * SCR-028 / FS00 browser acceptance, part 1 of 2: the hub, the Term Registry
@@ -570,6 +577,85 @@ export async function glAccountMasterFs00(ctx: Context) {
   console.log('  ✓ a blocked chart kept its accounts readable, offered nothing to create against, and recovered');
 
   console.log('SCR-028 FS00 part 3 passed: Account Group registry, field status matrix and the blocked-chart gate');
+
+  // ── Part 4: which chart the mode screen is working in ────────────────────
+  // The screen resolves its chart from the query string, and the workbench link that opens
+  // Create carries no parameter. Three situations used to share one sentence — "No active
+  // Chart of Accounts is defined yet" — so an operator holding two charts was told their
+  // configuration did not exist and sent to define what they already had. Each situation now
+  // says its own thing, and each is asserted against what the database holds.
+  console.log('SCR-028 FS00 part 4: the chart the mode screen says it is working in');
+
+  await defineChart(CLIENT, SECOND_CHART, 'Second chart for the chooser');
+
+  // 4.1 No parameter, two usable charts: the screen offers them.
+  await page.goto(`${BASE}${ROUTE}/new`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('status').filter({ hasText: /Choose the Chart of Accounts to work in/ }).waitFor();
+  assert.equal(
+    await page.getByText(/No active Chart of Accounts is defined yet/).count(),
+    0,
+    'A tenant with usable charts is not told that none is defined.',
+  );
+  const offered = await chartOffers(page);
+  const usable = await storedUsableCharts(CLIENT);
+  assert.deepEqual(
+    offered.sort(),
+    usable.sort(),
+    'The chooser offers exactly the charts that are active and unblocked.',
+  );
+  assert.equal(offered.includes(CHART), true, 'The seeded chart is offered.');
+  assert.equal(offered.includes(SECOND_CHART), true, 'The chart created for this part is offered.');
+  await mkdir('.arena', { recursive: true });
+  await page.screenshot({ path: '.arena/gl-accounts-chart-chooser-review.png', fullPage: true });
+  console.log(`  ✓ no chart parameter offers the usable charts (${offered.join(', ')}) instead of claiming none exist`);
+
+  // 4.2 A parameter naming a chart that does not exist is named, not folded into the same answer.
+  await page.goto(`${BASE}${ROUTE}/new?chart=ZZZZ`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await page
+    .getByRole('status')
+    .filter({ hasText: /Chart of Accounts ZZZZ is not defined in this tenant/ })
+    .waitFor();
+  assert.equal(await chartOffers(page).then((codes) => codes.length), 0, 'A refusal offers nothing to click.');
+  console.log('  ✓ an unknown chart is named rather than reported as no chart at all');
+
+  // 4.3 Change needs an account as well, so a list of charts would only ask a second question
+  // with the first unanswered: it is sent to the hub that asks both.
+  await page.goto(`${BASE}${ROUTE}/edit`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  // The chooser's status line is the first paragraph; the explanation that follows it carries
+  // no role, so each is asserted as what it is rather than through one locator.
+  await page.getByRole('status').filter({ hasText: /Choose the Chart of Accounts to work in/ }).waitFor();
+  await page.getByText(/This screen needs an account as well as a chart/).waitFor();
+  assert.equal(
+    await page.locator(`a[href="${ROUTE}"]`).count() >= 1,
+    true,
+    'The hub that chooses both is linked.',
+  );
+  console.log('  ✓ change mode asks for the hub rather than offering a chart it cannot use alone');
+
+  // 4.4 A blocked chart accepts no new accounts, so it leaves the chooser — and returns when
+  // released. The offer list and the value help read the same set, or the screen disagrees
+  // with itself.
+  await setChartBlocked(CLIENT, SECOND_CHART, true);
+  await page.goto(`${BASE}${ROUTE}/new`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const blocked = await chartOffers(page);
+  assert.equal(blocked.includes(SECOND_CHART), false, 'A blocked chart is not offered for new accounts.');
+  assert.equal(blocked.includes(CHART), true, 'The unblocked chart is still offered.');
+  assert.deepEqual(blocked.sort(), (await storedUsableCharts(CLIENT)).sort(), 'The offer follows the stored state.');
+  await setChartBlocked(CLIENT, SECOND_CHART, false);
+  await page.goto(`${BASE}${ROUTE}/new`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  assert.equal(
+    (await chartOffers(page)).includes(SECOND_CHART),
+    true,
+    'A released chart is offered again.',
+  );
+  console.log('  ✓ a blocked chart leaves the chooser and returns when it is released');
+
+  console.log('SCR-028 FS00 part 4 passed: the mode screen says which chart it is working in');
 }
 
 function initialScreen2(page: Page) {
@@ -723,4 +809,47 @@ async function postAgainst(client: string, account: string) {
       },
     ]);
   });
+}
+
+/** The chart codes the chooser offers, read from the links it renders. */
+async function chartOffers(page: Page): Promise<string[]> {
+  const hrefs = await page
+    .locator(`a[href^="${ROUTE}/new?chart="]`)
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute('href') ?? ''));
+  return hrefs
+    .map((href) => new URL(href, 'http://localhost').searchParams.get('chart') ?? '')
+    .filter((code) => code.length > 0);
+}
+
+/** The charts this mode may work in: active and unblocked, which is the set the screen offers. */
+async function storedUsableCharts(client: string): Promise<string[]> {
+  const rows = (await withTenant(client, (tx) =>
+    tx.execute(
+      sql`select chart_of_accounts
+            from chart_of_accounts
+           where is_active and not is_blocked
+           order by chart_of_accounts`,
+    ),
+  )) as unknown as Array<{ chart_of_accounts: string }>;
+  return rows.map((row) => row.chart_of_accounts);
+}
+
+/**
+ * Create the second chart by copying the seeded one, behind the screen's back, because the
+ * point of this part is what FS00 renders when a tenant holds two usable charts — and
+ * defining one is OB13's screen, with its own acceptance.
+ */
+async function defineChart(client: string, chart: string, name: string) {
+  await withTenant(client, (tx) =>
+    tx.execute(
+      sql`insert into chart_of_accounts
+            (client, chart_of_accounts, name, language, account_number_length, group_chart,
+             cost_element_integration, is_blocked, is_active, created_by)
+          select client, ${chart}, ${name}, language, account_number_length, group_chart,
+                 cost_element_integration, false, true, 'BROWSER_FIXTURE'
+            from chart_of_accounts
+           where client = ${client} and chart_of_accounts = ${CHART}
+          on conflict do nothing`,
+    ),
+  );
 }
