@@ -81,9 +81,9 @@ export function AccountGroupsPanel({
     <>
       {canCreate && <CreateGroupForm charts={charts} />}
 
-      <section aria-labelledby="fs00-group-list-title" className="panel overflow-hidden">
+      <section aria-labelledby="account-group-list-title" className="panel overflow-hidden">
         <div className="panel-header">
-          <h2 id="fs00-group-list-title" className="panel-title">{t('glAccount.groupListTitle')}</h2>
+          <h2 id="account-group-list-title" className="panel-title">{t('glAccount.groupListTitle')}</h2>
           <span className="text-2xs text-ink-faint">{groups.length}</span>
         </div>
         <p className="border-b border-line px-4 py-2 text-xs text-ink-faint">
@@ -157,9 +157,9 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
 
   if (charts.length === 0) {
     return (
-      <section aria-labelledby="fs00-group-create-title" className="panel overflow-hidden">
+      <section aria-labelledby="account-group-create-title" className="panel overflow-hidden">
         <div className="border-b border-line bg-sunken px-4 py-3">
-          <h2 id="fs00-group-create-title" className="panel-title">{t('glAccount.groupCreateTitle')}</h2>
+          <h2 id="account-group-create-title" className="panel-title">{t('glAccount.groupCreateTitle')}</h2>
         </div>
         <p role="status" className="p-5 text-center text-sm text-ink-soft">{t('glAccount.chartEmpty')}</p>
       </section>
@@ -167,9 +167,9 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
   }
 
   return (
-    <section aria-labelledby="fs00-group-create-title" className="panel overflow-hidden">
+    <section aria-labelledby="account-group-create-title" className="panel overflow-hidden">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="fs00-group-create-title" className="panel-title">{t('glAccount.groupCreateTitle')}</h2>
+        <h2 id="account-group-create-title" className="panel-title">{t('glAccount.groupCreateTitle')}</h2>
         <p className="mt-1 text-xs text-ink-faint">{t('glAccount.groupPanelRule')}</p>
       </div>
 
@@ -181,12 +181,12 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="min-w-0">
-            <label htmlFor="fs00-group-chart" className="field-label">
+            <label htmlFor="account-group-chart" className="field-label">
               {t('glAccount.chart')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <select
-              id="fs00-group-chart"
+              id="account-group-chart"
               name="chartOfAccounts"
               required
               value={chartOfAccounts}
@@ -204,12 +204,12 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
           </div>
 
           <div className="min-w-0">
-            <label htmlFor="fs00-group-code" className="field-label">
+            <label htmlFor="account-group-code" className="field-label">
               {t('glAccount.groupCode')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <input
-              id="fs00-group-code"
+              id="account-group-code"
               name="accountGroup"
               type="text"
               required
@@ -228,12 +228,12 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
         </div>
 
         <div className="min-w-0">
-          <label htmlFor="fs00-group-description" className="field-label">
+          <label htmlFor="account-group-description" className="field-label">
             {t('glAccount.groupDescription')}
             <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
           </label>
           <input
-            id="fs00-group-description"
+            id="account-group-description"
             name="description"
             type="text"
             required
@@ -248,12 +248,12 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="min-w-0">
-            <label htmlFor="fs00-group-from" className="field-label">
+            <label htmlFor="account-group-from" className="field-label">
               {t('glAccount.groupFrom')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <input
-              id="fs00-group-from"
+              id="account-group-from"
               name="fromAccountNumber"
               type="text"
               required
@@ -267,12 +267,12 @@ function CreateGroupForm({ charts }: { charts: AccountGroupChartChoice[] }) {
             />
           </div>
           <div className="min-w-0">
-            <label htmlFor="fs00-group-to" className="field-label">
+            <label htmlFor="account-group-to" className="field-label">
               {t('glAccount.groupTo')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <input
-              id="fs00-group-to"
+              id="account-group-to"
               name="toAccountNumber"
               type="text"
               required
@@ -312,7 +312,7 @@ function ChangeGroupDialog({ group }: { group: AccountGroupPanelRow }) {
   const [fromAccountNumber, setFromAccountNumber] = useState(group.fromAccountNumber);
   const [toAccountNumber, setToAccountNumber] = useState(group.toAccountNumber);
   const [reason, setReason] = useState('');
-  const idPrefix = `fs00-group-change-${group.chartOfAccounts}-${group.accountGroup}`;
+  const idPrefix = `account-group-change-${group.chartOfAccounts}-${group.accountGroup}`;
   return (
     <GlAccountDialog
       label={t('glAccount.change')}
@@ -435,7 +435,7 @@ function GroupLifecycleDialog({ group }: { group: AccountGroupPanelRow }) {
   );
   const [reason, setReason] = useState('');
   const deactivating = group.isActive;
-  const idPrefix = `fs00-group-lifecycle-${group.chartOfAccounts}-${group.accountGroup}`;
+  const idPrefix = `account-group-lifecycle-${group.chartOfAccounts}-${group.accountGroup}`;
 
   return (
     <GlAccountDialog
@@ -495,7 +495,7 @@ function FieldStatusDialog({
     return initial;
   });
   const [reason, setReason] = useState('');
-  const idPrefix = `fs00-group-matrix-${group.chartOfAccounts}-${group.accountGroup}`;
+  const idPrefix = `account-group-matrix-${group.chartOfAccounts}-${group.accountGroup}`;
   const editable = canChange && group.isActive;
 
   return (

@@ -39,9 +39,9 @@ export function GroupChartOfAccountsPanel({
 }) {
   return (
     <div className="space-y-4">
-      <section className="panel overflow-hidden" aria-labelledby="ob13-group-panel-title">
+      <section className="panel overflow-hidden" aria-labelledby="group-chart-panel-title">
         <div className="border-b border-line bg-sunken px-4 py-3">
-          <h2 id="ob13-group-panel-title" className="font-semibold">{t('chartOfAccounts.groupPanelTitle')}</h2>
+          <h2 id="group-chart-panel-title" className="font-semibold">{t('chartOfAccounts.groupPanelTitle')}</h2>
           <p className="mt-1 text-xs text-ink-soft">{t('chartOfAccounts.groupPanelRule')}</p>
         </div>
         {canMaintain
@@ -90,7 +90,7 @@ export function GroupChartOfAccountsForm({
   ]);
 
   const editing = mode === 'CHANGE' && initial !== undefined;
-  const idPrefix = editing ? `ob13-group-change-${initial.groupChartOfAccounts.toLowerCase()}` : 'ob13-group-create';
+  const idPrefix = editing ? `group-chart-change-${initial.groupChartOfAccounts.toLowerCase()}` : 'group-chart-create';
 
   return (
     <>
@@ -211,9 +211,9 @@ export function GroupChartOfAccountsList({
   canMaintain: boolean;
 }) {
   return (
-    <section className="panel overflow-hidden" aria-labelledby="ob13-group-list-title">
+    <section className="panel overflow-hidden" aria-labelledby="group-chart-list-title">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="ob13-group-list-title" className="font-semibold">{t('chartOfAccounts.groupListTitle')}</h2>
+        <h2 id="group-chart-list-title" className="font-semibold">{t('chartOfAccounts.groupListTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('chartOfAccounts.groupListRule')}</p>
       </div>
       {entries.length === 0 ? (
@@ -296,7 +296,7 @@ export function GroupChartOfAccountsList({
                           isActive={entry.isActive}
                           version={entry.version}
                           canMaintain={canMaintain}
-                          idPrefix={`ob13-group-${entry.groupChartOfAccounts.toLowerCase()}`}
+                          idPrefix={`group-chart-${entry.groupChartOfAccounts.toLowerCase()}`}
                         />
                       </div>
                     </td>

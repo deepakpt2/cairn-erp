@@ -86,7 +86,7 @@ export function ChartOfAccountsList({
                         isActive={chart.isActive}
                         version={chart.version}
                         canMaintain={canMaintain}
-                        idPrefix={`ob13-${chart.chartOfAccounts.toLowerCase()}`}
+                        idPrefix={`chart-of-accounts-${chart.chartOfAccounts.toLowerCase()}`}
                       />
                       </div>
                     </td>

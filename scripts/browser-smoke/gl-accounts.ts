@@ -61,9 +61,9 @@ export async function glAccountMasterFs00(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'G/L Account Master Record', exact: true }).waitFor();
 
-  const initial = page.locator('section[aria-labelledby="fs00-initial-title"]');
-  const list = page.locator('section[aria-labelledby="fs00-list-title"]');
-  const groupList = page.locator('section[aria-labelledby="fs00-group-list-title"]');
+  const initial = page.locator('section[aria-labelledby="gl-master-initial-title"]');
+  const list = page.locator('section[aria-labelledby="gl-master-list-title"]');
+  const groupList = page.locator('section[aria-labelledby="account-group-list-title"]');
   await initial.waitFor();
   await list.waitFor();
   await groupList.waitFor();
@@ -137,7 +137,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   await page.waitForURL(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
 
-  const fields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  const fields = page.locator('section[aria-labelledby="gl-master-field-title"]');
   await fields.waitFor();
   await fields.locator('[name="accountNumber"]').fill(CREATED_ACCOUNT);
   await fields.locator('[name="name"]').fill('Browser acceptance clearing account');
@@ -194,7 +194,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   await page.waitForURL(`${BASE}${ROUTE}/view?**`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
 
-  const displayFields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  const displayFields = page.locator('section[aria-labelledby="gl-master-field-title"]');
   await displayFields.waitFor();
   assert.equal(await displayFields.locator('[name="accountNumber"]').inputValue(), CREATED_ACCOUNT);
   assert.equal(await displayFields.locator('[name="name"]').inputValue(), 'Browser acceptance clearing account');
@@ -222,7 +222,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   await page.waitForURL(`${BASE}${ROUTE}/edit?**`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
 
-  const edit = page.locator('section[aria-labelledby="fs00-field-title"]');
+  const edit = page.locator('section[aria-labelledby="gl-master-field-title"]');
   await edit.waitFor();
   assert.ok(
     await edit.locator('[name="accountNumber"]').getAttribute('readonly') !== null,
@@ -353,7 +353,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   assert.equal(deletionHistory[0].changeType, 'DELETE');
   assert.equal(deletionHistory[0].reason, 'Created for browser acceptance and no longer needed');
   assert.equal(
-    await page.locator('section[aria-labelledby="fs00-list-title"] tbody tr').filter({ hasText: CREATED_ACCOUNT }).count(),
+    await page.locator('section[aria-labelledby="gl-master-list-title"] tbody tr').filter({ hasText: CREATED_ACCOUNT }).count(),
     0,
     'The deleted account is off the list the redirect rendered.',
   );
@@ -364,7 +364,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   // ── 11. The Account Group registry is maintained inside FS00 ──────────────
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const groupCreate = page.locator('section[aria-labelledby="fs00-group-create-title"]');
+  const groupCreate = page.locator('section[aria-labelledby="account-group-create-title"]');
   await groupCreate.waitFor();
 
   // The package seeds GENL spanning the whole chart width, and a range may not overlap a
@@ -470,14 +470,14 @@ export async function glAccountMasterFs00(ctx: Context) {
   // ── 14. The group decides what an account write may carry ─────────────────
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const initialScreen = page.locator('section[aria-labelledby="fs00-initial-title"]');
+  const initialScreen = page.locator('section[aria-labelledby="gl-master-initial-title"]');
   await initialScreen.locator('[name="chart"]').fill(CHART);
   await initialScreen.getByRole('radio', { name: 'Create', exact: true }).check();
   await initialScreen.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.waitForURL(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
 
-  const groupFields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  const groupFields = page.locator('section[aria-labelledby="gl-master-field-title"]');
   await groupFields.waitFor();
   await groupFields.locator('[name="accountGroup"]').selectOption(GROUP_B);
   // A suppressed field is not rendered at all, so it cannot be posted.
@@ -549,7 +549,7 @@ export async function glAccountMasterFs00(ctx: Context) {
 
   await page.goto(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const options = await page.locator('section[aria-labelledby="fs00-field-title"] [name="accountGroup"] option').allInnerTexts();
+  const options = await page.locator('section[aria-labelledby="gl-master-field-title"] [name="accountGroup"] option').allInnerTexts();
   assert.equal(options.some((option) => option.includes(GROUP_B)), false, 'A deactivated group leaves the choice list.');
   assert.equal(options.some((option) => option.includes(GROUP)), true, 'The active group is still offered.');
   console.log(`  ✓ deactivation recorded its reason, kept the account's group and left the choice list`);
@@ -659,7 +659,7 @@ export async function glAccountMasterFs00(ctx: Context) {
 }
 
 function initialScreen2(page: Page) {
-  return page.locator('section[aria-labelledby="fs00-initial-title"]');
+  return page.locator('section[aria-labelledby="gl-master-initial-title"]');
 }
 
 /** One row of the Account Group registry, addressed by its group code. */
@@ -743,14 +743,14 @@ async function historyFor(client: string, account: string): Promise<HistoryRow[]
 async function createThroughUi(page: Page, BASE: string, account: string, name: string, accountType: string) {
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const initial = page.locator('section[aria-labelledby="fs00-initial-title"]');
+  const initial = page.locator('section[aria-labelledby="gl-master-initial-title"]');
   await initial.locator('[name="chart"]').fill(CHART);
   await initial.getByRole('radio', { name: 'Create', exact: true }).check();
   await initial.getByRole('button', { name: 'Continue', exact: true }).click();
   await page.waitForURL(`${BASE}${ROUTE}/new?chart=${CHART}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
 
-  const fields = page.locator('section[aria-labelledby="fs00-field-title"]');
+  const fields = page.locator('section[aria-labelledby="gl-master-field-title"]');
   await fields.waitFor();
   await fields.locator('[name="accountNumber"]').fill(account);
   await fields.locator('[name="name"]').fill(name);

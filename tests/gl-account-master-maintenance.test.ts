@@ -211,7 +211,7 @@ async function completeCompanyCodeDefinition() {
 }
 
 beforeAll(async () => {
-  tenant = await createTenant('scr028-fs00-stage3');
+  tenant = await createTenant('scr028-gl-master-stage3');
   await completeCompanyCodeDefinition();
   await saveChartOfAccounts(chartInput(CHART));
   // The first group is created through the service under test, so every later test writes

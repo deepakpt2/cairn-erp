@@ -180,7 +180,7 @@ function panelParagraph(page: Page, text: RegExp): Locator {
 async function defineChart(page: Page, base: string, key: string, name: string, width: number) {
   await page.goto(`${base}${CHARTS_ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const panel = page.locator('section[aria-labelledby="ob13-create-title"]');
+  const panel = page.locator('section[aria-labelledby="chart-of-accounts-create-title"]');
   await panel.locator('[name="chartOfAccounts"]').fill(key);
   await panel.locator('[name="name"]').fill(name);
   await panel.locator('[name="accountNumberLength"]').fill(String(width));

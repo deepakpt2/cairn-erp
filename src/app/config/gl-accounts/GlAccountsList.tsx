@@ -66,7 +66,7 @@ function BlockDialog({
     { ok: true },
   );
   const [reason, setReason] = useState('');
-  const idPrefix = `fs00-block-${chartOfAccounts}-${account}`;
+  const idPrefix = `gl-master-block-${chartOfAccounts}-${account}`;
 
   return (
     <GlAccountDialog
@@ -142,7 +142,7 @@ function DeleteDialog({
     { ok: true },
   );
   const [reason, setReason] = useState('');
-  const idPrefix = `fs00-delete-${chartOfAccounts}-${account}`;
+  const idPrefix = `gl-master-delete-${chartOfAccounts}-${account}`;
 
   return (
     <GlAccountDialog
@@ -189,9 +189,9 @@ export function GlAccountsList({
   }
 
   return (
-    <section aria-labelledby="fs00-list-title" className="panel overflow-hidden">
+    <section aria-labelledby="gl-master-list-title" className="panel overflow-hidden">
       <div className="panel-header">
-        <h2 id="fs00-list-title" className="panel-title">{t('glAccount.listTitle')}</h2>
+        <h2 id="gl-master-list-title" className="panel-title">{t('glAccount.listTitle')}</h2>
         <span className="text-2xs text-ink-faint">{accounts.length}</span>
       </div>
       <p className="border-b border-line px-4 py-2 text-xs text-ink-faint">{t('glAccount.listRule')}</p>

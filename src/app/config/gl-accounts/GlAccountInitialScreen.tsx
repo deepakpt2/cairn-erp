@@ -60,16 +60,16 @@ export function GlAccountInitialScreen({
   ];
 
   return (
-    <section aria-labelledby="fs00-initial-title" className="panel overflow-hidden">
+    <section aria-labelledby="gl-master-initial-title" className="panel overflow-hidden">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="fs00-initial-title" className="panel-title">{t('glAccount.initialTitle')}</h2>
+        <h2 id="gl-master-initial-title" className="panel-title">{t('glAccount.initialTitle')}</h2>
         <p className="mt-1 text-xs text-ink-faint">{t('glAccount.initialRule')}</p>
       </div>
 
       <div className="space-y-4 p-3 sm:p-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <ChartOfAccountsValueHelp
-            id="fs00-initial-chart"
+            id="gl-master-initial-chart"
             name="chart"
             label={t('glAccount.chart')}
             value={chart}
@@ -84,7 +84,7 @@ export function GlAccountInitialScreen({
           />
 
           <GlAccountValueHelp
-            id="fs00-initial-account"
+            id="gl-master-initial-account"
             name="account"
             label={t('glAccount.accountNumber')}
             value={accountNumber}

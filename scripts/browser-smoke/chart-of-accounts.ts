@@ -70,10 +70,10 @@ export async function chartOfAccountsDefinition(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Chart of Accounts', exact: true }).waitFor();
 
-  const createPanel = page.locator('section[aria-labelledby="ob13-create-title"]');
+  const createPanel = page.locator('section[aria-labelledby="chart-of-accounts-create-title"]');
   const chartList = page.locator('section[aria-labelledby="chart-of-accounts-list-title"]');
-  const groupPanel = page.locator('section[aria-labelledby="ob13-group-panel-title"]');
-  const groupList = page.locator('section[aria-labelledby="ob13-group-list-title"]');
+  const groupPanel = page.locator('section[aria-labelledby="group-chart-panel-title"]');
+  const groupList = page.locator('section[aria-labelledby="group-chart-list-title"]');
   const groupF4 = createPanel.getByRole('button', { name: /Open Group Chart of Accounts lookup/ });
   await createPanel.waitFor();
   await groupPanel.waitFor();

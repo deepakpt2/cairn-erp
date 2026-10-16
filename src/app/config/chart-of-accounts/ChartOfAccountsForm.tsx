@@ -64,7 +64,7 @@ export function ChartOfAccountsForm({ mode, initial, languages, groupCharts, can
     initial?.version,
   ]);
   const editing = mode === 'CHANGE' && initial !== undefined;
-  const idPrefix = editing ? `ob13-change-${initial.chartOfAccounts.toLowerCase()}` : 'ob13-create';
+  const idPrefix = editing ? `chart-of-accounts-change-${initial.chartOfAccounts.toLowerCase()}` : 'chart-of-accounts-create';
   const lengthLocked = editing && initial.accountNumberLengthLocked;
 
   return (

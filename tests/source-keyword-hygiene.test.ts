@@ -95,48 +95,54 @@ function domIdentifiers(): { all: Set<string>; offenders: Set<string> } {
 }
 
 /**
+ * The attribute scan reads what a component renders as written. A prefix held in a variable
+ * never reaches an attribute, so `const idPrefix = 'ob13-create'` kept five coded identifiers
+ * out of the inventory below while the suite stayed green: ob13-create, ob13-change-,
+ * fs00-block-, fs00-delete- and the three fs00-group- prefixes. Every literal on a line that
+ * assigns an identifier prefix is read here too, so the class of hole is closed rather than
+ * the five instances merely fixed.
+ */
+function codedPrefixLiterals(): string[] {
+  const aliases = registeredAliases();
+  const found: string[] = [];
+
+  for (const path of applicationSources('src')) {
+    if (!path.endsWith('.tsx')) continue;
+    readFileSync(path, 'utf8').split('\n').forEach((line, index) => {
+      if (!/Prefix\s*=/.test(line)) return;
+      for (const literal of line.matchAll(/[`'"]([^`'"]*)[`'"]/g)) {
+        const value = literal[1] ?? '';
+        const coded = aliases.some((alias) =>
+          new RegExp(`(^|[^A-Za-z0-9])${escaped(alias)}([^A-Za-z0-9]|$)`, 'i').test(value),
+        );
+        if (coded) found.push(`${path}:${index + 1}: ${value}`);
+      }
+    });
+  }
+
+  return found;
+}
+
+/**
  * The identifiers that were already there when this rule was written: 59 of them across 16
  * component files, left by FS00, OB13, OBY7, OVXA, OVXG, OVXK and by the OB29 and OB37
- * screens. They are inventoried rather than fixed here because every one of them is also a
- * selector in the browser harness, and the harness cannot be run until Chromium is installed
- * for the deferred acceptance round. Renaming a selector nobody can execute is how a deferred
+ * screens. They were inventoried rather than fixed on the spot because every one of them is
+ * also a selector in the browser harness, and renaming a selector nobody can execute is how a
  * round breaks silently: the suite stays green and the failure surfaces three screens later.
  *
- * They are renamed in that round, when each screen is open and each selector can be clicked.
- * The list must shrink as they go — the assertion below fails on an entry that no longer
- * exists in the sources, so paid-down debt cannot linger here as cover for new debt.
+ * The browser acceptance round has since run, and each screen was renamed while it was open
+ * and its selectors could still be clicked. Forty-one of the 59 are paid: FS00, OB13, OBY7,
+ * OB29 and OB37 carry house names now. The 18 that remain all belong to OVXA, OVXG and OVXK,
+ * whose screens were accepted before the round and are not scheduled in it. The list must
+ * keep shrinking as they go — the assertion below fails on an entry that no longer exists in
+ * the sources, so paid-down debt cannot linger here as cover for new debt.
  *
  * One limit, stated rather than left implied: the inventory is keyed by identifier value, not
  * by file, so a new component that reused one of these exact values would pass. A new prefix
- * is caught, a copied one is not. Keying it by file would close that and cost nothing but
- * length, and is worth doing if the round that renames these finds any of them duplicated.
+ * is caught, a copied one is not. The round checked, and none of the remaining values appears
+ * in more than one component, so keying it by file would still cost length and buy nothing.
  */
 const HISTORICAL_DOM_IDENTIFIERS = [
-  'fs00-account-group',
-  'fs00-account-number',
-  'fs00-account-type',
-  'fs00-chart',
-  'fs00-field-title',
-  'fs00-gl-account-type',
-  'fs00-group-account',
-  'fs00-group-chart',
-  'fs00-group-code',
-  'fs00-group-create-title',
-  'fs00-group-description',
-  'fs00-group-from',
-  'fs00-group-list-title',
-  'fs00-group-to',
-  'fs00-initial-account',
-  'fs00-initial-chart',
-  'fs00-initial-title',
-  'fs00-language',
-  'fs00-list-title',
-  'fs00-name',
-  'fs00-reason',
-  'fs00-reconciliation',
-  'fs00-sort-key',
-  'ob13-group-list-title',
-  'ob13-group-panel-title',
   'ovxa-assignment-list-title',
   'ovxa-division',
   'ovxa-form-title',
@@ -201,6 +207,10 @@ describe('source-system keyword hygiene', () => {
     const { all } = domIdentifiers();
     const stale = HISTORICAL_DOM_IDENTIFIERS.filter((value) => !all.has(value)).sort();
     expect(stale).toEqual([]);
+  });
+
+  it('keeps transaction codes out of the prefixes identifiers are built from', () => {
+    expect(codedPrefixLiterals()).toEqual([]);
   });
 
   it('keeps user-facing labels free of the keywords the two older scans watch', () => {

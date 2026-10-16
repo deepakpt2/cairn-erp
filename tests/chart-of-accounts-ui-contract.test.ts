@@ -61,7 +61,7 @@ describe('SCR-026 / OB13 amendment: Group CoA registry and lifecycle UI contract
   it('maintains the Group CoA registry on the same protected OB13 screen', () => {
     expect(page).toContain('listGroupChartsOfAccounts(client)');
     expect(page).toContain('<GroupChartOfAccountsPanel entries={groupEntries} languages={languages} canMaintain={canMaintain} />');
-    expect(groupPanel).toContain('id="ob13-group-panel-title"');
+    expect(groupPanel).toContain('id="group-chart-panel-title"');
     expect(groupPanel).toContain('maxLength={4}');
     expect(groupPanel).toContain('maxLength={50}');
     expect(groupPanel).toContain('pattern="[A-Z0-9]{4}"');

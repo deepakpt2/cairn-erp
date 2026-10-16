@@ -155,9 +155,9 @@ export function GlAccountFields({
   const reasonHint = useMemo(() => t('glAccount.reasonRule'), []);
 
   return (
-    <section aria-labelledby="fs00-field-title" className="panel overflow-hidden">
+    <section aria-labelledby="gl-master-field-title" className="panel overflow-hidden">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="fs00-field-title" className="panel-title">{title}</h2>
+        <h2 id="gl-master-field-title" className="panel-title">{title}</h2>
         <p className="mt-1 text-xs text-ink-faint">
           {t('glAccount.costElementPolicy', { policy: costElementPolicy })}
         </p>
@@ -180,9 +180,9 @@ export function GlAccountFields({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="min-w-0">
-            <label htmlFor="fs00-chart" className="field-label">{t('glAccount.chart')}</label>
+            <label htmlFor="gl-master-chart" className="field-label">{t('glAccount.chart')}</label>
             <input
-              id="fs00-chart"
+              id="gl-master-chart"
               name="chartOfAccountsDisplay"
               type="text"
               className="field-input code mt-1 min-h-11 w-full sm:min-h-9"
@@ -193,12 +193,12 @@ export function GlAccountFields({
           </div>
 
           <div className="min-w-0">
-            <label htmlFor="fs00-account-number" className="field-label">
+            <label htmlFor="gl-master-account-number" className="field-label">
               {t('glAccount.accountNumber')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <input
-              id="fs00-account-number"
+              id="gl-master-account-number"
               name="accountNumber"
               type="text"
               autoComplete="off"
@@ -221,12 +221,12 @@ export function GlAccountFields({
 
         {shows('name') && (
           <div className="min-w-0">
-            <label htmlFor="fs00-name" className="field-label">
+            <label htmlFor="gl-master-name" className="field-label">
               {t('glAccount.name')}
               {demands('name') && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
             </label>
             <input
-              id="fs00-name"
+              id="gl-master-name"
               name="name"
               type="text"
               maxLength={200}
@@ -245,12 +245,12 @@ export function GlAccountFields({
               by contract, and no group may suppress the thing that decides its own field
               status. Its matrix is reported here so the effect of the choice is visible. */}
           <div className="min-w-0">
-            <label htmlFor="fs00-account-group" className="field-label">
+            <label htmlFor="gl-master-account-group" className="field-label">
               {t('glAccount.accountGroup')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <select
-              id="fs00-account-group"
+              id="gl-master-account-group"
               name="accountGroup"
               required
               disabled={readOnly}
@@ -273,12 +273,12 @@ export function GlAccountFields({
 
           {shows('accountType') && (
             <div className="min-w-0">
-              <label htmlFor="fs00-account-type" className="field-label">
+              <label htmlFor="gl-master-account-type" className="field-label">
                 {t('glAccount.accountType')}
                 {demands('accountType') && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
               </label>
               <select
-                id="fs00-account-type"
+                id="gl-master-account-type"
                 name="accountType"
                 required={demands('accountType')}
                 disabled={readOnly}
@@ -298,12 +298,12 @@ export function GlAccountFields({
         <div className="grid gap-4 sm:grid-cols-2">
           {shows('glAccountType') && (
             <div className="min-w-0">
-              <label htmlFor="fs00-gl-account-type" className="field-label">
+              <label htmlFor="gl-master-gl-account-type" className="field-label">
                 {t('glAccount.glAccountType')}
                 {demands('glAccountType') && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
               </label>
               <select
-                id="fs00-gl-account-type"
+                id="gl-master-gl-account-type"
                 name="glAccountType"
                 required={demands('glAccountType')}
                 disabled={readOnly}
@@ -335,7 +335,7 @@ export function GlAccountFields({
         <div className="grid gap-4 sm:grid-cols-2">
           {shows('languageKey') && (
             <ChartLanguageField
-              id="fs00-language"
+              id="gl-master-language"
               name="languageKey"
               label={t('glAccount.language')}
               value={values.languageKey}
@@ -347,12 +347,12 @@ export function GlAccountFields({
 
           {shows('sortKey') && (
             <div className="min-w-0">
-              <label htmlFor="fs00-sort-key" className="field-label">
+              <label htmlFor="gl-master-sort-key" className="field-label">
                 {t('glAccount.sortKey')}
                 {demands('sortKey') && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
               </label>
               <input
-                id="fs00-sort-key"
+                id="gl-master-sort-key"
                 name="sortKey"
                 type="text"
                 maxLength={3}
@@ -387,12 +387,12 @@ export function GlAccountFields({
 
           {shows('reconciliationType') && (
             <div className="min-w-0">
-              <label htmlFor="fs00-reconciliation" className="field-label">
+              <label htmlFor="gl-master-reconciliation" className="field-label">
                 {t('glAccount.reconciliation')}
                 {demands('reconciliationType') && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
               </label>
               <select
-                id="fs00-reconciliation"
+                id="gl-master-reconciliation"
                 name="reconciliationType"
                 required={demands('reconciliationType')}
                 disabled={readOnly}
@@ -417,7 +417,7 @@ export function GlAccountFields({
 
         {shows('groupAccountNumber') && (
           <GlAccountValueHelp
-            id="fs00-group-account"
+            id="account-group-account"
             name="groupAccountNumber"
             label={t('glAccount.groupAccount')}
             value={values.groupAccountNumber}
@@ -513,12 +513,12 @@ export function GlAccountFields({
 
         {!readOnly && (
           <div>
-            <label htmlFor="fs00-reason" className="field-label">
+            <label htmlFor="gl-master-reason" className="field-label">
               {t('glAccount.reason')}
               {reasonRequired && <span className="ms-1 text-signal-error" aria-hidden="true">*</span>}
             </label>
             <textarea
-              id="fs00-reason"
+              id="gl-master-reason"
               name="reason"
               rows={3}
               maxLength={500}
