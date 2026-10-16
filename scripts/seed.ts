@@ -36,6 +36,14 @@ const ACTIVITIES: Activity[] = [
   // ── Enterprise structure ──────────────────────────────────────────────────
   { code: 'CFG.ORG.COMPANYCODE.DEFINE', area: 'ENTERPRISE_STRUCTURE', title: 'Define company code', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'Financial accounting', wizardStage: 'ONBOARDING', route: '/config/company-codes' },
   { code: 'CFG.FIN.COA.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define chart of accounts', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'G/L accounts', wizardStage: 'ONBOARDING', route: '/config/chart-of-accounts' },
+  // The steps that follow a chart: copying one into another, and the three ways into a G/L account
+  // master. Registered here rather than left to the capability and term registries, because the
+  // workbench is the plan a configurator reads, and a step with no row in it is a step nobody is
+  // offered. Titles match the Term Registry entries for the same codes.
+  { code: 'CFG.FIN.COA.COPY', area: 'FINANCIAL_ACCOUNTING', title: 'Copy chart of accounts', kind: 'DEFINE', prerequisites: ['CFG.FIN.COA.DEFINE'], enables: 'A second operational chart', route: '/config/chart-of-accounts/copy' },
+  { code: 'CFG.FIN.GLACCOUNT.CREATE', area: 'FINANCIAL_ACCOUNTING', title: 'G/L account master create', kind: 'DEFINE', prerequisites: ['CFG.FIN.COA.DEFINE'], enables: 'Account master records', route: '/config/gl-accounts/new' },
+  { code: 'CFG.FIN.GLACCOUNT.CHANGE', area: 'FINANCIAL_ACCOUNTING', title: 'G/L account master change', kind: 'DEFINE', prerequisites: ['CFG.FIN.GLACCOUNT.CREATE'], enables: 'Corrected account masters', route: '/config/gl-accounts/edit' },
+  { code: 'CFG.FIN.GLACCOUNT.DISPLAY', area: 'FINANCIAL_ACCOUNTING', title: 'G/L account master display', kind: 'DEFINE', prerequisites: ['CFG.FIN.COA.DEFINE'], enables: 'Account master review', route: '/config/gl-accounts' },
   { code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', area: 'ENTERPRISE_STRUCTURE', title: 'Assign chart of accounts to company code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'], enables: 'Account posting', wizardStage: 'ONBOARDING', route: '/config/company-codes' },
   { code: 'CFG.FIN.FYV.DEFINE', area: 'FINANCIAL_ACCOUNTING', title: 'Define fiscal year variant', kind: 'DEFINE', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE'], enables: 'Posting periods', wizardStage: 'ONBOARDING', route: '/config/fiscal-year-variants' },
   { code: 'CFG.FIN.FYV.ASSIGN', area: 'FINANCIAL_ACCOUNTING', title: 'Assign fiscal year variant to company code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.FYV.DEFINE'], enables: 'Period control', wizardStage: 'ONBOARDING', route: '/config/fiscal-year-variants/assign-company-codes' },
