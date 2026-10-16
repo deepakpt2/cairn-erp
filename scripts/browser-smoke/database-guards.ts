@@ -18,7 +18,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'purchasing-groups': { database: 'cairn_b152', port: '55529', batch: 'B-152' },
   'sales-orgs': { database: 'cairn_b153', port: '55530', batch: 'B-153' },
   'sales-org-division': { database: 'cairn', port: '5432', batch: 'OVXA local loopback' },
-  'controlling-area': { database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' },
+  'controlling-area': { database: 'cairn_b210', port: '5432', batch: 'SCR-024 local loopback' },
   'controlling-area-company-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' },
   'chart-of-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' },
   'gl-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' },

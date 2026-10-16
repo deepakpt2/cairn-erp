@@ -263,7 +263,7 @@ async function controllingAreaDefinition(ctx: BrowserContext) {
   await createForm.getByRole('button', { name: 'Open Fiscal Year Variant lookup (F4)', exact: true }).click();
   const fiscalYearDialog = page.getByRole('dialog', { name: 'Fiscal Year Variant lookup', exact: true });
   await fiscalYearDialog.waitFor();
-  const k4Choice = fiscalYearDialog.getByRole('button', { name: /K4.*Calendar year, 4 special periods.*Inactive/i });
+  const k4Choice = fiscalYearDialog.getByRole('button', { name: /K4.*Calendar year \+ 4 special.*Inactive/i });
   await k4Choice.waitFor();
   assert.match(await k4Choice.innerText(), /Inactive/i);
   await k4Choice.click();

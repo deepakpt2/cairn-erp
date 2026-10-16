@@ -118,7 +118,10 @@ describe('bounded browser target selection', () => {
     const guard = ACCEPTANCE_DATABASE_GUARDS['controlling-area'];
     expect(okkp).toMatchObject({ client: 'T972' });
     expect(okkp?.client).not.toBe('T973');
-    expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'SCR-024 local loopback' });
+    // SCR-024 recorded the local database name of its day. This environment's reviewed loopback
+    // database is cairn_b210, so the guard names that and the target runs again.
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'SCR-024 local loopback' });
+    expect(guard?.batch).toMatch(/local loopback/);
     expect(STATIC_ACCEPTANCE_TARGETS.has('controlling-area')).toBe(false);
   });
   it('reserves T970 for SCR-025 OX19 and binds acceptance to a guarded local PostgreSQL database', () => {

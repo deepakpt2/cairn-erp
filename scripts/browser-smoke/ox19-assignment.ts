@@ -150,7 +150,7 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
     await tx.execute(sql`
       insert into fiscal_year_variant
         (client, variant, name, regular_periods, special_periods, is_calendar_year, created_by)
-      values (${CLIENT}, 'F2', 'Browser OX19 alternate fiscal year', 12, 4, false, 'BROWSER_FIXTURE')
+      values (${CLIENT}, 'F2', 'Browser OX19 alternate year', 12, 4, false, 'BROWSER_FIXTURE')
       on conflict (client, variant) do nothing
     `);
   });
