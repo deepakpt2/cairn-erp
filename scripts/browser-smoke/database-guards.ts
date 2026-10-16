@@ -22,6 +22,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'controlling-area-company-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' },
   'chart-of-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' },
   'gl-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' },
+  'chart-of-accounts-copy': { database: 'cairn_b210', port: '5432', batch: 'SCR-027 local loopback' },
   'fiscal-year-variant-assignment': { database: 'cairn_b210', port: '5432', batch: 'SCR-030 local loopback' },
   'fiscal-year-variants': { database: 'cairn_b210', port: '5432', batch: 'SCR-029 local loopback' },
   // Every target is bound, including the ones that predate this guard. The runner verifies a
