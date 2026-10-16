@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-13 (v1.70) · **Part 3 of 3 — this is the live part**
+**Created:** 2026-10-13 (v1.70) · **Part 3 of 4 — FROZEN at v2.61; the set continues in [CAIRN-4.md](CAIRN-4.md)**
 **Continues:** [CAIRN.md](CAIRN.md) (§0–§26.35) · [CAIRN-2.md](CAIRN-2.md) (§26.36–§30 up to v1.69)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -28,7 +28,7 @@
 |---|---|---|---|
 | `CAIRN.md` | §0–§26.35 | 395,959 bytes (99.0 % of ceiling) | **FROZEN** — pointer edits only |
 | `CAIRN-2.md` | §26.36–§30 (through v1.69) | 398,255 bytes (99.6 % of ceiling) | **FROZEN** — pointer edits only |
-| `CAIRN-3.md` | §0.3, §1.4, §2.1, §26.167+ (next), §30 continued | new — this part | **LIVE** |
+| `CAIRN-3.md` | §0.3, §1.4 R-24–R-72, §2.1 D-093–D-139, §26.167–§26.259, §30 v1.70–v2.61 | 354,009 bytes at rotation (98.3 % of the trigger) | **FROZEN** — pointer edits only; continues in `CAIRN-4.md` |
 
 **Where new work is recorded from v1.70 onward:** new requirements as §1.4 rows, new decisions as
 §2.1 rows, completed batches as §26.167+ section entries (§26.36-style), and change-log versions as
@@ -1528,6 +1528,7 @@ recorded change, date and reason stated.
 | 2.61 | 2026-10-16 | **The standard package inventoried object by object and split by primary key; everything company-specific leaves it (B-243, §26.259; R-72/D-139).** The package is three appliers writing 28 tables and marking twenty-nine activities complete. What stays is tenant-level by construction - the chart with 74 accounts, K4 with 16 periods, C001 with its intervals, document types, exchange rates, a channel, a division, a purchasing group with its organisation left null, the partner-function catalogue, and the material, valuation, MRP and payment-term defaults. What leaves is keyed by an object that does not exist yet, including a credit control area whose primary key is `(client, companyCode)` and so cannot be written at all before OX02. The package then marks twelve activities complete instead of twenty-nine, and `PackageInput` shrinks to client, currency and two optional keys. Cost recorded before being incurred: harness fixtures that came from onboarding must be built through their own screens, and how many of the 127 service-test files depend on a company code the package no longer creates is not yet known. Sequencing against the tenant screen still open. | Agent |
 ---
 
-*End of this part for now. This part is the live canonical log: it is updated in the same turn as any
-change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes, the next part
-`CAIRN-4.md` begins and this file states that the set continues there (§0.3 / D-093).*
+*This part is frozen. It passed the 360,000-byte rotation trigger at v2.61, so the set continues in
+[`CAIRN-4.md`](CAIRN-4.md), which is the live canonical log from 2026-10-16 onward and carries §26.260+
+and §30 v2.62+ (§0.3 / D-093). Edits here are limited to pointer and continuation lines and to
+corrections that cannot be deferred.*
