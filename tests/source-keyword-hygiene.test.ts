@@ -13,6 +13,17 @@
  * reintroduce what those two never watched. Matching is case-sensitive on purpose: the
  * keywords are uppercase in the source system, and a case-insensitive scan would flag ordinary
  * English words such as "tag" and "month" that the period schema legitimately uses.
+ *
+ * Transaction codes get their own rule, because they are the half the case-sensitive scan
+ * cannot reach: a DOM identifier is written in lower case, so `oby7-variant` sails through a
+ * list of uppercase keywords while teaching exactly the vocabulary the rule exists to keep
+ * out. Identifiers are matched case-insensitively and only where an identifier can appear —
+ * the value of an id, name, htmlFor, aria-labelledby, aria-describedby or data-testid — so
+ * the scan cannot reach into prose, where "tag" and "month" live.
+ *
+ * The vocabulary is the registry's own alias data rather than a second list: a rule that
+ * repeated the codes would go stale the moment a screen registered a new one, which is how
+ * the identifiers in the allowlist below went unnoticed for five screens.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -37,6 +48,129 @@ const KEYWORDS = [
 ] as const;
 
 const PATTERN = new RegExp(`\\b(?:${KEYWORDS.join('|')})\\b`);
+
+/** Where a DOM identifier can appear. Values only, so prose is never scanned. */
+const DOM_IDENTIFIER =
+  /\b(?:id|name|htmlFor|aria-labelledby|aria-describedby|data-testid)\s*=\s*(?:"([^"]*)"|'([^']*)'|\{`([^`]*)`\}|\{"([^"]*)"\})/g;
+
+/** The transaction codes the registry holds as aliases, read from the seed itself. */
+function registeredAliases(): string[] {
+  const seed = readFileSync('scripts/seed.ts', 'utf8');
+  const aliases = new Set<string>();
+  for (const block of seed.matchAll(/aliases:\s*\[([^\]]*)\]/g)) {
+    for (const alias of block[1].matchAll(/'([^']+)'/g)) aliases.add(alias[1]);
+  }
+  return [...aliases];
+}
+
+function escaped(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Every identifier value a component renders, and the subset built from a transaction code.
+ * A template literal is read as written, `${...}` included: the prefix is the part that
+ * carries the code, and the suffix is a record key.
+ */
+function domIdentifiers(): { all: Set<string>; offenders: Set<string> } {
+  const aliases = registeredAliases();
+  const all = new Set<string>();
+  const offenders = new Set<string>();
+
+  for (const path of applicationSources('src')) {
+    if (!path.endsWith('.tsx')) continue;
+    const text = readFileSync(path, 'utf8');
+    for (const match of text.matchAll(DOM_IDENTIFIER)) {
+      const value = match[1] ?? match[2] ?? match[3] ?? match[4] ?? '';
+      if (!value) continue;
+      all.add(value);
+      const coded = aliases.some((alias) =>
+        new RegExp(`(^|[^A-Za-z0-9])${escaped(alias)}([^A-Za-z0-9]|$)`, 'i').test(value),
+      );
+      if (coded) offenders.add(value);
+    }
+  }
+
+  return { all, offenders };
+}
+
+/**
+ * The identifiers that were already there when this rule was written: 59 of them across 16
+ * component files, left by FS00, OB13, OBY7, OVXA, OVXG, OVXK and by the OB29 and OB37
+ * screens. They are inventoried rather than fixed here because every one of them is also a
+ * selector in the browser harness, and the harness cannot be run until Chromium is installed
+ * for the deferred acceptance round. Renaming a selector nobody can execute is how a deferred
+ * round breaks silently: the suite stays green and the failure surfaces three screens later.
+ *
+ * They are renamed in that round, when each screen is open and each selector can be clicked.
+ * The list must shrink as they go — the assertion below fails on an entry that no longer
+ * exists in the sources, so paid-down debt cannot linger here as cover for new debt.
+ *
+ * One limit, stated rather than left implied: the inventory is keyed by identifier value, not
+ * by file, so a new component that reused one of these exact values would pass. A new prefix
+ * is caught, a copied one is not. Keying it by file would close that and cost nothing but
+ * length, and is worth doing if the round that renames these finds any of them duplicated.
+ */
+const HISTORICAL_DOM_IDENTIFIERS = [
+  'fs00-account-group',
+  'fs00-account-number',
+  'fs00-account-type',
+  'fs00-chart',
+  'fs00-field-title',
+  'fs00-gl-account-type',
+  'fs00-group-account',
+  'fs00-group-chart',
+  'fs00-group-code',
+  'fs00-group-create-title',
+  'fs00-group-description',
+  'fs00-group-from',
+  'fs00-group-list-title',
+  'fs00-group-to',
+  'fs00-initial-account',
+  'fs00-initial-chart',
+  'fs00-initial-title',
+  'fs00-language',
+  'fs00-list-title',
+  'fs00-name',
+  'fs00-reason',
+  'fs00-reconciliation',
+  'fs00-sort-key',
+  'ob13-group-list-title',
+  'ob13-group-panel-title',
+  'ob37-grid-title',
+  'ob37-reason-${row.code}',
+  'ob37-variant-${row.code}',
+  'oby7-copy-title',
+  'oby7-lifecycle-${row.variant}',
+  'oby7-name-${mode}',
+  'oby7-periods-reason-${row.variant}',
+  'oby7-reason',
+  'oby7-reason-${mode}',
+  'oby7-regular-${mode}',
+  'oby7-source',
+  'oby7-special-${mode}',
+  'oby7-target',
+  'oby7-variant-${mode}',
+  'oby7-variant-create-title',
+  'oby7-variant-list-title',
+  'ovxa-assignment-list-title',
+  'ovxa-division',
+  'ovxa-form-title',
+  'ovxa-sales-org',
+  'ovxa-value-help-search',
+  'ovxa-value-help-title',
+  'ovxg-distribution-channel',
+  'ovxg-division',
+  'ovxg-name',
+  'ovxg-sales-org',
+  'ovxg-value-help-search',
+  'ovxg-value-help-title',
+  'ovxk-assignment-list-title',
+  'ovxk-distribution-channel',
+  'ovxk-form-title',
+  'ovxk-sales-org',
+  'ovxk-value-help-search',
+  'ovxk-value-help-title'];
 
 function applicationSources(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -70,6 +204,19 @@ describe('source-system keyword hygiene', () => {
       expect(seed).toContain(`'${alias}'`);
     }
     expect(seed).not.toMatch(PATTERN);
+  });
+
+  it('keeps transaction codes out of DOM identifiers, except the ones already inventoried', () => {
+    const { offenders } = domIdentifiers();
+    const historical = new Set(HISTORICAL_DOM_IDENTIFIERS);
+    const newOffenders = [...offenders].filter((value) => !historical.has(value)).sort();
+    expect(newOffenders).toEqual([]);
+  });
+
+  it('holds the inventory to what is still there, so it shrinks as the debt is paid', () => {
+    const { all } = domIdentifiers();
+    const stale = HISTORICAL_DOM_IDENTIFIERS.filter((value) => !all.has(value)).sort();
+    expect(stale).toEqual([]);
   });
 
   it('keeps user-facing labels free of the keywords the two older scans watch', () => {
