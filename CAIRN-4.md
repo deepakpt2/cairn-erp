@@ -92,6 +92,8 @@ Six of the twelve are bound to historical databases this environment does not ru
 
 | D-141 | **The builder calls a service where the package called a service, and inserts directly everywhere else.** D-140 said the builder would be written against the services the screens call. That is amended: eleven of the thirteen objects are inserted directly with `onConflictDoNothing`, because the screen services demand what a fixture cannot supply — a reason for every change, an expected version, retirement guards — while two go through real services, `assignCompanyCodeToControllingAreaInTransaction` and `recordChange`, because the package used those too and their rows and audit trail are part of what fixtures were written against. Which is which was settled by comparing snapshots rather than by argument. | Owner latitude over design process, exercised on 2026-10-16 after measurement. | 2026-10-16 |
 
+| D-142 | **Activity marks travel with the rows that satisfy them.** When the company-specific half of the package moved to the structure builder, the eighteen marks moved with it rather than staying in tenant creation. The screens gate on the workbench — the Controlling Area panel refuses to create anything while `CFG.ORG.COMPANYCODE.DEFINE` is incomplete — so a tenant whose structure exists but whose workbench does not say so is a tenant that cannot be configured further. The alternative, leaving the marks in `createTenant`, would have recreated the exact lie the split exists to remove: a tenant told it has configured what no screen was asked about. | Owner ruling that the package keep only general data, applied on 2026-10-16 after two browser targets refused to proceed. | 2026-10-16 |
+
 ---
 
 ### 26.261 B-245 — SCR-032 sequenced into five published steps, and two errors in yesterday's count corrected `DECIDED · NOTHING IMPLEMENTED`
@@ -141,6 +143,40 @@ The owner chose the order and the numbering (R-73/D-140): the package is split b
 
 ---
 
+### 26.263 B-247 — Step A2 finished: the browser stage found two real faults, one in the builder and one in a target `IMPLEMENTED · GREEN`
+
+Step A2 was published as `78b1200` with its node-side gates green and its browser re-runs explicitly still pending. They are done now, and they earned their place: **three of the seven locally runnable affected targets failed**, and the failures separated cleanly into one product fault and one target fault.
+
+**The discriminator.** Rather than guess whether A2 caused them, the two product files were checked out from `75cff49`, rebuilt, and the three targets re-run: all three passed. So the failures were A2's, not stale fixtures or a drifting environment, and the diagnosis could proceed on that footing. The tree was then restored to `78b1200` and rebuilt.
+
+**Fault one, in the builder (two targets).** `controlling-area` timed out waiting for its create success notice, and the panel said why: *"Controlling Area prerequisites are incomplete: CFG.ORG.COMPANYCODE.DEFINE. Complete Company Code definition in the configuration workbench first."* `fiscal-year-variant-assignment` failed the same way at its no-op notice. The builder wrote the company code and marked nothing. The package had marked eighteen activities alongside its rows, and the screens gate on those marks, so the marks had to move with the rows (D-142). `applyStandardStructure` now marks the eighteen it satisfies and reports them as `result.activities`. Leaving the marks in `createTenant` was the other option and would have restored precisely the lie the split exists to remove.
+
+**A discovery underneath it.** `markActivityComplete` is an update, and a tenant created through the tenant service gets a `config_activity_status` row for every activity, while a fixture made by `tests/helpers.createTenant` gets none — so the builder's marks had nothing to land on in the node tests, and the first version of the new assertion failed with zero rows rather than eighteen. The A1b test now inserts the eighteen rows as `NOT_STARTED` before rebuilding, which is the state a real tenant is in after the reduced package runs. The divergence itself is pre-existing and is raised below as an open item.
+
+**Fault two, in the target (one target).** `payment-methods` failed `null !== ''` on `getAttribute('readonly')`, deterministically, while a diagnostic showed the product rendering `readonly=""` correctly. The cause was the target: the Change link navigates client-side through the detail view, whose retire form carries the code in `<input type="hidden" name="methodCode">`, and the assertion read the first match mid-navigation — a hidden input, which has no readonly attribute. The target now waits for the `edit=1` URL and scopes to `input[name="methodCode"]:not([type="hidden"])`. This is the one edit made to a target B-244 listed as dependent, and it changes when the assertion reads, not what it asserts.
+
+**Browser results, against the production build on the reviewed database (`cairn_b210`, runtime role restricted, migration role elevated).**
+
+| Target | Checkpoints | Result |
+|---|---|---|
+| `foundation` | 8 | passed — posts to `100000`/`200000` from the package's chart, workbench shows Completed |
+| `controlling-area` | 9 | passed after the marks moved |
+| `fiscal-year-variant-assignment` | 12 | passed after the marks moved |
+| `material-mrp` | 8 | passed — plant `1000` from the builder |
+| `sales-org-division` | 10 | passed — the standard pair and its sales area from the builder |
+| `payment-methods` | 6 | passed after the target's locator was fixed |
+| `payment-terms` | 5 | passed |
+
+Every one of them logged `✓ builder supplied the standard structure` on the way in, which is the harness reporting that the package no longer provides it and the builder did.
+
+**One dependent target could not be run.** `sales-org-company-code` is in `STATIC_ACCEPTANCE_TARGETS`, so the runner requires `CAIRN_TEST_DATABASE_URL` to name the owner-supplied static test database before it will touch it, and that variable is not in `.env.local`. It is unverified, not passing.
+
+**Verification.** Typecheck clean; `lint:ip` clean over 485 files; suite **1006 passed of 1006 across 128 files**; seven browser targets, 58 checkpoints, all green against the production build.
+
+**Open.** (1) `sales-org-company-code` awaits the owner's static database credential, as OVXK does. (2) Whether `tests/helpers.createTenant` should insert workbench rows for every activity, so that node-side tests can observe marking at all — today they cannot. (3) The four fields on `CreateTenantInput` are still accepted and ignored; B1 removes them from the form and B2 from the interface.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -152,6 +188,7 @@ recorded change, date and reason stated.
 
 | 2.63 | 2026-10-16 | **SCR-032 sequenced into five published steps; two activity counts corrected; an `else`-branch defect found (B-245, §26.261; R-73/D-140).** The package is split before the screen is reduced, both inside one SCR with two published stages, so OBBP stays SCR-033. The package marks thirty activities, not twenty-nine - twenty-six in its own loop, three in the material applier, one in payment terms - and the split keeps twelve and drops eighteen; the correction is carried into the frozen part as a footer note, which §0.3 permits for a count the next stage is checked against. Counting found that `createTenant`'s `else` branch marks `CFG.ORG.COMPANYCODE.DEFINE` complete when the package is not activated, so an empty tenant is told a company code exists that nothing created; it goes with step A2. Five steps published green in order: builder, package reduction, screen, backend, acceptance - with the builder first so that eighteen test files and twelve targets can stay untouched as the proof of the split. Still open for step B1: how the package option and Creation Type coexist. | Agent |
 | 2.64 | 2026-10-16 | **Step A1b: a snapshot test proved the builder and corrected two published claims (B-246, §26.262; D-141).** `tests/standard-structure-builder.test.ts` snapshots the structure the package writes, deletes it, rebuilds it and compares - thirteen tables and four change documents, field by field, with timestamps and the sales organisation's address number excluded. Its first run caught two gaps a grep for `insert(` could not see: the package creates the controlling area to company code link through `assignCompanyCodeToControllingAreaInTransaction`, and records three change documents through `recordChange`. The builder now does both, and the claim in `f4851ff` that `CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY` had no row behind it is withdrawn - what stands is that the plant, purchasing organisation and sales organisation assignments are satisfied by a `company_code` column rather than a link table. D-141 amends D-140: services where the package used services, direct inserts elsewhere. Teeth checked by mutation - dropping one change document fails two tests. Gates: tsc clean, lint:ip clean, 1005 of 1005 across 128 files in 68 s, up by exactly the three new tests. | Agent |
+| 2.65 | 2026-10-16 | **Step A2 finished green in the browser, after it found two faults (B-247, §26.263; D-142).** Three of the seven locally runnable affected targets failed on the published A2 build. Rebuilding the previous commit's product code and re-running them showed all three passing, so the faults were A2's rather than the environment's. Two were the builder's: it wrote the company code and marked nothing, and the Controlling Area panel refuses to create while `CFG.ORG.COMPANYCODE.DEFINE` is incomplete, so the eighteen activity marks moved with the rows they describe. One was a target's: `payment-methods` read the first `[name="methodCode"]` element mid-navigation, which on the detail view is a hidden input from the retire form and has no readonly attribute; it now waits for the edit URL and scopes to the visible field. Underneath, `markActivityComplete` is an update and fixture tenants from `tests/helpers.createTenant` have no workbench rows at all, so the new assertion had to insert them first - a pre-existing divergence now recorded as an open item. Seven targets, 58 checkpoints, green against the production build on `cairn_b210`; suite 1006 of 1006 across 128 files; typecheck and lint:ip clean. `sales-org-company-code` remains unverified: it is on the static-database allowlist and needs the owner's `CAIRN_TEST_DATABASE_URL`. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

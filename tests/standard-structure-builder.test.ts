@@ -4,6 +4,7 @@ import { withTenant } from '../src/platform/db/client';
 import {
   applyStandardStructure,
   STANDARD_STRUCTURE,
+  STRUCTURE_ACTIVITIES,
 } from '../src/platform/tenancy/standard-structure';
 import {
   companyCode,
@@ -22,6 +23,7 @@ import {
 } from '../src/modules/foundation/schema';
 import { centralAddress } from '../src/modules/foundation/central-address-schema';
 import { changeDocument, changeDocumentItem } from '../src/platform/tables/audit-trail';
+import { configActivityStatus } from '../src/platform/tables/registry';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -132,6 +134,27 @@ async function deleteStructure(client: string): Promise<void> {
     for (const { table } of STRUCTURE_TABLES) {
       await tx.delete(table).where(eq(table.client, client));
     }
+    // The activities go back to NOT_STARTED as well: that is the state a tenant is in
+    // after the reduced package runs and before the builder does. They are inserted
+    // first because marking is an update — a tenant created through the tenant service
+    // gets a workbench row for every activity, while a fixture made by
+    // tests/helpers.createTenant gets none, so without this the builder's marks would
+    // have nothing to land on and the assertion below would prove nothing.
+    for (const code of STRUCTURE_ACTIVITIES) {
+      await tx
+        .insert(configActivityStatus)
+        .values({ client, activityCode: code, status: 'NOT_STARTED' })
+        .onConflictDoNothing();
+    }
+    await tx
+      .update(configActivityStatus)
+      .set({ status: 'NOT_STARTED', completedAt: null, completedBy: null })
+      .where(
+        and(
+          eq(configActivityStatus.client, client),
+          inArray(configActivityStatus.activityCode, [...STRUCTURE_ACTIVITIES]),
+        ),
+      );
     const documents = await tx
       .select({ id: changeDocument.id })
       .from(changeDocument)
@@ -218,6 +241,28 @@ describe('standard structure builder', () => {
       expect(after[name], `${name} differs from what the package wrote`).toEqual(before[name]);
     }
     expect(await changeProjection(tenant.client)).toEqual(changesBefore);
+
+    // The screens gate on these marks. The Controlling Area panel refuses to create
+    // anything while CFG.ORG.COMPANYCODE.DEFINE is incomplete, and the fiscal year
+    // variant assignment answers the same way, so a builder that wrote the rows without
+    // marking them leaves the tenant unable to continue configuring what it has.
+    expect(result.activities).toHaveLength(18);
+    const statuses = await withTenant(tenant.client, async (tx) =>
+      tx
+        .select({
+          activityCode: configActivityStatus.activityCode,
+          status: configActivityStatus.status,
+        })
+        .from(configActivityStatus)
+        .where(
+          and(
+            eq(configActivityStatus.client, tenant.client),
+            inArray(configActivityStatus.activityCode, [...STRUCTURE_ACTIVITIES]),
+          ),
+        ),
+    );
+    expect(statuses).toHaveLength(18);
+    expect(statuses.every((row) => row.status === 'COMPLETED')).toBe(true);
 
     // The sales organisation's address is the one value that cannot be equal: the
     // address table has no natural key, so a rebuild allocates a fresh number and

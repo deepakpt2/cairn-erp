@@ -59,6 +59,7 @@ import { createCentralAddress } from '../../modules/foundation/central-address-m
 import { assignCompanyCodeToControllingAreaInTransaction } from '../../modules/foundation/controlling-area-company-assignment';
 import { recordChange } from '../change';
 import { withTenant, type Tx } from '../db/client';
+import { markActivityComplete } from './index';
 import { eq, and } from 'drizzle-orm';
 
 /** The keys this builder uses. They are the keys the standard package used. */
@@ -73,6 +74,37 @@ export const STANDARD_STRUCTURE = {
   division: '01',
   intercompanyClearingAccount: '110100',
 } as const;
+
+/**
+ * The configuration activities this structure satisfies.
+ *
+ * The standard package used to mark these eighteen complete at tenant creation, and
+ * the screens gate on them: the Controlling Area panel refuses to create anything while
+ * `CFG.ORG.COMPANYCODE.DEFINE` is not complete, and the fiscal year variant assignment
+ * answers the same way. Whoever writes the structure has to say so on the workbench,
+ * or the workbench asks for work that is already done and the screens refuse work that
+ * is legitimately next. The marks move with the rows rather than staying behind.
+ */
+export const STRUCTURE_ACTIVITIES: readonly string[] = [
+  'CFG.ORG.COMPANYCODE.DEFINE',
+  'CFG.ORG.COMPANYCODE.ASSIGN_COA',
+  'CFG.FIN.FYV.ASSIGN',
+  'CFG.FIN.PPV.ASSIGN',
+  'CFG.FIN.CREDIT.DEFINE',
+  'CFG.COST.CONTROLLINGAREA.DEFINE',
+  'CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY',
+  'CFG.ORG.PLANT.DEFINE',
+  'CFG.ORG.PLANT.ASSIGN_COMPANY',
+  'CFG.ORG.STORAGELOC.DEFINE',
+  'CFG.PROC.PURORG.DEFINE',
+  'CFG.PROC.PURORG.ASSIGN_COMPANY',
+  'CFG.PROC.PURORG.ASSIGN_PLANT',
+  'CFG.ORG.SALESORG.DEFINE',
+  'CFG.ORG.SALESORG.ASSIGN_COMPANY',
+  'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
+  'CFG.ORG.SALESORG.ASSIGN_DIVISION',
+  'CFG.ORG.SALESAREA.DEFINE',
+];
 
 const STANDARD_STORAGE_LOCATIONS: ReadonlyArray<{ code: string; name: string }> = [
   { code: '0001', name: 'Raw materials store' },
@@ -118,6 +150,8 @@ export interface StandardStructureResult {
   salesOrg: string;
   salesArea: { salesOrg: string; distributionChannel: string; division: string };
   storageLocations: number;
+  /** The configuration activities this structure satisfies on the workbench. */
+  activities: readonly string[];
   /** False when the company code was already there and nothing was written. */
   created: boolean;
 }
@@ -170,6 +204,7 @@ export async function applyStandardStructureInTransaction(
       division: STANDARD_STRUCTURE.division,
     },
     storageLocations: STANDARD_STORAGE_LOCATIONS.length,
+    activities: STRUCTURE_ACTIVITIES,
     created: existing.length === 0,
   };
 
@@ -369,6 +404,12 @@ export async function applyStandardStructureInTransaction(
       isActive: 'Active',
     },
   });
+
+  // The workbench has to reflect what was just written, or the screens that gate on
+  // these activities refuse the next legitimate step.
+  for (const code of STRUCTURE_ACTIVITIES) {
+    await markActivityComplete(tx, client, code, changedBy);
+  }
 
   return result;
 }

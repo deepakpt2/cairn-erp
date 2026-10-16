@@ -1825,7 +1825,15 @@ async function paymentMethods(ctx: BrowserContext) {
   console.log('  ✓ workbench route, empty tenant state, create, audit actor and activity completion');
 
   await page.getByRole('link', { name: 'Change', exact: true }).click();
-  assert.equal(await page.locator('[name="methodCode"]').getAttribute('readonly'), '');
+  // The link navigates client-side, and the detail view it passes through carries the
+  // code in a hidden input of the same name for its retire form. Reading the first
+  // match therefore tested a hidden field mid-navigation and got null for readonly;
+  // waiting for the edit URL and scoping to the visible field puts the assertion on the
+  // form it means to check.
+  await page.waitForURL(/edit=1/);
+  const immutableCode = page.locator('input[name="methodCode"]:not([type="hidden"])');
+  await immutableCode.waitFor();
+  assert.equal(await immutableCode.getAttribute('readonly'), '');
   await page.locator('input[name="description"]').fill('Browser Payment Method revised');
   await page.locator('[name="allowedDirection"]').selectOption('INCOMING');
   await page.locator('input[name="reason"]').fill('Browser payment method change');
