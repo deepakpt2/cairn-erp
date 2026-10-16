@@ -31,6 +31,7 @@ import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './target
 import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assignment';
 import { chartOfAccountsDefinition as ob13ChartOfAccounts } from './chart-of-accounts';
 import { glAccountMasterFs00 } from './gl-accounts';
+import { postingPeriodVariantsObbo } from './posting-period-variants';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4564,6 +4565,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'controlling-area-company-assignment': ox19Assignment,
   'chart-of-accounts': ob13ChartOfAccounts,
   'gl-accounts': glAccountMasterFs00,
+  'posting-period-variants': postingPeriodVariantsObbo,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
