@@ -1,23 +1,32 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
 import type {
   PostingPeriodIntervalDefault,
   PostingPeriodVariantRow,
 } from '@/modules/foundation/posting-period-variant-definition';
+import {
+  deletePostingPeriodVariantAction,
+  savePostingPeriodVariantAction,
+  type PostingPeriodVariantActionState,
+} from './actions';
 
 /** The contract's key rule: up to four letters or digits, held upper case. */
 const VARIANT_PATTERN = /^[A-Z0-9]{1,4}$/;
 const NAME_MAX = 30;
 
-/**
- * The write path arrives with the service. An inert form says so rather than pretending: a
- * button that silently does nothing teaches an operator that the screen is broken.
- */
-function inertSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-  window.alert(t('ppv.inert'));
+export function ActionMessage({ state }: { state: PostingPeriodVariantActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
 }
 
 function DialogHeader({ code, label }: { code: string; label: string }) {
@@ -69,6 +78,10 @@ export function PostingPeriodVariantForm({
   const editing = mode === 'CHANGE' && initial !== undefined;
   const [variant, setVariant] = useState(initial?.variant ?? '');
   const [name, setName] = useState(initial?.name ?? '');
+  const [state, formAction, pending] = useActionState<PostingPeriodVariantActionState, FormData>(
+    savePostingPeriodVariantAction,
+    { ok: true },
+  );
 
   const key = variant.trim().toUpperCase();
 
@@ -82,12 +95,17 @@ export function PostingPeriodVariantForm({
   if (!name.trim()) problems.push(t('ppv.nameRequired'));
   else if (name.trim().length > NAME_MAX) problems.push(t('ppv.nameTooLong'));
 
-  const locked = !canMaintain;
-  const canSubmit = canMaintain && problems.length === 0;
+  // Read-only while the write is in flight: a field that can still be edited during a
+  // submission is a field whose edit is silently thrown away.
+  const locked = !canMaintain || pending;
+  const canSubmit = canMaintain && !pending && problems.length === 0;
 
   return (
-    <form className="space-y-3" onSubmit={inertSubmit}>
+    <form className="space-y-3" action={formAction}>
+      <input type="hidden" name="mode" value={mode} />
       {editing && <input type="hidden" name="variant" value={initial.variant} />}
+
+      <ActionMessage state={state} />
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
@@ -244,6 +262,10 @@ function IntervalList({ row }: { row: PostingPeriodVariantRow }) {
  * screen, before the operator is offered a button the write side would reject.
  */
 function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantRow; canMaintain: boolean }) {
+  const [state, formAction, pending] = useActionState<PostingPeriodVariantActionState, FormData>(
+    deletePostingPeriodVariantAction,
+    { ok: true },
+  );
   const blocked = row.usedByCompanyCodes.length > 0;
   const label = `${t('ppv.delete')} ${row.variant}`;
 
@@ -256,8 +278,11 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
         <div className="mx-auto max-w-2xl">
           <DialogHeader code={row.variant} label={label} />
           <section className="panel overflow-hidden p-4">
-            <form className="space-y-3" onSubmit={inertSubmit}>
+            <form className="space-y-3" action={formAction}>
               <input type="hidden" name="variant" value={row.variant} />
+
+              <ActionMessage state={state} />
+
               <p className="text-sm text-ink">
                 {t('ppv.deleteConfirm', {
                   variant: row.variant,
@@ -288,7 +313,7 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={!canMaintain || blocked}
+                  disabled={!canMaintain || blocked || pending}
                 >
                   {t('ppv.deleteConfirmButton')}
                 </button>

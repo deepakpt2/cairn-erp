@@ -1656,7 +1656,20 @@ const en: Catalogue = {
   'ppv.deleteBlockedRemedy':
     'Assign those Company Codes to another posting period variant first, then delete this one.',
   'ppv.deleteConfirmButton': 'Delete variant',
-  'ppv.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
+  'ppv.created':
+    'Posting Period Variant {variant} defined, with {intervals} intervals, one per account type.',
+  'ppv.createdNote':
+    'Every interval is open for the whole fiscal year, exactly as the standard package ships ' +
+    'it. Close what this variant should not accept in Posting periods, per Company Code.',
+  'ppv.descriptionSaved': 'The description of Posting Period Variant {variant} was saved.',
+  'ppv.unchanged':
+    'Posting Period Variant {variant} already had that description. Nothing was written.',
+  'ppv.deleted':
+    'Posting Period Variant {variant} was deleted, with the {intervals} intervals it held.',
+  'ppv.unexpected': 'The Posting Period Variant change could not be completed.',
+  'ppv.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the ' +
+    'change log.',
 
   // ── Plants ────────────────────────────────────────────────────────────────
   'plant.title': 'Plants',

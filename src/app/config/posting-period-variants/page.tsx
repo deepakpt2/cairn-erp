@@ -20,7 +20,13 @@ const ROUTE = '/config/posting-period-variants';
  * operator closing a month is already on. Opening this screen from there and returning is
  * the whole journey.
  */
-export default async function PostingPeriodVariantsPage() {
+export default async function PostingPeriodVariantsPage({
+  searchParams,
+}: {
+  /** `deleted` carries the confirmation a delete dialog cannot render: its own row is gone. */
+  searchParams: Promise<{ deleted?: string; intervals?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession(ROUTE);
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
@@ -45,6 +51,12 @@ export default async function PostingPeriodVariantsPage() {
         </nav>
         <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">{t('ppv.subtitle')}</p>
       </section>
+
+      {params.deleted ? (
+        <p role="status" className="border border-line bg-sunken px-4 py-3 text-sm text-ink-soft">
+          {t('ppv.deleted', { variant: params.deleted, intervals: params.intervals ?? '0' })}
+        </p>
+      ) : null}
 
       {!canMaintain && (
         <p role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
