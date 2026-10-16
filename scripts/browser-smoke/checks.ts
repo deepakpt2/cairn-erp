@@ -30,6 +30,7 @@ import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/fo
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
 import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assignment';
 import { chartOfAccountsDefinition as ob13ChartOfAccounts } from './chart-of-accounts';
+import { fiscalYearVariantAssignmentOb37 } from './fiscal-year-variant-assignment';
 import { fiscalYearVariantsOb29 } from './fiscal-year-variants';
 import { glAccountMasterFs00 } from './gl-accounts';
 import { postingPeriodVariantsObbo } from './posting-period-variants';
@@ -4565,6 +4566,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'controlling-area': controllingAreaDefinition,
   'controlling-area-company-assignment': ox19Assignment,
   'chart-of-accounts': ob13ChartOfAccounts,
+  'fiscal-year-variant-assignment': fiscalYearVariantAssignmentOb37,
   'fiscal-year-variants': fiscalYearVariantsOb29,
   'gl-accounts': glAccountMasterFs00,
   'posting-period-variants': postingPeriodVariantsObbo,

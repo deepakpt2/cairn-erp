@@ -182,6 +182,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'controlling-area-company-assignment') return '/config/controlling-area/assign-company-code';
   if (target.id === 'chart-of-accounts') return '/config/chart-of-accounts';
   if (target.id === 'gl-accounts') return '/config/gl-accounts';
+  if (target.id === 'fiscal-year-variant-assignment') return '/config/fiscal-year-variants/assign-company-codes';
   if (target.id === 'fiscal-year-variants') return '/config/fiscal-year-variants';
   if (target.id === 'posting-period-variants') return '/config/posting-period-variants';
   if (target.id === 'payment-terms') return '/config/payment-terms';

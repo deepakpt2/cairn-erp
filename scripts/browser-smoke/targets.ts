@@ -16,6 +16,7 @@ export const TARGETS = [
   { id: 'controlling-area-company-assignment', client: 'T970', label: 'SCR-025 OX19 assignment, compatibility, duplicate no-op, unassign history and dual-capability access' },
   { id: 'chart-of-accounts', client: 'T969', label: 'SCR-026 OB13 Chart of Accounts fields, F4, audit, account-length lock, block behavior, Group CoA registry and lifecycle' },
   { id: 'gl-accounts', client: 'T968', label: 'SCR-028 FS00 G/L account hub, moved registry aliases, Create and Display modes' },
+  { id: 'fiscal-year-variant-assignment', client: 'T965', label: 'SCR-030 OB37 fiscal year variant assignment, Controlling Area conflict, active-only choice and the stale-row guard' },
   { id: 'fiscal-year-variants', client: 'T966', label: 'SCR-029 OB29 fiscal year variant registry, derived and maintained period lists, retirement guards' },
   { id: 'posting-period-variants', client: 'T967', label: 'SCR-031 OBBO posting period variant registry, the interval set a variant is born with, deletion guards and audit' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
