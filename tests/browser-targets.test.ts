@@ -22,6 +22,22 @@ describe('bounded browser target selection', () => {
   it.each(['unknown', '', 'Foundation', '0100'])('rejects an unknown target %j', (name) => {
     expect(() => parseBrowserCommand(['--target', name])).toThrow('Unknown browser target');
   });
+  it('binds every browser target to a reviewed database, and every guard to a real target', () => {
+    // The runner verifies a guard that exists and runs a target that has none, so completeness is
+    // the whole protection: one missing entry silently drops the check for that target.
+    const unguarded = TARGETS.filter((target) => !ACCEPTANCE_DATABASE_GUARDS[target.id]).map((target) => target.id);
+    expect(unguarded).toEqual([]);
+    const stale = Object.keys(ACCEPTANCE_DATABASE_GUARDS).filter(
+      (id) => !TARGETS.some((target) => target.id === id),
+    );
+    expect(stale).toEqual([]);
+    for (const target of TARGETS) {
+      const guard = ACCEPTANCE_DATABASE_GUARDS[target.id];
+      expect(guard?.database, target.id).toMatch(/^cairn/);
+      expect(guard?.port, target.id).toMatch(/^\d+$/);
+      expect(guard?.batch, target.id).toMatch(/\S/);
+    }
+  });
   it('uses distinct reserved test keys, never the development company key', () => {
     expect(new Set(TARGETS.map((target) => target.client)).size).toBe(TARGETS.length);
     for (const target of TARGETS) expect(target.client).toMatch(/^T\d{3}$/);

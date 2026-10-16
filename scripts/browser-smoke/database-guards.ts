@@ -23,5 +23,24 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'chart-of-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-026 local loopback' },
   'gl-accounts': { database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' },
   'fiscal-year-variants': { database: 'cairn_b210', port: '5432', batch: 'SCR-029 local loopback' },
+  // Every target is bound, including the ones that predate this guard. The runner verifies a
+  // guard that exists and simply runs a target that has none, so an unregistered target would
+  // reach whatever DATABASE_URL says with no review behind it. Binding all of them to the local
+  // loopback database is what makes that impossible: a target may run here, or not at all.
+  'foundation': { database: 'cairn_b210', port: '5432', batch: 'foundation local loopback' },
+  'material-basic': { database: 'cairn_b210', port: '5432', batch: 'material-basic local loopback' },
+  'material-purchasing': { database: 'cairn_b210', port: '5432', batch: 'material-purchasing local loopback' },
+  'material-mrp': { database: 'cairn_b210', port: '5432', batch: 'material-mrp local loopback' },
+  'material-valuation': { database: 'cairn_b210', port: '5432', batch: 'material-valuation local loopback' },
+  'payment-terms': { database: 'cairn_b210', port: '5432', batch: 'payment-terms local loopback' },
+  'payment-methods': { database: 'cairn_b210', port: '5432', batch: 'payment-methods local loopback' },
+  'business-partners': { database: 'cairn_b210', port: '5432', batch: 'business-partners local loopback' },
+  'supplier-company': { database: 'cairn_b210', port: '5432', batch: 'supplier-company local loopback' },
+  'supplier-purchasing': { database: 'cairn_b210', port: '5432', batch: 'supplier-purchasing local loopback' },
+  'customer-company': { database: 'cairn_b210', port: '5432', batch: 'customer-company local loopback' },
+  'customer-sales-area': { database: 'cairn_b210', port: '5432', batch: 'customer-sales-area local loopback' },
+  'sales-org-company-code': { database: 'cairn_b210', port: '5432', batch: 'SCR-021 local loopback' },
+  'distribution-channels': { database: 'cairn_b210', port: '5432', batch: 'SCR-022 local loopback' },
+  'divisions': { database: 'cairn_b210', port: '5432', batch: 'SCR-022 local loopback' },
   'posting-period-variants': { database: 'cairn_b210', port: '5432', batch: 'SCR-031 local loopback' },
 };
