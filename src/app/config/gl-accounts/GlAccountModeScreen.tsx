@@ -22,6 +22,13 @@ import {
 
 const ROUTE = '/config/gl-accounts';
 
+/** The mode's own path, so choosing a chart keeps the operator in the screen they came to. */
+const MODE_PATH: Record<GlAccountMode, string> = {
+  CREATE: 'new',
+  CHANGE: 'edit',
+  DISPLAY: 'view',
+};
+
 const MODE_ACTIVITY: Record<GlAccountMode, { activity: string; alias: string }> = {
   CREATE: { activity: 'CFG.FIN.GLACCOUNT.CREATE', alias: 'FS00' },
   CHANGE: { activity: 'CFG.FIN.GLACCOUNT.CHANGE', alias: 'FSP0' },
@@ -40,6 +47,50 @@ function toContractReconciliation(stored: string | null): GlAccountValues['recon
   return stored !== null && (RECONCILIATION_TYPES as readonly string[]).includes(stored)
     ? (stored as ReconciliationType)
     : '';
+}
+
+/**
+ * What the screen asks when it was opened without a chart.
+ *
+ * Create can proceed on a chart alone, so the charts are offered as links into this same mode.
+ * Change and Display need an account as well, and a list of charts would only offer a second
+ * question with the first one still unanswered, so they are sent to the hub that asks both.
+ */
+function ChartChooser({
+  mode,
+  charts,
+}: {
+  mode: GlAccountMode;
+  charts: Array<{ chartOfAccounts: string; name: string }>;
+}) {
+  return (
+    <div className="border border-line bg-white p-4">
+      <p role="status" className="text-sm font-medium text-ink">{t('glAccount.chartChoose')}</p>
+      <p className="mt-1 text-xs text-ink-soft">
+        {mode === 'CREATE' ? t('glAccount.chartChooseRule') : t('glAccount.chartChooseAccountRule')}
+      </p>
+      {mode === 'CREATE' ? (
+        <ul className="mt-3 space-y-2">
+          {charts.map((chart) => (
+            <li key={chart.chartOfAccounts}>
+              <Link
+                href={`${ROUTE}/${MODE_PATH[mode]}?chart=${encodeURIComponent(chart.chartOfAccounts)}`}
+                className="text-sm text-accent hover:underline"
+              >
+                <span className="code font-semibold">{chart.chartOfAccounts}</span> · {chart.name}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3">
+          <Link href={ROUTE} className="text-sm text-accent hover:underline">
+            {t('glAccount.backToList')}
+          </Link>
+        </p>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -70,6 +121,9 @@ export async function GlAccountModeScreen({
     chartOfAccountsF4Choices(client),
   ]);
   const chart = charts.find((row) => row.chartOfAccounts === chartKey);
+  // A blocked or deactivated chart keeps its accounts readable but accepts no new ones, so a
+  // chooser offers only the charts this mode can actually work in.
+  const usableCharts = charts.filter((row) => row.isActive && !row.isBlocked);
 
   const accounts = chart
     ? await listGlAccounts(client, { chartOfAccounts: chart.chartOfAccounts })
@@ -112,7 +166,19 @@ export async function GlAccountModeScreen({
       </p>,
     );
 
-  if (!chart) return notice(t('glAccount.chartEmpty'));
+  if (!chart) {
+    // Three situations used to share one sentence, which told an operator holding two charts
+    // that none was defined. A wrong diagnosis is worse than none: it sends them to define a
+    // chart they already have, and leaves the real question — which one is this screen working
+    // in — unasked.
+    if (chartKey) {
+      return notice(t('glAccount.chartNotFound', { chart: chartKey }));
+    }
+    if (usableCharts.length === 0) {
+      return notice(t('glAccount.chartEmpty'));
+    }
+    return shell(<ChartChooser mode={mode} charts={usableCharts} />);
+  }
   if (mode !== 'DISPLAY' && !canWrite) return notice(t('glAccount.modeDenied', { authority: activity }));
   // A blocked chart keeps its accounts readable but refuses new ones; a deactivated
   // chart refuses both writes and new accounts, exactly as OB13's lifecycle states.

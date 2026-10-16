@@ -1190,7 +1190,16 @@ const en: Catalogue = {
   'glAccount.chart': 'Chart of Accounts',
   'glAccount.chartRule': 'Only active, unblocked Charts of Accounts can be selected.',
   'glAccount.chartLookup': 'Chart of Accounts lookup',
-  'glAccount.chartEmpty': 'No active Chart of Accounts is defined yet. Maintain one in OB13 first.',
+  'glAccount.chartEmpty':
+    'No active Chart of Accounts is defined yet. Define one in Chart of Accounts, or release ' +
+    'one that is blocked or deactivated.',
+  'glAccount.chartNotFound': 'Chart of Accounts {chart} is not defined in this tenant.',
+  'glAccount.chartChoose': 'Choose the Chart of Accounts to work in.',
+  'glAccount.chartChooseRule':
+    'Only active, unblocked charts accept new accounts. A blocked or deactivated chart keeps ' +
+    'its accounts readable.',
+  'glAccount.chartChooseAccountRule':
+    'This screen needs an account as well as a chart. The G/L account hub chooses both.',
   'glAccount.accountNumber': 'G/L Account',
   'glAccount.accountNumberRule':
     'Up to {length} alphanumeric characters, leading zeros preserved. Immutable after creation.',
@@ -1472,7 +1481,9 @@ const en: Catalogue = {
   'chartCopy.reasonRequired': 'State why this chart is copied.',
   'chartCopy.preview': 'Ready to copy every account of chart {source} into chart {target}.',
   'chartCopy.tenantScope': 'A copy stays inside this tenant. Copying into another tenant needs a platform-admin service token and is not offered here.',
-  'chartCopy.noCharts': 'No active, unblocked Chart of Accounts is available to copy. Maintain one in OB13 first.',
+  'chartCopy.noCharts':
+    'No active, unblocked Chart of Accounts is available to copy. Define one in Chart of ' +
+    'Accounts, or release one that is blocked or deactivated.',
   'chartCopy.copying': 'Copying…',
   'chartCopy.copied': 'Copied {total} account(s) from chart {source} into chart {target}: {created} created, {overwritten} overwritten, {unchanged} already identical.',
   'chartCopy.paddedNote': 'Account numbers were left-padded to the width of chart {target}.',
