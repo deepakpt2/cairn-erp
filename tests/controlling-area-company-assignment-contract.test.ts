@@ -12,6 +12,7 @@ const companyCodeCoa = readFileSync('src/modules/foundation/company-code-coa-ass
 const foundationServices = readFileSync('src/modules/foundation/services.ts', 'utf8');
 const standardConfig = readFileSync('src/modules/foundation/standard-config.ts', 'utf8');
 const workbench = readFileSync('src/app/config/page.tsx', 'utf8');
+const workbenchTree = readFileSync('src/app/config/WorkbenchTree.tsx', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
 const migration = readFileSync('drizzle/0032_controlling_area_company_ox19.sql', 'utf8');
 const locale = readFileSync('src/platform/i18n/index.ts', 'utf8');
@@ -116,7 +117,10 @@ describe('SCR-025 / OX19 assignment contract', () => {
 
   it('keeps the OX19 route discoverable from the workbench and the migration fail-closed', () => {
     expect(workbench).toContain("'/config/controlling-area/assign-company-code'");
-    expect(workbench).toContain('item.route_path && BUILT_ROUTES.has(item.route_path)');
+    // The workbench renders as a tree, so the rule that a route is offered only when its screen
+    // exists lives in the component that draws the link, fed by the page's list of built routes.
+    expect(workbench).toContain('builtRoutes={[...BUILT_ROUTES]}');
+    expect(workbenchTree).toContain('item.route_path && routes.has(item.route_path)');
     expect(workbench).not.toContain('PENDING_ACTIVITY_CODES');
     expect(seed).toContain("code: 'CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY'");
     expect(seed).toContain("route: '/config/controlling-area/assign-company-code'");

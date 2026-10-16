@@ -4,6 +4,7 @@ import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { listTenants, configReadiness } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
+import { WorkbenchTree } from './WorkbenchTree';
 
 export const dynamic = 'force-dynamic';
 
@@ -90,13 +91,6 @@ export default async function WorkbenchPage({
     '/finance/journal/new',
   ]);
 
-  // Group into areas, preserving the define/assign sequence.
-  const areas = new Map<string, ActivityRow[]>();
-  for (const row of rows) {
-    if (!areas.has(row.area)) areas.set(row.area, []);
-    areas.get(row.area)!.push(row);
-  }
-
   const percent =
     readiness.totalActivities === 0
       ? 0
@@ -143,92 +137,7 @@ export default async function WorkbenchPage({
         </div>
       </section>
 
-      <div className="space-y-4">
-        {[...areas.entries()].map(([area, items]) => (
-          <section key={area} className="panel overflow-hidden">
-            <div className="panel-header">
-              <h2 className="panel-title">{area.replace(/_/g, ' ').toLowerCase()}</h2>
-              <span className="text-2xs text-ink-faint">
-                {items.filter((i) => completed.has(i.code)).length} / {items.length}
-              </span>
-            </div>
-            <table className="grid-table">
-              <thead>
-                <tr>
-                  <th className="w-16">Step</th>
-                  <th className="w-20">Kind</th>
-                  <th>Activity</th>
-                  <th className="w-72">{t('workbench.enables')}</th>
-                  <th className="w-28">{t('workbench.prerequisites')}</th>
-                  <th className="w-24" />
-                  <th className="w-24" />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const prereqs = item.prerequisites
-                    .split(',')
-                    .map((p) => p.trim())
-                    .filter(Boolean);
-                  const blocked =
-                    !completed.has(item.code) && prereqs.some((p) => !completed.has(p));
-                  const missing = prereqs.filter((p) => !completed.has(p));
-
-                  return (
-                    <tr key={item.code}>
-                      <td className="tabular text-ink-faint">{item.sequence}</td>
-                      <td>
-                        <span
-                          className={`chip ${
-                            item.activity_kind === 'DEFINE' ? 'chip-info' : 'chip-neutral'
-                          }`}
-                        >
-                          {item.activity_kind === 'DEFINE'
-                            ? t('workbench.kind.define')
-                            : t('workbench.kind.assign')}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="font-medium">{item.title}</div>
-                        <div className="code text-ink-faint">{item.code}</div>
-                      </td>
-                      <td className="text-ink-soft">{item.enables ?? '—'}</td>
-                      <td className="text-2xs text-ink-faint">
-                        {missing.length === 0 ? '—' : missing.join(', ')}
-                      </td>
-                      <td className="text-end">
-                        {item.route_path && BUILT_ROUTES.has(item.route_path) ? (
-                          <Link href={item.route_path} className="text-accent hover:underline">
-                            Open
-                          </Link>
-                        ) : (
-                          <span className="text-2xs text-ink-faint">Screen pending</span>
-                        )}
-                      </td>
-                      <td className="text-end">
-                        {completed.has(item.code) ? (
-                          <span className="chip chip-ok">{t('workbench.status.completed')}</span>
-                        ) : blocked ? (
-                          <span
-                            className="chip chip-warn"
-                            title={`Waiting for: ${missing.join(', ')}`}
-                          >
-                            {t('workbench.status.blocked')}
-                          </span>
-                        ) : (
-                          <span className="chip chip-neutral">
-                            {t('workbench.status.notStarted')}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-        ))}
-      </div>
+      <WorkbenchTree rows={rows} completed={[...completed]} builtRoutes={[...BUILT_ROUTES]} />
     </div>
   );
 }

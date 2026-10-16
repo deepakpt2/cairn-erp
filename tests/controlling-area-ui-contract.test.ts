@@ -10,6 +10,7 @@ const actions = readFileSync('src/app/config/controlling-area/actions.ts', 'utf8
 const maintenance = readFileSync('src/modules/foundation/controlling-area-maintenance.ts', 'utf8');
 const locale = readFileSync('src/platform/i18n/index.ts', 'utf8');
 const workbench = readFileSync('src/app/config/page.tsx', 'utf8');
+const workbenchTree = readFileSync('src/app/config/WorkbenchTree.tsx', 'utf8');
 
 function values(overrides: Record<string, unknown> = {}) {
   return {
@@ -108,7 +109,10 @@ describe('SCR-024 OKKP UI contract', () => {
     expect(list).not.toMatch(/name="companyCode"/);
     expect(list).not.toMatch(/deactivateControllingArea|reactivateControllingArea/);
     expect(workbench).toContain("'/config/controlling-area/assign-company-code'");
-    expect(workbench).toContain('item.route_path && BUILT_ROUTES.has(item.route_path)');
+    // The workbench renders as a tree, so the rule that a route is offered only when its screen
+    // exists lives in the component that draws the link, fed by the page's list of built routes.
+    expect(workbench).toContain('builtRoutes={[...BUILT_ROUTES]}');
+    expect(workbenchTree).toContain('item.route_path && routes.has(item.route_path)');
     expect(workbench).not.toContain('PENDING_ACTIVITY_CODES');
   });
 });
