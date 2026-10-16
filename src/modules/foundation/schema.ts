@@ -272,6 +272,14 @@ export const companyCode = pgTable(
       columns: [t.client, t.chartOfAccounts],
       foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
     }),
+    // OB37: a company code posts in one fiscal year variant, and a variant in use cannot be
+    // removed. Nullable, because a company code is defined before its variant is assigned.
+    index('company_code_fyv_idx').on(t.client, t.fiscalYearVariant),
+    foreignKey({
+      name: 'company_code_client_fiscal_year_variant_fk',
+      columns: [t.client, t.fiscalYearVariant],
+      foreignColumns: [fiscalYearVariant.client, fiscalYearVariant.variant],
+    }),
   ],
 );
 
