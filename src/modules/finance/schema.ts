@@ -39,9 +39,9 @@ export const glAccount = pgTable(
     name: varchar('name', { length: 200 }).notNull(),
     /** ASSET | LIABILITY | EQUITY | REVENUE | EXPENSE — drives statement placement. */
     accountType: varchar('account_type', { length: 16 }).notNull(),
-    /** Account Group (`KTOKS`): owns the number range and the field status matrix. */
+    /** Account Group: owns the number range and the field status matrix. */
     accountGroup: varchar('account_group', { length: 4 }).notNull(),
-    /** G/L Account Type (`XBILK`): balance sheet accounts carry forward, P/L accounts close. */
+    /** G/L Account Type: balance sheet accounts carry forward, P/L accounts close. */
     glAccountType: varchar('gl_account_type', { length: 16 }).notNull().default('BALANCE_SHEET'),
     /**
      * Derived from `glAccountType` and pinned by a check, so the stored flag can never
@@ -50,7 +50,7 @@ export const glAccount = pgTable(
     isBalanceSheet: boolean('is_balance_sheet').notNull(),
     /** Open item management: items stay open until explicitly cleared (§14.2). */
     isOpenItemManaged: boolean('is_open_item_managed').notNull().default(false),
-    /** Reconciliation account (`MITKZ`): CUSTOMERS | VENDORS | ASSETS | MATERIAL — §14.2. */
+    /** Reconciliation account: CUSTOMERS | VENDORS | ASSETS | MATERIAL — §14.2. */
     reconciliationType: varchar('reconciliation_type', { length: 16 }),
     /** Whether postings to this account require a cost object. */
     requiresCostObject: boolean('requires_cost_object').notNull().default(false),
@@ -62,13 +62,13 @@ export const glAccount = pgTable(
      * stored here, so the service layer validates the number against that registry.
      */
     groupAccountNumber: varchar('group_account_number', { length: 10 }),
-    /** Language Key (`SPRAS`). */
+    /** Language Key. */
     languageKey: varchar('language_key', { length: 2 }).notNull().default('EN'),
-    /** Sort Key (`ZUAWE`) — three-character line item sort assignment. */
+    /** Sort Key — three-character line item sort assignment. */
     sortKey: varchar('sort_key', { length: 3 }).notNull().default('000'),
-    /** Posting block (`XSPEB`): the account exists but may not be posted to. */
+    /** Posting block: the account exists but may not be posted to. */
     isBlockedPosting: boolean('is_blocked_posting').notNull().default(false),
-    /** Creation block (`XSPEA`): the master record may not be created. */
+    /** Creation block: the master record may not be created. */
     isBlockedCreation: boolean('is_blocked_creation').notNull().default(false),
     ...auditColumns,
   },

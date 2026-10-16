@@ -1,5 +1,5 @@
 /**
- * SCR-029 / OB29 — Fiscal Year Variant registry (`PERIV`, T009) and its periods (T009B).
+ * SCR-029 / OB29 — the Fiscal Year Variant registry and its periods.
  *
  * This is the read side. It exists before the writes because the screen has to render the
  * registry to be worth looking at, and because one question — where does a period start? —

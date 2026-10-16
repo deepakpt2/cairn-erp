@@ -55,7 +55,7 @@ const FIELD_LABEL_KEY: Record<GlAccountField, string> = {
 };
 
 /**
- * Account Group registry (`KTOKS`), maintained inside FS00 (SCR-028, R-51/D-123).
+ * Account Group registry, maintained inside FS00 (SCR-028, R-51/D-123).
  *
  * A group owns a number range and the field status matrix that drives the field screen, so
  * this panel is where an accountant decides what a group must supply. The matrix is shown

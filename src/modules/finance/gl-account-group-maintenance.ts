@@ -1,5 +1,5 @@
 /**
- * SCR-028 / FS00 — Account Group registry (`KTOKS`) and its field status matrix.
+ * SCR-028 / FS00 — the Account Group registry and its field status matrix.
  *
  * The registry decides how an account may be maintained: the number range a group owns
  * and, field by field, whether FS00 suppresses a field, offers it or demands it. It is
@@ -9,7 +9,7 @@
  * rule enforced only there would be optional.
  *
  * Four rules shape the writes:
- * - a range is read against the chart's account-number length (OB13 `KTKTB`), so a bound
+ * - a range is read against the chart's account-number length, so a bound
  *   longer than the chart allows is refused rather than silently unreachable;
  * - a group's range may not overlap a sibling's, active or not, because the registry
  *   partitions the chart's number space and an overlap makes the range check on an
@@ -928,8 +928,8 @@ function groupNotFound(code: string) {
 }
 
 const GROUP_FIELD_LABELS = {
-  chartOfAccounts: 'Chart of Accounts (KTOPL)',
-  accountGroup: 'Account Group (KTOKS)',
+  chartOfAccounts: 'Chart of Accounts',
+  accountGroup: 'Account Group',
   description: 'Description',
   fromAccountNumber: 'From Account Number',
   toAccountNumber: 'To Account Number',

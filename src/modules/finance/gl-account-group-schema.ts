@@ -6,7 +6,7 @@
  * it owns, and — field by field — whether the screen suppresses a field, offers it or
  * demands it. The group-side account master is the consolidation target an operational
  * account may point at. Both are tenant-local, and the registry is chart-scoped because
- * a chart owns the account-number length (OB13 `KTKTB`) its ranges are read against.
+ * a chart owns the account-number length its ranges are read against.
  *
  * Migration `0036` is the source of truth for the database; these definitions mirror it
  * so queries and constraints stay in step, and a contract test compares the field
@@ -44,7 +44,7 @@ export type {
 } from './gl-account-vocabulary';
 
 /**
- * Account Group registry (`KTOKS`) — one row per group per chart.
+ * The Account Group registry — one row per group per chart.
  *
  * A group owns a character range of account numbers and the field status matrix that
  * the FS00 screen renders from. Groups are deactivated rather than deleted while

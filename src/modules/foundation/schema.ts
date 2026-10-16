@@ -100,7 +100,7 @@ export const chartOfAccounts = pgTable(
 );
 
 /**
- * Fiscal year variant (`PERIV`, T009) — how a fiscal year is split into periods (§8.2, §14.3).
+ * Fiscal year variant — how a fiscal year is split into periods (§8.2, §14.3).
  *
  * Rebuilt for SCR-029/OB29 on the contract's own widths and flags: a two-character key, a
  * thirty-character description, and the year-dependent indicator that decides whether the
@@ -115,17 +115,17 @@ export const fiscalYearVariant = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    /** Fiscal Year Variant (`PERIV`): two uppercase letters or digits, immutable. */
+    /** Fiscal Year Variant: two uppercase letters or digits, immutable. */
     variant: varchar('variant', { length: 2 }).notNull(),
-    /** Description (`LTEXT`). */
+    /** Description. */
     name: varchar('name', { length: 30 }).notNull(),
-    /** Calendar Year (`XJAHR`): the fiscal year is the calendar year, January to December. */
+    /** Calendar Year: the fiscal year is the calendar year, January to December. */
     isCalendarYear: boolean('is_calendar_year').notNull().default(false),
-    /** Posting Periods (`ANZPER`): ordinary periods in the year, 1 to 16. */
+    /** Posting Periods: ordinary periods in the year, 1 to 16. */
     regularPeriods: smallint('regular_periods').notNull(),
-    /** Special Periods (`ANZSP`): year-end adjustment periods, 0 to 4, never for daily posting. */
+    /** Special Periods: year-end adjustment periods, 0 to 4, never for daily posting. */
     specialPeriods: smallint('special_periods').notNull().default(0),
-    /** Year Dependent (`XMONAT`): periods vary by calendar year, e.g. a 4-4-5 retail calendar. */
+    /** Year Dependent: periods vary by calendar year, e.g. a 4-4-5 retail calendar. */
     isYearDependent: boolean('is_year_dependent').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
     version: integer('version').notNull().default(1),
@@ -141,7 +141,7 @@ export const fiscalYearVariant = pgTable(
 );
 
 /**
- * One row per posting period (`T009B`), holding the period's **end** and its year shift.
+ * One row per posting period, holding the period's **end** and its year shift.
  *
  * A period's start is never stored: it is the previous period's end plus one day, and the
  * first period starts the day after the last period of the fiscal year before it. Storing
@@ -159,17 +159,17 @@ export const fiscalYearPeriod = pgTable(
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
     variant: varchar('variant', { length: 2 }).notNull(),
-    /** Calendar Year (`BDATJ`); 0 means the row holds for every year. */
+    /** Calendar Year; 0 means the row holds for every year. */
     calendarYear: integer('calendar_year').notNull().default(0),
-    /** Posting Period (`POPER`): 1 to `regular_periods`, then the special periods. */
+    /** Posting Period: 1 to `regular_periods`, then the special periods. */
     period: smallint('period').notNull(),
     /** REGULAR | SPECIAL — period control refuses daily postings into a special period. */
     periodType: varchar('period_type', { length: 10 }).notNull(),
-    /** Month (`MONAT`) in which the period ends. */
+    /** Month in which the period ends. */
     month: smallint('month').notNull(),
-    /** Day (`TAG`) on which the period ends; 31 means the last day of the month. */
+    /** Day on which the period ends; 31 means the last day of the month. */
     day: smallint('day').notNull().default(31),
-    /** Year shift (`JAHRSHIFT`): +1 when the end falls in the next calendar year, −1 in the previous. */
+    /** Year shift: +1 when the end falls in the next calendar year, −1 in the previous. */
     yearShift: smallint('year_shift').notNull().default(0),
     ...auditColumns,
   },

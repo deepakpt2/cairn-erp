@@ -16,8 +16,8 @@ const ROUTE = '/config/gl-accounts';
  * The FS00 initial screen: Chart of Accounts, G/L account number and mode.
  *
  * The reference transaction asks these three questions before showing a single field,
- * and so does this screen: the account number's maximum length is a property of the chart (OB13
- * `KTKTB`), so the chart has to be known before the number can be validated. Only
+ * and so does this screen: the account number's maximum length is a property of the chart,
+ * so the chart has to be known before the number can be validated. Only
  * active, unblocked charts are offered; accounts of a blocked chart stay readable but
  * cannot be created.
  */

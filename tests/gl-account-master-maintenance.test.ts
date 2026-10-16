@@ -224,7 +224,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe('Account Group registry (KTOKS)', () => {
+describe('Account Group registry', () => {
   it('creates a group at version 1 and records the creation with its reason', async () => {
     const result = await saveAccountGroup(groupInput('GENB', {
       fromAccountNumber: '2000',
@@ -560,7 +560,7 @@ describe('G/L account writes under the matrix', () => {
     expect(matrix).toMatchObject({ sortKey: 'MANDATORY', isOpenItemManaged: 'SUPPRESS' });
 
     await expect(upsertGlAccount(accountInput('1600', { mode: 'CREATE', sortKey: '', fieldStatus: matrix })))
-      .rejects.toThrow(/Account Group GENA makes Sort Key \(ZUAWE\) mandatory/);
+      .rejects.toThrow(/Account Group GENA makes Sort Key mandatory/);
 
     await expect(upsertGlAccount(accountInput('1600', { mode: 'CREATE', sortKey: '001', fieldStatus: matrix })))
       .resolves.toMatchObject({ created: true, version: 1 });

@@ -769,15 +769,15 @@ function notFound(code: string) {
 const GROUP_FIELD_LABELS = {
   groupChartOfAccounts: 'Group CoA (KTOKL)',
   name: 'Description (KTPLT)',
-  language: 'Language Key (SPRAS)',
+  language: 'Language Key',
   isActive: 'Active',
 };
 
 const FIELD_LABELS = {
-  chartOfAccounts: 'Chart of Accounts (KTOPL)',
+  chartOfAccounts: 'Chart of Accounts',
   name: 'Description (KTPLT)',
-  language: 'Language Key (SPRAS)',
-  accountNumberLength: 'Length of G/L Account Number (KTKTB)',
+  language: 'Language Key',
+  accountNumberLength: 'Length of G/L Account Number',
   groupChart: 'Group CoA',
   costElementIntegration: 'Cost Element Integration',
   isBlocked: 'Block flag',

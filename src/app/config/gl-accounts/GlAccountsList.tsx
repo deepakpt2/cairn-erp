@@ -16,7 +16,7 @@ export interface GlAccountListRow {
   accountNumber: string;
   name: string;
   accountType: string;
-  /** Account Group (`KTOKS`) the account belongs to. */
+  /** Account Group the account belongs to. */
   accountGroup: string;
   isOpenItemManaged: boolean;
   reconciliationType: string | null;

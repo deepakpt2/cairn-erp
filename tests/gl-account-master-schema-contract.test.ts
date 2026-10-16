@@ -174,7 +174,7 @@ describe('FS00 G/L account master fields', () => {
     expect(migration).toContain('is_blocked_creation = is_blocked');
   });
 
-  it('moves MITKZ to the contracted plural vocabulary and keeps MATERIAL', () => {
+  it('moves the reconciliation indicator to the contracted plural vocabulary and keeps MATERIAL', () => {
     expect(migration).toContain("WHEN 'CUSTOMER' THEN 'CUSTOMERS'");
     expect(migration).toContain("WHEN 'VENDOR' THEN 'VENDORS'");
     expect(migration).toContain("WHEN 'ASSET' THEN 'ASSETS'");

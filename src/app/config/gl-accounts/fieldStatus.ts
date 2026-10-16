@@ -1,7 +1,7 @@
 /**
  * FS00 field status control (SCR-028).
  *
- * The Account Group (`KTOKS`) decides, per field, whether the screen suppresses it,
+ * The Account Group decides, per field, whether the screen suppresses it,
  * offers it or demands it. The matrix itself is data — a row per (group, field) in
  * `gl_account_group_field_status` — so a consultant can tighten a group without a
  * release. This module holds the shapes the screen renders; the vocabulary, the baseline
@@ -14,7 +14,7 @@
  * screen share one list each.
  *
  * Two contract fields are deliberately absent from the matrix:
- * - `is_balance_sheet` is computed from the G/L Account Type (`XBILK`) and is never
+ * - `is_balance_sheet` is computed from the G/L Account Type and is never
  *   stored independently, so there is nothing for a group to suppress.
  * - the audit reason is conditional on the change itself (a block change or a
  *   deletion), not on the group.
@@ -51,7 +51,7 @@ export type {
 /**
  * One Account Group registry row as the screen consumes it.
  *
- * The registry is chart-scoped, because a chart owns the account-number length (`KTKTB`)
+ * The registry is chart-scoped, because a chart owns the account-number length
  * its ranges are read against, so the chart key is part of the row's identity.
  */
 export interface AccountGroupRow {

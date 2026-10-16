@@ -333,7 +333,7 @@ export async function applyStandardPackage(
     startMonth: 1,
     isCalendarYear: true,
     isYearDependent: false,
-    // Thirty characters, because OB29's LTEXT is thirty: the old description was 32.
+    // Thirty characters, because the contract's description field is thirty: the old text was 32.
     name: 'Calendar year + 4 special',
   };
 

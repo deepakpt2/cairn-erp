@@ -126,7 +126,7 @@ export function GlAccountFields({
     setValues((previous) => ({ ...previous, [key]: value }));
   }
 
-  /** XBILK follows the account type unless the group lets the user hold a different one. */
+  /** The statement placement follows the account type unless the group lets the user hold a different one. */
   function chooseAccountType(accountType: AccountType) {
     setValues((previous) => ({ ...previous, accountType, glAccountType: deriveGlAccountType(accountType) }));
   }

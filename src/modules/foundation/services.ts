@@ -270,7 +270,7 @@ export async function listGlAccounts(
 /**
  * Chart-level G/L account values (SCR-028 / FS00).
  *
- * `is_balance_sheet` is not an input: it is derived from the G/L Account Type (`XBILK`)
+ * `is_balance_sheet` is not an input: it is derived from the G/L Account Type
  * and pinned by a database check, so a caller cannot store a flag that contradicts the
  * indicator the screen shows. The Account Group is mandatory — it owns the number range
  * the account must fall inside and the field status matrix the screen renders from.
@@ -284,24 +284,24 @@ export interface GlAccountInput {
   accountNumber: string;
   name: string;
   accountType: AccountType;
-  /** Account Group (`KTOKS`) this account belongs to. */
+  /** Account Group this account belongs to. */
   accountGroup: string;
-  /** Statement placement (`XBILK`); derived from the account type when omitted. */
+  /** Statement placement; derived from the account type when omitted. */
   glAccountType?: GlAccountType;
   isOpenItemManaged: boolean;
-  /** Reconciliation account (`MITKZ`); null when the account reconciles nothing. */
+  /** Reconciliation account; null when the account reconciles nothing. */
   reconciliationType?: ReconciliationType | null;
   requiresCostObject: boolean;
   isTaxRelevant: boolean;
   /** Optional group-side account for consolidation roll-up. */
   groupAccountNumber?: string | null;
-  /** Language Key (`SPRAS`). */
+  /** Language Key. */
   languageKey?: string;
-  /** Sort Key (`ZUAWE`). */
+  /** Sort Key. */
   sortKey?: string;
-  /** Posting block (`XSPEB`). */
+  /** Posting block. */
   isBlockedPosting?: boolean;
-  /** Creation block (`XSPEA`). */
+  /** Creation block. */
   isBlockedCreation?: boolean;
   changedBy: string;
   /**
@@ -622,7 +622,7 @@ export async function upsertGlAccount(input: GlAccountInput) {
 }
 
 /**
- * Change the two block flags of one account (FS00, `XSPEB`/`XSPEA`).
+ * Change the two block flags of one account (FS00).
  *
  * The list screen offers blocking without opening the whole field screen, so this reads
  * and writes the flags inside one transaction rather than accepting a full row back from

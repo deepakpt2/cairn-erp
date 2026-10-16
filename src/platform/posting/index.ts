@@ -491,7 +491,7 @@ function assertBalanced(totals: { debit: string; credit: string }) {
  * problem at once: a vendor line in a closed vendor period and a GL line in an
  * open one should produce one clear message, not a partially validated document.
  *
- * Account type per line comes from the account's reconciliation indicator (`MITKZ`):
+ * Account type per line comes from the account's reconciliation indicator:
  *   VENDORS -> K, CUSTOMERS -> D, ASSETS -> A, MATERIAL -> M, otherwise S.
  */
 async function assertPostingPeriodOpen(tx: Tx, input: PostJournalInput): Promise<void> {
@@ -586,7 +586,7 @@ async function accountTypeFor(
 /**
  * Period-control account type per reconciliation indicator.
  *
- * A `Record` over the contracted vocabulary rather than a switch, so widening `MITKZ`
+ * A `Record` over the contracted vocabulary rather than a switch, so widening the reconciliation
  * is a compile error here instead of a line silently classified as a general ledger
  * posting — which would let it into a period closed for its own account type.
  */

@@ -29,7 +29,7 @@ const MODE_ACTIVITY: Record<GlAccountMode, { activity: string; alias: string }> 
 };
 
 /**
- * Stored `MITKZ` to the screen's value.
+ * Stored reconciliation indicator to the screen's value.
  *
  * Migration 0036 moved stored values to the contracted plural vocabulary and kept
  * `MATERIAL` as a fourth contracted value (R-52/D-124), so a stored value is either
@@ -45,8 +45,8 @@ function toContractReconciliation(stored: string | null): GlAccountValues['recon
 /**
  * One FS00 mode screen: Create, Change or Display.
  *
- * The chart is resolved first because it owns the account number's maximum length (OB13
- * `KTKTB`) and the cost element policy, and because a blocked or deactivated chart must
+ * The chart is resolved first because it owns the account number's maximum length and the
+ * cost element policy, and because a blocked or deactivated chart must
  * refuse new accounts while keeping existing ones readable.
  */
 export async function GlAccountModeScreen({
@@ -125,7 +125,7 @@ export async function GlAccountModeScreen({
   }
 
   // The Account Group registry drives the field screen twice over: its rows are the F4
-  // for `KTOKS`, and the selected group's matrix decides which fields are rendered at all.
+  // for the Account Group, and the selected group's matrix decides which fields are rendered at all.
   // The group-side account master is looked up through the chart's Group CoA and is empty
   // until a consolidation round fills it (R-51/D-123).
   const [groups, groupMatrices, groupAccounts] = await Promise.all([

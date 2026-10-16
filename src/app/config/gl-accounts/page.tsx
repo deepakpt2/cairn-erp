@@ -72,7 +72,7 @@ export default async function GlAccountsPage({
   }
 
   // The single legacy block flag stands for both blocks until the schema stage splits
-  // XSPEB and XSPEA into their own columns.
+  // the posting and creation blocks into their own columns.
   const rows: GlAccountListRow[] = accounts.map((account) => ({
     chartOfAccounts: account.chartOfAccounts,
     accountNumber: account.accountNumber,

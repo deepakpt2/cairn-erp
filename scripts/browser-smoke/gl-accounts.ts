@@ -165,7 +165,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   assert.equal(stored[0].account_type, 'LIABILITY');
   assert.equal(stored[0].account_group, GROUP);
   assert.equal(stored[0].gl_account_type, 'BALANCE_SHEET');
-  // Derived, never posted: XBILK says Balance Sheet, so the indicator follows it.
+  // Derived, never posted: the statement placement says Balance Sheet, so the indicator follows it.
   assert.equal(stored[0].is_balance_sheet, true);
   assert.equal(stored[0].sort_key, '000');
   assert.equal(stored[0].language_key, 'EN');
@@ -257,7 +257,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   await page.waitForLoadState('networkidle');
   // The label appears twice in a row — on the <summary> that opens the dialog and on the
   // checkbox inside it — so address the summary, not the text.
-  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block (XSPEB)' }).click();
+  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block' }).click();
 
   const blockDialog = page.getByRole('dialog', { name: `Change blocks for ${CREATED_ACCOUNT}` });
   await blockDialog.waitFor();
@@ -285,7 +285,7 @@ export async function glAccountMasterFs00(ctx: Context) {
   // and carries the version the form was opened with.
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block (XSPEB)' }).click();
+  await rowFor(list, CREATED_ACCOUNT).locator('summary').filter({ hasText: 'Posting Block' }).click();
   const unblockDialog = page.getByRole('dialog', { name: `Change blocks for ${CREATED_ACCOUNT}` });
   await unblockDialog.waitFor();
   assert.equal(await unblockDialog.locator('[name="isBlockedPosting"]').isChecked(), true, 'The block the last save stored is rendered back.');

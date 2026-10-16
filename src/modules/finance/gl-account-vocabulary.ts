@@ -39,12 +39,12 @@ export type FieldStatus = (typeof FIELD_STATUSES)[number];
 export const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
-/** Statement placement (`XBILK`); the stored balance-sheet flag is derived from it. */
+/** Statement placement; the stored balance-sheet flag is derived from it. */
 export const GL_ACCOUNT_TYPES = ['BALANCE_SHEET', 'PL_STATEMENT'] as const;
 export type GlAccountType = (typeof GL_ACCOUNT_TYPES)[number];
 
 /**
- * Reconciliation account indicator (`MITKZ`).
+ * Reconciliation account indicator.
  *
  * Plural per the FS00 contract, and `MATERIAL` is a contracted value rather than a
  * legacy one (R-52/D-124): accounts reconcile to materials as well as to the three
@@ -54,17 +54,17 @@ export type GlAccountType = (typeof GL_ACCOUNT_TYPES)[number];
 export const RECONCILIATION_TYPES = ['CUSTOMERS', 'VENDORS', 'ASSETS', 'MATERIAL'] as const;
 export type ReconciliationType = (typeof RECONCILIATION_TYPES)[number];
 
-/** Language keys the platform supports today (`SPRAS`). */
+/** Language keys the platform supports today. */
 export const SUPPORTED_LANGUAGE_KEYS = ['EN'] as const;
 export const DEFAULT_LANGUAGE_KEY = 'EN';
-/** Sort key (`ZUAWE`) default: three characters, no assignment rule. */
+/** Sort key default: three characters, no assignment rule. */
 export const DEFAULT_SORT_KEY = '000';
 
 /** Statement types whose accounts carry a balance forward instead of closing. */
 const BALANCE_SHEET_ACCOUNT_TYPES: readonly AccountType[] = ['ASSET', 'LIABILITY', 'EQUITY'];
 
 /**
- * `XBILK` follows the account type: assets, liabilities and equity carry forward,
+ * The statement placement follows the account type: assets, liabilities and equity carry forward,
  * revenue and expense close at year end. The screen offers this as the default and the
  * group's field status decides whether the indicator stays editable.
  */
@@ -157,15 +157,15 @@ export const STORAGE_MANDATORY_FIELDS: readonly GlAccountField[] = ['name', 'acc
 export const GL_ACCOUNT_FIELD_LABELS: Readonly<Record<GlAccountField, string>> = {
   name: 'Short Text (TXT20)',
   accountType: 'Account Type',
-  glAccountType: 'G/L Account Type (XBILK)',
-  isOpenItemManaged: 'Open Item Management (XOPVW)',
-  reconciliationType: 'Reconciliation Account (MITKZ)',
+  glAccountType: 'G/L Account Type',
+  isOpenItemManaged: 'Open Item Management',
+  reconciliationType: 'Reconciliation Account',
   requiresCostObject: 'Cost Object Required',
   isTaxRelevant: 'Tax Relevant',
   groupAccountNumber: 'Group Account Number',
-  languageKey: 'Language Key (SPRAS)',
-  sortKey: 'Sort Key (ZUAWE)',
-  isBlockedPosting: 'Posting Block (XSPEB)',
-  isBlockedCreation: 'Creation Block (XSPEA)',
+  languageKey: 'Language Key',
+  sortKey: 'Sort Key',
+  isBlockedPosting: 'Posting Block',
+  isBlockedCreation: 'Creation Block',
 };
 
