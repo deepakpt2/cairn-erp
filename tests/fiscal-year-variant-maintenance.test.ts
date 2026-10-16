@@ -526,6 +526,25 @@ describe('OB29 maintain a period list', () => {
     await lifecycle(MIXED, true);
   });
 
+  it('reports an identical period list as unchanged rather than filing an empty document', async () => {
+    // recordChange files only the fields that moved, so a document for a list that did not
+    // change would have no items at all and come back null — which this module reads as a lost
+    // audit trail and refuses. The honest answer is that nothing changed.
+    const before = await row(COUNTS);
+    const repeated = await maintainPeriods(COUNTS, calendarYearEnds());
+    expect(repeated).toMatchObject({ unchanged: true, version: before.version });
+    expect((await row(COUNTS)).version).toBe(before.version);
+    expect(await history('fiscal_year_period', `${COUNTS}/every-year`)).toHaveLength(1);
+
+    // And a list that does move is still written and still filed.
+    const moved = await maintainPeriods(COUNTS, [
+      ...calendarYearEnds().slice(0, 11),
+      { period: 12, month: 12, day: 30, yearShift: 0 },
+    ]);
+    expect(moved).toMatchObject({ unchanged: false, version: before.version + 1 });
+    expect(await history('fiscal_year_period', `${COUNTS}/every-year`)).toHaveLength(2);
+  });
+
   it('refuses a period list opened against a stale version, and rewrites the list whole', async () => {
     await expect(maintainPeriods(SHIFTED, aprilYear(), { expectedVersion: 99 }))
       .rejects.toThrow(/changed after it was opened/);
