@@ -64,7 +64,7 @@ describe('source-system keyword hygiene', () => {
     const seed = readFileSync('scripts/seed.ts', 'utf8');
     // The aliases a consultant searches by. Every one is a transaction code, and none of them
     // is a data-dictionary keyword, which is the distinction this suite exists to hold.
-    for (const alias of ['OB13', 'FS00', 'FSP0', 'FSS0', 'OBY7']) {
+    for (const alias of ['OB13', 'FS00', 'FSP0', 'FSS0', 'OBY7', 'OB29']) {
       expect(seed).toContain(`'${alias}'`);
     }
     expect(seed).not.toMatch(PATTERN);
