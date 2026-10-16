@@ -105,14 +105,14 @@ export function FiscalYearVariantForm({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div>
-          <label htmlFor={`oby7-variant-${mode}`} className="field-label">
+          <label htmlFor={`fyv-variant-${mode}`} className="field-label">
             {t('fiscalYearVariant.key')}
             <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
           </label>
           {editing ? (
             <>
               <input
-                id={`oby7-variant-${mode}`}
+                id={`fyv-variant-${mode}`}
                 className="field-input code"
                 value={initial.variant}
                 readOnly
@@ -121,7 +121,7 @@ export function FiscalYearVariantForm({
             </>
           ) : (
             <input
-              id={`oby7-variant-${mode}`}
+              id={`fyv-variant-${mode}`}
               name="variant"
               className="field-input code"
               maxLength={2}
@@ -134,12 +134,12 @@ export function FiscalYearVariantForm({
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor={`oby7-name-${mode}`} className="field-label">
+          <label htmlFor={`fyv-name-${mode}`} className="field-label">
             {t('fiscalYearVariant.name')}
             <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
           </label>
           <input
-            id={`oby7-name-${mode}`}
+            id={`fyv-name-${mode}`}
             name="name"
             className="field-input"
             maxLength={30}
@@ -150,12 +150,12 @@ export function FiscalYearVariantForm({
         </div>
 
         <div>
-          <label htmlFor={`oby7-regular-${mode}`} className="field-label">
+          <label htmlFor={`fyv-regular-${mode}`} className="field-label">
             {t('fiscalYearVariant.regularPeriods')}
             <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
           </label>
           <input
-            id={`oby7-regular-${mode}`}
+            id={`fyv-regular-${mode}`}
             name="regularPeriods"
             className="field-input tabular"
             type="number"
@@ -168,11 +168,11 @@ export function FiscalYearVariantForm({
         </div>
 
         <div>
-          <label htmlFor={`oby7-special-${mode}`} className="field-label">
+          <label htmlFor={`fyv-special-${mode}`} className="field-label">
             {t('fiscalYearVariant.specialPeriods')}
           </label>
           <input
-            id={`oby7-special-${mode}`}
+            id={`fyv-special-${mode}`}
             name="specialPeriods"
             className="field-input tabular"
             type="number"
@@ -216,12 +216,12 @@ export function FiscalYearVariantForm({
         </div>
 
         <div className="sm:col-span-2 lg:col-span-3">
-          <label htmlFor={`oby7-reason-${mode}`} className="field-label">
+          <label htmlFor={`fyv-reason-${mode}`} className="field-label">
             {t('fiscalYearVariant.reason')}
             <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
           </label>
           <textarea
-            id={`oby7-reason-${mode}`}
+            id={`fyv-reason-${mode}`}
             name="reason"
             rows={2}
             maxLength={500}
@@ -257,9 +257,9 @@ export function FiscalYearVariantPanel({
   canMaintain: boolean;
 }) {
   return (
-    <section className="panel overflow-hidden" aria-labelledby="oby7-variant-create-title">
+    <section className="panel overflow-hidden" aria-labelledby="fyv-variant-create-title">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="oby7-variant-create-title" className="font-semibold">{t('fiscalYearVariant.createTitle')}</h2>
+        <h2 id="fyv-variant-create-title" className="font-semibold">{t('fiscalYearVariant.createTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('fiscalYearVariant.createRule')}</p>
       </div>
       {canMaintain ? (
@@ -281,9 +281,9 @@ export function FiscalYearVariantList({
   canMaintain: boolean;
 }) {
   return (
-    <section className="panel overflow-hidden" aria-labelledby="oby7-variant-list-title">
+    <section className="panel overflow-hidden" aria-labelledby="fyv-variant-list-title">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="oby7-variant-list-title" className="font-semibold">{t('fiscalYearVariant.listTitle')}</h2>
+        <h2 id="fyv-variant-list-title" className="font-semibold">{t('fiscalYearVariant.listTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('fiscalYearVariant.listRule')}</p>
       </div>
 
@@ -417,12 +417,12 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
                 <input type="hidden" name="isActive" value={row.isActive ? 'false' : 'true'} />
                 <input type="hidden" name="expectedVersion" value={row.version} />
                 <div>
-                  <label htmlFor={`oby7-lifecycle-${row.variant}`} className="field-label">
+                  <label htmlFor={`fyv-lifecycle-${row.variant}`} className="field-label">
                     {t('fiscalYearVariant.reason')}
                     <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
                   </label>
                   <textarea
-                    id={`oby7-lifecycle-${row.variant}`}
+                    id={`fyv-lifecycle-${row.variant}`}
                     name="reason"
                     required
                     minLength={1}
@@ -613,12 +613,12 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
             {t('fiscalYearVariant.periodEditorRule', { total: String(total), regular: String(row.regularPeriods) })}
           </p>
           <div>
-            <label htmlFor={`oby7-periods-reason-${row.variant}`} className="field-label">
+            <label htmlFor={`fyv-periods-reason-${row.variant}`} className="field-label">
               {t('fiscalYearVariant.reason')}
               <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
             </label>
             <textarea
-              id={`oby7-periods-reason-${row.variant}`}
+              id={`fyv-periods-reason-${row.variant}`}
               name="reason"
               rows={2}
               maxLength={500}

@@ -80,9 +80,9 @@ export function AssignCompanyCodesUI({
   const active = variants.filter((variant) => variant.isActive);
 
   return (
-    <section className="panel overflow-hidden" aria-labelledby="ob37-grid-title">
+    <section className="panel overflow-hidden" aria-labelledby="fyv-assignment-grid-title">
       <div className="border-b border-line bg-sunken px-4 py-3">
-        <h2 id="ob37-grid-title" className="font-semibold">{t('fyvAssignment.gridTitle')}</h2>
+        <h2 id="fyv-assignment-grid-title" className="font-semibold">{t('fyvAssignment.gridTitle')}</h2>
         <p className="mt-1 text-xs text-ink-soft">{t('fyvAssignment.gridRule')}</p>
       </div>
 
@@ -276,12 +276,12 @@ function CompanyCodeRow({
                     <input type="hidden" name="expectedVariant" value={row.fiscalYearVariant ?? ''} />
 
                     <div>
-                      <label htmlFor={`ob37-variant-${row.code}`} className="field-label">
+                      <label htmlFor={`fyv-assignment-variant-${row.code}`} className="field-label">
                         {t('fyvAssignment.variant')}
                         <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
                       </label>
                       <select
-                        id={`ob37-variant-${row.code}`}
+                        id={`fyv-assignment-variant-${row.code}`}
                         name="fiscalYearVariant"
                         className="field-input code"
                         value={variant}
@@ -304,12 +304,12 @@ function CompanyCodeRow({
                     </div>
 
                     <div>
-                      <label htmlFor={`ob37-reason-${row.code}`} className="field-label">
+                      <label htmlFor={`fyv-assignment-reason-${row.code}`} className="field-label">
                         {t('fyvAssignment.reason')}
                         <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
                       </label>
                       <textarea
-                        id={`ob37-reason-${row.code}`}
+                        id={`fyv-assignment-reason-${row.code}`}
                         name="reason"
                         rows={3}
                         maxLength={500}

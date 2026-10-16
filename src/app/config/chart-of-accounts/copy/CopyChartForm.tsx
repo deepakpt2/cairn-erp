@@ -73,9 +73,9 @@ export function CopyChartForm({
   const canSubmit = canCopy && !pending && problems.length === 0;
 
   return (
-    <section className="border border-line bg-white shadow-sm" aria-labelledby="oby7-copy-title">
+    <section className="border border-line bg-white shadow-sm" aria-labelledby="copy-chart-copy-title">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-3 py-2 sm:px-4">
-        <h2 id="oby7-copy-title" className="text-sm font-semibold text-ink">{t('chartCopy.title')}</h2>
+        <h2 id="copy-chart-copy-title" className="text-sm font-semibold text-ink">{t('chartCopy.title')}</h2>
         <span className="code text-2xs text-ink-soft">CFG.FIN.COA.COPY · OBY7</span>
       </header>
 
@@ -87,12 +87,12 @@ export function CopyChartForm({
         ) : (
           <>
             <div>
-              <label htmlFor="oby7-source" className="field-label">
+              <label htmlFor="copy-chart-source" className="field-label">
                 {t('chartCopy.source')}
                 <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
               </label>
               <select
-                id="oby7-source"
+                id="copy-chart-source"
                 name="sourceChartOfAccounts"
                 className="field-input"
                 value={source}
@@ -109,12 +109,12 @@ export function CopyChartForm({
             </div>
 
             <div>
-              <label htmlFor="oby7-target" className="field-label">
+              <label htmlFor="copy-chart-target" className="field-label">
                 {t('chartCopy.target')}
                 <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
               </label>
               <select
-                id="oby7-target"
+                id="copy-chart-target"
                 name="targetChartOfAccounts"
                 className="field-input"
                 value={target}
@@ -176,12 +176,12 @@ export function CopyChartForm({
             </div>
 
             <div className="sm:col-span-2">
-              <label htmlFor="oby7-reason" className="field-label">
+              <label htmlFor="copy-chart-reason" className="field-label">
                 {t('chartCopy.reason')}
                 <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
               </label>
               <textarea
-                id="oby7-reason"
+                id="copy-chart-reason"
                 name="reason"
                 rows={2}
                 maxLength={200}
