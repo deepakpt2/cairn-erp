@@ -15,10 +15,13 @@
  * The interval labels come from the posting engine. A screen that named the account types
  * itself would be a second implementation of the same vocabulary, and the two would drift.
  */
-import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { withTenant } from '../../platform/db/client';
+import { recordChange } from '../../platform/change';
+import { withTenant, type Tx } from '../../platform/db/client';
 import { ACCOUNT_TYPE_LABELS, type AccountType } from '../../platform/periods';
+import { configActivityStatus } from '../../platform/tables/registry';
+import { markActivityComplete } from '../../platform/tenancy';
 import { companyCode, postingPeriodRule, postingPeriodVariant } from './schema';
 
 export const ACTIVITY = 'CFG.FIN.PPV.DEFINE';
@@ -37,6 +40,13 @@ const ACCOUNT_TYPE_ORDER: AccountType[] = ['S', 'K', 'D', 'A', 'M'];
 const ACCOUNT_TYPES: string[] = ACCOUNT_TYPE_ORDER;
 
 const clientSchema = z.string().trim().regex(/^[A-Za-z0-9]{2,4}$/);
+
+/**
+ * What the registry declares must be done first. A posting period variant says which periods
+ * of a fiscal year are open, so a tenant that has not put a fiscal year variant on a Company
+ * Code yet has nothing for it to open.
+ */
+const PREREQUISITES = ['CFG.FIN.FYV.ASSIGN'] as const;
 
 export type PostingPeriodIntervalRow = {
   accountType: AccountType;
@@ -194,5 +204,379 @@ export async function listPostingPeriodVariants(client: string): Promise<Posting
         changedAt: variant.changedAt,
       };
     });
+  });
+}
+
+/** The contract's key rule: up to four letters or digits, held upper case. */
+const variantKeySchema = z
+  .string()
+  .trim()
+  .min(1, 'A Posting Period Variant is required.')
+  .max(4, 'The Posting Period Variant is at most four characters.')
+  .transform((value) => value.toUpperCase())
+  .refine((value) => /^[A-Z0-9]{1,4}$/.test(value), {
+    message: 'The Posting Period Variant is one to four letters or digits.',
+  });
+
+const descriptionSchema = z
+  .string()
+  .trim()
+  .min(1, 'A description is required.')
+  .max(30, 'The description is at most thirty characters.');
+
+export const postingPeriodVariantValuesSchema = z.object({
+  /**
+   * The screen says which of the two it is doing. New Entries and editing a row ask the same
+   * two questions, and a service that inferred the answer from whether the key exists would
+   * turn a mistyped key on a new entry into somebody else's description change.
+   */
+  mode: z.enum(['CREATE', 'CHANGE']),
+  variant: variantKeySchema,
+  name: descriptionSchema,
+});
+
+export const postingPeriodVariantInputSchema = postingPeriodVariantValuesSchema.extend({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1, 'The user making the change is required.'),
+});
+
+export type PostingPeriodVariantInput = z.input<typeof postingPeriodVariantInputSchema>;
+
+export const postingPeriodVariantDeleteInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1, 'The user making the change is required.'),
+  variant: variantKeySchema,
+});
+
+export type PostingPeriodVariantDeleteInput = z.input<typeof postingPeriodVariantDeleteInputSchema>;
+
+export class PostingPeriodVariantError extends Error {
+  readonly code = 'CAIRN_CONFIG';
+
+  constructor(
+    message: string,
+    readonly remedy = 'Review the Posting Period Variant and try again.',
+  ) {
+    super(message);
+    this.name = 'PostingPeriodVariantError';
+  }
+}
+
+export interface PostingPeriodVariantSaveResult {
+  variant: string;
+  name: string;
+  mode: 'CREATED' | 'CHANGED' | 'UNCHANGED';
+  /** Interval rows written alongside a new variant. Zero on change: the intervals are not edited here. */
+  intervalsCreated: number;
+}
+
+export interface PostingPeriodVariantDeleteResult {
+  deleted: boolean;
+  variant: string;
+  name: string;
+  intervalsRemoved: number;
+  /** Always empty when `deleted` is true: anything posting against the variant refuses it. */
+  companyCodes: string[];
+}
+
+/**
+ * The interval set as one line, so a change document can carry what a definition created or
+ * a deletion removed. Compact the way the fiscal year variant's period ends are: an auditor
+ * reads the set, not a join.
+ */
+export function describeIntervalSet(
+  intervals: Array<{
+    accountType: string;
+    periodFrom: number;
+    periodTo: number;
+    allowSpecialPeriods: boolean;
+  }>,
+): string {
+  return intervals
+    .map(
+      (interval) =>
+        `${interval.accountType} ${interval.periodFrom}-${interval.periodTo}` +
+        (interval.allowSpecialPeriods ? ' +special' : ''),
+    )
+    .join(', ');
+}
+
+async function assertPrerequisites(tx: Tx, client: string): Promise<void> {
+  const rows = await tx
+    .select({ activityCode: configActivityStatus.activityCode })
+    .from(configActivityStatus)
+    .where(
+      and(
+        eq(configActivityStatus.client, client),
+        inArray(configActivityStatus.activityCode, [...PREREQUISITES]),
+        eq(configActivityStatus.status, 'COMPLETED'),
+      ),
+    );
+  const completed = new Set(rows.map((row) => row.activityCode));
+  const missing = PREREQUISITES.filter((code) => !completed.has(code));
+  if (missing.length > 0) {
+    throw new PostingPeriodVariantError(
+      `Posting period variant prerequisites are incomplete: ${missing.join(', ')}.`,
+      'Assign a fiscal year variant to a Company Code first (CFG.FIN.FYV.ASSIGN). A posting ' +
+        'period variant says which periods of a fiscal year are open, so there is nothing for ' +
+        'it to open until a Company Code has one.',
+    );
+  }
+}
+
+/**
+ * Define a posting period variant, or change the description of one that exists.
+ *
+ * One function serves both because they are the same two questions, and a registry that
+ * validated one and not the other is how a screen ends up accepting what the database
+ * refuses. The caller says which of the two it means, because a mistyped key on a new entry
+ * must be refused rather than read as a change to the variant that happens to hold it. The
+ * key is never changed: a variant is the identity its Company Codes point at, so a different
+ * key is a different variant.
+ *
+ * A new variant is created with its interval set, because a variant with no intervals cannot
+ * post and nothing else in the product creates them. Saving the description a variant already
+ * has reports `UNCHANGED` and writes nothing — not even a version — because an empty change
+ * document is a document that says something happened when it did not.
+ */
+export async function savePostingPeriodVariant(
+  raw: PostingPeriodVariantInput,
+): Promise<PostingPeriodVariantSaveResult> {
+  const parsed = postingPeriodVariantInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new PostingPeriodVariantError(
+      parsed.error.issues[0]?.message ?? 'The Posting Period Variant is not valid.',
+      'Correct the indicated value and submit again.',
+    );
+  }
+
+  const { client, changedBy, mode, variant, name } = parsed.data;
+
+  return withTenant(client, async (tx) => {
+    await assertPrerequisites(tx, client);
+
+    const [existing] = await tx
+      .select()
+      .from(postingPeriodVariant)
+      .where(and(eq(postingPeriodVariant.client, client), eq(postingPeriodVariant.variant, variant)))
+      .for('update');
+
+    if (mode === 'CREATE' && existing) {
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} is already defined in this tenant.`,
+        'Change the description of the variant that exists, or choose another key.',
+      );
+    }
+    if (mode === 'CHANGE' && !existing) {
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} is not defined in this tenant.`,
+        'Define it first (CFG.FIN.PPV.DEFINE), or reload the registry.',
+      );
+    }
+
+    if (!existing) {
+      try {
+        await tx.insert(postingPeriodVariant).values({
+          client,
+          variant,
+          name,
+          createdBy: changedBy,
+        });
+      } catch (error) {
+        // Two configurators can both read an empty registry. The key settles it, and the
+        // second one gets the same sentence the screen would have shown.
+        if (error instanceof Error && /duplicate key/i.test(error.message)) {
+          throw new PostingPeriodVariantError(
+            `Posting Period Variant ${variant} is already defined in this tenant.`,
+            'Choose another key, or change the description of the variant that exists.',
+          );
+        }
+        throw error;
+      }
+
+      await tx.insert(postingPeriodRule).values(
+        DEFAULT_INTERVALS.map((interval) => ({
+          client,
+          variant,
+          accountType: interval.accountType,
+          periodFrom: interval.periodFrom,
+          periodTo: interval.periodTo,
+          yearShiftPast: interval.yearShiftPast,
+          yearShiftFuture: interval.yearShiftFuture,
+          allowSpecialPeriods: interval.allowSpecialPeriods,
+          createdBy: changedBy,
+        })),
+      );
+
+      const documentId = await recordChange(tx, {
+        client,
+        objectClass: OBJECT_CLASS,
+        objectKey: variant,
+        changeType: 'CREATE',
+        changedBy,
+        transactionCode: ACTIVITY,
+        after: {
+          variant,
+          name,
+          intervalCount: DEFAULT_INTERVALS.length,
+          intervals: describeIntervalSet(DEFAULT_INTERVALS),
+        },
+        fieldLabels: {
+          variant: 'Posting Period Variant',
+          name: 'Description',
+          intervalCount: 'Intervals created',
+          intervals: 'Interval set',
+        },
+        // A variant decides what the books will accept, and it is born wide open. Both halves
+        // of that are worth an auditor's attention.
+        securityRelevantFields: ['variant', 'intervals'],
+      });
+      if (!documentId) {
+        throw new PostingPeriodVariantError(
+          `Posting Period Variant ${variant} was written but the change could not be recorded in the change history.`,
+          'Nothing further was saved. Ask an administrator to check the change log before defining it again.',
+        );
+      }
+
+      await markActivityComplete(tx, client, ACTIVITY, changedBy);
+      return { variant, name, mode: 'CREATED', intervalsCreated: DEFAULT_INTERVALS.length };
+    }
+
+    if (existing.name === name) {
+      await markActivityComplete(tx, client, ACTIVITY, changedBy);
+      return { variant, name, mode: 'UNCHANGED', intervalsCreated: 0 };
+    }
+
+    await tx
+      .update(postingPeriodVariant)
+      .set({ name, changedBy, changedAt: new Date() })
+      .where(and(eq(postingPeriodVariant.client, client), eq(postingPeriodVariant.variant, variant)));
+
+    const documentId = await recordChange(tx, {
+      client,
+      objectClass: OBJECT_CLASS,
+      objectKey: variant,
+      changeType: 'CHANGE',
+      changedBy,
+      transactionCode: ACTIVITY,
+      before: { variant, name: existing.name },
+      after: { variant, name },
+      fieldLabels: {
+        variant: 'Posting Period Variant',
+        name: 'Description',
+      },
+    });
+    if (!documentId) {
+      throw new PostingPeriodVariantError(
+        `The description of Posting Period Variant ${variant} was saved but the change could not be recorded in the change history.`,
+        'Ask an administrator to check the change log.',
+      );
+    }
+
+    await markActivityComplete(tx, client, ACTIVITY, changedBy);
+    return { variant, name, mode: 'CHANGED', intervalsCreated: 0 };
+  });
+}
+
+/**
+ * Delete a posting period variant, with the intervals it owns.
+ *
+ * The intervals go with it because they are its children: an interval row is meaningless
+ * without the variant it belongs to, and leaving them behind is how a registry ends up
+ * holding rows no screen can show. What may not go with it is a Company Code's posting
+ * control, so a variant anything posts against is refused and the refusal names every
+ * Company Code holding it.
+ *
+ * There is no undelete. The change document carries the whole interval set that was removed,
+ * which is what makes the deletion reviewable rather than merely recorded.
+ */
+export async function deletePostingPeriodVariant(
+  raw: PostingPeriodVariantDeleteInput,
+): Promise<PostingPeriodVariantDeleteResult> {
+  const parsed = postingPeriodVariantDeleteInputSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new PostingPeriodVariantError(
+      parsed.error.issues[0]?.message ?? 'The Posting Period Variant is not valid.',
+      'Correct the indicated value and submit again.',
+    );
+  }
+
+  const { client, changedBy, variant } = parsed.data;
+
+  return withTenant(client, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(postingPeriodVariant)
+      .where(and(eq(postingPeriodVariant.client, client), eq(postingPeriodVariant.variant, variant)))
+      .for('update');
+
+    if (!existing) {
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} is not defined in this tenant.`,
+        'Reload the registry, or define the variant first (CFG.FIN.PPV.DEFINE).',
+      );
+    }
+
+    const referencing = await tx
+      .select({ companyCode: companyCode.companyCode })
+      .from(companyCode)
+      .where(and(eq(companyCode.client, client), eq(companyCode.postingPeriodVariant, variant)))
+      .orderBy(asc(companyCode.companyCode));
+
+    if (referencing.length > 0) {
+      const codes = referencing.map((row) => row.companyCode);
+      const plural = codes.length === 1;
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} cannot be deleted: Company Code ${describeUsedBy(codes)} ` +
+          `${plural ? 'posts' : 'post'} against it.`,
+        `Assign ${plural ? 'that Company Code' : 'those Company Codes'} to another posting period ` +
+          'variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), then delete this one.',
+      );
+    }
+
+    const removed = await tx
+      .delete(postingPeriodRule)
+      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)))
+      .returning();
+
+    await tx
+      .delete(postingPeriodVariant)
+      .where(and(eq(postingPeriodVariant.client, client), eq(postingPeriodVariant.variant, variant)));
+
+    const documentId = await recordChange(tx, {
+      client,
+      objectClass: OBJECT_CLASS,
+      objectKey: variant,
+      changeType: 'DELETE',
+      changedBy,
+      transactionCode: ACTIVITY,
+      before: {
+        variant,
+        name: existing.name,
+        intervalCount: removed.length,
+        intervals: describeIntervalSet(removed),
+      },
+      fieldLabels: {
+        variant: 'Posting Period Variant',
+        name: 'Description',
+        intervalCount: 'Intervals removed',
+        intervals: 'Interval set',
+      },
+      securityRelevantFields: ['variant', 'intervals'],
+    });
+    if (!documentId) {
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} was deleted but the change could not be recorded in the change history.`,
+        'Ask an administrator to check the change log.',
+      );
+    }
+
+    return {
+      deleted: true,
+      variant,
+      name: existing.name,
+      intervalsRemoved: removed.length,
+      companyCodes: [],
+    };
   });
 }
