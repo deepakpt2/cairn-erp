@@ -827,7 +827,8 @@ export async function deleteGlAccount(input: GlAccountDeletionInput) {
  * accountant told "it has postings" and then "it also has open items" on the next attempt
  * learns nothing from either message.
  */
-async function glAccountUsage(tx: Tx, client: string, coa: string, accountNumber: string) {
+/** Exported for OBY7: an overwrite must not touch an account the delete guard would protect. */
+export async function glAccountUsage(tx: Tx, client: string, coa: string, accountNumber: string) {
   const [lines] = await tx
     .select({
       lineCount: sql<number>`count(*)::int`,
