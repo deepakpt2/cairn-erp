@@ -111,7 +111,10 @@ describe('bounded browser target selection', () => {
     expect(assignment?.client).not.toBe('T975');
     expect(assignment?.client).not.toBe('T976');
     expect(assignment?.client).not.toBe('T977');
-    expect(guard).toMatchObject({ database: 'cairn', port: '5432', batch: 'OVXA local loopback' });
+    // OVXA recorded the local database name of its day; this environment's reviewed loopback
+    // database is cairn_b210, so the guard names that and the target runs again.
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'OVXA local loopback' });
+    expect(guard?.batch).toMatch(/local loopback/);
   });
   it('reserves T972 for SCR-024 OKKP and binds it only to local PostgreSQL', () => {
     const okkp = TARGETS.find((target) => target.id === 'controlling-area');
