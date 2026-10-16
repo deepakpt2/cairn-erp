@@ -58,7 +58,7 @@ export const clientSettings = pgTable(
     dateFormat: varchar('date_format', { length: 20 }).notNull().default('YYYY-MM-DD'),
     decimalSeparator: char('decimal_separator', { length: 1 }).notNull().default('.'),
     thousandsSeparator: char('thousands_separator', { length: 1 }).notNull().default(','),
-    fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }),
+    fiscalYearVariant: varchar('fiscal_year_variant', { length: 2 }),
     flags: jsonb('flags').$type<Record<string, boolean>>().notNull().default({}),
     ...auditColumns,
   },

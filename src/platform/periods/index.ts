@@ -75,69 +75,95 @@ export async function derivePosition(
   postingDate: string,
 ): Promise<PeriodPosition> {
   const variant = await getVariant(tx, client, variantCode);
-  const periods = await tx
-    .select()
-    .from(fiscalYearPeriod)
-    .where(
-      and(eq(fiscalYearPeriod.client, client), eq(fiscalYearPeriod.variant, variantCode)),
-    );
-
-  const regular = periods
-    .filter((p) => p.periodType === 'REGULAR')
-    .sort((a, b) => a.period - b.period);
-
-  if (regular.length === 0) {
-    throw new PeriodError(
-      `Fiscal year variant ${variantCode} has no periods defined.`,
-      `Define the periods for this variant, or assign a different variant to the company ` +
-        `code (CFG.FIN.FYV.DEFINE).`,
-    );
-  }
 
   const [yearText, monthText, dayText] = postingDate.split('-');
   const dateYear = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
+  const posted = Date.UTC(dateYear, Number(monthText) - 1, Number(dayText));
 
-  // The period whose calendar window contains the date. Days beyond a month's end
-  // simply never match, so a day-31 window is safe for shorter months.
-  const match = regular.find((p) =>
-    withinWindow(p.startMonth, p.startDay, p.endMonth, p.endDay, month, day),
-  );
-
-  if (!match) {
-    throw new PeriodError(
-      `Posting date ${postingDate} does not fall in any period of fiscal year variant ` +
-        `${variantCode}.`,
-      `Check the variant's period definition — the periods must cover the whole year ` +
-        `(CFG.FIN.FYV.DEFINE).`,
-    );
-  }
-
-  // Fiscal year: the calendar year, adjusted when the year is shifted.
-  let fiscalYear = dateYear;
-  if (!variant.isCalendarYear) {
-    const firstStartMonth = regular[0].startMonth;
-    if (firstStartMonth > 1 && month >= firstStartMonth) {
-      // A year starting in, say, October: Oct–Dec belong to the NEXT fiscal year.
-      fiscalYear = dateYear + 1;
+  // A date near a year boundary can belong to the fiscal year that started in the previous
+  // calendar year or to the one starting in this, so both are tested rather than guessed
+  // from a start month. A year-dependent variant reads the row set of the fiscal year being
+  // tested, because that is the whole point of maintaining periods per year.
+  for (const fiscalYear of [dateYear, dateYear + 1]) {
+    const regular = await regularPeriods(tx, client, variantCode, variant.isYearDependent, fiscalYear);
+    if (regular.length === 0) {
+      throw new PeriodError(
+        `Fiscal year variant ${variantCode} has no periods defined.`,
+        `Define the periods for this variant, or assign a different variant to the company ` +
+          `code (CFG.FIN.FYV.DEFINE).`,
+      );
     }
+    const match = periodWindows(regular, fiscalYear).find((w) => posted >= w.start && posted <= w.end);
+    if (match) return { fiscalYear, period: match.period, periodType: 'REGULAR' };
   }
 
-  return { fiscalYear, period: match.period, periodType: 'REGULAR' };
+  throw new PeriodError(
+    `Posting date ${postingDate} does not fall in any period of fiscal year variant ` +
+      `${variantCode}.`,
+    `Check the variant's period definition — the periods must cover the whole year ` +
+      `(CFG.FIN.FYV.DEFINE).`,
+  );
 }
 
-function withinWindow(
-  startMonth: number,
-  startDay: number,
-  endMonth: number,
-  endDay: number,
-  month: number,
-  day: number,
-): boolean {
-  const afterStart = month > startMonth || (month === startMonth && day >= startDay);
-  const beforeEnd = month < endMonth || (month === endMonth && day <= endDay);
-  return afterStart && beforeEnd;
+/**
+ * The ordinary periods that apply to one fiscal year, in period order.
+ *
+ * A year-dependent variant keeps a row set per calendar year; every other variant's rows
+ * hold for all years, which `calendar_year` 0 records. A year-dependent variant with no rows
+ * for the year asked about falls back to its year-independent rows rather than reporting a
+ * gap, because a partly maintained variant still has to answer where a date falls.
+ */
+async function regularPeriods(
+  tx: Tx,
+  client: string,
+  variantCode: string,
+  isYearDependent: boolean,
+  fiscalYear: number,
+) {
+  const load = async (calendarYear: number) => {
+    const rows = await tx
+      .select()
+      .from(fiscalYearPeriod)
+      .where(and(
+        eq(fiscalYearPeriod.client, client),
+        eq(fiscalYearPeriod.variant, variantCode),
+        eq(fiscalYearPeriod.calendarYear, calendarYear),
+      ));
+    return rows.filter((row) => row.periodType === 'REGULAR').sort((a, b) => a.period - b.period);
+  };
+
+  if (!isYearDependent) return load(0);
+  const forYear = await load(fiscalYear);
+  return forYear.length > 0 ? forYear : load(0);
+}
+
+/**
+ * Each period's calendar window, derived from the ends that are stored.
+ *
+ * A period starts the day after the one before it ends, and the first period starts the day
+ * after the last period of the fiscal year before it — which is what makes a shifted year
+ * work without storing a start that could disagree with its neighbour. `day` 31 means the
+ * last day of the month, so a period ending in February ends on the 28th or 29th.
+ */
+function periodWindows(
+  regular: Array<{ period: number; month: number; day: number; yearShift: number }>,
+  fiscalYear: number,
+) {
+  const endOf = (period: { month: number; day: number; yearShift: number }, year: number) => {
+    const calendarYear = year + period.yearShift;
+    const lastDay = new Date(Date.UTC(calendarYear, period.month, 0)).getUTCDate();
+    return Date.UTC(calendarYear, period.month - 1, Math.min(period.day, lastDay));
+  };
+
+  return regular.map((period, index) => {
+    const previous = index === 0 ? regular[regular.length - 1]! : regular[index - 1]!;
+    const previousEnd = endOf(previous, index === 0 ? fiscalYear - 1 : fiscalYear);
+    return {
+      period: period.period,
+      start: previousEnd + 86_400_000,
+      end: endOf(period, fiscalYear),
+    };
+  });
 }
 
 /**
@@ -322,56 +348,48 @@ export function buildPeriodRows(input: {
 }): Array<{
   period: number;
   periodType: 'REGULAR' | 'SPECIAL';
-  startMonth: number;
-  startDay: number;
-  endMonth: number;
-  endDay: number;
-  name: string;
+  month: number;
+  day: number;
+  yearShift: number;
 }> {
   const rows: Array<{
     period: number;
     periodType: 'REGULAR' | 'SPECIAL';
-    startMonth: number;
-    startDay: number;
-    endMonth: number;
-    endDay: number;
-    name: string;
+    month: number;
+    day: number;
+    yearShift: number;
   }> = [];
 
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-
-  let previousEndMonth = 0;
+  let lastMonth = input.startMonth;
+  let lastShift = 0;
   for (let i = 0; i < input.regularPeriods; i++) {
-    // Months are laid out consecutively from the fiscal year's start month.
-    const startMonth = ((input.startMonth - 1 + i) % 12) + 1;
-    const endMonth = ((input.startMonth - 1 + i) % 12) + 1;
-    rows.push({
-      period: i + 1,
-      periodType: 'REGULAR',
-      startMonth,
-      startDay: 1,
-      endMonth,
-      endDay: 31,
-      name: `Period ${i + 1} (${monthNames[startMonth - 1]})`,
-    });
-    previousEndMonth = endMonth;
+    // Months are laid out consecutively from the fiscal year's start month; each wrap past
+    // December moves the period's end into the next calendar year.
+    const month = ((input.startMonth - 1 + i) % 12) + 1;
+    const yearShift = Math.floor((input.startMonth - 1 + i) / 12);
+    if (yearShift > 1) {
+      throw new PeriodError(
+        `A fiscal year of ${input.regularPeriods} periods starting in month ${input.startMonth} ` +
+          `runs more than a year past its own start.`,
+        'Maintain the periods per calendar year with Year Dependent switched on, or use 12 ' +
+          'periods for a shifted year (CFG.FIN.FYV.DEFINE).',
+      );
+    }
+    rows.push({ period: i + 1, periodType: 'REGULAR', month, day: 31, yearShift });
+    lastMonth = month;
+    lastShift = yearShift;
   }
 
-  // Special periods sit after the last ordinary period, sharing its calendar
-  // window. They are for year-end adjustment only — a distinction period control
-  // enforces rather than one users are trusted to remember.
+  // Special periods sit after the last ordinary period, sharing its calendar window. They
+  // are for year-end adjustment only — a distinction period control enforces rather than one
+  // users are trusted to remember.
   for (let i = 0; i < input.specialPeriods; i++) {
     rows.push({
       period: input.regularPeriods + i + 1,
       periodType: 'SPECIAL',
-      startMonth: previousEndMonth,
-      startDay: 1,
-      endMonth: previousEndMonth,
-      endDay: 31,
-      name: `Special period ${i + 1}`,
+      month: lastMonth,
+      day: 31,
+      yearShift: lastShift,
     });
   }
 

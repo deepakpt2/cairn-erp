@@ -332,7 +332,9 @@ export async function applyStandardPackage(
     specialPeriods: 4,
     startMonth: 1,
     isCalendarYear: true,
-    name: 'Calendar year, 4 special periods',
+    isYearDependent: false,
+    // Thirty characters, because OB29's LTEXT is thirty: the old description was 32.
+    name: 'Calendar year + 4 special',
   };
 
   await tx
@@ -344,6 +346,7 @@ export async function applyStandardPackage(
       regularPeriods: fyv.regularPeriods,
       specialPeriods: fyv.specialPeriods,
       isCalendarYear: fyv.isCalendarYear,
+      isYearDependent: fyv.isYearDependent,
       createdBy: activatedBy,
     })
     .onConflictDoNothing();
@@ -357,13 +360,13 @@ export async function applyStandardPackage(
       .values({
         client,
         variant: fyvKey,
+        // 0: this variant's periods hold for every calendar year.
+        calendarYear: 0,
         period: row.period,
         periodType: row.periodType,
-        startMonth: row.startMonth,
-        startDay: row.startDay,
-        endMonth: row.endMonth,
-        endDay: row.endDay,
-        name: row.name,
+        month: row.month,
+        day: row.day,
+        yearShift: row.yearShift,
         createdBy: activatedBy,
       })
       .onConflictDoNothing();

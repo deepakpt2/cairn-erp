@@ -12,6 +12,7 @@ import {
   char,
   text,
   integer,
+  smallint,
   boolean,
   timestamp,
   date,
@@ -98,33 +99,58 @@ export const chartOfAccounts = pgTable(
   ],
 );
 
-/** Fiscal year variant — how the year is split into periods (§8.2, §14.3). */
+/**
+ * Fiscal year variant (`PERIV`, T009) — how a fiscal year is split into periods (§8.2, §14.3).
+ *
+ * Rebuilt for SCR-029/OB29 on the contract's own widths and flags: a two-character key, a
+ * thirty-character description, and the year-dependent indicator that decides whether the
+ * period list is maintained per calendar year or holds for every year. The previous pair of
+ * tables stored a period's start and end; the contract stores the end and a year shift, and
+ * the period engine derives each start from the period before it, which is how the reference
+ * product computes it and the only way a hand-maintained period list can stay consistent.
+ */
 export const fiscalYearVariant = pgTable(
   'fiscal_year_variant',
   {
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    variant: varchar('variant', { length: 4 }).notNull(),
-    name: varchar('name', { length: 120 }).notNull(),
-    /** Number of ordinary posting periods: 12, or 13 for a 4-4-5 year. */
-    regularPeriods: integer('regular_periods').notNull().default(12),
-    /** Extra periods for year-end adjustment, usually 4. Never used for daily postings. */
-    specialPeriods: integer('special_periods').notNull().default(4),
-    /** True when period 1 starts in January. False for a shifted fiscal year. */
-    isCalendarYear: boolean('is_calendar_year').notNull().default(true),
+    /** Fiscal Year Variant (`PERIV`): two uppercase letters or digits, immutable. */
+    variant: varchar('variant', { length: 2 }).notNull(),
+    /** Description (`LTEXT`). */
+    name: varchar('name', { length: 30 }).notNull(),
+    /** Calendar Year (`XJAHR`): the fiscal year is the calendar year, January to December. */
+    isCalendarYear: boolean('is_calendar_year').notNull().default(false),
+    /** Posting Periods (`ANZPER`): ordinary periods in the year, 1 to 16. */
+    regularPeriods: smallint('regular_periods').notNull(),
+    /** Special Periods (`ANZSP`): year-end adjustment periods, 0 to 4, never for daily posting. */
+    specialPeriods: smallint('special_periods').notNull().default(0),
+    /** Year Dependent (`XMONAT`): periods vary by calendar year, e.g. a 4-4-5 retail calendar. */
+    isYearDependent: boolean('is_year_dependent').notNull().default(false),
     isActive: boolean('is_active').notNull().default(true),
+    version: integer('version').notNull().default(1),
     ...auditColumns,
   },
-  (t) => [primaryKey({ columns: [t.client, t.variant] })],
+  (t) => [
+    primaryKey({ columns: [t.client, t.variant] }),
+    check('fiscal_year_variant_key_format_ck', sql`${t.variant} ~ '^[A-Z0-9]{2}$'`),
+    check('fiscal_year_variant_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
+    check('fiscal_year_variant_regular_periods_ck', sql`${t.regularPeriods} between 1 and 16`),
+    check('fiscal_year_variant_special_periods_ck', sql`${t.specialPeriods} between 0 and 4`),
+  ],
 );
 
 /**
- * One row per posting period, with its calendar mapping.
+ * One row per posting period (`T009B`), holding the period's **end** and its year shift.
  *
- * Derived from the variant rather than hand-maintained, because a fiscal year
- * definition that disagrees with its own period list is a defect nobody finds
+ * A period's start is never stored: it is the previous period's end plus one day, and the
+ * first period starts the day after the last period of the fiscal year before it. Storing
+ * both would let a variant disagree with its own period list, which is a defect nobody finds
  * until an auditor does.
+ *
+ * `calendar_year` is 0 for a variant whose periods hold for every year, and the actual year
+ * for a year-dependent one, so a 4-4-5 calendar can keep a row set per year without the
+ * year-independent majority paying for it.
  */
 export const fiscalYearPeriod = pgTable(
   'fiscal_year_period',
@@ -132,23 +158,34 @@ export const fiscalYearPeriod = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    variant: varchar('variant', { length: 4 }).notNull(),
-    /** 1–12 for ordinary periods; 13+ for special periods. */
-    period: integer('period').notNull(),
-    /** REGULAR | SPECIAL */
+    variant: varchar('variant', { length: 2 }).notNull(),
+    /** Calendar Year (`BDATJ`); 0 means the row holds for every year. */
+    calendarYear: integer('calendar_year').notNull().default(0),
+    /** Posting Period (`POPER`): 1 to `regular_periods`, then the special periods. */
+    period: smallint('period').notNull(),
+    /** REGULAR | SPECIAL — period control refuses daily postings into a special period. */
     periodType: varchar('period_type', { length: 10 }).notNull(),
-    /** Month (1–12) in which the period starts, within the fiscal year. */
-    startMonth: integer('start_month').notNull(),
-    startDay: integer('start_day').notNull().default(1),
-    endMonth: integer('end_month').notNull(),
-    /** 31 means "end of month"; the variant of the month handles the rest. */
-    endDay: integer('end_day').notNull().default(31),
-    name: varchar('name', { length: 60 }),
+    /** Month (`MONAT`) in which the period ends. */
+    month: smallint('month').notNull(),
+    /** Day (`TAG`) on which the period ends; 31 means the last day of the month. */
+    day: smallint('day').notNull().default(31),
+    /** Year shift (`JAHRSHIFT`): +1 when the end falls in the next calendar year, −1 in the previous. */
+    yearShift: smallint('year_shift').notNull().default(0),
     ...auditColumns,
   },
   (t) => [
-    primaryKey({ columns: [t.client, t.variant, t.period] }),
-    index('fiscal_year_period_variant_idx').on(t.client, t.variant),
+    primaryKey({ columns: [t.client, t.variant, t.calendarYear, t.period] }),
+    index('fiscal_year_period_variant_idx').on(t.client, t.variant, t.calendarYear),
+    foreignKey({
+      name: 'fiscal_year_period_variant_fk',
+      columns: [t.client, t.variant],
+      foreignColumns: [fiscalYearVariant.client, fiscalYearVariant.variant],
+    }).onDelete('cascade'),
+    check('fiscal_year_period_type_ck', sql`${t.periodType} in ('REGULAR', 'SPECIAL')`),
+    check('fiscal_year_period_number_ck', sql`${t.period} between 1 and 20`),
+    check('fiscal_year_period_month_ck', sql`${t.month} between 1 and 12`),
+    check('fiscal_year_period_day_ck', sql`${t.day} between 1 and 31`),
+    check('fiscal_year_period_year_shift_ck', sql`${t.yearShift} between -1 and 1`),
   ],
 );
 
@@ -211,7 +248,7 @@ export const companyCode = pgTable(
     name: varchar('name', { length: 160 }).notNull(),
     /** Assignments — the "assign" half of the define/assign chain. */
     chartOfAccounts: varchar('chart_of_accounts', { length: 4 }),
-    fiscalYearVariant: varchar('fiscal_year_variant', { length: 4 }),
+    fiscalYearVariant: varchar('fiscal_year_variant', { length: 2 }),
     postingPeriodVariant: varchar('posting_period_variant', { length: 4 }),
     /** Local currency: the books are kept in this currency (§14.4). */
     currency: char('currency', { length: 3 }).notNull(),
