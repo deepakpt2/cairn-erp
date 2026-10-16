@@ -239,11 +239,61 @@ export async function fiscalYearVariantsOb29(ctx: Context) {
   }
   console.log(`  ✓ the maintained list saved for ${year} and the grid offers back every end that was stored`);
 
+  // The start beside each end is the engine's, shown while the list is still editable.
+  await assertRenderedWindows(client, MAINTAINED, year, readBackGrid);
+  assert.match(
+    await readBackGrid.innerText(),
+    /follows the ends in the fields/,
+    'The editor says the start it shows follows what is being typed.',
+  );
+
+  // And it moves as the ends are typed. Editing the last period is the interesting case: the
+  // first period starts the day after the last one ends, in the fiscal year before, so one day
+  // off the end of period twelve moves the start of period one across a year boundary.
+  const beforeEdit = (await storedPeriods(client, MAINTAINED)).filter(
+    (stored) => stored.period_type === 'REGULAR' && stored.calendar_year === year,
+  );
+  await readBackGrid.getByRole('spinbutton', { name: 'Ends on day 12', exact: true }).fill('30');
+  const afterEdit = periodWindows(
+    beforeEdit.map((stored) => ({
+      period: stored.period,
+      month: stored.month,
+      day: stored.period === 12 ? 30 : stored.day,
+      yearShift: stored.year_shift,
+    })),
+    year,
+  );
+  const twelfth = afterEdit.find((window) => window.period === 12)!;
+  const first = afterEdit.find((window) => window.period === 1)!;
+  await readBackGrid
+    .locator('tbody tr')
+    .nth(11)
+    .filter({ hasText: `${iso(twelfth.start)} → ${iso(twelfth.end)}` })
+    .waitFor();
+  assert.ok(
+    (await readBackGrid.locator('tbody tr').first().innerText()).includes(`${iso(first.start)} → ${iso(first.end)}`),
+    `Editing the last end moves the first period's start to ${iso(first.start)}, across the year boundary.`,
+  );
+  console.log('  ✓ the start shown while editing is the engine’s, and it moves as the ends are typed');
+
+  // The edit was never saved: reload so the next step submits the list that is stored.
+  await page.goto(`${base}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const unchangedRow = variantRow(page, MAINTAINED);
+  await unchangedRow.getByText('Periods', { exact: true }).click();
+  const unchangedGrid = unchangedRow.locator('details[open]');
+  await unchangedGrid.waitFor();
+  assert.equal(
+    await unchangedGrid.getByRole('spinbutton', { name: 'Ends on day 12', exact: true }).inputValue(),
+    String(beforeEdit.find((stored) => stored.period === 12)!.day),
+    'An edit that was not saved is not stored.',
+  );
+
   // ── 8. Saving the same list again changes nothing ─────────────────────────
   const versionBefore = (await storedVariant(client, MAINTAINED))?.version;
   const documentsBefore = (await documents(client, MAINTAINED, 'fiscal_year_period')).length;
-  await readBack.locator(`#fyv-periods-reason-${MAINTAINED}`).fill(REASON);
-  await readBackGrid.getByRole('button', { name: 'Save period list', exact: true }).click();
+  await unchangedRow.locator(`#fyv-periods-reason-${MAINTAINED}`).fill(REASON);
+  await unchangedGrid.getByRole('button', { name: 'Save period list', exact: true }).click();
   await page
     .getByRole('status')
     .filter({ hasText: /was already stored exactly as submitted; nothing was changed/ })
@@ -424,6 +474,9 @@ async function assertRenderedWindows(client: string, variant: string, year: numb
     assert.ok(rendered.includes(`${start} → ${end}`), `Period ${window.period} shows ${start} → ${end}.`);
   }
 }
+
+/** The date shape both the screen and the read side use for a derived window. */
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
 type StoredVariant = {
   variant: string;
