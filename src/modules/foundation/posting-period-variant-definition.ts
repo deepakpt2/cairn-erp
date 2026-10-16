@@ -80,6 +80,12 @@ function isAccountType(value: string): value is AccountType {
   return ACCOUNT_TYPES.includes(value);
 }
 
+/** Where an account type sits in the reading order. Unknown types sort last, together. */
+function rankAccountType(accountType: string): number {
+  const rank = ACCOUNT_TYPE_ORDER.indexOf(accountType as AccountType);
+  return rank === -1 ? ACCOUNT_TYPE_ORDER.length : rank;
+}
+
 export type PostingPeriodIntervalDefault = PostingPeriodIntervalRow;
 
 /**
@@ -292,7 +298,10 @@ export function describeIntervalSet(
     allowSpecialPeriods: boolean;
   }>,
 ): string {
-  return intervals
+  // Sorted, because the rows come back in whatever order the table held them. Two identical
+  // deletions must file an identical sentence, or an auditor comparing them is reading noise.
+  return [...intervals]
+    .sort((left, right) => rankAccountType(left.accountType) - rankAccountType(right.accountType))
     .map(
       (interval) =>
         `${interval.accountType} ${interval.periodFrom}-${interval.periodTo}` +
