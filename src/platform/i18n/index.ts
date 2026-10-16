@@ -1587,9 +1587,76 @@ const en: Catalogue = {
   'pp.specials': 'Special periods',
   'pp.save': 'Apply',
   'pp.saved': 'Posting period rule updated.',
+  'pp.defineVariantsLink': 'Define posting period variants',
   'pp.note':
     'Vendor and customer periods are normally closed ahead of the general ledger, so that ' +
     'late supplier invoices cannot change a subledger that has already been reported.',
+
+  // ─── Posting period variants ───────────────────────────────────────────────
+  'ppv.title': 'Posting Period Variants',
+  'ppv.subtitle':
+    'Which set of open and closed periods a Company Code posts against. A variant holds one ' +
+    'interval per account type; the intervals themselves are opened and closed per Company ' +
+    'Code in Posting periods.',
+  'ppv.postingPeriodsLink': 'Posting periods',
+  'ppv.companyCodesLink': 'Company Codes',
+  'ppv.fiscalYearVariantsLink': 'Fiscal Year Variants',
+  'ppv.createTitle': 'Define Posting Period Variant',
+  'ppv.createRule':
+    'The key is up to four letters or digits and cannot be changed afterwards. To use a ' +
+    'different key, define another variant.',
+  'ppv.key': 'Posting Period Variant',
+  'ppv.keyRule': 'The Posting Period Variant is one to four letters or digits.',
+  'ppv.keyTaken':
+    'Posting Period Variant {variant} is already defined. Choose another key, or change the ' +
+    'existing variant.',
+  'ppv.keyImmutable': 'The key cannot be changed; define another variant instead.',
+  'ppv.name': 'Description',
+  'ppv.nameRequired': 'A description is required.',
+  'ppv.nameTooLong': 'The description is at most thirty characters.',
+  'ppv.defaultsTitle': 'Created with the variant',
+  'ppv.defaultsRule':
+    'Defining a variant also creates one interval per account type, so the variant is usable ' +
+    'as soon as a Company Code is assigned to it. Open and close the intervals per Company ' +
+    'Code in Posting periods.',
+  'ppv.create': 'Define variant',
+  'ppv.saveChanges': 'Save changes',
+  'ppv.change': 'Change',
+  'ppv.readOnly': 'You can read this registry but not change it.',
+  'ppv.listTitle': 'Defined variants',
+  'ppv.listRule':
+    'Every posting period variant in the tenant, with the intervals it holds and the Company ' +
+    'Codes posting against it.',
+  'ppv.empty': 'No posting period variant is defined in this tenant yet.',
+  'ppv.intervals': 'Intervals',
+  'ppv.intervalsCount': 'Intervals: {count}',
+  'ppv.noIntervals':
+    'This variant holds no intervals, so nothing can post against it until they exist.',
+  'ppv.accountType': 'Account type',
+  'ppv.openRange': 'Open periods',
+  'ppv.yearShiftPast': 'Prior years open',
+  'ppv.yearShiftFuture': 'Future years open',
+  'ppv.usedBy': 'Used by Company Codes',
+  'ppv.usedByNone': 'Not assigned',
+  'ppv.status': 'Status',
+  'ppv.active': 'Active',
+  'ppv.deactivated': 'Deactivated',
+  'ppv.changed': 'Changed',
+  'ppv.actions': 'Actions',
+  'ppv.delete': 'Delete',
+  'ppv.deleteConfirm':
+    'Delete Posting Period Variant {variant} ({name}), together with the intervals it holds? ' +
+    'This cannot be undone.',
+  'ppv.deleteRule':
+    'A variant no Company Code posts against can be deleted, along with its own intervals. ' +
+    'The deletion is recorded in the change log.',
+  'ppv.deleteBlocked':
+    'Posting Period Variant {variant} cannot be deleted: Company Code {companyCodes} posts ' +
+    'against it.',
+  'ppv.deleteBlockedRemedy':
+    'Assign those Company Codes to another posting period variant first, then delete this one.',
+  'ppv.deleteConfirmButton': 'Delete variant',
+  'ppv.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
 
   // ── Plants ────────────────────────────────────────────────────────────────
   'plant.title': 'Plants',

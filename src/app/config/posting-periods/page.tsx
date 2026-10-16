@@ -9,11 +9,15 @@ import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-ass
 export const dynamic = 'force-dynamic';
 
 /**
- * Posting periods — CFG.FIN.PPV.DEFINE / FIN.CLOSE.PERIOD
+ * Posting periods — FIN.CLOSE.PERIOD
  *
  * The screen where a user decides what the books will accept. It reads the
  * company code's posting period variant, so what is shown is what the posting
  * engine will actually enforce — the two cannot disagree.
+ *
+ * Defining the variants themselves is OBBO, at /config/posting-period-variants:
+ * this screen opens and closes the intervals a variant holds, it does not create
+ * the variant. The link below is the whole journey between the two.
  */
 export default async function PostingPeriodsPage({
   searchParams,
@@ -70,6 +74,11 @@ export default async function PostingPeriodsPage({
         <span className="code text-ink-faint">FIN.CLOSE.PERIOD</span>
         <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('pp.title')}</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('pp.subtitle')}</p>
+        <p className="mt-2 text-sm">
+          <Link href="/config/posting-period-variants" className="text-accent hover:underline">
+            {t('pp.defineVariantsLink')}
+          </Link>
+        </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-2xs uppercase tracking-wide text-ink-faint">
