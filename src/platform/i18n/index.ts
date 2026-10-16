@@ -1456,6 +1456,7 @@ const en: Catalogue = {
   'fiscalYearVariant.endOfMonth': 'Month {month}, day {day}, year shift {shift}',
   'fiscalYearVariant.special': 'Special',
   'fiscalYearVariant.regular': 'Ordinary',
+  'fiscalYearVariant.startPreview': 'The start beside each period follows the ends in the fields and changes as you type: it is the window posting will use.',
   'fiscalYearVariant.notDerived': 'Special periods share the last ordinary period and carry no window of their own.',
   'fiscalYearVariant.periodsReadOnly': 'Periods are read from the registry.',
   'chartOfAccounts.copyLink': 'Copy Chart of Accounts',

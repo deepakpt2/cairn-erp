@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { periodWindows } from '@/platform/periods/windows';
 import { t } from '@/platform/i18n';
 import type { FiscalYearVariantRow } from '@/modules/foundation/fiscal-year-variant-maintenance';
 import {
@@ -457,6 +458,9 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
   );
 }
 
+/** The same date shape the read side stores its derived windows in. */
+const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaintain: boolean }) {
   const thisYear = new Date().getFullYear();
   const maintainedYears = row.years.filter((year) => year !== 0);
@@ -468,6 +472,9 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
     saveFiscalYearPeriodsAction,
     { ok: true },
   );
+  // The ends live in the fields themselves, so this holds only what has been edited. It exists
+  // to show the window posting will derive; the fields still submit their own values.
+  const [draft, setDraft] = useState<Record<number, { month?: number; day?: number; yearShift?: number }>>({});
 
   if (row.isCalendarYear) {
     return (
@@ -500,6 +507,32 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
     };
   });
 
+  // What each period will be, once the ends in the fields are what is stored. A list held for
+  // every year is stored against year zero and shown against this year, as the read side shows it.
+  const edited = rows.map((period) => ({ ...period, ...draft[period.period] }));
+  const preview = new Map(
+    periodWindows(
+      edited
+        .filter((period) => period.periodType === 'REGULAR')
+        .map(({ period, month, day, yearShift }) => ({ period, month, day, yearShift })),
+      year === 0 ? thisYear : year,
+    ).map((window) => [window.period, window] as const),
+  );
+  const startText = new Map<number, string>();
+  for (const period of rows) {
+    const window = preview.get(period.period);
+    startText.set(
+      period.period,
+      editable
+        ? window
+          ? `${iso(window.start)} → ${iso(window.end)}`
+          : t('fiscalYearVariant.notDerived')
+        : period.derivedStart && period.derivedEnd
+          ? `${period.derivedStart} → ${period.derivedEnd}`
+          : t('fiscalYearVariant.notDerived'),
+    );
+  }
+
   // The grid is rendered inside the form that submits it when the list is editable, and
   // outside any form when it is read-only, so it is built once and placed by the branch.
   const grid = (
@@ -509,7 +542,7 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
               <th>{t('fiscalYearVariant.period')}</th>
               <th>{t('fiscalYearVariant.periodType')}</th>
               <th>{t('fiscalYearVariant.periodEnds')}</th>
-              {!editable && <th>{t('fiscalYearVariant.periodStart')}</th>}
+              <th>{t('fiscalYearVariant.periodStart')}</th>
             </tr>
           </thead>
           <tbody>
@@ -534,6 +567,14 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
                         aria-label={`${t('fiscalYearVariant.periodMonth')} ${period.period}`}
                         className="field-input tabular w-20"
                         defaultValue={period.month}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) return;
+                          setDraft((current) => ({
+                            ...current,
+                            [period.period]: { ...current[period.period], month: value },
+                          }));
+                        }}
                         disabled={pending}
                       >
                         {MONTHS.map((month) => (
@@ -548,6 +589,14 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
                         min={1}
                         max={31}
                         defaultValue={period.day}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) return;
+                          setDraft((current) => ({
+                            ...current,
+                            [period.period]: { ...current[period.period], day: value },
+                          }));
+                        }}
                         disabled={pending}
                       />
                       <select
@@ -555,6 +604,14 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
                         aria-label={`${t('fiscalYearVariant.periodYearShift')} ${period.period}`}
                         className="field-input tabular w-20"
                         defaultValue={period.yearShift}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (!Number.isFinite(value)) return;
+                          setDraft((current) => ({
+                            ...current,
+                            [period.period]: { ...current[period.period], yearShift: value },
+                          }));
+                        }}
                         disabled={pending}
                       >
                         {SHIFTS.map((shift) => (
@@ -572,13 +629,9 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
                     </span>
                   )}
                 </td>
-                {!editable && (
-                  <td className="tabular text-xs text-ink-soft">
-                    {period.derivedStart && period.derivedEnd
-                      ? `${period.derivedStart} → ${period.derivedEnd}`
-                      : t('fiscalYearVariant.notDerived')}
-                  </td>
-                )}
+                <td className="tabular text-xs text-ink-soft">
+                  {startText.get(period.period)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -613,6 +666,9 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
           <input type="hidden" name="calendarYear" value={year} />
           <input type="hidden" name="expectedVersion" value={row.version} />
           {grid}
+          <p className="border border-line bg-white p-3 text-xs text-ink-soft">
+            {t('fiscalYearVariant.startPreview')}
+          </p>
           <ActionMessage state={state} />
           <p className="border border-line bg-white p-3 text-xs text-ink-soft">
             {t('fiscalYearVariant.periodEditorRule', { total: String(total), regular: String(row.regularPeriods) })}
