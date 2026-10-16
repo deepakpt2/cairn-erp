@@ -1,7 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import {
+  assignFiscalYearVariantAction,
+  type FyvAssignmentActionState,
+} from './assign-company-codes/actions';
+
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+export function AssignmentMessage({ state }: { state: FyvAssignmentActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
+}
 
 export interface AssignableCompanyCode {
   code: string;
@@ -44,6 +62,11 @@ export interface AssignableVariant {
  * The variant picker lists code and description together, which is what the reference F4 shows;
  * only active variants are offered, and a variant in use cannot be retired, so a Company Code
  * can never be left pointing at one.
+ *
+ * The refusals above are the same ones the service applies, shown early; they are not a
+ * substitute for it. A save revalidates and the row is rebuilt from the database, so the dialog
+ * a second assignment would open is a different dialog than the first — which is why a browser
+ * test reloads between writes rather than clicking twice.
  */
 export function AssignCompanyCodesUI({
   companyCodes,
@@ -115,6 +138,10 @@ function CompanyCodeRow({
 }) {
   const [variant, setVariant] = useState(row.fiscalYearVariant ?? '');
   const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<FyvAssignmentActionState, FormData>(
+    assignFiscalYearVariantAction,
+    { ok: true },
+  );
 
   const current = variants.find((entry) => entry.code === row.fiscalYearVariant) ?? null;
   const proposed = variants.find((entry) => entry.code === variant) ?? null;
@@ -157,7 +184,7 @@ function CompanyCodeRow({
   }
   if (!reason.trim()) problems.push(t('fyvAssignment.reasonRequired'));
 
-  const canSubmit = canMaintain && problems.length === 0;
+  const canSubmit = canMaintain && !pending && problems.length === 0;
   const label = `${t('fyvAssignment.assign')} ${row.code}`;
 
   return (
@@ -244,15 +271,7 @@ function CompanyCodeRow({
                   <div className="border-b border-line bg-sunken px-4 py-3">
                     <h3 className="font-semibold">{t('fyvAssignment.dialogRule')}</h3>
                   </div>
-                  <form
-                    className="space-y-3 p-4"
-                    onSubmit={(event) => {
-                      // Stage 1 renders the decision and its refusals; the write arrives with the
-                      // assignment service, and an inert form says so rather than pretending.
-                      event.preventDefault();
-                      window.alert(t('fyvAssignment.inert'));
-                    }}
-                  >
+                  <form action={formAction} className="space-y-3 p-4">
                     <input type="hidden" name="companyCode" value={row.code} />
                     <input type="hidden" name="expectedVariant" value={row.fiscalYearVariant ?? ''} />
 
@@ -266,6 +285,7 @@ function CompanyCodeRow({
                         name="fiscalYearVariant"
                         className="field-input code"
                         value={variant}
+                        disabled={pending}
                         onChange={(event) => setVariant(event.target.value)}
                       >
                         <option value="">{t('fyvAssignment.chooseVariant')}</option>
@@ -295,12 +315,14 @@ function CompanyCodeRow({
                         maxLength={500}
                         className="field-input"
                         value={reason}
+                        readOnly={pending}
                         onChange={(event) => setReason(event.target.value)}
                       />
                       <p className="mt-1 text-xs text-ink-faint">{t('fyvAssignment.reasonHelp')}</p>
                     </div>
 
                     <div className="space-y-2">
+                      <AssignmentMessage state={state} />
                       {notices.map((notice) => (
                         <p key={notice} role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
                           {notice}
@@ -312,7 +334,7 @@ function CompanyCodeRow({
                         </p>
                       ))}
                       <button type="submit" className="btn-primary" disabled={!canSubmit}>
-                        {t('fyvAssignment.assign')}
+                        {pending ? t('common.saving') : t('fyvAssignment.assign')}
                       </button>
                     </div>
                   </form>
