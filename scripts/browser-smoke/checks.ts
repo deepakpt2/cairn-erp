@@ -10,6 +10,7 @@ import { generateBankRecordId } from '../../src/platform/security/bank-record-id
 import { loadBankDataKeyring } from '../../src/platform/security/bank-data-keyring';
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
+import { applyStandardStructure } from '../../src/platform/tenancy/standard-structure';
 import { changeHistory } from '../../src/platform/change';
 import { indexDocument } from '../../src/platform/document';
 import { listCompanyCodes } from '../../src/modules/foundation/services';
@@ -142,6 +143,19 @@ export async function onboard(ctx: BrowserContext) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(/\/config$/, { waitUntil: 'commit' });
   await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+  // The enterprise structure every browser target was written against. The standard
+  // package still provides it, so this reports which half supplied the rows rather
+  // than asserting one answer: reducing the package must not need an edit here.
+  const structure = await applyStandardStructure({
+    client: CLIENT,
+    companyName: 'Browser verification company',
+    country: 'KW',
+    currency: 'KWD',
+    changedBy: 'browser.admin',
+  });
+  console.log(structure.created
+    ? '  ✓ builder supplied the standard structure'
+    : '  ✓ standard package still supplies the structure; builder changed nothing');
   assert.equal((await withTenant(CLIENT, (tx) => tx.execute(sql`select count(*)::int as n from number_range where object_code = 'JOURNAL_ENTRY'`)) as unknown as Array<{ n: number }>)[0].n, 0);
   console.log('  ✓ UI-created tenant has no hidden accounting intervals');
 }

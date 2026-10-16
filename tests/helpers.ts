@@ -8,6 +8,7 @@ import { closeDb, db, withTenant } from '@/platform/db/client';
 import { client as clientTable, clientSettings } from '@/platform/tables/tenancy';
 import { defineRange } from '@/platform/numbering';
 import { applyStandardPackage, STANDARD_ACCOUNT_GROUP } from '@/modules/foundation/standard-config';
+import { applyStandardStructureInTransaction } from '@/platform/tenancy/standard-structure';
 import { glAccountGroup } from '@/modules/finance/gl-account-group-schema';
 import { chartOfAccounts, distributionChannel, division, salesOrgDistributionChannel, salesOrgDivision } from '@/modules/foundation/schema';
 import { deriveGlAccountType, deriveIsBalanceSheet } from '@/modules/finance/gl-account-vocabulary';
@@ -77,6 +78,18 @@ export async function createTenant(
         country: 'KW',
         fiscalYearVariant: 'K4',
         activatedBy: 'TEST',
+      });
+      // The enterprise structure a configured test tenant is expected to have. While
+      // the standard package still writes it this call finds the rows already there
+      // and does nothing; when the package is reduced to general data this is what
+      // keeps the eighteen structure-dependent test files unchanged.
+      await applyStandardStructureInTransaction(tx, {
+        client,
+        companyCode,
+        companyName: `Test company ${client}`,
+        currency,
+        country: 'KW',
+        changedBy: 'TEST',
       });
     }
   });

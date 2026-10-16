@@ -9,6 +9,7 @@
  * the wizard ever diverge, the wizard is right and this is a bug.
  */
 import { createTenant, listTenants } from '../src/platform/tenancy';
+import { applyStandardStructure } from '../src/platform/tenancy/standard-structure';
 import { closeDb } from '../src/platform/db/client';
 import { listNumberRanges, maintainNumberRange } from '../src/modules/foundation/number-ranges';
 import { seedDevelopmentMaterials } from '../src/modules/inventory/development-fixture';
@@ -54,6 +55,19 @@ async function main() {
     },
     activateStandardPackage: true,
     createdBy: 'DEV_SEED',
+  });
+
+  // The enterprise structure a development tenant works with. The standard package
+  // still writes these rows, so today this finds them present and does nothing; once
+  // the package carries only data that is true for any company, this is what keeps the
+  // development tenant whole.
+  await applyStandardStructure({
+    client: result.client,
+    companyCode: '1000',
+    companyName: 'Cairn Development Company',
+    country: 'KW',
+    currency: 'USD',
+    changedBy: 'DEV_SEED',
   });
 
   await ensureDevelopmentInterval();
