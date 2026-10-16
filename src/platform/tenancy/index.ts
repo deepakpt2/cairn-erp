@@ -127,11 +127,19 @@ export interface CreateTenantInput {
   language?: string;
   timezone?: string;
   isDevelopment?: boolean;
-  /** First company code — the legal entity that keeps the books (§6.1). */
-  companyCode: string;
-  companyName: string;
-  fiscalYearVariant: string;
-  chartOfAccounts: string;
+  /**
+   * Accepted and ignored since `INTL-STD-3`: tenant creation no longer configures a
+   * company. A company code is defined on its own screen after the tenant exists, so
+   * there is nothing here to hang one from. These four stay optional rather than being
+   * deleted only because the creation form still posts them; the form loses the fields
+   * in SCR-032 step B1 and this interface loses them in step B2.
+   */
+  companyCode?: string;
+  companyName?: string;
+  /** Still used: the package defines the variant and the tenant settings record it. */
+  fiscalYearVariant?: string;
+  /** Still used: the package defines the chart the tenant posts against. */
+  chartOfAccounts?: string;
   administrator: {
     username: string;
     fullName: string;
@@ -149,7 +157,6 @@ export interface CreateTenantInput {
 
 export interface CreatedTenant {
   client: string;
-  companyCode: string;
   administratorUsername: string;
   rolesCreated: number;
   rangesCreated: number;
@@ -168,8 +175,8 @@ export class TenancyError extends Error {
 
 export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx) => Promise<void>): Promise<CreatedTenant> {
   validateKey(input.clientKey);
-  validateKey(input.companyCode, 'Company code');
-  const chartOfAccounts = input.chartOfAccounts.trim().toUpperCase();
+  if (input.companyCode) validateKey(input.companyCode, 'Company code');
+  const chartOfAccounts = (input.chartOfAccounts ?? 'CA01').trim().toUpperCase();
   if (!/^[A-Z0-9]{4}$/.test(chartOfAccounts)) {
     throw new TenancyError(
       'Chart of Accounts key must be exactly four letters or numbers.',
@@ -183,7 +190,6 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
   }
 
   const clientKey = input.clientKey.toUpperCase();
-  const companyCode = input.companyCode.toUpperCase();
 
   const existing = await withTenant(clientKey, (tx) =>
     tx.select().from(clientTable).where(eq(clientTable.client, clientKey)).limit(1),
@@ -218,7 +224,7 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
 
     await tx.insert(clientSettings).values({
       client: clientKey,
-      fiscalYearVariant: input.fiscalYearVariant,
+      fiscalYearVariant: input.fiscalYearVariant ?? null,
       createdBy: input.createdBy,
     });
 
@@ -317,11 +323,7 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
       const { applyStandardPackage } = await import('../../modules/foundation/standard-config');
       const result = await applyStandardPackage(tx, {
         client: clientKey,
-        companyCode,
-        companyName: input.companyName,
         currency: input.currency.toUpperCase(),
-        country: input.country.toUpperCase(),
-        city: undefined,
         chartOfAccounts,
         fiscalYearVariant: input.fiscalYearVariant,
         activatedBy: input.createdBy,
@@ -332,42 +334,24 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
       // Mark the onboarding activities the package has just satisfied, so the
       // workbench reflects reality instead of asking for work already done.
       for (const code of [
-        'CFG.ORG.COMPANYCODE.DEFINE',
         'CFG.FIN.COA.DEFINE',
-        'CFG.ORG.COMPANYCODE.ASSIGN_COA',
         'CFG.FIN.FYV.DEFINE',
-        'CFG.FIN.FYV.ASSIGN',
         'CFG.FIN.PPV.DEFINE',
-        'CFG.FIN.PPV.ASSIGN',
         'CFG.FIN.DOCTYPE.DEFINE',
-        'CFG.ORG.PLANT.DEFINE',
-        'CFG.ORG.PLANT.ASSIGN_COMPANY',
-        'CFG.ORG.STORAGELOC.DEFINE',
-        'CFG.PROC.PURORG.DEFINE',
-        'CFG.PROC.PURORG.ASSIGN_COMPANY',
-        'CFG.PROC.PURORG.ASSIGN_PLANT',
         'CFG.PROC.PURGROUP.DEFINE',
-        'CFG.ORG.SALESORG.DEFINE',
-        'CFG.ORG.SALESORG.ASSIGN_COMPANY',
         'CFG.ORG.DISTCHANNEL.DEFINE',
-        'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
         'CFG.ORG.DIVISION.DEFINE',
-        'CFG.ORG.SALESORG.ASSIGN_DIVISION',
-        'CFG.ORG.SALESAREA.DEFINE',
-        'CFG.COST.CONTROLLINGAREA.DEFINE',
-        'CFG.COST.CONTROLLINGAREA.ASSIGN_COMPANY',
-        'CFG.FIN.CREDIT.DEFINE',
         'CFG.FIN.EXRATE.MAINTAIN',
       ]) {
         await markActivityComplete(tx, clientKey, code, input.createdBy);
       }
-    } else {
-      await markActivityComplete(tx, clientKey, 'CFG.ORG.COMPANYCODE.DEFINE', input.createdBy);
     }
+    // A tenant created without the package used to be told its company code was
+    // defined. Nothing defined one, so nothing is marked: an empty tenant now reports
+    // an empty workbench, which is the truth the workbench exists to show.
 
     return {
       client: clientKey,
-      companyCode,
       administratorUsername: input.administrator.username,
       rolesCreated,
       rangesCreated,

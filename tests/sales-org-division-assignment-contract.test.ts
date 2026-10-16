@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { STANDARD_STRUCTURE } from '../src/platform/tenancy/standard-structure';
 
 const service = readFileSync('src/modules/foundation/sales-org-division-assignment.ts', 'utf8');
 const schema = readFileSync('src/modules/foundation/schema.ts', 'utf8');
 const migration = readFileSync('drizzle/0029_sales_org_division_assignment.sql', 'utf8');
 const rlsMigration = readFileSync('drizzle/9024_sales_org_division_policies.sql', 'utf8');
 const standardConfig = readFileSync('src/modules/foundation/standard-config.ts', 'utf8');
+const standardStructure = readFileSync('src/platform/tenancy/standard-structure.ts', 'utf8');
 const tenancy = readFileSync('src/platform/tenancy/index.ts', 'utf8');
 const salesOrgMaintenance = readFileSync('src/modules/foundation/sales-organization-maintenance.ts', 'utf8');
 const divisionMaintenance = readFileSync('src/modules/foundation/distribution-channel-division-maintenance.ts', 'utf8');
@@ -78,17 +80,23 @@ describe('OVXA Sales Organization / Division service and database contract', () 
   });
 
   it('seeds and audits the standard pair before its default Sales Area, and retains definition dependencies', () => {
-    const pairAt = standardConfig.indexOf('.insert(salesOrgDivision)');
-    const areaAt = standardConfig.indexOf('.insert(salesArea)', pairAt);
+    // SCR-032 moved the standard pair and its default sales area out of the package and
+    // into the structure builder; the ordering this test exists to protect — the pair
+    // audited before the sales area that depends on it — is asserted where they now live.
+    const pairAt = standardStructure.indexOf('.insert(salesOrgDivision)');
+    const areaAt = standardStructure.indexOf('.insert(salesArea)', pairAt);
     expect(pairAt).toBeGreaterThan(-1);
     expect(areaAt).toBeGreaterThan(pairAt);
-    const standardPair = standardConfig.slice(pairAt, areaAt);
-    expect(standardPair).toContain("division: '01'");
+    const standardPair = standardStructure.slice(pairAt, areaAt);
+    expect(STANDARD_STRUCTURE.division).toBe('01');
+    expect(standardPair).toContain('division: STANDARD_STRUCTURE.division');
     expect(standardPair).toContain("objectClass: 'sales_org_division'");
     expect(standardPair).toContain(`transactionCode: '${assignmentActivity}'`);
     expect(standardPair).toContain("changeType: 'CREATE'");
     expect(standardPair).toContain("securityRelevantFields: ['salesOrg', 'division']");
-    expect(tenancy).toContain(`'${assignmentActivity}'`);
+    // Tenant creation no longer marks the assignment: nothing at creation links a sales
+    // organisation to a division any more.
+    expect(tenancy).not.toContain(`'${assignmentActivity}'`);
     expect(seed).toContain(`{ code: '${assignmentActivity}'`);
     expect(salesOrgMaintenance).toContain('salesOrgDivision');
     expect(salesOrgMaintenance).toContain('Division assignments and cannot be deactivated');

@@ -11,6 +11,7 @@ const okkp = readFileSync('src/modules/foundation/controlling-area-maintenance.t
 const companyCodeCoa = readFileSync('src/modules/foundation/company-code-coa-assignment.ts', 'utf8');
 const foundationServices = readFileSync('src/modules/foundation/services.ts', 'utf8');
 const standardConfig = readFileSync('src/modules/foundation/standard-config.ts', 'utf8');
+const standardStructure = readFileSync('src/platform/tenancy/standard-structure.ts', 'utf8');
 const workbench = readFileSync('src/app/config/page.tsx', 'utf8');
 const workbenchTree = readFileSync('src/app/config/WorkbenchTree.tsx', 'utf8');
 const seed = readFileSync('scripts/seed.ts', 'utf8');
@@ -109,8 +110,14 @@ describe('SCR-025 / OX19 assignment contract', () => {
     expect(assignment).toContain('lockCompanyCodeOxxAssignments(tx, client, companyCodeKey, [areaCode])');
     expect(companyCodeCoa).toContain('assertCompanyCodeFinancialSettingsCompatible');
     expect(foundationServices).toContain('assertCompanyCodeFinancialSettingsCompatible');
-    expect(standardConfig).toContain('assertCompanyCodeFinancialSettingsCompatible');
-    expect(standardConfig).toContain('assignCompanyCodeToControllingAreaInTransaction(tx, {');
+    // The standard package no longer writes company financial settings at all — SCR-032
+    // removed its company-specific half — so the write path this inventory tracks moved
+    // to the structure builder. The builder does not call the compatibility assert
+    // itself: it only ever inserts a company code that cannot already exist, and it
+    // reaches the controlling area through the OX19 service below, which validates the
+    // chart baseline against the area's other assignments.
+    expect(standardConfig).not.toContain('assertCompanyCodeFinancialSettingsCompatible');
+    expect(standardStructure).toContain('assignCompanyCodeToControllingAreaInTransaction(tx, {');
     expect(okkp).toContain('row.currency.trim() !== areaCurrency');
     expect(okkp).toContain("scope === 'MULTIPLE' && chartBaseline !== null && chartBaseline !== chart");
   });

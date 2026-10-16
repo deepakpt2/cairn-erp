@@ -1,5 +1,5 @@
 /**
- * Standard configuration package — CAIRN.md §7.3, `INTL-STD-2`
+ * Standard configuration package — CAIRN.md §7.3, `INTL-STD-3`
  *
  * Activatable in one action, versioned, and used as the fixture for every
  * automated test. Its purpose is not to fill screens with sample data: it is to
@@ -8,36 +8,40 @@
  *
  * Everything here is configuration, not business data. Master data (materials,
  * partners) is a separate concern and belongs to M1b's master-data screens.
+ *
+ * Since `INTL-STD-3` nothing in this file belongs to a company. The package used
+ * to create a company code and hang a controlling area, a plant with storage
+ * locations, a purchasing organisation and a sales organisation from it, which
+ * meant a tenant could not exist without one legal entity already configured and
+ * the workbench reported twelve configuration activities as complete that no
+ * screen had been asked about. What is left is true for any company a tenant may
+ * later define through its own screen: the chart of accounts and its accounts,
+ * the fiscal year variant and its periods, the posting period variant and its
+ * interval rules, document types, exchange rates, distribution channels,
+ * divisions, purchasing groups, the supplier partner-function catalogue, material
+ * types, groups and valuation classes, and payment terms.
+ *
+ * The enterprise structure a fixture needs now comes from
+ * `src/platform/tenancy/standard-structure.ts`, which reproduces the rows this
+ * file used to write and is exercised against them by
+ * `tests/standard-structure-builder.test.ts`.
  */
 import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../../platform/db/client';
 import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
-import { createCentralAddress } from './central-address-maintenance';
 import { applyPaymentTermDefaults } from './payment-terms';
 import {
   chartOfAccounts,
-  companyCode,
-  creditControlArea,
-  controllingArea,
   distributionChannel,
   division,
   documentType,
   exchangeRate,
   fiscalYearPeriod,
   fiscalYearVariant,
-  plant,
   postingPeriodRule,
   postingPeriodVariant,
   purchasingGroup,
-  purchasingOrg,
-  purchasingOrgPlant,
-  salesArea,
-  salesOrg,
-  salesOrgDistributionChannel,
-  salesOrgDivision,
-  salesOrgText,
-  storageLocation,
   supplierPartnerFunction,
 } from './schema';
 import { glAccount } from '../finance/schema';
@@ -48,13 +52,11 @@ import {
   isBalanceSheetAccountType,
   type ReconciliationType,
 } from '../finance/gl-account-vocabulary';
-import { assignCompanyCodeToControllingAreaInTransaction } from './controlling-area-company-assignment';
-import {
-  assertCompanyCodeFinancialSettingsCompatible,
-  lockCompanyCodeOxxAssignments,
-} from './controlling-area-company-compatibility';
 
-export const STANDARD_PACKAGE_VERSION = 'INTL-STD-2';
+// Bumped from INTL-STD-2 when the company-specific half left the package: the
+// version is the object key of the package's change document, so tenants
+// configured before and after the split are distinguishable in the audit trail.
+export const STANDARD_PACKAGE_VERSION = 'INTL-STD-3';
 
 /**
  * The Account Group the standard package defines for its chart (FS00).
@@ -73,17 +75,12 @@ const SUPPLIER_PARTNER_FUNCTIONS = [
 
 export interface PackageInput {
   client: string;
-  companyCode: string;
-  companyName: string;
+  /** Currency the exchange rates and the chart are built around. */
   currency: string;
-  country: string;
-  city?: string;
-  timezone?: string;
   /** Tenant-local operational chart key. Defaults to CA01 for the standard package. */
   chartOfAccounts?: string;
   /** Fiscal year variant key to create. Defaults to K4 (calendar + 4 special). */
   fiscalYearVariant?: string;
-  /** Local-language name of the chart of accounts. */
   activatedBy: string;
 }
 
@@ -416,151 +413,7 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
   }
 
-  /* ── Company code ────────────────────────────────────────────────────────── */
-  const currentOxxAreas = await lockCompanyCodeOxxAssignments(tx, client, input.companyCode, ['A000']);
-  const existingCompany = await tx
-    .select()
-    .from(companyCode)
-    .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, input.companyCode)))
-    .limit(1)
-    .for('update');
-
-  if (
-    chartDefinition.isBlocked
-    && (existingCompany.length === 0 || existingCompany[0].chartOfAccounts?.trim() !== coaKey)
-  ) {
-    throw new Error(`Chart of Accounts ${coaKey} is blocked; the standard package cannot create a new Company Code segment.`);
-  }
-
-  if (existingCompany.length === 0) {
-    await tx.insert(companyCode).values({
-      client,
-      companyCode: input.companyCode,
-      name: input.companyName,
-      chartOfAccounts: coaKey,
-      fiscalYearVariant: fyvKey,
-      postingPeriodVariant: ppvKey,
-      currency: input.currency,
-      country: input.country,
-      city: input.city ?? null,
-      creditControlArea: '0001',
-      intercompanyClearingAccount: '110100',
-      createdBy: activatedBy,
-    });
-  } else {
-    // Keep an existing company code in step with the package rather than
-    // overwriting its identity, but never break a current OX19 financial match.
-    await assertCompanyCodeFinancialSettingsCompatible(tx, client, input.companyCode, {
-      chartOfAccounts: coaKey,
-      fiscalYearVariant: fyvKey,
-      currency: existingCompany[0].currency,
-    }, currentOxxAreas);
-    await tx
-      .update(companyCode)
-      .set({
-        chartOfAccounts: coaKey,
-        fiscalYearVariant: fyvKey,
-        postingPeriodVariant: ppvKey,
-        changedBy: activatedBy,
-        changedAt: new Date(),
-      })
-      .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, input.companyCode)));
-  }
-
-  /* ── Credit control area (D-029) ─────────────────────────────────────────── */
-  await tx
-    .insert(creditControlArea)
-    .values({
-      client,
-      creditControlArea: '0001',
-      name: 'Standard credit control area',
-      currency: input.currency,
-      warningThresholdPercent: 90,
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
-
-  /* ── Controlling area ────────────────────────────────────────────────────── */
-  await tx
-    .insert(controllingArea)
-    .values({
-      client,
-      controllingArea: 'A000',
-      name: 'Standard controlling area',
-      companyCodeScope: 'SINGLE',
-      currency: input.currency,
-      fiscalYearVariant: fyvKey,
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
-
-  // Initial package assignment shares OX19's compatibility, cardinality, lock and audit path.
-  await assignCompanyCodeToControllingAreaInTransaction(tx, {
-    client,
-    changedBy: activatedBy,
-    controllingArea: 'A000',
-    companyCode: input.companyCode,
-  });
-
-  /* ── Plant and storage locations ─────────────────────────────────────────── */
-  await tx
-    .insert(plant)
-    .values({
-      client,
-      plant: '1000',
-      name: `${input.companyName} — Main plant`,
-      companyCode: input.companyCode,
-      country: input.country,
-      city: input.city ?? null,
-      isProductionSite: true,
-      isStorageSite: true,
-      defaultStorageLocation: '0001',
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
-
-  const storageLocations: Array<{ code: string; name: string }> = [
-    { code: '0001', name: 'Raw materials store' },
-    { code: '0002', name: 'Production floor' },
-    { code: '0003', name: 'Finished goods warehouse' },
-    { code: '0099', name: 'Goods receipt area' },
-  ];
-
-  for (const location of storageLocations) {
-    await tx
-      .insert(storageLocation)
-      .values({
-        client,
-        plant: '1000',
-        storageLocation: location.code,
-        name: location.name,
-        allowNegativeStock: false,
-        createdBy: activatedBy,
-      })
-      .onConflictDoNothing();
-  }
-
-  /* ── Purchasing organisation and groups ──────────────────────────────────── */
-  await tx
-    .insert(purchasingOrg)
-    .values({
-      client,
-      purchasingOrg: '1000',
-      name: `${input.companyName} — Purchasing`,
-      companyCode: input.companyCode,
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
-
-  await tx
-    .insert(purchasingOrgPlant)
-    .values({
-      client,
-      purchasingOrg: '1000',
-      plant: '1000',
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing();
+  /* ── Purchasing groups ──────────────────────────────────────── */
 
   const buyerGroups: Array<{ code: string; name: string }> = [
     { code: '001', name: 'Raw materials buying' },
@@ -582,24 +435,7 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
   }
 
-  /* ── Sales organisation, CAM address, localized text, channels and divisions ── */
-  const [existingSalesOrg] = await tx.select().from(salesOrg).where(and(
-    eq(salesOrg.client, client), eq(salesOrg.salesOrg, '1000'),
-  ));
-  if (!existingSalesOrg) {
-    const addressNumber = await createCentralAddress(tx, client, activatedBy, { country: input.country });
-    await tx.insert(salesOrg).values({
-      client,
-      salesOrg: '1000',
-      addressNumber,
-      companyCode: input.companyCode,
-      currency: input.currency,
-      createdBy: activatedBy,
-    }).onConflictDoNothing();
-  }
-  await tx.insert(salesOrgText).values({
-    client, salesOrg: '1000', languageKey: 'E', name: 'Standard Sales', formText: 'STANDARD', createdBy: activatedBy,
-  }).onConflictDoNothing();
+  /* ── Distribution channels and divisions ─────────────────────── */
 
   const channels: Array<{ code: string; name: string }> = [
     { code: '01', name: 'Direct sales' },
@@ -628,101 +464,6 @@ export async function applyStandardPackage(
       .insert(division)
       .values({ client, division: div.code, name: div.name, createdBy: activatedBy })
       .onConflictDoNothing();
-  }
-
-  const [defaultSalesOrgChannel] = await tx
-    .insert(salesOrgDistributionChannel)
-    .values({
-      client,
-      salesOrg: '1000',
-      distributionChannel: '01',
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing()
-    .returning({ salesOrg: salesOrgDistributionChannel.salesOrg });
-  if (defaultSalesOrgChannel) {
-    const mappingChangeId = await recordChange(tx, {
-      client,
-      objectClass: 'sales_org_distribution_channel',
-      objectKey: '1000/01',
-      changeType: 'CREATE',
-      changedBy: activatedBy,
-      transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
-      after: { salesOrg: '1000', distributionChannel: '01' },
-      securityRelevantFields: ['salesOrg', 'distributionChannel'],
-      fieldLabels: {
-        salesOrg: 'Sales Organization',
-        distributionChannel: 'Distribution Channel',
-      },
-    });
-    if (!mappingChangeId) throw new Error('Standard Sales Organization/Distribution Channel assignment could not be recorded.');
-  }
-
-  const [defaultSalesOrgDivision] = await tx
-    .insert(salesOrgDivision)
-    .values({
-      client,
-      salesOrg: '1000',
-      division: '01',
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing()
-    .returning({ salesOrg: salesOrgDivision.salesOrg });
-  if (defaultSalesOrgDivision) {
-    const mappingChangeId = await recordChange(tx, {
-      client,
-      objectClass: 'sales_org_division',
-      objectKey: '1000/01',
-      changeType: 'CREATE',
-      changedBy: activatedBy,
-      transactionCode: 'CFG.ORG.SALESORG.ASSIGN_DIVISION',
-      after: { salesOrg: '1000', division: '01' },
-      securityRelevantFields: ['salesOrg', 'division'],
-      fieldLabels: {
-        salesOrg: 'Sales Organization',
-        division: 'Division',
-      },
-    });
-    if (!mappingChangeId) throw new Error('Standard Sales Organization/Division assignment could not be recorded.');
-  }
-
-  const [defaultSalesArea] = await tx
-    .insert(salesArea)
-    .values({
-      client,
-      salesOrg: '1000',
-      distributionChannel: '01',
-      division: '01',
-      name: 'Direct sales — manufactured products',
-      createdBy: activatedBy,
-    })
-    .onConflictDoNothing()
-    .returning({ salesOrg: salesArea.salesOrg });
-  if (defaultSalesArea) {
-    const changeId = await recordChange(tx, {
-      client,
-      objectClass: 'sales_area',
-      objectKey: '1000/01/01',
-      changeType: 'CREATE',
-      changedBy: activatedBy,
-      transactionCode: 'CFG.ORG.SALESAREA.DEFINE',
-      after: {
-        salesOrg: '1000',
-        distributionChannel: '01',
-        division: '01',
-        name: 'Direct sales — manufactured products',
-        isActive: true,
-      },
-      securityRelevantFields: ['salesOrg', 'distributionChannel', 'division', 'isActive'],
-      fieldLabels: {
-        salesOrg: 'Sales Organization',
-        distributionChannel: 'Distribution Channel',
-        division: 'Division',
-        name: 'Sales Area Name',
-        isActive: 'Active',
-      },
-    });
-    if (!changeId) throw new Error('Standard Sales Area creation could not be recorded.');
   }
 
   /* ── Document types ──────────────────────────────────────────────────────── */
@@ -795,7 +536,6 @@ export async function applyStandardPackage(
       accounts,
       fiscalYearVariant: fyvKey,
       periods: periodRows.length,
-      companyCode: input.companyCode,
       supplierPartnerFunctions: SUPPLIER_PARTNER_FUNCTIONS.length,
     },
   });

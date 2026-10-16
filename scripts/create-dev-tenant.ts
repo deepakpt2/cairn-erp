@@ -42,8 +42,6 @@ async function main() {
     currency: 'USD',
     timezone: 'Asia/Kuwait',
     isDevelopment: true,
-    companyCode: '1000',
-    companyName: 'Cairn Development Company',
     fiscalYearVariant: 'K4',
     chartOfAccounts: 'CA01',
     administrator: {
@@ -74,7 +72,7 @@ async function main() {
   await seedDevelopmentMaterials();
   console.log('Development tenant created:');
   console.log(`  Tenant key        ${result.client}`);
-  console.log(`  Company code      ${result.companyCode}`);
+  console.log('  Company code      1000 (built by the standard structure builder)');
   console.log(`  Administrator     ${result.administratorUsername}`);
   console.log(`  Roles             ${result.rolesCreated}`);
   console.log(`  Number ranges     ${result.rangesCreated} operational + 1 accounting`);

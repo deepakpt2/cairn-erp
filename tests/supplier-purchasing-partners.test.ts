@@ -82,9 +82,8 @@ describe('supplier purchasing partner-function read services', () => {
         .set({ isActive: false, changedBy: 'TEST' })
         .where(and(eq(supplierPartnerFunction.client, defaults.client), eq(supplierPartnerFunction.functionCode, 'DELIVERY_PARTNER')));
       await applyStandardPackage(tx, {
-        client: defaults.client, companyCode: defaults.companyCode,
-        companyName: `Test company ${defaults.client}`, currency: defaults.currency,
-        country: 'KW', fiscalYearVariant: 'K4', activatedBy: 'TEST',
+        client: defaults.client, currency: defaults.currency,
+        fiscalYearVariant: 'K4', activatedBy: 'TEST',
       });
     });
     const rows = await listSupplierPartnerFunctions(defaults.client);

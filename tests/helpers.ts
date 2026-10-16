@@ -72,10 +72,7 @@ export async function createTenant(
     if (options.withConfiguration !== false) {
       await applyStandardPackage(tx, {
         client,
-        companyCode,
-        companyName: `Test company ${client}`,
         currency,
-        country: 'KW',
         fiscalYearVariant: 'K4',
         activatedBy: 'TEST',
       });

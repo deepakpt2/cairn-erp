@@ -113,9 +113,11 @@ describe('SCR-021 Sales Organization -> Company Code assignment contract', () =>
     expect(migration).toContain('DELETE FROM config_activity_status');
     expect(migration).toContain('DELETE FROM config_activity');
     expect(migration).toContain('SCR021_MIGRATION');
-    // The placeholder must be gone from runtime code: onboarding marks the approved code,
-    // and no source, script or test still references the old one.
-    expect(tenancy).toContain(`'${capability}'`);
+    // The placeholder must be gone from runtime code. Onboarding no longer marks the
+    // approved code either: SCR-032 took the company-specific half out of the standard
+    // package, so nothing at tenant creation assigns a sales organisation to a company
+    // code and the activity stays with this screen alone.
+    expect(tenancy).not.toContain(`'${capability}'`);
     expect(tenancy).not.toContain(`'${placeholder}'`);
     expect(seed).not.toContain(`'${placeholder}'`);
   });

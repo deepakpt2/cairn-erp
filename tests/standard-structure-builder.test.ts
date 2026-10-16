@@ -158,16 +158,23 @@ describe('standard structure builder', () => {
   let changesBefore: string[];
 
   /**
-   * The point of this file. Step A2 of SCR-032 takes the company-specific rows out of
-   * the standard package and leaves this builder as the only thing that writes them.
+   * The point of this file. Step A2 of SCR-032 took the company-specific rows out of
+   * the standard package and left this builder as the only thing that writes them.
    * Eighteen test files and twelve browser targets were written against the structure
-   * the package provided and are not allowed to change, so the builder has to produce
-   * the same rows, not merely rows that happen to satisfy them. Comparing a snapshot
-   * taken from the package against one taken from the builder is the only check that
-   * actually says so — and it has to be made while the package still writes them,
-   * because afterwards there is nothing left to compare against.
+   * the package provided and were not allowed to change, so the builder had to produce
+   * the same rows, not merely rows that happen to satisfy them.
+   *
+   * This test was written and published green while the package still wrote the
+   * structure (commit 75cff49), which is when the comparison against the package was
+   * actually made — and it caught two things the builder was missing, the controlling
+   * area link and three change documents. Now that the package no longer writes them,
+   * the same test proves something narrower and still worth having: the builder
+   * reproduces the structure exactly after it is deleted, and a repeat call changes
+   * nothing. The values the package used to write are pinned as constants in the test
+   * below, so the historical half of the claim stays under test rather than living only
+   * in a commit message.
    */
-  it('rebuilds row for row what the standard package wrote', async () => {
+  it('rebuilds the structure row for row after it is deleted', async () => {
     tenant = await createTenant('structure-builder');
     before = await snapshot(tenant.client);
     changesBefore = await changeProjection(tenant.client);
@@ -296,6 +303,110 @@ describe('standard structure builder', () => {
     });
 
     await destroyTenant(custom.client);
+  });
+
+  it('pins the keys, names and defaults the standard package used to write', async () => {
+    // The round-trip test above can only prove the builder agrees with itself. These are
+    // the values the package wrote before SCR-032 reduced it, kept as assertions so that
+    // a fixture written against them — eighteen test files and twelve browser targets —
+    // cannot drift silently.
+    await withTenant(tenant.client, async (tx) => {
+      const [company] = await tx
+        .select()
+        .from(companyCode)
+        .where(eq(companyCode.client, tenant.client));
+      expect(company.companyCode).toBe('1000');
+      expect(company.name).toBe(`Test company ${tenant.client}`);
+      expect(company.chartOfAccounts).toBe('CA01');
+      expect(company.fiscalYearVariant).toBe('K4');
+      expect(company.postingPeriodVariant).toBe('C001');
+      expect(company.creditControlArea).toBe('0001');
+      expect(company.intercompanyClearingAccount).toBe('110100');
+      expect(company.country).toBe('KW');
+
+      const [credit] = await tx
+        .select()
+        .from(creditControlArea)
+        .where(eq(creditControlArea.client, tenant.client));
+      expect(credit.creditControlArea).toBe('0001');
+      expect(credit.name).toBe('Standard credit control area');
+      expect(credit.warningThresholdPercent).toBe(90);
+
+      const [area] = await tx
+        .select()
+        .from(controllingArea)
+        .where(eq(controllingArea.client, tenant.client));
+      expect(area.controllingArea).toBe('A000');
+      expect(area.name).toBe('Standard controlling area');
+      expect(area.companyCodeScope).toBe('SINGLE');
+      expect(area.fiscalYearVariant).toBe('K4');
+
+      const [link] = await tx
+        .select()
+        .from(controllingAreaCompany)
+        .where(eq(controllingAreaCompany.client, tenant.client));
+      expect(link.controllingArea).toBe('A000');
+      expect(link.companyCode).toBe('1000');
+
+      const [site] = await tx.select().from(plant).where(eq(plant.client, tenant.client));
+      expect(site.plant).toBe('1000');
+      expect(site.name).toBe(`Test company ${tenant.client} — Main plant`);
+      expect(site.defaultStorageLocation).toBe('0001');
+      expect(site.isProductionSite).toBe(true);
+      expect(site.isStorageSite).toBe(true);
+
+      const locations = await tx
+        .select()
+        .from(storageLocation)
+        .where(eq(storageLocation.client, tenant.client));
+      expect(locations.map((row) => row.storageLocation).sort()).toEqual([
+        '0001',
+        '0002',
+        '0003',
+        '0099',
+      ]);
+
+      const [purchasing] = await tx
+        .select()
+        .from(purchasingOrg)
+        .where(eq(purchasingOrg.client, tenant.client));
+      expect(purchasing.purchasingOrg).toBe('1000');
+      expect(purchasing.name).toBe(`Test company ${tenant.client} — Purchasing`);
+      const [orgPlant] = await tx
+        .select()
+        .from(purchasingOrgPlant)
+        .where(eq(purchasingOrgPlant.client, tenant.client));
+      expect(orgPlant.purchasingOrg).toBe('1000');
+      expect(orgPlant.plant).toBe('1000');
+
+      const [sales] = await tx
+        .select()
+        .from(salesOrg)
+        .where(eq(salesOrg.client, tenant.client));
+      expect(sales.salesOrg).toBe('1000');
+      const [text] = await tx
+        .select()
+        .from(salesOrgText)
+        .where(eq(salesOrgText.client, tenant.client));
+      expect(text.name).toBe('Standard Sales');
+      expect(text.languageKey).toBe('E');
+      expect(text.formText?.trim()).toBe('STANDARD'); // char(n), so it comes back padded
+      const [channel] = await tx
+        .select()
+        .from(salesOrgDistributionChannel)
+        .where(eq(salesOrgDistributionChannel.client, tenant.client));
+      expect(channel.distributionChannel).toBe('01');
+      const [divisionRow] = await tx
+        .select()
+        .from(salesOrgDivision)
+        .where(eq(salesOrgDivision.client, tenant.client));
+      expect(divisionRow.division).toBe('01');
+      const [area2] = await tx
+        .select()
+        .from(salesArea)
+        .where(eq(salesArea.client, tenant.client));
+      expect(area2.name).toBe('Direct sales — manufactured products');
+    });
   });
 
   afterAll(async () => {

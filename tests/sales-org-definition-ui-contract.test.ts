@@ -138,7 +138,10 @@ describe('SCR-020 Sales Organization definition UI and action contract', () => {
     expect(seed).toContain(`{ ourCode: '${capability}', termType: 'CONFIG_ACTIVITY'`);
     expect(seed).toContain("'CFG.ORG.SALESORG.DEFINE'");
     expect(seed).toContain("then 'COMPLETED' else 'NOT_STARTED' end");
-    expect(tenancy).toContain("'CFG.ORG.SALESORG.DEFINE'");
-    expect(tenancy).toContain("'CFG.ORG.SALESORG.ASSIGN_COMPANY'");
+    // SCR-032 took the company-specific half out of the standard package, so tenant
+    // creation no longer defines a sales organisation and must not claim the activity.
+    // The workbench keeps asking for it until the sales organisation screen answers.
+    expect(tenancy).not.toContain("'CFG.ORG.SALESORG.DEFINE'");
+    expect(tenancy).not.toContain("'CFG.ORG.SALESORG.ASSIGN_COMPANY'");
   });
 });
