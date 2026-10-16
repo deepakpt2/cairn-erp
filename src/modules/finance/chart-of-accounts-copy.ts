@@ -46,6 +46,7 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { recordChange } from '../../platform/change';
+import { markActivityComplete } from '../../platform/tenancy';
 import { changeDocument } from '../../platform/tables/audit-trail';
 import { withTenant } from '../../platform/db/client';
 import { ConfigError, glAccountUsage } from '../foundation/services';
@@ -464,6 +465,8 @@ export async function copyChartOfAccounts(
         'Retry the copy. If the problem continues, contact an administrator.',
       );
     }
+
+    await markActivityComplete(tx, client, ACTIVITY, changedBy);
 
     return {
       sourceChartOfAccounts: source,
