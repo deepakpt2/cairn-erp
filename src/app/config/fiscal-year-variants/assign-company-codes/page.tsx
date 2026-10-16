@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { and, asc, count, eq, max, min } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, max, min } from 'drizzle-orm';
 import { can, requireSession } from '@/platform/auth/current';
 import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
@@ -69,7 +69,13 @@ export default async function AssignFiscalYearVariantPage() {
         lastYear: max(journalEntry.fiscalYear),
       })
       .from(journalEntry)
-      .where(eq(journalEntry.client, client))
+      // The same definition the assignment service uses: a reversed document still occupied a
+      // period, and a draft never did. Two counts of one rule is how a screen and its service
+      // come to disagree about whether a book has posted.
+      .where(and(
+        eq(journalEntry.client, client),
+        inArray(journalEntry.status, ['POSTED', 'REVERSED']),
+      ))
       .groupBy(journalEntry.companyCode)),
   ]);
 
