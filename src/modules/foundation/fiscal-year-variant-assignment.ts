@@ -274,11 +274,11 @@ export async function assignFiscalYearVariant(
       changedBy,
       transactionCode: ACTIVITY,
       reason: values.reason,
-      before: {
-        fiscalYearVariant: current.fiscalYearVariant,
-        postedDocuments,
-        postedYears: describeYears(firstPostedYear, lastPostedYear),
-      },
+      // The exposure appears only on the after side, and that is deliberate: recordChange files
+      // the fields whose values moved, so a figure repeated on both sides would be dropped and
+      // the audit trail would not say how many documents were already on the other calendar.
+      // It is not a field that changed; it is the context the change was made in.
+      before: { fiscalYearVariant: current.fiscalYearVariant },
       after: {
         fiscalYearVariant: values.fiscalYearVariant,
         postedDocuments,

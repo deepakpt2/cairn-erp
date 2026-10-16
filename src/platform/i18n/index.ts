@@ -1362,6 +1362,7 @@ const en: Catalogue = {
   'fiscalYearVariant.deactivatedMessage': 'Fiscal Year Variant {variant} deactivated. Company Codes and Controlling Areas keep it as their variant.',
   'fiscalYearVariant.reactivated': 'Fiscal Year Variant {variant} is active again.',
   'fiscalYearVariant.lifecycleUnchanged': 'Fiscal Year Variant {variant} already had that status.',
+  'fiscalYearVariant.periodsUnchanged': 'The period list for {variant} ({year}) was already stored exactly as submitted; nothing was changed.',
   'fiscalYearVariant.periodsSaved': 'Periods of {variant} for {year} saved: {count} period(s), variant version {version}.',
   'fiscalYearVariant.periodGridIncomplete': 'The period list arrived incomplete.',
   'fiscalYearVariant.periodGridIncompleteRemedy': 'Reload the screen and save the whole list again.',

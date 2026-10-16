@@ -561,6 +561,29 @@ export async function saveFiscalYearPeriods(raw: FiscalYearPeriodMaintenanceInpu
       ))
       .orderBy(asc(fiscalYearPeriod.period));
 
+    // Re-saving the list that is already stored is not a change, and treating it as one breaks:
+    // recordChange files only the fields that moved, so a document for an identical list has no
+    // items and comes back null, which this module reads as a lost audit trail and refuses. The
+    // operator would be told the change could not be recorded when what happened is that there
+    // was nothing to record. Answer "nothing changed" instead, and leave the version alone.
+    const unchangedList =
+      before.length === sorted.length &&
+      before.every((row, index) =>
+        row.period === sorted[index].period &&
+        row.month === sorted[index].month &&
+        row.day === sorted[index].day &&
+        row.yearShift === sorted[index].yearShift);
+    if (unchangedList) {
+      await markActivityComplete(tx, client, ACTIVITY, changedBy);
+      return {
+        variant,
+        calendarYear,
+        periods: sorted.length,
+        version: definition.version,
+        unchanged: true as const,
+      };
+    }
+
     await tx
       .delete(fiscalYearPeriod)
       .where(and(
@@ -607,7 +630,7 @@ export async function saveFiscalYearPeriods(raw: FiscalYearPeriodMaintenanceInpu
       after: { periodCount: sorted.length, periodEnds: describeEnds(sorted) },
     });
     await markActivityComplete(tx, client, ACTIVITY, changedBy);
-    return { variant, calendarYear, periods: sorted.length, version };
+    return { variant, calendarYear, periods: sorted.length, version, unchanged: false as const };
   });
 }
 

@@ -184,6 +184,20 @@ export async function saveFiscalYearPeriodsAction(
 
     revalidateVariantRoutes();
 
+    // A list that was already stored exactly as submitted is not a change, and saying "saved"
+    // would tell the operator a version moved when it did not.
+    if (result.unchanged) {
+      return {
+        ok: true,
+        message: t('fiscalYearVariant.periodsUnchanged', {
+          variant: result.variant,
+          year: result.calendarYear === 0
+            ? t('fiscalYearVariant.everyYear')
+            : String(result.calendarYear),
+        }),
+      };
+    }
+
     return {
       ok: true,
       message: t('fiscalYearVariant.periodsSaved', {
