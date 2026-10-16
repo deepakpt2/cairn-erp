@@ -29,6 +29,8 @@ const KEYWORDS = [
   // Fiscal year variants and periods
   'PERIV', 'LTEXT', 'XJAHR', 'ANZPER', 'ANZSP', 'XMONAT', 'BDATJ', 'POPER', 'MONAT', 'TAG',
   'JAHRSHIFT', 'T009', 'T009B',
+  // Posting period variants and their intervals
+  'VARNT', 'BKRSV', 'T010O', 'XT010O', 'T001B',
   // Organisational and partner keys
   'VKORG', 'BUKRS', 'VTWEG', 'VTEXT', 'SPART', 'MATNR', 'WERKS', 'LGORT', 'EKORG', 'EKGRP',
   'LIFNR', 'KUNNR',
@@ -64,7 +66,7 @@ describe('source-system keyword hygiene', () => {
     const seed = readFileSync('scripts/seed.ts', 'utf8');
     // The aliases a consultant searches by. Every one is a transaction code, and none of them
     // is a data-dictionary keyword, which is the distinction this suite exists to hold.
-    for (const alias of ['OB13', 'FS00', 'FSP0', 'FSS0', 'OBY7', 'OB29', 'OB37']) {
+    for (const alias of ['OB13', 'FS00', 'FSP0', 'FSS0', 'OBY7', 'OB29', 'OB37', 'OBBO']) {
       expect(seed).toContain(`'${alias}'`);
     }
     expect(seed).not.toMatch(PATTERN);

@@ -201,8 +201,9 @@ export async function checkPostingAllowed(
         `No posting period rule exists for account type ${accountType} ` +
         `(${ACCOUNT_TYPE_LABELS[accountType]}) in posting period variant ${variantCode}.`,
       remedy:
-        'Maintain the rule in Posting Periods (CFG.FIN.PPV.DEFINE), or assign another ' +
-        'posting period variant to the company code.',
+        'Maintain the interval in Posting periods (FIN.CLOSE.PERIOD), or give the Company ' +
+        'Code another posting period variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE). ' +
+        'Defining variants is CFG.FIN.PPV.DEFINE, which does not maintain their intervals.',
     };
   }
 
