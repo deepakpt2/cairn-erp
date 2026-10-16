@@ -500,6 +500,91 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
     };
   });
 
+  // The grid is rendered inside the form that submits it when the list is editable, and
+  // outside any form when it is read-only, so it is built once and placed by the branch.
+  const grid = (
+        <table className="grid-table min-w-[620px]">
+          <thead>
+            <tr>
+              <th>{t('fiscalYearVariant.period')}</th>
+              <th>{t('fiscalYearVariant.periodType')}</th>
+              <th>{t('fiscalYearVariant.periodEnds')}</th>
+              {!editable && <th>{t('fiscalYearVariant.periodStart')}</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((period) => (
+              <tr key={period.period}>
+                <td className="tabular">
+                  {period.period}
+                  <input type="hidden" name="periodNumber" value={period.period} />
+                </td>
+                <td>
+                  <span className={period.periodType === 'SPECIAL' ? 'chip chip-neutral' : 'chip'}>
+                    {period.periodType === 'SPECIAL'
+                      ? t('fiscalYearVariant.special')
+                      : t('fiscalYearVariant.regular')}
+                  </span>
+                </td>
+                <td>
+                  {editable ? (
+                    <span className="flex flex-wrap items-center gap-1">
+                      <select
+                        name="periodMonth"
+                        aria-label={`${t('fiscalYearVariant.periodMonth')} ${period.period}`}
+                        className="field-input tabular w-20"
+                        defaultValue={period.month}
+                        disabled={pending}
+                      >
+                        {MONTHS.map((month) => (
+                          <option key={month} value={month}>{month}</option>
+                        ))}
+                      </select>
+                      <input
+                        name="periodDay"
+                        aria-label={`${t('fiscalYearVariant.periodDay')} ${period.period}`}
+                        className="field-input tabular w-20"
+                        type="number"
+                        min={1}
+                        max={31}
+                        defaultValue={period.day}
+                        disabled={pending}
+                      />
+                      <select
+                        name="periodYearShift"
+                        aria-label={`${t('fiscalYearVariant.periodYearShift')} ${period.period}`}
+                        className="field-input tabular w-20"
+                        defaultValue={period.yearShift}
+                        disabled={pending}
+                      >
+                        {SHIFTS.map((shift) => (
+                          <option key={shift} value={shift}>{shift > 0 ? `+${shift}` : shift}</option>
+                        ))}
+                      </select>
+                    </span>
+                  ) : (
+                    <span className="tabular">
+                      {t('fiscalYearVariant.endOfMonth', {
+                        month: String(period.month),
+                        day: String(period.day),
+                        shift: String(period.yearShift),
+                      })}
+                    </span>
+                  )}
+                </td>
+                {!editable && (
+                  <td className="tabular text-xs text-ink-soft">
+                    {period.derivedStart && period.derivedEnd
+                      ? `${period.derivedStart} → ${period.derivedEnd}`
+                      : t('fiscalYearVariant.notDerived')}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+  );
+
   return (
     <div className="mt-2 space-y-2">
       {row.isYearDependent ? (
@@ -522,92 +607,12 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
         </p>
       )}
 
-      <table className="grid-table min-w-[620px]">
-        <thead>
-          <tr>
-            <th>{t('fiscalYearVariant.period')}</th>
-            <th>{t('fiscalYearVariant.periodType')}</th>
-            <th>{t('fiscalYearVariant.periodEnds')}</th>
-            {!editable && <th>{t('fiscalYearVariant.periodStart')}</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((period) => (
-            <tr key={period.period}>
-              <td className="tabular">
-                {period.period}
-                <input type="hidden" name="periodNumber" value={period.period} />
-              </td>
-              <td>
-                <span className={period.periodType === 'SPECIAL' ? 'chip chip-neutral' : 'chip'}>
-                  {period.periodType === 'SPECIAL'
-                    ? t('fiscalYearVariant.special')
-                    : t('fiscalYearVariant.regular')}
-                </span>
-              </td>
-              <td>
-                {editable ? (
-                  <span className="flex flex-wrap items-center gap-1">
-                    <select
-                      name="periodMonth"
-                      aria-label={`${t('fiscalYearVariant.periodMonth')} ${period.period}`}
-                      className="field-input tabular w-20"
-                      defaultValue={period.month}
-                      disabled={pending}
-                    >
-                      {MONTHS.map((month) => (
-                        <option key={month} value={month}>{month}</option>
-                      ))}
-                    </select>
-                    <input
-                      name="periodDay"
-                      aria-label={`${t('fiscalYearVariant.periodDay')} ${period.period}`}
-                      className="field-input tabular w-20"
-                      type="number"
-                      min={1}
-                      max={31}
-                      defaultValue={period.day}
-                      disabled={pending}
-                    />
-                    <select
-                      name="periodYearShift"
-                      aria-label={`${t('fiscalYearVariant.periodYearShift')} ${period.period}`}
-                      className="field-input tabular w-20"
-                      defaultValue={period.yearShift}
-                      disabled={pending}
-                    >
-                      {SHIFTS.map((shift) => (
-                        <option key={shift} value={shift}>{shift > 0 ? `+${shift}` : shift}</option>
-                      ))}
-                    </select>
-                  </span>
-                ) : (
-                  <span className="tabular">
-                    {t('fiscalYearVariant.endOfMonth', {
-                      month: String(period.month),
-                      day: String(period.day),
-                      shift: String(period.yearShift),
-                    })}
-                  </span>
-                )}
-              </td>
-              {!editable && (
-                <td className="tabular text-xs text-ink-soft">
-                  {period.derivedStart && period.derivedEnd
-                    ? `${period.derivedStart} → ${period.derivedEnd}`
-                    : t('fiscalYearVariant.notDerived')}
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
       {editable ? (
         <form action={formAction} className="space-y-2">
           <input type="hidden" name="variant" value={row.variant} />
           <input type="hidden" name="calendarYear" value={year} />
           <input type="hidden" name="expectedVersion" value={row.version} />
+          {grid}
           <ActionMessage state={state} />
           <p className="border border-line bg-white p-3 text-xs text-ink-soft">
             {t('fiscalYearVariant.periodEditorRule', { total: String(total), regular: String(row.regularPeriods) })}
@@ -633,9 +638,12 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
           </button>
         </form>
       ) : (
-        <p className="border border-line bg-white p-3 text-xs text-ink-soft">
-          {t('fiscalYearVariant.periodsReadOnly')}
-        </p>
+        <>
+          {grid}
+          <p className="border border-line bg-white p-3 text-xs text-ink-soft">
+            {t('fiscalYearVariant.periodsReadOnly')}
+          </p>
+        </>
       )}
     </div>
   );
