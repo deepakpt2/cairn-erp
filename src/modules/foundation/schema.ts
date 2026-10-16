@@ -197,7 +197,8 @@ export const postingPeriodVariant = pgTable(
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
     variant: varchar('variant', { length: 4 }).notNull(),
-    name: varchar('name', { length: 120 }).notNull(),
+    /** Thirty characters, per the OBBO contract; migration 0041 refused to shorten anything. */
+    name: varchar('name', { length: 30 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
@@ -234,6 +235,13 @@ export const postingPeriodRule = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.client, t.variant, t.accountType] }),
+    // OBBO: an interval is a child of its variant and cannot outlive it. The primary key
+    // already carries the (client, variant) prefix a parent-side check needs, so no index.
+    foreignKey({
+      name: 'posting_period_rule_client_variant_fk',
+      columns: [t.client, t.variant],
+      foreignColumns: [postingPeriodVariant.client, postingPeriodVariant.variant],
+    }),
   ],
 );
 
@@ -279,6 +287,16 @@ export const companyCode = pgTable(
       name: 'company_code_client_fiscal_year_variant_fk',
       columns: [t.client, t.fiscalYearVariant],
       foreignColumns: [fiscalYearVariant.client, fiscalYearVariant.variant],
+    }),
+    // OBBO: a company code posts against one posting period variant, and a variant in use
+    // cannot be removed. Nullable, because a company code is defined before its variant is
+    // assigned. The trigger cairn_assert_company_code_refs() still fires first on a write
+    // and names the activity that defines the missing variant.
+    index('company_code_ppv_idx').on(t.client, t.postingPeriodVariant),
+    foreignKey({
+      name: 'company_code_client_posting_period_variant_fk',
+      columns: [t.client, t.postingPeriodVariant],
+      foreignColumns: [postingPeriodVariant.client, postingPeriodVariant.variant],
     }),
   ],
 );
