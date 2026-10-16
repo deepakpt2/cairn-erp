@@ -145,10 +145,10 @@ async function regularPeriods(
  * work without storing a start that could disagree with its neighbour. `day` 31 means the
  * last day of the month, so a period ending in February ends on the 28th or 29th.
  */
-function periodWindows(
+export function periodWindows(
   regular: Array<{ period: number; month: number; day: number; yearShift: number }>,
   fiscalYear: number,
-) {
+): Array<{ period: number; start: number; end: number }> {
   const endOf = (period: { month: number; day: number; yearShift: number }, year: number) => {
     const calendarYear = year + period.yearShift;
     const lastDay = new Date(Date.UTC(calendarYear, period.month, 0)).getUTCDate();

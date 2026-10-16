@@ -65,6 +65,7 @@ export default async function WorkbenchPage({
     '/config/company-codes',
     '/config/chart-of-accounts',
     '/config/chart-of-accounts/copy',
+    '/config/fiscal-year-variants',
     '/config/controlling-area',
     '/config/controlling-area/assign-company-code',
     '/config/gl-accounts',
