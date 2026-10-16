@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listFiscalYearVariants } from '@/modules/foundation/fiscal-year-variant-maintenance';
-import { FiscalYearVariantForm, FiscalYearVariantList } from './FiscalYearVariants';
+import { FiscalYearVariantList, FiscalYearVariantPanel } from './FiscalYearVariants';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +40,7 @@ export default async function FiscalYearVariantsPage() {
           {t('auth.readOnly', { authority: ACTIVITY })}
         </p>
       )}
-      <FiscalYearVariantForm variants={variants} canMaintain={canMaintain} />
+      <FiscalYearVariantPanel variants={variants} canMaintain={canMaintain} />
       <FiscalYearVariantList variants={variants} canMaintain={canMaintain} />
     </div>
   );
