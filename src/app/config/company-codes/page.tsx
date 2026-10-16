@@ -64,6 +64,9 @@ export default async function CompanyCodesPage() {
         </div>
         <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('cc.title')}</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('cc.subtitle')}</p>
+        <Link href="/config/fiscal-year-variants/assign-company-codes" className="mt-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
+          {t('cc.assignFiscalYearVariant')}
+        </Link>
       </header>
 
       {canDefine && references && (

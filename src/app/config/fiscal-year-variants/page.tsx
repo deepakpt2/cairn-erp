@@ -31,6 +31,7 @@ export default async function FiscalYearVariantsPage() {
           <Link href="/config" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('nav.workbench')}</Link>
           <Link href="/config/posting-periods" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('fiscalYearVariant.postingPeriodsLink')}</Link>
           <Link href="/config/company-codes" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('fiscalYearVariant.companyCodesLink')}</Link>
+          <Link href="/config/fiscal-year-variants/assign-company-codes" className="inline-flex min-h-11 items-center border border-[#8faabd] bg-white px-3 text-sm font-medium text-[#264e6b] hover:bg-[#f8fbfd] sm:min-h-8 sm:py-1">{t('fiscalYearVariant.assignCompanyCodesLink')}</Link>
         </nav>
         <p className="border-b border-[#cbd5de] px-3 py-3 text-sm text-[#435b6d] sm:px-4">{t('fiscalYearVariant.subtitle')}</p>
       </section>
