@@ -874,6 +874,43 @@ export const taxCode = pgTable(
  * Document type — classifies a document and drives its number range and the
  * account types it may touch (§8.2).
  */
+/**
+ * Account determination (SCR-040, migration 0049): the G/L account an
+ * automatic posting derives for a (chart, posting event, valuation class,
+ * general modifier) combination. The event vocabulary is the product's own
+ * (the reference keys BSX/WRX/GBB/PRD are search aliases, never stored,
+ * R-89); the valuation modifier dimension of the reference layout is
+ * omitted, because this product keyes valuation by plant and holds no
+ * grouping of valuation areas. Blank valuation class and blank general
+ * modifier are stored values: any class, no modifier split.
+ */
+export const accountDetermination = pgTable(
+  'account_determination',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+    /** Product posting event, e.g. INVENTORY, GR_IR_CLEARING. */
+    event: varchar('event', { length: 24 }).notNull(),
+    /** '' = any valuation class. */
+    valuationClass: varchar('valuation_class', { length: 20 }).notNull().default(''),
+    /** '' = no general-modifier split. */
+    generalModifier: varchar('general_modifier', { length: 4 }).notNull().default(''),
+    glAccount: varchar('gl_account', { length: 10 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.chartOfAccounts, t.event, t.valuationClass, t.generalModifier] }),
+    index('account_determination_chart_event_idx').on(t.client, t.chartOfAccounts, t.event),
+    check('account_determination_chart_format', sql`${t.chartOfAccounts} ~ '^[A-Z0-9]{4}$'`),
+    check('account_determination_event_format', sql`${t.event} ~ '^[A-Z][A-Z0-9_]{2,23}$'`),
+    check('account_determination_valuation_class_format', sql`${t.valuationClass} ~ '^([A-Z0-9_]{1,20})?$'`),
+    check('account_determination_modifier_format', sql`${t.generalModifier} ~ '^([A-Z0-9]{1,4})?$'`),
+    check('account_determination_gl_account_nonempty', sql`length(btrim(${t.glAccount})) between 1 and 10`),
+  ],
+);
+
 export const documentType = pgTable(
   'document_type',
   {

@@ -1965,6 +1965,51 @@ const en: Catalogue = {
   'tolGroup.unexpected': 'The tolerance group could not be saved.',
   'tolGroup.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'acctDet.title': 'Define Account Determination',
+  'acctDet.subtitle':
+    'The G/L account an automatic posting derives for each posting event, per chart of accounts, ' +
+    'valuation class and general modifier. Logistics postings do not read these rows yet; this screen ' +
+    'defines the configuration they will read.',
+  'acctDet.chartsLink': 'Chart of accounts',
+  'acctDet.newTitle': 'New determination',
+  'acctDet.gridTitle': 'Determination rows',
+  'acctDet.chart': 'Chart of Accounts',
+  'acctDet.chooseChart': 'Choose chart of accounts',
+  'acctDet.event': 'Posting Event',
+  'acctDet.chooseEvent': 'Choose posting event',
+  'acctDet.event.INVENTORY': 'Inventory posting',
+  'acctDet.event.GR_IR_CLEARING': 'GR/IR clearing',
+  'acctDet.event.OFFSETTING_INVENTORY': 'Offsetting entry for inventory',
+  'acctDet.event.PRICE_DIFFERENCE': 'Price differences',
+  'acctDet.valuationClass': 'Valuation Class',
+  'acctDet.anyValuationClass': 'Any valuation class',
+  'acctDet.chooseValuationClass': 'Choose valuation class',
+  'acctDet.generalModifier': 'General Modifier',
+  'acctDet.generalModifierHint': 'Up to four letters or digits, for the postings this event splits (for example consumption or scrap).',
+  'acctDet.glAccount': 'G/L Account',
+  'acctDet.chooseGlAccount': 'Choose G/L account',
+  'acctDet.expectedKind': 'Expected account kind',
+  'acctDet.kind.BALANCE_SHEET': 'Balance sheet',
+  'acctDet.kind.PL_STATEMENT': 'Profit and loss',
+  'acctDet.reason': 'Reason',
+  'acctDet.create': 'Create determination',
+  'acctDet.change': 'Change',
+  'acctDet.save': 'Save determination',
+  'acctDet.delete': 'Delete',
+  'acctDet.actions': 'Actions',
+  'acctDet.empty': 'No determination rows stand for this chart and event.',
+  'acctDet.noChartEvent': 'Choose a chart of accounts and a posting event to see its determination rows.',
+  'acctDet.deleteNote':
+    'Deleting removes the account a future posting would derive; that posting will then fail for want of a determination. Deleting is possible while nothing reads these rows.',
+  'acctDet.inert':
+    'This screen is published ahead of its write path. The fields record what will be asked; saving is not enabled yet.',
+  'acctDet.created': 'Determination for {event} in chart {chart} defined.',
+  'acctDet.changed': 'Determination for {event} in chart {chart} updated.',
+  'acctDet.unchanged': 'Determination for {event} in chart {chart} already stands as shown; nothing was changed.',
+  'acctDet.deleted': 'Determination for {event} in chart {chart} deleted.',
+  'acctDet.unexpected': 'The determination could not be saved.',
+  'acctDet.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
