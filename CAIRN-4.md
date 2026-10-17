@@ -1008,6 +1008,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.315 B-299 — SCR-040 / OBYC stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.FIN.ACCTDET.DEFINE` (FIN, CONFIGURE) joins `scripts/seed.ts` (no role row changes; the `CFG.*` wildcard makes the row the grant). The Term Registry gains the definition entry at `/config/account-determination` with **OBYC as a search alias only**, its description carrying the contract whole — the product event catalogue with the reference keys as aliases, the account-kind expectation per event, classes as the material master's own, deletion's cost stated. The workbench's built-routes set gains the screen in the same stage. The activity row needed no adding (it has routed since the seed); it was read back standing instead. After reseeding — 81 capabilities (was 80), 50 terms (was 49), 42 aliases (was 41), activities unchanged at 60 — each row was read back individually: the capability standing, the Term Registry entry on its route, the OBYC alias joined to it, and the activity with prerequisite `CFG.FIN.COA.DEFINE` on its route.
+
+**Environment.** Mid-stage the sandbox lost `node_modules` (a snapshot wipe of the kind recorded before); dependencies were restored with `npm ci` and the standard environment restore before the gates ran, no repository state affected.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1109 tests across 136 files**; seed applied to `cairn_b210` and the rows read back from it.
+
+**Cost.** Measured: 13:58 in to 14:05, when `4be7e4f` landed — **7 minutes** of a 39-minute box, the environment restore inside it.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1071,6 +1085,7 @@ recorded change, date and reason stated.
 | 2.114 | 2026-10-17 | **SCR-040 / OBYC contract confirmed and stage 1 (the screen) published (B-296, §26.312; R-89).** The owner settled the product event catalogue (the reference keys as aliases only) against maximum parity, the valuation-grouping dimension omitted whole, valuation classes as the material master's own, and the G/L rule as existence-plus-kind — *whichever makes parity*. Stage 1 publishes `/config/account-determination` inert: chart and event selectors, modifier fields drawn per the event's catalogue row, the expected kind stated beside the account, and the `account_determination` schema definition the stage-2 migration will create. Typecheck, build (route 2.25 kB) and `lint:ip` clean; suite 1109 across 136 files. Cost measured at 5 minutes. | Agent |
 | 2.115 | 2026-10-17 | **SCR-040 / OBYC stage 2: the table (B-297, §26.313).** Migrations `0049_account_determination.sql` and `9032_..._policies.sql` create the registry (11 columns, five-part key over both deliberate blanks, five format/non-empty checks plus the client FK, forced RLS) on `cairn_b210` (83 migrations); verified from the database, the read side answering empty beside the tenant's chart and four active valuation classes, every check exercised refused and the registry read back empty. Typecheck, build and `lint:ip` clean; suite 1109 across 136 files. Cost measured at 5 minutes. | Agent |
 | 2.116 | 2026-10-17 | **SCR-040 / OBYC stage 3: the write (B-298, §26.314).** `saveAccountDetermination` and `deleteAccountDetermination` and the live screen: the G/L account the one changeable field behind an immutable five-part key, the catalogue judging per failure — chart standing, event standing, modifiers refused for events that do not use them, class standing active, and the account not-in-chart against the wrong-kind, the account security-relevant in one change document per write with a mandatory reason. Typecheck, build (route 2.85 kB) and `lint:ip` clean; suite 1109 across 136 files. Cost measured at 5 minutes. | Agent |
+| 2.117 | 2026-10-17 | **SCR-040 / OBYC stage 4: the supporting rows (B-299, §26.315).** Capability `CFG.FIN.ACCTDET.DEFINE` seeded (81 capabilities), the Term Registry entry added with OBYC as a search alias only (50 terms, 42 aliases), the workbench's built-routes set gaining the screen, the activity row read back standing with its prerequisite and route; every row verified after reseeding. A snapshot wipe took `node_modules` mid-stage and was restored by `npm ci` and the standard environment restore, inside the measured cost. Typecheck and `lint:ip` clean, build ok, suite 1109 across 136 files. Cost measured at 7 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
