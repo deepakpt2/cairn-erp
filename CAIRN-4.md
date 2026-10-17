@@ -1434,6 +1434,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.346 B-330 — SCR-046 / KCH1 stage 3: the write `STAGE PUBLISHED`
+
+**The services.** Nine acts in `src/modules/foundation/profit-center-hierarchy.ts`, mirrored from SCR-042's proven service with the diff reviewed line by line: define the hierarchy header (one per controlling area), define and change nodes (parent judged acyclic, the whole subtree guarded at ten levels), delete nodes (refused while child nodes or placed periods stand, the counts named), place and unplace periods (a period stands in at most one node; placing a placed period names where it stands, so a move is unplace-then-place and the audit shows both ends), and the alternative groups — define, change, delete (their leaves go with them), add and remove leaves (EQ single centres, BT ranges, I/E signs, range order judged). One change document per write with a mandatory reason; placements and leaf signs security-relevant, because they decide what a rollup will one day contain. The profit centre master is never touched by a structural act. The mirrored screen (`/config/profit-center-hierarchy`) carries the same dialogs the cost centre hierarchy proved, and the SCR-042 harness lessons are already inside them.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (the live screen compiled); suite **1191 tests across 142 files**. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Cost.** Measured: 17:22 in to 17:27 — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The activity row, capability and registry entry (stage 4), and tests, browser acceptance, and the KE51 placement display (stage 5) remain; the write is published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1528,6 +1540,7 @@ recorded change, date and reason stated.
 | 2.145 | 2026-10-17 | **SCR-045 / KE51 CLOSED and accepted (B-327, §26.343).** Stage 5 ships 12 service tests and the T951 browser target `profit-centers` (6/6 journeys on its first run against the production build — period documented with both texts and a segment, duplicate and overlap refused, the change dialog, the lock round, the documented deletion, journal-guarded deletion asserted in the service tests), the previous closures' harness lessons written in from the start. Neighbouring `cost-centers` and `activity-rates` targets, typecheck, build and `lint:ip` clean; suite 1191 across 142 files. The hierarchy stands deferred to its own next SCR in the owner's words. Cost measured at 76 minutes overall. | Agent |
 | 2.146 | 2026-10-17 | **SCR-046 / KCH1 contract confirmed and stage 1 (the screen) published (B-328, §26.344; R-95).** SAP parity on all four forks resolves to the SCR-042 shape on profit centres: the explicitly rooted standard tree, per-period exclusive placement, and EQ/BT I/E leaves resolved dynamically — no SET* frame in storage, KCH1/KCH5N/KCH6N to be search aliases only, and the KE51 screen to gain its read-only placement at closure. Stage 1 publishes `/config/profit-center-hierarchy` inert: five table definitions, the mirrored read service, the area-over-tree screen, and the catalogue keys. Typecheck, build (route 1.6 kB) and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 6 minutes. | Agent |
 | 2.147 | 2026-10-17 | **SCR-046 / KCH1 stage 2: the tables (B-329, §26.345).** Migrations `0056_profit_center_hierarchy.sql` and `9039_..._policies.sql` create the five hierarchy tables (the per-period unique index carrying the at-most-one-node rule; forced RLS on all five) on `cairn_b210` (97 migrations). Typecheck clean; suite 1191 across 142 files. Cost measured at 2 minutes. | Agent |
+| 2.148 | 2026-10-17 | **SCR-046 / KCH1 stage 3: the write (B-330, §26.346).** Nine acts mirrored from SCR-042's proven service with the diff reviewed: the header, nodes judged acyclic and depth-guarded, deletion refused with counts, exclusive per-period placement with moves as unplace-then-place, and EQ/BT I/E group leaves — placements and signs security-relevant in one change document per write with a mandatory reason, the master never touched. Typecheck, build and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
