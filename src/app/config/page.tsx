@@ -81,6 +81,7 @@ export default async function WorkbenchPage({
     '/config/tax-codes',
     '/config/banks',
     '/config/house-banks',
+    '/config/document-types',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
