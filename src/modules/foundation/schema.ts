@@ -768,6 +768,44 @@ export const exchangeRate = pgTable(
 );
 
 /**
+ * Tax code — the levy a journal line names, defined per country (SCR-035 / R-85).
+ *
+ * Journal lines have carried `tax_code` as free text since the first posting schema;
+ * this is the registry that gives the text a meaning. The code is up to four
+ * characters — the line's own width, not the reference package's two — the rate a
+ * percentage at two decimals between nothing and everything, and the condition
+ * type / account key are the operator-entered values a posting rule reads: tenant
+ * data, shape-checked, there being no condition master to validate them against.
+ * No active flag: the lifecycle is deletion, refused while lines carry the code.
+ */
+export const taxCode = pgTable(
+  'tax_code',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    country: char('country', { length: 2 })
+      .notNull()
+      .references(() => country.code),
+    taxCode: varchar('tax_code', { length: 4 }).notNull(),
+    name: varchar('name', { length: 50 }).notNull(),
+    taxType: varchar('tax_type', { length: 4 }).notNull(),
+    ratePercent: numeric('rate_percent', { precision: 7, scale: 2 }).notNull(),
+    accountKey: varchar('account_key', { length: 3 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.country, t.taxCode] }),
+    index('tax_code_code_idx').on(t.client, t.taxCode),
+    check('tax_code_code_format', sql`${t.taxCode} ~ '^[A-Z0-9]{1,4}$'`),
+    check('tax_code_name_nonempty', sql`length(btrim(${t.name})) between 1 and 50`),
+    check('tax_code_type_format', sql`${t.taxType} ~ '^[A-Z0-9]{1,4}$'`),
+    check('tax_code_rate_bounds', sql`${t.ratePercent} between 0 and 100`),
+    check('tax_code_account_key_format', sql`${t.accountKey} is null or ${t.accountKey} ~ '^[A-Z0-9]{1,3}$'`),
+  ],
+);
+
+/**
  * Document type — classifies a document and drives its number range and the
  * account types it may touch (§8.2).
  */

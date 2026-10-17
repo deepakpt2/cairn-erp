@@ -1,7 +1,9 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, count, eq } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { country as countryReference } from '../../platform/tables/reference';
+import { journalEntryLine } from '../finance/schema';
+import { taxCode } from './schema';
 
 /**
  * FTXP Define Tax Codes for Sales and Purchases — the read side (SCR-035 stage 1).
@@ -43,13 +45,43 @@ export interface CountryChoice {
   name: string;
 }
 
-/**
- * Every tax code the tenant holds. Stage 2 creates the tax_code table; until it lands
- * the registry is empty, and the stage-3 write reads the same shape this returns.
- */
+/** Every tax code the tenant holds, beside the lines that already carry each code. */
 export async function listTaxCodes(client: string): Promise<TaxCodeRow[]> {
-  void client;
-  return [];
+  return withTenant(client, async (tx) => {
+    const [codes, usage] = await Promise.all([
+      tx
+        .select({
+          country: taxCode.country,
+          taxCode: taxCode.taxCode,
+          name: taxCode.name,
+          taxType: taxCode.taxType,
+          ratePercent: taxCode.ratePercent,
+          accountKey: taxCode.accountKey,
+        })
+        .from(taxCode)
+        .where(eq(taxCode.client, client))
+        .orderBy(asc(taxCode.country), asc(taxCode.taxCode)),
+      tx
+        .select({ taxCode: journalEntryLine.taxCode, lines: count() })
+        .from(journalEntryLine)
+        .where(eq(journalEntryLine.client, client))
+        .groupBy(journalEntryLine.taxCode),
+    ]);
+
+    const usedBy = new Map(
+      usage.filter((row) => row.taxCode !== null).map((row) => [row.taxCode as string, Number(row.lines)]),
+    );
+
+    return codes.map((row) => ({
+      country: row.country.trim(),
+      taxCode: row.taxCode,
+      name: row.name,
+      taxType: row.taxType,
+      ratePercent: row.ratePercent,
+      accountKey: row.accountKey,
+      usedByLines: usedBy.get(row.taxCode) ?? 0,
+    }));
+  });
 }
 
 /** The countries a tax code may be defined for: the country master, in full. */
