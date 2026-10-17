@@ -42,6 +42,7 @@ import { postingPeriodVariantAssignmentObbp } from './posting-period-variant-ass
 import { exchangeRatesOb08 } from './exchange-rates';
 import { taxCodesFtxp } from './tax-codes';
 import { banksBankMaster } from './banks';
+import { houseBanksFi12 } from './house-banks';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4857,6 +4858,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'exchange-rates': exchangeRatesOb08,
   'tax-codes': taxCodesFtxp,
   'banks': banksBankMaster,
+  'house-banks': houseBanksFi12,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
