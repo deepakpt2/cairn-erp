@@ -1929,6 +1929,11 @@ const en: Catalogue = {
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'tolGroup.title': 'Define Employee Tolerance Groups',
   'costCenter.title': 'Define Cost Centres',
+  'costHierarchy.title': 'Define Cost Centre Hierarchy',
+  'costHierarchy.subtitle':
+    'The standard hierarchy of a controlling area — one tree whose nodes hold cost centre ' +
+    'periods — and the alternative groups beside it, resolved from single centres, ranges and ' +
+    'exclusions. Rollups and reports do not read these structures yet.',
   'costCenter.subtitle':
     'Cost centres defined period by period inside a controlling area, each period carrying its ' +
     'company code, a responsible person and a category. Postings carry centre codes as text and ' +
