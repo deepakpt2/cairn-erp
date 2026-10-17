@@ -133,7 +133,7 @@ export async function activityTypesKl01(ctx: Context) {
     .locator('tr')
     .filter({ has: page.locator('td:first-child').getByText(TYPE, { exact: true }) })
     .first();
-  await row.getByRole('button', { name: 'Change', exact: true }).click();
+  await row.getByText('Change', { exact: true }).first().click();
   const changeDialog = page.getByRole('dialog', { name: `Change ${TYPE} · from 2026-01-01` });
   await changeDialog.locator('input[name="name"]').fill('Direct Labor Hours (renamed)');
   await changeDialog.locator('select[name="category"]').selectOption('3');
@@ -151,7 +151,7 @@ export async function activityTypesKl01(ctx: Context) {
 
   // ── 5. The posting lock round ─────────────────────────────────────────────
   await row.getByText('Open').first().waitFor();
-  await row.getByRole('button', { name: 'Lock', exact: true }).click();
+  await row.getByText('Lock', { exact: true }).first().click();
   const lockDialog = page.getByRole('dialog', { name: `Lock ${TYPE} · from 2026-01-01` });
   await lockDialog.locator('textarea[name="reason"]').fill(REASON);
   await lockDialog.getByRole('button', { name: 'Lock activity type', exact: true }).click();
@@ -161,7 +161,7 @@ export async function activityTypesKl01(ctx: Context) {
     true,
     'The lock is stored.',
   );
-  await row.getByRole('button', { name: 'Unlock', exact: true }).click();
+  await row.getByText('Unlock', { exact: true }).first().click();
   const unlockDialog = page.getByRole('dialog', { name: `Unlock ${TYPE} · from 2026-01-01` });
   await unlockDialog.locator('textarea[name="reason"]').fill(REASON);
   await unlockDialog.getByRole('button', { name: 'Unlock activity type', exact: true }).click();
@@ -169,7 +169,7 @@ export async function activityTypesKl01(ctx: Context) {
   console.log('  ✓ the type locks for posting and opens again');
 
   // ── 6. The period deletes, and the deletion is documented ────────────────
-  await row.getByRole('button', { name: 'Delete', exact: true }).click();
+  await row.getByText('Delete', { exact: true }).first().click();
   const deleteDialog = page.getByRole('dialog', { name: `Delete ${TYPE} · from 2026-01-01` });
   await deleteDialog.locator('textarea[name="reason"]').fill(REASON);
   await deleteDialog.getByRole('button', { name: 'Delete activity type period', exact: true }).click();
