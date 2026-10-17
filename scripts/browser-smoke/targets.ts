@@ -34,6 +34,7 @@ export const TARGETS = [
   { id: 'activity-rates', client: 'T952', label: 'SCR-044 KP26 activity rate matrix, per-period validity, documented deletion, master judges served' },
   { id: 'profit-centers', client: 'T951', label: 'SCR-045 KE51 profit centre periods, user-directory responsible, journal-guarded deletion, posting lock' },
   { id: 'profit-center-hierarchy', client: 'T950', label: 'SCR-047a KCH1/KCH5N standard hierarchy and alternative groups, exclusive period placement, ranged leaves, unassign' },
+  { id: 'material-types', client: 'T949', label: 'SCR-048 OMS2 material types, range-judged creation, per-plant updating guard, used-type deletion refusal, deactivation' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

@@ -201,6 +201,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'activity-rates') return '/config/activity-rates';
   if (target.id === 'profit-centers') return '/config/profit-centers';
   if (target.id === 'profit-center-hierarchy') return '/config/profit-center-hierarchy';
+  if (target.id === 'material-types') return '/config/material-types';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
