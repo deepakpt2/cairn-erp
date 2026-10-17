@@ -1,10 +1,16 @@
 'use client';
 
+import { useActionState, useState } from 'react';
+
 import { t } from '@/platform/i18n';
 import type {
   CompanyChoice,
   EmployeeToleranceGroupRow,
 } from '@/modules/foundation/employee-tolerance-definition';
+import {
+  saveToleranceGroupAction,
+  type ToleranceGroupActionState,
+} from './actions';
 
 function RequiredMark() {
   return (
@@ -12,11 +18,17 @@ function RequiredMark() {
   );
 }
 
-function InertNote() {
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+function TolMessage({ state }: { state: ToleranceGroupActionState }) {
+  if (!state.message) return null;
   return (
-    <p role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
-      {t('tolGroup.inert')}
-    </p>
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
   );
 }
 
@@ -30,13 +42,13 @@ function groupLabel(groupKey: string): string {
 }
 
 const LIMIT_FIELDS = [
-  { name: 'maxDocumentAmount', labelKey: 'tolGroup.maxDocumentAmount', step: '0.01', required: true },
-  { name: 'maxLineAmount', labelKey: 'tolGroup.maxLineAmount', step: '0.01', required: true },
-  { name: 'maxCashDiscountPercent', labelKey: 'tolGroup.maxCashDiscountPercent', step: '0.001', required: true },
-  { name: 'paymentDiffRevenueAmount', labelKey: 'tolGroup.paymentDiffRevenueAmount', step: '0.01', required: false },
-  { name: 'paymentDiffExpenseAmount', labelKey: 'tolGroup.paymentDiffExpenseAmount', step: '0.01', required: false },
-  { name: 'paymentDiffRevenuePercent', labelKey: 'tolGroup.paymentDiffRevenuePercent', step: '0.1', required: false },
-  { name: 'paymentDiffExpensePercent', labelKey: 'tolGroup.paymentDiffExpensePercent', step: '0.1', required: false },
+  { name: 'maxDocumentAmount', labelKey: 'tolGroup.maxDocumentAmount', placeholder: '100000.00', required: true },
+  { name: 'maxLineAmount', labelKey: 'tolGroup.maxLineAmount', placeholder: '50000.00', required: true },
+  { name: 'maxCashDiscountPercent', labelKey: 'tolGroup.maxCashDiscountPercent', placeholder: '3.000', required: true },
+  { name: 'paymentDiffRevenueAmount', labelKey: 'tolGroup.paymentDiffRevenueAmount', placeholder: '0.00', required: false },
+  { name: 'paymentDiffExpenseAmount', labelKey: 'tolGroup.paymentDiffExpenseAmount', placeholder: '0.00', required: false },
+  { name: 'paymentDiffRevenuePercent', labelKey: 'tolGroup.paymentDiffRevenuePercent', placeholder: '0.0', required: false },
+  { name: 'paymentDiffExpensePercent', labelKey: 'tolGroup.paymentDiffExpensePercent', placeholder: '0.0', required: false },
 ] as const;
 
 type LimitFieldName = typeof LIMIT_FIELDS[number]['name'];
@@ -59,13 +71,12 @@ function LimitFields({
             <input
               id={`${idPrefix}-${field.name}`}
               name={field.name}
-              type="number"
-              min="0"
-              step={field.step}
+              type="text"
+              inputMode="decimal"
               className="field-input code"
               defaultValue={row ? row[field.name as LimitFieldName] : ''}
-              placeholder="0.00"
-              disabled
+              placeholder={field.placeholder}
+              required={field.required}
             />
           </div>
         ))}
@@ -76,30 +87,53 @@ function LimitFields({
   );
 }
 
-function ReasonField({ id }: { id: string }) {
+function ReasonField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <div>
       <label htmlFor={id} className="field-label">
         {t('tolGroup.reason')}<RequiredMark />
       </label>
-      <textarea id={id} name="reason" className="field-input" rows={2} maxLength={500} disabled />
+      <textarea
+        id={id}
+        name="reason"
+        className="field-input"
+        rows={2}
+        maxLength={500}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }
 
 function CreatePanel({ companies }: { companies: CompanyChoice[] }) {
+  const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<ToleranceGroupActionState, FormData>(
+    saveToleranceGroupAction,
+    { ok: true },
+  );
+
   return (
     <section className="panel overflow-hidden" aria-labelledby="tol-group-create-title">
       <div className="panel-header">
         <h2 id="tol-group-create-title" className="panel-title">{t('tolGroup.newTitle')}</h2>
       </div>
-      <form className="space-y-3 p-4">
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="tol-group-company" className="field-label">
               {t('tolGroup.companyCode')}<RequiredMark />
             </label>
-            <select id="tol-group-company" name="companyCode" className="field-input" defaultValue="" disabled>
+            <select id="tol-group-company" name="companyCode" className="field-input" defaultValue="">
               <option value="">{t('tolGroup.allCompanies')}</option>
               {companies.map((company) => (
                 <option key={company.companyCode} value={company.companyCode}>
@@ -110,14 +144,14 @@ function CreatePanel({ companies }: { companies: CompanyChoice[] }) {
           </div>
           <div>
             <label htmlFor="tol-group-key" className="field-label">{t('tolGroup.groupKey')}</label>
-            <input id="tol-group-key" name="groupKey" className="field-input code" maxLength={4} placeholder="TG01" disabled />
+            <input id="tol-group-key" name="groupKey" className="field-input code" maxLength={4} placeholder="TG01" />
             <p className="mt-1 text-xs text-ink-soft">{t('tolGroup.groupKeyHint')}</p>
           </div>
         </div>
         <LimitFields idPrefix="tol-group" row={null} />
-        <ReasonField id="tol-group-reason" />
-        <InertNote />
-        <button type="submit" className="btn-primary" disabled>
+        <ReasonField id="tol-group-reason" value={reason} onChange={setReason} />
+        <TolMessage state={state} />
+        <button type="submit" className="btn-primary" disabled={pending || !reason.trim()}>
           {t('tolGroup.create')}
         </button>
       </form>
@@ -125,10 +159,20 @@ function CreatePanel({ companies }: { companies: CompanyChoice[] }) {
   );
 }
 
-function ChangeDialog({ row, companies }: { row: EmployeeToleranceGroupRow; companies: CompanyChoice[] }) {
+/**
+ * Change, one dialog per row. The key is not among the fields: the dialog
+ * names the scope and group it opened from, and limits are all it may
+ * change — renaming a group means defining the new one.
+ */
+function ChangeDialog({ row }: { row: EmployeeToleranceGroupRow }) {
+  const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<ToleranceGroupActionState, FormData>(
+    saveToleranceGroupAction,
+    { ok: true },
+  );
   const keySuffix = `${row.companyCode || 'ALL'}-${row.groupKey || 'DEFAULT'}`;
   const label = `${groupLabel(row.groupKey)} · ${scopeLabel(row.companyCode)}`;
-  void companies;
+
   return (
     <details className="min-w-16">
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
@@ -153,11 +197,14 @@ function ChangeDialog({ row, companies }: { row: EmployeeToleranceGroupRow; comp
             </button>
           </div>
           <section className="panel overflow-hidden p-4">
-            <form className="space-y-3">
+            <form className="space-y-3" action={formAction}>
+              <input type="hidden" name="mode" value="CHANGE" />
+              <input type="hidden" name="companyCode" value={row.companyCode} />
+              <input type="hidden" name="groupKey" value={row.groupKey} />
               <LimitFields idPrefix={`tol-group-${keySuffix}`} row={row} />
-              <ReasonField id={`tol-group-change-reason-${keySuffix}`} />
-              <InertNote />
-              <button type="submit" className="btn-primary" disabled>
+              <ReasonField id={`tol-group-change-reason-${keySuffix}`} value={reason} onChange={setReason} />
+              <TolMessage state={state} />
+              <button type="submit" className="btn-primary" disabled={pending || !reason.trim()}>
                 {t('tolGroup.save')}
               </button>
             </form>
@@ -172,14 +219,11 @@ export function ToleranceGroups({
   rows,
   companies,
   canMaintain,
-  inert,
 }: {
   rows: EmployeeToleranceGroupRow[];
   companies: CompanyChoice[];
   canMaintain: boolean;
-  inert?: boolean;
 }) {
-  void inert;
   return (
     <>
       {canMaintain && <CreatePanel companies={companies} />}
@@ -224,7 +268,7 @@ export function ToleranceGroups({
                     <td><span className="code">{row.paymentDiffExpensePercent}</span></td>
                     {canMaintain && (
                       <td>
-                        <ChangeDialog row={row} companies={companies} />
+                        <ChangeDialog row={row} />
                       </td>
                     )}
                   </tr>

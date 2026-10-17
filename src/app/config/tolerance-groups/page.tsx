@@ -52,7 +52,7 @@ export default async function ToleranceGroupsPage() {
         </p>
       )}
 
-      <ToleranceGroups rows={rows} companies={companies} canMaintain={canMaintain} inert />
+      <ToleranceGroups rows={rows} companies={companies} canMaintain={canMaintain} />
     </div>
   );
 }

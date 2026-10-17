@@ -1959,8 +1959,6 @@ const en: Catalogue = {
     'Tolerance groups cannot be deleted yet: a group may only be removed once user assignment exists ' +
     'to be checked, and that assignment is not built. Limits stay changeable; a group key that should ' +
     'not have been used is corrected by defining the right group.',
-  'tolGroup.inert':
-    'This screen is published ahead of its write path. The fields record what will be asked; saving is not enabled yet.',
   'tolGroup.created': 'Tolerance Group {group} defined for {scope}.',
   'tolGroup.changed': 'Tolerance Group {group} for {scope} updated.',
   'tolGroup.unchanged': 'Tolerance Group {group} for {scope} already stands as shown; nothing was changed.',
