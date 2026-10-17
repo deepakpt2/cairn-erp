@@ -42,9 +42,6 @@ export default async function BanksPage() {
             <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
               {t('nav.workbench')}
             </Link>
-            <Link href="/config/house-banks" className="btn btn-default min-h-11 sm:min-h-8">
-              {t('bank.houseBanksLink')}
-            </Link>
           </div>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('bank.subtitle')}</p>

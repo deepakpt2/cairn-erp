@@ -1774,7 +1774,6 @@ const en: Catalogue = {
     'The banks a house bank names, held once for every tenant: the bank country and key a house ' +
     'bank refers to, with the name, city and SWIFT code it displays. A bank is defined here once ' +
     'and read by every tenant; it can be deleted only while no house bank names it.',
-  'bank.houseBanksLink': 'House banks',
   'bank.newTitle': 'New bank',
   'bank.gridTitle': 'Banks',
   'bank.country': 'Bank Country',
