@@ -1786,7 +1786,6 @@ const en: Catalogue = {
   'bank.city': 'City',
   'bank.swift': 'SWIFT / BIC',
   'bank.swiftHint': 'Optional. Eight or eleven characters.',
-  'bank.reason': 'Reason',
   'bank.create': 'Create bank',
   'bank.change': 'Change',
   'bank.save': 'Save bank',
@@ -1796,9 +1795,6 @@ const en: Catalogue = {
     'bank names this bank; the house bank must first be pointed elsewhere or deleted.',
   'bank.actions': 'Actions',
   'bank.empty': 'No banks are defined in the bank master.',
-  'bank.inert':
-    'This screen is being built. Defining banks becomes available once the bank master table ' +
-    'and its write path are in place; nothing entered here is saved yet.',
   'bank.created': 'Bank {key} for {country} defined.',
   'bank.changed': 'Bank {key} for {country} updated.',
   'bank.unchanged': 'Bank {key} for {country} already stands as shown; nothing was changed.',

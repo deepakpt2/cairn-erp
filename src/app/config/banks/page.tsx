@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/banks';
 
 /**
- * Bank master (SCR-036 stage 1: the screen). Reference alias FI01.
+ * Bank master (SCR-036; live since stage 3). Reference alias FI01.
  *
  * Banks are global reference data — one row per bank, shared by every tenant —
  * because house banks (FI12, SCR-037) name a bank by country and key and read its
@@ -56,7 +56,7 @@ export default async function BanksPage() {
         </p>
       )}
 
-      <Banks banks={banks} countries={countries} />
+      <Banks banks={banks} countries={countries} canMaintain={canMaintain} />
     </div>
   );
 }
