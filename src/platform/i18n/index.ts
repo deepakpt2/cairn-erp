@@ -1934,6 +1934,11 @@ const en: Catalogue = {
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
   'actType.title': 'Define Activity Types',
   'actRate.title': 'Plan Activity Prices',
+  'materialGroup.title': 'Define Material Groups',
+  'materialGroup.subtitle':
+    'Material groups defined once per tenant: the classification materials carry for ' +
+    'procurement, reporting and search. A group decides nothing about numbering, ' +
+    'valuation or periods; a group in use is never deleted under its materials.',
   'materialType.title': 'Define Material Types',
   'materialType.subtitle':
     'Material types defined once per tenant: the key and description, the price-control ' +
