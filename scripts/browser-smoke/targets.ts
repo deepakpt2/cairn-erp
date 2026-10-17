@@ -21,6 +21,7 @@ export const TARGETS = [
   { id: 'fiscal-year-variants', client: 'T966', label: 'SCR-029 OB29 fiscal year variant registry, derived and maintained period lists, retirement guards' },
   { id: 'posting-period-variants', client: 'T967', label: 'SCR-031 OBBO posting period variant registry, the interval set a variant is born with, deletion guards and audit' },
   { id: 'posting-period-variant-assignment', client: 'T963', label: 'SCR-033 OBBP posting period variant assignment, clearing before and after posting and the stale-row guard' },
+  { id: 'exchange-rates', client: 'T962', label: 'SCR-034 OB08 exchange rate maintenance, duplicate-key refusal, ratio arithmetic and deletion' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
