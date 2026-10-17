@@ -19,9 +19,8 @@ const ROUTE = '/config/tax-codes';
  * The activity has routed here since the seed with no screen behind the route, and
  * journal lines have carried a tax code as free text for just as long: this screen
  * is where the codes get defined — per country, with the rate and the condition and
- * account keys a posting rule reads. The table arrives with the migration in
- * stage 2 and the write path with the service in stage 3; until then the forms are
- * inert and say so.
+ * account keys a posting rule reads. Posted lines keep the amounts they were posted
+ * with; a definition governs what is determined from its change onward.
  */
 export default async function TaxCodesPage() {
   const session = await requireSession(ROUTE);

@@ -1762,7 +1762,13 @@ const en: Catalogue = {
     'posted with it, so no history is orphaned; the deletion and its reason are filed.',
   'taxCode.actions': 'Actions',
   'taxCode.empty': 'No tax codes are defined in this tenant.',
-  'taxCode.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
+  'taxCode.created': 'Tax Code {code} for {country} defined at {rate}%.',
+  'taxCode.changed': 'Tax Code {code} for {country} now stands at {rate}%.',
+  'taxCode.unchanged': 'Tax Code {code} for {country} already stands at those values; nothing was changed.',
+  'taxCode.deleted': 'Tax Code {code} for {country} deleted. Its definition is kept in the change history.',
+  'taxCode.unexpected': 'The tax code could not be saved.',
+  'taxCode.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +

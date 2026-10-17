@@ -1,22 +1,17 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type {
   CountryChoice,
   TaxCodeRow,
 } from '@/modules/foundation/tax-code-definition';
-
-/**
- * The write path arrives with the service (SCR-035 stage 3). An inert form says so
- * rather than pretending: a button that silently does nothing teaches an operator
- * that the screen is broken. Same pattern as the earlier screens' first stages.
- */
-function inertSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-  window.alert(t('taxCode.inert'));
-}
+import {
+  deleteTaxCodeAction,
+  saveTaxCodeAction,
+  type TaxCodeActionState,
+} from './actions';
 
 function DialogHeader({ label, sub }: { label: string; sub: string }) {
   return (
@@ -35,6 +30,20 @@ function DialogHeader({ label, sub }: { label: string; sub: string }) {
       >
         {t('common.close')}
       </button>
+    </div>
+  );
+}
+
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+function TaxMessage({ state }: { state: TaxCodeActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
     </div>
   );
 }
@@ -74,13 +83,18 @@ function ReasonField({
 
 function CreatePanel({ countries }: { countries: CountryChoice[] }) {
   const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<TaxCodeActionState, FormData>(
+    saveTaxCodeAction,
+    { ok: true },
+  );
 
   return (
     <section className="panel overflow-hidden" aria-labelledby="tax-code-create-title">
       <div className="panel-header">
         <h2 id="tax-code-create-title" className="panel-title">{t('taxCode.newTitle')}</h2>
       </div>
-      <form className="space-y-3 p-4" onSubmit={inertSubmit}>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label htmlFor="tax-code-country" className="field-label">
@@ -127,7 +141,8 @@ function CreatePanel({ countries }: { countries: CountryChoice[] }) {
           </div>
         </div>
         <ReasonField id="tax-code-reason" value={reason} onChange={setReason} />
-        <button type="submit" className="btn-primary" disabled={!reason.trim()}>
+        <TaxMessage state={state} />
+        <button type="submit" className="btn-primary" disabled={pending || !reason.trim()}>
           {t('taxCode.create')}
         </button>
       </form>
@@ -139,13 +154,22 @@ function CreatePanel({ countries }: { countries: CountryChoice[] }) {
  * Change and delete, one dialog each per row. A code's key — country and code — cannot
  * be edited in place: renaming it means defining the new code and, where the old one
  * should not stand, deleting it. The Change dialog therefore offers only the
- * description, rate, condition type and account key. The Delete dialog says where the
- * code is used before it offers anything: journal lines carry the code without its
- * country, so the count is every line in the tenant carrying it, under any country.
+ * description, rate, condition type and account key, guarded on the rate the dialog
+ * opened against. The Delete dialog says where the code is used before it offers
+ * anything: journal lines carry the code without its country, so the count is every
+ * line in the tenant carrying it, under any country.
  */
 function RowDialogs({ row }: { row: TaxCodeRow }) {
   const [changeReason, setChangeReason] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
+  const [changeState, changeAction, changePending] = useActionState<TaxCodeActionState, FormData>(
+    saveTaxCodeAction,
+    { ok: true },
+  );
+  const [deleteState, deleteAction, deletePending] = useActionState<TaxCodeActionState, FormData>(
+    deleteTaxCodeAction,
+    { ok: true },
+  );
   const keyText = `${row.country} · ${row.taxCode}`;
   const idKey = `${row.country}-${row.taxCode}`;
   const changeLabel = `${t('taxCode.change')} ${row.taxCode}`;
@@ -161,9 +185,11 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={changeLabel} sub={keyText} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3" onSubmit={inertSubmit}>
+              <form className="space-y-3" action={changeAction}>
+                <input type="hidden" name="mode" value="CHANGE" />
                 <input type="hidden" name="country" value={row.country} />
                 <input type="hidden" name="taxCode" value={row.taxCode} />
+                <input type="hidden" name="expectedRate" value={row.ratePercent} />
                 <div>
                   <span className="field-label">{t('taxCode.name')}</span>
                   <p className="font-medium">{row.name}</p>
@@ -198,7 +224,8 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                   </p>
                 )}
                 <ReasonField id={`tax-code-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
-                <button type="submit" className="btn-primary" disabled={!changeReason.trim()}>
+                <TaxMessage state={changeState} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
                   {t('taxCode.save')}
                 </button>
               </form>
@@ -215,7 +242,7 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={t('taxCode.delete')} sub={keyText} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3" onSubmit={inertSubmit}>
+              <form className="space-y-3" action={deleteAction}>
                 <input type="hidden" name="country" value={row.country} />
                 <input type="hidden" name="taxCode" value={row.taxCode} />
                 {used ? (
@@ -226,7 +253,8 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                   <p className="text-sm text-ink-soft">{t('taxCode.deleteNote')}</p>
                 )}
                 <ReasonField id={`tax-code-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
-                <button type="submit" className="btn-primary" disabled={used || !deleteReason.trim()}>
+                <TaxMessage state={deleteState} />
+                <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim()}>
                   {t('taxCode.delete')}
                 </button>
               </form>
