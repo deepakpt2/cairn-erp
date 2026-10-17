@@ -88,6 +88,7 @@ export default async function WorkbenchPage({
     '/config/cost-center-hierarchy',
     '/config/activity-types',
     '/config/activity-rates',
+    '/config/profit-centers',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
