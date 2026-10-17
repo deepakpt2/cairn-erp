@@ -553,6 +553,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.283 B-267 — SCR-034 / OB08 stage 2: the translation ratios `STAGE PUBLISHED`
+
+**The migration.** `0042_exchange_rate_ratios.sql`, in the verify-before-apply shape of 0041: `ratio_from` and `ratio_to` join `exchange_rate` as integer `NOT NULL DEFAULT 1`, with a check at each column that a ratio is at least 1. Integers because a ratio is a unit count — 1, 10, 100 — and the contract's nine-digit ceiling fits an integer with room to spare; a check because a write dividing by zero, or multiplying by a negative factor, would produce rates nobody decided on, and the database should not have to rely on the service being honest. The default is not an invention: every existing row was quoted for one unit, so the backfill states a fact. Applied to `cairn_b210` and read back — both columns, both checks, and the seeded USD→EUR rate carrying 1 : 1 with its effective rate equal to its quoted rate, as it must.
+
+**What grew around it.** The schema declares both columns and both checks; the read side returns them with the effective rate computed by the database (`rate × ratio_to / ratio_from` at numeric(18,8)), not by a JavaScript float, because a rate's eighteen digits are more than a double holds; the grid gains Ratio and Effective Rate columns, and the Change dialog now opens on the row's stored ratios rather than an assumed 1 — the stage-1 note is discharged.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 2.27 kB); suite **1025 tests across 130 files**; the migration applied once against 70 already applied and verified from the database.
+
+**Cost.** Measured: 07:20 in to 07:24, when `daa160d` landed — **4 minutes** of a 39-minute box.
+
+**Not accepted.** The write path (stage 3), the registry rows (stage 4) and browser acceptance (stage 5). Backend next.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -584,6 +598,7 @@ recorded change, date and reason stated.
 | 2.82 | 2026-10-17 | **SCR-033 / OBBP stage 4: the supporting rows (B-264, §26.280).** Capability `CFG.FIN.PPV.ASSIGN` seeded (74 capabilities; roles grant `CFG.*` by wildcard, so the row is the grant), the Term Registry entry added with OBBP as a search alias only (43 terms, 35 aliases), and the activity's route moved from the posting-periods screen to the assignment screen, all read back from the reseeded database. OBBO's deletion remedy now names the assignment screen that can actually reassign, in service and catalog together, and the definition's registry description says *exactly* four characters, stale since R-81. Typecheck and `lint:ip` clean, build ok, suite 1012 across 129 files. Cost measured at 6 minutes. | Agent |
 | 2.83 | 2026-10-17 | **SCR-033 / OBBP accepted and closed (B-265, §26.281).** Twelve service tests pass, including the posted book that moves between variants but may not be left unassigned and the count that reads every journal entry as the screen states it. The new browser target passes at nine checkpoints — grid, workbench route, the exact choice, the documented assignment, the repeat offering no save, clearing before posting and its refusal after — with the OBBO and OB37 targets green beside it. Acceptance caught the workbench still calling the new screen pending, its hand-kept route set missing the entry stage 4 owed; the route is added and the omission recorded. Suite 1025 across 130 files, typecheck and `lint:ip` clean. Cost measured at 12 minutes. | Agent |
 | 2.84 | 2026-10-17 | **SCR-034 / OB08 contract confirmed and stage 1 (the screen) published (B-266, §26.282; R-84).** The table, the composite key, the activity and one builder write already exist; the screen, capability, registry entry and service do not. The owner settled the package's four differences: the product's BUYING/SELLING/AVERAGE stay (reference letters are aliases only), the translation ratios are added as columns in stage 2, a rate is deletable with a reason because posted documents keep their own rate, and a reason is mandatory on every write. Stage 1 delivers `/config/exchange-rates` — new-rate panel with the pair value-helped from the currency master and the ratios defaulted to 1, a grid of every rate held, Change and Delete dialogs per row — with its read side in a new module and the forms inert, saying so, until the stage-3 service arrives. Typecheck, build (route 2.23 kB) and `lint:ip` clean; suite 1025 across 130 files. Cost measured at 25 minutes, a failed first build inside it. | Agent |
+| 2.85 | 2026-10-17 | **SCR-034 / OB08 stage 2: the translation ratios (B-267, §26.283).** Migration 0042 adds `ratio_from`/`ratio_to` as integer columns defaulting to 1 — every existing row's truth, since each was quoted for one unit — each checked at 1 or more, in the verify-before-apply shape; applied and read back from the database with the seeded rate at 1 : 1. The read side computes the effective rate in SQL at the stored precision, the grid shows ratio and effective rate, and the Change dialog opens on the stored ratios. Typecheck and `lint:ip` clean, build ok, suite 1025 across 130 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
