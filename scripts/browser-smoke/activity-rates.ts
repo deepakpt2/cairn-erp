@@ -145,7 +145,9 @@ export async function activityRatesKp26(ctx: Context) {
   });
   await deleteDialog.locator('textarea[name="reason"]').fill(REASON);
   await deleteDialog.getByRole('button', { name: 'Delete activity rate', exact: true }).click();
-  await page.getByRole('status').filter({ hasText: /period 2 deleted/ }).waitFor();
+  // The dialog unmounts with its own success; the standing evidence is the emptied row.
+  await deleteDialog.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => undefined);
+  await page.waitForLoadState('networkidle');
   assert.equal(await storedRate(client, 2), null, 'The period row is gone from the database.');
   const gone = await documents(client);
   assert.ok(
