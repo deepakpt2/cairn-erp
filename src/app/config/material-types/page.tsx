@@ -1,13 +1,18 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import {
+  ACTIVITY,
+  listAccountCategoryReferences,
+  listMaterialTypes,
+  listTypeValuation,
+} from '@/modules/inventory/material-type-definition';
 import { t } from '@/platform/i18n';
 import MaterialTypes from './MaterialTypes';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/material-types';
-const ACTIVITY = 'CFG.INV.MATERIALTYPE.DEFINE';
 
 /**
  * Material type definition (SCR-048 / OMS2; inert since stage 1).
@@ -22,6 +27,12 @@ const ACTIVITY = 'CFG.INV.MATERIALTYPE.DEFINE';
 export default async function MaterialTypesPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
+  const client = session.user.client;
+  const [types, references, valuation] = await Promise.all([
+    listMaterialTypes(client),
+    listAccountCategoryReferences(client),
+    listTypeValuation(client),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -44,7 +55,12 @@ export default async function MaterialTypesPage() {
         </p>
       )}
 
-      <MaterialTypes canMaintain={canMaintain} />
+      <MaterialTypes
+        types={types}
+        references={references}
+        valuation={valuation}
+        canMaintain={canMaintain}
+      />
     </div>
   );
 }

@@ -28,8 +28,6 @@ export const materialType = pgTable('material_type', {
   externalPurchaseOrders: char('external_purchase_orders', { length: 1 }).notNull().default('2'),
   internalPurchaseOrders: char('internal_purchase_orders', { length: 1 }).notNull().default('1'),
   isConfigurable: boolean('is_configurable').notNull().default(false),
-  isStocked: boolean('is_stocked').notNull().default(true),
-  isValuated: boolean('is_valuated').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true), ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialType] }),
@@ -48,7 +46,7 @@ export const materialTypeValuation = pgTable('material_type_valuation', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialType, t.valuationArea] }),
   foreignKey({ columns: [t.client, t.materialType], foreignColumns: [materialType.client, materialType.materialType] }),
-  foreignKey({ columns: [t.client, t.valuationArea], foreignColumns: [plant.client, plant.plant] }),
+  foreignKey({ columns: [t.client, t.valuationArea], foreignColumns: [plant.client, plant.plant] }).onDelete('cascade'),
 ]);
 
 export const materialGroup = pgTable('material_group', {

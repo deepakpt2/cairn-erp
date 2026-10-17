@@ -138,7 +138,7 @@ describe('material master', () => {
 
   it('keeps service materials out of inventory valuation and planning', async () => {
     await saveMaterialView(basic({ materialType: 'SERV', materialGroup: 'SERVICES', baseUnit: 'HR' }));
-    await expect(saveMaterialView(accounting())).rejects.toThrow('not stock-valuated');
+    await expect(saveMaterialView(accounting())).rejects.toThrow('does not update values');
     await expect(saveMaterialView(mrp())).rejects.toThrow('non-stock material');
   });
 

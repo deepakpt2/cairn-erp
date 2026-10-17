@@ -6,7 +6,7 @@ import { recordChange } from '../../platform/change';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { companyCode, plant, purchasingGroup } from '../foundation/schema';
-import { material, materialPlant, materialValuation, materialType, materialGroup, valuationClass, mrpController, planningFile } from './schema';
+import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, valuationClass, mrpController, planningFile } from './schema';
 import { MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from './constants';
 
 export class MaterialError extends Error {
@@ -22,7 +22,7 @@ const common = z.object({
   expectedVersion: z.number().int().nonnegative(), changedBy: z.string().min(1).max(60), reason: z.string().trim().max(500).default(''),
 });
 const materialInput = z.discriminatedUnion('view', [
-  common.extend({ view: z.literal('BASIC'), description: z.string().trim().max(200), materialType: z.string().min(1).max(12),
+  common.extend({ view: z.literal('BASIC'), description: z.string().trim().max(200), materialType: z.string().min(1).max(4),
     materialGroup: z.string().max(20), baseUnit: z.string().max(6), industrySector: z.string().max(20), barcode: z.string().max(32),
     grossWeight: quantity, netWeight: quantity, weightUnit: z.string().max(6), isBlocked: z.boolean() }),
   common.extend({ view: z.literal('PURCHASING'), plant: z.string().min(1).max(10), purchasingGroup: z.string().max(3),
@@ -118,7 +118,9 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
     const [type] = await tx.select().from(materialType).where(eq(materialType.materialType, base.materialType));
 
     if (view === 'ACCOUNTING') {
-      if (!type.isValuated) throw new MaterialError('This material type is not stock-valuated.', 'Services do not have an inventory valuation view.');
+      const [valueRow] = await tx.select().from(materialTypeValuation)
+        .where(and(eq(materialTypeValuation.materialType, base.materialType), eq(materialTypeValuation.valuationArea, input.plant)));
+      if (valueRow && !valueRow.valueUpdating) throw new MaterialError('This material type does not update values at this plant.', 'Services do not have an inventory valuation view.');
       const filter = and(eq(materialValuation.client, client), eq(materialValuation.materialNumber, materialNumber), eq(materialValuation.valuationArea, input.plant));
       const [before] = await tx.select().from(materialValuation).where(filter).for('update');
       checkVersion(before, expectedVersion);
@@ -155,7 +157,9 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       values = { purchasingGroup: input.purchasingGroup || null, orderUnit: input.orderUnit || null, overdeliveryTolerance: input.overdeliveryTolerance, underdeliveryTolerance: input.underdeliveryTolerance, manufacturerPartNumber: input.manufacturerPartNumber || null };
       statusColumn = 'purchasingStatus'; complete = !!(base.baseUnit && input.purchasingGroup && input.orderUnit);
     } else {
-      if (!type.isStocked && input.mrpType !== 'NONE') throw new MaterialError('A non-stock material cannot be planned for inventory.', 'Choose No planning for this type.');
+      const [quantityRow] = await tx.select().from(materialTypeValuation)
+        .where(and(eq(materialTypeValuation.materialType, base.materialType), eq(materialTypeValuation.valuationArea, input.plant)));
+      if (quantityRow && !quantityRow.quantityUpdating && input.mrpType !== 'NONE') throw new MaterialError('A non-stock material cannot be planned for inventory.', 'Choose No planning for this type.');
       if (input.mrpController) {
         const [controller] = await tx.select().from(mrpController).where(eq(mrpController.controller, input.mrpController));
         if (!controller?.isActive) throw new MaterialError(`MRP controller ${input.mrpController} is not active or does not exist.`);

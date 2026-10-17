@@ -75,7 +75,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
       {view === 'ACCOUNTING' && <>
         <div className="grid gap-3 sm:grid-cols-3">
           {options('valuationClass', 'material.valuationClass', choices.valuationClasses.filter((c) => c.allowedMaterialTypes.split(',').includes(value('materialType'))).map((r) => ({ key: r.valuationClass, text: r.name })))}
-          {coded('priceControl', 'material.priceControl', PRICE_CONTROLS, currentType?.defaultPriceControl ?? 'STANDARD')}
+          {coded('priceControl', 'material.priceControl', PRICE_CONTROLS, (currentType?.defaultPriceControl === 'V' ? 'MOVING_AVERAGE' : 'STANDARD'))}
           {decimal('priceUnit', 'material.priceUnit', '1')}
           {decimal('standardPrice', 'material.standardPrice')}{decimal('movingAveragePrice', 'material.movingPrice')}
           <Field label={t('journal.currency')}><span className="field-input code bg-sunken">{value('currency', '—')}</span></Field>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { requireSession, can } from '@/platform/auth/current';
 import { listMaterials, materialChoices, getMaterialDetail } from '@/modules/inventory/materials';
+import { listTypeValuation } from '@/modules/inventory/material-type-definition';
 import { MATERIAL_VIEWS, MATERIAL_VIEW_CAPABILITY } from '@/modules/inventory/constants';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
@@ -28,7 +29,9 @@ export default async function MaterialsPage({ searchParams }: {
   const company = choices.companies.find((c) => c.companyCode === site?.companyCode);
   const editable = can(session, MATERIAL_VIEW_CAPABILITY[view]);
   const valuationReadable = can(session, 'FIN.MATERIAL.VALUATION.DISPLAY') || can(session, MATERIAL_VIEW_CAPABILITY.ACCOUNTING) || can(session, 'AUDIT.WORKSPACE');
-  const nonValuated = view === 'ACCOUNTING' && choices.types.find((t) => t.materialType === detail?.base.materialType)?.isValuated === false;
+  const typeValuation = view === 'ACCOUNTING' && detail ? await listTypeValuation(client) : [];
+  const nonValuated = view === 'ACCOUNTING'
+    && typeValuation.find((r) => r.materialType === detail?.base.materialType && r.plant === plant)?.valueUpdating === false;
   const base = detail?.base ?? source?.base;
   const record = view === 'BASIC' ? detail?.base : view === 'ACCOUNTING' ? valuation : org;
   // Pass only editable/view-context primitives, not technical timestamps/tenant keys.

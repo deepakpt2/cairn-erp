@@ -269,6 +269,9 @@ export async function applyStandardStructureInTransaction(
     createdBy: changedBy,
   }).onConflictDoNothing();
 
+  const { seedTypeValuationForPlant } = await import('../../modules/inventory/standard-config');
+  await seedTypeValuationForPlant(tx, client, STANDARD_STRUCTURE.plant, changedBy);
+
   for (const location of STANDARD_STORAGE_LOCATIONS) {
     await tx.insert(storageLocation).values({
       client,

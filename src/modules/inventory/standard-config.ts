@@ -12,6 +12,30 @@ import {
   valuationClass,
 } from './schema';
 
+export const TYPE_UPDATING_DEFAULTS: Record<string, { quantityUpdating: boolean; valueUpdating: boolean }> = {
+  RAW: { quantityUpdating: true, valueUpdating: true },
+  SEMI: { quantityUpdating: true, valueUpdating: true },
+  FIN: { quantityUpdating: true, valueUpdating: true },
+  TRAD: { quantityUpdating: true, valueUpdating: true },
+  SERV: { quantityUpdating: false, valueUpdating: false },
+};
+
+/**
+ * Seed the per-plant updating rows for a plant that has just been
+ * created: onboarding creates the plant after the material defaults
+ * stand, so both call sites seed, each idempotently.
+ */
+export async function seedTypeValuationForPlant(tx: Tx, client: string, plantCode: string, createdBy: string) {
+  const types = await tx.select({ materialType: materialType.materialType })
+    .from(materialType).where(eq(materialType.client, client));
+  for (const t of types) {
+    const defaults = TYPE_UPDATING_DEFAULTS[t.materialType] ?? { quantityUpdating: true, valueUpdating: true };
+    await tx.insert(materialTypeValuation).values({
+      client, materialType: t.materialType, valuationArea: plantCode, ...defaults, createdBy,
+    }).onConflictDoNothing();
+  }
+}
+
 export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: string) {
   await tx.insert(accountCategoryReference)
     .values({ client, reference: '0001', name: 'General valuation', createdBy })
@@ -24,8 +48,10 @@ export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: s
     { materialType: 'SERV', name: 'Service', defaultProcurementType: 'BUY', defaultPriceControl: 'S', isStocked: false, isValuated: false },
   ];
   for (const type of types) {
+    const { isStocked, isValuated, ...typeRow } = type;
+    void isStocked; void isValuated;
     await tx.insert(materialType)
-      .values({ ...type, accountCategoryReference: '0001', client, createdBy })
+      .values({ ...typeRow, accountCategoryReference: '0001', client, createdBy })
       .onConflictDoNothing();
   }
   // Quantity/value updating stands per plant (R-96); seed it from the
