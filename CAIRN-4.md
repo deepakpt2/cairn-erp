@@ -1365,6 +1365,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.341 B-325 — SCR-045 / KE51 stage 3: the write `STAGE PUBLISHED`
+
+**The services.** `saveProfitCenter`, `setProfitCenterPostingLock` and `deleteProfitCenter` in `src/modules/foundation/profit-center-definition.ts`, in the KS01 period shape. The key (controlling area, profit centre, valid from) is immutable; create over a standing key refuses naming Change and a change to a missing key refuses naming Create. The responsible user is judged against the tenant's active users when entered — a name that cannot sign in here cannot be responsible here — while the person responsible stays free text and the segment stays at its parity width unjudged, there being no segment master yet, as the screen states. The validity span is judged against every sibling period, the overlap refusal naming the period it collides with, while valid to may be re-set so long as it still overlaps none.
+
+**The audit.** One change document per write with a mandatory reason; the responsible user, the segment and the lock state security-relevant, since they decide whose result this is and where postings may still go. Locking is its own act; deletion is hard and refused while journal documents dated inside the period carry the centre — journal lines already carry a profit centre code as text, so the judge counts something real from the first day, the KS01 guard verbatim. The first successful write of any kind completes `CFG.COST.PROFITCENTER.DEFINE` (prerequisite `CFG.COST.CONTROLLINGAREA.DEFINE`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (the new screen compiled); suite **1178 tests across 141 files**. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Cost.** Measured: 16:56 in to 16:59 — **3 minutes** of a 39-minute box.
+
+**Not accepted.** The capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain; the write is published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1454,6 +1468,7 @@ recorded change, date and reason stated.
 | 2.140 | 2026-10-17 | **Workbench tree reworked (B-322, §26.338).** On the owner's finding — poor folding, undistinguished sub-items, no classification — the tree now names every branch in words beside its code path, indents leaves and headers 22px per level behind a guide rail with depth shading and accent bars, folds from a boxed rotating toggle with per-branch completion chips and progress, and gains Expand all / Collapse all. Presentation only; the `cost-centers` browser target passed unchanged against it. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 | 2.141 | 2026-10-17 | **SCR-045 / KE51 contract confirmed and stage 1 (the screen) published (B-323, §26.339; R-94).** SAP parity on the names (short 20 required, long 40 optional, both on the row), the segment's width (free until a segment master stands), and the lifecycle (journal-guarded delete plus the lock); the hierarchy deferred in the owner's own words — 'same defer for now then build it' — as the next SCR, this screen gaining placement afterwards as KS01 did. Stage 1 publishes `/config/profit-centers` inert: the period definition, the reads with the user-directory value help, the master-detail screen, and the catalogue keys. Typecheck, build (route 1.79 kB) and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 5 minutes. | Agent |
 | 2.142 | 2026-10-17 | **SCR-045 / KE51 stage 2: the table (B-324, §26.340).** Migrations `0055_profit_center.sql` and `9038_..._policies.sql` create the period registry (15 columns, four-part key, seven constraints; forced RLS, four grants) on `cairn_b210` (95 migrations). Typecheck clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
+| 2.143 | 2026-10-17 | **SCR-045 / KE51 stage 3: the write (B-325, §26.341).** `saveProfitCenter`, `setProfitCenterPostingLock` and `deleteProfitCenter` and the live screen: the period key immutable, the responsible user judged against the tenant's active users, the segment kept at parity width unjudged until its master stands, the validity span judged against every sibling period — responsible user, segment and lock security-relevant in one change document per write with a mandatory reason, and deletion refused while journal documents dated inside carry the centre. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
