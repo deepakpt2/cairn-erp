@@ -33,6 +33,7 @@ export const TARGETS = [
   { id: 'distribution-channels', client: 'T975', label: 'SCR-022 OVXI Distribution Channel create/change/copy/deactivate and exact-capability access' },
   { id: 'divisions', client: 'T974', label: 'SCR-022 OVXB Division create/change/copy/deactivate and exact-capability access' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
+  { id: 'tenant-creation', client: 'T971', label: 'SCR-032 tenant creation: empty and standard paths, copy refused, names shared and a key refused' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

@@ -10,6 +10,7 @@ import { generateBankRecordId } from '../../src/platform/security/bank-record-id
 import { loadBankDataKeyring } from '../../src/platform/security/bank-data-keyring';
 import { hashPassword } from '../../src/platform/auth/password';
 import { withTenant } from '../../src/platform/db/client';
+import { listTenants } from '../../src/platform/tenancy';
 import { applyStandardStructure } from '../../src/platform/tenancy/standard-structure';
 import { changeHistory } from '../../src/platform/change';
 import { indexDocument } from '../../src/platform/document';
@@ -4590,6 +4591,172 @@ async function salesOrgDivisionAssignment(ctx: BrowserContext) {
   await page.getByRole('heading', { level: 1, name: 'Sales Organization / Division assignments', exact: true }).waitFor();
 }
 
+/**
+ * SCR-032 · B3: what creating a tenant does now that the standard package holds
+ * general data only and the enterprise structure comes from its own screens.
+ *
+ * The runner onboards this target's fixture and destroys it afterwards, but it
+ * destroys only that fixture. Every tenant this check creates it also destroys,
+ * before the run in case a previous one failed, and after it in a `finally`, so a
+ * reviewed database is never left holding a probe.
+ */
+async function tenantCreationScr032(ctx: BrowserContext) {
+  const { page, BASE, CLIENT } = scope(ctx);
+  const PROBE_NAME = 'SCR-032 creation probe';
+  const EMPTY = 'ZT91';
+  const STANDARD = 'ZT92';
+  const SHARED_NAME = 'ZT93';
+  const PROBES = [EMPTY, STANDARD, SHARED_NAME];
+  const PLATFORM_MARKS = ['CFG.PLT.CLIENT.DEFINE', 'CFG.PLT.ROLE.DEFINE', 'CFG.PLT.USER.CREATE'];
+  console.log('Browser: tenant creation after the package split');
+
+  async function destroyProbe(key: string) {
+    await withTenant(key, async (tx) => {
+      await tx.execute(sql`set local statement_timeout = '10s'`);
+      await tx.execute(sql`delete from client where client = ${key} and name = ${PROBE_NAME}`);
+    }).catch(() => {});
+  }
+  async function completedActivities(key: string): Promise<string[]> {
+    const rows = (await withTenant(key, (tx) =>
+      tx.execute(
+        sql`select activity_code from config_activity_status
+             where status = 'COMPLETED' order by activity_code`,
+      ),
+    )) as unknown as Array<{ activity_code: string }>;
+    return rows.map((row) => row.activity_code.trim());
+  }
+  async function openCreationForm() {
+    await page.goto(`${BASE}/clients/new`, { waitUntil: 'commit' });
+    const provisioningToken = page.locator('[name="provisioningToken"]');
+    if (await provisioningToken.count()) await provisioningToken.fill(randomUUID());
+    await page.locator('[name="clientKey"]').fill(EMPTY);
+    await page.locator('[name="name"]').fill(PROBE_NAME);
+    await page.locator('[name="currency"]').fill('KWD');
+  }
+  async function submitAs(username: string) {
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Create tenant', exact: true }).click();
+  }
+  async function signInTo(key: string, username: string) {
+    await page.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+    await page.locator('[name="client"]').fill(key);
+    await page.locator('[name="username"]').fill(username);
+    await page.locator('[name="password"]').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    // A sign-in with no `next` lands wherever the tenant's home is, so wait only for
+    // the session and then ask for the workbench explicitly.
+    await page.waitForURL((url) => url.pathname !== '/signin', { waitUntil: 'commit' });
+    await page.goto(`${BASE}/config`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
+  }
+  async function signOut() {
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.waitForURL(/\/signin/, { waitUntil: 'commit' });
+  }
+
+  try {
+    for (const key of PROBES) await destroyProbe(key);
+
+    // Copying is refused where the operator can see it, and cannot be submitted at all.
+    await openCreationForm();
+    await page.locator('input[name="creationType"][value="copy"]').check();
+    const refusal = page.locator('[role="alert"]').filter({ hasText: /Copying a tenant is not available yet/ });
+    await refusal.waitFor();
+    assert.match(
+      await refusal.innerText(),
+      /Create an empty tenant/,
+      'A refusal that names no way forward is not a remedy.',
+    );
+    assert.equal(await page.getByRole('button', { name: 'Create tenant', exact: true }).isDisabled(), true);
+    console.log('  ✓ copying a tenant is refused on the screen, with a remedy, and cannot be submitted');
+
+    // The empty path: a tenant, its first administrator, and no configuration at all.
+    await page.locator('input[name="creationType"][value="empty"]').check();
+    await submitAs('probe.admin');
+    await page.waitForURL(/\/signin\?/, { waitUntil: 'commit' });
+    assert.match(page.url(), new RegExp(`client=${EMPTY}`), 'The operator is sent to the tenant just created.');
+    assert.match(page.url(), /created=1/);
+    console.log('  ✓ an empty tenant is created and the operator is sent to sign in as its first administrator');
+
+    await signInTo(EMPTY, 'probe.admin');
+    assert.deepEqual(
+      await completedActivities(EMPTY),
+      PLATFORM_MARKS,
+      'An empty tenant is told exactly what creation did, and nothing it did not do.',
+    );
+    console.log('  ✓ the workbench of an empty tenant reports the three platform activities and no configuration');
+
+    await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+    assert.equal(await page.getByText('1000', { exact: true }).count(), 0, 'Creation no longer defines a company code.');
+    console.log('  ✓ an empty tenant has no company code, because creation no longer defines one');
+    await signOut();
+
+    // The standard path: general data only. Same name as the empty tenant, because
+    // R-74 makes the key the only unique thing about a tenant.
+    await openCreationForm();
+    await page.locator('[name="clientKey"]').fill(STANDARD);
+    await page.locator('input[name="creationType"][value="standard"]').check();
+    await submitAs('probe.admin');
+    await page.waitForURL(/\/signin\?/, { waitUntil: 'commit' });
+    assert.match(page.url(), new RegExp(`client=${STANDARD}`));
+    console.log('  ✓ a second tenant takes the first one\u2019s name, because only the key is unique');
+
+    await signInTo(STANDARD, 'probe.admin');
+    const marks = await completedActivities(STANDARD);
+    assert.equal(marks.length, 14, `The standard package marks eleven activities beside the three platform ones; saw ${marks.length}.`);
+    for (const code of ['CFG.FIN.COA.DEFINE', 'CFG.FIN.FYV.DEFINE', 'CFG.FIN.PPV.DEFINE']) {
+      assert.ok(marks.includes(code), `The package still configures ${code}.`);
+    }
+    for (const code of ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.FYV.ASSIGN', 'CFG.FIN.PPV.ASSIGN', 'CFG.ORG.PLANT.DEFINE']) {
+      assert.ok(!marks.includes(code), `${code} is company-specific and must no longer be reported as done.`);
+    }
+    console.log('  ✓ the standard tenant reports general data as configured and company structure as outstanding');
+
+    await page.goto(`${BASE}/config/chart-of-accounts`, { waitUntil: 'domcontentloaded' });
+    await page.getByText('CA01', { exact: true }).first().waitFor();
+    console.log('  ✓ the standard tenant has the general chart of accounts the package creates');
+
+    await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
+    assert.equal(
+      await page.getByText('1000', { exact: true }).count(),
+      0,
+      'The package holds general data only; a company code comes from its own screen.',
+    );
+    console.log('  ✓ the standard tenant still has no company code, which is the point of the split');
+    await signOut();
+
+    // A third tenant, same name again, then the key that is already taken.
+    await openCreationForm();
+    await page.locator('[name="clientKey"]').fill(SHARED_NAME);
+    await submitAs('probe.admin');
+    await page.waitForURL(/\/signin\?/, { waitUntil: 'commit' });
+    assert.match(page.url(), new RegExp(`client=${SHARED_NAME}`));
+    console.log('  ✓ a third tenant shares the name as well, and is created without objection');
+
+    await openCreationForm();
+    await page.locator('[name="clientKey"]').fill(STANDARD);
+    await submitAs('probe.admin');
+    await page.waitForURL(/\/clients\/new/, { waitUntil: 'commit' });
+    await page.getByText(/already exists/).first().waitFor();
+    assert.equal(await completedActivities(SHARED_NAME).then((rows) => rows.length > 0), true);
+    console.log('  ✓ a key already in use is refused on the form, naming the conflict');
+
+    // The runner signs the session out after a check and then proves a protected
+    // route refuses it, so a check must not end on a public form with nobody signed in.
+    await signInTo(CLIENT, 'browser.admin');
+  } finally {
+    for (const key of PROBES) await destroyProbe(key);
+    const remaining = (await listTenants()).filter((tenant) => PROBES.includes(tenant.client));
+    assert.deepEqual(
+      remaining.map((tenant) => tenant.client),
+      [],
+      'A probe this check created must not outlive it.',
+    );
+    console.log('  ✓ the probes are gone and the reviewed database holds only the target fixture');
+  }
+}
+
 export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<void>> = {
   foundation,
   'company-code-definition': companyCodeDefinition,
@@ -4615,6 +4782,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   divisions,
   'payment-terms': paymentTerms,
   'payment-methods': paymentMethods,
+  'tenant-creation': tenantCreationScr032,
   'business-partners': businessPartners,
   'supplier-company': supplierCompany,
   'supplier-purchasing': supplierPurchasing,

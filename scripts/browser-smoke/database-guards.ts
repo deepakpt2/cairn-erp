@@ -45,4 +45,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'distribution-channels': { database: 'cairn_b210', port: '5432', batch: 'SCR-022 local loopback' },
   'divisions': { database: 'cairn_b210', port: '5432', batch: 'SCR-022 local loopback' },
   'posting-period-variants': { database: 'cairn_b210', port: '5432', batch: 'SCR-031 local loopback' },
+  // SCR-032 · B3 acceptance runs on the reviewed loopback database, like every other
+  // local target; the probes it creates are destroyed by the check itself.
+  'tenant-creation': { database: 'cairn_b210', port: '5432', batch: 'SCR-032 local loopback' },
 };
