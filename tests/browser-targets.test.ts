@@ -38,6 +38,17 @@ describe('bounded browser target selection', () => {
       expect(guard?.batch, target.id).toMatch(/\S/);
     }
   });
+  it('rebinds business-partners bank fixture writes to the guarded migration connection (R-79)', () => {
+    const target = TARGETS.find((candidate) => candidate.id === 'business-partners');
+    const guard = ACCEPTANCE_DATABASE_GUARDS['business-partners'];
+    expect(target).toMatchObject({ client: 'T992' });
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432' });
+    const checksSource = readFileSync('scripts/browser-smoke/checks.ts', 'utf8');
+    expect(checksSource).toContain('process.env.MIGRATION_DATABASE_URL');
+    expect(checksSource).toContain("ACCEPTANCE_DATABASE_GUARDS['business-partners']");
+    expect(checksSource).not.toContain('CAIRN_SMOKE_FIXTURE_DATABASE_URL');
+    expect(checksSource).not.toContain("'cairn_test'");
+  });
   it('uses distinct reserved test keys, never the development company key', () => {
     expect(new Set(TARGETS.map((target) => target.client)).size).toBe(TARGETS.length);
     for (const target of TARGETS) expect(target.client).toMatch(/^T\d{3}$/);

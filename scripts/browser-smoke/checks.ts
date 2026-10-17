@@ -30,6 +30,7 @@ import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/fo
 import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
 import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
+import { ACCEPTANCE_DATABASE_GUARDS } from './database-guards';
 import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assignment';
 import { chartOfAccountsDefinition as ob13ChartOfAccounts } from './chart-of-accounts';
 import { chartOfAccountsCopyOby7 } from './chart-of-accounts-copy';
@@ -44,24 +45,55 @@ const year = new Date().getUTCFullYear();
 export type BrowserContext = { page: Page; base: string; target: BrowserTarget };
 function scope(ctx: BrowserContext) { return { page: ctx.page, BASE: ctx.base, CLIENT: ctx.target.client }; }
 
-/** Elevated fixture writes are allowed only to a fresh, loopback cairn_test database. */
+/**
+ * Elevated fixture writes use the migration connection only after both connection strings are
+ * proven to name the reviewed business-partners loopback database (R-79). The application role
+ * can read partner_bank but cannot insert into it, which is why this one synthetic row needs the
+ * separated elevated role; the tenant, partner and no-existing-row checks below remain the limit
+ * on what that role may touch here.
+ */
 async function insertSyntheticPartnerBankRecord(client: string, partnerNumber: string): Promise<string> {
-  const fixtureUrl = process.env.CAIRN_SMOKE_FIXTURE_DATABASE_URL;
-  assert.ok(fixtureUrl, 'Masked bank-detail smoke requires CAIRN_SMOKE_FIXTURE_DATABASE_URL.');
+  const guard = ACCEPTANCE_DATABASE_GUARDS['business-partners'];
+  assert.ok(guard, 'Business-partners acceptance has no reviewed database guard.');
+  const fixtureUrl = process.env.MIGRATION_DATABASE_URL;
+  assert.ok(fixtureUrl, 'Masked bank-detail smoke requires MIGRATION_DATABASE_URL.');
+  const runtimeUrl = process.env.DATABASE_URL;
+  assert.ok(runtimeUrl, 'Masked bank-detail smoke requires DATABASE_URL so the fixture binding can be verified.');
+  let fixture: URL;
+  let runtime: URL;
+  try {
+    fixture = new URL(fixtureUrl);
+    runtime = new URL(runtimeUrl);
+  } catch {
+    throw new Error('Masked bank-detail smoke connection URLs must be valid PostgreSQL URLs.');
+  }
+  for (const [url, variable] of [[fixture, 'MIGRATION_DATABASE_URL'], [runtime, 'DATABASE_URL']] as const) {
+    assert.equal(url.protocol, 'postgresql:', `${variable} must use PostgreSQL.`);
+    assert.equal(url.hostname, '127.0.0.1', `${variable} must use loopback; remote databases are forbidden.`);
+    assert.equal(url.port, guard.port, `${variable} must target the reviewed business-partners port.`);
+    assert.equal(url.pathname, `/${guard.database}`, `${variable} must target only the reviewed business-partners database.`);
+    assert.equal(url.search, '', `${variable} must not include unreviewed connection parameters.`);
+    assert.ok(url.password.length > 0, `${variable} must include the reviewed local password.`);
+  }
+  assert.equal(decodeURIComponent(runtime.username), 'cairn_app', 'DATABASE_URL must use the restricted application role.');
+  const fixtureRole = decodeURIComponent(fixture.username);
+  assert.notEqual(fixtureRole, 'cairn_app', 'Fixture writer must be separate from the read-only application role.');
   const fixtureDb = postgres(fixtureUrl, { max: 1, prepare: false, onnotice: () => {} });
 
   try {
     const [identity] = await fixtureDb`
       select current_database() as database_name,
              host(inet_server_addr()) as server_address,
+             inet_server_port() as server_port,
              current_user as role_name`;
-    assert.equal(identity?.database_name, 'cairn_test', 'Fixture writes are restricted to the disposable cairn_test database.');
+    assert.equal(identity?.database_name, guard.database, 'Fixture writes are restricted to the reviewed business-partners database.');
     assert.equal(identity?.server_address, '127.0.0.1', 'Fixture writes are restricted to loopback PostgreSQL.');
-    assert.notEqual(identity?.role_name, 'cairn_app', 'Fixture writer must be separate from the read-only application role.');
+    assert.equal(String(identity?.server_port), guard.port, 'Fixture writes are restricted to the reviewed business-partners port.');
+    assert.equal(identity?.role_name, fixtureRole, 'Fixture writer must be the role named by MIGRATION_DATABASE_URL.');
     const [role] = await fixtureDb`
       select (rolsuper or rolbypassrls) as elevated
       from pg_roles where rolname = current_user`;
-    assert.equal(role?.elevated, true, 'Fixture connection must be privileged only inside the disposable test cluster.');
+    assert.equal(role?.elevated, true, 'Fixture connection must be the separated elevated role for the reviewed database.');
 
     const [tenant] = await fixtureDb`
       select name, is_development from client where client = ${client}`;
@@ -4351,6 +4383,10 @@ async function distributionDimensionDefinition(ctx: BrowserContext, kind: Distri
   await signInAs(actor);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${BASE}${route}`, { waitUntil: 'commit' });
+  // 'commit' only means navigation has started; evaluating before the heading renders can find
+  // no body yet and throw on scrollWidth. Wait for the server-rendered heading, as the earlier
+  // mobile step does, so the width is read from a complete document.
+  await page.getByRole('heading', { level: 1, name: plural, exact: true }).waitFor();
   const finalMobileOverflow = await page.evaluate(() => Math.max(
     document.documentElement.scrollWidth,
     document.body.scrollWidth,
