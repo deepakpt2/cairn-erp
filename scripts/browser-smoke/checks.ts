@@ -45,6 +45,7 @@ import { banksBankMaster } from './banks';
 import { houseBanksFi12 } from './house-banks';
 import { documentTypesOba7 } from './document-types';
 import { toleranceGroupsOba4 } from './tolerance-groups';
+import { accountDeterminationObyc } from './account-determination';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4863,6 +4864,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'house-banks': houseBanksFi12,
   'document-types': documentTypesOba7,
   'tolerance-groups': toleranceGroupsOba4,
+  'account-determination': accountDeterminationObyc,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

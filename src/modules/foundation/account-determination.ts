@@ -115,9 +115,9 @@ export async function listDeterminationValuationClasses(client: string): Promise
     const rows = await tx
       .select({ valuationClass: valuationClass.valuationClass, name: valuationClass.name })
       .from(valuationClass)
-      .where(eq(valuationClass.client, client))
+      .where(and(eq(valuationClass.client, client), eq(valuationClass.isActive, true)))
       .orderBy(asc(valuationClass.valuationClass));
-    return rows.filter((row) => row.valuationClass.trim() !== '');
+    return rows;
   });
 }
 
