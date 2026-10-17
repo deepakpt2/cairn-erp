@@ -1150,6 +1150,18 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.325 B-309 — SCR-042 / KSH1·OKEON stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.COST.COSTCENTERHIER.DEFINE` (COST, CONFIGURE) joins `scripts/seed.ts` (83 capabilities; the `CFG.*` wildcard makes the row the grant, as by now usual). The Term Registry gains the definition entry at `/config/cost-center-hierarchy` with **KSH1, KSH2 and OKEON as search aliases only** (52 terms, 46 aliases), its description carrying the whole contract — both structures, per-period placement with moves as unplace-then-place, cycles and the ten-level guard, node/group deletion dynamics with masters untouched, subsets not built, and the honest note that rollups do not read the trees yet. The workbench's built-routes set gains the screen. The activity row itself already stood in the seed (60 activities; route `/config/cost-center-hierarchy`, prerequisite `CFG.COST.COSTCENTER.DEFINE`) — read back rather than assumed, after SCR-039 stage 4's catch, standing with its prerequisite and route.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1136 tests across 138 files**; seed applied to `cairn_b210` and the rows read back (capability, term with its three aliases, the standing activity; counts 83/60/52/46).
+
+**Cost.** Measured: 15:21 in to 15:22 — **1 minute** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1223,6 +1235,7 @@ recorded change, date and reason stated.
 | 2.124 | 2026-10-17 | **SCR-042 / KSH1·OKEON contract confirmed and stage 1 (the screen) published (B-306, §26.322; R-91).** Parity on all four forks: both structures (standard hierarchy plus alternative groups), per-period placement, ranged/excluding group leaves, and an explicitly created root — storage in the design's own product tables rather than the generic set frame, subsets not built. Stage 1 publishes `/config/cost-center-hierarchy` inert: five table definitions, area master over tree, placement with the unplaced periods stated, groups with leaves resolved in display order, and the catalogue keys. Typecheck, build (route 2.41 kB) and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 5 minutes. | Agent |
 | 2.125 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 2: the tables (B-307, §26.323).** Migration `0052` creates the five tables of both structures (hierarchy header, parent-linked nodes, period assignments carrying the one-parent unique index, groups and signed ranged leaves; the node parent foreign key living in the migration as recorded); `9035` isolates all five on `cairn_b210` (89 migrations; five tables verified standing with forced RLS, one policy and four grants each). Typecheck clean; suite 1136 across 138 files. Cost measured at 2 minutes. | Agent |
 | 2.126 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 3: the write (B-308, §26.324).** Nine acts and the live screen: the hierarchy header, nodes judged acyclic against their whole carried subtree with the ten-level guard end-to-end and one root per area, period placement exclusive with moves shown as unplace-then-place, node deletion refused against children and placements (counts stated), groups deleted with their leaves, masters never touched by placement changes — placements and leaf signs security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 4 minutes. | Agent |
+| 2.127 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 4: the supporting rows (B-309, §26.325).** Capability `CFG.COST.COSTCENTERHIER.DEFINE` seeded (83 capabilities), the Term Registry entry added with KSH1, KSH2 and OKEON as search aliases only (52 terms, 46 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route (60 activities). Typecheck and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 1 minute. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
