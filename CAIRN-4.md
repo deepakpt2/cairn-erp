@@ -1254,6 +1254,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.333 B-317 — SCR-044 / KP26 stage 1: the inert screen `STAGE PUBLISHED`
+
+**The contract (R-93).** The owner's package plans activity prices per cost centre, activity type, version, fiscal year and fiscal period — a planned quantity with fixed and variable price components per price unit, masters judged on the actual dates of each planned period, and deletion impact-checked. All four forks put to the owner took **SAP parity**: versions as a free key of at most three characters with any number standing side by side and no version administration (a version stands when first planned against); periods from the controlling area's fiscal year variant for the year, special periods sharing the last regular period's window as everywhere else here; master validity judged **per period against the fiscal period's window**, never per year — a centre or type valid for part of a year plans exactly that part, locked masters refusing; and the price indicator of SCR-043 governing entry (manual stands, automatic refuses entered components until a calculation exists to own them). The same ruling discharges the promise the KL01 screen makes: **this SCR gives both masters' deletion judges their rate count** — an activity type period or a cost centre period refuses deletion while rates stand against it, the count named.
+
+**What was published.** `activityRate` joins the foundation schema as a definition (`activity_rate`, seven-part key over the six planning dimensions, the quantity at decimal(13,3), the components at decimal(11,2), the price unit ≥ 1); `src/modules/foundation/activity-rate-definition.ts` carries the planning-context read (the area's variant periods for a year with `periodWindows` windows, specials folded onto the last regular window), the rate read, and the distinct master choices; `/config/activity-rates` heads the page with the area/version/year/centre/type selectors over the period matrix (window dates, quantity and both components per a price unit, present values read-only), the currency and variant named beside the selection, over the stage-1 inert note. Two catalogue keys joined (`actRate.title`, `actRate.subtitle`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 1.93 kB); suite **1164 tests across 140 files**.
+
+**Cost.** Measured: 16:17 in to 16:22 — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The table (stage 2), the write including both masters' new deletion judges (stage 3), capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1335,6 +1349,7 @@ recorded change, date and reason stated.
 | 2.132 | 2026-10-17 | **SCR-043 / KL01 stage 3: the write (B-314, §26.330).** `saveActivityType`, `setActivityTypePostingLock` and `deleteActivityType` and the live screen: the period key immutable, the unit judged on existence against the global units table, both behaviour digits against their catalogues, the valid categories stored as the canonical subset, the validity span judged against every sibling period — unit, category, price and lock security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
 | 2.133 | 2026-10-17 | **SCR-043 / KL01 stage 4: the supporting rows (B-315, §26.331).** Capability `CFG.COST.ACTIVITYTYPE.DEFINE` seeded (84 capabilities), the Term Registry entry added with KL01 as a search alias only (53 terms, 47 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
 | 2.134 | 2026-10-17 | **SCR-043 / KL01 CLOSED and accepted (B-316, §26.332).** Stage 5 ships 12 service tests and the T953 browser target `activity-types` (6/6 journeys against the production build — period documented in HR, the overlap named back, the change dialog, the lock round, the documented deletion); three harness-side fixes in the target alone (missing catalogue keys committed separately; summaries by text; the lock dialogs closed before the next act). Neighbouring `cost-centers` and `cost-center-hierarchy` targets, typecheck, build and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 104 minutes overall. | Agent |
+| 2.135 | 2026-10-17 | **SCR-044 / KP26 contract confirmed and stage 1 (the screen) published (B-317, §26.333; R-93).** SAP parity taken on all four forks — versions as a free three-character key standing when first planned, periods from the area's fiscal year variant with specials on the last regular window, master validity judged per period against the period's window, and the price indicator governing entry (manual stands, automatic refuses components) — and both masters' deletion judges gain their rate count here. Stage 1 publishes `/config/activity-rates` inert: the seven-part rate definition, the planning-context and rate reads, the selector-over-matrix screen, and the catalogue keys. Typecheck, build (route 1.93 kB) and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
