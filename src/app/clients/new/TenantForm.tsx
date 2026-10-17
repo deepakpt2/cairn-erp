@@ -1,22 +1,35 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { createTenantAction, type OnboardState } from '../actions';
 
 const INITIAL: OnboardState = { ok: true };
 
 /**
- * Tenant onboarding — CAIRN.md §7.2.
+ * Tenant onboarding — CAIRN.md §7.2, reduced by SCR-032.
  *
- * Grouped the way an implementation actually runs: identity, then structure,
- * then the financial basis, then the first user. Field order follows that
- * sequence deliberately, because a user working from an implementation plan
- * reads top to bottom.
+ * Creating a tenant asks what a tenant is, not what a company inside it is: identity,
+ * then what the tenant starts with, then its first administrator. The enterprise
+ * structure and the financial basis this form used to collect are configured afterwards
+ * on their own screens, because a tenant may legitimately have no company code at all.
+ * The standard package now holds only data that is true for any company, so choosing it
+ * here no longer implies a legal entity, and the structure that does imply one belongs
+ * to whichever company code the tenant defines later.
+ *
+ * Three consequences the form is built around. There is no start option: a created
+ * tenant is available at once, which is what `client.status` already recorded. Only the
+ * key is unique, so the name carries no uniqueness claim. And copying a tenant is
+ * offered and refused rather than hidden, because an implementation asks for it and a
+ * refusal that names the remedy is more use than an absent option.
+ *
+ * Field order follows the sequence an implementation actually runs, top to bottom.
  */
 export default function TenantForm({ requiresOwnerToken = false }: { requiresOwnerToken?: boolean }) {
   const [state, action, pending] = useActionState(createTenantAction, INITIAL);
+  const [creationType, setCreationType] = useState('empty');
+  const copyRefused = creationType === 'copy';
 
   return (
     <div className="mx-auto max-w-3xl p-6">
@@ -45,8 +58,8 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
           <Field label={t('onboard.clientKey')} hint={t('onboard.clientKey.hint')} required width="w-40">
             <input name="clientKey" required maxLength={4} defaultValue="0200" className="field-input code" />
           </Field>
-          <Field label={t('onboard.name')} required width="flex-1">
-            <input name="name" required defaultValue="Acme Manufacturing" className="field-input" />
+          <Field label={t('onboard.name')} hint={t('onboard.name.hint')} required width="flex-1">
+            <input name="name" required maxLength={120} defaultValue="Acme Manufacturing" className="field-input" />
           </Field>
           <Field label={t('onboard.legalName')} width="flex-1">
             <input name="legalName" className="field-input" />
@@ -62,30 +75,42 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
           </Field>
         </Section>
 
-        <Section title={t('onboard.section.structure')}>
-          <Field
-            label={t('onboard.companyCode')}
-            hint={t('onboard.companyCode.hint')}
-            required
-            width="w-40"
-          >
-            <input name="companyCode" required maxLength={4} defaultValue="1000" className="field-input code" />
-          </Field>
-          <Field label={t('onboard.companyName')} required width="flex-1">
-            <input name="companyName" required defaultValue="Acme Manufacturing" className="field-input" />
-          </Field>
-        </Section>
-
-        <Section title={t('onboard.section.finance')}>
-          <Field label={t('onboard.chartOfAccounts')} hint={t('onboard.chartOfAccounts.hint')} required width="w-40">
-            <input name="chartOfAccounts" required minLength={4} maxLength={4} pattern="[A-Za-z0-9]{4}" autoCapitalize="characters" defaultValue="CA01" className="field-input code" />
-          </Field>
-          <Field label={t('onboard.fiscalYearVariant')} width="w-64">
-            <select name="fiscalYearVariant" defaultValue="K4" className="field-input">
-              <option value="K4">K4 — calendar year, 4 special periods</option>
-              <option value="K1">K1 — calendar year, 1 special period</option>
-            </select>
-          </Field>
+        <Section title={t('onboard.section.creation')}>
+          <div className="w-full space-y-3">
+            <p className="field-hint">{t('onboard.creationType.hint')}</p>
+            <Choice
+              name="creationType"
+              value="empty"
+              title={t('onboard.creationType.empty')}
+              hint={t('onboard.creationType.empty.hint')}
+              checked
+              onSelect={setCreationType}
+            />
+            <Choice
+              name="creationType"
+              value="standard"
+              title={t('onboard.creationType.standard')}
+              hint={t('onboard.creationType.standard.hint')}
+              onSelect={setCreationType}
+            />
+            <Choice
+              name="creationType"
+              value="copy"
+              title={t('onboard.creationType.copy')}
+              hint={t('onboard.creationType.copy.hint')}
+              onSelect={setCreationType}
+            />
+            {copyRefused && (
+              <div className="border border-signal-error/30 bg-signal-error-soft p-3" role="alert">
+                <p className="text-sm font-semibold text-signal-error">
+                  {t('onboard.creationType.copy.refused')}
+                </p>
+                <p className="mt-0.5 text-sm text-ink-soft">
+                  {t('onboard.creationType.copy.remedy')}
+                </p>
+              </div>
+            )}
+          </div>
         </Section>
 
         <Section title={t('onboard.section.admin')}>
@@ -113,25 +138,49 @@ export default function TenantForm({ requiresOwnerToken = false }: { requiresOwn
             <input type="checkbox" name="isDevelopment" defaultChecked className="accent-accent" />
             {t('tenants.origin.development')} tenant
           </label>
-          <label className="flex items-center gap-2 text-sm text-ink-soft">
-            <input
-              type="checkbox"
-              name="activateStandardPackage"
-              defaultChecked
-              className="accent-accent"
-            />
-            {t('onboard.activatePackage')}
-          </label>
           <div className="flex-1" />
           <Link href="/clients" className="btn btn-default">
             {t('onboard.cancel')}
           </Link>
-          <button type="submit" className="btn btn-primary" disabled={pending}>
+          <button type="submit" className="btn btn-primary" disabled={pending || copyRefused}>
             {pending ? 'Creating…' : t('onboard.submit')}
           </button>
         </div>
       </form>
     </div>
+  );
+}
+
+function Choice({
+  name,
+  value,
+  title,
+  hint,
+  checked = false,
+  onSelect,
+}: {
+  name: string;
+  value: string;
+  title: string;
+  hint: string;
+  checked?: boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-sm">
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        defaultChecked={checked}
+        onChange={() => onSelect(value)}
+        className="mt-1 accent-accent"
+      />
+      <span>
+        <span className="font-medium text-ink">{title}</span>
+        <span className="block text-ink-soft">{hint}</span>
+      </span>
+    </label>
   );
 }
 
