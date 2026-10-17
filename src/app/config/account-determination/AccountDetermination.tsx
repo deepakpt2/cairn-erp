@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type {
   AccountDeterminationRow,
   ChartChoice,
+  GlAccountChoice,
   PostingEvent,
   ValuationClassChoice,
 } from '@/modules/foundation/account-determination';
+import {
+  deleteDeterminationAction,
+  saveDeterminationAction,
+  type AccountDeterminationActionState,
+} from './actions';
 
 function RequiredMark() {
   return (
@@ -16,11 +22,17 @@ function RequiredMark() {
   );
 }
 
-function InertNote() {
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+function DetMessage({ state }: { state: AccountDeterminationActionState }) {
+  if (!state.message) return null;
   return (
-    <p role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
-      {t('acctDet.inert')}
-    </p>
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
   );
 }
 
@@ -45,13 +57,29 @@ function DialogHeader({ label, sub }: { label: string; sub: string }) {
   );
 }
 
-function ReasonField({ id }: { id: string }) {
+function ReasonField({
+  id,
+  value,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
   return (
     <div>
       <label htmlFor={id} className="field-label">
         {t('acctDet.reason')}<RequiredMark />
       </label>
-      <textarea id={id} name="reason" className="field-input" rows={2} maxLength={500} disabled />
+      <textarea
+        id={id}
+        name="reason"
+        className="field-input"
+        rows={2}
+        maxLength={500}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }
@@ -66,28 +94,37 @@ function EventLabel({ entry }: { entry: PostingEvent }) {
 }
 
 /**
- * The fields a create and a change share, behind the chart/event heading:
- * the modifier columns appear exactly where the event's catalogue row says
- * they belong. The G/L account is the one changeable field.
+ * The modifier and account fields, behind the chart/event heading: the
+ * modifier columns appear exactly where the event's catalogue row says
+ * they belong. The G/L account is chosen from the chart's own accounts of
+ * the kind the event expects — the service judges the same list per
+ * failure for any value a request carries.
  */
 function DeterminationFields({
   idPrefix,
   entry,
+  chart,
   valuationClasses,
+  glChoices,
   row,
 }: {
   idPrefix: string;
   entry: PostingEvent;
+  chart: string;
   valuationClasses: ValuationClassChoice[];
+  glChoices: GlAccountChoice[];
   row: AccountDeterminationRow | null;
 }) {
+  const accounts = glChoices.filter(
+    (choice) => choice.chartOfAccounts === chart && choice.glAccountType === entry.expectedAccountKind,
+  );
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2">
         {entry.usesValuationClass && (
           <div>
             <label htmlFor={`${idPrefix}-valuation-class`} className="field-label">{t('acctDet.valuationClass')}</label>
-            <select id={`${idPrefix}-valuation-class`} name="valuationClass" className="field-input" defaultValue={row?.valuationClass ?? ''} disabled>
+            <select id={`${idPrefix}-valuation-class`} name="valuationClass" className="field-input" defaultValue={row?.valuationClass ?? ''}>
               <option value="">{t('acctDet.anyValuationClass')}</option>
               {valuationClasses.map((choice) => (
                 <option key={choice.valuationClass} value={choice.valuationClass}>
@@ -97,10 +134,10 @@ function DeterminationFields({
             </select>
           </div>
         )}
-        {entry.usesGeneralModifier && (
+        {entry.usesGeneralModifier && !row && (
           <div>
             <label htmlFor={`${idPrefix}-modifier`} className="field-label">{t('acctDet.generalModifier')}</label>
-            <input id={`${idPrefix}-modifier`} name="generalModifier" className="field-input code" maxLength={4} defaultValue={row?.generalModifier ?? ''} disabled />
+            <input id={`${idPrefix}-modifier`} name="generalModifier" className="field-input code" maxLength={4} defaultValue="" />
             <p className="mt-1 text-xs text-ink-soft">{t('acctDet.generalModifierHint')}</p>
           </div>
         )}
@@ -108,7 +145,14 @@ function DeterminationFields({
           <label htmlFor={`${idPrefix}-gl-account`} className="field-label">
             {t('acctDet.glAccount')}<RequiredMark />
           </label>
-          <input id={`${idPrefix}-gl-account`} name="glAccount" className="field-input code" maxLength={10} defaultValue={row?.glAccount ?? ''} placeholder="130000" disabled />
+          <select id={`${idPrefix}-gl-account`} name="glAccount" className="field-input" defaultValue={row?.glAccount ?? ''} required>
+            <option value="">{t('acctDet.chooseGlAccount')}</option>
+            {accounts.map((choice) => (
+              <option key={choice.accountNumber} value={choice.accountNumber}>
+                {choice.accountNumber} — {choice.name}
+              </option>
+            ))}
+          </select>
           <p className="mt-1 text-xs text-ink-soft">
             {t('acctDet.expectedKind')}: {t(`acctDet.kind.${entry.expectedAccountKind}`)}
           </p>
@@ -118,17 +162,41 @@ function DeterminationFields({
   );
 }
 
+function KeyInputs({ row }: { row: AccountDeterminationRow }) {
+  return (
+    <>
+      <input type="hidden" name="chartOfAccounts" value={row.chartOfAccounts} />
+      <input type="hidden" name="event" value={row.event} />
+      <input type="hidden" name="valuationClass" value={row.valuationClass} />
+      <input type="hidden" name="generalModifier" value={row.generalModifier} />
+    </>
+  );
+}
+
 function RowDialogs({
   row,
   entry,
   valuationClasses,
+  glChoices,
 }: {
   row: AccountDeterminationRow;
   entry: PostingEvent;
   valuationClasses: ValuationClassChoice[];
+  glChoices: GlAccountChoice[];
 }) {
+  const [changeReason, setChangeReason] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [changeState, changeAction, changePending] = useActionState<AccountDeterminationActionState, FormData>(
+    saveDeterminationAction,
+    { ok: true },
+  );
+  const [deleteState, deleteAction, deletePending] = useActionState<AccountDeterminationActionState, FormData>(
+    deleteDeterminationAction,
+    { ok: true },
+  );
   const keySuffix = `${row.chartOfAccounts}-${row.event}-${row.valuationClass || 'ANY'}-${row.generalModifier || 'NONE'}`;
   const sub = `${row.chartOfAccounts} · ${row.event}`;
+
   return (
     <div className="flex gap-3">
       <details className="min-w-16">
@@ -139,11 +207,13 @@ function RowDialogs({
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={`${t('acctDet.change')} ${row.glAccount}`} sub={sub} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3">
-                <DeterminationFields idPrefix={`acct-det-${keySuffix}`} entry={entry} valuationClasses={valuationClasses} row={row} />
-                <ReasonField id={`acct-det-change-reason-${keySuffix}`} />
-                <InertNote />
-                <button type="submit" className="btn-primary" disabled>
+              <form className="space-y-3" action={changeAction}>
+                <input type="hidden" name="mode" value="CHANGE" />
+                <KeyInputs row={row} />
+                <DeterminationFields idPrefix={`acct-det-${keySuffix}`} entry={entry} chart={row.chartOfAccounts} valuationClasses={valuationClasses} glChoices={glChoices} row={row} />
+                <ReasonField id={`acct-det-change-reason-${keySuffix}`} value={changeReason} onChange={setChangeReason} />
+                <DetMessage state={changeState} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
                   {t('acctDet.save')}
                 </button>
               </form>
@@ -160,11 +230,12 @@ function RowDialogs({
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={t('acctDet.delete')} sub={sub} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3">
+              <form className="space-y-3" action={deleteAction}>
+                <KeyInputs row={row} />
                 <p className="text-sm text-ink-soft">{t('acctDet.deleteNote')}</p>
-                <ReasonField id={`acct-det-delete-reason-${keySuffix}`} />
-                <InertNote />
-                <button type="submit" className="btn-primary" disabled>
+                <ReasonField id={`acct-det-delete-reason-${keySuffix}`} value={deleteReason} onChange={setDeleteReason} />
+                <DetMessage state={deleteState} />
+                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim()}>
                   {t('acctDet.delete')}
                 </button>
               </form>
@@ -180,20 +251,24 @@ export function AccountDetermination({
   rows,
   charts,
   valuationClasses,
+  glChoices,
   events,
   canMaintain,
-  inert,
 }: {
   rows: AccountDeterminationRow[];
   charts: ChartChoice[];
   valuationClasses: ValuationClassChoice[];
+  glChoices: GlAccountChoice[];
   events: PostingEvent[];
   canMaintain: boolean;
-  inert?: boolean;
 }) {
-  void inert;
   const [chart, setChart] = useState('');
   const [event, setEvent] = useState('');
+  const [reason, setReason] = useState('');
+  const [createState, createAction, createPending] = useActionState<AccountDeterminationActionState, FormData>(
+    saveDeterminationAction,
+    { ok: true },
+  );
   const entry = events.find((candidate) => candidate.event === event);
   const visible = entry && chart
     ? rows.filter((row) => row.chartOfAccounts === chart && row.event === event)
@@ -201,17 +276,20 @@ export function AccountDetermination({
 
   return (
     <>
-      <section className="panel overflow-hidden" aria-labelledby="acct-det-select-title">
+      <section className="panel overflow-hidden" aria-labelledby="acct-det-create-title">
         <div className="panel-header">
-          <h2 id="acct-det-select-title" className="panel-title">{t('acctDet.newTitle')}</h2>
+          <h2 id="acct-det-create-title" className="panel-title">{t('acctDet.newTitle')}</h2>
         </div>
-        <form className="space-y-3 p-4">
+        <form className="space-y-3 p-4" action={createAction}>
+          <input type="hidden" name="mode" value="CREATE" />
+          <input type="hidden" name="chartOfAccounts" value={chart} />
+          <input type="hidden" name="event" value={event} />
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="acct-det-chart" className="field-label">
                 {t('acctDet.chart')}<RequiredMark />
               </label>
-              <select id="acct-det-chart" name="chartOfAccounts" className="field-input" value={chart} onChange={(change) => setChart(change.target.value)}>
+              <select id="acct-det-chart" className="field-input" value={chart} onChange={(change) => setChart(change.target.value)}>
                 <option value="">{t('acctDet.chooseChart')}</option>
                 {charts.map((choice) => (
                   <option key={choice.chartOfAccounts} value={choice.chartOfAccounts}>
@@ -224,7 +302,7 @@ export function AccountDetermination({
               <label htmlFor="acct-det-event" className="field-label">
                 {t('acctDet.event')}<RequiredMark />
               </label>
-              <select id="acct-det-event" name="event" className="field-input" value={event} onChange={(change) => setEvent(change.target.value)}>
+              <select id="acct-det-event" className="field-input" value={event} onChange={(change) => setEvent(change.target.value)}>
                 <option value="">{t('acctDet.chooseEvent')}</option>
                 {events.map((candidate) => (
                   <option key={candidate.event} value={candidate.event}>
@@ -234,12 +312,12 @@ export function AccountDetermination({
               </select>
             </div>
           </div>
-          {entry && (
+          {entry && chart && (
             <>
-              <DeterminationFields idPrefix="acct-det" entry={entry} valuationClasses={valuationClasses} row={null} />
-              <ReasonField id="acct-det-reason" />
-              <InertNote />
-              <button type="submit" className="btn-primary" disabled>
+              <DeterminationFields idPrefix="acct-det" entry={entry} chart={chart} valuationClasses={valuationClasses} glChoices={glChoices} row={null} />
+              <ReasonField id="acct-det-reason" value={reason} onChange={setReason} />
+              <DetMessage state={createState} />
+              <button type="submit" className="btn-primary" disabled={createPending || !reason.trim()}>
                 {t('acctDet.create')}
               </button>
             </>
@@ -287,7 +365,7 @@ export function AccountDetermination({
                       <td><span className="code">{row.glAccount}</span></td>
                       {canMaintain && (
                         <td>
-                          <RowDialogs row={row} entry={entry} valuationClasses={valuationClasses} />
+                          <RowDialogs row={row} entry={entry} valuationClasses={valuationClasses} glChoices={glChoices} />
                         </td>
                       )}
                     </tr>

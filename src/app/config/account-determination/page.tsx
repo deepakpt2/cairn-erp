@@ -8,6 +8,7 @@ import {
   listAccountDeterminations,
   listDeterminationCharts,
   listDeterminationValuationClasses,
+  listGlAccountChoices,
 } from '@/modules/foundation/account-determination';
 import { AccountDetermination } from './AccountDetermination';
 
@@ -28,10 +29,11 @@ export default async function AccountDeterminationPage() {
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
 
-  const [rows, charts, valuationClasses] = await Promise.all([
+  const [rows, charts, valuationClasses, glChoices] = await Promise.all([
     listAccountDeterminations(client),
     listDeterminationCharts(client),
     listDeterminationValuationClasses(client),
+    listGlAccountChoices(client),
   ]);
 
   return (
@@ -62,9 +64,9 @@ export default async function AccountDeterminationPage() {
         rows={rows}
         charts={charts}
         valuationClasses={valuationClasses}
+        glChoices={glChoices}
         events={POSTING_EVENTS}
         canMaintain={canMaintain}
-        inert
       />
     </div>
   );

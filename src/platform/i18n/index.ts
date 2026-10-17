@@ -2001,8 +2001,6 @@ const en: Catalogue = {
   'acctDet.noChartEvent': 'Choose a chart of accounts and a posting event to see its determination rows.',
   'acctDet.deleteNote':
     'Deleting removes the account a future posting would derive; that posting will then fail for want of a determination. Deleting is possible while nothing reads these rows.',
-  'acctDet.inert':
-    'This screen is published ahead of its write path. The fields record what will be asked; saving is not enabled yet.',
   'acctDet.created': 'Determination for {event} in chart {chart} defined.',
   'acctDet.changed': 'Determination for {event} in chart {chart} updated.',
   'acctDet.unchanged': 'Determination for {event} in chart {chart} already stands as shown; nothing was changed.',
