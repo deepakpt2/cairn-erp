@@ -74,6 +74,7 @@ export default async function ActivityTypesPage({
         categories={ACTIVITY_CATEGORIES}
         priceIndicators={PRICE_INDICATORS}
         ccCategories={COST_CENTER_CATEGORIES}
+        canMaintain={canMaintain}
       />
     </div>
   );
