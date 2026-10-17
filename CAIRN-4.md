@@ -1519,6 +1519,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.353 B-337 — SCR-048 / OMS2 stage 4: the supporting seeding — 88 capabilities, OMS2 in search
+
+**What shipped.** The seed now carries the `CFG.INV.MATERIALTYPE.DEFINE` capability (`INV` / `CONFIGURE`) beside the standing config activity, and a Term Registry entry for `/config/material-types` (Tier 2 configured, conformance B) whose only alias is **OMS2** — the SAP code stays search-only, as always — describing the round's parity in the registry's own words. `/config/material-types` joins `BUILT_ROUTES`, so the workbench offers the screen and its row can complete from the screen's first write. `npm run seed` applied and read back: **88 capabilities / 61 activities / 57 terms / 53 aliases**. The activity's onboarding behaviour is unchanged: the provisioned types keep the activity standing completed for new tenants, per the contract's note, and the screen's writes re-affirm it.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; suite **1206 tests across 143 files**.
+
+**Cost.** Measured: 21:26 in to 21:28 — **2 minutes** (the seed's read-back ran inside the same minute; the clock cross-checks against the git stamps below).
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1621,6 +1631,7 @@ recorded change, date and reason stated.
 | 2.153 | 2026-10-17 | **SCR-048 / OMS2 stage 1 (B-334, §26.350): the inert material-types screen.** `/config/material-types` stands introduced (`CFG.INV.MATERIALTYPE.DEFINE · OMS2`) with the three sections the live screen keeps — type grid with definition detail, account category references, per-plant quantity/value updating — and states the contract's guards in its help text. Typecheck, `lint:ip`, production build (route 1.2 kB) clean; suite 1206 across 143 files. Cost measured at 4 minutes. | Agent |
 | 2.154 | 2026-10-17 | **SCR-048 / OMS2 stage 2 (B-335, §26.351): the parity schema.** Migration 0057 narrows the standing `material_type` (key to 4, name to 25, price control to the S/V letter) carrying the FINISHED→FIN / TRADE→TRAD / SERVICE→SERV renames through materials and valuation classes, adds the number-range keys, 0/1/2 procurement indicators and configurable flag, stands `account_category_reference` (provisioned 0001 on every tenant), and backfills per-plant `material_type_valuation` rows from the standing flags; 9040 puts forced RLS on both new tables — 99 migrations. Type-level flags retire in stage 3 with their last readers. Provisioning speaks the new shape; typecheck, `lint:ip`, build clean; materials 24/24, suite 1206 across 143 files. Cost measured at 5 minutes. | Agent |
 | 2.155 | 2026-10-17 | **SCR-048 / OMS2 stage 3 (B-336, §26.352): the write service and live screen.** `material-type-definition.ts` maintains the standing table at parity — number-range keys judged against the standing engine (object MATERIAL, internal/external matched), account reference judged against its master maintained from the same screen, 0/1/2 procurement indicators, hard delete refused under standing materials, updating refused under standing materials at the plant. Migration 0058 retires the type-level updating flags (materials now read the per-plant rows; rows seeded at both provisioning call sites), 0059 cascades them with their plant — 101 migrations. Typecheck, `lint:ip`, build clean; suite 1206 across 143 files. Cost measured at 12 minutes. | Agent |
+| 2.156 | 2026-10-17 | **SCR-048 / OMS2 stage 4 (B-337, §26.353): the supporting seeding.** The `CFG.INV.MATERIALTYPE.DEFINE` capability and a Term Registry entry carrying **OMS2 as a search alias only** are seeded, and `/config/material-types` joins `BUILT_ROUTES`; seed read back at 88 capabilities / 61 activities / 57 terms / 53 aliases. Typecheck and `lint:ip` clean; suite 1206 across 143 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

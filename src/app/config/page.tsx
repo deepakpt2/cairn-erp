@@ -90,6 +90,7 @@ export default async function WorkbenchPage({
     '/config/activity-rates',
     '/config/profit-centers',
     '/config/profit-center-hierarchy',
+    '/config/material-types',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
