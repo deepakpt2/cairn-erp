@@ -1446,6 +1446,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.347 B-331 — SCR-046 / KCH1 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** Unlike its predecessors, this activity did not stand in the seed waiting: stage 4 adds the whole row set. The `config_activity` row `CFG.COST.PROFITCENTERHIER.DEFINE` (61 activities; route `/config/profit-center-hierarchy`, prerequisite `CFG.COST.PROFITCENTER.DEFINE`, STANDARD stage), the capability of the same code (87 capabilities; the `CFG.*` wildcard makes the row the grant, as by now usual), and the Term Registry entry at `/config/profit-center-hierarchy` with **KCH1, KCH5N and KCH6N as search aliases only** (56 terms, 52 aliases) — its description carrying the whole contract: the explicitly rooted tree, the exclusive per-period placement with moves as unplace-then-place, the dynamically resolved EQ/BT I/E leaves, the deletion refusals with counts, the master never touched, and the KE51 screen reading its placement from these assignments. The workbench's built-routes set gains the screen.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1191 tests across 142 files**; seed applied to `cairn_b210` and every row read back (activity with its prerequisite and route, capability, term with all three aliases; counts 87/61/56/52).
+
+**Cost.** Measured: 17:27 in to 17:29 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** Tests, browser acceptance, and the KE51 placement display (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1541,6 +1553,7 @@ recorded change, date and reason stated.
 | 2.146 | 2026-10-17 | **SCR-046 / KCH1 contract confirmed and stage 1 (the screen) published (B-328, §26.344; R-95).** SAP parity on all four forks resolves to the SCR-042 shape on profit centres: the explicitly rooted standard tree, per-period exclusive placement, and EQ/BT I/E leaves resolved dynamically — no SET* frame in storage, KCH1/KCH5N/KCH6N to be search aliases only, and the KE51 screen to gain its read-only placement at closure. Stage 1 publishes `/config/profit-center-hierarchy` inert: five table definitions, the mirrored read service, the area-over-tree screen, and the catalogue keys. Typecheck, build (route 1.6 kB) and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 6 minutes. | Agent |
 | 2.147 | 2026-10-17 | **SCR-046 / KCH1 stage 2: the tables (B-329, §26.345).** Migrations `0056_profit_center_hierarchy.sql` and `9039_..._policies.sql` create the five hierarchy tables (the per-period unique index carrying the at-most-one-node rule; forced RLS on all five) on `cairn_b210` (97 migrations). Typecheck clean; suite 1191 across 142 files. Cost measured at 2 minutes. | Agent |
 | 2.148 | 2026-10-17 | **SCR-046 / KCH1 stage 3: the write (B-330, §26.346).** Nine acts mirrored from SCR-042's proven service with the diff reviewed: the header, nodes judged acyclic and depth-guarded, deletion refused with counts, exclusive per-period placement with moves as unplace-then-place, and EQ/BT I/E group leaves — placements and signs security-relevant in one change document per write with a mandatory reason, the master never touched. Typecheck, build and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 5 minutes. | Agent |
+| 2.149 | 2026-10-17 | **SCR-046 / KCH1 stage 4: the supporting rows (B-331, §26.347).** The activity row itself added this time (61 activities; prerequisite `CFG.COST.PROFITCENTER.DEFINE`), capability `CFG.COST.PROFITCENTERHIER.DEFINE` seeded (87 capabilities), the Term Registry entry added with KCH1, KCH5N and KCH6N as search aliases only (56 terms, 52 aliases), and the workbench's built-routes set gaining the screen — all read back. Typecheck and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
