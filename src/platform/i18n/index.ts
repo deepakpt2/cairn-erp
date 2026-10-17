@@ -1801,6 +1801,68 @@ const en: Catalogue = {
   'bank.unexpected': 'The bank could not be saved.',
   'bank.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'houseBank.title': 'Define House Banks',
+  'houseBank.subtitle':
+    'The tenant\'s own banks, one per company code, and the accounts held at each. A house bank ' +
+    'names a bank from the bank master and shows its name, city and SWIFT code from there; each ' +
+    'account carries the number money moves through, its currency, and the G/L account its ' +
+    'postings clear through.',
+  'houseBank.banksLink': 'Banks',
+  'houseBank.companyCodesLink': 'Company Codes',
+  'houseBank.newTitle': 'New house bank',
+  'houseBank.gridTitle': 'House banks',
+  'houseBank.accountsTitle': 'Bank accounts',
+  'houseBank.accountsFor': 'Bank accounts of {key} ({company})',
+  'houseBank.company': 'Company Code',
+  'houseBank.key': 'House Bank',
+  'houseBank.keyHint': 'The short key naming this bank inside its company code, up to five letters or digits.',
+  'houseBank.bank': 'Bank',
+  'houseBank.chooseBank': 'Choose bank',
+  'houseBank.bankHint': 'Defined in the bank master; the name, city and SWIFT code below are read from there.',
+  'houseBank.bankName': 'Bank Name',
+  'houseBank.city': 'City',
+  'houseBank.swift': 'SWIFT / BIC',
+  'houseBank.accounts': 'Accounts',
+  'houseBank.accountsCount': '{count} account(s)',
+  'houseBank.accountNew': 'New bank account',
+  'houseBank.accountId': 'Account ID',
+  'houseBank.accountNumber': 'Account Number',
+  'houseBank.iban': 'IBAN',
+  'houseBank.ibanHint': 'Optional. Up to thirty-four characters, for accounts identified by IBAN.',
+  'houseBank.currency': 'Currency',
+  'houseBank.glAccount': 'G/L Account',
+  'houseBank.glHint': 'An asset balance-sheet account of this company code\'s chart of accounts.',
+  'houseBank.reason': 'Reason',
+  'houseBank.create': 'Create house bank',
+  'houseBank.createAccount': 'Create bank account',
+  'houseBank.change': 'Change',
+  'houseBank.save': 'Save house bank',
+  'houseBank.saveAccount': 'Save bank account',
+  'houseBank.delete': 'Delete',
+  'houseBank.deleteNote':
+    'Deleting removes the house bank from this company code. It is refused while bank accounts ' +
+    'stand under it; delete the accounts first.',
+  'houseBank.deleteAccountNote':
+    'Deleting removes this bank account. Nothing references a bank account yet, so it may be ' +
+    'deleted outright.',
+  'houseBank.actions': 'Actions',
+  'houseBank.empty': 'No house banks are defined for this company code.',
+  'houseBank.emptyAccounts': 'No bank accounts are defined under this house bank.',
+  'houseBank.selectHouseBank': 'Select a house bank above to maintain its accounts.',
+  'houseBank.inert':
+    'This screen is being built. Defining house banks becomes available once the house bank ' +
+    'tables and their write path are in place; nothing entered here is saved yet.',
+  'houseBank.created': 'House Bank {key} defined for {company}.',
+  'houseBank.changed': 'House Bank {key} for {company} updated.',
+  'houseBank.unchanged': 'House Bank {key} for {company} already stands as shown; nothing was changed.',
+  'houseBank.deleted': 'House Bank {key} for {company} deleted.',
+  'houseBank.accountCreated': 'Bank Account {account} defined under {key}.',
+  'houseBank.accountChanged': 'Bank Account {account} under {key} updated.',
+  'houseBank.accountUnchanged': 'Bank Account {account} under {key} already stands as shown; nothing was changed.',
+  'houseBank.accountDeleted': 'Bank Account {account} under {key} deleted.',
+  'houseBank.unexpected': 'The house bank could not be saved.',
+  'houseBank.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
