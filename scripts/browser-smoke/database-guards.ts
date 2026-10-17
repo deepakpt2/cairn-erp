@@ -8,15 +8,22 @@ export type BrowserAcceptanceDatabaseGuard = {
 
 /** Each local acceptance target is bound to an explicitly reviewed loopback database and port. */
 export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, BrowserAcceptanceDatabaseGuard>> = {
-  'company-code-definition': { database: 'cairn_b110', port: '55496', batch: 'B-110' },
-  'company-code-coa-assignment': { database: 'cairn_b115', port: '55498', batch: 'B-115' },
-  'plant-definition': { database: 'cairn_b125', port: '55521', batch: 'B-125' },
-  'plant-company-code-assignment': { database: 'cairn_b129', port: '55523', batch: 'B-129' },
-  'storage-locations': { database: 'cairn_b139', port: '55525', batch: 'B-139' },
-  'purchasing-orgs': { database: 'cairn_b150', port: '55527', batch: 'B-150' },
-  'purchasing-org-company-code': { database: 'cairn_b151', port: '55528', batch: 'B-151' },
-  'purchasing-groups': { database: 'cairn_b152', port: '55529', batch: 'B-152' },
-  'sales-orgs': { database: 'cairn_b153', port: '55530', batch: 'B-153' },
+  // R-77 (owner ruling, 2026-10-17): these nine were each bound to a disposable cluster of
+  // their own — cairn_b110 to cairn_b153 on ports 55496 to 55530 — which this environment does
+  // not provide, so all nine stopped at their guard and could not run at all. They are rebound to
+  // the reviewed loopback database, following SCR-024, SCR-025, SCR-026 and SCR-028, and each
+  // keeps the batch it came from in its label. Isolation between targets now rests on the reserved
+  // fixture key each one owns and on the runner's refusal to touch a tenant that is not exactly
+  // that fixture, rather than on a cluster per target.
+  'company-code-definition': { database: 'cairn_b210', port: '5432', batch: 'B-110 local loopback' },
+  'company-code-coa-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-115 local loopback' },
+  'plant-definition': { database: 'cairn_b210', port: '5432', batch: 'B-125 local loopback' },
+  'plant-company-code-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-129 local loopback' },
+  'storage-locations': { database: 'cairn_b210', port: '5432', batch: 'B-139 local loopback' },
+  'purchasing-orgs': { database: 'cairn_b210', port: '5432', batch: 'B-150 local loopback' },
+  'purchasing-org-company-code': { database: 'cairn_b210', port: '5432', batch: 'B-151 local loopback' },
+  'purchasing-groups': { database: 'cairn_b210', port: '5432', batch: 'B-152 local loopback' },
+  'sales-orgs': { database: 'cairn_b210', port: '5432', batch: 'B-153 local loopback' },
   'sales-org-division': { database: 'cairn_b210', port: '5432', batch: 'OVXA local loopback' },
   'controlling-area': { database: 'cairn_b210', port: '5432', batch: 'SCR-024 local loopback' },
   'controlling-area-company-assignment': { database: 'cairn_b210', port: '5432', batch: 'B-211 local loopback' },

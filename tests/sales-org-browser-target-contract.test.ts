@@ -12,14 +12,13 @@ const end = checks.indexOf('\nasync function purchasingOrgCompanyCodeAssignment'
 const check = checks.slice(start, end);
 
 describe('SCR-020 isolated live-browser target contract', () => {
-  it('reserves a unique tenant and an isolated disposable PostgreSQL guard separate from service acceptance', () => {
+  it('reserves a unique tenant and a guard naming the reviewed loopback database and its B-153 batch (R-77)', () => {
     const target = TARGETS.find((item) => item.id === 'sales-orgs');
     const guard = ACCEPTANCE_DATABASE_GUARDS['sales-orgs'];
     expect(target).toMatchObject({ client: 'T977' });
     expect(TARGETS.filter((item) => item.client === 'T977')).toHaveLength(1);
-    expect(guard).toMatchObject({ database: 'cairn_b153', port: '55530', batch: 'B-153' });
-    expect(guard?.database).not.toBe('cairn_b152');
-    expect(guard?.port).not.toBe('55529');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-153 local loopback' });
+    expect(guard?.batch).toMatch(/B-153/);
     expect(runner).toContain('if (databaseGuard) await verifyAcceptanceDatabase(databaseGuard)');
     expect(runner).toContain("if (target.id === 'sales-orgs') return '/config/sales-orgs'");
   });

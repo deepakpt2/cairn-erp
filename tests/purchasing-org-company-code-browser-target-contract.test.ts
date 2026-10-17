@@ -11,12 +11,12 @@ const end = checks.indexOf('\nexport const CHECKS:', start);
 const scenario = checks.slice(start, end);
 
 describe('SCR-018 guarded browser target contract', () => {
-  it('reserves its own tenant fixture and isolated disposable PostgreSQL guard', () => {
+  it('reserves its own tenant fixture and a guard naming the reviewed loopback database and its B-151 batch (R-77)', () => {
     const target = TARGETS.find((candidate) => candidate.id === 'purchasing-org-company-code');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-org-company-code'];
     expect(target).toMatchObject({ client: 'T979' });
     expect(target?.client).not.toBe('T980');
-    expect(guard).toMatchObject({ database: 'cairn_b151', port: '55528', batch: 'B-151' });
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-151 local loopback' });
     expect(runner).toContain("target.id === 'purchasing-org-company-code'");
   });
 

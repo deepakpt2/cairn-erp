@@ -12,12 +12,12 @@ const checkEnd = checks.indexOf('\nexport const CHECKS:', checkStart);
 const targetCheck = checks.slice(checkStart, checkEnd);
 
 describe('SCR-017 guarded live-browser target contract', () => {
-  it('reserves a unique fixture key and a B-150-only disposable PostgreSQL guard', () => {
+  it('reserves a unique fixture key and a guard naming the reviewed loopback database and its B-150 batch (R-77)', () => {
     const target = TARGETS.find((candidate) => candidate.id === 'purchasing-orgs');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-orgs'];
     expect(target).toMatchObject({ client: 'T980' });
     expect(TARGETS.filter((candidate) => candidate.client === 'T980')).toHaveLength(1);
-    expect(guard).toMatchObject({ database: 'cairn_b150', port: '55527', batch: 'B-150' });
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-150 local loopback' });
     expect(runner).toContain("assert.equal(process.env.CAIRN_ENV ?? 'development', 'development'");
     expect(runner).toContain('if (databaseGuard) await verifyAcceptanceDatabase(databaseGuard)');
   });

@@ -81,8 +81,9 @@ describe('SCR-016 Storage Location UI/page contract', () => {
   it('defines a separate B-139 browser target without consuming the cross-tenant fixture key', () => {
     expect(TARGETS.find((target) => target.id === 'storage-locations')).toMatchObject({ client: 'T981' });
     expect(TARGETS.some((target) => String(target.client) === 'T982')).toBe(false);
+    // R-77: rebound to the reviewed loopback database, still named for its B-139 batch.
     expect(ACCEPTANCE_DATABASE_GUARDS['storage-locations']).toMatchObject({
-      database: 'cairn_b139', port: '55525', batch: 'B-139',
+      database: 'cairn_b210', port: '5432', batch: 'B-139 local loopback',
     });
     expect(browserRunner).toContain("target.id === 'storage-locations'");
     expect(browserChecks).toContain("'storage-locations': storageLocations");

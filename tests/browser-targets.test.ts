@@ -43,57 +43,54 @@ describe('bounded browser target selection', () => {
     for (const target of TARGETS) expect(target.client).toMatch(/^T\d{3}$/);
     expect(TARGETS.some((target) => String(target.client) === '0100')).toBe(false);
   });
-  it('keeps B-115 acceptance guarded by its own disposable database and port', () => {
+  it('keeps B-110 and B-115 acceptance on the reviewed loopback database, apart by fixture key (R-77)', () => {
     const definition = ACCEPTANCE_DATABASE_GUARDS['company-code-definition'];
     const assignment = ACCEPTANCE_DATABASE_GUARDS['company-code-coa-assignment'];
-    expect(definition).toMatchObject({ database: 'cairn_b110', port: '55496', batch: 'B-110' });
-    expect(assignment).toMatchObject({ database: 'cairn_b115', port: '55498', batch: 'B-115' });
-    expect(assignment?.database).not.toBe(definition?.database);
-    expect(assignment?.port).not.toBe(definition?.port);
+    expect(definition).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-110 local loopback' });
+    expect(assignment).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-115 local loopback' });
+    // Separate clusters are not available here, so what keeps the two apart is the reserved key.
+    const definitionKey = TARGETS.find((target) => target.id === 'company-code-definition')?.client;
+    const assignmentKey = TARGETS.find((target) => target.id === 'company-code-coa-assignment')?.client;
+    expect(assignmentKey).not.toBe(definitionKey);
   });
-  it('keeps B-125 Plant definition browser acceptance isolated from B-123 service acceptance', () => {
+  it('keeps B-125 Plant definition browser acceptance on the reviewed loopback database, named for its batch (R-77)', () => {
     const plant = TARGETS.find((target) => target.id === 'plant-definition');
     const guard = ACCEPTANCE_DATABASE_GUARDS['plant-definition'];
     expect(plant).toMatchObject({ client: 'T984' });
-    expect(guard).toMatchObject({ database: 'cairn_b125', port: '55521', batch: 'B-125' });
-    expect(guard?.database).not.toBe('cairn_b123');
-    expect(guard?.port).not.toBe('55520');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-125 local loopback' });
+    expect(guard?.batch).toMatch(/B-125/);
+    expect(plant?.client).not.toBe(TARGETS.find((target) => target.id === 'plant-company-code-assignment')?.client);
   });
-  it('keeps B-129 Plant Company Code assignment acceptance isolated from B-125 and B-128', () => {
+  it('keeps B-129 Plant Company Code assignment acceptance on the reviewed loopback database, named for its batch (R-77)', () => {
     const assignment = TARGETS.find((target) => target.id === 'plant-company-code-assignment');
     const guard = ACCEPTANCE_DATABASE_GUARDS['plant-company-code-assignment'];
     expect(assignment).toMatchObject({ client: 'T983' });
-    expect(guard).toMatchObject({ database: 'cairn_b129', port: '55523', batch: 'B-129' });
-    expect(guard?.database).not.toBe('cairn_b125');
-    expect(guard?.database).not.toBe('cairn_b128');
-    expect(guard?.port).not.toBe('55521');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-129 local loopback' });
+    expect(guard?.batch).toMatch(/B-129/);
   });
-  it('keeps B-139 Storage Location browser acceptance isolated from the cross-tenant fixture key', () => {
+  it('keeps B-139 Storage Location browser acceptance on the reviewed loopback database, off the cross-tenant fixture key (R-77)', () => {
     const storageLocations = TARGETS.find((target) => target.id === 'storage-locations');
     const guard = ACCEPTANCE_DATABASE_GUARDS['storage-locations'];
     expect(storageLocations).toMatchObject({ client: 'T981' });
-    expect(guard).toMatchObject({ database: 'cairn_b139', port: '55525', batch: 'B-139' });
-    expect(guard?.database).not.toBe('cairn_b137');
-    expect(guard?.port).not.toBe('55556');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-139 local loopback' });
+    expect(guard?.batch).toMatch(/B-139/);
     expect(storageLocations?.client).not.toBe('T980');
   });
-  it('keeps B-150 SCR-017 browser acceptance on a separate reserved fixture and database guard', () => {
+  it('keeps B-150 SCR-017 browser acceptance on a separate reserved fixture and the reviewed loopback guard (R-77)', () => {
     const purchasingOrgs = TARGETS.find((target) => target.id === 'purchasing-orgs');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-orgs'];
     expect(purchasingOrgs).toMatchObject({ client: 'T980' });
     expect(purchasingOrgs?.client).not.toBe('T982');
-    expect(guard).toMatchObject({ database: 'cairn_b150', port: '55527', batch: 'B-150' });
-    expect(guard?.database).not.toBe('cairn_b145');
-    expect(guard?.port).not.toBe('38436');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-150 local loopback' });
+    expect(guard?.batch).toMatch(/B-150/);
   });
-  it('keeps B-151 SCR-018 assignment acceptance isolated from OX08 browser acceptance', () => {
+  it('keeps B-151 SCR-018 assignment acceptance on the reviewed loopback database, off the OX08 fixture key (R-77)', () => {
     const assignment = TARGETS.find((target) => target.id === 'purchasing-org-company-code');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-org-company-code'];
     expect(assignment).toMatchObject({ client: 'T979' });
     expect(assignment?.client).not.toBe('T980');
-    expect(guard).toMatchObject({ database: 'cairn_b151', port: '55528', batch: 'B-151' });
-    expect(guard?.database).not.toBe('cairn_b150');
-    expect(guard?.port).not.toBe('55527');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-151 local loopback' });
+    expect(guard?.batch).toMatch(/B-151/);
   });
   it('reserves T976 for SCR-021 Sales Organization Company Code assignment', () => {
     const assignment = TARGETS.find((target) => target.id === 'sales-org-company-code');
@@ -152,7 +149,7 @@ describe('bounded browser target selection', () => {
     expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'SCR-028 local loopback' });
     expect(STATIC_ACCEPTANCE_TARGETS.has('gl-accounts')).toBe(false);
   });
-  it('keeps B-152 SCR-019 acceptance on a distinct reserved client, database and port', () => {
+  it('keeps B-152 SCR-019 acceptance on a distinct reserved client and the reviewed loopback guard (R-77)', () => {
     const groups = TARGETS.find((target) => target.id === 'purchasing-groups');
     const guard = ACCEPTANCE_DATABASE_GUARDS['purchasing-groups'];
     expect(groups).toMatchObject({ client: 'T978' });
@@ -160,11 +157,8 @@ describe('bounded browser target selection', () => {
     expect(groups?.client).not.toBe('T979');
     expect(groups?.client).not.toBe('T980');
     expect(groups?.client).not.toBe('T981');
-    expect(guard).toMatchObject({ database: 'cairn_b152', port: '55529', batch: 'B-152' });
-    expect(guard?.database).not.toBe('cairn_b150');
-    expect(guard?.database).not.toBe('cairn_b151');
-    expect(guard?.port).not.toBe('55527');
-    expect(guard?.port).not.toBe('55528');
+    expect(guard).toMatchObject({ database: 'cairn_b210', port: '5432', batch: 'B-152 local loopback' });
+    expect(guard?.batch).toMatch(/B-152/);
   });
   it('limits each browser target to two minutes', () => {
     expect(RUN_TIMEOUT_MS).toBe(120_000);
