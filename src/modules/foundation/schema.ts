@@ -985,6 +985,43 @@ export const activityRate = pgTable(
   ],
 );
 
+/** Profit centre periods — SCR-045 / R-94 (definition; table created in stage 2). */
+export const profitCenter = pgTable(
+  'profit_center',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    profitCenter: varchar('profit_center', { length: 10 }).notNull(),
+    validFrom: date('valid_from').notNull(),
+    validTo: date('valid_to').notNull(),
+    /** Short name (required, at most 20 — SAP parity). */
+    name: varchar('name', { length: 20 }).notNull(),
+    /** Long text (optional, at most 40). */
+    longText: varchar('long_text', { length: 40 }),
+    personResponsible: varchar('person_responsible', { length: 20 }).notNull().default(''),
+    /** Optional; judged against the tenant's users when entered. */
+    responsibleUser: varchar('responsible_user', { length: 12 }),
+    /** Optional segment (at most 10); no segment master stands yet (R-94). */
+    segment: varchar('segment', { length: 10 }),
+    isPostingLocked: boolean('is_posting_locked').notNull().default(false),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.profitCenter, t.validFrom] }),
+    check('profit_center_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('profit_center_code_format_ck', sql`${t.profitCenter} ~ '^[A-Z0-9]{1,10}$'`),
+    check('profit_center_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
+    check('profit_center_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+    foreignKey({
+      name: 'profit_center_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+  ],
+);
+
 /** Credit control area — shared credit limit boundary (D-029). */
 export const creditControlArea = pgTable(
   'credit_control_area',

@@ -1934,6 +1934,11 @@ const en: Catalogue = {
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
   'actType.title': 'Define Activity Types',
   'actRate.title': 'Plan Activity Prices',
+  'profitCenter.title': 'Define Profit Centres',
+  'profitCenter.subtitle':
+    'Profit centres defined period by period inside a controlling area: the units profitability ' +
+    'is reported on. Hierarchy placement arrives with the profit centre hierarchy activity; the ' +
+    'segment is entered freely until a segment master stands.',
   'actRate.subtitle':
     'Activity prices planned per cost centre, activity type, planning version, fiscal year and ' +
     'fiscal period: the planned quantity in the type unit, with fixed and variable price ' +
