@@ -1,22 +1,17 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type {
   CurrencyChoice,
   ExchangeRateRow,
 } from '@/modules/foundation/exchange-rate-maintenance';
-
-/**
- * The write path arrives with the service (SCR-034 stage 3). An inert form says so
- * rather than pretending: a button that silently does nothing teaches an operator
- * that the screen is broken. Same pattern as the OBBO and OBBP screens' first stages.
- */
-function inertSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-  window.alert(t('exRate.inert'));
-}
+import {
+  deleteExchangeRateAction,
+  saveExchangeRateAction,
+  type ExchangeRateActionState,
+} from './actions';
 
 function DialogHeader({ label, sub }: { label: string; sub: string }) {
   return (
@@ -39,62 +34,17 @@ function DialogHeader({ label, sub }: { label: string; sub: string }) {
   );
 }
 
-function RateTypeSelect({
-  id,
-  value,
-  rateTypes,
-  onChange,
-}: {
-  id: string;
-  value: string;
-  rateTypes: readonly string[];
-  onChange: (value: string) => void;
-}) {
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+function RateMessage({ state }: { state: ExchangeRateActionState }) {
+  if (!state.message) return null;
   return (
-    <select
-      id={id}
-      name="rateType"
-      className="field-input"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
     >
-      {rateTypes.map((type) => (
-        <option key={type} value={type}>
-          {t(`exRate.type.${type}`)}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function CurrencySelect({
-  id,
-  name,
-  value,
-  currencies,
-  onChange,
-}: {
-  id: string;
-  name: string;
-  value: string;
-  currencies: CurrencyChoice[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <select
-      id={id}
-      name={name}
-      className="field-input code"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      <option value="">{t('exRate.chooseCurrency')}</option>
-      {currencies.map((currency) => (
-        <option key={currency.code} value={currency.code}>
-          {currency.code} — {currency.name}
-        </option>
-      ))}
-    </select>
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
   );
 }
 
@@ -104,38 +54,87 @@ function RequiredMark() {
   );
 }
 
-function CreatePanel({ currencies, rateTypes }: { currencies: CurrencyChoice[]; rateTypes: readonly string[] }) {
+function CreatePanel({
+  currencies,
+  rateTypes,
+}: {
+  currencies: CurrencyChoice[];
+  rateTypes: readonly string[];
+}) {
   const [rateType, setRateType] = useState<string>('AVERAGE');
   const [fromCurrency, setFromCurrency] = useState('');
   const [toCurrency, setToCurrency] = useState('');
   const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<ExchangeRateActionState, FormData>(
+    saveExchangeRateAction,
+    { ok: true },
+  );
   const samePair = fromCurrency !== '' && fromCurrency === toCurrency;
-  const canSave = Boolean(reason.trim()) && !samePair && fromCurrency !== '' && toCurrency !== '';
+  const canSave = !pending && Boolean(reason.trim()) && !samePair && fromCurrency !== '' && toCurrency !== '';
 
   return (
     <section className="panel overflow-hidden" aria-labelledby="ex-rate-create-title">
       <div className="panel-header">
         <h2 id="ex-rate-create-title" className="panel-title">{t('exRate.newTitle')}</h2>
       </div>
-      <form className="space-y-3 p-4" onSubmit={inertSubmit}>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
             <label htmlFor="ex-rate-type" className="field-label">
               {t('exRate.rateType')}<RequiredMark />
             </label>
-            <RateTypeSelect id="ex-rate-type" value={rateType} rateTypes={rateTypes} onChange={setRateType} />
+            <select
+              id="ex-rate-type"
+              name="rateType"
+              className="field-input"
+              value={rateType}
+              onChange={(event) => setRateType(event.target.value)}
+            >
+              {rateTypes.map((type) => (
+                <option key={type} value={type}>
+                  {t(`exRate.type.${type}`)}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="ex-rate-from" className="field-label">
               {t('exRate.fromCurrency')}<RequiredMark />
             </label>
-            <CurrencySelect id="ex-rate-from" name="fromCurrency" value={fromCurrency} currencies={currencies} onChange={setFromCurrency} />
+            <select
+              id="ex-rate-from"
+              name="fromCurrency"
+              className="field-input code"
+              value={fromCurrency}
+              onChange={(event) => setFromCurrency(event.target.value)}
+            >
+              <option value="">{t('exRate.chooseCurrency')}</option>
+              {currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="ex-rate-to" className="field-label">
               {t('exRate.toCurrency')}<RequiredMark />
             </label>
-            <CurrencySelect id="ex-rate-to" name="toCurrency" value={toCurrency} currencies={currencies} onChange={setToCurrency} />
+            <select
+              id="ex-rate-to"
+              name="toCurrency"
+              className="field-input code"
+              value={toCurrency}
+              onChange={(event) => setToCurrency(event.target.value)}
+            >
+              <option value="">{t('exRate.chooseCurrency')}</option>
+              {currencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label htmlFor="ex-rate-valid-from" className="field-label">
@@ -178,6 +177,7 @@ function CreatePanel({ currencies, rateTypes }: { currencies: CurrencyChoice[]; 
             onChange={(event) => setReason(event.target.value)}
           />
         </div>
+        <RateMessage state={state} />
         <button type="submit" className="btn-primary" disabled={!canSave}>
           {t('exRate.create')}
         </button>
@@ -190,11 +190,20 @@ function CreatePanel({ currencies, rateTypes }: { currencies: CurrencyChoice[]; 
  * Change and delete, one dialog each per row. A rate's key — type, pair and the date it
  * takes effect — cannot be edited in place: correcting a key means a new rate and, where
  * the old one should not stand, a deletion. The Change dialog therefore offers only the
- * rate and its ratios, which is the correction the package allows before period locking.
+ * rate and its ratios, guarded on the rate the dialog opened against.
  */
 function RowDialogs({ row }: { row: ExchangeRateRow }) {
-  const [reason, setReason] = useState('');
-  const keyText = `${row.rateType} · ${row.fromCurrency} → ${row.toCurrency} · ${row.validFrom}`;
+  const [changeReason, setChangeReason] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
+  const [changeState, changeAction, changePending] = useActionState<ExchangeRateActionState, FormData>(
+    saveExchangeRateAction,
+    { ok: true },
+  );
+  const [deleteState, deleteAction, deletePending] = useActionState<ExchangeRateActionState, FormData>(
+    deleteExchangeRateAction,
+    { ok: true },
+  );
+  const keyText = `${t(`exRate.type.${row.rateType}`)} · ${row.fromCurrency} → ${row.toCurrency} · ${row.validFrom}`;
   const idKey = `${row.rateType}-${row.fromCurrency}-${row.toCurrency}-${row.validFrom}`;
   const changeLabel = `${t('exRate.change')} ${row.fromCurrency} → ${row.toCurrency}`;
 
@@ -208,11 +217,13 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={changeLabel} sub={keyText} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3" onSubmit={inertSubmit}>
+              <form className="space-y-3" action={changeAction}>
+                <input type="hidden" name="mode" value="CHANGE" />
                 <input type="hidden" name="rateType" value={row.rateType} />
                 <input type="hidden" name="fromCurrency" value={row.fromCurrency} />
                 <input type="hidden" name="toCurrency" value={row.toCurrency} />
                 <input type="hidden" name="validFrom" value={row.validFrom} />
+                <input type="hidden" name="expectedRate" value={row.rate} />
                 <div>
                   <span className="field-label">{t('exRate.rate')}</span>
                   <p className="code font-medium">{row.rate}</p>
@@ -244,11 +255,12 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                     className="field-input"
                     rows={2}
                     maxLength={500}
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
+                    value={changeReason}
+                    onChange={(event) => setChangeReason(event.target.value)}
                   />
                 </div>
-                <button type="submit" className="btn-primary" disabled={!reason.trim()}>
+                <RateMessage state={changeState} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
                   {t('exRate.save')}
                 </button>
               </form>
@@ -265,12 +277,18 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
           <div className="mx-auto max-w-2xl">
             <DialogHeader label={t('exRate.delete')} sub={keyText} />
             <section className="panel overflow-hidden p-4">
-              <form className="space-y-3" onSubmit={inertSubmit}>
+              <form className="space-y-3" action={deleteAction}>
                 <input type="hidden" name="rateType" value={row.rateType} />
                 <input type="hidden" name="fromCurrency" value={row.fromCurrency} />
                 <input type="hidden" name="toCurrency" value={row.toCurrency} />
                 <input type="hidden" name="validFrom" value={row.validFrom} />
                 <p className="text-sm text-ink-soft">{t('exRate.deleteNote')}</p>
+                <div>
+                  <span className="field-label">{t('exRate.rate')}</span>
+                  <p className="code font-medium">
+                    {row.rate} <span className="text-ink-soft">({row.ratioFrom} : {row.ratioTo})</span>
+                  </p>
+                </div>
                 <div>
                   <label htmlFor={`ex-rate-delete-reason-${idKey}`} className="field-label">
                     {t('exRate.reason')}<RequiredMark />
@@ -281,11 +299,12 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                     className="field-input"
                     rows={2}
                     maxLength={500}
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
+                    value={deleteReason}
+                    onChange={(event) => setDeleteReason(event.target.value)}
                   />
                 </div>
-                <button type="submit" className="btn-primary" disabled={!reason.trim()}>
+                <RateMessage state={deleteState} />
+                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim()}>
                   {t('exRate.delete')}
                 </button>
               </form>

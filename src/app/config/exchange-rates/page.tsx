@@ -19,11 +19,10 @@ const ROUTE = '/config/exchange-rates';
  *
  * The exchange_rate table predates every screen that might maintain it: the standard
  * package seeds a tenant's first rates and nothing has ever let a configurator change
- * one. This screen is that maintenance — every rate beside the date it takes effect,
- * with the translation ratios stage 2 adds as columns shown from the start, because a
- * form that hides a factor the rate depends on is a form that misstates the rate.
- * The write path arrives with the service in stage 3; until then the forms are inert
- * and say so.
+ * one. This screen is that maintenance — every rate beside the date it takes effect
+ * and the translation ratios it is quoted for, since a form that hid a factor the
+ * rate depends on would misstate the rate. Posted documents carry their own rate, so
+ * this table governs future lookups rather than history.
  */
 export default async function ExchangeRatesPage() {
   const session = await requireSession(ROUTE);

@@ -1763,7 +1763,13 @@ const en: Catalogue = {
     'is better corrected than deleted where postings may still look back at it.',
   'exRate.actions': 'Actions',
   'exRate.empty': 'No exchange rates are maintained in this tenant.',
-  'exRate.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
+  'exRate.created': '{type} {pair} from {from} created at {rate}.',
+  'exRate.changed': '{type} {pair} from {from} now stands at {rate}.',
+  'exRate.unchanged': '{type} {pair} from {from} already stands at that rate; nothing was changed.',
+  'exRate.deleted': '{type} {pair} from {from} deleted. Documents already posted keep the rate they were posted with.',
+  'exRate.unexpected': 'The exchange rate could not be saved.',
+  'exRate.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'ppvAssign.companyCodesLink': 'Company Codes',
   'ppvAssign.postingPeriodsLink': 'Posting periods',
   'ppv.unexpectedRemedy':
