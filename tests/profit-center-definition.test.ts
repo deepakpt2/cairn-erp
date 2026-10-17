@@ -6,6 +6,7 @@ import { withTenant } from '@/platform/db/client';
 import { configActivityStatus } from '@/platform/tables/registry';
 import { journalEntry, journalEntryLine } from '@/modules/finance/schema';
 import { appUser } from '@/platform/tables/security';
+import { profitCenterHierarchy, profitCenterNode, profitCenterNodeAssignment } from '@/modules/foundation/schema';
 import {
   ACTIVITY,
   ProfitCenterError,
@@ -326,6 +327,33 @@ describe('profit centre definition (SCR-045)', () => {
         (document) => document.changeType === 'DELETE' && document.transactionCode === ACTIVITY,
       ),
     ).toBe(true);
+  });
+
+  it('shows the hierarchy placement from SCR-046 assignments', async () => {
+    const { client } = fixture();
+    const beforeRows = await listProfitCenters(client, 'A000');
+    expect(beforeRows.find((row) => row.profitCenter === 'PC100' && row.validFrom === '2026-01-01')?.hierarchyNode).toBeNull();
+
+    await withTenant(client, async (tx) => {
+      await tx
+        .insert(profitCenterHierarchy)
+        .values({ client, controllingArea: 'A000', title: 'Test hierarchy', createdBy: TEST_ACTOR })
+        .onConflictDoNothing();
+      await tx
+        .insert(profitCenterNode)
+        .values({
+          client, controllingArea: 'A000', node: 'PROD', parentNode: null,
+          title: 'Production', createdBy: TEST_ACTOR,
+        })
+        .onConflictDoNothing();
+      await tx.insert(profitCenterNodeAssignment).values({
+        client, controllingArea: 'A000', node: 'PROD', profitCenter: 'PC100',
+        validFrom: '2026-01-01', createdBy: TEST_ACTOR,
+      });
+    });
+
+    const afterRows = await listProfitCenters(client, 'A000');
+    expect(afterRows.find((row) => row.profitCenter === 'PC100' && row.validFrom === '2026-01-01')?.hierarchyNode).toBe('PROD');
   });
 
   it('refuses the prerequisite tenant, formats and a blank reason', async () => {

@@ -395,6 +395,7 @@ export default function ProfitCenters({
                   <th>Person responsible</th>
                   <th>User</th>
                   <th>Segment</th>
+                  <th>Hierarchy node</th>
                   <th>Posting</th>
                   <th>Actions</th>
                 </tr>
@@ -410,6 +411,7 @@ export default function ProfitCenters({
                     <td>{row.personResponsible || '—'}</td>
                     <td className="code">{row.responsibleUser ?? '—'}</td>
                     <td className="code">{row.segment ?? '—'}</td>
+                    <td className="code">{row.hierarchyNode ?? 'Not placed'}</td>
                     <td>{row.isPostingLocked ? 'Locked' : 'Open'}</td>
                     <td>
                       {canMaintain ? (

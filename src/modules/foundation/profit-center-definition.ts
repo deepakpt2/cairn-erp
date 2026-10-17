@@ -3,7 +3,7 @@ import { asc, eq } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { appUser } from '../../platform/tables/security';
 import { listCostCenterAreas, type CostCenterArea } from './cost-center-definition';
-import { profitCenter } from './schema';
+import { profitCenter, profitCenterNodeAssignment } from './schema';
 
 export { listCostCenterAreas };
 export type { CostCenterArea };
@@ -45,6 +45,8 @@ export interface ProfitCenterRow {
   responsibleUser: string | null;
   segment: string | null;
   isPostingLocked: boolean;
+  /** The SCR-046 standard-hierarchy node this period is placed on, if any. */
+  hierarchyNode: string | null;
 }
 
 export async function listProfitCenters(
@@ -52,8 +54,8 @@ export async function listProfitCenters(
   area: string,
 ): Promise<ProfitCenterRow[]> {
   if (area === '') return [];
-  return withTenant(clientId, async (tx) =>
-    tx
+  return withTenant(clientId, async (tx) => {
+    const rows = await tx
       .select({
         controllingArea: profitCenter.controllingArea,
         profitCenter: profitCenter.profitCenter,
@@ -68,8 +70,23 @@ export async function listProfitCenters(
       })
       .from(profitCenter)
       .where(eq(profitCenter.controllingArea, area))
-      .orderBy(asc(profitCenter.profitCenter), asc(profitCenter.validFrom)),
-  );
+      .orderBy(asc(profitCenter.profitCenter), asc(profitCenter.validFrom));
+    const assignments = await tx
+      .select({
+        node: profitCenterNodeAssignment.node,
+        profitCenter: profitCenterNodeAssignment.profitCenter,
+        validFrom: profitCenterNodeAssignment.validFrom,
+      })
+      .from(profitCenterNodeAssignment)
+      .where(eq(profitCenterNodeAssignment.controllingArea, area));
+    const placement = new Map(
+      assignments.map((row) => [`${row.profitCenter}:${row.validFrom}`, row.node]),
+    );
+    return rows.map((row) => ({
+      ...row,
+      hierarchyNode: placement.get(`${row.profitCenter}:${row.validFrom}`) ?? null,
+    }));
+  });
 }
 
 export interface ResponsibleUserChoice {
