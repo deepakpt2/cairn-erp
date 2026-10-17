@@ -567,6 +567,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.284 B-268 — SCR-034 / OB08 stage 3: the write `STAGE PUBLISHED`
+
+**The service.** `saveExchangeRate` and `deleteExchangeRate` join the read side in `exchange-rate-maintenance.ts`, in the OBBO shape. One prereq (`CFG.ORG.COMPANYCODE.DEFINE`, the activity's own seeded prerequisite), both currencies checked against the currency master — unknown refused naming the master, inactive refused too — a same-currency pair refused, the rate positive at the contract's precision. Create refuses a key already maintained and names Change; a change to a key that does not exist refuses and names Create, because a key cannot be changed into existence. A change is guarded on `expectedRate`, the rate the caller saw, compared as numbers at the column's precision rather than as strings nobody normalized; repeating the stored rate and ratios is a no-op that writes nothing but the activity completion. Deletion removes the row outright — posted documents keep their own rate, so nothing historical is rewritten — and files the removed rate. Every write files one change document on the composite key with the rate security-relevant and the mandatory reason on it.
+
+**The screen is live.** The three inert forms now post to capability-protected actions asking for the assignment activity alone — the write touches only the rate table, so OB37's second authority is not asked for here. The same-pair refusal the form showed from stage 1 stays; the action's answers render as status or alert with remedy. Until the capability is seeded in stage 4 the screen is read-only for every role — fail-closed, and stated on the screen rather than discovered, as OBBP stood between its stages 3 and 4.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 2.69 kB, live); suite **1025 tests across 130 files**. Service tests and browser acceptance are stage 5; nothing here is accepted yet.
+
+**Cost.** Measured: 07:26 in to 07:30, when `1d79b24` landed — **4 minutes** of a 39-minute box.
+
+**Not accepted.** The registry rows (stage 4) and tests/acceptance (stage 5).
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -599,6 +613,7 @@ recorded change, date and reason stated.
 | 2.83 | 2026-10-17 | **SCR-033 / OBBP accepted and closed (B-265, §26.281).** Twelve service tests pass, including the posted book that moves between variants but may not be left unassigned and the count that reads every journal entry as the screen states it. The new browser target passes at nine checkpoints — grid, workbench route, the exact choice, the documented assignment, the repeat offering no save, clearing before posting and its refusal after — with the OBBO and OB37 targets green beside it. Acceptance caught the workbench still calling the new screen pending, its hand-kept route set missing the entry stage 4 owed; the route is added and the omission recorded. Suite 1025 across 130 files, typecheck and `lint:ip` clean. Cost measured at 12 minutes. | Agent |
 | 2.84 | 2026-10-17 | **SCR-034 / OB08 contract confirmed and stage 1 (the screen) published (B-266, §26.282; R-84).** The table, the composite key, the activity and one builder write already exist; the screen, capability, registry entry and service do not. The owner settled the package's four differences: the product's BUYING/SELLING/AVERAGE stay (reference letters are aliases only), the translation ratios are added as columns in stage 2, a rate is deletable with a reason because posted documents keep their own rate, and a reason is mandatory on every write. Stage 1 delivers `/config/exchange-rates` — new-rate panel with the pair value-helped from the currency master and the ratios defaulted to 1, a grid of every rate held, Change and Delete dialogs per row — with its read side in a new module and the forms inert, saying so, until the stage-3 service arrives. Typecheck, build (route 2.23 kB) and `lint:ip` clean; suite 1025 across 130 files. Cost measured at 25 minutes, a failed first build inside it. | Agent |
 | 2.85 | 2026-10-17 | **SCR-034 / OB08 stage 2: the translation ratios (B-267, §26.283).** Migration 0042 adds `ratio_from`/`ratio_to` as integer columns defaulting to 1 — every existing row's truth, since each was quoted for one unit — each checked at 1 or more, in the verify-before-apply shape; applied and read back from the database with the seeded rate at 1 : 1. The read side computes the effective rate in SQL at the stored precision, the grid shows ratio and effective rate, and the Change dialog opens on the stored ratios. Typecheck and `lint:ip` clean, build ok, suite 1025 across 130 files. Cost measured at 4 minutes. | Agent |
+| 2.86 | 2026-10-17 | **SCR-034 / OB08 stage 3: the write (B-268, §26.284).** `saveExchangeRate`/`deleteExchangeRate` in the OBBO shape — currency-master checks, same-pair and positive-rate refusals, the duplicate key naming Change and the missing key naming Create, a change guarded on the rate the caller saw and repeating itself as a no-op, deletion outright with the removed rate filed, one change document per write with the rate security-relevant, reason mandatory throughout — and the three forms live behind the activity's capability, unseeded until stage 4 so the screen stands read-only meanwhile. Typecheck and `lint:ip` clean, production build ok, suite 1025 across 130 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
