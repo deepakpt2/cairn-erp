@@ -53,6 +53,7 @@ import { activityRatesKp26 } from './activity-rates';
 import { profitCentersKe51 } from './profit-centers';
 import { profitCenterHierarchyKch1 } from './profit-center-hierarchy';
 import { materialTypesOms2 } from './material-types';
+import { materialGroupsOmsf } from './material-groups';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4879,6 +4880,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'profit-centers': profitCentersKe51,
   'profit-center-hierarchy': profitCenterHierarchyKch1,
   'material-types': materialTypesOms2,
+  'material-groups': materialGroupsOmsf,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
