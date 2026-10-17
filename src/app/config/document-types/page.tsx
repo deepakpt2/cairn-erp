@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/document-types';
 
 /**
- * OBA7 Define Document Types (SCR-038 stage 1: the screen).
+ * OBA7 Define Document Types (SCR-038; live since stage 3).
  *
  * The standard package delivers the working set of document types into every
  * tenant; journals have posted against them since the first posting. This

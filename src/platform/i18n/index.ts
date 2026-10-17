@@ -1916,12 +1916,10 @@ const en: Catalogue = {
     'history names stays defined; deactivate it if it should no longer be posted with.',
   'docType.actions': 'Actions',
   'docType.empty': 'No document types are defined in this tenant.',
-  'docType.inert':
-    'This screen is being built. Maintaining document types becomes available once the write ' +
-    'path is in place; the document types below are shown as they stand, and nothing entered ' +
-    'here is saved yet.',
   'docType.created': 'Document Type {code} defined.',
   'docType.changed': 'Document Type {code} updated.',
+  'docType.changeUsedNote':
+    '{count} journal entr(ies) already stand under this type; they keep what they were posted with.',
   'docType.unchanged': 'Document Type {code} already stands as shown; nothing was changed.',
   'docType.deleted': 'Document Type {code} deleted.',
   'docType.deactivated': 'Document Type {code} deactivated.',
