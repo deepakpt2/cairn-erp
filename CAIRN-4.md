@@ -1564,6 +1564,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.357 B-341 — SCR-049 / OMSF stage 3: the write service and the live screen
+
+**What shipped.** `src/modules/inventory/material-group-definition.ts` maintains the standing table at the contract's parity: keys of at most nine uppercase letters or digits, the short description of at most 20 required beside the optional long description of at most 60, duplicate keys refused, a change that changes nothing returning unchanged. Deletion is **hard and refused while materials carry the group** (count named, the remedy naming reclassification or deactivation), deactivation/reactivation stands as its own act, and every write carries a mandatory reason and one change document (`material_group` object class, the active flag security-relevant), the first successful write completing `CFG.INV.MATERIALGROUP.DEFINE`. The live screen keeps stage 1's single section, now working: the group grid with short and long descriptions, standing material counts and status, its definition form, and the two lifecycle dialogs. Scope stayed as contracted — no number-range, valuation or period logic came near the service; materials continue to judge a named group against this master exactly as they did, now against its narrowed key.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled (material-groups route 2.19 kB); suite **1215 tests across 144 files**, materials and material-types suites passing against the narrowed master.
+
+**Cost.** Measured: 22:01 in to 22:04 — **3 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1671,6 +1681,7 @@ recorded change, date and reason stated.
 | 2.158 | 2026-10-17 | **SCR-049 / OMSF package recorded as R-97: material groups at SAP parity in the SCR-048 shape.** The `material_group` table already stands with no define screen; the key narrows to 9 (MAINTENANCE→MAINT), the name becomes a short description of at most 20 with an optional 60-character long description on the row, per-language text rows stay deferred (B-223), classification-only scope with no number-range or accounting behaviour, hard delete refused under standing materials with deactivation beside it. Stage order resumes at the UI. | Agent |
 | 2.159 | 2026-10-17 | **SCR-049 / OMSF stage 1 (B-339, §26.355): the inert material-groups screen.** `/config/material-groups` stands introduced (`CFG.INV.MATERIALGROUP.DEFINE · OMSF`) with its single section, the contract's key/description widths, delete-when-unused lifecycle and classification-only scope stated in its help text. Typecheck, `lint:ip`, production build (route 891 B) clean; suite 1215 across 144 files. Cost measured at 2 minutes. | Agent |
 | 2.160 | 2026-10-17 | **SCR-049 / OMSF stage 2 (B-340, §26.356): the parity schema.** Migration 0060 narrows the standing `material_group` (key to 9 with MAINTENANCE→MAINT carried through materials, name to the 20-character short description, optional 60-character long description seeded for the truncated provisioned texts); provisioning and the material master's group input follow — 102 migrations standing. Typecheck, `lint:ip`, build clean; materials 24/24, suite 1215 across 144 files. Cost measured at 4 minutes. | Agent |
+| 2.161 | 2026-10-17 | **SCR-049 / OMSF stage 3 (B-341, §26.357): the write service and live screen.** `material-group-definition.ts` maintains the standing table — 9-character keys, 20/60 descriptions, hard delete refused under standing materials with deactivation beside it, reason and one change document per write — and the stage-1 screen is live with counts and lifecycle dialogs. Typecheck, `lint:ip`, build clean; suite 1215 across 144 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

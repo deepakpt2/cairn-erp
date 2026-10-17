@@ -1,13 +1,16 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import {
+  ACTIVITY,
+  listMaterialGroups,
+} from '@/modules/inventory/material-group-definition';
 import { t } from '@/platform/i18n';
 import MaterialGroups from './MaterialGroups';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/material-groups';
-const ACTIVITY = 'CFG.INV.MATERIALGROUP.DEFINE';
 
 /**
  * Material group definition (SCR-049 / OMSF; inert since stage 1).
@@ -21,6 +24,7 @@ const ACTIVITY = 'CFG.INV.MATERIALGROUP.DEFINE';
 export default async function MaterialGroupsPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
+  const groups = await listMaterialGroups(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -43,7 +47,7 @@ export default async function MaterialGroupsPage() {
         </p>
       )}
 
-      <MaterialGroups canMaintain={canMaintain} />
+      <MaterialGroups groups={groups} canMaintain={canMaintain} />
     </div>
   );
 }
