@@ -213,15 +213,16 @@ export async function listPostingPeriodVariants(client: string): Promise<Posting
   });
 }
 
-/** The contract's key rule: up to four letters or digits, held upper case. */
+/** The contract's key rule (owner package, 2026-10-17): exactly four letters or digits. */
 const variantKeySchema = z
   .string()
   .trim()
   .min(1, 'A Posting Period Variant is required.')
-  .max(4, 'The Posting Period Variant is at most four characters.')
+  .min(4, 'The Posting Period Variant is exactly four characters.')
+  .max(4, 'The Posting Period Variant is exactly four characters.')
   .transform((value) => value.toUpperCase())
-  .refine((value) => /^[A-Z0-9]{1,4}$/.test(value), {
-    message: 'The Posting Period Variant is one to four letters or digits.',
+  .refine((value) => /^[A-Z0-9]{4}$/.test(value), {
+    message: 'The Posting Period Variant is exactly four letters or digits.',
   });
 
 const descriptionSchema = z
@@ -488,16 +489,16 @@ export async function savePostingPeriodVariant(
 }
 
 /**
- * Delete a posting period variant, with the intervals it owns.
+ * Delete a posting period variant (owner package, 2026-10-17: deletion is blocked while
+ * intervals exist, reversing the earlier rule that intervals were removed with it).
  *
- * The intervals go with it because they are its children: an interval row is meaningless
- * without the variant it belongs to, and leaving them behind is how a registry ends up
- * holding rows no screen can show. What may not go with it is a Company Code's posting
- * control, so a variant anything posts against is refused and the refusal names every
- * Company Code holding it.
+ * Two things may not be taken with it. A Company Code's posting control, so a variant
+ * anything posts against is refused and the refusal names every Company Code holding it.
+ * And the intervals it holds: they are the open/close rules the books run on, so they must
+ * be removed first and on purpose, never as a side effect of deleting their owner. A
+ * variant that clears both checks holds nothing, and deleting it removes one row.
  *
- * There is no undelete. The change document carries the whole interval set that was removed,
- * which is what makes the deletion reviewable rather than merely recorded.
+ * There is no undelete; the change document is what makes the deletion reviewable.
  */
 export async function deletePostingPeriodVariant(
   raw: PostingPeriodVariantDeleteInput,
@@ -544,10 +545,18 @@ export async function deletePostingPeriodVariant(
       );
     }
 
-    const removed = await tx
-      .delete(postingPeriodRule)
-      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)))
-      .returning();
+    const intervals = await tx
+      .select({ accountType: postingPeriodRule.accountType })
+      .from(postingPeriodRule)
+      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)));
+
+    if (intervals.length > 0) {
+      throw new PostingPeriodVariantError(
+        `Posting Period Variant ${variant} cannot be deleted: ${intervals.length} ` +
+          `${intervals.length === 1 ? 'interval still exists' : 'intervals still exist'} for it.`,
+        'Remove the intervals it holds first, then delete this one.',
+      );
+    }
 
     await tx
       .delete(postingPeriodVariant)
@@ -563,16 +572,12 @@ export async function deletePostingPeriodVariant(
       before: {
         variant,
         name: existing.name,
-        intervalCount: removed.length,
-        intervals: describeIntervalSet(removed),
       },
       fieldLabels: {
         variant: 'Posting Period Variant',
         name: 'Description',
-        intervalCount: 'Intervals removed',
-        intervals: 'Interval set',
       },
-      securityRelevantFields: ['variant', 'intervals'],
+      securityRelevantFields: ['variant'],
     });
     if (!documentId) {
       throw new PostingPeriodVariantError(
@@ -585,7 +590,7 @@ export async function deletePostingPeriodVariant(
       deleted: true,
       variant,
       name: existing.name,
-      intervalsRemoved: removed.length,
+      intervalsRemoved: 0,
       companyCodes: [],
     };
   });

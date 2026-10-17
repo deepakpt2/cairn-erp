@@ -28,7 +28,7 @@ const RENAMED = 'Browser variant, renamed';
  *
  * A posting period variant is not a label, it is the set of intervals a Company Code posts
  * against, so the intervals are asserted as carefully as the variant: what the screen offers
- * when a variant is created, what the table holds afterwards, and what a deletion takes away.
+ * when a variant is created, what the table holds afterwards, and what a deletion may not take.
  *
  * Everything asserted here is asserted twice: once in the browser, because the screen is the
  * product, and once in the database, because a form that renders a value is not a form that
@@ -264,7 +264,24 @@ export async function postingPeriodVariantsObbo(ctx: Context) {
   assert.ok(await storedVariant(CLIENT, SEEDED), 'The seeded variant survives the refused deletion.');
   console.log('  ✓ deletion of a variant in use is refused on the screen, naming every Company Code holding it');
 
-  // ── 9. Deleting an unreferenced variant takes its own intervals ───────────
+  // ── 9. Deleting is refused while intervals exist; with none left, it deletes ──
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await openRowDialog(page, CREATED, 'Delete');
+  const blockedDialog = page.locator('details[open]');
+  await blockedDialog.getByRole('alert').filter({ hasText: /cannot be deleted: 5 intervals still exist/ }).waitFor();
+  assert.equal(
+    await blockedDialog.getByRole('button', { name: 'Delete variant', exact: true }).isDisabled(),
+    true,
+    'The operator is not offered a button the write side would reject.',
+  );
+  assert.ok(await storedVariant(CLIENT, CREATED), 'The variant survives the refused deletion.');
+  assert.equal((await storedIntervals(CLIENT, CREATED)).length, 5, 'Its intervals survive too.');
+  console.log('  ✓ deletion of a variant holding intervals is refused on the screen, and nothing was removed');
+
+  // No screen removes interval rows yet, so the fixture strips them the direct way; the
+  // deletion that follows is still driven through the screen.
+  await removeIntervals(CLIENT, CREATED);
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   await openRowDialog(page, CREATED, 'Delete');
@@ -272,20 +289,15 @@ export async function postingPeriodVariantsObbo(ctx: Context) {
   // The dialog lives in the row the deletion removes, so the confirmation comes back as a
   // banner on the registry rather than into a node that no longer exists.
   await page.waitForURL(/deleted=BP01/, { waitUntil: 'commit' });
-  await page.getByRole('status').filter({ hasText: /was deleted, with the 5 intervals it held/ }).waitFor();
+  await page.getByRole('status').filter({ hasText: /Posting Period Variant BP01 was deleted\./ }).waitFor();
   assert.equal(await storedVariant(CLIENT, CREATED), undefined, 'The variant row is gone.');
-  assert.equal((await storedIntervals(CLIENT, CREATED)).length, 0, 'Its intervals went with it.');
+  assert.equal((await storedIntervals(CLIENT, CREATED)).length, 0, 'No intervals remain for it.');
   const removal = await documentItems(CLIENT, CREATED, 'DELETE');
   const removedFields = new Map(removal.map((item) => [item.field_name, item]));
   assert.equal(removedFields.get('variant')?.old_value, CREATED, 'The document carries the key that was deleted.');
   assert.equal(removedFields.get('variant')?.new_value, null, 'A deletion files a null new value.');
   assert.equal(removedFields.get('variant')?.is_security_relevant, 'true', 'The deletion is flagged for the auditor.');
-  assert.equal(
-    removedFields.get('intervals')?.old_value,
-    'S 1-12 +special, K 1-12, D 1-12, A 1-12 +special, M 1-12',
-    'The document carries the interval set that was removed, so the deletion is reviewable.',
-  );
-  console.log('  ✓ an unreferenced variant was deleted with its intervals, and the deletion is reviewable');
+  console.log('  ✓ an unreferenced variant with no intervals left was deleted, and the deletion is reviewable');
 
   // ── 10. The registry reads back without it ────────────────────────────────
   await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
@@ -352,6 +364,13 @@ async function storedIntervals(client: string, variant: string): Promise<StoredI
            order by account_type`,
     ),
   )) as unknown as StoredInterval[];
+}
+
+/** Interval rows have no removal screen yet, so the fixture strips them the direct way. */
+async function removeIntervals(client: string, variant: string) {
+  await withTenant(client, (tx) =>
+    tx.execute(sql`delete from posting_period_rule where client = ${client} and variant = ${variant}`),
+  );
 }
 
 async function storedCompanyCodes(client: string, variant: string): Promise<string[]> {

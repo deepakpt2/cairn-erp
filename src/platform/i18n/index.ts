@@ -1632,7 +1632,7 @@ const en: Catalogue = {
     'The key is up to four letters or digits and cannot be changed afterwards. To use a ' +
     'different key, define another variant.',
   'ppv.key': 'Posting Period Variant',
-  'ppv.keyRule': 'The Posting Period Variant is one to four letters or digits.',
+  'ppv.keyRule': 'The Posting Period Variant is exactly four letters or digits.',
   'ppv.keyTaken':
     'Posting Period Variant {variant} is already defined. Choose another key, or change the ' +
     'existing variant.',
@@ -1671,10 +1671,9 @@ const en: Catalogue = {
   'ppv.actions': 'Actions',
   'ppv.delete': 'Delete',
   'ppv.deleteConfirm':
-    'Delete Posting Period Variant {variant} ({name}), together with the intervals it holds? ' +
-    'This cannot be undone.',
+    'Delete Posting Period Variant {variant} ({name})? This cannot be undone.',
   'ppv.deleteRule':
-    'A variant no Company Code posts against can be deleted, along with its own intervals. ' +
+    'A variant no Company Code posts against, and which holds no intervals, can be deleted. ' +
     'The deletion is recorded in the change log.',
   'ppv.deleteBlocked':
     'Posting Period Variant {variant} cannot be deleted: Company Code {companyCodes} posts ' +
@@ -1682,6 +1681,11 @@ const en: Catalogue = {
   'ppv.deleteBlockedRemedy':
     'Assign them to another posting period variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), ' +
     'then delete this one.',
+  'ppv.deleteBlockedIntervals':
+    'Posting Period Variant {variant} cannot be deleted: {intervals} intervals still exist ' +
+    'for it.',
+  'ppv.deleteBlockedIntervalsRemedy':
+    'Remove the intervals it holds first, then delete this one.',
   'ppv.deleteConfirmButton': 'Delete variant',
   'ppv.created':
     'Posting Period Variant {variant} defined, with {intervals} intervals, one per account type.',
@@ -1691,8 +1695,7 @@ const en: Catalogue = {
   'ppv.descriptionSaved': 'The description of Posting Period Variant {variant} was saved.',
   'ppv.unchanged':
     'Posting Period Variant {variant} already had that description. Nothing was written.',
-  'ppv.deleted':
-    'Posting Period Variant {variant} was deleted, with the {intervals} intervals it held.',
+  'ppv.deleted': 'Posting Period Variant {variant} was deleted.',
   'ppv.unexpected': 'The Posting Period Variant change could not be completed.',
   'ppv.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the ' +

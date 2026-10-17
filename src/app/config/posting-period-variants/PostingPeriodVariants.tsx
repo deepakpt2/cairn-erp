@@ -13,7 +13,7 @@ import {
 } from './actions';
 
 /** The contract's key rule: up to four letters or digits, held upper case. */
-const VARIANT_PATTERN = /^[A-Z0-9]{1,4}$/;
+const VARIANT_PATTERN = /^[A-Z0-9]{4}$/;
 const NAME_MAX = 30;
 
 export function ActionMessage({ state }: { state: PostingPeriodVariantActionState }) {
@@ -128,6 +128,7 @@ export function PostingPeriodVariantForm({
               id={`ppv-variant-${mode}`}
               name="variant"
               className="field-input code"
+              minLength={4}
               maxLength={4}
               value={variant}
               placeholder="C002"
@@ -257,16 +258,18 @@ function IntervalList({ row }: { row: PostingPeriodVariantRow }) {
 }
 
 /**
- * Deleting a variant takes its own intervals with it. What it may not take is a Company
- * Code's posting control, so a variant anything posts against is refused here, on the
- * screen, before the operator is offered a button the write side would reject.
+ * Deleting a variant is refused while anything still depends on it: a Company Code's
+ * posting control, or the intervals it holds. Both are refused here, on the screen,
+ * before the operator is offered a button the write side would reject.
  */
 function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantRow; canMaintain: boolean }) {
   const [state, formAction, pending] = useActionState<PostingPeriodVariantActionState, FormData>(
     deletePostingPeriodVariantAction,
     { ok: true },
   );
-  const blocked = row.usedByCompanyCodes.length > 0;
+  const blockedByCompanyCodes = row.usedByCompanyCodes.length > 0;
+  const blockedByIntervals = row.intervals.length > 0;
+  const blocked = blockedByCompanyCodes || blockedByIntervals;
   const label = `${t('ppv.delete')} ${row.variant}`;
 
   return (
@@ -299,11 +302,20 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
 
               {blocked ? (
                 <p role="alert" className="border border-signal-error bg-white p-3 text-sm text-signal-error">
-                  {t('ppv.deleteBlocked', {
-                    variant: row.variant,
-                    companyCodes: row.usedByLabel,
-                  })}
-                  <span className="mt-1 block text-xs text-ink-soft">{t('ppv.deleteBlockedRemedy')}</span>
+                  {blockedByCompanyCodes
+                    ? t('ppv.deleteBlocked', {
+                        variant: row.variant,
+                        companyCodes: row.usedByLabel,
+                      })
+                    : t('ppv.deleteBlockedIntervals', {
+                        variant: row.variant,
+                        intervals: String(row.intervals.length),
+                      })}
+                  <span className="mt-1 block text-xs text-ink-soft">
+                    {blockedByCompanyCodes
+                      ? t('ppv.deleteBlockedRemedy')
+                      : t('ppv.deleteBlockedIntervalsRemedy')}
+                  </span>
                 </p>
               ) : (
                 <p className="text-xs text-ink-soft">{t('ppv.deleteRule')}</p>

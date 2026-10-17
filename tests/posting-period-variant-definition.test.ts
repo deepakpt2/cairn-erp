@@ -8,8 +8,8 @@
  *
  * The intervals matter as much as the variant here. A posting period variant is not a label,
  * it is the set of intervals a Company Code posts against, so "created" means the variant row
- * and five interval rows that agree with the constant the screen renders, and "deleted" means
- * both are gone.
+ * and five interval rows that agree with the constant the screen renders, and "deleted" is
+ * refused until those rows are removed first (owner package, 2026-10-17).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
@@ -91,6 +91,15 @@ async function storedIntervals(client: string, variant: string) {
   );
 }
 
+/** Interval rows have no removal screen yet, so a fixture strips them the direct way. */
+async function removeIntervals(client: string, variant: string) {
+  await withTenant(client, (tx) =>
+    tx
+      .delete(postingPeriodRule)
+      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant))),
+  );
+}
+
 async function history(client: string, key: string) {
   return withTenant(client, (tx) => changeHistory(tx, client, OBJECT_CLASS, key));
 }
@@ -130,22 +139,27 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
       client,
       changedBy: ACTOR,
       mode: 'CREATE',
-      variant: 'ZP0',
+      variant: 'ZP00',
       name: 'Never written',
     });
 
     await expect(attempt).rejects.toBeInstanceOf(PostingPeriodVariantError);
     await expect(attempt).rejects.toThrow(/prerequisites are incomplete: CFG\.FIN\.FYV\.ASSIGN/);
-    await expect(storedVariant(client, 'ZP0')).resolves.toBeNull();
+    await expect(storedVariant(client, 'ZP00')).resolves.toBeNull();
   });
 
-  it('refuses a key that is not up to four letters or digits', async () => {
+  it('refuses a key that is not exactly four letters or digits', async () => {
     const { client } = fixture();
 
     const tooLong = savePostingPeriodVariant({
       client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP123', name: 'Never written',
     });
-    await expect(tooLong).rejects.toThrow(/at most four characters/);
+    await expect(tooLong).rejects.toThrow(/exactly four characters/);
+
+    const tooShort = savePostingPeriodVariant({
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP1', name: 'Never written',
+    });
+    await expect(tooShort).rejects.toThrow(/exactly four characters/);
 
     const empty = savePostingPeriodVariant({
       client, changedBy: ACTOR, mode: 'CREATE', variant: '   ', name: 'Never written',
@@ -155,7 +169,7 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
     const punctuation = savePostingPeriodVariant({
       client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP!', name: 'Never written',
     });
-    await expect(punctuation).rejects.toThrow(/one to four letters or digits/);
+    await expect(punctuation).rejects.toThrow(/exactly four/);
 
     expect(await listPostingPeriodVariants(client)).toHaveLength(1);
   });
@@ -164,16 +178,16 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
     const { client } = fixture();
 
     const missing = savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP2', name: '   ',
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP02', name: '   ',
     });
     await expect(missing).rejects.toThrow(/description is required/);
 
     const tooLong = savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP2', name: 'x'.repeat(31),
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP02', name: 'x'.repeat(31),
     });
     await expect(tooLong).rejects.toThrow(/at most thirty characters/);
 
-    expect(await storedVariant(client, 'ZP2')).toBeNull();
+    expect(await storedVariant(client, 'ZP02')).toBeNull();
   });
 
   it('accepts a description of exactly thirty characters, which is the contract width', async () => {
@@ -181,11 +195,11 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
     const name = 'x'.repeat(30);
 
     const saved = await savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP2', name,
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP02', name,
     });
 
     expect(saved.mode).toBe('CREATED');
-    const stored = await storedVariant(client, 'ZP2');
+    const stored = await storedVariant(client, 'ZP02');
     expect(stored?.name).toBe(name);
     expect(stored?.name).toHaveLength(30);
   });
@@ -207,30 +221,30 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
     const { client } = fixture();
 
     const attempt = savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP9', name: 'Never written',
+      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP99', name: 'Never written',
     });
 
     await expect(attempt).rejects.toThrow(/is not defined in this tenant/);
-    expect(await storedVariant(client, 'ZP9')).toBeNull();
+    expect(await storedVariant(client, 'ZP99')).toBeNull();
   });
 
   it('creates the variant with one interval per account type, exactly as the screen promises', async () => {
     const { client } = fixture();
 
     const saved = await savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP1', name: 'Probe lifecycle variant',
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'ZP01', name: 'Probe lifecycle variant',
     });
 
     expect(saved).toMatchObject({
-      variant: 'ZP1', name: 'Probe lifecycle variant', mode: 'CREATED',
+      variant: 'ZP01', name: 'Probe lifecycle variant', mode: 'CREATED',
       intervalsCreated: DEFAULT_INTERVALS.length,
     });
 
-    const stored = await storedVariant(client, 'ZP1');
+    const stored = await storedVariant(client, 'ZP01');
     expect(stored?.isActive).toBe(true);
     expect(stored?.createdBy).toBe(ACTOR);
 
-    const intervals = await storedIntervals(client, 'ZP1');
+    const intervals = await storedIntervals(client, 'ZP01');
     expect(intervals).toHaveLength(DEFAULT_INTERVALS.length);
     // Compared row by row against the constant the screen renders, so the note on the form and
     // the rows in the table cannot drift apart without this test noticing.
@@ -250,21 +264,21 @@ describe('SCR-031 / OBBO — defining a posting period variant', () => {
     const { client } = fixture();
 
     const saved = await savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CREATE', variant: 'zp3', name: 'Lower case key',
+      client, changedBy: ACTOR, mode: 'CREATE', variant: 'zp03', name: 'Lower case key',
     });
 
-    expect(saved.variant).toBe('ZP3');
-    expect(await storedVariant(client, 'zp3')).toBeNull();
-    expect((await storedVariant(client, 'ZP3'))?.name).toBe('Lower case key');
+    expect(saved.variant).toBe('ZP03');
+    expect(await storedVariant(client, 'zp03')).toBeNull();
+    expect((await storedVariant(client, 'ZP03'))?.name).toBe('Lower case key');
 
-    const documents = await history(client, 'ZP3');
+    const documents = await history(client, 'ZP03');
     expect(documents).toHaveLength(1);
     expect(documents[0].changeType).toBe('CREATE');
     expect(documents[0].transactionCode).toBe(ACTIVITY);
     expect(documents[0].changedBy).toBe(ACTOR);
 
     const byField = new Map(documents[0].items.map((item) => [item.fieldName, item]));
-    expect(byField.get('variant')?.newValue).toBe('ZP3');
+    expect(byField.get('variant')?.newValue).toBe('ZP03');
     expect(byField.get('variant')?.oldValue).toBeNull();
     expect(byField.get('name')?.newValue).toBe('Lower case key');
     expect(byField.get('intervalCount')?.newValue).toBe(String(DEFAULT_INTERVALS.length));
@@ -296,15 +310,15 @@ describe('SCR-031 / OBBO — changing a description', () => {
     const { client } = fixture();
 
     const saved = await savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP1', name: 'Renamed by the suite',
+      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP01', name: 'Renamed by the suite',
     });
 
-    expect(saved).toMatchObject({ variant: 'ZP1', mode: 'CHANGED', intervalsCreated: 0 });
-    expect((await storedVariant(client, 'ZP1'))?.name).toBe('Renamed by the suite');
+    expect(saved).toMatchObject({ variant: 'ZP01', mode: 'CHANGED', intervalsCreated: 0 });
+    expect((await storedVariant(client, 'ZP01'))?.name).toBe('Renamed by the suite');
     // Changing the description must not touch the intervals it was created with.
-    expect(await storedIntervals(client, 'ZP1')).toHaveLength(DEFAULT_INTERVALS.length);
+    expect(await storedIntervals(client, 'ZP01')).toHaveLength(DEFAULT_INTERVALS.length);
 
-    const change = (await history(client, 'ZP1')).find((doc) => doc.changeType === 'CHANGE');
+    const change = (await history(client, 'ZP01')).find((doc) => doc.changeType === 'CHANGE');
     expect(change).toBeDefined();
     expect(change?.items).toHaveLength(1);
     expect(change?.items[0]).toMatchObject({
@@ -314,14 +328,14 @@ describe('SCR-031 / OBBO — changing a description', () => {
 
   it('reports an identical description as unchanged and files nothing', async () => {
     const { client } = fixture();
-    const before = await history(client, 'ZP1');
+    const before = await history(client, 'ZP01');
 
     const saved = await savePostingPeriodVariant({
-      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP1', name: 'Renamed by the suite',
+      client, changedBy: ACTOR, mode: 'CHANGE', variant: 'ZP01', name: 'Renamed by the suite',
     });
 
     expect(saved.mode).toBe('UNCHANGED');
-    expect(await history(client, 'ZP1')).toHaveLength(before.length);
+    expect(await history(client, 'ZP01')).toHaveLength(before.length);
   });
 });
 
@@ -338,8 +352,8 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
 
     // The refusal follows the current assignment rather than a stale read: move the Company
     // Code onto a variant of its own and the same deletion is refused for the same reason.
-    await assignCompanyCode(client, code, 'ZP1');
-    const moved = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP1' });
+    await assignCompanyCode(client, code, 'ZP01');
+    const moved = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP01' });
     await expect(moved).rejects.toThrow(new RegExp(`Company Code ${code} posts against it`));
     await assignCompanyCode(client, code, SEEDED);
   });
@@ -347,41 +361,52 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
   it('refuses to delete a variant that is not defined', async () => {
     const { client } = fixture();
 
-    const attempt = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP9' });
+    const attempt = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP99' });
 
     await expect(attempt).rejects.toThrow(/is not defined in this tenant/);
   });
 
-  it('deletes an unreferenced variant with the intervals it owns, and files what went', async () => {
+  it('refuses to delete a variant while intervals still exist for it', async () => {
     const { client } = fixture();
-    expect(await storedIntervals(client, 'ZP1')).toHaveLength(DEFAULT_INTERVALS.length);
+    expect(await storedIntervals(client, 'ZP01')).toHaveLength(DEFAULT_INTERVALS.length);
 
-    const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP1' });
+    const attempt = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP01' });
+
+    await expect(attempt).rejects.toBeInstanceOf(PostingPeriodVariantError);
+    await expect(attempt).rejects.toThrow(/cannot be deleted: 5 intervals still exist for it/);
+    // The refusal leaves both the variant and its intervals exactly as they were.
+    await expect(storedVariant(client, 'ZP01')).resolves.not.toBeNull();
+    expect(await storedIntervals(client, 'ZP01')).toHaveLength(DEFAULT_INTERVALS.length);
+  });
+
+  it('deletes an unreferenced variant once its intervals are removed, and files what went', async () => {
+    const { client } = fixture();
+    await removeIntervals(client, 'ZP01');
+    expect(await storedIntervals(client, 'ZP01')).toHaveLength(0);
+
+    const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP01' });
 
     expect(deleted).toMatchObject({
-      deleted: true, variant: 'ZP1', name: 'Renamed by the suite',
-      intervalsRemoved: DEFAULT_INTERVALS.length, companyCodes: [],
+      deleted: true, variant: 'ZP01', name: 'Renamed by the suite',
+      intervalsRemoved: 0, companyCodes: [],
     });
-    expect(await storedVariant(client, 'ZP1')).toBeNull();
-    expect(await storedIntervals(client, 'ZP1')).toHaveLength(0);
+    expect(await storedVariant(client, 'ZP01')).toBeNull();
+    expect(await storedIntervals(client, 'ZP01')).toHaveLength(0);
 
-    const removal = (await history(client, 'ZP1')).find((doc) => doc.changeType === 'DELETE');
+    const removal = (await history(client, 'ZP01')).find((doc) => doc.changeType === 'DELETE');
     expect(removal).toBeDefined();
     expect(removal?.transactionCode).toBe(ACTIVITY);
     const byField = new Map(removal?.items.map((item) => [item.fieldName, item]) ?? []);
-    // A deletion files what was there against a null new value, so an auditor reads the set
+    // A deletion files what was there against a null new value, so an auditor reads the key
     // that was removed rather than only the fact of its removal.
-    expect(byField.get('variant')?.oldValue).toBe('ZP1');
+    expect(byField.get('variant')?.oldValue).toBe('ZP01');
     expect(byField.get('variant')?.newValue).toBeNull();
     expect(byField.get('variant')?.isSecurityRelevant).toBe('true');
-    // The variant was created from the defaults and its intervals were never edited, so the
-    // sentence filed here is the same one the create filed, in the same order.
-    expect(byField.get('intervals')?.oldValue).toBe(describeIntervalSet(DEFAULT_INTERVALS));
-    expect(byField.get('intervalCount')?.oldValue).toBe(String(DEFAULT_INTERVALS.length));
+    expect(byField.get('name')?.oldValue).toBe('Renamed by the suite');
 
     // The registry reads back without it, and the seeded variant is untouched throughout.
     const remaining = await listPostingPeriodVariants(client);
-    expect(remaining.map((row) => row.variant)).not.toContain('ZP1');
+    expect(remaining.map((row) => row.variant)).not.toContain('ZP01');
     const seeded = remaining.find((row) => row.variant === SEEDED);
     expect(seeded?.name).toBe('Standard period control');
     expect(seeded?.intervals).toHaveLength(DEFAULT_INTERVALS.length);
@@ -391,11 +416,12 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
   it('leaves the lower-case-keyed variant deletable too, and the tenant readable afterwards', async () => {
     const { client } = fixture();
 
-    const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'zp3' });
+    await removeIntervals(client, 'ZP03');
+    const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'zp03' });
     expect(deleted.deleted).toBe(true);
 
     const rows = await listPostingPeriodVariants(client);
-    expect(rows.map((row) => row.variant)).toEqual([SEEDED, 'ZP2']);
+    expect(rows.map((row) => row.variant)).toEqual([SEEDED, 'ZP02']);
     expect(rows[0].intervals.map((interval) => interval.accountType)).toEqual(['S', 'K', 'D', 'A', 'M']);
     expect(rows[0].intervals[0].summary).toContain('periods 1 to 12');
   });
