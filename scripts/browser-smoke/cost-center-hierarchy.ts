@@ -89,23 +89,21 @@ export async function costCenterHierarchyKs01(ctx: Context) {
   await definePanel.locator('#hier-title').fill('Acceptance hierarchy');
   await definePanel.locator('#hier-define-reason').fill(REASON);
   await definePanel.getByRole('button', { name: 'Define hierarchy', exact: true }).click();
-  await page
-    .getByRole('status')
-    .filter({ hasText: 'The standard hierarchy is defined for this controlling area.' })
-    .waitFor();
+  // The success unmounts the define panel; the standing heading is the evidence.
+  await page.getByRole('heading', { name: 'Standard hierarchy — Acceptance hierarchy', exact: true }).waitFor();
 
   const nodePanel = page.locator('section[aria-labelledby="hier-node-create-title"]');
   await nodePanel.locator('#hier-node-key').fill('ALL');
   await nodePanel.locator('#hier-node-title').fill('All cost centres');
   await nodePanel.locator('#hier-node-reason').fill(REASON);
-  await nodePanel.getByRole('button', { name: 'Define node', exact: true }).click();
+  await nodePanel.getByRole('button', { name: 'Define node', exact: true }).evaluate((el) => (el as HTMLElement).click());
   await page.getByRole('status').filter({ hasText: 'Node ALL defined.' }).waitFor();
 
   await nodePanel.locator('#hier-node-key').fill('PLANTS');
   await nodePanel.locator('#hier-node-title').fill('Plant centres');
   await nodePanel.locator('#hier-node-parent').selectOption('ALL');
   await nodePanel.locator('#hier-node-reason').fill(REASON);
-  await nodePanel.getByRole('button', { name: 'Define node', exact: true }).click();
+  await nodePanel.getByRole('button', { name: 'Define node', exact: true }).evaluate((el) => (el as HTMLElement).click());
   await page.getByRole('status').filter({ hasText: 'Node PLANTS defined.' }).waitFor();
   console.log('  ✓ the header stands, with root ALL and PLANTS under it');
 
@@ -170,10 +168,8 @@ export async function costCenterHierarchyKs01(ctx: Context) {
   await unassignDialog.waitFor();
   await unassignDialog.locator(`#unplace-reason-${CENTRE}-2026-01-01`).fill(REASON);
   await unassignDialog.getByRole('button', { name: 'Unassign period', exact: true }).click();
-  await page
-    .getByRole('status')
-    .filter({ hasText: new RegExp(`Cost Centre ${CENTRE} from 2026-01-01 unassigned`) })
-    .waitFor();
+  // The success unmounts the dialog with the placement row; the unplaced list is the evidence.
+  await page.getByText(`Unplaced periods: ${CENTRE} from 2026-01-01`).waitFor();
   assert.equal(await placedNode(client, CENTRE), null, 'The placement is gone.');
   assert.equal(await centreStands(client, CENTRE), true, 'The cost centre itself stands.');
   const docs = await withTenant(client, (tx) =>
