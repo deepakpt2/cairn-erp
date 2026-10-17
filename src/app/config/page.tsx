@@ -85,6 +85,7 @@ export default async function WorkbenchPage({
     '/config/tolerance-groups',
     '/config/account-determination',
     '/config/cost-centers',
+    '/config/cost-center-hierarchy',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
