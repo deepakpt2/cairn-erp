@@ -29,6 +29,7 @@ export const TARGETS = [
   { id: 'tolerance-groups', client: 'T957', label: 'SCR-039 OBA4 employee tolerance group definition, blank scope and group keys, zero unlimited, no deletion offered' },
   { id: 'account-determination', client: 'T956', label: 'SCR-040 OBYC account determination master-detail, per-event modifiers, G/L redirect, deletion documented' },
   { id: 'cost-centers', client: 'T955', label: 'SCR-041 KS01 cost centre periods, assignment-judged company, overlap refusal, posting lock, deletion documented' },
+  { id: 'cost-center-hierarchy', client: 'T954', label: 'SCR-042 KSH1/OKEON standard hierarchy and alternative groups, exclusive period placement, ranged leaves, unassign' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

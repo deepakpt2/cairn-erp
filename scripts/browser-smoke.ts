@@ -196,6 +196,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'tolerance-groups') return '/config/tolerance-groups';
   if (target.id === 'account-determination') return '/config/account-determination';
   if (target.id === 'cost-centers') return '/config/cost-centers';
+  if (target.id === 'cost-center-hierarchy') return '/config/cost-center-hierarchy';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
