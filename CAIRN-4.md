@@ -1406,6 +1406,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.344 B-328 — SCR-046 / KCH1 stage 1: the inert screen `STAGE PUBLISHED`
+
+**The contract (R-95).** The owner's package models profit centre groups as the reference's set framework — a set header keyed by class and subclass, parent-child subset rows, and interval leaves with signs — under a standard hierarchy each controlling area carries. All four forks took **SAP parity**, and they resolve to the exact shape SCR-042 proved for cost centres (the owner's own sequencing of it as KE51's "deferred step, then build it"): one tree per area with an explicitly created single root, nodes of at most 24 characters, depth at most 10, a profit centre **validity period placed on exactly one node** — the unique index is the rule, a move is unplace-then-place — and alternative groups whose EQ/BT leaves with Include/Exclude signs resolve dynamically against the master, so a centre created tomorrow inside a standing range is a member without an edit. The set class and SET* frame stay out of storage — product vocabulary throughout, the package's own notes conceding the approximation — and KCH1/KCH5N/KCH6N will be Term Registry aliases only. The SCR closes with the KE51 screen showing each period's hierarchy node read-only, discharging R-94's deferral as B-311 discharged KS01's.
+
+**What was published.** Five definitions join the foundation schema (`profit_center_hierarchy`, `profit_center_node`, `profit_center_node_assignment` with its per-period unique index, `profit_center_group`, `profit_center_group_leaf`), `src/modules/foundation/profit-center-hierarchy.ts` carries the read side (the area view: flattened tree with placed counts, placements, unplaced periods, groups with resolved members; the pure `flattenNodes`/`resolveGroupMembers` pair), and `/config/profit-center-hierarchy` heads the page with the area selector, the define-hierarchy form, the tree and groups sections, over the stage-1 inert note. Two catalogue keys joined (`profitHierarchy.title`, `profitHierarchy.subtitle`); the service and schema were mirrored mechanically from SCR-042's proven code and the diff reviewed.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 1.6 kB); suite **1191 tests across 142 files**.
+
+**Cost.** Measured: 17:14 in to 17:20 — **6 minutes** of a 39-minute box, the environment restore after a snapshot wipe included.
+
+**Not accepted.** The tables (stage 2), the write (stage 3), the activity row, capability and registry entry (stage 4), and tests, browser acceptance, and the KE51 placement display (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1498,6 +1512,7 @@ recorded change, date and reason stated.
 | 2.143 | 2026-10-17 | **SCR-045 / KE51 stage 3: the write (B-325, §26.341).** `saveProfitCenter`, `setProfitCenterPostingLock` and `deleteProfitCenter` and the live screen: the period key immutable, the responsible user judged against the tenant's active users, the segment kept at parity width unjudged until its master stands, the validity span judged against every sibling period — responsible user, segment and lock security-relevant in one change document per write with a mandatory reason, and deletion refused while journal documents dated inside carry the centre. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 3 minutes. | Agent |
 | 2.144 | 2026-10-17 | **SCR-045 / KE51 stage 4: the supporting rows (B-326, §26.342).** Capability `CFG.COST.PROFITCENTER.DEFINE` seeded (86 capabilities), the Term Registry entry added with KE51 as a search alias only (55 terms, 49 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 | 2.145 | 2026-10-17 | **SCR-045 / KE51 CLOSED and accepted (B-327, §26.343).** Stage 5 ships 12 service tests and the T951 browser target `profit-centers` (6/6 journeys on its first run against the production build — period documented with both texts and a segment, duplicate and overlap refused, the change dialog, the lock round, the documented deletion, journal-guarded deletion asserted in the service tests), the previous closures' harness lessons written in from the start. Neighbouring `cost-centers` and `activity-rates` targets, typecheck, build and `lint:ip` clean; suite 1191 across 142 files. The hierarchy stands deferred to its own next SCR in the owner's words. Cost measured at 76 minutes overall. | Agent |
+| 2.146 | 2026-10-17 | **SCR-046 / KCH1 contract confirmed and stage 1 (the screen) published (B-328, §26.344; R-95).** SAP parity on all four forks resolves to the SCR-042 shape on profit centres: the explicitly rooted standard tree, per-period exclusive placement, and EQ/BT I/E leaves resolved dynamically — no SET* frame in storage, KCH1/KCH5N/KCH6N to be search aliases only, and the KE51 screen to gain its read-only placement at closure. Stage 1 publishes `/config/profit-center-hierarchy` inert: five table definitions, the mirrored read service, the area-over-tree screen, and the catalogue keys. Typecheck, build (route 1.6 kB) and `lint:ip` clean; suite 1191 across 142 files. Cost measured at 6 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
