@@ -14,12 +14,11 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/profit-center-hierarchy';
 
 /**
- * Profit centre hierarchy (SCR-046 / KCH1; inert since stage 1).
+ * Cost centre hierarchy (SCR-046 / KCH1 · KCH5N).
  *
- * The deferred step of KE51: one standard hierarchy tree per
- * controlling area holding profit centre periods, beside alternative
- * groups resolved from ranged and excluding leaves — the SCR-042 shape
- * applied to profit centres.
+ * The standard hierarchy is the area's one tree, with profit centre periods
+ * placed into nodes; alternative groups stand beside it, resolved from
+ * their leaves. Rollups do not read either structure yet.
  */
 export default async function ProfitCenterHierarchyPage({
   searchParams,
@@ -41,7 +40,7 @@ export default async function ProfitCenterHierarchyPage({
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
       <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{ACTIVITY} · KCH1</span>
+        <span className="code text-ink-faint">{ACTIVITY} · KCH1/KCH5N</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('profitHierarchy.title')}</h1>
           <div className="flex flex-wrap gap-2">
@@ -59,7 +58,12 @@ export default async function ProfitCenterHierarchyPage({
         </p>
       )}
 
-      <ProfitCenterHierarchy areas={areas} selectedArea={selectedArea} view={view} />
+      <ProfitCenterHierarchy
+        areas={areas}
+        selectedArea={selectedArea}
+        view={view}
+        canMaintain={canMaintain}
+      />
     </div>
   );
 }
