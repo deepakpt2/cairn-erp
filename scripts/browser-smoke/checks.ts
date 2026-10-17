@@ -879,25 +879,32 @@ async function companyCodeDefinition(ctx: BrowserContext) {
   await page.getByRole('heading', { name: 'Create company code', exact: true }).waitFor();
   assert.equal(await page.locator('tbody tr').count() >= 1, true, 'The standard package should leave a readable existing Company Code.');
 
-  const countryOptions = await page.locator('[name="country"] option').evaluateAll((options) =>
+  // The page renders a second form — the assignment form — as soon as any company code has
+  // pending assignments, and that form carries a companyCode control of its own. Every field
+  // access in the create flow is scoped to the form that owns the create button, because an
+  // unscoped [name="companyCode"] resolves to two elements the moment 2000 exists unassigned.
+  const definitionForm = page
+    .locator('form')
+    .filter({ has: page.getByRole('button', { name: 'Create company code', exact: true }) });
+
+  const countryOptions = await definitionForm.locator('[name="country"] option').evaluateAll((options) =>
     options.map((option) => (option as HTMLOptionElement).value),
   );
-  const currencyOptions = await page.locator('[name="currency"] option').evaluateAll((options) =>
+  const currencyOptions = await definitionForm.locator('[name="currency"] option').evaluateAll((options) =>
     options.map((option) => (option as HTMLOptionElement).value),
   );
   assert.ok(countryOptions.includes('KW'), 'Authorized maintainer receives country choices.');
   assert.ok(currencyOptions.includes('KWD'), 'Authorized maintainer receives active-currency choices.');
 
   for (const field of ['client', 'changedBy', 'chartOfAccounts', 'fiscalYearVariant', 'postingPeriodVariant']) {
-    assert.equal(await page.locator(`[name="${field}"]`).count(), 0, `${field} is not a definition-form field.`);
+    assert.equal(await definitionForm.locator(`[name="${field}"]`).count(), 0, `${field} is not a definition-form field.`);
   }
-  await page.locator('[name="companyCode"]').fill(code);
-  await page.locator('[name="name"]').fill(name);
-  await page.locator('[name="country"]').selectOption('KW');
-  await page.locator('[name="currency"]').selectOption('KWD');
-  await page.locator('[name="city"]').fill('Al Jahra');
-  await page.locator('[name="taxRegistrationNumber"]').fill('B110-TAX-2000');
-  const definitionForm = page.locator('form').filter({ has: page.locator('[name="companyCode"]') });
+  await definitionForm.locator('[name="companyCode"]').fill(code);
+  await definitionForm.locator('[name="name"]').fill(name);
+  await definitionForm.locator('[name="country"]').selectOption('KW');
+  await definitionForm.locator('[name="currency"]').selectOption('KWD');
+  await definitionForm.locator('[name="city"]').fill('Al Jahra');
+  await definitionForm.locator('[name="taxRegistrationNumber"]').fill('B110-TAX-2000');
   await definitionForm.evaluate((form) => {
     for (const [field, value] of Object.entries({
       client: '0100',
@@ -921,10 +928,10 @@ async function companyCodeDefinition(ctx: BrowserContext) {
 
   // A successful create resets the form but keeps the server-confirmed feedback visible.
   for (const field of ['companyCode', 'name', 'city', 'taxRegistrationNumber']) {
-    assert.equal(await page.locator(`[name="${field}"]`).inputValue(), '', `${field} resets after success.`);
+    assert.equal(await definitionForm.locator(`[name="${field}"]`).inputValue(), '', `${field} resets after success.`);
   }
-  assert.equal(await page.locator('[name="country"]').inputValue(), '');
-  assert.equal(await page.locator('[name="currency"]').inputValue(), '');
+  assert.equal(await definitionForm.locator('[name="country"]').inputValue(), '');
+  assert.equal(await definitionForm.locator('[name="currency"]').inputValue(), '');
 
   let rows = await listCompanyCodes(CLIENT);
   let created = rows.filter((row) => row.companyCode === code);
@@ -978,10 +985,10 @@ async function companyCodeDefinition(ctx: BrowserContext) {
   console.log('  ✓ form creates one audited definition, resets after success and leaves assignments unset');
 
   // Duplicate submits are rejected by the create-only action and do not overwrite the row.
-  await page.locator('[name="companyCode"]').fill(code);
-  await page.locator('[name="name"]').fill('Attempted browser overwrite');
-  await page.locator('[name="country"]').selectOption('US');
-  await page.locator('[name="currency"]').selectOption('USD');
+  await definitionForm.locator('[name="companyCode"]').fill(code);
+  await definitionForm.locator('[name="name"]').fill('Attempted browser overwrite');
+  await definitionForm.locator('[name="country"]').selectOption('US');
+  await definitionForm.locator('[name="currency"]').selectOption('USD');
   await page.getByRole('button', { name: 'Create company code', exact: true }).click();
   await page.getByRole('status').getByText('Company code 2000 already exists.', { exact: true }).waitFor();
   rows = await listCompanyCodes(CLIENT);
@@ -2253,7 +2260,13 @@ async function supplierPartnerFunctionEditor(ctx: BrowserContext) {
   await replacedRow.locator('form').last().locator('[name="reason"]').fill('Browser unique partner-function removal');
   const uniqueRemoveButton=replacedRow.getByRole('button',{name:'Remove assignment',exact:true});
   await uniqueRemoveButton.click();
-  await uniqueRemoveButton.waitFor({state:'detached'});
+  // The action re-renders this panel from the server, and the client-side status line is lost in
+  // that refresh, so there is no message to wait for. What the panel renders afterwards is read
+  // from committed data, while a query issued from this process can run before the write is
+  // visible to its own connection — which is why waiting on the button, or on nothing at all,
+  // made this step pass or fail on timing alone. Waiting on the server's own sentence makes the
+  // read that follows deterministic.
+  await card('ORDERING_PARTNER').getByText('No related Supplier is assigned.',{exact:true}).waitFor();
   assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
   assert.equal(assignments.filter(row=>row.functionCode==='ORDERING_PARTNER').length,0);
   console.log('  ✓ unique assignment add, replacement and reasoned removal persist through the UI');
@@ -2320,7 +2333,13 @@ async function supplierPartnerFunctionEditor(ctx: BrowserContext) {
   await promotedRow.locator('form').last().locator('[name="reason"]').fill('Browser remove current default partner');
   const currentDefaultRemoveButton=promotedRow.getByRole('button',{name:'Remove assignment',exact:true});
   await currentDefaultRemoveButton.click();
-  await currentDefaultRemoveButton.waitFor({state:'detached'});
+  // The action re-renders this panel from the server, and the client-side status line is lost in
+  // that refresh, so there is no message to wait for. What the panel renders afterwards is read
+  // from committed data, while a query issued from this process can run before the write is
+  // visible to its own connection — which is why waiting on the button, or on nothing at all,
+  // made this step pass or fail on timing alone. Waiting on the server's own sentence makes the
+  // read that follows deterministic.
+  await delivery.getByText('No default is set. A purchasing transaction must ask the user to choose.',{exact:true}).waitFor();
   assignments=await listSupplierPurchasingPartners(CLIENT,focal,'1000');
   deliveryRows=assignments.filter(row=>row.functionCode==='DELIVERY_PARTNER');
   assert.equal(deliveryRows.length,1);assert.equal(deliveryRows[0].assignedPartnerNumber,'TESTSUPP03');assert.equal(deliveryRows[0].isDefault,false);
@@ -2893,7 +2912,10 @@ async function storageLocations(ctx: BrowserContext) {
   await page.getByText('Read-only view. Changes require authority CFG.ORG.STORAGELOC.DEFINE.', { exact: true }).waitFor();
   const locationRow = page.locator('tbody tr').filter({ hasText: locationCode });
   await locationRow.waitFor();
-  assert.ok((await locationRow.innerText()).includes('Inactive'));
+  // The status chip is uppercased by CSS (.chip applies `uppercase`) and innerText reports the
+  // transformed text, so the catalogue's "Inactive" arrives as "INACTIVE". The comparison has to
+  // be case-insensitive; matching the exact casing would test the stylesheet, not the status.
+  assert.match(await locationRow.innerText(), /inactive/i);
   assert.equal(await page.getByRole('link', { name: 'Create Storage Location', exact: true }).count(), 0);
   assert.equal(await page.getByRole('link', { name: 'Change', exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', { name: 'Confirm deactivation', exact: true }).count(), 0);
@@ -4283,14 +4305,23 @@ async function distributionDimensionDefinition(ctx: BrowserContext, kind: Distri
   assert.equal(await readActivityStatus().then((status) => status?.completed_by), actor);
   console.log('  ✓ unused definition is soft-deactivated and retained with security-relevant history');
 
+  // The standard structure leaves key 01 with two references: it is assigned to Sales
+  // Organization 1000, and Sales Area 1000/01/01 uses it. The service refuses deactivation on the
+  // sales-organisation reference first (distribution-channel-division-maintenance.ts:320 and :326)
+  // and on the Sales Area reference second (:333), and the first cannot be cleared to reach the
+  // second: removing the pair is itself refused while a Sales Area uses it, and the Sales Area F4
+  // only offers pairs that are assigned. So in any state the screens can produce, a referenced
+  // standard key is protected by the sales-organisation guard, and that is what this step asserts.
+  // The Sales Area guard remains reachable only through a direct service write, which is recorded
+  // as an open item rather than covered here by fabricating a state no operator can reach.
   await page.goto(`${BASE}${route}?${codeField}=01`, { waitUntil: 'commit' });
   const protectedPanel = page.locator('details').filter({ hasText: `Deactivate definition · ${singular}` });
   await protectedPanel.locator('summary').click();
   await protectedPanel.locator('form').getByRole('button', { name: 'Confirm deactivation', exact: true }).click();
-  await page.getByRole('alert').getByText(/still referenced by Sales Area configuration/).waitFor();
+  await page.getByRole('alert').getByText(new RegExp(`${singular} 01 is still assigned to one or more Sales Organizations`)).waitFor();
   assert.equal((await readDefinition('01'))?.is_active, true, 'A referenced standard definition remains active after rejection.');
-  assert.equal(await referenceCount('01') > 0, true);
-  console.log('  ✓ Sales Area dependency prevents deactivation without changing the definition');
+  assert.equal(await referenceCount('01') > 0, true, 'The Sales Area that also references the key is untouched by the refusal.');
+  console.log('  ✓ a key assigned to a Sales Organization cannot be deactivated, and neither the definition nor its Sales Area changes');
 
   await page.goto(`${BASE}${route}?${codeField}=${codeTwo}&history=1`, { waitUntil: 'commit' });
   await page.getByText('This definition is inactive and retained with its history.', { exact: true }).waitFor();

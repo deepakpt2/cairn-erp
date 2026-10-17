@@ -32,7 +32,7 @@ describe('SCR-022 Distribution Channel and Division isolated browser targets', (
     expect(checksSource).toContain('  divisions,');
   });
 
-  it('covers distinct exact capabilities, copy-as-new, audited name change, reference guard and mobile layout', () => {
+  it('covers distinct exact capabilities, copy-as-new, audited name change, the deactivation guard a reachable state produces, and mobile layout', () => {
     expect(check).toContain("'CFG.ORG.DISTCHANNEL.DEFINE'");
     expect(check).toContain("'CFG.ORG.DIVISION.DEFINE'");
     for (const marker of [
@@ -40,7 +40,11 @@ describe('SCR-022 Distribution Channel and Division isolated browser targets', (
       'distributionChannel',
       'name-only change increments the audit version',
       'Copy must require a new, immutable key.',
-      'Sales Area dependency prevents deactivation',
+      // The standard key carries two references, and the service refuses on the sales-organisation
+      // one first; the pair cannot be unassigned while a Sales Area uses it and the Sales Area F4
+      // only offers assigned pairs, so this is the guard any reachable state produces (B-256).
+      'is still assigned to one or more Sales Organizations',
+      'a key assigned to a Sales Organization cannot be deactivated',
       'isSecurityRelevant === \'true\'',
       'width: 390',
       'horizontalOverflow <= 1',
