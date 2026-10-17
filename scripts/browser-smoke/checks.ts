@@ -1457,14 +1457,16 @@ async function companyCodeCoaAssignment(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   const code = '2000';
   const name = 'Browser Acceptance CoA Assignment';
-  const activeChart = 'B115ACT';
-  const inactiveChart = 'B115OFF';
+  // Chart keys are varchar(4) — this target was written when they were wider, and its
+  // seven-character fixture keys were rejected by the column long after it last ran.
+  const activeChart = 'B11A';
+  const inactiveChart = 'B11O';
   console.log('Company Code CoA assignment: verify independent capabilities, local active choices, one-time save and read-only access');
 
   await page.goto(`${BASE}/config/company-codes`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Company codes', exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Create company code', exact: true }).waitFor();
-  assert.equal(await page.locator('tbody tr').count() >= 1, true, 'The standard package should leave a readable assigned Company Code.');
+  assert.equal(await page.locator('tbody tr').count() >= 1, true, 'The standard structure builder leaves a readable assigned Company Code.');
 
   // Create a fresh unassigned row through the real session-bound definition action.
   await page.locator('[name="companyCode"]').fill(code);
