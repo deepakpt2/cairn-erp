@@ -82,6 +82,7 @@ export default async function WorkbenchPage({
     '/config/banks',
     '/config/house-banks',
     '/config/document-types',
+    '/config/tolerance-groups',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
