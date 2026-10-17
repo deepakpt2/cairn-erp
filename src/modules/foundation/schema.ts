@@ -902,6 +902,156 @@ export const costCenterGroupLeaf = pgTable(
   ],
 );
 
+/** Profit centre hierarchy — SCR-046 / R-95 (definition; tables created in stage 2). */
+export const profitCenterHierarchy = pgTable(
+  'profit_center_hierarchy',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    title: varchar('title', { length: 40 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea] }),
+    check('profit_center_hierarchy_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('profit_center_hierarchy_title_not_blank_ck', sql`length(btrim(${t.title})) > 0`),
+    foreignKey({
+      name: 'profit_center_hierarchy_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+  ],
+);
+
+/** Hierarchy nodes — parent-linked, one root per area (root = null parent). */
+export const profitCenterNode = pgTable(
+  'profit_center_node',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    node: varchar('node', { length: 24 }).notNull(),
+    parentNode: varchar('parent_node', { length: 24 }),
+    title: varchar('title', { length: 40 }).notNull(),
+    displayOrder: integer('display_order').notNull().default(0),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.node] }),
+    check('profit_center_node_key_format_ck', sql`${t.node} ~ '^[A-Z0-9]{1,24}$'`),
+    check('profit_center_node_parent_format_ck', sql`${t.parentNode} is null or ${t.parentNode} ~ '^[A-Z0-9]{1,24}$'`),
+    check('profit_center_node_title_not_blank_ck', sql`length(btrim(${t.title})) > 0`),
+    foreignKey({
+      name: 'profit_center_node_hierarchy_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [profitCenterHierarchy.client, profitCenterHierarchy.controllingArea],
+    }),
+    // The parent foreign key (node → profit_center_node itself, same area) is
+    // declared in the stage-2 migration: a self-reference in the definition
+    // initializer is what the compiler refuses (TS7022), and the database
+    // must carry the rule regardless of where it is declared.
+  ],
+);
+
+/** Period placement into the standard hierarchy — one node per period per area. */
+export const profitCenterNodeAssignment = pgTable(
+  'profit_center_node_assignment',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    node: varchar('node', { length: 24 }).notNull(),
+    profitCenter: varchar('profit_center', { length: 10 }).notNull(),
+    validFrom: date('valid_from').notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.node, t.profitCenter, t.validFrom] }),
+    uniqueIndex('profit_center_node_assignment_period_unique_idx').on(
+      t.client,
+      t.controllingArea,
+      t.profitCenter,
+      t.validFrom,
+    ),
+    foreignKey({
+      name: 'profit_center_node_assignment_node_fk',
+      columns: [t.client, t.controllingArea, t.node],
+      foreignColumns: [profitCenterNode.client, profitCenterNode.controllingArea, profitCenterNode.node],
+    }),
+    foreignKey({
+      name: 'profit_center_node_assignment_period_fk',
+      columns: [t.client, t.controllingArea, t.profitCenter, t.validFrom],
+      foreignColumns: [profitCenter.client, profitCenter.controllingArea, profitCenter.profitCenter, profitCenter.validFrom],
+    }),
+  ],
+);
+
+/** Alternative profit centre groups (KCH1) — many-to-many, leaves only. */
+export const profitCenterGroup = pgTable(
+  'profit_center_group',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    groupName: varchar('group_name', { length: 24 }).notNull(),
+    title: varchar('title', { length: 40 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.groupName] }),
+    check('profit_center_group_name_format_ck', sql`${t.groupName} ~ '^[A-Z0-9]{1,24}$'`),
+    check('profit_center_group_title_not_blank_ck', sql`length(btrim(${t.title})) > 0`),
+    foreignKey({
+      name: 'profit_center_group_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+  ],
+);
+
+/** Group leaves: single centres or ranges (EQ/BT), included or excluded (I/E). */
+export const profitCenterGroupLeaf = pgTable(
+  'profit_center_group_leaf',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    groupName: varchar('group_name', { length: 24 }).notNull(),
+    /** I include | E exclude */
+    valSign: char('val_sign', { length: 1 }).notNull().default('I'),
+    /** EQ single | BT range */
+    valOption: varchar('val_option', { length: 2 }).notNull().default('EQ'),
+    valFrom: varchar('val_from', { length: 10 }).notNull(),
+    /** '' for EQ leaves. */
+    valTo: varchar('val_to', { length: 10 }).notNull().default(''),
+    displayOrder: integer('display_order').notNull().default(0),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.client, t.controllingArea, t.groupName, t.valSign, t.valOption, t.valFrom, t.valTo],
+    }),
+    check('profit_center_group_leaf_sign_ck', sql`${t.valSign} in ('I','E')`),
+    check('profit_center_group_leaf_option_ck', sql`${t.valOption} in ('EQ','BT')`),
+    check('profit_center_group_leaf_from_format_ck', sql`${t.valFrom} ~ '^[A-Z0-9]{1,10}$'`),
+    check(
+      'profit_center_group_leaf_range_ck',
+      sql`(${t.valOption} = 'EQ' and ${t.valTo} = '') or (${t.valOption} = 'BT' and ${t.valTo} ~ '^[A-Z0-9]{1,10}$' and ${t.valTo} >= ${t.valFrom})`,
+    ),
+    foreignKey({
+      name: 'profit_center_group_leaf_group_fk',
+      columns: [t.client, t.controllingArea, t.groupName],
+      foreignColumns: [profitCenterGroup.client, profitCenterGroup.controllingArea, profitCenterGroup.groupName],
+    }),
+  ],
+);
+
 /** Activity type periods — SCR-043 / R-92 (definition; table created in stage 2). */
 export const activityType = pgTable(
   'activity_type',

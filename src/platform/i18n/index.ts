@@ -1935,6 +1935,11 @@ const en: Catalogue = {
   'actType.title': 'Define Activity Types',
   'actRate.title': 'Plan Activity Prices',
   'profitCenter.title': 'Define Profit Centres',
+  'profitHierarchy.title': 'Define Profit Centre Hierarchy',
+  'profitHierarchy.subtitle':
+    'The standard hierarchy per controlling area holding profit centre periods, beside ' +
+    'alternative groups resolved from single, ranged and excluding leaves. Nothing rolls up ' +
+    'over these trees yet.',
   'profitCenter.subtitle':
     'Profit centres defined period by period inside a controlling area: the units profitability ' +
     'is reported on. Hierarchy placement arrives with the profit centre hierarchy activity; the ' +
