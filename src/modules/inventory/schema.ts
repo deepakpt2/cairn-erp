@@ -9,15 +9,47 @@ const tenant = () => varchar('client', { length: 4 }).notNull().references(() =>
 const quantity = (name: string) => numeric(name, { precision: 23, scale: 3 });
 const money = (name: string) => numeric(name, { precision: 23, scale: 4 });
 
+export const accountCategoryReference = pgTable('account_category_reference', {
+  client: tenant(), reference: varchar('reference', { length: 4 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(), ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.reference] })]);
+
 export const materialType = pgTable('material_type', {
-  client: tenant(), materialType: varchar('material_type', { length: 12 }).notNull(),
-  name: varchar('name', { length: 100 }).notNull(),
+  client: tenant(), materialType: varchar('material_type', { length: 4 }).notNull(),
+  name: varchar('name', { length: 25 }).notNull(),
   defaultProcurementType: varchar('default_procurement_type', { length: 8 }).notNull(),
-  defaultPriceControl: varchar('default_price_control', { length: 16 }).notNull(),
+  /** Reference letter stored, word shown: `S` standard price, `V` moving average price. */
+  defaultPriceControl: varchar('default_price_control', { length: 1 }).notNull(),
+  /** 2-char keys into the number-range engine (object MATERIAL); judged by the type service, not an FK. */
+  internalNumberRange: varchar('internal_number_range', { length: 2 }),
+  externalNumberRange: varchar('external_number_range', { length: 2 }),
+  accountCategoryReference: varchar('account_category_reference', { length: 4 }).notNull(),
+  /** Domain `0` not allowed, `1` allowed with warning, `2` allowed — stored as digit, shown as words. */
+  externalPurchaseOrders: char('external_purchase_orders', { length: 1 }).notNull().default('2'),
+  internalPurchaseOrders: char('internal_purchase_orders', { length: 1 }).notNull().default('1'),
+  isConfigurable: boolean('is_configurable').notNull().default(false),
   isStocked: boolean('is_stocked').notNull().default(true),
   isValuated: boolean('is_valuated').notNull().default(true),
   isActive: boolean('is_active').notNull().default(true), ...auditColumns,
-}, (t) => [primaryKey({ columns: [t.client, t.materialType] })]);
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialType] }),
+  foreignKey({
+    columns: [t.client, t.accountCategoryReference],
+    foreignColumns: [accountCategoryReference.client, accountCategoryReference.reference],
+  }),
+]);
+
+/** Quantity/value updating per valuation area (the plant) — the T134M shape (R-96). */
+export const materialTypeValuation = pgTable('material_type_valuation', {
+  client: tenant(), materialType: varchar('material_type', { length: 4 }).notNull(),
+  valuationArea: varchar('valuation_area', { length: 10 }).notNull(),
+  quantityUpdating: boolean('quantity_updating').notNull().default(true),
+  valueUpdating: boolean('value_updating').notNull().default(true), ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialType, t.valuationArea] }),
+  foreignKey({ columns: [t.client, t.materialType], foreignColumns: [materialType.client, materialType.materialType] }),
+  foreignKey({ columns: [t.client, t.valuationArea], foreignColumns: [plant.client, plant.plant] }),
+]);
 
 export const materialGroup = pgTable('material_group', {
   client: tenant(), materialGroup: varchar('material_group', { length: 20 }).notNull(),

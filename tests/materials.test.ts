@@ -107,7 +107,7 @@ describe('material master', () => {
 
   it('does not allow material type or a used base unit to be changed', async () => {
     await saveMaterialView(basic());
-    await expect(saveMaterialView(basic({ expectedVersion: 1, materialType: 'FINISHED' }))).rejects.toThrow('immutable');
+    await expect(saveMaterialView(basic({ expectedVersion: 1, materialType: 'FIN' }))).rejects.toThrow('immutable');
     await saveMaterialView(mrp());
     await expect(saveMaterialView(basic({ expectedVersion: 1, baseUnit: 'PC' }))).rejects.toThrow('base unit cannot change');
   });
@@ -137,7 +137,7 @@ describe('material master', () => {
   });
 
   it('keeps service materials out of inventory valuation and planning', async () => {
-    await saveMaterialView(basic({ materialType: 'SERVICE', materialGroup: 'SERVICES', baseUnit: 'HR' }));
+    await saveMaterialView(basic({ materialType: 'SERV', materialGroup: 'SERVICES', baseUnit: 'HR' }));
     await expect(saveMaterialView(accounting())).rejects.toThrow('not stock-valuated');
     await expect(saveMaterialView(mrp())).rejects.toThrow('non-stock material');
   });

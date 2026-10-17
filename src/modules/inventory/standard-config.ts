@@ -1,16 +1,44 @@
 /** International material defaults — applied in the tenant onboarding transaction. */
+import { eq } from 'drizzle-orm';
 import type { Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
-import { materialType, materialGroup, valuationClass, mrpController } from './schema';
+import { plant } from '../foundation/schema';
+import {
+  accountCategoryReference,
+  materialGroup,
+  materialType,
+  materialTypeValuation,
+  mrpController,
+  valuationClass,
+} from './schema';
 
 export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: string) {
-  for (const type of [
-    { materialType: 'RAW', name: 'Raw material', defaultProcurementType: 'BUY', defaultPriceControl: 'MOVING_AVERAGE', isStocked: true, isValuated: true },
-    { materialType: 'SEMI', name: 'Semi-finished product', defaultProcurementType: 'MAKE', defaultPriceControl: 'STANDARD', isStocked: true, isValuated: true },
-    { materialType: 'FINISHED', name: 'Finished product', defaultProcurementType: 'MAKE', defaultPriceControl: 'STANDARD', isStocked: true, isValuated: true },
-    { materialType: 'TRADE', name: 'Trading goods', defaultProcurementType: 'BUY', defaultPriceControl: 'MOVING_AVERAGE', isStocked: true, isValuated: true },
-    { materialType: 'SERVICE', name: 'Service', defaultProcurementType: 'BUY', defaultPriceControl: 'STANDARD', isStocked: false, isValuated: false },
-  ]) await tx.insert(materialType).values({ ...type, client, createdBy }).onConflictDoNothing();
+  await tx.insert(accountCategoryReference)
+    .values({ client, reference: '0001', name: 'General valuation', createdBy })
+    .onConflictDoNothing();
+  const types = [
+    { materialType: 'RAW', name: 'Raw material', defaultProcurementType: 'BUY', defaultPriceControl: 'V', isStocked: true, isValuated: true },
+    { materialType: 'SEMI', name: 'Semi-finished product', defaultProcurementType: 'MAKE', defaultPriceControl: 'S', isStocked: true, isValuated: true },
+    { materialType: 'FIN', name: 'Finished product', defaultProcurementType: 'MAKE', defaultPriceControl: 'S', isStocked: true, isValuated: true },
+    { materialType: 'TRAD', name: 'Trading goods', defaultProcurementType: 'BUY', defaultPriceControl: 'V', isStocked: true, isValuated: true },
+    { materialType: 'SERV', name: 'Service', defaultProcurementType: 'BUY', defaultPriceControl: 'S', isStocked: false, isValuated: false },
+  ];
+  for (const type of types) {
+    await tx.insert(materialType)
+      .values({ ...type, accountCategoryReference: '0001', client, createdBy })
+      .onConflictDoNothing();
+  }
+  // Quantity/value updating stands per plant (R-96); seed it from the
+  // provisioned defaults for every plant standing at onboarding.
+  const plants = await tx.select({ plant: plant.plant }).from(plant).where(eq(plant.client, client));
+  for (const type of types) {
+    for (const p of plants) {
+      await tx.insert(materialTypeValuation).values({
+        client, materialType: type.materialType, valuationArea: p.plant,
+        quantityUpdating: type.isStocked, valueUpdating: type.isValuated, createdBy,
+      }).onConflictDoNothing();
+    }
+  }
   for (const group of [
     { materialGroup: 'GENERAL', name: 'General materials' }, { materialGroup: 'RAW', name: 'Raw materials' },
     { materialGroup: 'PACKAGING', name: 'Packaging' }, { materialGroup: 'PRODUCTS', name: 'Manufactured products' },
@@ -19,8 +47,8 @@ export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: s
   for (const c of [
     { valuationClass: 'RAW_INVENTORY', name: 'Raw material inventory', allowedMaterialTypes: 'RAW' },
     { valuationClass: 'SEMI_INVENTORY', name: 'Semi-finished inventory', allowedMaterialTypes: 'SEMI' },
-    { valuationClass: 'FINISHED_INVENTORY', name: 'Finished product inventory', allowedMaterialTypes: 'FINISHED' },
-    { valuationClass: 'TRADE_INVENTORY', name: 'Trading goods inventory', allowedMaterialTypes: 'TRADE' },
+    { valuationClass: 'FINISHED_INVENTORY', name: 'Finished product inventory', allowedMaterialTypes: 'FIN' },
+    { valuationClass: 'TRADE_INVENTORY', name: 'Trading goods inventory', allowedMaterialTypes: 'TRAD' },
   ]) await tx.insert(valuationClass).values({ ...c, client, createdBy }).onConflictDoNothing();
   await tx.insert(mrpController).values({ client, controller: '001', name: 'Primary planner', createdBy }).onConflictDoNothing();
   for (const code of ['CFG.INV.MATERIALTYPE.DEFINE', 'CFG.INV.MATERIALGROUP.DEFINE', 'CFG.PROD.MRPCONTROLLER.DEFINE']) {

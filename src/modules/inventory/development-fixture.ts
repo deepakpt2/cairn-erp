@@ -9,7 +9,7 @@ export async function seedDevelopmentMaterials() {
   const samples = [
     { number: 'RAW-STEEL', description: 'Carbon steel sheet', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY' as const, priceControl: 'MOVING_AVERAGE' as const, valuationClass: 'RAW_INVENTORY', price: '5.0000' },
     { number: 'PACK-CARTON', description: 'Shipping carton', type: 'RAW', group: 'PACKAGING', unit: 'PC', procurement: 'BUY' as const, priceControl: 'MOVING_AVERAGE' as const, valuationClass: 'RAW_INVENTORY', price: '2.0000' },
-    { number: 'FG-BRACKET', description: 'Manufactured bracket', type: 'FINISHED', group: 'PRODUCTS', unit: 'PC', procurement: 'MAKE' as const, priceControl: 'STANDARD' as const, valuationClass: 'FINISHED_INVENTORY', price: '100.0000' },
+    { number: 'FG-BRACKET', description: 'Manufactured bracket', type: 'FIN', group: 'PRODUCTS', unit: 'PC', procurement: 'MAKE' as const, priceControl: 'STANDARD' as const, valuationClass: 'FINISHED_INVENTORY', price: '100.0000' },
   ];
   for (const s of samples) {
     const common = { client, materialNumber: s.number, changedBy: 'DEV_SEED', reason: 'Development sample master' };
