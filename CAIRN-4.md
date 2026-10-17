@@ -1487,6 +1487,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.350 B-334 — SCR-048 / OMS2 stage 1: the inert material-types screen stands
+
+**What shipped.** `/config/material-types` as a server page (`requireSession`, the `CFG.INV.MATERIALTYPE.DEFINE` capability already seeded judging its authority) introducing `Define Material Types · OMS2` with the workbench link and the read-only notice, over an inert client screen holding the three sections the live screen will keep: the type grid with its definition detail (key of at most four letters or digits, description of at most 25, price-control default, internal and external number ranges, account category reference, procurement permissions, configurable flag, delete-when-unused beside deactivation), the account category references judged on every type, and the per-plant quantity/value updating rows with the standing-material guard stated in its help text. i18n gained `materialType.title`/`materialType.subtitle`. Nothing reads or writes; the route joins `BUILT_ROUTES` only when the activity becomes completable, per standing practice.
+
+**Gates.** `npm run typecheck` clean; `lint:ip` clean; production build compiled (material-types route 1.2 kB); suite **1206 tests across 143 files**.
+
+**Cost.** Measured: 13:58 in to 14:02 — **4 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1586,6 +1596,7 @@ recorded change, date and reason stated.
 | 2.150 | 2026-10-17 | **SCR-047a / KCH1 CLOSED and accepted (B-332, §26.348).** Stage 5 ships 13 service tests, the KE51 placement display (a 13th SCR-045 test pins both states), and the T950 browser target `profit-center-hierarchy` (7/7 journeys against the production build — the header and root standing, exclusive placement, the root-deletion refusal, the ranged leaf resolving, the documented unassignment); two mirror misses in the target and labels fixed without touching the mirrored logic, an environment restore after a snapshot wipe included. Neighbouring `profit-centers` and `cost-center-hierarchy` targets, typecheck, build and `lint:ip` clean; suite 1206 across 143 files. Cost measured at 83 minutes overall. | Agent |
 | 2.151 | 2026-10-17 | **KCH1 redesignated SCR-047a (B-333, §26.349), at the owner's direction** — 'change KCH1 to SCR-047a and keep the numbering after same.' The redesignation runs through R-95, B-328–B-332, rows 2.146–2.150, code comments, tests and the browser target; pushed git commits and the applied migration headers keep the original designation as historical stamps, by design. Numbering continues SCR-048 (OMS2) and SCR-049 (OMSF). Typecheck and `lint:ip` clean; affected suites 26/26. Cost measured at 3 minutes. | Agent |
 | 2.152 | 2026-10-17 | **SCR-048 / OMS2 package recorded as R-96: material types at SAP parity on all four forks.** The `material_type` table already stands from the materials build with no define screen; the round builds the screen/service over it, narrows the key to 4 and the name to 25 (provisioned FINISHED/TRADE/SERVICE renamed FIN/TRAD/SERV), stores the price-control default as S/V shown as words, judges both number-range keys against the standing number-range engine (object MATERIAL), adds a judged `account_category_reference` master maintained from the same screen, moves quantity/value updating to per-plant `material_type_valuation` rows (the T134M shape) with standing-material guards, and takes procurement indicators 0/1/2 plus the configurable flag. OMS1 stays out. Stage order resumes at the UI. | Agent |
+| 2.153 | 2026-10-17 | **SCR-048 / OMS2 stage 1 (B-334, §26.350): the inert material-types screen.** `/config/material-types` stands introduced (`CFG.INV.MATERIALTYPE.DEFINE · OMS2`) with the three sections the live screen keeps — type grid with definition detail, account category references, per-plant quantity/value updating — and states the contract's guards in its help text. Typecheck, `lint:ip`, production build (route 1.2 kB) clean; suite 1206 across 143 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

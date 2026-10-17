@@ -1934,6 +1934,12 @@ const en: Catalogue = {
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
   'actType.title': 'Define Activity Types',
   'actRate.title': 'Plan Activity Prices',
+  'materialType.title': 'Define Material Types',
+  'materialType.subtitle':
+    'Material types defined once per tenant: the key and description, the price-control ' +
+    'default, the material number ranges, the account category reference, procurement ' +
+    'permissions, and quantity and value updating per plant. Materials are created against ' +
+    'these types; a type in use is never deleted under its materials.',
   'profitCenter.title': 'Define Profit Centres',
   'profitHierarchy.title': 'Define Profit Centre Hierarchy',
   'profitHierarchy.subtitle':
