@@ -357,7 +357,27 @@ export function FiscalYearVariantList({
                       <summary className="min-h-11 cursor-pointer select-none py-2 font-medium text-accent hover:underline sm:min-h-9">
                         {t('fiscalYearVariant.showPeriods')}
                       </summary>
-                      <PeriodPanel row={row} canMaintain={canMaintain} />
+                      {/* The period form opens on top of the list, like Change and the
+                          lifecycle control, instead of expanding inside this narrow
+                          table cell where the grid was squeezed to the side. */}
+                      <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={`${t('fiscalYearVariant.periods')} ${row.variant}`}
+                        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+                      >
+                        <div className="mx-auto max-w-3xl">
+                          <DialogHeader
+                            code={row.variant}
+                            label={`${t('fiscalYearVariant.periods')} · ${row.variant}`}
+                          />
+                          <section className="panel overflow-hidden p-4">
+                            <div className="overflow-x-auto">
+                              <PeriodPanel row={row} canMaintain={canMaintain} />
+                            </div>
+                          </section>
+                        </div>
+                      </div>
                     </details>
                   </td>
                 </tr>

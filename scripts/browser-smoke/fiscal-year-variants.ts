@@ -76,6 +76,10 @@ export async function fiscalYearVariantsOb29(ctx: Context) {
     /12 posting periods and 4 special periods .* derived from its own parameters/,
     'The panel names the counts the periods were derived from.',
   );
+  // The panel is a dialog on top of the list now, so it is closed the way a user closes it
+  // before anything behind it is touched.
+  await seededGrid.getByRole('button', { name: 'Close', exact: true }).click();
+  assert.equal(await seededRow.locator('details[open]').count(), 0, 'The periods dialog closes.');
   console.log(`  ✓ the registry lists ${SEEDED} with its 16 derived periods and no list to maintain`);
 
   // ── 2. The workbench sends the activity here ──────────────────────────────
@@ -142,6 +146,8 @@ export async function fiscalYearVariantsOb29(ctx: Context) {
     /12 posting periods and 2 special periods .* derived from its own parameters/,
     'The panel names the counts that were entered, not the ones the package ships.',
   );
+  await calendarPanel.getByRole('button', { name: 'Close', exact: true }).click();
+  assert.equal(await calendarRow.locator('details[open]').count(), 0, 'The periods dialog closes.');
   console.log(`  ✓ ${CALENDAR} is listed with its own description and derived from the counts entered`);
 
   // ── 5. The screen refuses what the service refuses, before the click ──────
