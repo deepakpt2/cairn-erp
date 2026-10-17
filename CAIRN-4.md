@@ -1296,6 +1296,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.336 B-320 — SCR-044 / KP26 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.COST.ACTIVITYRATE.CONFIRM` (COST, CONFIGURE) joins `scripts/seed.ts` (85 capabilities; the `CFG.*` wildcard makes the row the grant, as by now usual). The Term Registry gains the plan-prices entry at `/config/activity-rates` with **KP26 as a search alias only** (54 terms, 48 aliases), its description carrying the whole contract — the six planning dimensions and the matrix act, the free version key standing when first planned, the variant's periods with specials on the last regular window, validity judged per period, the price indicator's governance, and the rate rows standing as usage against both masters' deletion. The workbench's built-routes set gains the screen. The activity row itself already stood in the seed (60 activities; route `/config/activity-rates`, prerequisite `CFG.COST.ACTIVITYTYPE.DEFINE`) — read back rather than assumed, standing with its prerequisite and route.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1164 tests across 140 files**; seed applied to `cairn_b210` and the rows read back (capability, term with its alias, the standing activity; counts 85/54/48).
+
+**Cost.** Measured: 16:28 in to 16:30 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1380,6 +1392,7 @@ recorded change, date and reason stated.
 | 2.135 | 2026-10-17 | **SCR-044 / KP26 contract confirmed and stage 1 (the screen) published (B-317, §26.333; R-93).** SAP parity taken on all four forks — versions as a free three-character key standing when first planned, periods from the area's fiscal year variant with specials on the last regular window, master validity judged per period against the period's window, and the price indicator governing entry (manual stands, automatic refuses components) — and both masters' deletion judges gain their rate count here. Stage 1 publishes `/config/activity-rates` inert: the seven-part rate definition, the planning-context and rate reads, the selector-over-matrix screen, and the catalogue keys. Typecheck, build (route 1.93 kB) and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 5 minutes. | Agent |
 | 2.136 | 2026-10-17 | **SCR-044 / KP26 stage 2: the table (B-318, §26.334).** Migrations `0054_activity_rate.sql` and `9037_..._policies.sql` create the planning registry (15 columns, seven-part key over the six planning dimensions, thirteen constraints including the quantity and component widths and the price unit floor; forced RLS, four grants) on `cairn_b210` (93 migrations). Typecheck clean; suite 1164 across 140 files. Cost measured at 1 minute. | Agent |
 | 2.137 | 2026-10-17 | **SCR-044 / KP26 stage 3: the write (B-319, §26.335).** `saveActivityRates` and `deleteActivityRate` and the live matrix screen: one save per (area, version, year, centre, type) under one change document with the price components security-relevant, validity judged per period against the fiscal window — masters standing, unlocked, category-compatible — and automatic price indicators refusing entered components while quantities stand. Both masters' deletion judges gained their rate count in the same commit, so the promise on the KL01 screen is now true with no copy changed. Typecheck, build and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 5 minutes. | Agent |
+| 2.138 | 2026-10-17 | **SCR-044 / KP26 stage 4: the supporting rows (B-320, §26.336).** Capability `CFG.COST.ACTIVITYRATE.CONFIRM` seeded (85 capabilities), the Term Registry entry added with KP26 as a search alias only (54 terms, 48 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
