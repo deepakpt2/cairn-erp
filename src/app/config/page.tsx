@@ -80,6 +80,7 @@ export default async function WorkbenchPage({
     '/config/exchange-rates',
     '/config/tax-codes',
     '/config/banks',
+    '/config/house-banks',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
