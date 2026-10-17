@@ -1930,6 +1930,11 @@ const en: Catalogue = {
   'tolGroup.title': 'Define Employee Tolerance Groups',
   'costCenter.title': 'Define Cost Centres',
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
+  'actType.title': 'Define Activity Types',
+  'actType.subtitle':
+    'Activity types defined period by period inside a controlling area: the unit the output is ' +
+    'measured in, how the activity allocates, and how its price is found. Rates per cost centre ' +
+    'follow as their own activity; nothing prices or allocates against these rows yet.',
   'costHierarchy.subtitle':
     'The standard hierarchy of a controlling area — one tree whose nodes hold cost centre ' +
     'periods — and the alternative groups beside it, resolved from single centres, ranges and ' +
