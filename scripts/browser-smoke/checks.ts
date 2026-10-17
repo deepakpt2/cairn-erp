@@ -2419,8 +2419,14 @@ async function supplierPurchasing(ctx: BrowserContext) {
 
   const id=randomUUID();const password=await hashPassword(PASSWORD);
   await withTenant(CLIENT,async tx=>{
+    // The partners page gained a page-level gate on FND.PARTNER.DISPLAY after this target was
+    // written, so a user without it is refused the page and never reaches the panel-level gate
+    // that is the subject of this assertion. The fixture grants page access and nothing else:
+    // the refusal still has to come from the panel, and still has to name the panel's authority.
+    await tx.execute(sql`insert into role(client,code,name,is_read_only,created_by) values(${CLIENT},'PARTNER_PAGE_ONLY','Partner page access only',true,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'PARTNER_PAGE_ONLY','FND.PARTNER.DISPLAY')`);
     await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${id},${CLIENT},'purchasing.viewer','Purchasing Viewer',${password},false,'BROWSER_FIXTURE')`);
-    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${id},'PARTNER_PAGE_ONLY','BROWSER_FIXTURE')`);
   });
   await page.getByRole('button',{name:'Sign out',exact:true}).click();
   await page.goto(`${BASE}/signin`,{waitUntil:'domcontentloaded'});
@@ -2553,8 +2559,14 @@ async function customerCompany(ctx: BrowserContext) {
   await withTenant(CLIENT,async tx=>{
     await tx.execute(sql`insert into role(client,code,name,is_read_only,created_by) values(${CLIENT},'CUSTOMER_AR_REVIEWER','Customer AR reviewer',true,'BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'CUSTOMER_AR_REVIEWER','FIN.CUSTOMER.COMPANY.DISPLAY')`);
+    // Page-level access, without which the partners page refuses both users below and neither
+    // panel-level notice this target asserts can ever render. Read authority for the customer
+    // panel stays the only thing that separates the reviewer from the unrelated viewer.
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'CUSTOMER_AR_REVIEWER','FND.PARTNER.DISPLAY')`);
+    await tx.execute(sql`insert into role(client,code,name,is_read_only,created_by) values(${CLIENT},'PARTNER_PAGE_ONLY','Partner page access only',true,'BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into role_capability(client,role_code,capability_code) values(${CLIENT},'PARTNER_PAGE_ONLY','FND.PARTNER.DISPLAY')`);
     await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${warehouseId},${CLIENT},'company.viewer','Company Viewer',${password},false,'BROWSER_FIXTURE')`);
-    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${warehouseId},'WAREHOUSE_CLERK','BROWSER_FIXTURE')`);
+    await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${warehouseId},'PARTNER_PAGE_ONLY','BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into app_user(id,client,username,full_name,password_hash,must_change_password,created_by) values(${reviewerId},${CLIENT},'finance.viewer','Finance Viewer',${password},false,'BROWSER_FIXTURE')`);
     await tx.execute(sql`insert into user_role(client,user_id,role_code,created_by) values(${CLIENT},${reviewerId},'CUSTOMER_AR_REVIEWER','BROWSER_FIXTURE')`);
   });
