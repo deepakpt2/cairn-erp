@@ -626,6 +626,22 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.288 B-272 — SCR-035 / FTXP stage 2: the `tax_code` table `STAGE PUBLISHED`
+
+**The migration.** `0043_tax_code.sql` creates the registry journal lines have referred to without a referent: tenant, country and code as the primary key; the country held by foreign key to the country master's own two-character key (a code for a country that does not exist taxes nowhere); the code itself up to four upper-case letters or digits, the journal line's width, so anything a line can already carry is a code that can be defined; the description at the package's fifty; the rate numeric(7,2) checked between 0 and 100 — above a hundred taxes more than the base, below nothing pays out, and neither is defended to an auditor; the condition type and optional account key shape-checked for the same reason the contract keeps them as data (R-85). No active flag, because the chosen lifecycle is deletion and a row is therefore defined or gone, its history in the change documents. `9028_tax_code_policies.sql` applies the standard tenant isolation — RLS enabled and forced, the `tenant_isolation` policy, no PUBLIC rights, DML for `cairn_app` — in the pattern of 9027. One index serves the usage count, on `(client, tax_code)`: the text a line carries is how the registry is searched.
+
+**Verified from the database, not from the migration output:** all eleven columns at their contract widths, all eight constraints present (primary key, two foreign keys, five checks), RLS enabled and forced, the policy in place. Applied once against 71 already applied.
+
+**What grew around it.** The drizzle schema declares the table with the same checks; the read side is now real — every code the tenant holds beside a count of the journal lines carrying it, tenant-wide for the code under any country, as the contract states, since lines store no country to join on.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1039 tests across 131 files**; migrations applied and read back.
+
+**Cost.** Measured: 08:52 in to 08:55, when `5aa2aaa` landed — **3 minutes** of a 39-minute box.
+
+**Not accepted.** The write path (stage 3), the registry rows (stage 4) and browser acceptance (stage 5). Backend next.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
