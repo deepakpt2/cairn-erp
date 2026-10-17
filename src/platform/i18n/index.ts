@@ -1725,6 +1725,43 @@ const en: Catalogue = {
   'ppvAssign.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'ppvAssign.defineLink': 'Define variants',
+  'exRate.title': 'Maintain Exchange Rates',
+  'exRate.subtitle':
+    'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
+    'A rate is effective from its Valid From date until a newer rate for the same type and ' +
+    'pair takes over; the value a posting uses is the rate with its translation ratios applied.',
+  'exRate.companyCodesLink': 'Company Codes',
+  'exRate.postingPeriodsLink': 'Posting periods',
+  'exRate.newTitle': 'New exchange rate',
+  'exRate.gridTitle': 'Exchange rates',
+  'exRate.rateType': 'Exchange Rate Type',
+  'exRate.type.AVERAGE': 'Average rate',
+  'exRate.type.BUYING': 'Buying rate',
+  'exRate.type.SELLING': 'Selling rate',
+  'exRate.fromCurrency': 'From Currency',
+  'exRate.toCurrency': 'To Currency',
+  'exRate.chooseCurrency': 'Choose currency',
+  'exRate.pair': 'Currency Pair',
+  'exRate.validFrom': 'Valid From',
+  'exRate.rate': 'Rate',
+  'exRate.newRate': 'New rate',
+  'exRate.ratioFrom': 'Ratio (from)',
+  'exRate.ratioTo': 'Ratio (to)',
+  'exRate.rateMeaning':
+    'Quoted directly: 1 unit of the From currency equals the rate — with its ratios applied — in the To currency.',
+  'exRate.samePair': 'A currency does not convert into itself; choose two different currencies.',
+  'exRate.reason': 'Reason',
+  'exRate.create': 'Create rate',
+  'exRate.change': 'Change',
+  'exRate.save': 'Save rate',
+  'exRate.delete': 'Delete',
+  'exRate.deleteNote':
+    'Deleting a rate removes it for future lookups. Documents already posted keep the rate ' +
+    'they were posted with, so history is not rewritten — but a rate nobody should use again ' +
+    'is better corrected than deleted where postings may still look back at it.',
+  'exRate.actions': 'Actions',
+  'exRate.empty': 'No exchange rates are maintained in this tenant.',
+  'exRate.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
   'ppvAssign.companyCodesLink': 'Company Codes',
   'ppvAssign.postingPeriodsLink': 'Posting periods',
   'ppv.unexpectedRemedy':
