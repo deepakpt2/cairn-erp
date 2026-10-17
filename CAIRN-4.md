@@ -699,6 +699,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.293 B-277 — SCR-036 / Bank Master stage 2: the global `bank_master` table `STAGE PUBLISHED`
+
+**The migration.** `0044_bank_master.sql` creates the master R-86 ruled, in the global family of the country and currency tables it stands beside: `bank_country` by foreign key to the country master's key, `bank_key` up to fifteen upper-case letters or digits, the composite key the two of them; the name required at sixty (an unnamed bank cannot be picked out of a list); city and SWIFT optional, the SWIFT held to the BIC shape — four letters of bank, two of country, two of location, optionally three of branch, eight or eleven characters and never anything between. Actor audit columns in place of change documents, per the ruling's second stated deviation. No seeded rows: D-058's rule is this product's rule for master data generally. `9029_bank_master_policies.sql` grants `cairn_app` DML and PUBLIC nothing — deliberately no row-level security, because there is no tenant column to predicate on; who may write is the application's decision, taken by capability in stage 3. `bankMaster` joins `src/platform/tables/reference.ts`, whose header now names this table as the one ruled exception to "maintained by migration/seed".
+
+**Verification.** Both migrations applied to `cairn_b210` (75 in total including policies) and the result read back from the database rather than trusted: nine columns as designed; six constraints (the primary key, the country foreign key, four checks); the application's four grants present. The checks were exercised, not eyeballed: a nine-character SWIFT refused, an unknown country refused by the foreign key, a lowercase bank key refused — and a valid Kuwait bank inserted and removed again, leaving the master empty as shipped. `src/modules/foundation/bank-master.ts` now reads the table for real.
+
+**Verification, code side.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1054 tests across 132 files**.
+
+**Cost.** Measured: 10:11 in to 10:16, when `9e807ad` landed — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The write (stage 3), the capability and registry entry (stage 4), tests and browser acceptance (stage 5) remain; the screen still shows its inert note, now over a real but empty table.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -740,6 +754,7 @@ recorded change, date and reason stated.
 | 2.92 | 2026-10-17 | **SCR-035 / FTXP stage 4: the supporting rows (B-274, §26.290).** Capability `CFG.FIN.TAXCODE.DEFINE` seeded (76 capabilities; roles grant `CFG.*` by wildcard, so the row is the grant), the Term Registry entry added with FTXP as a search alias only (45 terms, 37 aliases), the workbench's built-routes set gaining the screen in the same stage — all read back from the reseeded database. Typecheck and `lint:ip` clean, build ok, suite 1039 across 131 files. Cost measured at 3 minutes. | Agent |
 | 2.93 | 2026-10-17 | **SCR-035 / FTXP accepted and closed (B-275, §26.291).** Fourteen service tests pass, including the tenant-wide usage count asserted under both countries of a shared code and the deletion that files its removed rate before refusing to repeat itself. The new browser target passes at seven checkpoints — workbench route, honestly empty registry, documented creation, duplicate refusal, the guarded 7.50% change, deletion refused on screen naming both posted lines, the unused spare deleted — with the OB08 target green beside it; one of its two runs captured React error #418, which remains open as recorded. Suite 1054 across 132 files, typecheck and `lint:ip` clean. Cost measured at 7 minutes. | Agent |
 | 2.94 | 2026-10-17 | **SCR-036 / Bank Master contract confirmed and stage 1 (the screen) published (B-276, §26.292; R-86).** The owner's FI12 package reads bank facts from a global bank master the product does not have; the owner ruled the master is built first as its own SCR and FI12 follows as SCR-037, the roadmap's own number for it. Stage 1 delivers `/config/banks` — new-bank panel value-helped from the country master, empty grid, Change/Delete shapes with the deletion rule stated — forms disabled behind the inert note, the list honestly empty until stage 2 creates the global table. Two deviations stated in the ruling: a capability rather than a configuration activity gates shared reference data, and writes audit through created_by/updated_by rather than tenant change documents. Typecheck, build (route 1.92 kB) and `lint:ip` clean; suite 1054 across 132 files. Cost measured at 4 minutes. | Agent |
+| 2.95 | 2026-10-17 | **SCR-036 / Bank Master stage 2: the global `bank_master` table (B-277, §26.293).** Migration 0044 creates the master in the global family — country by foreign key to the country master, bank key up to fifteen upper-case alphanumerics as the composite key, name required at sixty, city and an 8-or-11-character BIC-shape SWIFT optional, actor audit columns instead of tenant change documents — and 9029 grants the application DML with no tenant policy to write, there being no tenant column. Nine columns, six constraints and the grants read back from the database, the checks exercised with refused inserts (nine-character SWIFT, unknown country, lowercase key) before a valid row was inserted and removed. The read side is real. Typecheck and `lint:ip` clean, build ok, suite 1054 across 132 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
