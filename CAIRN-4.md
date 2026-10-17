@@ -1337,6 +1337,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.339 B-323 — SCR-045 / KE51 stage 1: the inert screen `STAGE PUBLISHED`
+
+**The contract (R-94).** The owner's package models the profit centre master on validity intervals keyed (area, centre, valid-to) with texts in a separate language table, a mandatory hierarchy area naming a node of the standard profit centre hierarchy, an optional segment validated against a segment master, and deletion guarded by postings and dependents. The forks came back: **SAP parity on the names** (the short name of at most 20 required, the long text of at most 40 optional — both on the row, as every master here keeps its name, no language table); **SAP parity on the segment's width** (stored at 10, entered freely until a segment master stands to judge it, stated on the screen rather than pretended); **SAP parity on the lifecycle** (hard delete refused while journal documents dated inside the period carry the centre — the journal lines already carry the code as text — plus the posting lock); and, in the owner's own words on the hierarchy, **"same defer for now then build it"** — KE51 carries no hierarchy field and judges no placement, the profit centre hierarchy is the next SCR, and this screen gains its read-only placement afterwards exactly as KS01 did in B-311. The responsible user, when entered, is judged against the tenant's user directory; company-code assignment is not built, postings resolving the centre by validity dates as the package's own period interplay prescribes.
+
+**What was published.** `profitCenter` joins the foundation schema as a definition (`profit_center`, four-part period key, the parity name widths, the segment and responsible-user columns unjudged here on purpose), `src/modules/foundation/profit-center-definition.ts` carries the read side (areas, an area's periods, the tenant's active users for the value help), and `/config/profit-centers` heads the page with the controlling-area master-detail selector, the create form (code, short and long texts, validity, both responsibles, the segment) and the periods table, over the stage-1 inert note. Two catalogue keys joined (`profitCenter.title`, `profitCenter.subtitle`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 1.79 kB); suite **1178 tests across 141 files**.
+
+**Cost.** Measured: 16:49 in to 16:54 — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The table (stage 2), the write (stage 3), capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain. The profit centre hierarchy follows as its own SCR after this one, per the owner's deferral.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1424,6 +1438,7 @@ recorded change, date and reason stated.
 | 2.138 | 2026-10-17 | **SCR-044 / KP26 stage 4: the supporting rows (B-320, §26.336).** Capability `CFG.COST.ACTIVITYRATE.CONFIRM` seeded (85 capabilities), the Term Registry entry added with KP26 as a search alias only (54 terms, 48 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 2 minutes. | Agent |
 | 2.139 | 2026-10-17 | **SCR-044 / KP26 CLOSED and accepted (B-321, §26.337).** Stage 5 ships 13 service tests and the T952 browser target `activity-rates` (4/4 journeys against the production build — a two-period plan at full decimal scale, the matrix change, the documented deletion), with both masters' deletion judges asserted against planned rows; two harness-side fixes in the target alone (exact cell labels; the emptied row asserted over the unmounting status). Neighbouring `activity-types` and `cost-centers` targets, typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 78 minutes overall. | Agent |
 | 2.140 | 2026-10-17 | **Workbench tree reworked (B-322, §26.338).** On the owner's finding — poor folding, undistinguished sub-items, no classification — the tree now names every branch in words beside its code path, indents leaves and headers 22px per level behind a guide rail with depth shading and accent bars, folds from a boxed rotating toggle with per-branch completion chips and progress, and gains Expand all / Collapse all. Presentation only; the `cost-centers` browser target passed unchanged against it. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
+| 2.141 | 2026-10-17 | **SCR-045 / KE51 contract confirmed and stage 1 (the screen) published (B-323, §26.339; R-94).** SAP parity on the names (short 20 required, long 40 optional, both on the row), the segment's width (free until a segment master stands), and the lifecycle (journal-guarded delete plus the lock); the hierarchy deferred in the owner's own words — 'same defer for now then build it' — as the next SCR, this screen gaining placement afterwards as KS01 did. Stage 1 publishes `/config/profit-centers` inert: the period definition, the reads with the user-directory value help, the master-detail screen, and the catalogue keys. Typecheck, build (route 1.79 kB) and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
