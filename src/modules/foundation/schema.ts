@@ -930,7 +930,7 @@ export const employeeToleranceGroup = pgTable(
     groupKey: varchar('group_key', { length: 4 }).notNull().default(''),
     maxDocumentAmount: numeric('max_document_amount', { precision: 15, scale: 2 }).notNull(),
     maxLineAmount: numeric('max_line_amount', { precision: 13, scale: 2 }).notNull(),
-    maxCashDiscountPercent: numeric('max_cash_discount_percent', { precision: 5, scale: 3 }).notNull(),
+    maxCashDiscountPercent: numeric('max_cash_discount_percent', { precision: 6, scale: 3 }).notNull(),
     paymentDiffRevenueAmount: numeric('payment_diff_revenue_amount', { precision: 7, scale: 2 }).notNull().default('0'),
     paymentDiffExpenseAmount: numeric('payment_diff_expense_amount', { precision: 7, scale: 2 }).notNull().default('0'),
     paymentDiffRevenuePercent: numeric('payment_diff_revenue_percent', { precision: 3, scale: 1 }).notNull().default('0'),
