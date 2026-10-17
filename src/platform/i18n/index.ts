@@ -1867,6 +1867,68 @@ const en: Catalogue = {
   'houseBank.unexpected': 'The house bank could not be saved.',
   'houseBank.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'docType.title': 'Define Document Types',
+  'docType.subtitle':
+    'The classification every accounting document carries: what it may post to, the number ' +
+    'range interval its number comes from, and how it reverses. The standard package delivers ' +
+    'the working set; this screen is where the set is maintained.',
+  'docType.numberRangesLink': 'Number ranges',
+  'docType.newTitle': 'New document type',
+  'docType.gridTitle': 'Document types',
+  'docType.code': 'Document Type',
+  'docType.codeHint': 'Exactly two letters or digits.',
+  'docType.name': 'Description',
+  'docType.interval': 'Number Range Interval',
+  'docType.chooseInterval': 'Choose interval',
+  'docType.intervalHint': 'The interval of the document number object this type draws its numbers from.',
+  'docType.reversal': 'Reverse Doc. Type',
+  'docType.noReversalType': 'Same type',
+  'docType.reversalMode': 'Reversal Mode',
+  'docType.mode.REVERSE_ONLY': 'Reversal posts on the same date',
+  'docType.mode.REVERSE_AND_ALT_DATE': 'Reversal may post on another date',
+  'docType.mode.NO_REVERSE': 'Reversal not allowed',
+  'docType.accountTypes': 'Account Types Allowed',
+  'docType.acct.A': 'Assets',
+  'docType.acct.D': 'Customers',
+  'docType.acct.K': 'Vendors',
+  'docType.acct.M': 'Materials',
+  'docType.acct.S': 'G/L accounts',
+  'docType.requiresReference': 'Reference required',
+  'docType.requiresLineText': 'Line text required',
+  'docType.usedBy': 'Used by (entries)',
+  'docType.active': 'Active',
+  'docType.reason': 'Reason',
+  'docType.create': 'Create document type',
+  'docType.change': 'Change',
+  'docType.save': 'Save document type',
+  'docType.delete': 'Delete',
+  'docType.deactivate': 'Deactivate',
+  'docType.reactivate': 'Reactivate',
+  'docType.deactivateNote':
+    'Deactivating stops this type being offered to posting. Documents already posted keep the ' +
+    'type they were posted with.',
+  'docType.reactivateNote': 'Reactivating offers this type to posting again.',
+  'docType.deleteNote':
+    'Deleting removes the document type. It is refused while journal entries in this tenant ' +
+    'were posted under it.',
+  'docType.deleteBlocked':
+    'This document type is carried by {count} journal entr(ies) and cannot be deleted. A type ' +
+    'history names stays defined; deactivate it if it should no longer be posted with.',
+  'docType.actions': 'Actions',
+  'docType.empty': 'No document types are defined in this tenant.',
+  'docType.inert':
+    'This screen is being built. Maintaining document types becomes available once the write ' +
+    'path is in place; the document types below are shown as they stand, and nothing entered ' +
+    'here is saved yet.',
+  'docType.created': 'Document Type {code} defined.',
+  'docType.changed': 'Document Type {code} updated.',
+  'docType.unchanged': 'Document Type {code} already stands as shown; nothing was changed.',
+  'docType.deleted': 'Document Type {code} deleted.',
+  'docType.deactivated': 'Document Type {code} deactivated.',
+  'docType.reactivated': 'Document Type {code} reactivated.',
+  'docType.unexpected': 'The document type could not be saved.',
+  'docType.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
