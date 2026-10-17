@@ -58,7 +58,12 @@ export default async function CostCenterHierarchyPage({
         </p>
       )}
 
-      <CostCenterHierarchy areas={areas} selectedArea={selectedArea} view={view} />
+      <CostCenterHierarchy
+        areas={areas}
+        selectedArea={selectedArea}
+        view={view}
+        canMaintain={canMaintain}
+      />
     </div>
   );
 }

@@ -1,34 +1,624 @@
 'use client';
 
+import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { CostCenterArea } from '../../../modules/foundation/cost-center-definition';
-import type { HierarchyView } from '../../../modules/foundation/cost-center-hierarchy';
+import type {
+  GroupRow,
+  HierarchyNodeRow,
+  HierarchyView,
+} from '../../../modules/foundation/cost-center-hierarchy';
+import {
+  addLeafAction,
+  deleteGroupAction,
+  deleteHierarchyNodeAction,
+  placePeriodAction,
+  removeLeafAction,
+  saveGroupAction,
+  saveHierarchyHeaderAction,
+  saveHierarchyNodeAction,
+  unplacePeriodAction,
+  type HierarchyActionState,
+} from './actions';
 
-const INERT_NOTE =
-  'Stage 1 of 5: this screen is inert — the hierarchy tables and the write arrive in the following stages.';
+function RequiredMark() {
+  return (
+    <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
+  );
+}
 
-const inputClass = 'field-input';
+function Message({ state }: { state: HierarchyActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
+}
 
-export default function CostCenterHierarchy({
-  areas,
+function ReasonField({ id }: { id: string }) {
+  const [reason, setReason] = useState('');
+  return (
+    <div>
+      <label htmlFor={id} className="field-label">
+        Reason<RequiredMark />
+      </label>
+      <textarea
+        id={id}
+        name="reason"
+        className="field-input"
+        rows={2}
+        maxLength={500}
+        required
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function DialogShell({
+  summary,
+  title,
+  code,
+  children,
+}: {
+  summary: string;
+  title: string;
+  code: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="min-w-16">
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        {summary}
+      </summary>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+      >
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
+            <div>
+              <span className="code text-xs text-ink-faint">KSH1/OKEON · {code}</span>
+              <p className="font-semibold">{title}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-default min-h-11 sm:min-h-9"
+              onClick={(event) => {
+                const details = event.currentTarget.closest('details');
+                if (details) details.open = false;
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <section className="panel overflow-hidden p-4">{children}</section>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function useAction(action: typeof saveHierarchyNodeAction) {
+  return useActionState<HierarchyActionState, FormData>(action, { ok: true });
+}
+
+/* ── Hierarchy header ─────────────────────────────────────────────── */
+
+function DefineHierarchyPanel({ selectedArea }: { selectedArea: string }) {
+  const [state, formAction, pending] = useAction(saveHierarchyHeaderAction as never);
+  return (
+    <section className="panel overflow-hidden" aria-labelledby="hier-define-title">
+      <div className="panel-header">
+        <h2 id="hier-define-title" className="panel-title">Define the standard hierarchy</h2>
+      </div>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <div>
+          <label htmlFor="hier-title" className="field-label">
+            Hierarchy title<RequiredMark />
+          </label>
+          <input id="hier-title" name="title" required maxLength={40} className="field-input" />
+        </div>
+        <ReasonField id="hier-define-reason" />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Define hierarchy
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/* ── Nodes ────────────────────────────────────────────────────────── */
+
+function NodeFields({
+  idPrefix,
+  row,
+  nodes,
+}: {
+  idPrefix: string;
+  row: HierarchyNodeRow | null;
+  nodes: HierarchyNodeRow[];
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label htmlFor={`${idPrefix}-title`} className="field-label">
+          Title<RequiredMark />
+        </label>
+        <input
+          id={`${idPrefix}-title`}
+          name="title"
+          required
+          maxLength={40}
+          className="field-input"
+          defaultValue={row?.title ?? ''}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-parent`} className="field-label">Parent node</label>
+        <select
+          id={`${idPrefix}-parent`}
+          name="parentNode"
+          className="field-input"
+          defaultValue={row?.parentNode ?? ''}
+        >
+          <option value="">(root)</option>
+          {nodes
+            .filter((node) => node.node !== row?.node)
+            .map((node) => (
+              <option key={node.node} value={node.node}>
+                {node.node}
+              </option>
+            ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-order`} className="field-label">Display order</label>
+        <input
+          id={`${idPrefix}-order`}
+          name="displayOrder"
+          type="number"
+          className="field-input"
+          defaultValue={row?.displayOrder ?? 0}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CreateNodePanel({
+  selectedArea,
+  nodes,
+}: {
+  selectedArea: string;
+  nodes: HierarchyNodeRow[];
+}) {
+  const [state, formAction, pending] = useAction(saveHierarchyNodeAction as never);
+  return (
+    <section className="panel overflow-hidden" aria-labelledby="hier-node-create-title">
+      <div className="panel-header">
+        <h2 id="hier-node-create-title" className="panel-title">New node</h2>
+      </div>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <div>
+          <label htmlFor="hier-node-key" className="field-label">
+            Node<RequiredMark />
+          </label>
+          <input
+            id="hier-node-key"
+            name="node"
+            required
+            maxLength={24}
+            className="field-input code"
+            placeholder="PRODUCTION"
+          />
+          <p className="mt-1 text-xs text-ink-soft">
+            The first node defined, with no parent, becomes the root; there is exactly one root.
+          </p>
+        </div>
+        <NodeFields idPrefix="hier-node" row={null} nodes={nodes} />
+        <ReasonField id="hier-node-reason" />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Define node
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function ChangeNodeDialog({
+  row,
+  nodes,
+  selectedArea,
+}: {
+  row: HierarchyNodeRow;
+  nodes: HierarchyNodeRow[];
+  selectedArea: string;
+}) {
+  const [state, formAction, pending] = useAction(saveHierarchyNodeAction as never);
+  const label = `Node ${row.node}`;
+  return (
+    <DialogShell summary="Change" title={`Change ${label}`} code={row.node}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="mode" value="CHANGE" />
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="node" value={row.node} />
+        <NodeFields idPrefix={`hier-node-${row.node}`} row={row} nodes={nodes} />
+        <ReasonField id={`hier-node-change-reason-${row.node}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Save changes
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+function DeleteNodeDialog({
+  row,
+  childCount,
+  selectedArea,
+}: {
+  row: HierarchyNodeRow;
+  childCount: number;
+  selectedArea: string;
+}) {
+  const [state, formAction, pending] = useAction(deleteHierarchyNodeAction as never);
+  const label = `Node ${row.node}`;
+  const blocked = childCount > 0 || row.assignedPeriods > 0;
+  return (
+    <DialogShell summary="Delete" title={`Delete ${label}`} code={row.node}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="node" value={row.node} />
+        <p className="text-sm text-ink-soft">
+          A node is deleted only while no child node and no placed period stands under it.
+        </p>
+        {blocked ? (
+          <p role="status" className="text-sm text-ink-soft">
+            {childCount} child node{childCount === 1 ? '' : 's'} and {row.assignedPeriods} placed
+            period{row.assignedPeriods === 1 ? '' : 's'} stand under this node — deletion is refused.
+          </p>
+        ) : null}
+        <ReasonField id={`hier-node-delete-reason-${row.node}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending || blocked}>
+          Delete node
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+/* ── Placement ────────────────────────────────────────────────────── */
+
+function PlacementPanel({
   selectedArea,
   view,
 }: {
-  areas: CostCenterArea[];
   selectedArea: string;
   view: HierarchyView;
 }) {
-  const router = useRouter();
+  const [state, formAction, pending] = useAction(placePeriodAction as never);
   const allPeriods = [
     ...view.unplacedPeriods.map((period) => ({ ...period, node: '' })),
     ...view.placements,
   ].sort((a, b) => a.costCenter.localeCompare(b.costCenter) || a.validFrom.localeCompare(b.validFrom));
   return (
+    <section className="panel overflow-hidden" aria-labelledby="hierarchy-place-title">
+      <div className="panel-header">
+        <h2 id="hierarchy-place-title" className="panel-title">Period placement</h2>
+      </div>
+      {view.unplacedPeriods.length > 0 ? (
+        <p className="p-4 pb-0 text-sm text-ink-soft">
+          Unplaced periods: {view.unplacedPeriods
+            .map((period) => `${period.costCenter} from ${period.validFrom}`)
+            .join(', ')}
+        </p>
+      ) : (
+        <p className="p-4 pb-0 text-sm text-ink-soft">Every period standing is placed.</p>
+      )}
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="place-period" className="field-label">
+              Cost centre period<RequiredMark />
+            </label>
+            <select id="place-period" name="period" required className="field-input" defaultValue="">
+              <option value="">Choose a period</option>
+              {allPeriods.map((period) => (
+                <option
+                  key={`${period.costCenter}:${period.validFrom}`}
+                  value={`${period.costCenter}:${period.validFrom}`}
+                >
+                  {period.costCenter} from {period.validFrom}
+                  {period.node ? ` (in ${period.node})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="place-node" className="field-label">
+              Node<RequiredMark />
+            </label>
+            <select id="place-node" name="node" required className="field-input" defaultValue="">
+              <option value="">Choose a node</option>
+              {view.nodes.map((node) => (
+                <option key={node.node} value={node.node}>
+                  {node.node}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <ReasonField id="place-reason" />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Place period
+        </button>
+      </form>
+      {view.placements.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="grid-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Node</th>
+                <th>Cost centre</th>
+                <th>Valid from</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.placements.map((placement) => (
+                <tr key={`${placement.node}:${placement.costCenter}:${placement.validFrom}`}>
+                  <td className="code">{placement.node}</td>
+                  <td className="code">{placement.costCenter}</td>
+                  <td>{placement.validFrom}</td>
+                  <td>
+                    <UnassignDialog placement={placement} selectedArea={selectedArea} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function UnassignDialog({
+  placement,
+  selectedArea,
+}: {
+  placement: { node: string; costCenter: string; validFrom: string };
+  selectedArea: string;
+}) {
+  const [state, formAction, pending] = useAction(unplacePeriodAction as never);
+  const label = `${placement.costCenter} from ${placement.validFrom}`;
+  return (
+    <DialogShell summary="Unassign" title={`Unassign ${label}`} code={label}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="node" value={placement.node} />
+        <input type="hidden" name="costCenter" value={placement.costCenter} />
+        <input type="hidden" name="validFrom" value={placement.validFrom} />
+        <p className="text-sm text-ink-soft">
+          Unassigning removes the placement only; the cost centre period itself stands.
+        </p>
+        <ReasonField id={`unplace-reason-${placement.costCenter}-${placement.validFrom}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Unassign period
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+/* ── Alternative groups ───────────────────────────────────────────── */
+
+function CreateGroupPanel({ selectedArea }: { selectedArea: string }) {
+  const [state, formAction, pending] = useAction(saveGroupAction as never);
+  return (
+    <section className="panel overflow-hidden" aria-labelledby="hier-group-create-title">
+      <div className="panel-header">
+        <h2 id="hier-group-create-title" className="panel-title">New alternative group</h2>
+      </div>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="group-name" className="field-label">
+              Group<RequiredMark />
+            </label>
+            <input id="group-name" name="groupName" required maxLength={24} className="field-input code" placeholder="NORTHPLANTS" />
+          </div>
+          <div>
+            <label htmlFor="group-title" className="field-label">
+              Title<RequiredMark />
+            </label>
+            <input id="group-title" name="title" required maxLength={40} className="field-input" />
+          </div>
+        </div>
+        <ReasonField id="group-create-reason" />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Define group
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: string }) {
+  const [leafState, leafAction, leafPending] = useAction(addLeafAction as never);
+  const [deleteState, deleteAction, deletePending] = useAction(deleteGroupAction as never);
+  return (
+    <section className="panel overflow-hidden" aria-labelledby={`group-${group.groupName}`}>
+      <div className="panel-header flex flex-wrap items-center justify-between gap-3">
+        <h3 id={`group-${group.groupName}`} className="panel-title">
+          {group.groupName} — {group.title}
+        </h3>
+        <span className="code text-xs text-ink-soft">
+          Members: {group.members.join(', ') || '—'}
+        </span>
+      </div>
+      {group.leaves.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="grid-table min-w-[640px]">
+            <thead>
+              <tr>
+                <th>Sign</th>
+                <th>Option</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Order</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.leaves.map((leaf) => (
+                <tr key={`${leaf.valSign}${leaf.valOption}:${leaf.valFrom}..${leaf.valTo}`}>
+                  <td className="code">{leaf.valSign === 'I' ? 'Include' : 'Exclude'}</td>
+                  <td className="code">{leaf.valOption === 'BT' ? 'Range' : 'Single'}</td>
+                  <td className="code">{leaf.valFrom}</td>
+                  <td className="code">{leaf.valTo || '—'}</td>
+                  <td>{leaf.displayOrder}</td>
+                  <td>
+                    <RemoveLeafDialog group={group} leaf={leaf} selectedArea={selectedArea} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="p-4 text-sm text-ink-soft">No leaves stand in this group yet.</p>
+      )}
+      <form className="space-y-3 border-t border-line p-4" action={leafAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="groupName" value={group.groupName} />
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label htmlFor={`leaf-${group.groupName}-sign`} className="field-label">Sign</label>
+            <select id={`leaf-${group.groupName}-sign`} name="valSign" className="field-input" defaultValue="I">
+              <option value="I">Include (I)</option>
+              <option value="E">Exclude (E)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor={`leaf-${group.groupName}-option`} className="field-label">Option</label>
+            <select id={`leaf-${group.groupName}-option`} name="valOption" className="field-input" defaultValue="EQ">
+              <option value="EQ">Single centre (EQ)</option>
+              <option value="BT">Range (BT)</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor={`leaf-${group.groupName}-order`} className="field-label">Display order</label>
+            <input id={`leaf-${group.groupName}-order`} name="displayOrder" type="number" className="field-input" defaultValue={0} />
+          </div>
+          <div>
+            <label htmlFor={`leaf-${group.groupName}-from`} className="field-label">
+              From centre<RequiredMark />
+            </label>
+            <input id={`leaf-${group.groupName}-from`} name="valFrom" required maxLength={10} className="field-input code" />
+          </div>
+          <div>
+            <label htmlFor={`leaf-${group.groupName}-to`} className="field-label">To centre (ranges)</label>
+            <input id={`leaf-${group.groupName}-to`} name="valTo" maxLength={10} className="field-input code" />
+          </div>
+        </div>
+        <ReasonField id={`leaf-${group.groupName}-reason`} />
+        <Message state={leafState} />
+        <button type="submit" className="btn-primary" disabled={leafPending}>
+          Add leaf
+        </button>
+      </form>
+      <form className="space-y-3 border-t border-line p-4" action={deleteAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="groupName" value={group.groupName} />
+        <p className="text-sm text-ink-soft">
+          Deleting the group removes its leaves with it; the cost centres stand.
+        </p>
+        <ReasonField id={`group-delete-reason-${group.groupName}`} />
+        <Message state={deleteState} />
+        <button type="submit" className="btn-primary" disabled={deletePending}>
+          Delete group
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function RemoveLeafDialog({
+  group,
+  leaf,
+  selectedArea,
+}: {
+  group: GroupRow;
+  leaf: GroupRow['leaves'][number];
+  selectedArea: string;
+}) {
+  const [state, formAction, pending] = useAction(removeLeafAction as never);
+  const label = `${leaf.valSign === 'I' ? 'Include' : 'Exclude'} ${leaf.valFrom}${leaf.valTo ? `..${leaf.valTo}` : ''}`;
+  return (
+    <DialogShell summary="Remove" title={`Remove leaf ${label}`} code={group.groupName}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <input type="hidden" name="groupName" value={group.groupName} />
+        <input type="hidden" name="valSign" value={leaf.valSign} />
+        <input type="hidden" name="valOption" value={leaf.valOption} />
+        <input type="hidden" name="valFrom" value={leaf.valFrom} />
+        <input type="hidden" name="valTo" value={leaf.valTo} />
+        <input type="hidden" name="displayOrder" value={leaf.displayOrder} />
+        <p className="text-sm text-ink-soft">
+          Removing the leaf removes this line of the group only; the cost centres it named stand.
+        </p>
+        <ReasonField id={`leaf-remove-reason-${group.groupName}-${leaf.valFrom}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Remove leaf
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+/* ── The screen ───────────────────────────────────────────────────── */
+
+export default function CostCenterHierarchy({
+  areas,
+  selectedArea,
+  view,
+  canMaintain,
+}: {
+  areas: CostCenterArea[];
+  selectedArea: string;
+  view: HierarchyView;
+  canMaintain: boolean;
+}) {
+  const router = useRouter();
+  const childCount = (node: string) => view.nodes.filter((entry) => entry.parentNode === node).length;
+  return (
     <div className="space-y-4">
-      <p role="note" className="border border-line bg-paper px-4 py-3 text-sm text-ink">
-        {INERT_NOTE}
-      </p>
       <p className="max-w-3xl text-sm text-ink-soft">
         Two structures stand here. The standard hierarchy is the controlling area&apos;s one tree:
         cost centre periods are placed into its nodes, one node per period. Alternative groups are
@@ -55,6 +645,10 @@ export default function CostCenterHierarchy({
         </select>
       </label>
 
+      {selectedArea !== '' && view.hierarchyTitle === null && canMaintain && (
+        <DefineHierarchyPanel selectedArea={selectedArea} />
+      )}
+
       <section className="panel overflow-hidden" aria-labelledby="hierarchy-tree-title">
         <div className="panel-header">
           <h2 id="hierarchy-tree-title" className="panel-title">
@@ -65,8 +659,9 @@ export default function CostCenterHierarchy({
           <p className="p-4 text-sm text-ink-soft">Choose a controlling area to see its hierarchy.</p>
         ) : view.nodes.length === 0 ? (
           <p className="p-4 text-sm text-ink-soft">
-            No hierarchy is defined for this controlling area yet. The first node defined becomes
-            its root.
+            {view.hierarchyTitle
+              ? 'No nodes are defined yet. The first node defined, with no parent, becomes the root.'
+              : 'No hierarchy is defined for this controlling area yet.'}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -92,9 +687,18 @@ export default function CostCenterHierarchy({
                     <td>{node.displayOrder}</td>
                     <td>{node.assignedPeriods}</td>
                     <td>
-                      <button type="button" disabled className="text-sm text-ink-soft">
-                        Delete
-                      </button>
+                      {canMaintain ? (
+                        <div className="flex flex-wrap gap-1">
+                          <ChangeNodeDialog row={node} nodes={view.nodes} selectedArea={selectedArea} />
+                          <DeleteNodeDialog
+                            row={node}
+                            childCount={childCount(node.node)}
+                            selectedArea={selectedArea}
+                          />
+                        </div>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -102,117 +706,42 @@ export default function CostCenterHierarchy({
             </table>
           </div>
         )}
-        <fieldset disabled className="space-y-3 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="hier-node" className="field-label">Node (up to 24)</label>
-              <input id="hier-node" className={inputClass} maxLength={24} placeholder="PRODUCTION" />
-            </div>
-            <div>
-              <label htmlFor="hier-node-title" className="field-label">Title</label>
-              <input id="hier-node-title" className={inputClass} maxLength={40} />
-            </div>
-            <div>
-              <label htmlFor="hier-node-parent" className="field-label">Parent node</label>
-              <select id="hier-node-parent" className={inputClass} defaultValue="">
-                <option value="">(root — first node only)</option>
-                {view.nodes.map((node) => (
-                  <option key={node.node} value={node.node}>
-                    {node.node}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="hier-node-order" className="field-label">Display order</label>
-              <input id="hier-node-order" type="number" className={inputClass} defaultValue={0} />
-            </div>
-          </div>
-          <p className="text-xs text-ink-soft">
-            A reason is required on every write (later stages). Nodes cannot form cycles and the
-            tree is guarded at ten levels.
-          </p>
-          <button type="button" disabled className="btn-primary">
-            Define node
-          </button>
-        </fieldset>
       </section>
 
-      <section className="panel overflow-hidden" aria-labelledby="hierarchy-place-title">
-        <div className="panel-header">
-          <h2 id="hierarchy-place-title" className="panel-title">Period placement</h2>
-        </div>
-        {view.unplacedPeriods.length > 0 ? (
-          <p className="p-4 pb-0 text-sm text-ink-soft">
-            Unplaced periods: {view.unplacedPeriods
-              .map((period) => `${period.costCenter} from ${period.validFrom}`)
-              .join(', ')}
-          </p>
-        ) : (
-          <p className="p-4 pb-0 text-sm text-ink-soft">Every period standing is placed.</p>
-        )}
-        <fieldset disabled className="space-y-3 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="place-period" className="field-label">Cost centre period</label>
-              <select id="place-period" className={inputClass} defaultValue="">
-                <option value="">Choose a period</option>
-                {allPeriods.map((period) => (
-                  <option
-                    key={`${period.costCenter}:${period.validFrom}`}
-                    value={`${period.costCenter}:${period.validFrom}`}
-                  >
-                    {period.costCenter} from {period.validFrom}
-                    {period.node ? ` (in ${period.node})` : ''}
-                  </option>
-                ))}
-              </select>
+      {canMaintain && selectedArea !== '' && view.hierarchyTitle !== null && (
+        <CreateNodePanel selectedArea={selectedArea} nodes={view.nodes} />
+      )}
+      {selectedArea !== '' && view.hierarchyTitle !== null && (
+        canMaintain ? (
+          <PlacementPanel selectedArea={selectedArea} view={view} />
+        ) : view.placements.length > 0 ? (
+          <section className="panel overflow-hidden" aria-labelledby="hierarchy-place-title">
+            <div className="panel-header">
+              <h2 id="hierarchy-place-title" className="panel-title">Period placement</h2>
             </div>
-            <div>
-              <label htmlFor="place-node" className="field-label">Node</label>
-              <select id="place-node" className={inputClass} defaultValue="">
-                <option value="">Choose a node</option>
-                {view.nodes.map((node) => (
-                  <option key={node.node} value={node.node}>
-                    {node.node}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button type="button" disabled className="btn-primary">
-            Place period
-          </button>
-        </fieldset>
-        {view.placements.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="grid-table min-w-[640px]">
-              <thead>
-                <tr>
-                  <th>Node</th>
-                  <th>Cost centre</th>
-                  <th>Valid from</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.placements.map((placement) => (
-                  <tr key={`${placement.node}:${placement.costCenter}:${placement.validFrom}`}>
-                    <td className="code">{placement.node}</td>
-                    <td className="code">{placement.costCenter}</td>
-                    <td>{placement.validFrom}</td>
-                    <td>
-                      <button type="button" disabled className="text-sm text-ink-soft">
-                        Unassign
-                      </button>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="grid-table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>Node</th>
+                    <th>Cost centre</th>
+                    <th>Valid from</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </section>
+                </thead>
+                <tbody>
+                  {view.placements.map((placement) => (
+                    <tr key={`${placement.node}:${placement.costCenter}:${placement.validFrom}`}>
+                      <td className="code">{placement.node}</td>
+                      <td className="code">{placement.costCenter}</td>
+                      <td>{placement.validFrom}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null
+      )}
 
       <section className="panel overflow-hidden" aria-labelledby="hierarchy-groups-title">
         <div className="panel-header">
@@ -220,82 +749,12 @@ export default function CostCenterHierarchy({
         </div>
         {view.groups.length === 0 ? (
           <p className="p-4 text-sm text-ink-soft">No alternative groups are defined for this area yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="grid-table min-w-[760px]">
-              <thead>
-                <tr>
-                  <th>Group</th>
-                  <th>Title</th>
-                  <th>Leaves</th>
-                  <th>Resolved members</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.groups.map((group) => (
-                  <tr key={group.groupName}>
-                    <td className="code">{group.groupName}</td>
-                    <td>{group.title}</td>
-                    <td className="code">
-                      {group.leaves
-                        .map((leaf) =>
-                          leaf.valOption === 'BT'
-                            ? `${leaf.valSign} ${leaf.valFrom}..${leaf.valTo}`
-                            : `${leaf.valSign} ${leaf.valFrom}`,
-                        )
-                        .join(', ') || '—'}
-                    </td>
-                    <td className="code">{group.members.join(', ') || '—'}</td>
-                    <td>
-                      <button type="button" disabled className="text-sm text-ink-soft">
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <fieldset disabled className="space-y-3 p-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label htmlFor="group-name" className="field-label">Group (up to 24)</label>
-              <input id="group-name" className={inputClass} maxLength={24} placeholder="NORTHPLANTS" />
-            </div>
-            <div>
-              <label htmlFor="group-title" className="field-label">Title</label>
-              <input id="group-title" className={inputClass} maxLength={40} />
-            </div>
-            <div>
-              <label htmlFor="leaf-sign" className="field-label">Leaf sign</label>
-              <select id="leaf-sign" className={inputClass} defaultValue="I">
-                <option value="I">Include (I)</option>
-                <option value="E">Exclude (E)</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="leaf-option" className="field-label">Leaf option</label>
-              <select id="leaf-option" className={inputClass} defaultValue="EQ">
-                <option value="EQ">Single centre (EQ)</option>
-                <option value="BT">Range (BT)</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="leaf-from" className="field-label">From centre</label>
-              <input id="leaf-from" className={inputClass} maxLength={10} />
-            </div>
-            <div>
-              <label htmlFor="leaf-to" className="field-label">To centre (ranges)</label>
-              <input id="leaf-to" className={inputClass} maxLength={10} />
-            </div>
-          </div>
-          <button type="button" disabled className="btn-primary">
-            Define group / add leaf
-          </button>
-        </fieldset>
+        ) : null}
       </section>
+      {canMaintain && selectedArea !== '' && <CreateGroupPanel selectedArea={selectedArea} />}
+      {view.groups.map((group) => (
+        <GroupCard key={group.groupName} group={group} selectedArea={selectedArea} />
+      ))}
     </div>
   );
 }
