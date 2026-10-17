@@ -1493,7 +1493,7 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 **Gates.** `npm run typecheck` clean; `lint:ip` clean; production build compiled (material-types route 1.2 kB); suite **1206 tests across 143 files**.
 
-**Cost.** Measured: 13:58 in to 14:02 — **4 minutes**.
+**Cost.** Measured: 20:58 in to 21:02 — **4 minutes**.
 
 ---
 
