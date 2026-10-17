@@ -67,8 +67,10 @@ export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: s
   }
   for (const group of [
     { materialGroup: 'GENERAL', name: 'General materials' }, { materialGroup: 'RAW', name: 'Raw materials' },
-    { materialGroup: 'PACKAGING', name: 'Packaging' }, { materialGroup: 'PRODUCTS', name: 'Manufactured products' },
-    { materialGroup: 'MAINTENANCE', name: 'Maintenance and repair' }, { materialGroup: 'SERVICES', name: 'Services' },
+    { materialGroup: 'PACKAGING', name: 'Packaging' },
+    { materialGroup: 'PRODUCTS', name: 'Manufactured goods', longDescription: 'Manufactured products' },
+    { materialGroup: 'MAINT', name: 'Maintenance', longDescription: 'Maintenance and repair' },
+    { materialGroup: 'SERVICES', name: 'Services' },
   ]) await tx.insert(materialGroup).values({ ...group, client, createdBy }).onConflictDoNothing();
   for (const c of [
     { valuationClass: 'RAW_INVENTORY', name: 'Raw material inventory', allowedMaterialTypes: 'RAW' },

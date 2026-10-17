@@ -50,8 +50,11 @@ export const materialTypeValuation = pgTable('material_type_valuation', {
 ]);
 
 export const materialGroup = pgTable('material_group', {
-  client: tenant(), materialGroup: varchar('material_group', { length: 20 }).notNull(),
-  name: varchar('name', { length: 100 }).notNull(), isActive: boolean('is_active').notNull().default(true), ...auditColumns,
+  client: tenant(), materialGroup: varchar('material_group', { length: 9 }).notNull(),
+  name: varchar('name', { length: 20 }).notNull(),
+  /** Optional long description (at most 60); the short name above is the maintained description. */
+  longDescription: varchar('long_description', { length: 60 }),
+  isActive: boolean('is_active').notNull().default(true), ...auditColumns,
 }, (t) => [primaryKey({ columns: [t.client, t.materialGroup] })]);
 
 export const valuationClass = pgTable('valuation_class', {

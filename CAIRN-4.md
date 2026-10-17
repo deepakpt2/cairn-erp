@@ -1554,6 +1554,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.356 B-340 — SCR-049 / OMSF stage 2: the parity schema — 102 migrations, no new table
+
+**What shipped.** Migration `0060_material_group_parity.sql` narrows the standing `material_group` in place: the one provisioned key exceeding nine characters is renamed wherever it is carried (the material foreign key dropped and re-added around MAINTENANCE→MAINT, as migration 0057 taught), the key becomes `varchar(9)` and the name the `varchar(20)` short description, and an optional `long_description varchar(60)` lands on the row — seeded in the same migration for the two provisioned descriptions the narrowing would have truncated, so 'Manufactured products' and 'Maintenance and repair' survive whole as long texts under their short names. No RLS migration is needed: the table's tenant policies already stand. Provisioning (`applyMaterialDefaults`) speaks the new shape, and the material master's group input narrows to nine characters to match the master it is judged against.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; the materials suite passes 24/24 against the narrowed group key; full suite **1215 tests across 144 files**.
+
+**Cost.** Measured: 21:55 in to 21:59 — **4 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1660,6 +1670,7 @@ recorded change, date and reason stated.
 | 2.157 | 2026-10-17 | **SCR-048 / OMS2 CLOSED and accepted (B-338, §26.354).** Stage 5 ships 8 service tests and the T949 browser target `material-types` (9/9 journeys against the production build — provisioned types at parity shape, the range-judged creation, the duplicate refusal, the updating guard, the used-type deletion refusal, deactivation, the database remembering all of it); neighbours `material-basic`, `material-valuation` and `material-mrp` green. Typecheck, `lint:ip` and the production build clean; suite 1215 across 144 files, 101 migrations, seed 88/61/57/53. Cost measured at 38 minutes overall. | Agent |
 | 2.158 | 2026-10-17 | **SCR-049 / OMSF package recorded as R-97: material groups at SAP parity in the SCR-048 shape.** The `material_group` table already stands with no define screen; the key narrows to 9 (MAINTENANCE→MAINT), the name becomes a short description of at most 20 with an optional 60-character long description on the row, per-language text rows stay deferred (B-223), classification-only scope with no number-range or accounting behaviour, hard delete refused under standing materials with deactivation beside it. Stage order resumes at the UI. | Agent |
 | 2.159 | 2026-10-17 | **SCR-049 / OMSF stage 1 (B-339, §26.355): the inert material-groups screen.** `/config/material-groups` stands introduced (`CFG.INV.MATERIALGROUP.DEFINE · OMSF`) with its single section, the contract's key/description widths, delete-when-unused lifecycle and classification-only scope stated in its help text. Typecheck, `lint:ip`, production build (route 891 B) clean; suite 1215 across 144 files. Cost measured at 2 minutes. | Agent |
+| 2.160 | 2026-10-17 | **SCR-049 / OMSF stage 2 (B-340, §26.356): the parity schema.** Migration 0060 narrows the standing `material_group` (key to 9 with MAINTENANCE→MAINT carried through materials, name to the 20-character short description, optional 60-character long description seeded for the truncated provisioned texts); provisioning and the material master's group input follow — 102 migrations standing. Typecheck, `lint:ip`, build clean; materials 24/24, suite 1215 across 144 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
