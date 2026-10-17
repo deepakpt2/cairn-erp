@@ -150,8 +150,8 @@ export async function profitCenterHierarchyKch1(ctx: Context) {
 
   const groupCard = page.locator('section[aria-labelledby="group-OPSG"]');
   await groupCard.locator('#leaf-OPSG-option').selectOption('BT');
-  await groupCard.locator('#leaf-OPSG-from').fill('CC1000');
-  await groupCard.locator('#leaf-OPSG-to').fill('CC9999');
+  await groupCard.locator('#leaf-OPSG-from').fill('PC100');
+  await groupCard.locator('#leaf-OPSG-to').fill('PC999');
   await groupCard.locator('#leaf-OPSG-reason').fill(REASON);
   await groupCard.getByRole('button', { name: 'Add leaf', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'The leaf stands in the group.' }).waitFor();

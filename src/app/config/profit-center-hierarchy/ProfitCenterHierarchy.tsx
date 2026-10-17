@@ -338,7 +338,7 @@ function PlacementPanel({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="place-period" className="field-label">
-              Cost centre period<RequiredMark />
+              Profit centre period<RequiredMark />
             </label>
             <select id="place-period" name="period" required className="field-input" defaultValue="">
               <option value="">Choose a period</option>
@@ -379,7 +379,7 @@ function PlacementPanel({
             <thead>
               <tr>
                 <th>Node</th>
-                <th>Cost centre</th>
+                <th>Profit centre</th>
                 <th>Valid from</th>
                 <th>Actions</th>
               </tr>
@@ -724,7 +724,7 @@ export default function ProfitCenterHierarchy({
                 <thead>
                   <tr>
                     <th>Node</th>
-                    <th>Cost centre</th>
+                    <th>Profit centre</th>
                     <th>Valid from</th>
                   </tr>
                 </thead>

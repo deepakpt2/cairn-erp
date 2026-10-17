@@ -849,7 +849,7 @@ export async function placeProfitCenterPeriod(raw: PeriodPlacementInput): Promis
       fieldLabels: {
         controllingArea: 'Controlling area',
         node: 'Node',
-        profitCenter: 'Cost centre',
+        profitCenter: 'Profit centre',
         validFrom: 'Valid from',
       },
       securityRelevantFields: ['node'],
@@ -908,7 +908,7 @@ export async function unplaceProfitCenterPeriod(raw: PeriodPlacementInput): Prom
       fieldLabels: {
         controllingArea: 'Controlling area',
         node: 'Node',
-        profitCenter: 'Cost centre',
+        profitCenter: 'Profit centre',
         validFrom: 'Valid from',
       },
       securityRelevantFields: ['node'],
