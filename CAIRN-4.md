@@ -1227,6 +1227,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.331 B-315 — SCR-043 / KL01 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.COST.ACTIVITYTYPE.DEFINE` (COST, CONFIGURE) joins `scripts/seed.ts` (84 capabilities; the `CFG.*` wildcard makes the row the grant, as by now usual). The Term Registry gains the definition entry at `/config/activity-types` with **KL01 as a search alias only** (53 terms, 47 aliases), its description carrying the whole contract — the period key and overlap rule, the unit judged on existence, both behaviour digits with their word meanings, the canonical category subset, the deliberately unconditional deletion of today with rates named as its future judge, and the lock as the standing alternative. The workbench's built-routes set gains the screen. The activity row itself already stood in the seed (60 activities; route `/config/activity-types`, prerequisite `CFG.COST.COSTCENTER.DEFINE`) — read back rather than assumed, standing with its prerequisite and route.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1151 tests across 139 files**; seed applied to `cairn_b210` and the rows read back (capability, term with its alias, the standing activity; counts 84/53/47).
+
+**Cost.** Measured: 15:56 in to 15:58 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1306,6 +1318,7 @@ recorded change, date and reason stated.
 | 2.130 | 2026-10-17 | **SCR-043 / KL01 contract confirmed and stage 1 (the screen) published (B-312, §26.328; R-92).** SAP parity taken on all three vocabulary forks — the category and price-indicator digits stored as the reference stores them with word labels displayed, any standing unit judged on existence, and valid cost-centre categories attached as a canonical subset — plus the KS01 lifecycle (delete and posting lock) and its period shape. Stage 1 publishes `/config/activity-types` inert: the four-part period definition, the digit catalogues and subset helpers, the area master over the create form fed by the global units table, and the catalogue keys. Typecheck, build (route 1.9 kB) and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
 | 2.131 | 2026-10-17 | **SCR-043 / KL01 stage 2: the table (B-313, §26.329).** Migrations `0053_activity_type.sql` and `9036_..._policies.sql` create the period registry (15 columns, four-part key, nine constraints including both digit vocabularies; forced RLS, four grants) on `cairn_b210` (91 migrations). Typecheck clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
 | 2.132 | 2026-10-17 | **SCR-043 / KL01 stage 3: the write (B-314, §26.330).** `saveActivityType`, `setActivityTypePostingLock` and `deleteActivityType` and the live screen: the period key immutable, the unit judged on existence against the global units table, both behaviour digits against their catalogues, the valid categories stored as the canonical subset, the validity span judged against every sibling period — unit, category, price and lock security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
+| 2.133 | 2026-10-17 | **SCR-043 / KL01 stage 4: the supporting rows (B-315, §26.331).** Capability `CFG.COST.ACTIVITYTYPE.DEFINE` seeded (84 capabilities), the Term Registry entry added with KL01 as a search alias only (53 terms, 47 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
