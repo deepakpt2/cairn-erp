@@ -87,6 +87,8 @@ export interface PackageInput {
 export interface PackageResult {
   version: string;
   chartOfAccounts: string;
+  /** The fiscal year variant the package defined, so the caller can record it. */
+  fiscalYearVariant: string;
   accounts: number;
   periods: number;
   accountsReceivableAccount: string;
@@ -547,6 +549,7 @@ export async function applyStandardPackage(
   return {
     version: STANDARD_PACKAGE_VERSION,
     chartOfAccounts: coaKey,
+    fiscalYearVariant: fyvKey,
     accounts,
     periods: periodRows.length,
     accountsReceivableAccount: '110000',

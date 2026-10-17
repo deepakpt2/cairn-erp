@@ -128,18 +128,11 @@ export interface CreateTenantInput {
   timezone?: string;
   isDevelopment?: boolean;
   /**
-   * Accepted and ignored since `INTL-STD-3`: tenant creation no longer configures a
-   * company. A company code is defined on its own screen after the tenant exists, so
-   * there is nothing here to hang one from. These four stay optional rather than being
-   * deleted only because the creation form still posts them; the form loses the fields
-   * in SCR-032 step B1 and this interface loses them in step B2.
+   * What the tenant starts with (R-75). Creation configures no company: the standard
+   * package holds only data that is true for any company, and the enterprise structure
+   * belongs to whichever company code the tenant defines later on its own screen.
    */
-  companyCode?: string;
-  companyName?: string;
-  /** Still used: the package defines the variant and the tenant settings record it. */
-  fiscalYearVariant?: string;
-  /** Still used: the package defines the chart the tenant posts against. */
-  chartOfAccounts?: string;
+  creationType?: TenantCreationType;
   administrator: {
     username: string;
     fullName: string;
@@ -154,6 +147,12 @@ export interface CreateTenantInput {
   activateStandardPackage?: boolean;
   createdBy: string;
 }
+
+/**
+ * The three creation types the screen offers. `copy` is one of them because an
+ * implementation asks for it, and it is refused rather than hidden: see {@link createTenant}.
+ */
+export type TenantCreationType = 'empty' | 'standard' | 'copy';
 
 export interface CreatedTenant {
   client: string;
@@ -175,12 +174,15 @@ export class TenancyError extends Error {
 
 export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx) => Promise<void>): Promise<CreatedTenant> {
   validateKey(input.clientKey);
-  if (input.companyCode) validateKey(input.companyCode, 'Company code');
-  const chartOfAccounts = (input.chartOfAccounts ?? 'CA01').trim().toUpperCase();
-  if (!/^[A-Z0-9]{4}$/.test(chartOfAccounts)) {
+
+  // Refused here rather than only in the browser: a submit button disabled on a form is
+  // not a refusal, and a forged POST would otherwise create a tenant nobody asked for.
+  // Nothing has been written at this point, so the refusal costs nothing to honour.
+  const creationType: TenantCreationType = input.creationType ?? 'empty';
+  if (creationType === 'copy') {
     throw new TenancyError(
-      'Chart of Accounts key must be exactly four letters or numbers.',
-      'Enter a four-character alphanumeric Chart of Accounts key.',
+      'Copying a tenant is not available yet.',
+      'Create an empty tenant or one with the standard general data, then configure its company on the company code, chart of accounts and fiscal year variant screens. Copying needs a ruling on each table it would carry.',
     );
   }
 
@@ -224,7 +226,9 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
 
     await tx.insert(clientSettings).values({
       client: clientKey,
-      fiscalYearVariant: input.fiscalYearVariant ?? null,
+      // An empty tenant posts in no fiscal year variant; the standard path records the
+      // one the package creates, below, rather than duplicating its default here.
+      fiscalYearVariant: null,
       createdBy: input.createdBy,
     });
 
@@ -319,17 +323,20 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
     let packageVersion: string | undefined;
     let accountsCreated: number | undefined;
 
-    if (input.activateStandardPackage !== false) {
+    if (creationType === 'standard') {
       const { applyStandardPackage } = await import('../../modules/foundation/standard-config');
       const result = await applyStandardPackage(tx, {
         client: clientKey,
         currency: input.currency.toUpperCase(),
-        chartOfAccounts,
-        fiscalYearVariant: input.fiscalYearVariant,
         activatedBy: input.createdBy,
       });
       packageVersion = result.version;
       accountsCreated = result.accounts;
+      // The package owns its own defaults; the tenant settings report what it made.
+      await tx
+        .update(clientSettings)
+        .set({ fiscalYearVariant: result.fiscalYearVariant })
+        .where(eq(clientSettings.client, clientKey));
 
       // Mark the onboarding activities the package has just satisfied, so the
       // workbench reflects reality instead of asking for work already done.

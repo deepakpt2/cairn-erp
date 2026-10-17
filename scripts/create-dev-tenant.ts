@@ -42,8 +42,6 @@ async function main() {
     currency: 'USD',
     timezone: 'Asia/Kuwait',
     isDevelopment: true,
-    fiscalYearVariant: 'K4',
-    chartOfAccounts: 'CA01',
     administrator: {
       username: 'dev.admin',
       fullName: 'Development Administrator',
@@ -51,7 +49,7 @@ async function main() {
       // Development-only credential. The environment check lives in .env.
       password: 'cairn-dev-2026',
     },
-    activateStandardPackage: true,
+    creationType: 'standard',
     createdBy: 'DEV_SEED',
   });
 

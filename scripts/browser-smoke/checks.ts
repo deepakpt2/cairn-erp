@@ -133,8 +133,12 @@ export async function onboard(ctx: BrowserContext) {
   if (await provisioningToken.count()) await provisioningToken.fill(randomUUID());
   await page.locator('[name="clientKey"]').fill(CLIENT);
   await page.locator('[name="name"]').fill(NAME);
-  await page.locator('[name="companyName"]').fill('Browser verification company');
   await page.locator('[name="currency"]').fill('KWD');
+  // The general data every target's fixtures assume: the chart and its accounts, the
+  // fiscal year variant and its periods, the posting period variant, the catalogues.
+  // The enterprise structure comes from the builder below, because creating a tenant
+  // configures no company any more.
+  await page.locator('input[name="creationType"][value="standard"]').check();
   await page.locator('[name="username"]').fill('browser.admin');
   await page.locator('[name="password"]').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create tenant', exact: true }).click();
@@ -143,9 +147,9 @@ export async function onboard(ctx: BrowserContext) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(/\/config$/, { waitUntil: 'commit' });
   await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
-  // The enterprise structure every browser target was written against. The standard
-  // package still provides it, so this reports which half supplied the rows rather
-  // than asserting one answer: reducing the package must not need an edit here.
+  // The enterprise structure every browser target was written against. Creation no
+  // longer supplies it, so the builder must: asserting that is what keeps this honest
+  // if a future change silently drops the structure from a fixture tenant.
   const structure = await applyStandardStructure({
     client: CLIENT,
     companyName: 'Browser verification company',
@@ -153,9 +157,12 @@ export async function onboard(ctx: BrowserContext) {
     currency: 'KWD',
     changedBy: 'browser.admin',
   });
-  console.log(structure.created
-    ? '  ✓ builder supplied the standard structure'
-    : '  ✓ standard package still supplies the structure; builder changed nothing');
+  assert.equal(
+    structure.created,
+    true,
+    'The builder must supply the standard structure; tenant creation no longer does.',
+  );
+  console.log('  ✓ builder supplied the standard structure');
   assert.equal((await withTenant(CLIENT, (tx) => tx.execute(sql`select count(*)::int as n from number_range where object_code = 'JOURNAL_ENTRY'`)) as unknown as Array<{ n: number }>)[0].n, 0);
   console.log('  ✓ UI-created tenant has no hidden accounting intervals');
 }

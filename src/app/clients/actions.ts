@@ -12,7 +12,6 @@ import { revalidatePath } from 'next/cache';
 import { createTenant, TenancyError } from '@/platform/tenancy';
 import { getSession } from '@/platform/auth/current';
 import { assertProvisioningToken, authorizeProvisioning, ProvisioningError } from '@/platform/tenancy/provisioning';
-import { t } from '@/platform/i18n';
 
 export interface OnboardState {
   ok: boolean;
@@ -28,19 +27,11 @@ export async function createTenantAction(
   const read = (name: string) => String(formData.get(name) ?? '').trim();
   const inputUsername = read('username');
 
-  // Creation type decides what the tenant starts with (R-75). Copying is offered on the
-  // screen and refused here as well, because a button disabled in the browser is not a
-  // refusal: a forged POST would otherwise create a tenant nobody asked for. Nothing is
-  // written and no source tenant is read, which is why the form renders no picker.
-  const creationType = read('creationType') || 'empty';
-  if (creationType === 'copy') {
-    return {
-      ok: false,
-      field: 'creationType',
-      message: t('onboard.creationType.copy.refused'),
-      remedy: t('onboard.creationType.copy.remedy'),
-    };
-  }
+  // Creation type decides what the tenant starts with (R-75). Only the two values that
+  // can proceed are forwarded as themselves; anything else, including a forged 'copy',
+  // reaches the service, which refuses it before writing anything.
+  const posted = read('creationType');
+  const creationType = posted === 'standard' || posted === 'copy' ? posted : 'empty';
 
   try {
     const environment = process.env.CAIRN_ENV;
@@ -57,14 +48,7 @@ export async function createTenantAction(
       currency: read('currency') || 'USD',
       timezone: read('timezone') || 'UTC',
       isDevelopment: formData.get('isDevelopment') === 'on',
-      activateStandardPackage: creationType === 'standard',
-      // The form no longer asks for a company code, a company name, a chart of accounts
-      // or a fiscal year variant: SCR-032 took the enterprise structure and the financial
-      // basis off this screen. The two defaults below stay only until step B2 removes the
-      // fields from CreateTenantInput and the service owns them; without them the tenant
-      // settings would record no variant while the package creates K4.
-      fiscalYearVariant: 'K4',
-      chartOfAccounts: 'CA01',
+      creationType,
       administrator: {
         username: read('username'),
         fullName: read('fullName'),
