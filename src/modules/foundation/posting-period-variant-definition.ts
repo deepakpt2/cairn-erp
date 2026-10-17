@@ -542,7 +542,7 @@ export async function deletePostingPeriodVariant(
           `${codes.length === 1 ? 'posts' : 'post'} against it.`,
         // The same sentence the screen shows before the click, so an operator reads one
         // instruction rather than two that happen to agree today.
-        'Assign them to another posting period variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), ' +
+        'Assign them to another posting period variant in Assign posting period variant to Company Code (CFG.FIN.PPV.ASSIGN), ' +
           'then delete this one.',
       );
     }

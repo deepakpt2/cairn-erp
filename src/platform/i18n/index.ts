@@ -1680,7 +1680,7 @@ const en: Catalogue = {
     'Posting Period Variant {variant} cannot be deleted: Company Code {companyCodes} posts ' +
     'against it.',
   'ppv.deleteBlockedRemedy':
-    'Assign them to another posting period variant in Company Codes (CFG.ORG.COMPANYCODE.DEFINE), ' +
+    'Assign them to another posting period variant in Assign posting period variant to Company Code (CFG.FIN.PPV.ASSIGN), ' +
     'then delete this one.',
   'ppv.deleteConfirmButton': 'Delete variant',
   'ppv.created':
