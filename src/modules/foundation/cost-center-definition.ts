@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
-import { controllingArea, controllingAreaCompany, costCenter, costCenterNodeAssignment } from './schema';
+import { activityRate, controllingArea, controllingAreaCompany, costCenter, costCenterNodeAssignment } from './schema';
 
 /**
  * Cost centre definition — the read side (SCR-041 stage 1).
@@ -148,7 +148,7 @@ export async function listAreaCompanyCodes(clientId: string, area: string): Prom
 }
 
 import { z } from 'zod';
-import { and, countDistinct, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, count, countDistinct, gte, inArray, lte, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
@@ -623,6 +623,23 @@ export async function deleteCostCenter(raw: CostCenterDeleteInput): Promise<{ de
       throw new CostCenterError(
         `Cost Centre ${values.costCenter} carries ${documents} journal document${documents === 1 ? '' : 's'} dated inside this period and cannot be deleted.`,
         'History outranks tidiness: lock the cost centre for posting instead; the centre keeps its history and stops being offered to new postings.',
+      );
+    }
+
+    // Activity rates planned against this centre are usage too (SCR-044):
+    // a planned price outlives the wish to tidy the master away.
+    const [rateCount] = await tx
+      .select({ n: count() })
+      .from(activityRate)
+      .where(and(
+        eq(activityRate.client, client),
+        eq(activityRate.controllingArea, values.controllingArea),
+        eq(activityRate.costCenter, values.costCenter),
+      ));
+    if ((rateCount?.n ?? 0) > 0) {
+      throw new CostCenterError(
+        `Cost Centre ${values.costCenter} carries ${rateCount?.n} activity rate row${rateCount?.n === 1 ? '' : 's'} and cannot be deleted.`,
+        'Delete the planned rates first (KP26), or lock the cost centre for posting instead; the centre keeps its plan and stops being offered to new postings.',
       );
     }
 

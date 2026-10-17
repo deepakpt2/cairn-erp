@@ -135,12 +135,12 @@ export async function listActivityUnits(): Promise<ActivityUnitChoice[]> {
 }
 
 import { z } from 'zod';
-import { and, inArray } from 'drizzle-orm';
+import { and, count, inArray } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { markActivityComplete } from '../../platform/tenancy';
 import { configActivityStatus } from '../../platform/tables/registry';
-import { controllingArea } from './schema';
+import { activityRate, controllingArea } from './schema';
 
 /**
  * The write (SCR-043 stage 3; contract R-92).
@@ -583,6 +583,23 @@ export async function deleteActivityType(raw: ActivityTypeDeleteInput): Promise<
       throw new ActivityTypeError(
         `Activity Type ${values.activityType} is not defined in Controlling Area ${values.controllingArea} from ${values.validFrom}.`,
         'Reload the activity types; the period may already have been deleted.',
+      );
+    }
+
+    // Activity rates planned against this type are usage (SCR-044): the
+    // count SCR-043 promised this judge, now standing against deletion.
+    const [rateCount] = await tx
+      .select({ n: count() })
+      .from(activityRate)
+      .where(and(
+        eq(activityRate.client, client),
+        eq(activityRate.controllingArea, values.controllingArea),
+        eq(activityRate.activityType, values.activityType),
+      ));
+    if ((rateCount?.n ?? 0) > 0) {
+      throw new ActivityTypeError(
+        `Activity Type ${values.activityType} carries ${rateCount?.n} activity rate row${rateCount?.n === 1 ? '' : 's'} and cannot be deleted.`,
+        'Delete the planned rates first (KP26), or lock the activity type for posting instead; the type keeps its plan and stops being offered to new pricing.',
       );
     }
 

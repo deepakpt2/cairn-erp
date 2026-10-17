@@ -1,5 +1,6 @@
 'use client';
 
+import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type {
@@ -7,9 +8,11 @@ import type {
   PlanningContext,
 } from '../../../modules/foundation/activity-rate-definition';
 import type { CostCenterArea } from '../../../modules/foundation/cost-center-definition';
-
-const INERT_NOTE =
-  'Stage 1 of 5: this screen is inert — the activity rate table and the matrix write arrive in the following stages.';
+import {
+  deleteActivityRateAction,
+  saveActivityRatesAction,
+  type ActivityRateActionState,
+} from './actions';
 
 export interface RateSelection {
   area: string;
@@ -19,6 +22,103 @@ export interface RateSelection {
   type: string;
 }
 
+function RequiredMark() {
+  return (
+    <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
+  );
+}
+
+function Message({ state }: { state: ActivityRateActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
+}
+
+function DeleteDialog({
+  selection,
+  period,
+}: {
+  selection: RateSelection;
+  period: number;
+}) {
+  const [state, formAction, pending] = useActionState<ActivityRateActionState, FormData>(
+    deleteActivityRateAction,
+    { ok: true },
+  );
+  const label = `${selection.center} / ${selection.type} · period ${period}`;
+  return (
+    <details className="min-w-16">
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        Delete
+      </summary>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Delete ${label}`}
+        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+      >
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
+            <div>
+              <span className="code text-xs text-ink-faint">KP26 · {label}</span>
+              <p className="font-semibold">Delete {label}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-default min-h-11 sm:min-h-9"
+              onClick={(event) => {
+                const details = event.currentTarget.closest('details');
+                if (details) details.open = false;
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <section className="panel overflow-hidden p-4">
+            <form className="space-y-3" action={formAction}>
+              <input type="hidden" name="controllingArea" value={selection.area} />
+              <input type="hidden" name="planVersion" value={selection.version} />
+              <input type="hidden" name="fiscalYear" value={selection.year} />
+              <input type="hidden" name="period" value={period} />
+              <input type="hidden" name="costCenter" value={selection.center} />
+              <input type="hidden" name="activityType" value={selection.type} />
+              <p className="text-sm text-ink-soft">
+                Deleting removes this period&apos;s planned row. Nothing consumes rates yet, so no
+                usage count stands against deletion today; allocations will give it one when they
+                land.
+              </p>
+              <div>
+                <label htmlFor={`rate-delete-reason-${period}`} className="field-label">
+                  Reason<RequiredMark />
+                </label>
+                <textarea
+                  id={`rate-delete-reason-${period}`}
+                  name="reason"
+                  className="field-input"
+                  rows={2}
+                  maxLength={500}
+                  required
+                />
+              </div>
+              <Message state={state} />
+              <button type="submit" className="btn-primary" disabled={pending}>
+                Delete activity rate
+              </button>
+            </form>
+          </section>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 export default function ActivityRates({
   areas,
   selection,
@@ -26,6 +126,7 @@ export default function ActivityRates({
   types,
   context,
   rates,
+  canMaintain,
 }: {
   areas: CostCenterArea[];
   selection: RateSelection;
@@ -33,8 +134,14 @@ export default function ActivityRates({
   types: string[];
   context: PlanningContext | null;
   rates: ActivityRateRow[];
+  canMaintain: boolean;
 }) {
   const router = useRouter();
+  const [state, formAction, pending] = useActionState<ActivityRateActionState, FormData>(
+    saveActivityRatesAction,
+    { ok: true },
+  );
+  const [reason, setReason] = useState('');
   const push = (next: Partial<RateSelection>) => {
     const merged = { ...selection, ...next };
     const query = new URLSearchParams(
@@ -43,19 +150,11 @@ export default function ActivityRates({
     router.push(`/config/activity-rates?${query.toString()}`);
   };
   const byPeriod = new Map(rates.map((row) => [row.period, row]));
+  const ready =
+    context !== null && selection.center !== '' && selection.type !== '' && selection.version !== '';
 
   return (
     <div className="space-y-4">
-      <p role="note" className="border border-line bg-paper px-4 py-3 text-sm text-ink">
-        {INERT_NOTE}
-      </p>
-      <p className="max-w-3xl text-sm text-ink-soft">
-        Activity prices are planned per cost centre, activity type, planning version, fiscal year
-        and fiscal period: a planned quantity in the type&apos;s unit, with a fixed and a variable
-        price component per price unit in the controlling area&apos;s currency. Validity is judged
-        per period against both masters; nothing calculates or allocates against these rows yet.
-      </p>
-
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-ink">Controlling area</span>
@@ -128,6 +227,20 @@ export default function ActivityRates({
         )}
       </div>
 
+      <form id="act-rate-form" action={formAction} className="hidden">
+        <input type="hidden" name="controllingArea" value={selection.area} />
+        <input type="hidden" name="planVersion" value={selection.version} />
+        <input type="hidden" name="fiscalYear" value={selection.year} />
+        <input type="hidden" name="costCenter" value={selection.center} />
+        <input type="hidden" name="activityType" value={selection.type} />
+        <input
+          type="hidden"
+          name="periods"
+          value={context ? context.periods.map((period) => period.period).join(',') : ''}
+        />
+        <input type="hidden" name="reason" value={reason} />
+      </form>
+
       <section className="panel overflow-hidden" aria-labelledby="act-rate-grid-title">
         <div className="panel-header">
           <h2 id="act-rate-grid-title" className="panel-title">Planned activity and prices by period</h2>
@@ -166,7 +279,9 @@ export default function ActivityRates({
                       </td>
                       <td>
                         <input
-                          disabled
+                          form="act-rate-form"
+                          name={`p${period.period}Quantity`}
+                          disabled={!canMaintain}
                           inputMode="decimal"
                           placeholder="0.000"
                           defaultValue={rate?.plannedQuantity ?? ''}
@@ -176,7 +291,9 @@ export default function ActivityRates({
                       </td>
                       <td>
                         <input
-                          disabled
+                          form="act-rate-form"
+                          name={`p${period.period}FixedPrice`}
+                          disabled={!canMaintain}
                           inputMode="decimal"
                           placeholder="0.00"
                           defaultValue={rate?.fixedPrice ?? ''}
@@ -186,7 +303,9 @@ export default function ActivityRates({
                       </td>
                       <td>
                         <input
-                          disabled
+                          form="act-rate-form"
+                          name={`p${period.period}VariablePrice`}
+                          disabled={!canMaintain}
                           inputMode="decimal"
                           placeholder="0.00"
                           defaultValue={rate?.variablePrice ?? ''}
@@ -196,7 +315,9 @@ export default function ActivityRates({
                       </td>
                       <td>
                         <input
-                          disabled
+                          form="act-rate-form"
+                          name={`p${period.period}PriceUnit`}
+                          disabled={!canMaintain}
                           inputMode="numeric"
                           defaultValue={rate?.priceUnit ?? 1}
                           className="w-16 rounded-none border border-line bg-paper px-2 py-1 text-sm text-ink"
@@ -204,9 +325,11 @@ export default function ActivityRates({
                         />
                       </td>
                       <td>
-                        <button type="button" disabled className="text-sm text-ink-soft">
-                          Delete
-                        </button>
+                        {canMaintain && rate ? (
+                          <DeleteDialog selection={selection} period={period.period} />
+                        ) : (
+                          '—'
+                        )}
                       </td>
                     </tr>
                   );
@@ -215,20 +338,34 @@ export default function ActivityRates({
             </table>
           </div>
         )}
-        <div className="space-y-2 p-4">
-          <button
-            type="button"
-            disabled
-            className="rounded-none border border-line bg-paper px-4 py-2 text-sm font-medium text-ink"
-          >
-            Save plan
-          </button>
-          <p className="text-xs text-ink-soft">
-            A reason is required on every write (later stages). Prices are in the controlling
-            area&apos;s currency; whether price components may be entered follows the activity
-            type&apos;s price indicator.
-          </p>
-        </div>
+        {canMaintain && ready && (
+          <div className="space-y-3 p-4">
+            <div className="max-w-xl">
+              <label htmlFor="act-rate-reason" className="field-label">
+                Reason<RequiredMark />
+              </label>
+              <textarea
+                id="act-rate-reason"
+                className="field-input"
+                rows={2}
+                maxLength={500}
+                required
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </div>
+            <Message state={state} />
+            <button type="submit" form="act-rate-form" className="btn-primary" disabled={pending}>
+              Save plan
+            </button>
+            <p className="text-xs text-ink-soft">
+              Prices are in the controlling area&apos;s currency, per the price unit shown. Whether
+              price components may be entered follows the activity type&apos;s price indicator:
+              manual indicators keep them, automatic indicators refuse them until a calculation
+              exists to own the price. Every period cell in view is saved with the act.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

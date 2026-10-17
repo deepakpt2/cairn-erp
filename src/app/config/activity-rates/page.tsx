@@ -97,6 +97,7 @@ export default async function ActivityRatesPage({
         types={distinctTypes(types)}
         context={context}
         rates={rates}
+        canMaintain={canMaintain}
       />
     </div>
   );
