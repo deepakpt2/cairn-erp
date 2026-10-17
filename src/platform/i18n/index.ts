@@ -1830,6 +1830,10 @@ const en: Catalogue = {
   'houseBank.iban': 'IBAN',
   'houseBank.ibanHint': 'Optional. Up to thirty-four characters, for accounts identified by IBAN.',
   'houseBank.currency': 'Currency',
+  'houseBank.chooseCurrency': 'Choose currency',
+  'houseBank.chooseGlAccount': 'Choose G/L account',
+  'houseBank.deleteBlocked':
+    'This house bank has {count} bank account(s) and cannot be deleted. Delete the accounts first.',
   'houseBank.glAccount': 'G/L Account',
   'houseBank.glHint': 'An asset balance-sheet account of this company code\'s chart of accounts.',
   'houseBank.reason': 'Reason',
@@ -1849,11 +1853,10 @@ const en: Catalogue = {
   'houseBank.empty': 'No house banks are defined for this company code.',
   'houseBank.emptyAccounts': 'No bank accounts are defined under this house bank.',
   'houseBank.selectHouseBank': 'Select a house bank above to maintain its accounts.',
-  'houseBank.inert':
-    'This screen is being built. Defining house banks becomes available once the house bank ' +
-    'tables and their write path are in place; nothing entered here is saved yet.',
   'houseBank.created': 'House Bank {key} defined for {company}.',
   'houseBank.changed': 'House Bank {key} for {company} updated.',
+  'houseBank.changeAccountsNote':
+    'The {count} bank account(s) under it now name the new bank.',
   'houseBank.unchanged': 'House Bank {key} for {company} already stands as shown; nothing was changed.',
   'houseBank.deleted': 'House Bank {key} for {company} deleted.',
   'houseBank.accountCreated': 'Bank Account {account} defined under {key}.',

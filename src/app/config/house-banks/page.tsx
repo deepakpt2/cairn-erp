@@ -5,7 +5,9 @@ import { t } from '@/platform/i18n';
 import {
   ACTIVITY,
   listBankChoices,
+  listGlAccountChoices,
   listHouseBankCompanies,
+  listHouseBankCurrencies,
   listHouseBanks,
 } from '@/modules/foundation/house-bank-definition';
 import { HouseBanks } from './HouseBanks';
@@ -15,7 +17,7 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/house-banks';
 
 /**
- * FI12 Define House Banks (SCR-037 stage 1: the screen).
+ * FI12 Define House Banks (SCR-037; live since stage 3).
  *
  * A house bank is the tenant's own bank inside a company code; the accounts
  * under it carry the numbers money actually moves through. The bank it names
@@ -27,10 +29,12 @@ export default async function HouseBanksPage() {
   const client = session.user.client;
   const canMaintain = can(session, ACTIVITY);
 
-  const [houseBanks, companies, banks] = await Promise.all([
+  const [houseBanks, companies, banks, currencies, glAccountChoices] = await Promise.all([
     listHouseBanks(client),
     listHouseBankCompanies(client),
     listBankChoices(client),
+    listHouseBankCurrencies(client),
+    listGlAccountChoices(client),
   ]);
 
   return (
@@ -64,6 +68,8 @@ export default async function HouseBanksPage() {
         houseBanks={houseBanks}
         companies={companies}
         banks={banks}
+        currencies={currencies}
+        glAccountChoices={glAccountChoices}
         canMaintain={canMaintain}
       />
     </div>
