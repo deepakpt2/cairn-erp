@@ -1769,6 +1769,43 @@ const en: Catalogue = {
   'taxCode.unexpected': 'The tax code could not be saved.',
   'taxCode.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'bank.title': 'Define Banks',
+  'bank.subtitle':
+    'The banks a house bank names, held once for every tenant: the bank country and key a house ' +
+    'bank refers to, with the name, city and SWIFT code it displays. A bank is defined here once ' +
+    'and read by every tenant; it can be deleted only while no house bank names it.',
+  'bank.houseBanksLink': 'House banks',
+  'bank.newTitle': 'New bank',
+  'bank.gridTitle': 'Banks',
+  'bank.country': 'Bank Country',
+  'bank.chooseCountry': 'Choose country',
+  'bank.key': 'Bank Key',
+  'bank.keyHint': 'The national bank identifier within its country, up to fifteen letters or digits.',
+  'bank.name': 'Bank Name',
+  'bank.namePlaceholder': 'National Bank of Kuwait',
+  'bank.city': 'City',
+  'bank.swift': 'SWIFT / BIC',
+  'bank.swiftHint': 'Optional. Eight or eleven characters.',
+  'bank.reason': 'Reason',
+  'bank.create': 'Create bank',
+  'bank.change': 'Change',
+  'bank.save': 'Save bank',
+  'bank.delete': 'Delete',
+  'bank.deleteNote':
+    'Deleting removes the bank from the master for every tenant. It is refused while any house ' +
+    'bank names this bank; the house bank must first be pointed elsewhere or deleted.',
+  'bank.actions': 'Actions',
+  'bank.empty': 'No banks are defined in the bank master.',
+  'bank.inert':
+    'This screen is being built. Defining banks becomes available once the bank master table ' +
+    'and its write path are in place; nothing entered here is saved yet.',
+  'bank.created': 'Bank {key} for {country} defined.',
+  'bank.changed': 'Bank {key} for {country} updated.',
+  'bank.unchanged': 'Bank {key} for {country} already stands as shown; nothing was changed.',
+  'bank.deleted': 'Bank {key} for {country} deleted from the bank master.',
+  'bank.unexpected': 'The bank could not be saved.',
+  'bank.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
