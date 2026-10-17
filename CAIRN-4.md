@@ -1213,6 +1213,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.330 B-314 — SCR-043 / KL01 stage 3: the write `STAGE PUBLISHED`
+
+**The services.** `saveActivityType`, `setActivityTypePostingLock` and `deleteActivityType` in `src/modules/foundation/activity-type-definition.ts`, in the KS01 period shape. The key (controlling area, activity type, valid from) is immutable; create over a standing key refuses naming Change and a change to a missing key refuses naming Create. The activity unit is judged against the global unit_of_measure table on existence (any standing unit, SAP parity), the two behaviour digits against their stored catalogues, and the valid cost-centre categories against the KS01 catalogue — stored as the canonical subset so two screens cannot record one applicability two ways, blank meaning all categories. The validity span is judged against every sibling period, the overlap refusal naming the period it collides with, while valid to may be re-set so long as it still overlaps none.
+
+**The audit.** One change document per write with a mandatory reason; the unit, the category, the price indicator and the lock state security-relevant, since together they decide what a price will be computed from when rates arrive. Locking is its own act; deletion is hard and — today — unconditional: nothing prices or allocates against these rows yet, so there is nothing to count, and the screen states plainly that SCR-044's rates will give the judge its count. The first successful write of any kind completes `CFG.COST.ACTIVITYTYPE.DEFINE` (prerequisite `CFG.COST.COSTCENTER.DEFINE`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (the new screen compiled); suite **1151 tests across 139 files**. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Cost.** Measured: 15:53 in to 15:56 — **3 minutes** of a 39-minute box.
+
+**Not accepted.** The capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain; the write is published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1291,6 +1305,7 @@ recorded change, date and reason stated.
 | 2.129 | 2026-10-17 | **The SCR-041 hierarchy deferral closed on the KS01 screen (B-311, §26.327).** The deferred hierarchy area arrives as display, not as a field: the KS01 periods grid now shows each period's standard-hierarchy node from the SCR-042 assignments (Not placed until placed), read-only, placement still maintained only on the hierarchy screen. The thirteenth cost-centre test pins both states; the `cost-centers` browser target passes unchanged on the production build. Suite 1151 tests across 139 files, typecheck and `lint:ip` clean. Cost measured at 4 minutes. | Agent |
 | 2.130 | 2026-10-17 | **SCR-043 / KL01 contract confirmed and stage 1 (the screen) published (B-312, §26.328; R-92).** SAP parity taken on all three vocabulary forks — the category and price-indicator digits stored as the reference stores them with word labels displayed, any standing unit judged on existence, and valid cost-centre categories attached as a canonical subset — plus the KS01 lifecycle (delete and posting lock) and its period shape. Stage 1 publishes `/config/activity-types` inert: the four-part period definition, the digit catalogues and subset helpers, the area master over the create form fed by the global units table, and the catalogue keys. Typecheck, build (route 1.9 kB) and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
 | 2.131 | 2026-10-17 | **SCR-043 / KL01 stage 2: the table (B-313, §26.329).** Migrations `0053_activity_type.sql` and `9036_..._policies.sql` create the period registry (15 columns, four-part key, nine constraints including both digit vocabularies; forced RLS, four grants) on `cairn_b210` (91 migrations). Typecheck clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
+| 2.132 | 2026-10-17 | **SCR-043 / KL01 stage 3: the write (B-314, §26.330).** `saveActivityType`, `setActivityTypePostingLock` and `deleteActivityType` and the live screen: the period key immutable, the unit judged on existence against the global units table, both behaviour digits against their catalogues, the valid categories stored as the canonical subset, the validity span judged against every sibling period — unit, category, price and lock security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
