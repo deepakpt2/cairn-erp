@@ -26,16 +26,16 @@ import {
 } from '@/modules/foundation/profit-center-hierarchy';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
-const TEST_ACTOR = 'SCR046_STAGE5';
-const REASON = 'SCR-046 automated backend test';
+const TEST_ACTOR = 'SCR047A_STAGE5';
+const REASON = 'SCR-047a automated backend test';
 const AREA = 'A000';
-const CENTRE_REASON = 'SCR-046 automated backend test';
+const CENTRE_REASON = 'SCR-047a automated backend test';
 
 let tenant: TestTenant | undefined;
 let prerequisiteTenant: TestTenant | undefined;
 
 function fixture(): TestTenant {
-  if (!tenant) throw new Error('SCR-046 stage 5 tenant fixture was not initialized.');
+  if (!tenant) throw new Error('SCR-047a stage 5 tenant fixture was not initialized.');
   return tenant;
 }
 
@@ -97,7 +97,7 @@ function node(nodeKey: string, overrides: Record<string, unknown> = {}) {
 }
 
 beforeAll(async () => {
-  tenant = await createTenant('scr046-ksh1-stage5');
+  tenant = await createTenant('scr047a-ksh1-stage5');
   const { client } = fixture();
   await setActivity(client, 'CFG.COST.CONTROLLINGAREA.DEFINE', 'COMPLETED');
   await setActivity(client, 'CFG.COST.PROFITCENTER.DEFINE', 'COMPLETED');
@@ -106,7 +106,7 @@ beforeAll(async () => {
   await standPeriod(client, 'CC2000');
   await standPeriod(client, 'CC3000');
 
-  prerequisiteTenant = await createTenant('scr046-ksh1-prereq');
+  prerequisiteTenant = await createTenant('scr047a-ksh1-prereq');
 });
 
 afterAll(async () => {
@@ -115,7 +115,7 @@ afterAll(async () => {
   await closeDb();
 });
 
-describe('profit centre hierarchy (SCR-046)', () => {
+describe('profit centre hierarchy (SCR-047a)', () => {
   it('resolves group members in display order, exclusions removing', () => {
     const members = resolveGroupMembers(
       ['CC1000', 'CC1500', 'CC2000', 'CC3000'],

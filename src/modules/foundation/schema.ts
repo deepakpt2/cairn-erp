@@ -902,7 +902,7 @@ export const costCenterGroupLeaf = pgTable(
   ],
 );
 
-/** Profit centre hierarchy — SCR-046 / R-95 (definition; tables created in stage 2). */
+/** Profit centre hierarchy — SCR-047a / R-95 (definition; tables created in stage 2). */
 export const profitCenterHierarchy = pgTable(
   'profit_center_hierarchy',
   {

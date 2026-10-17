@@ -15,7 +15,7 @@ export { listCostCenterAreas };
 export type { CostCenterArea };
 
 /**
- * Profit centre hierarchy — the read side (SCR-046 stage 1).
+ * Profit centre hierarchy — the read side (SCR-047a stage 1).
  *
  * The deferred step of KE51 (R-94), taken at SAP parity on all four
  * forks (R-95) in the exact shape SCR-042 proved for cost centres: the
@@ -245,7 +245,7 @@ import { configActivityStatus } from '../../platform/tables/registry';
 import { controllingArea } from './schema';
 
 /**
- * The write (SCR-046 stage 3; contract R-95).
+ * The write (SCR-047a stage 3; contract R-95).
  *
  * Nine acts over the two structures. The standard hierarchy: define its
  * header (one per controlling area), define and change nodes, delete

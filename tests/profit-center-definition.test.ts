@@ -329,7 +329,7 @@ describe('profit centre definition (SCR-045)', () => {
     ).toBe(true);
   });
 
-  it('shows the hierarchy placement from SCR-046 assignments', async () => {
+  it('shows the hierarchy placement from SCR-047a assignments', async () => {
     const { client } = fixture();
     const beforeRows = await listProfitCenters(client, 'A000');
     expect(beforeRows.find((row) => row.profitCenter === 'PC100' && row.validFrom === '2026-01-01')?.hierarchyNode).toBeNull();

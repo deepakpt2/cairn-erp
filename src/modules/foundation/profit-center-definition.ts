@@ -45,7 +45,7 @@ export interface ProfitCenterRow {
   responsibleUser: string | null;
   segment: string | null;
   isPostingLocked: boolean;
-  /** The SCR-046 standard-hierarchy node this period is placed on, if any. */
+  /** The SCR-047a standard-hierarchy node this period is placed on, if any. */
   hierarchyNode: string | null;
 }
 

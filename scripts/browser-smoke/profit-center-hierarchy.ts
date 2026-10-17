@@ -14,7 +14,7 @@ const REASON = 'Browser acceptance run';
 const CENTRE = 'PC900';
 
 /**
- * SCR-046 / KCH1·KCH5N browser acceptance: defining the profit centre hierarchy.
+ * SCR-047a / KCH1·KCH5N browser acceptance: defining the profit centre hierarchy.
  *
  * The journey follows the two structures. The standard hierarchy: its
  * header defined, a root and a child node defined under it, the fixture
@@ -33,7 +33,7 @@ const CENTRE = 'PC900';
 export async function profitCenterHierarchyKch1(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
-  console.log('SCR-046 KCH1/KCH5N: verify the workbench route, the hierarchy header, nodes, exclusive placement, blocked deletion, the ranged group, and unassign');
+  console.log('SCR-047a KCH1/KCH5N: verify the workbench route, the hierarchy header, nodes, exclusive placement, blocked deletion, the ranged group, and unassign');
 
   // The fixture: prerequisite activities stand completed, this activity
   // ready to run, and one profit centre period standing in the delivered
@@ -186,7 +186,7 @@ export async function profitCenterHierarchyKch1(ctx: Context) {
   );
   console.log('  ✓ the placement is removed and documented; the centre stands');
 
-  console.log('SCR-046 KCH1/KCH5N passed: workbench route, header, nodes, exclusivity, blocked deletion, ranged group, unassign');
+  console.log('SCR-047a KCH1/KCH5N passed: workbench route, header, nodes, exclusivity, blocked deletion, ranged group, unassign');
 }
 
 async function controllingAreaOf(client: string): Promise<string> {

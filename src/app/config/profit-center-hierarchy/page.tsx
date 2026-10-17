@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/profit-center-hierarchy';
 
 /**
- * Cost centre hierarchy (SCR-046 / KCH1 · KCH5N).
+ * Cost centre hierarchy (SCR-047a / KCH1 · KCH5N).
  *
  * The standard hierarchy is the area's one tree, with profit centre periods
  * placed into nodes; alternative groups stand beside it, resolved from
