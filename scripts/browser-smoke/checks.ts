@@ -40,6 +40,7 @@ import { glAccountMasterFs00 } from './gl-accounts';
 import { postingPeriodVariantsObbo } from './posting-period-variants';
 import { postingPeriodVariantAssignmentObbp } from './posting-period-variant-assignment';
 import { exchangeRatesOb08 } from './exchange-rates';
+import { taxCodesFtxp } from './tax-codes';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4853,6 +4854,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'posting-period-variants': postingPeriodVariantsObbo,
   'posting-period-variant-assignment': postingPeriodVariantAssignmentObbp,
   'exchange-rates': exchangeRatesOb08,
+  'tax-codes': taxCodesFtxp,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

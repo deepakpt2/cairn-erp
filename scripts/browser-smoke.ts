@@ -189,6 +189,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'posting-period-variants') return '/config/posting-period-variants';
   if (target.id === 'posting-period-variant-assignment') return '/config/posting-period-variants/assign-company-codes';
   if (target.id === 'exchange-rates') return '/config/exchange-rates';
+  if (target.id === 'tax-codes') return '/config/tax-codes';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
