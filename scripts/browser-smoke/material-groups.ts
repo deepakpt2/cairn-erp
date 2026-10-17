@@ -96,10 +96,10 @@ export async function materialGroupsOmsf(ctx: Context) {
     has: page.getByRole('cell', { name: 'BGRP', exact: true }),
   });
   await bgrpRow.getByRole('button', { name: 'Change', exact: true }).click();
-  await section.locator('#mg-name').fill('Browser Group Changed');
+  await section.locator('#mg-name').fill('Browser Group V2');
   await section.locator('#mg-reason').fill(REASON);
   await section.getByRole('button', { name: 'Save changes', exact: true }).click();
-  await section.getByRole('cell', { name: 'Browser Group Changed', exact: true }).waitFor();
+  await section.getByRole('cell', { name: 'Browser Group V2', exact: true }).waitFor();
   console.log('  ✓ the short description changes while the key stands');
 
   // ── 4. The used RAW group refuses deletion ───────────────────────────────
@@ -132,7 +132,7 @@ export async function materialGroupsOmsf(ctx: Context) {
     return { rows: rows as unknown as Record<string, unknown>[], history };
   });
   assert.equal(evidence.rows.length, 1, 'The created group stands exactly once.');
-  assert.equal(evidence.rows[0].name, 'Browser Group Changed');
+  assert.equal(evidence.rows[0].name, 'Browser Group V2');
   assert.equal(evidence.rows[0].is_active, false, 'The deactivation was stored.');
   assert.ok(evidence.history.length >= 3, 'Creation, change and deactivation are all documented.');
   console.log('  ✓ the database remembers the creation, the change and the deactivation');
