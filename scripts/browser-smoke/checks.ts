@@ -38,6 +38,7 @@ import { fiscalYearVariantAssignmentOb37 } from './fiscal-year-variant-assignmen
 import { fiscalYearVariantsOb29 } from './fiscal-year-variants';
 import { glAccountMasterFs00 } from './gl-accounts';
 import { postingPeriodVariantsObbo } from './posting-period-variants';
+import { postingPeriodVariantAssignmentObbp } from './posting-period-variant-assignment';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4849,6 +4850,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'fiscal-year-variants': fiscalYearVariantsOb29,
   'gl-accounts': glAccountMasterFs00,
   'posting-period-variants': postingPeriodVariantsObbo,
+  'posting-period-variant-assignment': postingPeriodVariantAssignmentObbp,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

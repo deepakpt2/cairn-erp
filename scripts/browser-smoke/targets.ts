@@ -20,6 +20,7 @@ export const TARGETS = [
   { id: 'fiscal-year-variant-assignment', client: 'T965', label: 'SCR-030 OB37 fiscal year variant assignment, Controlling Area conflict, active-only choice and the stale-row guard' },
   { id: 'fiscal-year-variants', client: 'T966', label: 'SCR-029 OB29 fiscal year variant registry, derived and maintained period lists, retirement guards' },
   { id: 'posting-period-variants', client: 'T967', label: 'SCR-031 OBBO posting period variant registry, the interval set a variant is born with, deletion guards and audit' },
+  { id: 'posting-period-variant-assignment', client: 'T963', label: 'SCR-033 OBBP posting period variant assignment, clearing before and after posting and the stale-row guard' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

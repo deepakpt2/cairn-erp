@@ -187,6 +187,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'fiscal-year-variant-assignment') return '/config/fiscal-year-variants/assign-company-codes';
   if (target.id === 'fiscal-year-variants') return '/config/fiscal-year-variants';
   if (target.id === 'posting-period-variants') return '/config/posting-period-variants';
+  if (target.id === 'posting-period-variant-assignment') return '/config/posting-period-variants/assign-company-codes';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';

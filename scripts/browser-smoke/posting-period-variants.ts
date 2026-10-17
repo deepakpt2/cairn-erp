@@ -254,7 +254,7 @@ export async function postingPeriodVariantsObbo(ctx: Context) {
   for (const company of await storedCompanyCodes(CLIENT, SEEDED)) {
     assert.ok(refusal.includes(company), `The refusal names Company Code ${company}.`);
   }
-  assert.match(refusal, /CFG\.ORG\.COMPANYCODE\.DEFINE/, 'The refusal names the activity that reassigns them.');
+  assert.match(refusal, /CFG\.FIN\.PPV\.ASSIGN/, 'The refusal names the activity that reassigns them.');
   assert.equal(
     await deleteDialog.getByRole('button', { name: 'Delete variant', exact: true }).isDisabled(),
     true,
