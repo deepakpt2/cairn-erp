@@ -489,16 +489,18 @@ export async function savePostingPeriodVariant(
 }
 
 /**
- * Delete a posting period variant (owner package, 2026-10-17: deletion is blocked while
- * intervals exist, reversing the earlier rule that intervals were removed with it).
+ * Delete a posting period variant, with the intervals it owns.
  *
- * Two things may not be taken with it. A Company Code's posting control, so a variant
- * anything posts against is refused and the refusal names every Company Code holding it.
- * And the intervals it holds: they are the open/close rules the books run on, so they must
- * be removed first and on purpose, never as a side effect of deleting their owner. A
- * variant that clears both checks holds nothing, and deleting it removes one row.
+ * The intervals go with it because they are its children: an interval row is meaningless
+ * without the variant it belongs to, and leaving them behind is how a registry ends up
+ * holding rows no screen can show. What may not go with it is a Company Code's posting
+ * control, so a variant anything posts against is refused and the refusal names every
+ * Company Code holding it. (An interval-count block stood here briefly under the owner's
+ * 2026-10-17 package and was removed the same day: OB52 opens and closes periods and
+ * deletes nothing, so no variant could ever have cleared it.)
  *
- * There is no undelete; the change document is what makes the deletion reviewable.
+ * There is no undelete. The change document carries the whole interval set that was removed,
+ * which is what makes the deletion reviewable rather than merely recorded.
  */
 export async function deletePostingPeriodVariant(
   raw: PostingPeriodVariantDeleteInput,
@@ -545,18 +547,10 @@ export async function deletePostingPeriodVariant(
       );
     }
 
-    const intervals = await tx
-      .select({ accountType: postingPeriodRule.accountType })
-      .from(postingPeriodRule)
-      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)));
-
-    if (intervals.length > 0) {
-      throw new PostingPeriodVariantError(
-        `Posting Period Variant ${variant} cannot be deleted: ${intervals.length} ` +
-          `${intervals.length === 1 ? 'interval still exists' : 'intervals still exist'} for it.`,
-        'Remove the intervals it holds first, then delete this one.',
-      );
-    }
+    const removed = await tx
+      .delete(postingPeriodRule)
+      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)))
+      .returning();
 
     await tx
       .delete(postingPeriodVariant)
@@ -572,12 +566,16 @@ export async function deletePostingPeriodVariant(
       before: {
         variant,
         name: existing.name,
+        intervalCount: removed.length,
+        intervals: describeIntervalSet(removed),
       },
       fieldLabels: {
         variant: 'Posting Period Variant',
         name: 'Description',
+        intervalCount: 'Intervals removed',
+        intervals: 'Interval set',
       },
-      securityRelevantFields: ['variant'],
+      securityRelevantFields: ['variant', 'intervals'],
     });
     if (!documentId) {
       throw new PostingPeriodVariantError(
@@ -590,7 +588,7 @@ export async function deletePostingPeriodVariant(
       deleted: true,
       variant,
       name: existing.name,
-      intervalsRemoved: 0,
+      intervalsRemoved: removed.length,
       companyCodes: [],
     };
   });

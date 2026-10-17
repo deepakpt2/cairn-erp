@@ -8,8 +8,8 @@
  *
  * The intervals matter as much as the variant here. A posting period variant is not a label,
  * it is the set of intervals a Company Code posts against, so "created" means the variant row
- * and five interval rows that agree with the constant the screen renders, and "deleted" is
- * refused until those rows are removed first (owner package, 2026-10-17).
+ * and five interval rows that agree with the constant the screen renders, and "deleted" means
+ * both are gone.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { and, asc, eq } from 'drizzle-orm';
@@ -88,15 +88,6 @@ async function storedIntervals(client: string, variant: string) {
       .from(postingPeriodRule)
       .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant)))
       .orderBy(asc(postingPeriodRule.accountType)),
-  );
-}
-
-/** Interval rows have no removal screen yet, so a fixture strips them the direct way. */
-async function removeIntervals(client: string, variant: string) {
-  await withTenant(client, (tx) =>
-    tx
-      .delete(postingPeriodRule)
-      .where(and(eq(postingPeriodRule.client, client), eq(postingPeriodRule.variant, variant))),
   );
 }
 
@@ -366,29 +357,15 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
     await expect(attempt).rejects.toThrow(/is not defined in this tenant/);
   });
 
-  it('refuses to delete a variant while intervals still exist for it', async () => {
+  it('deletes an unreferenced variant with the intervals it owns, and files what went', async () => {
     const { client } = fixture();
     expect(await storedIntervals(client, 'ZP01')).toHaveLength(DEFAULT_INTERVALS.length);
-
-    const attempt = deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP01' });
-
-    await expect(attempt).rejects.toBeInstanceOf(PostingPeriodVariantError);
-    await expect(attempt).rejects.toThrow(/cannot be deleted: 5 intervals still exist for it/);
-    // The refusal leaves both the variant and its intervals exactly as they were.
-    await expect(storedVariant(client, 'ZP01')).resolves.not.toBeNull();
-    expect(await storedIntervals(client, 'ZP01')).toHaveLength(DEFAULT_INTERVALS.length);
-  });
-
-  it('deletes an unreferenced variant once its intervals are removed, and files what went', async () => {
-    const { client } = fixture();
-    await removeIntervals(client, 'ZP01');
-    expect(await storedIntervals(client, 'ZP01')).toHaveLength(0);
 
     const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'ZP01' });
 
     expect(deleted).toMatchObject({
       deleted: true, variant: 'ZP01', name: 'Renamed by the suite',
-      intervalsRemoved: 0, companyCodes: [],
+      intervalsRemoved: DEFAULT_INTERVALS.length, companyCodes: [],
     });
     expect(await storedVariant(client, 'ZP01')).toBeNull();
     expect(await storedIntervals(client, 'ZP01')).toHaveLength(0);
@@ -397,12 +374,15 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
     expect(removal).toBeDefined();
     expect(removal?.transactionCode).toBe(ACTIVITY);
     const byField = new Map(removal?.items.map((item) => [item.fieldName, item]) ?? []);
-    // A deletion files what was there against a null new value, so an auditor reads the key
+    // A deletion files what was there against a null new value, so an auditor reads the set
     // that was removed rather than only the fact of its removal.
     expect(byField.get('variant')?.oldValue).toBe('ZP01');
     expect(byField.get('variant')?.newValue).toBeNull();
     expect(byField.get('variant')?.isSecurityRelevant).toBe('true');
-    expect(byField.get('name')?.oldValue).toBe('Renamed by the suite');
+    // The variant was created from the defaults and its intervals were never edited, so the
+    // sentence filed here is the same one the create filed, in the same order.
+    expect(byField.get('intervals')?.oldValue).toBe(describeIntervalSet(DEFAULT_INTERVALS));
+    expect(byField.get('intervalCount')?.oldValue).toBe(String(DEFAULT_INTERVALS.length));
 
     // The registry reads back without it, and the seeded variant is untouched throughout.
     const remaining = await listPostingPeriodVariants(client);
@@ -416,7 +396,6 @@ describe('SCR-031 / OBBO — deleting a variant', () => {
   it('leaves the lower-case-keyed variant deletable too, and the tenant readable afterwards', async () => {
     const { client } = fixture();
 
-    await removeIntervals(client, 'ZP03');
     const deleted = await deletePostingPeriodVariant({ client, changedBy: ACTOR, variant: 'zp03' });
     expect(deleted.deleted).toBe(true);
 

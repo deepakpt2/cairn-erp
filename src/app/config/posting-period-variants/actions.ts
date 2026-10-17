@@ -113,7 +113,7 @@ export async function savePostingPeriodVariantAction(
 }
 
 /**
- * Delete a posting period variant the service has cleared for deletion.
+ * Delete a posting period variant with the intervals it owns.
  *
  * The confirmation cannot be rendered into the dialog that asked for it: the dialog lives in
  * the row the deletion removes. So it confirms through the registry's own banner instead, the
