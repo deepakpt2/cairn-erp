@@ -112,6 +112,8 @@ const en: Catalogue = {
   'workbench.column.kind': 'Kind',
   'workbench.column.activity': 'Activity',
   'workbench.open': 'Open',
+  'workbench.expandAll': 'Expand all',
+  'workbench.collapseAll': 'Collapse all',
   'workbench.screenPending': 'Screen pending',
   'workbench.enables': 'Enables',
   'workbench.kind.define': 'Define',

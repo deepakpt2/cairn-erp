@@ -19,6 +19,7 @@ export type WorkbenchActivity = {
 
 type Branch = {
   label: string;
+  segment: string;
   path: string;
   depth: number;
   branches: Map<string, Branch>;
@@ -26,19 +27,93 @@ type Branch = {
 };
 
 /**
+ * Human names for the code segments the tree is built from. The code stays
+ * visible beside the name — it is the address other screens cite — but a
+ * reader classifies by the words, not by FIN or COA.
+ */
+const SEGMENT_LABELS: Record<string, string> = {
+  CFG: 'Configuration',
+  PLT: 'Platform',
+  ORG: 'Organization',
+  FIN: 'Financial Accounting',
+  COST: 'Controlling',
+  PROC: 'Procurement',
+  INV: 'Inventory',
+  PROD: 'Production',
+  SALES: 'Sales',
+  PEOPLE: 'People & Payroll',
+  CLIENT: 'Clients',
+  MAIL: 'Mail',
+  NUMBERRANGE: 'Number Ranges',
+  ROLE: 'Roles',
+  USER: 'Users',
+  COMPANYCODE: 'Company Codes',
+  PLANT: 'Plants',
+  STORAGELOC: 'Storage Locations',
+  SALESORG: 'Sales Organizations',
+  DISTCHANNEL: 'Distribution Channels',
+  DIVISION: 'Divisions',
+  SALESAREA: 'Sales Areas',
+  COA: 'Chart of Accounts',
+  GLACCOUNT: 'G/L Accounts',
+  FYV: 'Fiscal Year Variants',
+  PPV: 'Posting Period Variants',
+  DOCTYPE: 'Document Types',
+  TOLERANCE: 'Tolerance Groups',
+  ACCTDET: 'Account Determination',
+  EXRATE: 'Exchange Rates',
+  TAXCODE: 'Tax Codes',
+  BANK: 'Banks',
+  HOUSEBANK: 'House Banks',
+  PAYTERMS: 'Payment Terms',
+  PAYMENTMETHOD: 'Payment Methods',
+  CREDIT: 'Credit Management',
+  INTERCOMPANY: 'Intercompany',
+  CONTROLLINGAREA: 'Controlling Areas',
+  COSTCENTER: 'Cost Centres',
+  COSTCENTERHIER: 'Cost Centre Hierarchy',
+  ACTIVITYTYPE: 'Activity Types',
+  ACTIVITYRATE: 'Activity Rates',
+  PROFITCENTER: 'Profit Centres',
+  PURGROUP: 'Purchasing Groups',
+  PURORG: 'Purchasing Organizations',
+  RELEASE: 'Release Procedures',
+  MATERIALGROUP: 'Material Groups',
+  MATERIALTYPE: 'Material Types',
+  MOVETYPE: 'Movement Types',
+  WORKCENTER: 'Work Centres',
+  MRPCONTROLLER: 'MRP Controllers',
+  SCHEDULING: 'Scheduling',
+  LOTSIZE: 'Lot Sizing',
+  CONDITION: 'Conditions',
+  PRICING: 'Pricing',
+  DEDUCTION: 'Deductions',
+  PAYCOMPONENT: 'Pay Components',
+  RECORDTYPE: 'Record Types',
+};
+
+function segmentLabel(segment: string): string {
+  return SEGMENT_LABELS[segment] ?? segment.charAt(0) + segment.slice(1).toLowerCase();
+}
+
+/** How far one tree level steps in, in pixels. Deep enough to read at a glance. */
+const INDENT = 22;
+
+/**
  * The configuration workbench as a collapsible tree — CAIRN.md §7.1.
  *
- * The activity code is already a path: CFG.FIN.COA.COPY says that copying a chart belongs to the
- * chart of accounts, which belongs to finance, which belongs to configuration. Grouping by area
- * showed one of those four levels and left the rest to be read off the code, so a step that had
- * not been registered yet had nowhere to appear. The tree shows every level, which is what makes
- * the plan portable: a reader can see what a branch holds before opening it.
+ * The activity code is already a path: CFG.FIN.COA.COPY says that copying a
+ * chart belongs to the chart of accounts, which belongs to finance, which
+ * belongs to configuration. The tree shows every level of that path with a
+ * human name beside the segment, the leaves stepped in under their branch
+ * behind a guide rail, and each branch carrying its own completion count —
+ * so a reader can classify the whole plan, fold away what is not being
+ * worked on, and still scan one Status column across all of it.
  *
- * Branches start open. Nothing is hidden by default, and a reader who wants one branch collapses
- * it rather than hunting for the one that was closed.
- *
- * Leaves stay table rows in a single table, so the columns line up across the whole plan and a
- * reader can scan the Status column without following the tree.
+ * Branches start open. Nothing is hidden by default; folding is for the
+ * reader who has found their branch, and the header can fold or unfold the
+ * whole tree at once. Leaves stay table rows in a single table, so the
+ * columns line up across the whole plan.
  */
 export function WorkbenchTree({
   rows,
@@ -55,6 +130,7 @@ export function WorkbenchTree({
 
   const root = buildTree(rows);
   const visible = flatten(root, collapsed);
+  const allPaths = collectPaths(root);
 
   const toggle = (path: string) => {
     setCollapsed((current) => {
@@ -69,9 +145,25 @@ export function WorkbenchTree({
     <section className="panel overflow-hidden">
       <div className="panel-header">
         <h2 className="panel-title">{t('workbench.treeTitle')}</h2>
-        <span className="text-2xs text-ink-faint">
-          {t('workbench.treeHint', { total: String(rows.length), done: String(done.size) })}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-2xs text-ink-faint">
+            {t('workbench.treeHint', { total: String(rows.length), done: String(done.size) })}
+          </span>
+          <button
+            type="button"
+            className="btn btn-default min-h-7 px-2 py-0.5 text-2xs"
+            onClick={() => setCollapsed(new Set())}
+          >
+            {t('workbench.expandAll')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-default min-h-7 px-2 py-0.5 text-2xs"
+            onClick={() => setCollapsed(new Set(allPaths))}
+          >
+            {t('workbench.collapseAll')}
+          </button>
+        </div>
       </div>
       <table className="grid-table">
         <thead>
@@ -88,26 +180,13 @@ export function WorkbenchTree({
         <tbody>
           {visible.map((node) =>
             node.kind === 'branch' ? (
-              <tr key={`branch:${node.branch.path}`} className="bg-sunken" data-branch={node.branch.path}>
-                <td colSpan={7} className="px-2 py-1">
-                  <button
-                    type="button"
-                    aria-expanded={!collapsed.has(node.branch.path)}
-                    onClick={() => toggle(node.branch.path)}
-                    className="flex min-h-9 w-full items-center gap-2 text-start text-xs font-semibold tracking-wide text-ink-soft hover:text-accent"
-                  >
-                    <span aria-hidden="true" className="w-3 text-center">
-                      {collapsed.has(node.branch.path) ? '▸' : '▾'}
-                    </span>
-                    <span style={{ paddingInlineStart: `${node.branch.depth * 12}px` }}>
-                      {node.branch.label}
-                    </span>
-                    <span className="text-2xs font-normal text-ink-faint">
-                      {countDone(node.branch, done)} / {countActivities(node.branch)}
-                    </span>
-                  </button>
-                </td>
-              </tr>
+              <BranchRow
+                key={`branch:${node.branch.path}`}
+                branch={node.branch}
+                collapsed={collapsed.has(node.branch.path)}
+                done={done}
+                onToggle={() => toggle(node.branch.path)}
+              />
             ) : (
               <ActivityRow
                 key={node.activity.code}
@@ -121,6 +200,89 @@ export function WorkbenchTree({
         </tbody>
       </table>
     </section>
+  );
+}
+
+function BranchRow({
+  branch,
+  collapsed,
+  done,
+  onToggle,
+}: {
+  branch: Branch;
+  collapsed: boolean;
+  done: Set<string>;
+  onToggle: () => void;
+}) {
+  const total = countActivities(branch);
+  const finished = countDone(branch, done);
+  const percent = total === 0 ? 0 : Math.round((finished / total) * 100);
+  const depth = branch.depth;
+  return (
+    <tr
+      data-branch={branch.path}
+      className={
+        depth === 1
+          ? 'bg-sunken'
+          : depth === 2
+            ? 'bg-sunken/55'
+            : 'bg-surface'
+      }
+    >
+      <td colSpan={7} className="px-2 py-0">
+        <div
+          className="flex items-stretch gap-2"
+          style={{ paddingInlineStart: `${(depth - 1) * INDENT}px` }}
+        >
+          <span
+            aria-hidden="true"
+            className={`my-1 w-1 shrink-0 ${depth === 1 ? 'bg-accent' : depth === 2 ? 'bg-line-strong' : 'bg-line'}`}
+          />
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${branch.label}`}
+            onClick={onToggle}
+            className="flex min-h-10 flex-1 items-center gap-2.5 py-1 text-start hover:text-accent"
+          >
+            <span
+              aria-hidden="true"
+              className={`flex h-6 w-6 shrink-0 items-center justify-center border text-xs transition-transform ${
+                collapsed ? 'border-line-strong bg-surface text-ink-soft' : 'border-accent bg-accent text-white'
+              }`}
+              style={collapsed ? undefined : { transform: 'rotate(90deg)' }}
+            >
+              ▸
+            </span>
+            <span
+              className={
+                depth === 1
+                  ? 'text-sm font-bold tracking-tight text-ink'
+                  : depth === 2
+                    ? 'text-sm font-semibold text-ink'
+                    : 'text-sm font-medium text-ink-soft'
+              }
+            >
+              {branch.label}
+            </span>
+            <span className="code text-2xs font-normal text-ink-faint">{branch.path}</span>
+            <span className="ms-auto flex shrink-0 items-center gap-2">
+              <span className="hidden h-1.5 w-24 bg-line sm:block" aria-hidden="true">
+                <span
+                  className={`block h-full ${finished === total ? 'bg-signal-ok' : 'bg-accent'}`}
+                  style={{ width: `${percent}%` }}
+                />
+              </span>
+              <span
+                className={`chip ${finished === total && total > 0 ? 'chip-ok' : 'chip-neutral'}`}
+              >
+                {finished} / {total}
+              </span>
+            </span>
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -144,17 +306,20 @@ function ActivityRow({
 
   return (
     <tr>
-      <td className="tabular text-ink-faint" style={{ paddingInlineStart: `${depth * 12 + 8}px` }}>
-        {item.sequence}
-      </td>
+      <td className="tabular text-ink-faint">{item.sequence}</td>
       <td>
         <span className={`chip ${item.activity_kind === 'DEFINE' ? 'chip-info' : 'chip-neutral'}`}>
           {item.activity_kind === 'DEFINE' ? t('workbench.kind.define') : t('workbench.kind.assign')}
         </span>
       </td>
       <td>
-        <div className="font-medium">{item.title}</div>
-        <div className="code text-ink-faint">{item.code}</div>
+        <div
+          className="border-s-2 border-line ps-3"
+          style={{ marginInlineStart: `${Math.max(0, depth - 2) * INDENT}px` }}
+        >
+          <div className="font-medium">{item.title}</div>
+          <div className="code text-ink-faint">{item.code}</div>
+        </div>
       </td>
       <td className="text-ink-soft">{item.enables ?? '—'}</td>
       <td className="text-2xs text-ink-faint">{missing.length === 0 ? '—' : missing.join(', ')}</td>
@@ -188,7 +353,7 @@ function ActivityRow({
  * order the plan is meant to be read.
  */
 function buildTree(rows: WorkbenchActivity[]): Branch {
-  const root: Branch = { label: '', path: '', depth: 0, branches: new Map(), activities: [] };
+  const root: Branch = { label: '', segment: '', path: '', depth: 0, branches: new Map(), activities: [] };
   for (const row of rows) {
     const segments = row.code.split('.').filter(Boolean);
     const branchSegments = segments.slice(0, -1);
@@ -201,13 +366,32 @@ function buildTree(rows: WorkbenchActivity[]): Branch {
         node = existing;
         continue;
       }
-      const created: Branch = { label: segment, path, depth: index + 1, branches: new Map(), activities: [] };
+      const created: Branch = {
+        label: segmentLabel(segment),
+        segment,
+        path,
+        depth: index + 1,
+        branches: new Map(),
+        activities: [],
+      };
       node.branches.set(segment, created);
       node = created;
     }
     node.activities.push(row);
   }
   return root;
+}
+
+function collectPaths(root: Branch): string[] {
+  const paths: string[] = [];
+  const walk = (branch: Branch) => {
+    for (const child of branch.branches.values()) {
+      paths.push(child.path);
+      walk(child);
+    }
+  };
+  walk(root);
+  return paths;
 }
 
 type VisibleNode =
