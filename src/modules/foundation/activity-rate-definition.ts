@@ -471,6 +471,18 @@ export async function saveActivityRates(raw: ActivityRatesInput): Promise<{ chan
         .orderBy(asc(activityTypeTable.validFrom));
       void typePeriod;
 
+      // Automatic indicators (1, 2) leave the price to a calculation run
+      // this product does not have yet; entered components are refused.
+      if (
+        facts.priceIndicator !== '3' &&
+        (Number(entry.fixedPrice) !== 0 || Number(entry.variablePrice) !== 0)
+      ) {
+        throw new ActivityRateError(
+          `Activity Type ${values.activityType} carries price indicator ${facts.priceIndicator} (automatic) in period ${entry.period}; its prices are calculated, not entered.`,
+          'Plan the activity quantity and leave both price components at zero, or set the type to manual price entry (KL01, indicator 3).',
+        );
+      }
+
       const stored = {
         plannedQuantity: entry.plannedQuantity,
         fixedPrice: entry.fixedPrice,
