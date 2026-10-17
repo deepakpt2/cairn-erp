@@ -941,6 +941,50 @@ export const activityType = pgTable(
   ],
 );
 
+/** Activity rate planning — SCR-044 / R-93 (definition; table created in stage 2). */
+export const activityRate = pgTable(
+  'activity_rate',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    /** Planning version (at most three letters or digits); stands when first planned. */
+    planVersion: varchar('plan_version', { length: 3 }).notNull(),
+    fiscalYear: integer('fiscal_year').notNull(),
+    /** Fiscal period within the controlling area's fiscal year variant (1..16). */
+    period: smallint('period').notNull(),
+    costCenter: varchar('cost_center', { length: 10 }).notNull(),
+    activityType: varchar('activity_type', { length: 6 }).notNull(),
+    plannedQuantity: numeric('planned_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+    fixedPrice: numeric('fixed_price', { precision: 11, scale: 2 }).notNull().default('0'),
+    variablePrice: numeric('variable_price', { precision: 11, scale: 2 }).notNull().default('0'),
+    /** Prices are per this many activity units (>= 1). */
+    priceUnit: integer('price_unit').notNull().default(1),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.client, t.controllingArea, t.planVersion, t.fiscalYear, t.period, t.costCenter, t.activityType],
+    }),
+    check('activity_rate_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('activity_rate_version_format_ck', sql`${t.planVersion} ~ '^[A-Z0-9]{1,3}$'`),
+    check('activity_rate_year_ck', sql`${t.fiscalYear} between 1900 and 9999`),
+    check('activity_rate_period_ck', sql`${t.period} between 1 and 16`),
+    check('activity_rate_center_format_ck', sql`${t.costCenter} ~ '^[A-Z0-9]{1,10}$'`),
+    check('activity_rate_type_format_ck', sql`${t.activityType} ~ '^[A-Z0-9]{1,6}$'`),
+    check('activity_rate_quantity_ck', sql`${t.plannedQuantity} >= 0`),
+    check('activity_rate_fixed_price_ck', sql`${t.fixedPrice} >= 0`),
+    check('activity_rate_variable_price_ck', sql`${t.variablePrice} >= 0`),
+    check('activity_rate_price_unit_ck', sql`${t.priceUnit} >= 1`),
+    foreignKey({
+      name: 'activity_rate_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+  ],
+);
+
 /** Credit control area — shared credit limit boundary (D-029). */
 export const creditControlArea = pgTable(
   'credit_control_area',

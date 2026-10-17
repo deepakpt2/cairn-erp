@@ -1931,6 +1931,12 @@ const en: Catalogue = {
   'costCenter.title': 'Define Cost Centres',
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
   'actType.title': 'Define Activity Types',
+  'actRate.title': 'Plan Activity Prices',
+  'actRate.subtitle':
+    'Activity prices planned per cost centre, activity type, planning version, fiscal year and ' +
+    'fiscal period: the planned quantity in the type unit, with fixed and variable price ' +
+    'components per price unit in the controlling area currency. Nothing calculates or ' +
+    'allocates against these rows yet.',
   'actType.subtitle':
     'Activity types defined period by period inside a controlling area: the unit the output is ' +
     'measured in, how the activity allocates, and how its price is found. Rates per cost centre ' +
