@@ -155,6 +155,8 @@ export async function activityTypesKl01(ctx: Context) {
   const lockDialog = page.getByRole('dialog', { name: `Lock ${TYPE} · from 2026-01-01` });
   await lockDialog.locator('textarea[name="reason"]').fill(REASON);
   await lockDialog.getByRole('button', { name: 'Lock activity type', exact: true }).click();
+  // The dialog stays open on its own success; the standing row gains Locked behind it.
+  await closeDialog(lockDialog);
   await row.getByText('Locked').first().waitFor();
   assert.equal(
     (await storedPeriod(client, TYPE, '2026-01-01'))?.is_posting_locked,
