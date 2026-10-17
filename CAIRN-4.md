@@ -982,6 +982,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.313 B-297 — SCR-040 / OBYC stage 2: the table `STAGE PUBLISHED`
+
+**What was created.** Migration `0049_account_determination.sql` creates `account_determination` (11 columns): the five-part key of client, chart, event, valuation class and general modifier (both modifiers blank as stored values), the target G/L account, and the audit pair; six constraints — the chart, event, class and modifier formats and the non-blank account, plus the client foreign key. `9032` adds the standard tenant isolation (RLS enabled and forced, `tenant_isolation`, no PUBLIC rights, DML for `cairn_app`). Applied to `cairn_b210`: 83 migrations standing. The service's judging rules — the event vocabulary, class standing, the account's existence in the chart and its kind — are deliberately *not* in the table: they read other tables or the catalogue, and a check constraint could only lie about having verified them.
+
+**Verification, from the database.** 11 columns; the seven constraints by name; forced RLS with the single tenant-isolation policy; exactly four grants. The read side answered empty beside the tenant's real furniture (chart CA01; the four active inventory valuation classes). Every format check was exercised refused in its own transaction (short chart, lowercase event, spaced class, over-long modifier, blank account), a duplicate composite key refused (its probe transaction rolling back as designed), and the registry read back empty. A constraint-listing probe first failed on an operator-typing refusal (`char` concatenation) — a probe defect, corrected by casting, rather than a table defect.
+
+**Gates.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1109 tests across 136 files**.
+
+**Cost.** Measured: 13:45 in to 13:50, when `9f86b97` landed — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The write (stage 3), capability and registry entry (stage 4), and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1043,6 +1057,7 @@ recorded change, date and reason stated.
 | 2.112 | 2026-10-17 | **SCR-039 / OBA4 stage 4: the supporting rows (B-294, §26.310).** Capability `CFG.FIN.TOLERANCE.DEFINE` seeded (80 capabilities), the Term Registry entry added with OBA4 as a search alias only (49 terms, 41 aliases), the workbench's built-routes set gaining the screen — and, as checked for after SCR-037 stage 4's catch, the **activity row itself added new** to the seed (60 activities) with prerequisite `CFG.ORG.COMPANYCODE.DEFINE`; every row read back standing after reseeding. Typecheck and `lint:ip` clean, build ok, suite 1096 across 135 files. Cost measured at 4 minutes. | Agent |
 | 2.113 | 2026-10-17 | **SCR-039 / OBA4 stage 5: tests and acceptance (B-295, §26.311). SCR-039 CLOSED.** The service tests work the stored meanings through: both blank key parts creating the tenant-wide default group (documented under `ALL/DEFAULT`, all seven limits security-relevant), direction refusals on the blank key itself, a named Company Code judged, optional differences defaulting to zero, the line-versus-document refusal in all three zero shapes, the 100.000 discount ceiling stored whole, and no delete anywhere in the surface. The browser target `tolerance-groups` (T957 on `cairn_b210`) passes 5 checkpoints on the production build, ending with a change and the positive assertion that no Delete is offered; neighbours `document-types` and `house-banks` green. Suite 1109 tests across 136 files, typecheck and `lint:ip` clean. Cost measured at 5 minutes. | Agent |
 | 2.114 | 2026-10-17 | **SCR-040 / OBYC contract confirmed and stage 1 (the screen) published (B-296, §26.312; R-89).** The owner settled the product event catalogue (the reference keys as aliases only) against maximum parity, the valuation-grouping dimension omitted whole, valuation classes as the material master's own, and the G/L rule as existence-plus-kind — *whichever makes parity*. Stage 1 publishes `/config/account-determination` inert: chart and event selectors, modifier fields drawn per the event's catalogue row, the expected kind stated beside the account, and the `account_determination` schema definition the stage-2 migration will create. Typecheck, build (route 2.25 kB) and `lint:ip` clean; suite 1109 across 136 files. Cost measured at 5 minutes. | Agent |
+| 2.115 | 2026-10-17 | **SCR-040 / OBYC stage 2: the table (B-297, §26.313).** Migrations `0049_account_determination.sql` and `9032_..._policies.sql` create the registry (11 columns, five-part key over both deliberate blanks, five format/non-empty checks plus the client FK, forced RLS) on `cairn_b210` (83 migrations); verified from the database, the read side answering empty beside the tenant's chart and four active valuation classes, every check exercised refused and the registry read back empty. Typecheck, build and `lint:ip` clean; suite 1109 across 136 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
