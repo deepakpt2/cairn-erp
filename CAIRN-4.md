@@ -490,6 +490,22 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.279 B-263 — SCR-033 / OBBP stage 3: the write `STAGE PUBLISHED`
+
+**The service.** `assignPostingPeriodVariant` joins the read side in `posting-period-variant-assignment.ts`, in the OB37 shape: the Company Code row locked, deactivated refused, both prerequisites (`CFG.ORG.COMPANYCODE.DEFINE`, `CFG.FIN.PPV.DEFINE`) required complete, the variant's existence checked in the service so the refusal names `CFG.FIN.PPV.DEFINE` by activity rather than surfacing a constraint, and the write guarded on the `expectedVariant` the caller saw, checked before and inside the update. Repeating the held variant — or clearing an assignment that does not exist — writes nothing but the activity completion. Clearing with journal entries refuses, naming the count and the reason the rule exists: the entries were posted against the variant's open periods, so the variant may move to another but may not disappear from under them. The count is re-read under the lock and is the same measure the stage-1 dialog states, every journal entry under the Company Code. One change document on the Company Code carries the variant security-relevant with the entries-at-the-change count filed beside it; a reason is mandatory on every write.
+
+**The screen is live.** The dialog's inert submit is gone; it posts to a capability-protected action asking for the assignment activity and Company Code define together, the same pair OB37 asks for. The early refusals the dialog already showed — clearing blocked with the posted count, the unchanged selection — now disable the save rather than explain an alert, and the action's answer renders as status or alert with its remedy. Revalidation covers the workbench, Company Codes, both variant screens and posting periods. The capability the action looks for is not seeded until stage 4, so until then the screen is read-only for every role — the correct posture, and stated on the screen rather than discovered.
+
+**Two environment notes.** The workspace snapshot had dropped `node_modules` and the database again; `restore-env.sh` rebuilt both (dependencies in 13 s, `cairn_b210` rebuilt and bootstrapped) before any gate ran. And two parallel edits to the one component collided mid-step, each overwriting the other; the file was rewritten whole rather than patched a third time, and the diff was read before the gates to prove the intended content is what stands.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (route 2.03 kB, live); suite **1012 tests across 129 files**. Service tests and browser acceptance are stage 5; nothing here is accepted yet.
+
+**Cost.** Measured: 06:11 in to 06:18, when `a944ffc` landed — **7 minutes** of a 39-minute box, environment restore included.
+
+**Not accepted.** The registry rows (stage 4) and tests/acceptance (stage 5).
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
