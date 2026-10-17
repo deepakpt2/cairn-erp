@@ -1351,6 +1351,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.340 B-324 — SCR-045 / KE51 stage 2: the table `STAGE PUBLISHED`
+
+**What was created.** Migration `0055_profit_center.sql` creates `profit_center` (15 columns): the four-part period key of client, controlling area, profit centre and valid from; the period's end, the short and long texts at their parity widths, both responsibles, the segment, the posting-lock flag; and the full audit set. Seven constraints — area and code formats, the non-blank short name, the validity span, and the area foreign key. `9038` adds the standard tenant isolation (RLS enabled and forced, `tenant_isolation` on `cairn.client`, no PUBLIC rights, DML for `cairn_app`). Applied to `cairn_b210`: 95 migrations standing. The responsible user's standing in the user directory, the segment's future master, and hierarchy placement are deliberately not checks: the first is a service judgement against `app_user`, the second awaits its master, and the third belongs to the hierarchy SCR the owner has sequenced next.
+
+**Verification, from the database.** 15 columns; the seven constraints; forced RLS; exactly four grants. Stage 5's service tests will exercise every check against fixture parents.
+
+**Gates.** `npm run typecheck` clean; suite **1178 tests across 141 files**.
+
+**Cost.** Measured: 16:54 in to 16:56 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** The write (stage 3), the capability and registry entry (stage 4), and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1439,6 +1453,7 @@ recorded change, date and reason stated.
 | 2.139 | 2026-10-17 | **SCR-044 / KP26 CLOSED and accepted (B-321, §26.337).** Stage 5 ships 13 service tests and the T952 browser target `activity-rates` (4/4 journeys against the production build — a two-period plan at full decimal scale, the matrix change, the documented deletion), with both masters' deletion judges asserted against planned rows; two harness-side fixes in the target alone (exact cell labels; the emptied row asserted over the unmounting status). Neighbouring `activity-types` and `cost-centers` targets, typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 78 minutes overall. | Agent |
 | 2.140 | 2026-10-17 | **Workbench tree reworked (B-322, §26.338).** On the owner's finding — poor folding, undistinguished sub-items, no classification — the tree now names every branch in words beside its code path, indents leaves and headers 22px per level behind a guide rail with depth shading and accent bars, folds from a boxed rotating toggle with per-branch completion chips and progress, and gains Expand all / Collapse all. Presentation only; the `cost-centers` browser target passed unchanged against it. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 | 2.141 | 2026-10-17 | **SCR-045 / KE51 contract confirmed and stage 1 (the screen) published (B-323, §26.339; R-94).** SAP parity on the names (short 20 required, long 40 optional, both on the row), the segment's width (free until a segment master stands), and the lifecycle (journal-guarded delete plus the lock); the hierarchy deferred in the owner's own words — 'same defer for now then build it' — as the next SCR, this screen gaining placement afterwards as KS01 did. Stage 1 publishes `/config/profit-centers` inert: the period definition, the reads with the user-directory value help, the master-detail screen, and the catalogue keys. Typecheck, build (route 1.79 kB) and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 5 minutes. | Agent |
+| 2.142 | 2026-10-17 | **SCR-045 / KE51 stage 2: the table (B-324, §26.340).** Migrations `0055_profit_center.sql` and `9038_..._policies.sql` create the period registry (15 columns, four-part key, seven constraints; forced RLS, four grants) on `cairn_b210` (95 migrations). Typecheck clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
