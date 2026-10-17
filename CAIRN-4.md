@@ -1136,6 +1136,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.324 B-308 — SCR-042 / KSH1·OKEON stage 3: the write `STAGE PUBLISHED`
+
+**The services.** Nine acts in `src/modules/foundation/cost-center-hierarchy.ts`, in the settled shape: `saveHierarchyHeader`, `saveHierarchyNode`, `deleteHierarchyNode`, `placeCostCenterPeriod`, `unplaceCostCenterPeriod`, `saveCostCenterGroup`, `deleteCostCenterGroup`, `addGroupLeaf`, `removeGroupLeaf`. The judgements that matter are exercised in the service, never only on screen: a period stands in **at most one node** of its area (placing a placed period refuses naming where it stands; moving is unplace-then-place so the trail shows both ends); parent links **cannot cycle** — a reparent is judged against the new ancestry and against the whole subtree it carries, and the tree is **guarded at ten levels** end-to-end (a node carrying a deep subtree cannot be parked deep, either); exactly **one root** per area; a node deletes only while **no child node and no placed period** stands under it, both counts stated; a group is nothing but its leaves, so they go with it in the one document; and unplacing or deleting **never touches the cost centre master** — the placement goes, the centre stands. Group leaves are dynamic by contract (an EQ leaf may name a centre that does not stand yet; membership is resolution, not fact).
+
+**The audit.** One change document per write with a mandatory reason; placements and a leaf's sign security-relevant (they decide what a rollup charges where); the first successful write completes `CFG.COST.COSTCENTERHIER.DEFINE` (prerequisite `CFG.COST.COSTCENTER.DEFINE`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (screen compiled); suite **1136 tests across 138 files**. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Cost.** Measured: 15:17 in to 15:21 — **4 minutes** of a 39-minute box.
+
+**Not accepted.** The capability and registry entries (stage 4) and tests and browser acceptance (stage 5) remain; the write is published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1208,6 +1222,7 @@ recorded change, date and reason stated.
 | 2.123 | 2026-10-17 | **SCR-041 / KS01 stage 5: tests and acceptance (B-305, §26.321). SCR-041 CLOSED.** The service tests work the period rules through on the delivered A000 area: the assignment-judged company code, overlaps named against their siblings, the valid-to re-set, the lock filed security-relevant, deletion refused with the in-window document count stated while the window-free period deletes. The browser target `cost-centers` (T955 on `cairn_b210`) passes 6 checkpoints on the production build — route, creation on the offered company, duplicate and overlap refusals, rename, lock, documented deletion; neighbours `account-determination` and `tolerance-groups` green. Stage 5 caught three real defects, each corrected append-only or in the fixture: the missing change-side audit pair (`0051`), the tenant policy naming the wrong session setting (`9034`), and the fixture meeting the delivered A000. Suite 1136 tests across 138 files, typecheck and `lint:ip` clean. Cost measured at 7 minutes. | Agent |
 | 2.124 | 2026-10-17 | **SCR-042 / KSH1·OKEON contract confirmed and stage 1 (the screen) published (B-306, §26.322; R-91).** Parity on all four forks: both structures (standard hierarchy plus alternative groups), per-period placement, ranged/excluding group leaves, and an explicitly created root — storage in the design's own product tables rather than the generic set frame, subsets not built. Stage 1 publishes `/config/cost-center-hierarchy` inert: five table definitions, area master over tree, placement with the unplaced periods stated, groups with leaves resolved in display order, and the catalogue keys. Typecheck, build (route 2.41 kB) and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 5 minutes. | Agent |
 | 2.125 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 2: the tables (B-307, §26.323).** Migration `0052` creates the five tables of both structures (hierarchy header, parent-linked nodes, period assignments carrying the one-parent unique index, groups and signed ranged leaves; the node parent foreign key living in the migration as recorded); `9035` isolates all five on `cairn_b210` (89 migrations; five tables verified standing with forced RLS, one policy and four grants each). Typecheck clean; suite 1136 across 138 files. Cost measured at 2 minutes. | Agent |
+| 2.126 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 3: the write (B-308, §26.324).** Nine acts and the live screen: the hierarchy header, nodes judged acyclic against their whole carried subtree with the ten-level guard end-to-end and one root per area, period placement exclusive with moves shown as unplace-then-place, node deletion refused against children and placements (counts stated), groups deleted with their leaves, masters never touched by placement changes — placements and leaf signs security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
