@@ -907,6 +907,48 @@ export const documentType = pgTable(
   (t) => [primaryKey({ columns: [t.client, t.documentType] })],
 );
 
+/**
+ * Employee tolerance group (SCR-039, migration 0047): the posting ceilings
+ * attached to a group of users in a company code — per document, per line
+ * item, for cash discount, and for the payment differences a payment may
+ * book on its own. Both key parts may be blank as deliberate stored values:
+ * a blank company code is the tenant-wide scope standing under every
+ * company code, and a blank group key is the default group of its scope.
+ * Whether blank carries an FK depends on the column, so the company code is
+ * validated by the service rather than by a foreign key. Zero is a stored
+ * meaning, not a missing value: a zero limit imposes no ceiling (R-88).
+ */
+export const employeeToleranceGroup = pgTable(
+  'employee_tolerance_group',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    /** '' = tenant-wide scope; otherwise a company code of the tenant. */
+    companyCode: varchar('company_code', { length: 10 }).notNull().default(''),
+    /** '' = the default group of its scope. */
+    groupKey: varchar('group_key', { length: 4 }).notNull().default(''),
+    maxDocumentAmount: numeric('max_document_amount', { precision: 15, scale: 2 }).notNull(),
+    maxLineAmount: numeric('max_line_amount', { precision: 13, scale: 2 }).notNull(),
+    maxCashDiscountPercent: numeric('max_cash_discount_percent', { precision: 5, scale: 3 }).notNull(),
+    paymentDiffRevenueAmount: numeric('payment_diff_revenue_amount', { precision: 7, scale: 2 }).notNull().default('0'),
+    paymentDiffExpenseAmount: numeric('payment_diff_expense_amount', { precision: 7, scale: 2 }).notNull().default('0'),
+    paymentDiffRevenuePercent: numeric('payment_diff_revenue_percent', { precision: 3, scale: 1 }).notNull().default('0'),
+    paymentDiffExpensePercent: numeric('payment_diff_expense_percent', { precision: 3, scale: 1 }).notNull().default('0'),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.companyCode, t.groupKey] }),
+    index('employee_tolerance_group_company_idx').on(t.client, t.companyCode),
+    check('employee_tolerance_group_company_format', sql`${t.companyCode} ~ '^([A-Z0-9]{4})?$'`),
+    check('employee_tolerance_group_key_format', sql`${t.groupKey} ~ '^([A-Z0-9]{1,4})?$'`),
+    check('employee_tolerance_group_amount_bounds', sql`${t.maxDocumentAmount} >= 0 and ${t.maxLineAmount} >= 0 and ${t.paymentDiffRevenueAmount} >= 0 and ${t.paymentDiffExpenseAmount} >= 0`),
+    check('employee_tolerance_group_discount_bounds', sql`${t.maxCashDiscountPercent} between 0 and 100`),
+    check('employee_tolerance_group_diff_percent_bounds', sql`${t.paymentDiffRevenuePercent} between 0 and 99.9 and ${t.paymentDiffExpensePercent} between 0 and 99.9`),
+    check('employee_tolerance_group_line_within_document', sql`${t.maxLineAmount} = 0 or ${t.maxDocumentAmount} = 0 or ${t.maxLineAmount} <= ${t.maxDocumentAmount}`),
+  ],
+);
+
 export * from './payment-terms-schema';
 export * from './payment-method-schema';
 

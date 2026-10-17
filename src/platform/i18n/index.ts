@@ -1927,6 +1927,46 @@ const en: Catalogue = {
   'docType.unexpected': 'The document type could not be saved.',
   'docType.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'tolGroup.title': 'Define Employee Tolerance Groups',
+  'tolGroup.subtitle':
+    'The posting ceilings attached to a group of users in a company code: per document, per ' +
+    'line item, for cash discount, and for the payment differences a payment may book on its own. ' +
+    'Journal posting does not read these limits yet; this screen defines the configuration it will read.',
+  'tolGroup.newTitle': 'New tolerance group',
+  'tolGroup.gridTitle': 'Tolerance groups',
+  'tolGroup.companyCode': 'Company Code',
+  'tolGroup.allCompanies': 'All company codes (tenant-wide)',
+  'tolGroup.chooseCompany': 'Choose company code',
+  'tolGroup.groupKey': 'Tolerance Group',
+  'tolGroup.groupKeyHint': 'Up to four letters or digits. Leave blank for the default group of the scope.',
+  'tolGroup.defaultGroup': 'Default group',
+  'tolGroup.maxDocumentAmount': 'Maximum Amount per Document',
+  'tolGroup.maxLineAmount': 'Maximum Amount per Line Item',
+  'tolGroup.maxCashDiscountPercent': 'Maximum Cash Discount (%)',
+  'tolGroup.paymentDiffRevenueAmount': 'Payment Difference Revenue (Amount)',
+  'tolGroup.paymentDiffExpenseAmount': 'Payment Difference Expense (Amount)',
+  'tolGroup.paymentDiffRevenuePercent': 'Payment Difference Revenue (%)',
+  'tolGroup.paymentDiffExpensePercent': 'Payment Difference Expense (%)',
+  'tolGroup.zeroHint': 'A limit of 0 imposes no ceiling.',
+  'tolGroup.lineWithinDocument': 'A line item ceiling above the document ceiling can never be reached; both are judged when both stand non-zero.',
+  'tolGroup.reason': 'Reason',
+  'tolGroup.create': 'Create tolerance group',
+  'tolGroup.change': 'Change',
+  'tolGroup.save': 'Save tolerance group',
+  'tolGroup.actions': 'Actions',
+  'tolGroup.empty': 'No tolerance groups are defined in this tenant.',
+  'tolGroup.noDeleteNote':
+    'Tolerance groups cannot be deleted yet: a group may only be removed once user assignment exists ' +
+    'to be checked, and that assignment is not built. Limits stay changeable; a group key that should ' +
+    'not have been used is corrected by defining the right group.',
+  'tolGroup.inert':
+    'This screen is published ahead of its write path. The fields record what will be asked; saving is not enabled yet.',
+  'tolGroup.created': 'Tolerance Group {group} defined for {scope}.',
+  'tolGroup.changed': 'Tolerance Group {group} for {scope} updated.',
+  'tolGroup.unchanged': 'Tolerance Group {group} for {scope} already stands as shown; nothing was changed.',
+  'tolGroup.unexpected': 'The tolerance group could not be saved.',
+  'tolGroup.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
