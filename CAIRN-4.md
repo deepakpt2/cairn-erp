@@ -1176,6 +1176,14 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.327 B-311 — The SCR-041 hierarchy deferral closed on the KS01 screen `FOLLOW-UP`
+
+SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042: no field on the centre, placement arriving with the hierarchy screen. SCR-042 delivered the placement — and the owner pointed out the deferral's other half: the KS01 screen was to show the centre as unassigned until placed. It did not. `listCostCenters` now reads the period's node from the SCR-042 assignments (`hierarchyNode`, null = not placed) and the periods grid carries a **Hierarchy node** column ("Not placed" until SCR-042 places the period) — read-only: placement is still maintained only on the hierarchy screen, and nothing writes from KS01 into the tree.
+
+**Verification.** The thirteenth cost-centre test pins both states (null before placement, `PROD` after the assignment rows stand); the `cost-centers` browser target passes unchanged on the production build; `npm run typecheck` and `lint:ip` clean; suite **1151 tests across 139 files**. Cost measured: 15:38 in to 15:42 — **4 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1251,6 +1259,7 @@ recorded change, date and reason stated.
 | 2.126 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 3: the write (B-308, §26.324).** Nine acts and the live screen: the hierarchy header, nodes judged acyclic against their whole carried subtree with the ten-level guard end-to-end and one root per area, period placement exclusive with moves shown as unplace-then-place, node deletion refused against children and placements (counts stated), groups deleted with their leaves, masters never touched by placement changes — placements and leaf signs security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 4 minutes. | Agent |
 | 2.127 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 4: the supporting rows (B-309, §26.325).** Capability `CFG.COST.COSTCENTERHIER.DEFINE` seeded (83 capabilities), the Term Registry entry added with KSH1, KSH2 and OKEON as search aliases only (52 terms, 46 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route (60 activities). Typecheck and `lint:ip` clean; suite 1136 across 138 files. Cost measured at 1 minute. | Agent |
 | 2.128 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 5: tests and acceptance (B-310, §26.326). SCR-042 CLOSED.** The service tests work both structures through: the one-parent placement with moves as unplace-then-place, cycles and the ten-level guard refused, node deletion counts, leaf shapes judged both ways, groups deleting with their leaves while masters stand. The browser target `cost-center-hierarchy` (T954 on `cairn_b210`) passes 7 checkpoints on the production build — route, header, root and child, exclusivity, blocked deletion, the ranged group resolving on screen, documented unassign — asserted by standing evidence where success unmounts its own dialog; neighbours `cost-centers` and `account-determination` green. Suite 1150 tests across 139 files, typecheck and `lint:ip` clean. Cost measured at 10 minutes. | Agent |
+| 2.129 | 2026-10-17 | **The SCR-041 hierarchy deferral closed on the KS01 screen (B-311, §26.327).** The deferred hierarchy area arrives as display, not as a field: the KS01 periods grid now shows each period's standard-hierarchy node from the SCR-042 assignments (Not placed until placed), read-only, placement still maintained only on the hierarchy screen. The thirteenth cost-centre test pins both states; the `cost-centers` browser target passes unchanged on the production build. Suite 1151 tests across 139 files, typecheck and `lint:ip` clean. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
