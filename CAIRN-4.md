@@ -783,6 +783,24 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.299 B-283 — SCR-037 / FI12 stage 3: the two-level write `STAGE PUBLISHED`
+
+**The services.** `saveHouseBank`/`deleteHouseBank` and `saveBankAccount`/`deleteBankAccount` in `src/modules/foundation/house-bank-definition.ts`, in the OBBO/OB08 shape. Either level's first success completes the activity — a tenant that has defined an account has defined house banking. The company code must stand in the tenant; the house bank's bank must stand in the global master SCR-036 created, and the service refuses by name when either does not. A change to a house bank corrects only the bank reference and files the standing account count on the document's after side, the OB37 exposure rule, so the audit trail says how many accounts came to name the new bank. Deleting a house bank counts its accounts and refuses with the number; the account under it, referenced by nothing yet, deletes and files what was removed.
+
+**The G/L rule judged in the open.** The account's currency must stand active in the currency master, and its G/L account is checked the way R-86 settled — each failure named on its own: no chart assigned to the company code, no such account in that chart, not an asset account, not a balance-sheet account. The screen's G/L choice offers only the accounts that pass (asset balance-sheet accounts of the selected company code's chart, read with their properties for exactly this), so the ordinary path never meets the refusal; the service judges it again anyway, because a form is not a boundary.
+
+**The audit.** One change document per write: house banks on their `COMPANY/KEY` with the bank reference security-relevant, accounts on `COMPANY/KEY/ACCOUNT` with the G/L mapping security-relevant, a reason mandatory throughout. IBAN is stored spaceless at up to thirty-four characters, so a Kuwait IBAN finally fits the account it identifies.
+
+**The screen is live** behind `CFG.FIN.HOUSEBANK.DEFINE`: create panel, per-row Change/Delete with the account count disabling the house-bank deletion before the click, the accounts panel under a selected house bank with its own create form and dialogs. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (`/config/house-banks` 3.71 kB); suite **1066 tests across 133 files**.
+
+**Cost.** Measured: 11:03 in to 11:08, when `36c5f3e` landed — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain; the writes are published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -830,6 +848,7 @@ recorded change, date and reason stated.
 | 2.98 | 2026-10-17 | **SCR-036 / Bank Master accepted and closed (B-280, §26.296).** Eleven service tests pass, including the same bank read back under a second tenant, the no-op change leaving even the actor stamp untouched, and the master asserted empty afterwards — with fixture cleanup that survives test failure, because global rows outlive their tenants. The new browser target passes at five checkpoints: the route itself (no workbench row, by the ruling), documented creation with its creator stamp, duplicate refusal, the change, both deletions and the shared master left empty — with the FTXP target green beside it. The stage fixed a product defect the target caught: the header linked to the not-yet-built house-banks route and its prefetch kept the page from ever going idle; the link is removed until SCR-037 builds the screen it names. Suite 1066 across 133 files, typecheck and `lint:ip` clean. Cost measured at 9 minutes. | Agent |
 | 2.99 | 2026-10-17 | **SCR-037 / FI12 contract confirmed and stage 1 (the screen) published (B-281, §26.297; R-86 second half).** The two-level screen `/config/house-banks`: company code and five-character house-bank key naming a bank from the master SCR-036 built, accounts below it with account number plus optional IBAN, currency and the asset balance-sheet G/L rule as the field's hint — every form disabled behind the inert note, the house-bank list honestly empty until stage 2 creates the tables. Typecheck, build (route 2.66 kB) and `lint:ip` clean; suite 1066 across 133 files. Cost measured at 4 minutes. | Agent |
 | 2.100 | 2026-10-17 | **SCR-037 / FI12 stage 2: the `house_bank` and `bank_account` tables (B-282, §26.298).** Migration 0045 creates both registers — the house bank composite-foreign-keyed to its company code and to the global bank master, the account restricting its house bank's deletion at the database as the service will with the count, IBAN optional at thirty-four under its shape check, the asset-chart G/L rule left to the service with the reason stated in the migration — and 9030 applies the standard forced tenant isolation to both. Columns, constraints, RLS and policies read back from the database; the read side joins the master's display facts and nests the accounts. Typecheck and `lint:ip` clean, build ok, suite 1066 across 133 files. Cost measured at 5 minutes. | Agent |
+| 2.101 | 2026-10-17 | **SCR-037 / FI12 stage 3: the two-level write (B-283, §26.299).** Four services in the established shape: the house bank validated against company code and bank master, its change filing the standing account count on the after side, its deletion refused with that count; the account's currency active-checked and its G/L account judged with each failure named — no chart, no such account, not an asset, not balance-sheet — while the screen offers only the accounts that pass. One change document per write, the bank reference and the G/L mapping security-relevant, reason mandatory throughout; either level's first success completes the activity. The screen is live behind the house-bank capability, unseeded until stage 4 so it stands read-only meanwhile. Typecheck and `lint:ip` clean, build ok (3.71 kB), suite 1066 across 133 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
