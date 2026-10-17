@@ -1694,6 +1694,33 @@ const en: Catalogue = {
   'ppv.deleted':
     'Posting Period Variant {variant} was deleted, with the {intervals} intervals it held.',
   'ppv.unexpected': 'The Posting Period Variant change could not be completed.',
+  'ppvAssign.title': 'Assign Posting Period Variant to Company Code',
+  'ppvAssign.subtitle':
+    'Choose the posting period variant each Company Code posts against. The variant decides ' +
+    'which periods are open; defining the variants themselves is done in Posting Period Variants.',
+  'ppvAssign.gridTitle': 'Company Codes',
+  'ppvAssign.companyCode': 'Company Code',
+  'ppvAssign.companyName': 'Company Name',
+  'ppvAssign.variant': 'Posting Period Variant',
+  'ppvAssign.status': 'Status',
+  'ppvAssign.active': 'Active',
+  'ppvAssign.inactive': 'Inactive',
+  'ppvAssign.actions': 'Actions',
+  'ppvAssign.assign': 'Assign',
+  'ppvAssign.change': 'Change',
+  'ppvAssign.save': 'Assign variant',
+  'ppvAssign.reason': 'Reason',
+  'ppvAssign.empty': 'No Company Codes are defined in this tenant.',
+  'ppvAssign.clearingRule':
+    'Clearing the variant leaves the Company Code unassigned; it cannot post until another ' +
+    'variant is assigned.',
+  'ppvAssign.clearingPosted':
+    'This Company Code has posted {count} document(s), so its variant cannot be cleared; ' +
+    'assign a different one instead.',
+  'ppvAssign.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
+  'ppvAssign.defineLink': 'Define variants',
+  'ppvAssign.companyCodesLink': 'Company Codes',
+  'ppvAssign.postingPeriodsLink': 'Posting periods',
   'ppv.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the ' +
     'change log.',
