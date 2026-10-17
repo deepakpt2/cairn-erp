@@ -1,8 +1,8 @@
-import { asc } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { bankMaster } from '../../platform/tables/reference';
-import { companyCode } from './schema';
+import { bankAccount, companyCode, houseBank } from './schema';
 
 /**
  * FI12 Define House Banks — the read side (SCR-037 stage 1).
@@ -23,11 +23,8 @@ import { companyCode } from './schema';
  * referenced by nothing yet — deletes outright; a reason is mandatory on
  * every write with one change document per write, in the established shape.
  *
- * There are no house-bank tables yet: this module exists before them for the
- * same reason the earlier readers do — the screen has to render what a write
- * will be judged against: the tenant's company codes, the banks the master
- * holds, and where house banks already stand. Stage 2 creates the tables;
- * until then the list answers honestly empty.
+ * Stage 1 published the screen against an honestly empty list; stage 2
+ * created the tables (migration 0045) and the reads below are real.
  */
 export const ACTIVITY = 'CFG.FIN.HOUSEBANK.DEFINE';
 
@@ -64,13 +61,70 @@ export interface BankChoice {
 }
 
 /**
- * Every house bank the tenant holds, with its accounts. The tables arrive in
- * stage 2; until then no rows exist to read, and the screen says so rather
- * than pretending to have looked.
+ * Every house bank the tenant holds, with its accounts. The display facts —
+ * name, city, SWIFT — are joined from the bank master at read time and stored
+ * nowhere here, so correcting them in the master corrects every house bank
+ * that names the bank.
  */
 export async function listHouseBanks(client: string): Promise<HouseBankRow[]> {
-  void client;
-  return [];
+  return withTenant(client, async (tx) => {
+    const [houseBanks, accounts] = await Promise.all([
+      tx
+        .select({
+          companyCode: houseBank.companyCode,
+          houseBankKey: houseBank.houseBankKey,
+          bankCountry: houseBank.bankCountry,
+          bankKey: houseBank.bankKey,
+          bankName: bankMaster.name,
+          bankCity: bankMaster.city,
+          bankSwift: bankMaster.swift,
+        })
+        .from(houseBank)
+        .innerJoin(
+          bankMaster,
+          and(
+            eq(bankMaster.bankCountry, houseBank.bankCountry),
+            eq(bankMaster.bankKey, houseBank.bankKey),
+          ),
+        )
+        .where(eq(houseBank.client, client))
+        .orderBy(asc(houseBank.companyCode), asc(houseBank.houseBankKey)),
+      tx
+        .select()
+        .from(bankAccount)
+        .where(eq(bankAccount.client, client))
+        .orderBy(
+          asc(bankAccount.companyCode),
+          asc(bankAccount.houseBankKey),
+          asc(bankAccount.accountId),
+        ),
+    ]);
+
+    const accountsByHouse = new Map<string, BankAccountRow[]>();
+    for (const account of accounts) {
+      const key = `${account.companyCode}/${account.houseBankKey}`;
+      const list = accountsByHouse.get(key) ?? [];
+      list.push({
+        accountId: account.accountId,
+        accountNumber: account.accountNumber,
+        iban: account.iban,
+        currency: account.currency.trim(),
+        glAccount: account.glAccount,
+      });
+      accountsByHouse.set(key, list);
+    }
+
+    return houseBanks.map((row) => ({
+      companyCode: row.companyCode,
+      houseBankKey: row.houseBankKey,
+      bankCountry: row.bankCountry.trim(),
+      bankKey: row.bankKey,
+      bankName: row.bankName,
+      bankCity: row.bankCity,
+      bankSwift: row.bankSwift,
+      accounts: accountsByHouse.get(`${row.companyCode}/${row.houseBankKey}`) ?? [],
+    }));
+  });
 }
 
 /** The company codes a house bank may be defined under, with their charts. */

@@ -25,7 +25,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
-import { country, currency as currencyReference } from '../../platform/tables/reference';
+import { bankMaster, country, currency as currencyReference } from '../../platform/tables/reference';
 import { centralAddress } from './central-address-schema';
 
 /* ══ Enterprise structure ═══════════════════════════════════════════════════ */
@@ -778,6 +778,71 @@ export const exchangeRate = pgTable(
  * data, shape-checked, there being no condition master to validate them against.
  * No active flag: the lifecycle is deletion, refused while lines carry the code.
  */
+/**
+ * The tenant's own bank inside a company code (SCR-037, migration 0045). The
+ * bank it names lives in the global bank master; only the reference is stored,
+ * held by foreign key, and the display facts are read from there.
+ */
+export const houseBank = pgTable(
+  'house_bank',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+    bankCountry: char('bank_country', { length: 2 }).notNull(),
+    bankKey: varchar('bank_key', { length: 15 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.companyCode, t.houseBankKey] }),
+    foreignKey({
+      columns: [t.client, t.companyCode],
+      foreignColumns: [companyCode.client, companyCode.companyCode],
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.bankCountry, t.bankKey],
+      foreignColumns: [bankMaster.bankCountry, bankMaster.bankKey],
+    }),
+    index('house_bank_bank_idx').on(t.bankCountry, t.bankKey),
+    check('house_bank_key_format', sql`${t.houseBankKey} ~ '^[A-Z0-9]{1,5}$'`),
+  ],
+);
+
+/**
+ * An account held at a house bank (SCR-037, migration 0045): the number money
+ * moves through, an optional IBAN, a currency, and the G/L account its
+ * postings clear through. The house bank foreign key restricts deletion at
+ * the database, as the service refuses it with the count.
+ */
+export const bankAccount = pgTable(
+  'bank_account',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+    accountId: varchar('account_id', { length: 5 }).notNull(),
+    accountNumber: varchar('account_number', { length: 18 }).notNull(),
+    iban: varchar('iban', { length: 34 }),
+    currency: char('currency', { length: 3 }).notNull(),
+    glAccount: varchar('gl_account', { length: 10 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.companyCode, t.houseBankKey, t.accountId] }),
+    foreignKey({
+      columns: [t.client, t.companyCode, t.houseBankKey],
+      foreignColumns: [houseBank.client, houseBank.companyCode, houseBank.houseBankKey],
+    }).onDelete('restrict'),
+    check('bank_account_id_format', sql`${t.accountId} ~ '^[A-Z0-9]{1,5}$'`),
+    check('bank_account_number_nonempty', sql`length(btrim(${t.accountNumber})) between 1 and 18`),
+    check('bank_account_iban_format', sql`${t.iban} is null or ${t.iban} ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`),
+  ],
+);
+
 export const taxCode = pgTable(
   'tax_code',
   {
