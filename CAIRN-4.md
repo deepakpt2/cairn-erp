@@ -46,6 +46,27 @@ Rows continue the register in `CAIRN-3.md` §2.1 from D-139.
 
 ---
 
+## §1.4 Requirements — later clarifications, continued
+
+Rows continue the register in `CAIRN-3.md` §1.4 from R-73.
+
+| ID | Requirement | Interpretation |
+|---|---|---|
+| R-74 | **Only the tenant key is unique. The tenant name is not.** | This retracts half of R-68, which recorded the owner as asking for a name and a four-character key "both unique". Two tenants may share a name; the key is what identifies one. The creation form must not claim otherwise in its hint or enforce it in validation, and no uniqueness constraint on the name is proposed. Recorded here because it was ruled before the field set was drafted and the draft carried the wrong version forward. |
+| R-75 | **The standard package becomes an option of Creation Type, not a separate control.** | The owner chose to fold the package into the creation-type field rather than keep it as a checkbox beside it: one field with three options — *empty tenant*, *standard general data*, and *copy from an existing tenant*, the last shown and refused with a remedy. This supersedes both the earlier ruling that the package option "stays on the creation page as is" (it stays on the page, but as an option of this field) and the contract draft's statement that the package is no longer applied at creation. Since `INTL-STD-3` the package holds only data that is true for any company, so choosing it at creation no longer contradicts creating a tenant without a company. |
+
+---
+
+## §2.1 Decision register, continued
+
+Rows continue the register in `CAIRN-3.md` §2.1 from D-142.
+
+| ID | Decision | Rationale | Date |
+|---|---|---|---|
+| D-143 | **A creation type of "standard general data" applies the package at creation and nothing else; "copy from an existing tenant" is rendered, refused and writes nothing; and the proposed per-tenant package action on `/clients` is not built.** The contract draft at B-242 proposed a separate ADMINISTRATOR-gated action on the tenant list so that a tenant created empty could take the package later. With the package selectable at creation, that action is no longer load-bearing for anything — least of all for the harness, whose `onboard()` can choose the option instead of navigating to a second screen to find it. Building new surface that nothing requires, in an SCR whose subject is removing surface, is the wrong trade; if the owner later wants an empty tenant to be able to take the package, it is a small SCR of its own. | Owner ruling R-75, applied on 2026-10-17. | 2026-10-17 |
+
+---
+
 **Where new work is recorded from v2.62 onward:** new requirements continue the §1.4 register from
 R-72 in `CAIRN-3.md` (opened here when the first one is recorded), new decisions continue the §2.1
 register from D-139 (likewise), completed batches as §26.260+ entries, and change-log versions as §30
