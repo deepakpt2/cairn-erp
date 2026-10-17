@@ -81,15 +81,15 @@ export async function activityRatesKp26(ctx: Context) {
     new RegExp(`${ACTIVITY} · KP26`),
     'The screen says which activity and which reference transaction it is.',
   );
-  await page.getByLabel('Planned activity period 1').waitFor();
+  await page.getByLabel('Planned activity period 1', { exact: true }).waitFor();
   console.log('  ✓ the workbench routes here and the period matrix stands');
 
   // ── 2. A plan across two periods saves and reads back ────────────────────
-  await page.getByLabel('Planned activity period 1').fill('160');
-  await page.getByLabel('Fixed price period 1').fill('50');
-  await page.getByLabel('Variable price period 1').fill('10');
-  await page.getByLabel('Planned activity period 2').fill('150');
-  await page.getByLabel('Fixed price period 2').fill('50');
+  await page.getByLabel('Planned activity period 1', { exact: true }).fill('160');
+  await page.getByLabel('Fixed price period 1', { exact: true }).fill('50');
+  await page.getByLabel('Variable price period 1', { exact: true }).fill('10');
+  await page.getByLabel('Planned activity period 2', { exact: true }).fill('150');
+  await page.getByLabel('Fixed price period 2', { exact: true }).fill('50');
   // Capture the other cells as zeros: untouched cells submit as zero rows.
   await page.locator('#act-rate-reason').fill(REASON);
   await page.getByRole('button', { name: 'Save plan', exact: true }).click();
@@ -116,7 +116,7 @@ export async function activityRatesKp26(ctx: Context) {
     waitUntil: 'domcontentloaded',
   });
   await page.waitForLoadState('networkidle');
-  const quantityCell = page.getByLabel('Planned activity period 1');
+  const quantityCell = page.getByLabel('Planned activity period 1', { exact: true });
   await quantityCell.waitFor();
   assert.equal(await quantityCell.inputValue(), '160.000', 'The stored quantity renders back.');
   await quantityCell.fill('170');
