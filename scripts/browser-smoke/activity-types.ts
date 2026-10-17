@@ -167,6 +167,7 @@ export async function activityTypesKl01(ctx: Context) {
   const unlockDialog = page.getByRole('dialog', { name: `Unlock ${TYPE} · from 2026-01-01` });
   await unlockDialog.locator('textarea[name="reason"]').fill(REASON);
   await unlockDialog.getByRole('button', { name: 'Unlock activity type', exact: true }).click();
+  await closeDialog(unlockDialog);
   await row.getByText('Open').first().waitFor();
   console.log('  ✓ the type locks for posting and opens again');
 
