@@ -874,6 +874,18 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.305 B-289 — SCR-038 / OBA7 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.FIN.DOCTYPE.DEFINE` (FIN, CONFIGURE) joins `scripts/seed.ts`; no role row changes, because roles grant `CFG.*` by wildcard and the configurator and administrator patterns already cover it — the new row is the grant. The Term Registry gains the definition entry at `/config/document-types` with **OBA7 as a search alias only**; its description carries the whole contract (the exactly-two key, the interval that must be defined, the five account kinds with at least one, deletion refused while entries carry the type, deactivation always available, the account types and interval security-relevant). Read back after reseeding rather than trusted: 79 capabilities (was 78), 48 terms (was 47), 40 aliases (was 39), the capability and alias rows present, and — checked explicitly after SCR-037's stage 4 found a missing one — the activity row standing with its route at the screen (59 activities, unchanged; this one has routed since the seed). The workbench's built-routes set gains `/config/document-types` in the same stage, as it has since SCR-034.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1081 tests across 134 files**; seed applied to `cairn_b210` and the rows read back from it.
+
+**Cost.** Measured: 12:03 in to 12:06, when `f0378c5` landed — **3 minutes** of a 39-minute box.
+
+**Not accepted.** Service tests and browser acceptance (stage 5) remain; the screen becomes maintainable in the development tenant now that the capability exists, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -927,6 +939,7 @@ recorded change, date and reason stated.
 | 2.104 | 2026-10-17 | **SCR-038 / OBA7 contract confirmed and stage 1 (the screen) published (B-286, §26.302; R-87).** The registry already lives in every tenant (SA, KR, DR delivered by the standard package); the owner settled exactly-two keys, removal as both deletion-refused-while-used and deactivation, no special protection for delivered types, and the number range as the reference concept in product shape — an interval of the document-number object, validated to exist, no migration under live GENERAL data. Stage 1 delivers `/config/document-types` over the live registry: new-type panel with the five account-type checkboxes, per-row Change/Deactivate/Delete shapes stating the usage rule, forms disabled behind the inert note. Typecheck, build (route 2.46 kB) and `lint:ip` clean; suite 1081 across 134 files. Cost measured at 4 minutes. | Agent |
 | 2.105 | 2026-10-17 | **SCR-038 / OBA7 stage 2: the existing table verified, its format rules added (B-287, §26.303).** The `document_type` table read from the database rather than the schema: fifteen columns, composite key, forced tenant isolation and grants as the contract needs, and every delivered row complying — exactly-two upper-case keys, letter sets from the five posting letters, reversal modes from the three, no dangling reversal types. The one gap was that the table carried no check constraints at all, having had only the package as its writer; migration 0046 adds the four format rules, each exercised refused against the live table inside rolled-back transactions, the row count unchanged. No policy migration was needed. Typecheck and `lint:ip` clean, build ok, suite 1081 across 134 files. Cost measured at 4 minutes. | Agent |
 | 2.106 | 2026-10-17 | **SCR-038 / OBA7 stage 3: the write (B-288, §26.304).** Three services in the established shape: create/change with the exactly-two key, the interval validated to exist among the tenant's defined intervals and the reverse type to stand beside it, account types normalized to canonical order, the active state a separate write so a change cannot silently reactivate; deactivation filing the standing usage count; deletion refused tenant-wide while entries carry the type. One change document per write, account types and interval security-relevant, reason mandatory throughout, the invariant repeated answer writing nothing but the completion. The screen is live behind the definition capability, unseeded until stage 4 so it stands read-only meanwhile. Typecheck and `lint:ip` clean, build ok (3.07 kB), suite 1081 across 134 files. Cost measured at 3 minutes. | Agent |
+| 2.107 | 2026-10-17 | **SCR-038 / OBA7 stage 4: the supporting rows (B-289, §26.305).** Capability `CFG.FIN.DOCTYPE.DEFINE` seeded (79 capabilities; roles grant `CFG.*` by wildcard, so the row is the grant), the Term Registry entry added with OBA7 as a search alias only (48 terms, 40 aliases), the workbench's built-routes set gaining the screen in the same stage — and the activity row itself read back standing with its route, checked explicitly after SCR-037 stage 4 found one missing. Typecheck and `lint:ip` clean, build ok, suite 1081 across 134 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
