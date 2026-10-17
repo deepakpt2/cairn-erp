@@ -1324,6 +1324,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.338 B-322 — The workbench tree reworked: named classification, real indentation, honest folding
+
+**The owner's finding.** The configuration workbench tree "doesn't fold well", its sub-items "are not distinguished easily as everything is left aligned", and there is "no good classification". The code bore all three out: branch headers showed the raw code segment alone (`FIN`, `COA`) with no human name; the only indentation was 12px on the sequence-number cell while the activity titles — the column a reader scans — all started at the same left edge; and folding was one branch at a time from a small text chevron, with no way to fold or unfold the whole plan.
+
+**What changed (presentation only; the tree still builds from the activity code, branches still start open).** Every branch now carries a **human classification name** from a segment dictionary — Configuration, Platform, Organization, Financial Accounting, Controlling, Procurement, Inventory, Production, Sales, People & Payroll at module level; Company Codes, Chart of Accounts, Cost Centres, Activity Rates and their peers at object level — with the raw code path kept beside it in small type, because the code is the address other screens cite. **Indentation is real**: 22px per level applied to branch headers and to the leaf title itself, leaves riding behind a guide rail so a sub-item visibly hangs under its branch, and branch rows shaded by depth (deep sunken, mid sunken, leaf-level plain) with a depth accent bar. **Folding is honest**: a boxed 24px toggle with a rotating chevron and a 40px row hit area per branch, each branch carrying its own finished/total chip with a progress bar that turns green on completion, and **Expand all / Collapse all** in the panel header — collapse-all leaves exactly the classification skeleton the owner asked to be able to read. Two catalogue keys joined (`workbench.expandAll`, `workbench.collapseAll`).
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build compiled (`/config` 3.07 kB); suite **1178 tests across 141 files**; and the `cost-centers` browser target — which reads its workbench row and Open link off this tree — passed unchanged against the rebuilt screen, so the plan's addresses survived the new presentation.
+
+**Cost.** Measured: 16:43 in to 16:45 — **2 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1410,6 +1422,7 @@ recorded change, date and reason stated.
 | 2.137 | 2026-10-17 | **SCR-044 / KP26 stage 3: the write (B-319, §26.335).** `saveActivityRates` and `deleteActivityRate` and the live matrix screen: one save per (area, version, year, centre, type) under one change document with the price components security-relevant, validity judged per period against the fiscal window — masters standing, unlocked, category-compatible — and automatic price indicators refusing entered components while quantities stand. Both masters' deletion judges gained their rate count in the same commit, so the promise on the KL01 screen is now true with no copy changed. Typecheck, build and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 5 minutes. | Agent |
 | 2.138 | 2026-10-17 | **SCR-044 / KP26 stage 4: the supporting rows (B-320, §26.336).** Capability `CFG.COST.ACTIVITYRATE.CONFIRM` seeded (85 capabilities), the Term Registry entry added with KP26 as a search alias only (54 terms, 48 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 2 minutes. | Agent |
 | 2.139 | 2026-10-17 | **SCR-044 / KP26 CLOSED and accepted (B-321, §26.337).** Stage 5 ships 13 service tests and the T952 browser target `activity-rates` (4/4 journeys against the production build — a two-period plan at full decimal scale, the matrix change, the documented deletion), with both masters' deletion judges asserted against planned rows; two harness-side fixes in the target alone (exact cell labels; the emptied row asserted over the unmounting status). Neighbouring `activity-types` and `cost-centers` targets, typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 78 minutes overall. | Agent |
+| 2.140 | 2026-10-17 | **Workbench tree reworked (B-322, §26.338).** On the owner's finding — poor folding, undistinguished sub-items, no classification — the tree now names every branch in words beside its code path, indents leaves and headers 22px per level behind a guide rail with depth shading and accent bars, folds from a boxed rotating toggle with per-branch completion chips and progress, and gains Expand all / Collapse all. Presentation only; the `cost-centers` browser target passed unchanged against it. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
