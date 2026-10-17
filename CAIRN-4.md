@@ -581,6 +581,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.285 B-269 — SCR-034 / OB08 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.FIN.EXRATE.MAINTAIN` (FIN, CONFIGURE) joins `scripts/seed.ts`; no role row changes, because roles grant `CFG.*` by wildcard and the configurator and administrator patterns already cover it — the new row is the grant. The Term Registry gains the maintenance entry at `/config/exchange-rates` with **OB08 as a search alias only**, per the standing rule that reference keywords live in aliases and never in codes or the database; its description carries the whole contract (the three product rate types, ratios and the effective-rate arithmetic, the immutable key, deletion safe because posted documents keep their own rate, the rate security-relevant). Verified live after reseeding: 75 capabilities (was 74), 44 terms (was 43), 36 aliases (was 35), the capability and alias rows read back from the database, and the activity's route already pointing at the screen.
+
+**The row stage 5 caught last time, done in its own stage this time.** The workbench's built-routes set gains `/config/exchange-rates`, so the activity no longer says *Screen pending* for a screen that exists — the omission SCR-033's acceptance found after the fact, seeded here in the stage that owes it.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1025 tests across 130 files**; seed applied to `cairn_b210` and the rows read back rather than trusted from the seed output.
+
+**Cost.** Measured: 08:11 in to 08:14, when `e527023` landed — **3 minutes** of a 39-minute box.
+
+**Not accepted.** Service tests and browser acceptance (stage 5) remain; the screen becomes maintainable in the development tenant now that the capability exists, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -614,6 +628,7 @@ recorded change, date and reason stated.
 | 2.84 | 2026-10-17 | **SCR-034 / OB08 contract confirmed and stage 1 (the screen) published (B-266, §26.282; R-84).** The table, the composite key, the activity and one builder write already exist; the screen, capability, registry entry and service do not. The owner settled the package's four differences: the product's BUYING/SELLING/AVERAGE stay (reference letters are aliases only), the translation ratios are added as columns in stage 2, a rate is deletable with a reason because posted documents keep their own rate, and a reason is mandatory on every write. Stage 1 delivers `/config/exchange-rates` — new-rate panel with the pair value-helped from the currency master and the ratios defaulted to 1, a grid of every rate held, Change and Delete dialogs per row — with its read side in a new module and the forms inert, saying so, until the stage-3 service arrives. Typecheck, build (route 2.23 kB) and `lint:ip` clean; suite 1025 across 130 files. Cost measured at 25 minutes, a failed first build inside it. | Agent |
 | 2.85 | 2026-10-17 | **SCR-034 / OB08 stage 2: the translation ratios (B-267, §26.283).** Migration 0042 adds `ratio_from`/`ratio_to` as integer columns defaulting to 1 — every existing row's truth, since each was quoted for one unit — each checked at 1 or more, in the verify-before-apply shape; applied and read back from the database with the seeded rate at 1 : 1. The read side computes the effective rate in SQL at the stored precision, the grid shows ratio and effective rate, and the Change dialog opens on the stored ratios. Typecheck and `lint:ip` clean, build ok, suite 1025 across 130 files. Cost measured at 4 minutes. | Agent |
 | 2.86 | 2026-10-17 | **SCR-034 / OB08 stage 3: the write (B-268, §26.284).** `saveExchangeRate`/`deleteExchangeRate` in the OBBO shape — currency-master checks, same-pair and positive-rate refusals, the duplicate key naming Change and the missing key naming Create, a change guarded on the rate the caller saw and repeating itself as a no-op, deletion outright with the removed rate filed, one change document per write with the rate security-relevant, reason mandatory throughout — and the three forms live behind the activity's capability, unseeded until stage 4 so the screen stands read-only meanwhile. Typecheck and `lint:ip` clean, production build ok, suite 1025 across 130 files. Cost measured at 4 minutes. | Agent |
+| 2.87 | 2026-10-17 | **SCR-034 / OB08 stage 4: the supporting rows (B-269, §26.285).** Capability `CFG.FIN.EXRATE.MAINTAIN` seeded (75 capabilities; roles grant `CFG.*` by wildcard, so the row is the grant), the Term Registry entry added with OB08 as a search alias only (44 terms, 36 aliases), all read back from the reseeded database; and the workbench's built-routes set gains the screen in the stage that owes it, where SCR-033's acceptance had to catch the same omission after the fact. Typecheck and `lint:ip` clean, build ok, suite 1025 across 130 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
