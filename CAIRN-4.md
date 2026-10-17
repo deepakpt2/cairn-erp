@@ -656,6 +656,18 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.290 B-274 — SCR-035 / FTXP stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.FIN.TAXCODE.DEFINE` (FIN, CONFIGURE) joins `scripts/seed.ts`; no role row changes, because roles grant `CFG.*` by wildcard and the configurator and administrator patterns already cover it — the new row is the grant. The Term Registry gains the definition entry at `/config/tax-codes` with **FTXP as a search alias only**, per the standing rule; its description carries the whole contract (the four-character code within its country, the immutable key, the tenant-wide usage count behind deletion, the rate security-relevant). Verified live after reseeding: 76 capabilities (was 75), 45 terms (was 44), 37 aliases (was 36), the capability and alias rows read back from the database, and the activity's route already pointing at the screen. The workbench's built-routes set gains `/config/tax-codes` in the same stage, as it has since SCR-034.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1039 tests across 131 files**; seed applied to `cairn_b210` and the rows read back rather than trusted from the seed output.
+
+**Cost.** Measured: 09:13 in to 09:16, when `df82f1b` landed — **3 minutes** of a 39-minute box.
+
+**Not accepted.** Service tests and browser acceptance (stage 5) remain; the screen becomes maintainable in the development tenant now that the capability exists, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -694,6 +706,7 @@ recorded change, date and reason stated.
 | 2.89 | 2026-10-17 | **SCR-035 / FTXP contract confirmed and stage 1 (the screen) published (B-271, §26.287; R-85).** No tax-code table exists and journal lines carry the code as undefined free text; the activity alone stands. The owner settled four forks: the code up to four characters (not the package's two), the condition type and account key kept as operator-entered tenant data with the aliases-only tension recorded in the ruling, hard deletion refused while journal lines carry the code (counted tenant-wide, lines storing no country), and a reason on every write. Stage 1 delivers `/config/tax-codes` — new-code panel value-helped from the country master, grid with the lines-posted count, Change and Delete dialogs stating the usage rule — with the codes list honestly empty until stage 2 creates the table and the forms inert, saying so. Typecheck, build (route 2.17 kB) and `lint:ip` clean; suite 1039 across 131 files. Cost measured at 13 minutes. | Agent |
 | 2.90 | 2026-10-17 | **SCR-035 / FTXP stage 2: the `tax_code` table (B-272, §26.288).** Migration 0043 creates the registry journal lines have named without a referent — country by foreign key to the country master, code at the line's own four-character width, rate numeric(7,2) checked 0–100, condition type and account key shape-checked as the tenant data R-85 keeps them, no active flag because deletion is the lifecycle — and 9028 applies the standard forced tenant isolation. All eleven columns, eight constraints and the policy read back from the database; the read side now joins each code to the lines carrying it. Typecheck and `lint:ip` clean, build ok, suite 1039 across 131 files. Cost measured at 3 minutes. | Agent |
 | 2.91 | 2026-10-17 | **SCR-035 / FTXP stage 3: the write (B-273, §26.289).** `saveTaxCode`/`deleteTaxCode` in the OBBO shape — country-master check, duplicate key naming Change and missing key naming Create, a change guarded on the rate the caller saw and repeating itself as a no-op, deletion refused with the tenant-wide line count while journal lines carry the code and filing what it removed when none do, one change document per write with the rate security-relevant and the standing count filed beside a change, reason mandatory throughout — and the three forms live behind the definition capability, unseeded until stage 4 so the screen stands read-only meanwhile. Typecheck and `lint:ip` clean, production build ok, suite 1039 across 131 files. Cost measured at 4 minutes. | Agent |
+| 2.92 | 2026-10-17 | **SCR-035 / FTXP stage 4: the supporting rows (B-274, §26.290).** Capability `CFG.FIN.TAXCODE.DEFINE` seeded (76 capabilities; roles grant `CFG.*` by wildcard, so the row is the grant), the Term Registry entry added with FTXP as a search alias only (45 terms, 37 aliases), the workbench's built-routes set gaining the screen in the same stage — all read back from the reseeded database. Typecheck and `lint:ip` clean, build ok, suite 1039 across 131 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
