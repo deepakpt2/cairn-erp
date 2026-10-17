@@ -902,6 +902,45 @@ export const costCenterGroupLeaf = pgTable(
   ],
 );
 
+/** Activity type periods — SCR-043 / R-92 (definition; table created in stage 2). */
+export const activityType = pgTable(
+  'activity_type',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    activityType: varchar('activity_type', { length: 6 }).notNull(),
+    validFrom: date('valid_from').notNull(),
+    validTo: date('valid_to').notNull(),
+    name: varchar('name', { length: 40 }).notNull(),
+    /** Judged against the global unit_of_measure table at write time. */
+    activityUnit: varchar('activity_unit', { length: 6 }).notNull(),
+    /** 1 manual entry, manual allocation | 2 indirect, indirect | 3 manual entry, indirect | 4 manual entry, no allocation */
+    category: char('category', { length: 1 }).notNull(),
+    /** 1 automatic on activity | 2 automatic on capacity | 3 manual */
+    priceIndicator: char('price_indicator', { length: 1 }).notNull(),
+    /** Canonical comma subset of the KS01 category words; '' = all categories. */
+    validCcCategories: varchar('valid_cc_categories', { length: 80 }).notNull().default(''),
+    isPostingLocked: boolean('is_posting_locked').notNull().default(false),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.activityType, t.validFrom] }),
+    check('activity_type_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('activity_type_code_format_ck', sql`${t.activityType} ~ '^[A-Z0-9]{1,6}$'`),
+    check('activity_type_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
+    check('activity_type_category_ck', sql`${t.category} in ('1','2','3','4')`),
+    check('activity_type_price_indicator_ck', sql`${t.priceIndicator} in ('1','2','3')`),
+    check('activity_type_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+    foreignKey({
+      name: 'activity_type_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+  ],
+);
+
 /** Credit control area — shared credit limit boundary (D-029). */
 export const creditControlArea = pgTable(
   'credit_control_area',
