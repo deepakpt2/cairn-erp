@@ -77,6 +77,7 @@ export default async function WorkbenchPage({
     '/config/payment-terms',
     '/config/payment-methods',
     '/config/posting-periods',
+    '/config/exchange-rates',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
