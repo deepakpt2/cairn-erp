@@ -1079,6 +1079,18 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.320 B-304 — SCR-041 / KS01 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.COST.COSTCENTER.DEFINE` (COST, CONFIGURE) joins `scripts/seed.ts` (82 capabilities; no role row changes — the `CFG.*` wildcard makes the row the grant, as by now usual). The Term Registry gains the definition entry at `/config/cost-centers` with **KS01 as a search alias only** (51 terms, 43 aliases), its description carrying the whole contract — the period key and overlap rule, the assignment-judged company code, currency from the area, category words with letters as aliases, the deletion count and the lock alternative, hierarchy deferred to its own activity, and the honest note that postings carry centre codes as text and do not validate them yet. The workbench's built-routes set gains the screen. The activity row itself already stood in the seed (60 activities; route `/config/cost-centers`, prerequisite `CFG.COST.CONTROLLINGAREA.DEFINE`) — checked rather than assumed after SCR-039 stage 4's catch, and read back standing with both.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1123 tests across 137 files**; seed applied to `cairn_b210` and the rows read back from it (capability, term, KS01 alias, activity with its prerequisite and route; counts 82/60/51/43).
+
+**Cost.** Measured: 14:52 in to 14:57 — **5 minutes** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1147,6 +1159,7 @@ recorded change, date and reason stated.
 | 2.119 | 2026-10-17 | **SCR-041 / KS01 contract confirmed and stage 1 (the screen) published (B-301, §26.317; R-90).** Four forks settled: true validity periods against the package's key; deletion refused while journal documents dated inside a period carry the centre, plus an independent posting lock; categories as product words with the single letters as search aliases; hierarchy placement deferred to SCR-042. Currency displays from the controlling area and the name lives on the row. Stage 1 publishes `/config/cost-centers` inert — the area master-detail selector, the create form fed by the area's assigned company codes, the periods table with its lock/delete shapes, and the `cost_center` schema definition the stage-2 migration will create — with the client-boundary correction passing the category catalogue as a page prop. Typecheck, build and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 11 minutes. | Agent |
 | 2.120 | 2026-10-17 | **SCR-041 / KS01 stage 2: the table (B-302, §26.318).** Migrations `0050_cost_center.sql` and `9033_..._policies.sql` create the period registry (12 columns, four-part key, eleven constraints including the foreign key onto the area-company assignment itself; forced RLS, four grants) on `cairn_b210` (85 migrations). Typecheck and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 2 minutes. | Agent |
 | 2.121 | 2026-10-17 | **SCR-041 / KS01 stage 3: the write (B-303, §26.319).** `saveCostCenter`, `setCostCenterPostingLock` and `deleteCostCenter` and the live screen: the period key immutable, the company code judged against the area's own assignment, the validity span judged against every sibling period, deletion guarded by the count of journal documents dated inside the period carrying the centre — company code and lock security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 5 minutes. | Agent |
+| 2.122 | 2026-10-17 | **SCR-041 / KS01 stage 4: the supporting rows (B-304, §26.320).** Capability `CFG.COST.COSTCENTER.DEFINE` seeded (82 capabilities), the Term Registry entry added with KS01 as a search alias only (51 terms, 43 aliases), the workbench's built-routes set gaining the screen — and the activity row itself checked standing with its prerequisite and route before, not after, the fact (60 activities). Every row read back standing after reseeding. Typecheck and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
