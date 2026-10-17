@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/cost-centers';
 
 /**
- * Cost centre definition (SCR-041 / KS01; inert since stage 1).
+ * Cost centre definition (SCR-041 / KS01).
  *
  * The master-detail shape: a controlling-area selector over the tenant's
  * areas, then that area's cost centres one row per validity period. The
@@ -70,6 +70,7 @@ export default async function CostCentersPage({
         rows={rows}
         companyCodes={companyCodes}
         categories={COST_CENTER_CATEGORIES}
+        canMaintain={canMaintain}
       />
     </div>
   );
