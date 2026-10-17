@@ -1928,6 +1928,11 @@ const en: Catalogue = {
   'docType.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'tolGroup.title': 'Define Employee Tolerance Groups',
+  'costCenter.title': 'Define Cost Centres',
+  'costCenter.subtitle':
+    'Cost centres defined period by period inside a controlling area, each period carrying its ' +
+    'company code, a responsible person and a category. Postings carry centre codes as text and ' +
+    'do not validate them against these rows yet; this screen defines the master they will read.',
   'tolGroup.subtitle':
     'The posting ceilings attached to a group of users in a company code: per document, per ' +
     'line item, for cash discount, and for the payment differences a payment may book on its own. ' +

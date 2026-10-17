@@ -708,6 +708,50 @@ export const controllingAreaCompany = pgTable(
   ],
 );
 
+/** Cost centre periods — SCR-041 / R-90 (definition; table created in stage 2). */
+export const costCenter = pgTable(
+  'cost_center',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    costCenter: varchar('cost_center', { length: 10 }).notNull(),
+    validFrom: date('valid_from').notNull(),
+    validTo: date('valid_to').notNull(),
+    name: varchar('name', { length: 40 }).notNull(),
+    personResponsible: varchar('person_responsible', { length: 20 }),
+    /** PRODUCTION | ADMINISTRATION | SERVICE | SALES | SUPPORT */
+    category: varchar('category', { length: 16 }).notNull(),
+    companyCode: varchar('company_code', { length: 10 }).notNull(),
+    isPostingLocked: boolean('is_posting_locked').notNull().default(false),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.controllingArea, t.costCenter, t.validFrom] }),
+    check('cost_center_controlling_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('cost_center_code_format_ck', sql`${t.costCenter} ~ '^[A-Z0-9]{1,10}$'`),
+    check('cost_center_name_not_blank_ck', sql`length(btrim(${t.name})) > 0`),
+    check('cost_center_person_not_blank_ck', sql`${t.personResponsible} is null or length(btrim(${t.personResponsible})) > 0`),
+    check(
+      'cost_center_category_ck',
+      sql`${t.category} in ('PRODUCTION','ADMINISTRATION','SERVICE','SALES','SUPPORT')`,
+    ),
+    check('cost_center_company_code_format_ck', sql`${t.companyCode} ~ '^[A-Z0-9]{1,10}$'`),
+    check('cost_center_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+    foreignKey({
+      name: 'cost_center_controlling_area_fk',
+      columns: [t.client, t.controllingArea],
+      foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+    }),
+    foreignKey({
+      name: 'cost_center_area_company_fk',
+      columns: [t.client, t.controllingArea, t.companyCode],
+      foreignColumns: [controllingAreaCompany.client, controllingAreaCompany.controllingArea, controllingAreaCompany.companyCode],
+    }),
+  ],
+);
+
 /** Credit control area — shared credit limit boundary (D-029). */
 export const creditControlArea = pgTable(
   'credit_control_area',
