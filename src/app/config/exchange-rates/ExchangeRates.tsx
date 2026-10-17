@@ -227,11 +227,11 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                   </div>
                   <div>
                     <label htmlFor={`ex-rate-ratio-from-${idKey}`} className="field-label">{t('exRate.ratioFrom')}</label>
-                    <input id={`ex-rate-ratio-from-${idKey}`} name="ratioFrom" type="number" min={1} step={1} defaultValue={1} className="field-input code" />
+                    <input id={`ex-rate-ratio-from-${idKey}`} name="ratioFrom" type="number" min={1} step={1} defaultValue={row.ratioFrom} className="field-input code" />
                   </div>
                   <div>
                     <label htmlFor={`ex-rate-ratio-to-${idKey}`} className="field-label">{t('exRate.ratioTo')}</label>
-                    <input id={`ex-rate-ratio-to-${idKey}`} name="ratioTo" type="number" min={1} step={1} defaultValue={1} className="field-input code" />
+                    <input id={`ex-rate-ratio-to-${idKey}`} name="ratioTo" type="number" min={1} step={1} defaultValue={row.ratioTo} className="field-input code" />
                   </div>
                 </div>
                 <div>
@@ -325,6 +325,8 @@ export function ExchangeRates({
                 <th>{t('exRate.pair')}</th>
                 <th>{t('exRate.validFrom')}</th>
                 <th>{t('exRate.rate')}</th>
+                <th>{t('exRate.ratio')}</th>
+                <th>{t('exRate.effectiveRate')}</th>
                 {canMaintain && <th>{t('exRate.actions')}</th>}
               </tr>
             </thead>
@@ -337,6 +339,8 @@ export function ExchangeRates({
                   </td>
                   <td className="code">{row.validFrom}</td>
                   <td className="code">{row.rate}</td>
+                  <td className="code">{row.ratioFrom} : {row.ratioTo}</td>
+                  <td className="code">{row.effectiveRate}</td>
                   {canMaintain && (
                     <td>
                       <RowDialogs row={row} />
@@ -346,7 +350,7 @@ export function ExchangeRates({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={canMaintain ? 5 : 4} className="px-4 py-8 text-center text-sm text-ink-soft">
+                  <td colSpan={canMaintain ? 7 : 6} className="px-4 py-8 text-center text-sm text-ink-soft">
                     {t('exRate.empty')}
                   </td>
                 </tr>

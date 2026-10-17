@@ -1745,6 +1745,8 @@ const en: Catalogue = {
   'exRate.validFrom': 'Valid From',
   'exRate.rate': 'Rate',
   'exRate.newRate': 'New rate',
+  'exRate.ratio': 'Ratio (from : to)',
+  'exRate.effectiveRate': 'Effective Rate',
   'exRate.ratioFrom': 'Ratio (from)',
   'exRate.ratioTo': 'Ratio (to)',
   'exRate.rateMeaning':

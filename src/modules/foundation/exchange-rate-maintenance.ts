@@ -1,4 +1,4 @@
-import { asc, desc, eq } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { currency as currencyReference } from '../../platform/tables/reference';
@@ -32,6 +32,12 @@ export interface ExchangeRateRow {
   validFrom: string;
   /** As entered: 1 unit of fromCurrency = rate units of toCurrency. */
   rate: string;
+  /** The unit count the From side of the quote is stated for; at least 1. */
+  ratioFrom: number;
+  /** The unit count the To side of the quote is stated for; at least 1. */
+  ratioTo: number;
+  /** rate × ratioTo / ratioFrom, at the stored precision: what a posting would use. */
+  effectiveRate: string;
 }
 
 export interface CurrencyChoice {
@@ -49,6 +55,11 @@ export async function listExchangeRates(client: string): Promise<ExchangeRateRow
         toCurrency: exchangeRate.toCurrency,
         validFrom: exchangeRate.validFrom,
         rate: exchangeRate.rate,
+        ratioFrom: exchangeRate.ratioFrom,
+        ratioTo: exchangeRate.ratioTo,
+        // Computed by the database, not by a JavaScript float: a rate is money, and the
+        // stored precision is eighteen digits a double cannot hold.
+        effectiveRate: sql<string>`(${exchangeRate.rate} * ${exchangeRate.ratioTo} / ${exchangeRate.ratioFrom})::numeric(18, 8)`,
       })
       .from(exchangeRate)
       .where(eq(exchangeRate.client, client))

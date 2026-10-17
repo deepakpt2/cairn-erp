@@ -740,6 +740,14 @@ export const exchangeRate = pgTable(
     validFrom: date('valid_from').notNull(),
     /** Quoted as: 1 unit of fromCurrency = rate units of toCurrency. */
     rate: numeric('rate', { precision: 18, scale: 8 }).notNull(),
+    /**
+     * The translation ratio the rate is quoted for (SCR-034 / R-84; the package's
+     * FFACT/TFACT). The effective rate is rate × ratioTo / ratioFrom. A ratio is a
+     * unit count — 1, 10, 100 — so it is an integer, at least one, and defaults to
+     * the one every row meant before the columns existed.
+     */
+    ratioFrom: integer('ratio_from').notNull().default(1),
+    ratioTo: integer('ratio_to').notNull().default(1),
     /** True when the rate is quoted indirectly (units of foreign per 1 local). */
     isIndirectQuote: boolean('is_indirect_quote').notNull().default(false),
     ...auditColumns,
@@ -754,6 +762,8 @@ export const exchangeRate = pgTable(
       t.fromCurrency,
       t.toCurrency,
     ),
+    check('exchange_rate_ratio_from_positive', sql`${t.ratioFrom} >= 1`),
+    check('exchange_rate_ratio_to_positive', sql`${t.ratioTo} >= 1`),
   ],
 );
 
