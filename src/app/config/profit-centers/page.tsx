@@ -64,7 +64,13 @@ export default async function ProfitCentersPage({
         </p>
       )}
 
-      <ProfitCenters areas={areas} selectedArea={selectedArea} rows={rows} users={users} />
+      <ProfitCenters
+        areas={areas}
+        selectedArea={selectedArea}
+        rows={rows}
+        users={users}
+        canMaintain={canMaintain}
+      />
     </div>
   );
 }

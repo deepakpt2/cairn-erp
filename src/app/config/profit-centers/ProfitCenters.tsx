@@ -1,5 +1,6 @@
 'use client';
 
+import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { CostCenterArea } from '../../../modules/foundation/cost-center-definition';
@@ -7,32 +8,352 @@ import type {
   ProfitCenterRow,
   ResponsibleUserChoice,
 } from '../../../modules/foundation/profit-center-definition';
+import {
+  deleteProfitCenterAction,
+  lockProfitCenterAction,
+  saveProfitCenterAction,
+  type ProfitCenterActionState,
+} from './actions';
 
-const INERT_NOTE =
-  'Stage 1 of 5: this screen is inert — the profit centre table and the write arrive in the following stages.';
+function RequiredMark() {
+  return (
+    <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
+  );
+}
+
+function Message({ state }: { state: ProfitCenterActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
+}
+
+function ReasonField({ id }: { id: string }) {
+  const [reason, setReason] = useState('');
+  return (
+    <div>
+      <label htmlFor={id} className="field-label">
+        Reason<RequiredMark />
+      </label>
+      <textarea
+        id={id}
+        name="reason"
+        className="field-input"
+        rows={2}
+        maxLength={500}
+        required
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+      />
+    </div>
+  );
+}
+
+function DialogShell({
+  summary,
+  title,
+  code,
+  children,
+}: {
+  summary: string;
+  title: string;
+  code: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="min-w-16">
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        {summary}
+      </summary>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+      >
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
+            <div>
+              <span className="code text-xs text-ink-faint">KE51 · {code}</span>
+              <p className="font-semibold">{title}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-default min-h-11 sm:min-h-9"
+              onClick={(event) => {
+                const details = event.currentTarget.closest('details');
+                if (details) details.open = false;
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <section className="panel overflow-hidden p-4">{children}</section>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function CentreFields({
+  idPrefix,
+  row,
+  users,
+}: {
+  idPrefix: string;
+  row: ProfitCenterRow | null;
+  users: ResponsibleUserChoice[];
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label htmlFor={`${idPrefix}-validTo`} className="field-label">
+          Valid To<RequiredMark />
+        </label>
+        <input
+          id={`${idPrefix}-validTo`}
+          name="validTo"
+          type="date"
+          required
+          className="field-input"
+          defaultValue={row?.validTo ?? '9999-12-31'}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-name`} className="field-label">
+          Name<RequiredMark />
+        </label>
+        <input
+          id={`${idPrefix}-name`}
+          name="name"
+          required
+          maxLength={20}
+          className="field-input"
+          defaultValue={row?.name ?? ''}
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <label htmlFor={`${idPrefix}-longText`} className="field-label">
+          Long Text
+        </label>
+        <input
+          id={`${idPrefix}-longText`}
+          name="longText"
+          maxLength={40}
+          className="field-input"
+          defaultValue={row?.longText ?? ''}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-person`} className="field-label">
+          Person Responsible
+        </label>
+        <input
+          id={`${idPrefix}-person`}
+          name="personResponsible"
+          maxLength={20}
+          className="field-input"
+          defaultValue={row?.personResponsible ?? ''}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-user`} className="field-label">
+          Responsible User
+        </label>
+        <select
+          id={`${idPrefix}-user`}
+          name="responsibleUser"
+          className="field-input"
+          defaultValue={row?.responsibleUser ?? ''}
+        >
+          <option value="">No responsible user</option>
+          {users.map((user) => (
+            <option key={user.username} value={user.username}>
+              {user.username} — {user.fullName}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label htmlFor={`${idPrefix}-segment`} className="field-label">
+          Segment
+        </label>
+        <input
+          id={`${idPrefix}-segment`}
+          name="segment"
+          maxLength={10}
+          className="field-input code"
+          defaultValue={row?.segment ?? ''}
+        />
+        <p className="mt-1 text-xs text-ink-soft">
+          Entered freely until a segment master stands to judge it.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CreatePanel({
+  selectedArea,
+  users,
+}: {
+  selectedArea: string;
+  users: ResponsibleUserChoice[];
+}) {
+  const [state, formAction, pending] = useActionState<ProfitCenterActionState, FormData>(
+    saveProfitCenterAction,
+    { ok: true },
+  );
+  return (
+    <section className="panel overflow-hidden" aria-labelledby="pc-create-title">
+      <div className="panel-header">
+        <h2 id="pc-create-title" className="panel-title">New profit centre period</h2>
+      </div>
+      <form className="space-y-3 p-4" action={formAction}>
+        <input type="hidden" name="mode" value="CREATE" />
+        <input type="hidden" name="controllingArea" value={selectedArea} />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="pc-code" className="field-label">
+              Profit Centre<RequiredMark />
+            </label>
+            <input
+              id="pc-code"
+              name="profitCenter"
+              required
+              maxLength={10}
+              className="field-input code"
+              placeholder="PC100"
+            />
+          </div>
+          <div>
+            <label htmlFor="pc-validFrom" className="field-label">
+              Valid From<RequiredMark />
+            </label>
+            <input id="pc-validFrom" name="validFrom" type="date" required className="field-input" />
+          </div>
+        </div>
+        <CentreFields idPrefix="pc" row={null} users={users} />
+        <p className="text-xs text-ink-soft">
+          The key is (controlling area, profit centre, valid from); periods of one centre may not
+          overlap. Hierarchy placement arrives with the profit centre hierarchy activity, as it did
+          for cost centres.
+        </p>
+        <ReasonField id="pc-reason" />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Create profit centre period
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function ChangeDialog({ row, users }: { row: ProfitCenterRow; users: ResponsibleUserChoice[] }) {
+  const [state, formAction, pending] = useActionState<ProfitCenterActionState, FormData>(
+    saveProfitCenterAction,
+    { ok: true },
+  );
+  const suffix = `${row.profitCenter}-${row.validFrom}`;
+  const label = `${row.profitCenter} · from ${row.validFrom}`;
+  return (
+    <DialogShell summary="Change" title={`Change ${label}`} code={label}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="mode" value="CHANGE" />
+        <input type="hidden" name="controllingArea" value={row.controllingArea} />
+        <input type="hidden" name="profitCenter" value={row.profitCenter} />
+        <input type="hidden" name="validFrom" value={row.validFrom} />
+        <CentreFields idPrefix={`pc-${suffix}`} row={row} users={users} />
+        <ReasonField id={`pc-change-reason-${suffix}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Save changes
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+function LockDialog({ row }: { row: ProfitCenterRow }) {
+  const [state, formAction, pending] = useActionState<ProfitCenterActionState, FormData>(
+    lockProfitCenterAction,
+    { ok: true },
+  );
+  const suffix = `${row.profitCenter}-${row.validFrom}`;
+  const label = `${row.profitCenter} · from ${row.validFrom}`;
+  const verb = row.isPostingLocked ? 'Unlock' : 'Lock';
+  return (
+    <DialogShell summary={verb} title={`${verb} ${label}`} code={label}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="controllingArea" value={row.controllingArea} />
+        <input type="hidden" name="profitCenter" value={row.profitCenter} />
+        <input type="hidden" name="validFrom" value={row.validFrom} />
+        <input type="hidden" name="locked" value={row.isPostingLocked ? 'false' : 'true'} />
+        <p className="text-sm text-ink-soft">
+          {row.isPostingLocked
+            ? 'Unlocking offers this centre to new postings again.'
+            : 'Locking stops new postings carrying this centre; the centre keeps its history and stays listed.'}
+        </p>
+        <ReasonField id={`pc-lock-reason-${suffix}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {verb} profit centre
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
+
+function DeleteDialog({ row }: { row: ProfitCenterRow }) {
+  const [state, formAction, pending] = useActionState<ProfitCenterActionState, FormData>(
+    deleteProfitCenterAction,
+    { ok: true },
+  );
+  const suffix = `${row.profitCenter}-${row.validFrom}`;
+  const label = `${row.profitCenter} · from ${row.validFrom}`;
+  return (
+    <DialogShell summary="Delete" title={`Delete ${label}`} code={label}>
+      <form className="space-y-3" action={formAction}>
+        <input type="hidden" name="controllingArea" value={row.controllingArea} />
+        <input type="hidden" name="profitCenter" value={row.profitCenter} />
+        <input type="hidden" name="validFrom" value={row.validFrom} />
+        <p className="text-sm text-ink-soft">
+          Deleting removes this validity period. It is refused while journal documents dated inside
+          the period carry the centre; the posting lock is the alternative that keeps the centre
+          standing.
+        </p>
+        <ReasonField id={`pc-delete-reason-${suffix}`} />
+        <Message state={state} />
+        <button type="submit" className="btn-primary" disabled={pending}>
+          Delete profit centre period
+        </button>
+      </form>
+    </DialogShell>
+  );
+}
 
 export default function ProfitCenters({
   areas,
   selectedArea,
   rows,
   users,
+  canMaintain,
 }: {
   areas: CostCenterArea[];
   selectedArea: string;
   rows: ProfitCenterRow[];
   users: ResponsibleUserChoice[];
+  canMaintain: boolean;
 }) {
   const router = useRouter();
   return (
     <div className="space-y-4">
-      <p role="note" className="border border-line bg-paper px-4 py-3 text-sm text-ink">
-        {INERT_NOTE}
-      </p>
-      <p className="max-w-3xl text-sm text-ink-soft">
-        Profit centres are the units profitability is reported on, defined period by period inside
-        a controlling area. Hierarchy placement arrives with the profit centre hierarchy activity,
-        as it did for cost centres; the segment is entered freely until a segment master stands.
-      </p>
       <label className="block max-w-sm">
         <span className="mb-1 block text-sm font-medium text-ink">Controlling area</span>
         <select
@@ -51,61 +372,9 @@ export default function ProfitCenters({
         </select>
       </label>
 
-      <fieldset disabled className="max-w-3xl rounded-none border border-line bg-paper p-4">
-        <legend className="px-2 text-sm font-semibold text-ink">Define a profit centre period</legend>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Profit centre (up to 10)</span>
-            <input maxLength={10} placeholder="PC100" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Name (up to 20)</span>
-            <input maxLength={20} placeholder="Services Profit Ctr" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Valid from</span>
-            <input type="date" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Valid to</span>
-            <input type="date" defaultValue="9999-12-31" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block sm:col-span-2">
-            <span className="mb-1 block text-sm font-medium text-ink">Long text (up to 40, optional)</span>
-            <input maxLength={40} placeholder="Services & Consulting Profit Center" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Person responsible (optional)</span>
-            <input maxLength={20} placeholder="Jane Doe" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Responsible user (optional)</span>
-            <select className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink">
-              <option value="">No responsible user</option>
-              {users.map((user) => (
-                <option key={user.username} value={user.username}>
-                  {user.username} — {user.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-ink">Segment (up to 10, optional)</span>
-            <input maxLength={10} placeholder="SEG_CORP" className="w-full rounded-none border border-line bg-paper px-3 py-2 text-base text-ink" />
-          </label>
-        </div>
-        <button
-          type="button"
-          disabled
-          className="mt-4 rounded-none border border-line bg-paper px-4 py-2 text-sm font-medium text-ink"
-        >
-          Save profit centre period
-        </button>
-        <p className="mt-3 text-sm text-ink-soft">
-          The key is (controlling area, profit centre, valid from); periods of one centre may not
-          overlap. A reason is required on every write (later stages).
-        </p>
-      </fieldset>
+      {canMaintain && selectedArea !== '' && (
+        <CreatePanel selectedArea={selectedArea} users={users} />
+      )}
 
       <section className="panel overflow-hidden" aria-labelledby="pc-grid-title">
         <div className="panel-header">
@@ -143,13 +412,15 @@ export default function ProfitCenters({
                     <td className="code">{row.segment ?? '—'}</td>
                     <td>{row.isPostingLocked ? 'Locked' : 'Open'}</td>
                     <td>
-                      <div className="flex flex-wrap gap-2">
-                        <button type="button" disabled className="text-sm text-ink-soft">Change</button>
-                        <button type="button" disabled className="text-sm text-ink-soft">
-                          {row.isPostingLocked ? 'Unlock' : 'Lock'}
-                        </button>
-                        <button type="button" disabled className="text-sm text-ink-soft">Delete</button>
-                      </div>
+                      {canMaintain ? (
+                        <div className="flex flex-wrap gap-1">
+                          <ChangeDialog row={row} users={users} />
+                          <LockDialog row={row} />
+                          <DeleteDialog row={row} />
+                        </div>
+                      ) : (
+                        '—'
+                      )}
                     </td>
                   </tr>
                 ))}
