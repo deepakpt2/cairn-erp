@@ -1065,6 +1065,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.319 B-303 — SCR-041 / KS01 stage 3: the write `STAGE PUBLISHED`
+
+**The services.** `saveCostCenter`, `setCostCenterPostingLock` and `deleteCostCenter` in `src/modules/foundation/cost-center-definition.ts`, in the settled shape. The key (controlling area, cost centre, valid from) is immutable; create over a standing key refuses naming Change and a change to a missing key refuses naming Create. The company code is judged against the SCR-025 assignment — a code assigned to no area, or to another area, is refused by name — and the validity span is judged against every sibling period: an overlap refusal names the period it collides with, while valid to may be re-set on change so long as it still overlaps none. Locking is its own act (stops new postings, keeps history), deletion hard and guarded by the real count it needs: `countCostCenterDocuments` counts journal documents whose posting date falls inside the period and whose lines carry the centre — tenant-wide, as history's measure — and the refusal states the count and offers the lock as the alternative.
+
+**The audit.** One change document per write with a mandatory reason; the company code and the lock state security-relevant; a change repeating the stored facts reports `changed: false` and writes nothing but the activity completion, and the first successful write of any kind completes `CFG.COST.COSTCENTER.DEFINE` (prerequisite `CFG.COST.CONTROLLINGAREA.DEFINE`). Repeating a lock changes nothing, and a deletion's document files everything that stood.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok (the new screen compiled); suite **1123 tests across 137 files**. The capability is not seeded until stage 4, so the screen is read-only for every role meanwhile — fail-closed, as with every writer before it.
+
+**Cost.** Measured: 14:46 in to 14:51 — **5 minutes** of a 39-minute box.
+
+**Not accepted.** The capability and registry entry (stage 4) and tests and browser acceptance (stage 5) remain; the write is published but unreachable until the capability exists, deliberately.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1132,6 +1146,7 @@ recorded change, date and reason stated.
 | 2.118 | 2026-10-17 | **SCR-040 / OBYC stage 5: tests and acceptance (B-300, §26.316). SCR-040 CLOSED.** The service tests judge per failure against fixture balance-sheet and profit-and-loss accounts (event outside the catalogue, chart standing, modifiers refused for events that do not use them, invented and inactive classes refused, not-in-chart separated from the wrong kind in both directions), pin a change-redirect and a documented deletion, and caught the class list's missing active filter, corrected and pinned. The browser target `account-determination` (T956 on `cairn_b210`) passes 6 checkpoints on the production build; neighbours `tolerance-groups` and `document-types` green. Suite 1123 tests across 137 files, typecheck and `lint:ip` clean. Cost measured at 12 minutes. | Agent |
 | 2.119 | 2026-10-17 | **SCR-041 / KS01 contract confirmed and stage 1 (the screen) published (B-301, §26.317; R-90).** Four forks settled: true validity periods against the package's key; deletion refused while journal documents dated inside a period carry the centre, plus an independent posting lock; categories as product words with the single letters as search aliases; hierarchy placement deferred to SCR-042. Currency displays from the controlling area and the name lives on the row. Stage 1 publishes `/config/cost-centers` inert — the area master-detail selector, the create form fed by the area's assigned company codes, the periods table with its lock/delete shapes, and the `cost_center` schema definition the stage-2 migration will create — with the client-boundary correction passing the category catalogue as a page prop. Typecheck, build and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 11 minutes. | Agent |
 | 2.120 | 2026-10-17 | **SCR-041 / KS01 stage 2: the table (B-302, §26.318).** Migrations `0050_cost_center.sql` and `9033_..._policies.sql` create the period registry (12 columns, four-part key, eleven constraints including the foreign key onto the area-company assignment itself; forced RLS, four grants) on `cairn_b210` (85 migrations). Typecheck and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 2 minutes. | Agent |
+| 2.121 | 2026-10-17 | **SCR-041 / KS01 stage 3: the write (B-303, §26.319).** `saveCostCenter`, `setCostCenterPostingLock` and `deleteCostCenter` and the live screen: the period key immutable, the company code judged against the area's own assignment, the validity span judged against every sibling period, deletion guarded by the count of journal documents dated inside the period carrying the centre — company code and lock security-relevant in one change document per write with a mandatory reason. Typecheck, build and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 5 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
