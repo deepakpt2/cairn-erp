@@ -192,6 +192,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'tax-codes') return '/config/tax-codes';
   if (target.id === 'banks') return '/config/banks';
   if (target.id === 'house-banks') return '/config/house-banks';
+  if (target.id === 'document-types') return '/config/document-types';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';

@@ -25,6 +25,7 @@ export const TARGETS = [
   { id: 'tax-codes', client: 'T961', label: 'SCR-035 FTXP tax code definition, duplicate-key refusal, guarded change, usage-blocked deletion' },
   { id: 'banks', client: 'T960', label: 'SCR-036 bank master maintenance, duplicate-key refusal, change, deletion, master left empty' },
   { id: 'house-banks', client: 'T959', label: 'SCR-037 FI12 house bank and account definition, structural deletion refusal, ordered deletion' },
+  { id: 'document-types', client: 'T958', label: 'SCR-038 OBA7 document type definition over the delivered registry, lifecycle, in-use deletion refusal' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
