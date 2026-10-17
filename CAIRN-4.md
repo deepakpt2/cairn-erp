@@ -941,6 +941,18 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.310 B-294 — SCR-039 / OBA4 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** Four rows, one more than the recent rounds needed. The capability `CFG.FIN.TOLERANCE.DEFINE` (FIN, CONFIGURE) joins `scripts/seed.ts` (no role row changes; the `CFG.*` wildcard makes the row the grant). The Term Registry gains the definition entry at `/config/tolerance-groups` with **OBA4 as a search alias only**, its description carrying the whole contract — both blank key parts and their meanings, zero imposing no ceiling, the line ceiling judged only when both stand non-zero, no deletion until user assignment exists to check, and the honest note that posting does not read the limits yet. The workbench's built-routes set gains the screen in the same stage. And, unlike OBA7 whose activity had routed since the earliest seed, this activity is new: the seed's activity list gains `CFG.FIN.TOLERANCE.DEFINE` itself, with prerequisite `CFG.ORG.COMPANYCODE.DEFINE`. Read back after reseeding rather than trusted: 80 capabilities (was 79), 60 activities (was 59), 49 terms (was 48), 41 aliases (was 40) — and each row named and checked individually: capability standing, the Term Registry entry on its route, the alias row joined to it, and the activity row standing with its prerequisite and route at the screen.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; production build ok; suite **1096 tests across 135 files**; seed applied to `cairn_b210` and the rows read back from it.
+
+**Cost.** Measured: 13:01 in to 13:05, when `a9405e6` landed — **4 minutes** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -999,6 +1011,7 @@ recorded change, date and reason stated.
 | 2.109 | 2026-10-17 | **SCR-039 / OBA4 contract confirmed and stage 1 (the screen) published (B-291, §26.307; R-88).** The owner settled blank company code as the tenant-wide scope, a group key of up to four characters that may itself be blank (the default group), no deletion until user assignment exists to check, and zero in any limit meaning no ceiling, the line ceiling judged against the document ceiling only when both stand non-zero. Stage 1 publishes `/config/tolerance-groups` inert over the intended registry and the `employee_tolerance_group` schema definition the stage-2 migration will create, the screen stating the stored meanings of its blanks and zeroes and the not-yet-deletable position. Typecheck, build (route 1.99 kB) and `lint:ip` clean; suite 1096 across 135 files. Cost measured at 4 minutes. | Agent |
 | 2.110 | 2026-10-17 | **SCR-039 / OBA4 stage 2: the table (B-292, §26.308).** Migrations `0047_employee_tolerance_group.sql` and `9031_..._policies.sql` create the registry (14 columns, composite key over both deliberate blanks, six checks, forced RLS) on `cairn_b210` (80 migrations); verified from the database and every check exercised refused. The probe caught the package's literal `numeric(5,3)` topping out at 99.999 against the contract's 100.000 cash-discount ceiling, corrected by append-only `0048` widening to `numeric(6,3)` — after which 100.000 stores and 100.001 is refused by the check itself; registry read back empty. Typecheck, build and `lint:ip` clean; suite 1096 across 135 files. Cost measured at 4 minutes. | Agent |
 | 2.111 | 2026-10-17 | **SCR-039 / OBA4 stage 3: the write (B-293, §26.309).** `saveEmployeeToleranceGroup` (create/change only — no delete exists, per R-88) and the live screen: composite immutable key with both blanks as stored values, a named Company Code judged against the tenant, exact-decimal limits at package widths with zero imposing no ceiling and the line-versus-document rule judged only when both stand non-zero, no-op changes answering `changed: false`, a mandatory reason and one change document per write with all seven limits security-relevant. Typecheck, build (route 2.44 kB) and `lint:ip` clean; suite 1096 across 135 files. Cost measured at 4 minutes. | Agent |
+| 2.112 | 2026-10-17 | **SCR-039 / OBA4 stage 4: the supporting rows (B-294, §26.310).** Capability `CFG.FIN.TOLERANCE.DEFINE` seeded (80 capabilities), the Term Registry entry added with OBA4 as a search alias only (49 terms, 41 aliases), the workbench's built-routes set gaining the screen — and, as checked for after SCR-037 stage 4's catch, the **activity row itself added new** to the seed (60 activities) with prerequisite `CFG.ORG.COMPANYCODE.DEFINE`; every row read back standing after reseeding. Typecheck and `lint:ip` clean, build ok, suite 1096 across 135 files. Cost measured at 4 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
