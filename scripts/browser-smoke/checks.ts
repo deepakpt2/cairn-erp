@@ -48,6 +48,7 @@ import { toleranceGroupsOba4 } from './tolerance-groups';
 import { accountDeterminationObyc } from './account-determination';
 import { costCentersKs01 } from './cost-centers';
 import { costCenterHierarchyKs01 } from './cost-center-hierarchy';
+import { activityTypesKl01 } from './activity-types';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4869,6 +4870,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'account-determination': accountDeterminationObyc,
   'cost-centers': costCentersKs01,
   'cost-center-hierarchy': costCenterHierarchyKs01,
+  'activity-types': activityTypesKl01,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
