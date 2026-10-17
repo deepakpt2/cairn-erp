@@ -1379,6 +1379,18 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.342 B-326 — SCR-045 / KE51 stage 4: the supporting rows `STAGE PUBLISHED`
+
+**What was seeded.** The capability `CFG.COST.PROFITCENTER.DEFINE` (COST, CONFIGURE) joins `scripts/seed.ts` (86 capabilities; the `CFG.*` wildcard makes the row the grant, as by now usual). The Term Registry gains the definition entry at `/config/profit-centers` with **KE51 as a search alias only** (55 terms, 49 aliases), its description carrying the whole contract — the period key and overlap rule, both text widths on the row, the responsible user judged against the tenant's active users, the segment's honest free entry until its master stands, the hierarchy deferred to its own following SCR exactly as cost centres deferred theirs, and the journal-guarded deletion. The workbench's built-routes set gains the screen. The activity row itself already stood in the seed (60 activities; route `/config/profit-centers`, prerequisite `CFG.COST.CONTROLLINGAREA.DEFINE`) — read back rather than assumed, standing with its prerequisite and route.
+
+**Verification.** `npm run typecheck` clean; `lint:ip` clean; suite **1178 tests across 141 files**; seed applied to `cairn_b210` and the rows read back (capability, term with its alias, the standing activity; counts 86/55/49).
+
+**Cost.** Measured: 16:59 in to 17:01 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** Tests and browser acceptance (stage 5) remain; the screen is maintainable in the development tenant now, but nothing is accepted until stage 5 drives it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1469,6 +1481,7 @@ recorded change, date and reason stated.
 | 2.141 | 2026-10-17 | **SCR-045 / KE51 contract confirmed and stage 1 (the screen) published (B-323, §26.339; R-94).** SAP parity on the names (short 20 required, long 40 optional, both on the row), the segment's width (free until a segment master stands), and the lifecycle (journal-guarded delete plus the lock); the hierarchy deferred in the owner's own words — 'same defer for now then build it' — as the next SCR, this screen gaining placement afterwards as KS01 did. Stage 1 publishes `/config/profit-centers` inert: the period definition, the reads with the user-directory value help, the master-detail screen, and the catalogue keys. Typecheck, build (route 1.79 kB) and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 5 minutes. | Agent |
 | 2.142 | 2026-10-17 | **SCR-045 / KE51 stage 2: the table (B-324, §26.340).** Migrations `0055_profit_center.sql` and `9038_..._policies.sql` create the period registry (15 columns, four-part key, seven constraints; forced RLS, four grants) on `cairn_b210` (95 migrations). Typecheck clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 | 2.143 | 2026-10-17 | **SCR-045 / KE51 stage 3: the write (B-325, §26.341).** `saveProfitCenter`, `setProfitCenterPostingLock` and `deleteProfitCenter` and the live screen: the period key immutable, the responsible user judged against the tenant's active users, the segment kept at parity width unjudged until its master stands, the validity span judged against every sibling period — responsible user, segment and lock security-relevant in one change document per write with a mandatory reason, and deletion refused while journal documents dated inside carry the centre. Typecheck, build and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 3 minutes. | Agent |
+| 2.144 | 2026-10-17 | **SCR-045 / KE51 stage 4: the supporting rows (B-326, §26.342).** Capability `CFG.COST.PROFITCENTER.DEFINE` seeded (86 capabilities), the Term Registry entry added with KE51 as a search alias only (55 terms, 49 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1178 across 141 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
