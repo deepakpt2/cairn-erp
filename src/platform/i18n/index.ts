@@ -1725,6 +1725,44 @@ const en: Catalogue = {
   'ppvAssign.unexpectedRemedy':
     'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'ppvAssign.defineLink': 'Define variants',
+  'taxCode.title': 'Define Tax Codes for Sales and Purchases',
+  'taxCode.subtitle':
+    'The tax code each country taxes at, the rate it carries, and the condition and ' +
+    'account keys a posting rule reads. Journal lines already carry a tax code as text; ' +
+    'this is where the codes are defined, so a line names something that exists.',
+  'taxCode.companyCodesLink': 'Company Codes',
+  'taxCode.glAccountsLink': 'G/L accounts',
+  'taxCode.newTitle': 'New tax code',
+  'taxCode.gridTitle': 'Tax codes',
+  'taxCode.country': 'Country',
+  'taxCode.chooseCountry': 'Choose country',
+  'taxCode.code': 'Tax Code',
+  'taxCode.name': 'Description',
+  'taxCode.newName': 'New description',
+  'taxCode.taxType': 'Tax Type (condition)',
+  'taxCode.taxTypeHint': 'The condition type the posting rule reads, up to four characters (for example VST, MWS).',
+  'taxCode.rate': 'Tax Rate %',
+  'taxCode.accountKey': 'Account Key',
+  'taxCode.accountKeyHint': 'Optional. The account key the tax posting follows, up to three characters.',
+  'taxCode.usedBy': 'Used by (lines)',
+  'taxCode.reason': 'Reason',
+  'taxCode.create': 'Create tax code',
+  'taxCode.change': 'Change',
+  'taxCode.save': 'Save tax code',
+  'taxCode.delete': 'Delete',
+  'taxCode.changeUsedNote':
+    'Posted on {count} journal line(s). Documents already posted keep the amounts they ' +
+    'were posted with; a new rate governs what is determined from the change onward.',
+  'taxCode.deleteBlocked':
+    'This code is posted on {count} journal line(s) and cannot be deleted. Journal lines ' +
+    'carry the code without its country, so the count covers every line in this tenant ' +
+    'carrying it, under any country.',
+  'taxCode.deleteNote':
+    'Deleting a code removes it for future determination. Nothing in this tenant has ' +
+    'posted with it, so no history is orphaned; the deletion and its reason are filed.',
+  'taxCode.actions': 'Actions',
+  'taxCode.empty': 'No tax codes are defined in this tenant.',
+  'taxCode.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
   'exRate.title': 'Maintain Exchange Rates',
   'exRate.subtitle':
     'The rate each currency pair converts at, by rate type and the date it takes effect. ' +
