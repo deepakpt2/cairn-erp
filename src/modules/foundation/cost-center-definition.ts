@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
-import { controllingArea, controllingAreaCompany, costCenter } from './schema';
+import { controllingArea, controllingAreaCompany, costCenter, costCenterNodeAssignment } from './schema';
 
 /**
  * Cost centre definition — the read side (SCR-041 stage 1).
@@ -66,6 +66,8 @@ export interface CostCenterRow {
   currency: string;
   /** Journal documents dated inside this period carrying the centre (the deletion judge). */
   journalDocuments: number;
+  /** The standard-hierarchy node this period stands in (SCR-042), or null = not placed. */
+  hierarchyNode: string | null;
 }
 
 export async function listCostCenterAreas(clientId: string): Promise<CostCenterArea[]> {
@@ -104,6 +106,17 @@ export async function listCostCenters(clientId: string, area: string): Promise<C
       )
       .where(eq(costCenter.controllingArea, area))
       .orderBy(asc(costCenter.costCenter), asc(costCenter.validFrom));
+    const assignments = await tx
+      .select({
+        node: costCenterNodeAssignment.node,
+        costCenter: costCenterNodeAssignment.costCenter,
+        validFrom: costCenterNodeAssignment.validFrom,
+      })
+      .from(costCenterNodeAssignment)
+      .where(eq(costCenterNodeAssignment.controllingArea, area));
+    const placement = new Map(
+      assignments.map((row) => [`${row.costCenter}:${row.validFrom}`, row.node]),
+    );
     const counted = [];
     for (const row of rows) {
       counted.push({
@@ -114,6 +127,7 @@ export async function listCostCenters(clientId: string, area: string): Promise<C
           validFrom: row.validFrom,
           validTo: row.validTo,
         }),
+        hierarchyNode: placement.get(`${row.costCenter}:${row.validFrom}`) ?? null,
       });
     }
     return counted;

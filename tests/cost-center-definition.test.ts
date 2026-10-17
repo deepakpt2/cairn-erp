@@ -4,7 +4,12 @@ import { and, eq } from 'drizzle-orm';
 import { changeHistory } from '@/platform/change';
 import { withTenant } from '@/platform/db/client';
 import { configActivityStatus } from '@/platform/tables/registry';
-import { controllingAreaCompany } from '@/modules/foundation/schema';
+import {
+  controllingAreaCompany,
+  costCenterHierarchy,
+  costCenterNode,
+  costCenterNodeAssignment,
+} from '@/modules/foundation/schema';
 import { journalEntry, journalEntryLine } from '@/modules/finance/schema';
 import {
   ACTIVITY,
@@ -336,6 +341,37 @@ describe('cost centre definition (SCR-041)', () => {
       /real calendar date/,
     );
     await expect(saveCostCenter(creation({ reason: '  ' }))).rejects.toThrow(/reason is required/);
+  });
+
+  it('reports each period\'s hierarchy placement, or Not placed (SCR-042 deferral)', async () => {
+    const { client } = fixture();
+    const before = await listCostCenters(client, 'A000');
+    expect(before.find((row) => row.validFrom === '2026-01-01')?.hierarchyNode).toBeNull();
+    await withTenant(client, async (tx) => {
+      await tx.insert(costCenterHierarchy).values({
+        client,
+        controllingArea: 'A000',
+        title: 'Fixture hierarchy',
+        createdBy: TEST_ACTOR,
+      });
+      await tx.insert(costCenterNode).values({
+        client,
+        controllingArea: 'A000',
+        node: 'PROD',
+        title: 'Production',
+        createdBy: TEST_ACTOR,
+      });
+      await tx.insert(costCenterNodeAssignment).values({
+        client,
+        controllingArea: 'A000',
+        node: 'PROD',
+        costCenter: 'CC1000',
+        validFrom: '2026-01-01',
+        createdBy: TEST_ACTOR,
+      });
+    });
+    const after = await listCostCenters(client, 'A000');
+    expect(after.find((row) => row.validFrom === '2026-01-01')?.hierarchyNode).toBe('PROD');
   });
 
   it('refuses while the controlling-area prerequisite is incomplete', async () => {

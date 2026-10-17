@@ -418,6 +418,7 @@ export default function CostCenters({
                   <th>Name</th>
                   <th>Company code</th>
                   <th>Category</th>
+                  <th>Hierarchy node</th>
                   <th>Posting</th>
                   <th>Actions</th>
                 </tr>
@@ -432,6 +433,7 @@ export default function CostCenters({
                     <td>{row.name}</td>
                     <td className="code">{row.companyCode}</td>
                     <td>{row.category}</td>
+                    <td className="code">{row.hierarchyNode ?? 'Not placed'}</td>
                     <td>{row.isPostingLocked ? 'Locked' : 'Open'}</td>
                     <td>
                       {canMaintain ? (
