@@ -1268,6 +1268,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.334 B-318 — SCR-044 / KP26 stage 2: the table `STAGE PUBLISHED`
+
+**What was created.** Migration `0054_activity_rate.sql` creates `activity_rate` (15 columns): the seven-part key of client, controlling area, planning version, fiscal year, fiscal period, cost centre and activity type; the planned quantity at decimal(13,3); the fixed and variable price components at decimal(11,2) in the controlling area's currency (displayed, never stored with the row); the price unit; and the full audit set. Thirteen constraints — every key format, the year and period spans, the non-negative amounts and the price unit floor, and the area foreign key. `9037` adds the standard tenant isolation (RLS enabled and forced, `tenant_isolation` on `cairn.client`, no PUBLIC rights, DML for `cairn_app`). Applied to `cairn_b210`: 93 migrations standing. The period's membership in the area's variant, the masters' validity against the period window, and the price indicator's governance are service judgements — each needs the variant's windows and both masters, which no check can see.
+
+**Verification, from the database.** 15 columns; the thirteen constraints; forced RLS; exactly four grants. Stage 5's service tests will exercise every check against fixture parents.
+
+**Gates.** `npm run typecheck` clean; suite **1164 tests across 140 files**.
+
+**Cost.** Measured: 16:22 in to 16:23 — **1 minute** of a 39-minute box.
+
+**Not accepted.** The write, including both masters' new deletion judges (stage 3), the capability and registry entry (stage 4), and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1350,6 +1364,7 @@ recorded change, date and reason stated.
 | 2.133 | 2026-10-17 | **SCR-043 / KL01 stage 4: the supporting rows (B-315, §26.331).** Capability `CFG.COST.ACTIVITYTYPE.DEFINE` seeded (84 capabilities), the Term Registry entry added with KL01 as a search alias only (53 terms, 47 aliases), the workbench's built-routes set gaining the screen — and the activity row read back standing with its prerequisite and route. Typecheck and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
 | 2.134 | 2026-10-17 | **SCR-043 / KL01 CLOSED and accepted (B-316, §26.332).** Stage 5 ships 12 service tests and the T953 browser target `activity-types` (6/6 journeys against the production build — period documented in HR, the overlap named back, the change dialog, the lock round, the documented deletion); three harness-side fixes in the target alone (missing catalogue keys committed separately; summaries by text; the lock dialogs closed before the next act). Neighbouring `cost-centers` and `cost-center-hierarchy` targets, typecheck, build and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 104 minutes overall. | Agent |
 | 2.135 | 2026-10-17 | **SCR-044 / KP26 contract confirmed and stage 1 (the screen) published (B-317, §26.333; R-93).** SAP parity taken on all four forks — versions as a free three-character key standing when first planned, periods from the area's fiscal year variant with specials on the last regular window, master validity judged per period against the period's window, and the price indicator governing entry (manual stands, automatic refuses components) — and both masters' deletion judges gain their rate count here. Stage 1 publishes `/config/activity-rates` inert: the seven-part rate definition, the planning-context and rate reads, the selector-over-matrix screen, and the catalogue keys. Typecheck, build (route 1.93 kB) and `lint:ip` clean; suite 1164 across 140 files. Cost measured at 5 minutes. | Agent |
+| 2.136 | 2026-10-17 | **SCR-044 / KP26 stage 2: the table (B-318, §26.334).** Migrations `0054_activity_rate.sql` and `9037_..._policies.sql` create the planning registry (15 columns, seven-part key over the six planning dimensions, thirteen constraints including the quantity and component widths and the price unit floor; forced RLS, four grants) on `cairn_b210` (93 migrations). Typecheck clean; suite 1164 across 140 files. Cost measured at 1 minute. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
