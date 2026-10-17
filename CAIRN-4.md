@@ -1199,6 +1199,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.329 B-313 — SCR-043 / KL01 stage 2: the table `STAGE PUBLISHED`
+
+**What was created.** Migration `0053_activity_type.sql` creates `activity_type` (15 columns): the four-part period key of client, controlling area, activity type and valid from; the period's end, name and unit; the category and price-indicator digits; the canonical category subset ('' = all categories); the posting-lock flag; and the full audit set. Nine constraints — area and code formats, the non-blank name, both digit vocabularies, the validity span, and the area foreign key. `9036` adds the standard tenant isolation (RLS enabled and forced, `tenant_isolation` on `cairn.client`, no PUBLIC rights, DML for `cairn_app`). Applied to `cairn_b210`: 91 migrations standing. The unit's existence and the subset's canonical order are service judgements (one reads the global units table, the other the KS01 catalogue), deliberately not checks.
+
+**Verification, from the database.** 15 columns; the nine constraints; forced RLS; exactly four grants. The read side answers empty beside the tenant's real furniture (the development database holds no tenants' activity types yet; stage 5's service tests will exercise every check against fixture parents).
+
+**Gates.** `npm run typecheck` clean; suite **1151 tests across 139 files**.
+
+**Cost.** Measured: 15:51 in to 15:53 — **2 minutes** of a 39-minute box.
+
+**Not accepted.** The write (stage 3), capability and registry entry (stage 4), and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1276,6 +1290,7 @@ recorded change, date and reason stated.
 | 2.128 | 2026-10-17 | **SCR-042 / KSH1·OKEON stage 5: tests and acceptance (B-310, §26.326). SCR-042 CLOSED.** The service tests work both structures through: the one-parent placement with moves as unplace-then-place, cycles and the ten-level guard refused, node deletion counts, leaf shapes judged both ways, groups deleting with their leaves while masters stand. The browser target `cost-center-hierarchy` (T954 on `cairn_b210`) passes 7 checkpoints on the production build — route, header, root and child, exclusivity, blocked deletion, the ranged group resolving on screen, documented unassign — asserted by standing evidence where success unmounts its own dialog; neighbours `cost-centers` and `account-determination` green. Suite 1150 tests across 139 files, typecheck and `lint:ip` clean. Cost measured at 10 minutes. | Agent |
 | 2.129 | 2026-10-17 | **The SCR-041 hierarchy deferral closed on the KS01 screen (B-311, §26.327).** The deferred hierarchy area arrives as display, not as a field: the KS01 periods grid now shows each period's standard-hierarchy node from the SCR-042 assignments (Not placed until placed), read-only, placement still maintained only on the hierarchy screen. The thirteenth cost-centre test pins both states; the `cost-centers` browser target passes unchanged on the production build. Suite 1151 tests across 139 files, typecheck and `lint:ip` clean. Cost measured at 4 minutes. | Agent |
 | 2.130 | 2026-10-17 | **SCR-043 / KL01 contract confirmed and stage 1 (the screen) published (B-312, §26.328; R-92).** SAP parity taken on all three vocabulary forks — the category and price-indicator digits stored as the reference stores them with word labels displayed, any standing unit judged on existence, and valid cost-centre categories attached as a canonical subset — plus the KS01 lifecycle (delete and posting lock) and its period shape. Stage 1 publishes `/config/activity-types` inert: the four-part period definition, the digit catalogues and subset helpers, the area master over the create form fed by the global units table, and the catalogue keys. Typecheck, build (route 1.9 kB) and `lint:ip` clean; suite 1151 across 139 files. Cost measured at 3 minutes. | Agent |
+| 2.131 | 2026-10-17 | **SCR-043 / KL01 stage 2: the table (B-313, §26.329).** Migrations `0053_activity_type.sql` and `9036_..._policies.sql` create the period registry (15 columns, four-part key, nine constraints including both digit vocabularies; forced RLS, four grants) on `cairn_b210` (91 migrations). Typecheck clean; suite 1151 across 139 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
