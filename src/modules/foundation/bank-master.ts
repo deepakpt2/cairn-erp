@@ -1,7 +1,7 @@
 import { asc } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
-import { country as countryReference } from '../../platform/tables/reference';
+import { bankMaster, country as countryReference } from '../../platform/tables/reference';
 
 /**
  * Bank master — the read side (SCR-036 stage 1).
@@ -24,9 +24,8 @@ import { country as countryReference } from '../../platform/tables/reference';
  * history is filed per tenant and a global row has no tenant to file it under.
  * Deletion is refused while any tenant's house bank names the entry.
  *
- * There is no bank table yet: this module exists before it for the same reason the
- * earlier readers do — the screen has to render what a write will be judged
- * against. Stage 2 creates the table; until then the list answers honestly empty.
+ * Stage 1 published the screen against an honestly empty list; stage 2 created
+ * the table (migration 0044) and the read below is real from that commit on.
  */
 export const CAPABILITY = 'CFG.FIN.BANK.DEFINE';
 export const OBJECT_CLASS = 'bank_master';
@@ -48,12 +47,23 @@ export interface BankCountryChoice {
 }
 
 /**
- * Every bank the master holds. The table arrives in stage 2; until then no rows
- * exist to read, and the screen says so rather than pretending to have looked.
+ * Every bank the master holds, by country then key. The table is global — the
+ * tenant context only borrows the connection; no row is any tenant's.
  */
 export async function listBanks(client: string): Promise<BankRow[]> {
-  void client;
-  return [];
+  return withTenant(client, async (tx) => {
+    const rows = await tx
+      .select({
+        bankCountry: bankMaster.bankCountry,
+        bankKey: bankMaster.bankKey,
+        name: bankMaster.name,
+        city: bankMaster.city,
+        swift: bankMaster.swift,
+      })
+      .from(bankMaster)
+      .orderBy(asc(bankMaster.bankCountry), asc(bankMaster.bankKey));
+    return rows.map((row) => ({ ...row, bankCountry: row.bankCountry.trim() }));
+  });
 }
 
 /** The countries a bank may be keyed under — the country master, read as-is. */

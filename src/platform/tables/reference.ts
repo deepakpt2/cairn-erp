@@ -3,7 +3,10 @@
  *
  * Countries, currencies and units of measure are the same for every tenant, so
  * they sit outside the tenant partition. They are read-only through the
- * application and maintained by migration/seed.
+ * application and maintained by migration/seed. The bank master below is the
+ * one exception the owner ruled (R-86): global like the rest, but maintained
+ * through the application under a capability, because banks are discovered by
+ * operators long after seeding.
  */
 import {
   pgTable,
@@ -13,6 +16,7 @@ import {
   boolean,
   timestamp,
   index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 /** ISO 3166 country codes — CAIRN.md §8.2 */
@@ -57,4 +61,35 @@ export const unitOfMeasure = pgTable(
     isBaseUnit: boolean('is_base_unit').notNull().default(false),
   },
   (t) => [index('uom_dimension_idx').on(t.dimension)],
+);
+
+/**
+ * The bank master (SCR-036, migration 0044). Global like the tables above —
+ * a bank is the same bank in every tenant — but maintained through the
+ * application under the CFG.FIN.BANK.DEFINE capability (R-86), because house
+ * banks (SCR-037) refer to banks by country and key and a tenant cannot be
+ * asked to wait for a seed to learn its own bank. No tenant column, so no
+ * tenant policy; the audit is actor columns, since change history files per
+ * tenant and a global row has none to file under.
+ */
+export const bankMaster = pgTable(
+  'bank_master',
+  {
+    bankCountry: char('bank_country', { length: 2 })
+      .notNull()
+      .references(() => country.code),
+    bankKey: varchar('bank_key', { length: 15 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    city: varchar('city', { length: 35 }),
+    /** SWIFT/BIC: 8 or 11 characters, enforced by check in 0044. */
+    swift: varchar('swift', { length: 11 }),
+    createdBy: varchar('created_by', { length: 60 }).notNull().default('SYSTEM'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    changedBy: varchar('changed_by', { length: 60 }),
+    changedAt: timestamp('changed_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bankCountry, t.bankKey] }),
+    index('bank_master_name_idx').on(t.name),
+  ],
 );
