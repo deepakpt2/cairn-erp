@@ -122,8 +122,11 @@ export async function costCentersKs01(ctx: Context) {
     'A refused duplicate files no document.',
   );
 
+  await panel.locator('#cost-center-code').fill(CENTRE);
   await panel.locator('#cost-center-validFrom').fill('2026-06-01');
   await panel.locator('#cost-center-validTo').fill('2026-12-31');
+  await panel.locator('#cost-center-name').fill('Acceptance cost centre');
+  await panel.locator('#cost-center-company').selectOption(company as string);
   await panel.locator('#cost-center-reason').fill(REASON);
   await panel.getByRole('button', { name: 'Create cost centre period', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: /overlaps the period 2026-01-01/ }).waitFor();
@@ -166,7 +169,7 @@ export async function costCentersKs01(ctx: Context) {
     true,
     'The lock is stored.',
   );
-  await closeDialog(lockDialog);
+  // A successful lock unmounts its own dialog; reload rather than close it.
   await page.goto(`${base}${ROUTE}?area=${area}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   const lockedRow = gridRow(page, CENTRE);
