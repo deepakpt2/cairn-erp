@@ -1574,6 +1574,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.358 B-342 — SCR-049 / OMSF stage 4: the supporting seeding — 89 capabilities, OMSF in search
+
+**What shipped.** The seed now carries the `CFG.INV.MATERIALGROUP.DEFINE` capability (`INV` / `CONFIGURE`) beside the standing config activity, and a Term Registry entry for `/config/material-groups` (Tier 2 configured, conformance B) whose only alias is **OMSF** — the SAP code stays search-only, as always — describing the round's parity and its classification-only scope in the registry's own words. `/config/material-groups` joins `BUILT_ROUTES`. `npm run seed` applied and read back: **89 capabilities / 61 activities / 58 terms / 54 aliases**. The environment needed one restore first (a snapshot wipe had taken `node_modules` again); migrations read back at 102 standing before the seed ran, so nothing but the dependencies was lost.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; suite **1215 tests across 144 files**.
+
+**Cost.** Measured: 02:24 in to 02:27 — **3 minutes**, the environment restore inside it.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1682,6 +1692,7 @@ recorded change, date and reason stated.
 | 2.159 | 2026-10-17 | **SCR-049 / OMSF stage 1 (B-339, §26.355): the inert material-groups screen.** `/config/material-groups` stands introduced (`CFG.INV.MATERIALGROUP.DEFINE · OMSF`) with its single section, the contract's key/description widths, delete-when-unused lifecycle and classification-only scope stated in its help text. Typecheck, `lint:ip`, production build (route 891 B) clean; suite 1215 across 144 files. Cost measured at 2 minutes. | Agent |
 | 2.160 | 2026-10-17 | **SCR-049 / OMSF stage 2 (B-340, §26.356): the parity schema.** Migration 0060 narrows the standing `material_group` (key to 9 with MAINTENANCE→MAINT carried through materials, name to the 20-character short description, optional 60-character long description seeded for the truncated provisioned texts); provisioning and the material master's group input follow — 102 migrations standing. Typecheck, `lint:ip`, build clean; materials 24/24, suite 1215 across 144 files. Cost measured at 4 minutes. | Agent |
 | 2.161 | 2026-10-17 | **SCR-049 / OMSF stage 3 (B-341, §26.357): the write service and live screen.** `material-group-definition.ts` maintains the standing table — 9-character keys, 20/60 descriptions, hard delete refused under standing materials with deactivation beside it, reason and one change document per write — and the stage-1 screen is live with counts and lifecycle dialogs. Typecheck, `lint:ip`, build clean; suite 1215 across 144 files. Cost measured at 3 minutes. | Agent |
+| 2.162 | 2026-10-18 | **SCR-049 / OMSF stage 4 (B-342, §26.358): the supporting seeding.** The `CFG.INV.MATERIALGROUP.DEFINE` capability and a Term Registry entry carrying **OMSF as a search alias only** are seeded, and `/config/material-groups` joins `BUILT_ROUTES`; seed read back at 89 capabilities / 61 activities / 58 terms / 54 aliases. An environment restore after a snapshot wipe is inside the stage. Typecheck and `lint:ip` clean; suite 1215 across 144 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
