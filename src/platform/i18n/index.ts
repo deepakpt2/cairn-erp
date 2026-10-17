@@ -1717,7 +1717,13 @@ const en: Catalogue = {
   'ppvAssign.clearingPosted':
     'This Company Code has posted {count} document(s), so its variant cannot be cleared; ' +
     'assign a different one instead.',
-  'ppvAssign.inert': 'The write path for this screen is not connected yet. Nothing was saved.',
+  'ppvAssign.assigned': 'Company Code {companyCode} now posts against Posting Period Variant {to}; it posted against {from}.',
+  'ppvAssign.cleared': 'Company Code {companyCode} no longer posts against a Posting Period Variant; it posted against {from}. It cannot post until another variant is assigned.',
+  'ppvAssign.unchangedVariant': 'Company Code {companyCode} already posts against Posting Period Variant {variant}; nothing was changed.',
+  'ppvAssign.unchangedUnassigned': 'Company Code {companyCode} already has no Posting Period Variant; nothing was changed.',
+  'ppvAssign.unexpected': 'The assignment could not be saved.',
+  'ppvAssign.unexpectedRemedy':
+    'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
   'ppvAssign.defineLink': 'Define variants',
   'ppvAssign.companyCodesLink': 'Company Codes',
   'ppvAssign.postingPeriodsLink': 'Posting periods',

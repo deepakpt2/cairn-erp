@@ -19,8 +19,7 @@ const ROUTE = '/config/posting-period-variants/assign-company-codes';
  * A distinct activity from OBBO, which defines the variants: this one writes the
  * Company Code, so it shows every Company Code with the variant it posts against
  * and lets the assignment be made here — the journey the OBBO deletion remedy has
- * been pointing at. The write path arrives with the service in stage 3; until
- * then the dialog is inert and says so.
+ * been pointing at.
  */
 export default async function AssignPostingPeriodVariantPage() {
   const session = await requireSession(ROUTE);

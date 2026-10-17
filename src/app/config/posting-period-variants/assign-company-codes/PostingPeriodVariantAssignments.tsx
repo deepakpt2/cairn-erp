@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type { PostingPeriodVariantAssignmentRow } from '@/modules/foundation/posting-period-variant-assignment';
+import {
+  assignPostingPeriodVariantAction,
+  type PpvAssignmentActionState,
+} from './actions';
 
 export interface PostingPeriodVariantChoice {
   variant: string;
@@ -31,16 +35,35 @@ function DialogHeader({ code, label }: { code: string; label: string }) {
   );
 }
 
-/**
- * The write path arrives with the service (SCR-033 stage 3). An inert form says so
- * rather than pretending: a button that silently does nothing teaches an operator
- * that the screen is broken. Same pattern as the OBBO screen's first stage.
- */
-function inertSubmit(event: FormEvent<HTMLFormElement>) {
-  event.preventDefault();
-  window.alert(t('ppvAssign.inert'));
+/** The action's answer, refusal or confirmation, with the remedy underneath it. */
+function AssignmentMessage({ state }: { state: PpvAssignmentActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
 }
 
+/**
+ * OBBP Assign Company Code to Posting Period Variant (SCR-033).
+ *
+ * A grid of every Company Code beside the variant it posts against, with a per-row dialog
+ * rather than one form for the whole grid: the decision belongs to one book and its reason
+ * belongs beside that decision.
+ *
+ * Each dialog states its own constraint before anybody submits. The variant may be cleared
+ * only while the Company Code has no journal entries, so choosing Unassigned on a Company
+ * Code that has posted says that — with the count — and blocks the save; every other choice
+ * may be made at any time. Repeating the variant already held is shown as the no-op it is,
+ * and repeating it is refused a save button rather than filed as a change. These are the
+ * same rules the service applies, shown early; they are not a substitute for it, and a save
+ * re-reads the row under its lock before writing.
+ */
 function AssignmentControl({
   row,
   choices,
@@ -50,9 +73,15 @@ function AssignmentControl({
 }) {
   const [variant, setVariant] = useState(row.postingPeriodVariant ?? '');
   const [reason, setReason] = useState('');
+  const [state, formAction, pending] = useActionState<PpvAssignmentActionState, FormData>(
+    assignPostingPeriodVariantAction,
+    { ok: true },
+  );
   const label = `${t('ppvAssign.assign')} ${row.companyCode}`;
   const clearing = variant === '' && row.postingPeriodVariant !== null;
   const unchanged = variant === (row.postingPeriodVariant ?? '');
+  const clearingBlocked = clearing && row.postedDocuments > 0;
+  const canSave = !pending && Boolean(reason.trim()) && !unchanged && !clearingBlocked;
 
   return (
     <details className="min-w-28">
@@ -68,7 +97,7 @@ function AssignmentControl({
         <div className="mx-auto max-w-2xl">
           <DialogHeader code={row.companyCode} label={label} />
           <section className="panel overflow-hidden p-4">
-            <form className="space-y-3" onSubmit={inertSubmit}>
+            <form className="space-y-3" action={formAction}>
               <input type="hidden" name="companyCode" value={row.companyCode} />
               <input type="hidden" name="expectedVariant" value={row.postingPeriodVariant ?? ''} />
 
@@ -85,7 +114,7 @@ function AssignmentControl({
                 </label>
                 <select
                   id={`ppv-assign-variant-${row.companyCode}`}
-                  name="variant"
+                  name="postingPeriodVariant"
                   className="field-input code"
                   value={variant}
                   onChange={(event) => setVariant(event.target.value)}
@@ -97,8 +126,8 @@ function AssignmentControl({
                     </option>
                   ))}
                 </select>
-                {clearing && row.postedDocuments > 0 && (
-                  <p className="mt-1 text-xs text-signal-error">
+                {clearingBlocked && (
+                  <p role="alert" className="mt-1 text-xs text-signal-error">
                     {t('ppvAssign.clearingPosted', { count: String(row.postedDocuments) })}
                   </p>
                 )}
@@ -123,11 +152,9 @@ function AssignmentControl({
                 />
               </div>
 
-              <button
-                type="submit"
-                className="btn-primary"
-                disabled={!reason.trim() || unchanged}
-              >
+              <AssignmentMessage state={state} />
+
+              <button type="submit" className="btn-primary" disabled={!canSave}>
                 {t('ppvAssign.save')}
               </button>
             </form>
