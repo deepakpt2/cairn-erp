@@ -1051,6 +1051,20 @@ The screen now asks what a tenant is, not what a company inside it is. Two secti
 
 ---
 
+### 26.318 B-302 — SCR-041 / KS01 stage 2: the table `STAGE PUBLISHED`
+
+**What was created.** Migration `0050_cost_center.sql` creates `cost_center` (12 columns): the four-part key of client, controlling area, cost centre and valid from, the period's end, name and optional person, the category word, the company code, the posting-lock flag and the audit pair; eleven constraints — the area, code, company and category formats and vocabulary, the non-blank name and person, the validity span, two foreign keys (onto the controlling area, and onto the area-company assignment itself, so the database enforces the SCR-025 assignment the screen judges), and the client key. `9033` adds the standard tenant isolation (RLS enabled and forced, `tenant_isolation`, no PUBLIC rights, DML for `cairn_app`). Applied to `cairn_b210`: 85 migrations standing. Period overlap is deliberately not a constraint — it reads sibling rows and the service judges it.
+
+**Verification, from the database.** 12 columns; the eleven constraints by count; forced RLS; exactly four grants. The standing read side answers empty (the development database holds no tenants' areas yet; stage 5's service tests will exercise every check against fixture parents, where the fiscal-year variant and assignment rows exist).
+
+**Gates.** `npm run typecheck` clean; `lint:ip` clean; suite **1123 tests across 137 files**.
+
+**Cost.** Measured: 14:44 in to 14:46, when the stage's work landed — **2 minutes** of a 39-minute box.
+
+**Not accepted.** The write (stage 3), capability and registry entry (stage 4), and tests and browser acceptance (stage 5) remain.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1117,6 +1131,7 @@ recorded change, date and reason stated.
 | 2.117 | 2026-10-17 | **SCR-040 / OBYC stage 4: the supporting rows (B-299, §26.315).** Capability `CFG.FIN.ACCTDET.DEFINE` seeded (81 capabilities), the Term Registry entry added with OBYC as a search alias only (50 terms, 42 aliases), the workbench's built-routes set gaining the screen, the activity row read back standing with its prerequisite and route; every row verified after reseeding. A snapshot wipe took `node_modules` mid-stage and was restored by `npm ci` and the standard environment restore, inside the measured cost. Typecheck and `lint:ip` clean, build ok, suite 1109 across 136 files. Cost measured at 7 minutes. | Agent |
 | 2.118 | 2026-10-17 | **SCR-040 / OBYC stage 5: tests and acceptance (B-300, §26.316). SCR-040 CLOSED.** The service tests judge per failure against fixture balance-sheet and profit-and-loss accounts (event outside the catalogue, chart standing, modifiers refused for events that do not use them, invented and inactive classes refused, not-in-chart separated from the wrong kind in both directions), pin a change-redirect and a documented deletion, and caught the class list's missing active filter, corrected and pinned. The browser target `account-determination` (T956 on `cairn_b210`) passes 6 checkpoints on the production build; neighbours `tolerance-groups` and `document-types` green. Suite 1123 tests across 137 files, typecheck and `lint:ip` clean. Cost measured at 12 minutes. | Agent |
 | 2.119 | 2026-10-17 | **SCR-041 / KS01 contract confirmed and stage 1 (the screen) published (B-301, §26.317; R-90).** Four forks settled: true validity periods against the package's key; deletion refused while journal documents dated inside a period carry the centre, plus an independent posting lock; categories as product words with the single letters as search aliases; hierarchy placement deferred to SCR-042. Currency displays from the controlling area and the name lives on the row. Stage 1 publishes `/config/cost-centers` inert — the area master-detail selector, the create form fed by the area's assigned company codes, the periods table with its lock/delete shapes, and the `cost_center` schema definition the stage-2 migration will create — with the client-boundary correction passing the category catalogue as a page prop. Typecheck, build and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 11 minutes. | Agent |
+| 2.120 | 2026-10-17 | **SCR-041 / KS01 stage 2: the table (B-302, §26.318).** Migrations `0050_cost_center.sql` and `9033_..._policies.sql` create the period registry (12 columns, four-part key, eleven constraints including the foreign key onto the area-company assignment itself; forced RLS, four grants) on `cairn_b210` (85 migrations). Typecheck and `lint:ip` clean; suite 1123 across 137 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
