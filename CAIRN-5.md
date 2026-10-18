@@ -840,6 +840,13 @@ Ageing stores nothing: standing as of a key date reconstructs from the posted jo
 
 ---
 
+### 26.470 B-454 — SCR-070 stage 3: customer ageing reconstructs live as of the key date
+
+`src/modules/finance/customer-ageing.ts` mirrors the vendor service on the receivable side: an item stands when it posted on or before the key date and was not cleared on or before it; ageing runs on the customer invoice's computed due date (the journal's posting date otherwise) into not-yet-due plus three overdue buckets at operator thresholds judged strictly increasing. Amounts aggregate in company currency on local amounts, debit-positive, credits keeping their sign; per-customer bucket rows, company totals and item detail sorted by customer then due date stand behind it. The screen at `/finance/customer-ageing` is wired to it, its detail footer pointing at customer balances. Read-only; nothing posts.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -962,6 +969,7 @@ Ageing stores nothing: standing as of a key date reconstructs from the posted jo
 | 2.285 | 2026-10-18 | **SCR-070 customer ageing contracted (R-118, B-451, §26.467).** S_ALR_87012178 under house names, read-only: as-of key-date reconstruction from posting/clearing dates, due-date ageing at three increasing thresholds, company-currency signed amounts, per-customer buckets with item detail; `FIN.AR.AGEING` created; account groups, special G/L, layouts and partial-clearing reconstruction deferred. | Agent |
 | 2.286 | 2026-10-18 | **SCR-070 stage 1 published (B-452, §26.468).** The inert customer ageing screen `/finance/customer-ageing`: selection, empty ageing matrix and empty item detail rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.287 | 2026-10-18 | **SCR-070 stage 2 verified (B-453, §26.469).** No schema change: as-of ageing reconstructs from the posted journal; the standing company/posting and partner/company indexes cover customer lines identically. Migrations unchanged at 137. | Agent |
+| 2.288 | 2026-10-18 | **SCR-070 stage 3 published (B-454, §26.470).** Customer ageing reads live: as-of key-date reconstruction, invoice due-date ageing, three increasing thresholds or named refusal, signed company-currency buckets per customer with company totals and item detail; screen wired. | Agent |
 
 ---
 
