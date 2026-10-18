@@ -343,6 +343,28 @@ export const vendorDownPayment = pgTable('vendor_down_payment', {
   primaryKey({ columns: [t.client, t.paymentNumber] }),
 ]);
 
+/** Down-payment clearing record (SCR-082): the KZ journal stands the truth. */
+export const vendorDownPaymentClearing = pgTable('vendor_down_payment_clearing', {
+  client: tenantClient(),
+  clearingNumber: varchar('clearing_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  vendorNumber: varchar('vendor_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  specialGlIndicator: varchar('special_gl_indicator', { length: 1 }).notNull(),
+  alternativeReconciliationAccount: varchar('alternative_reconciliation_account', { length: 10 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  clearingDate: date('clearing_date', { mode: 'string' }).notNull(),
+  totalApplied: numeric('total_applied', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.clearingNumber] }),
+]);
+
 export const incomingPayment = pgTable('incoming_payment', {  client: tenantClient(),
   paymentNumber: varchar('payment_number', { length: 20 }).notNull(),
   fiscalYear: integer('fiscal_year').notNull(),

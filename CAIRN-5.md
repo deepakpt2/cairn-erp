@@ -1389,6 +1389,12 @@ Stage 1 of R-130. The `/finance/vendor-down-payment-clearing` screen stands as a
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-529 / §26.545 / §30 row 2.363. **Cost (B-254, measured):** contract published 17:26 UTC; stage 1 completed this turn.
 
+### 26.546 B-530 — SCR-082 stage 2: the clearing record
+
+Stage 2 of R-130. `vendor_down_payment_clearing` stands in the house payment-record shape (clearing number as the journal document number, indicator and resolved alternative account remembered, total applied held above zero by check) in `drizzle/0092_down_payment_clearing.sql`. No item-mapping table (declined in R-130) — the KZ lines and clearing stamps carry the per-item truth. The database stands at 155 migrations, the table verified by read-back.
+
+Verification: migration applied, table verified, typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-530 / §26.546 / §30 row 2.364. **Cost (B-254, measured):** stage 1 published 17:27 UTC; stage 2 completed this turn.
+
 ---
 ---
 
@@ -1598,3 +1604,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.361 | 2026-10-18 | **Responsive styling pass (B-527, §26.543).** Type and fixed widths move from px to rem, page shells gain responsive padding, dense grids wrap below the md breakpoint. Suite 1348 green; desktop rendering unchanged. | Agent |
 | 2.362 | 2026-10-18 | **SCR-082 contract R-130 written (B-528, §26.544).** F-54 down-payment clearing: a KZ transfer posting applies advances to invoices per item, remainders standing by the partial netting model; the mapping table declined. Stage 1 follows. | Agent |
 | 2.363 | 2026-10-18 | **SCR-082 stage 1 published (B-529, §26.545).** The down-payment clearing screen shell stands with both selection grids; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
+| 2.364 | 2026-10-18 | **SCR-082 stage 2 published (B-530, §26.546).** The down-payment clearing record stands; 155 migrations. The clearing service follows in stage 3. | Agent |
