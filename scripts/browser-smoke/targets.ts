@@ -42,6 +42,7 @@ export const TARGETS = [
   { id: 'material-deletion-flag', client: 'T944', label: 'SCR-053 MM06 deletion flag acts at client and plant scope, cancellation' },
   { id: 'material-period-control', client: 'T943', label: 'SCR-054 OMSY period initialization, backposting indicators, period shift' },
   { id: 'purchase-requisitions', client: 'T942', label: 'SCR-055 ME51N requisition creation through the item grid' },
+  { id: 'purchase-orders', client: 'T941', label: 'SCR-056 ME21N order creation through the header and item grid' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
