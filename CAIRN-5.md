@@ -655,6 +655,13 @@ Ageing stores nothing; migration `0078` adds the journal-header walk (company, p
 
 ---
 
+### 26.445 B-429 — SCR-066 vendor ageing stage 3: the reconstruction and live screen
+
+The ageing service reconstructs standing as of the key date — posted by then, not cleared by then — ages on the standing due-date rule, nets signed amounts into per-supplier buckets with a company total, and judges increasing thresholds by name. The screen is live: selection, the bucket grid with its total row, per-supplier item detail, and the drill-down link to the balances line items. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -752,6 +759,7 @@ Ageing stores nothing; migration `0078` adds the journal-header walk (company, p
 | 2.260 | 2026-10-18 | **SCR-066 vendor ageing contracted (R-114, B-426, §26.442).** S_ALR_87012085 under house names, read-only: standing reconstructed as of the key date, due-date ageing buckets per supplier, drill-down to the balances items; `FIN.AP.AGEING` created; alternative bases/sorts, document currency and special G/L deferred. | Agent |
 | 2.261 | 2026-10-18 | **SCR-066 vendor ageing stage 1 (B-427, §26.443).** The inert ageing screen stands at `/finance/vendor-ageing` — selection and the empty ageing grid. Typecheck and production build clean. | Agent |
 | 2.262 | 2026-10-18 | **SCR-066 vendor ageing stage 2 (B-428, §26.444).** No ageing table by contract — standing reconstructs from the journal; migration `0078` adds the company/posting-date header index. 133 migrations standing. | Agent |
+| 2.263 | 2026-10-18 | **SCR-066 vendor ageing stage 3 (B-429, §26.445).** Standing reconstructs as of the key date and ages on the due-date rule into per-supplier buckets with a company total; the screen is live with item detail and the balances drill-down. Typecheck and production build clean. | Agent |
 
 ---
 
