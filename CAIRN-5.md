@@ -348,6 +348,12 @@ Migration `0070_classification_class.sql` with `9048_classification_class_polici
 
 ---
 
+### 26.403 B-387 — SCR-058 / CL02 stage 4: activity, capability, term and route seeded
+
+The supporting register stands: `CFG.PROC.CLASS.DEFINE` as capability and configuration activity (prerequisite: characteristics; enables release strategies), the term *Define classes* with CL01, CL02 and CL03 as search aliases only, and `/config/classes` among the workbench's built routes. The seed reads back **95/66/66/70**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -398,6 +404,7 @@ Migration `0070_classification_class.sql` with `9048_classification_class_polici
 | 2.213 | 2026-10-18 | **SCR-058 / CL02 stage 1 (B-384, §26.400).** The inert classes screen stands at `/config/classes`: empty grid, editor with the type catalogue and positioned characteristic assignments, save disabled. Typecheck clean. | Agent |
 | 2.214 | 2026-10-18 | **SCR-058 / CL02 stage 2 (B-385, §26.401).** Migrations `0070` + `9048` applied (119 standing): `class_type`, `classification_class` and `class_assignment` behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.215 | 2026-10-18 | **SCR-058 / CL02 stage 3 (B-386, §26.402).** The class service and live screen, and the CT04 usage count made real: assignment judging, blocked protection on both sides, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.216 | 2026-10-18 | **SCR-058 / CL02 stage 4 (B-387, §26.403).** Activity, capability and term seeded (CL01/CL02/CL03 search aliases only), the route among the built routes; seed reads back 95/66/66/70. | Agent |
 
 ---
 

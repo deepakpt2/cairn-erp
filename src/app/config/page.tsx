@@ -96,6 +96,7 @@ export default async function WorkbenchPage({
     '/config/industry-sectors',
     '/config/material-period-control',
     '/config/characteristics',
+    '/config/classes',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
