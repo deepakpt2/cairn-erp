@@ -148,6 +148,8 @@ const en: Catalogue = {
   'material.list': "Material list",
   'material.subtitle': "Maintain basic data once, then extend the purchasing, planning and valuation views to each plant. Incomplete views can be saved for another department to finish.",
   'material.number': "Material",
+  'material.numberHint':
+    'Leave blank on create to draw the next number from the material type\'s internal range; a supplied number is judged against its external interval.',
   'material.description': "Description",
   'material.type': "Material type",
   'material.group': "Material group",

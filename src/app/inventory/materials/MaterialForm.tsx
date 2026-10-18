@@ -37,7 +37,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
       {view !== 'BASIC' && <><input type="hidden" name="materialNumber" value={number} /><input type="hidden" name="plant" value={plant} /></>}
       {view === 'BASIC' && <>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label={t('material.number')}><input name="materialNumber" defaultValue={number} readOnly={!creating} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.toUpperCase(); }} required maxLength={40} pattern="[A-Z0-9][A-Z0-9_.-]*" className="field-input code" /></Field>
+          <Field label={t('material.number')}><input name="materialNumber" defaultValue={number} readOnly={!creating} onInput={(e) => { e.currentTarget.value = e.currentTarget.value.toUpperCase(); }} required={!creating} maxLength={40} pattern="[A-Z0-9][A-Z0-9_.-]*" className="field-input code" />{creating && <span className="mt-1 block text-xs text-ink-soft">{t('material.numberHint')}</span>}</Field>
           {options('materialType', 'material.type', choices.types.map((r) => ({ key: r.materialType, text: r.name })), 'RAW', false, !creating)}
           {options('materialGroup', 'material.group', choices.groups.map((r) => ({ key: r.materialGroup, text: r.name })), 'GENERAL')}
         </div>

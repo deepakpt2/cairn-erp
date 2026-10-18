@@ -11,6 +11,7 @@ import {
   materialPlant,
   materialType,
   materialTypeValuation,
+  materialNumberRangeGroup,
 } from './schema';
 
 /**
@@ -138,6 +139,8 @@ export interface MaterialTypeRow {
   defaultPriceControl: string;
   internalNumberRange: string | null;
   externalNumberRange: string | null;
+  /** The MMNR group text when the type's key pair stands as a group (SCR-051). */
+  rangeGroup: string | null;
   accountCategoryReference: string;
   externalPurchaseOrders: string;
   internalPurchaseOrders: string;
@@ -154,13 +157,22 @@ export async function listMaterialTypes(client: string): Promise<MaterialTypeRow
       .from(materialType)
       .where(eq(materialType.client, tenant))
       .orderBy(materialType.materialType);
+    const groupRows = await tx
+      .select()
+      .from(materialNumberRangeGroup)
+      .where(eq(materialNumberRangeGroup.client, tenant));
     const out: MaterialTypeRow[] = [];
     for (const t of types) {
       const [row] = await tx
         .select({ n: count() })
         .from(material)
         .where(and(eq(material.client, tenant), eq(material.materialType, t.materialType)));
-      out.push({ ...t, materialCount: Number(row?.n ?? 0) });
+      const group = groupRows.find(
+        (g) =>
+          g.internalRangeKey === t.internalNumberRange &&
+          g.externalRangeKey === t.externalNumberRange,
+      );
+      out.push({ ...t, rangeGroup: group?.description ?? null, materialCount: Number(row?.n ?? 0) });
     }
     return out;
   });

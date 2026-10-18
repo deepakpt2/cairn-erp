@@ -5,6 +5,8 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { unitOfMeasure } from '../../platform/tables/reference';
+import { allocateNumber } from '../../platform/numbering';
+import { numberRange } from '../../platform/tables/numbering';
 import { companyCode, plant, purchasingGroup } from '../foundation/schema';
 import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, valuationClass, mrpController, planningFile } from './schema';
 import { MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from './constants';
@@ -22,7 +24,10 @@ const common = z.object({
   expectedVersion: z.number().int().nonnegative(), changedBy: z.string().min(1).max(60), reason: z.string().trim().max(500).default(''),
 });
 const materialInput = z.discriminatedUnion('view', [
-  common.extend({ view: z.literal('BASIC'), description: z.string().trim().max(200), materialType: z.string().min(1).max(4),
+  common.extend({ view: z.literal('BASIC'),
+    // Blank on create draws the next internal number (SCR-051 / MMNR).
+    materialNumber: z.string().regex(/^([A-Z0-9][A-Z0-9_.-]{0,39})?$/, 'Use at most 40 uppercase letters, digits, dots, hyphens or underscores, or leave blank to draw a number.'),
+    description: z.string().trim().max(200), materialType: z.string().min(1).max(4),
     materialGroup: z.string().max(9), baseUnit: z.string().max(6), industrySector: z.string().max(20), barcode: z.string().max(32),
     grossWeight: quantity, netWeight: quantity, weightUnit: z.string().max(6), isBlocked: z.boolean() }),
   common.extend({ view: z.literal('PURCHASING'), plant: z.string().min(1).max(10), purchasingGroup: z.string().max(3),
@@ -66,7 +71,8 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
   const parsed = materialInput.safeParse(raw);
   if (!parsed.success) { const i = parsed.error.issues[0]; throw new MaterialError(`${i.path.join('.')}: ${i.message}`); }
   const input = parsed.data;
-  const { client, materialNumber, changedBy, expectedVersion, view } = input;
+  const { client, changedBy, expectedVersion, view } = input;
+  let materialNumber = input.materialNumber;
   return withTenant(client, async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/material/${materialNumber}`}, 0))`);
     const [base] = await tx.select().from(material).where(key(client, materialNumber)).for('update');
@@ -75,6 +81,62 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       const [type] = await tx.select().from(materialType).where(eq(materialType.materialType, input.materialType));
       if (!type?.isActive) throw new MaterialError(`Material type ${input.materialType} is not active or does not exist.`);
       if (base && base.materialType !== input.materialType) throw new MaterialError('Material type is immutable after creation.', 'Create another material for a different type.');
+      if (!base) {
+        // MM01 number assignment (SCR-051 / R-99): a blank number draws
+        // from the type's internal range through the standing engine; a
+        // supplied number is judged against the type's external interval.
+        if (!materialNumber) {
+          if (!type.internalNumberRange) {
+            throw new MaterialError(
+              `Material type ${type.materialType} assigns no internal number range, so no number can be drawn.`,
+              'Enter a material number within the type\'s external range, or assign the type an internal range on the material types screen.',
+            );
+          }
+          const drawn = await allocateNumber(tx, {
+            client,
+            objectCode: 'MATERIALNR',
+            companyCode: '*',
+            subObject: type.internalNumberRange,
+            fiscalYear: 0,
+            allocatedBy: changedBy,
+          });
+          materialNumber = String(drawn.value);
+        } else if (type.externalNumberRange) {
+          // A type carrying no external range keeps MM01's standing free
+          // entry; the judge binds where configuration speaks.
+          if (!/^\d+$/.test(materialNumber)) {
+            throw new MaterialError(
+              'A supplied material number must be all digits to stand in the external interval.',
+              'Enter a numeric material number, or leave the field blank to draw the next internal number.',
+            );
+          }
+          const [range] = await tx
+            .select()
+            .from(numberRange)
+            .where(
+              and(
+                eq(numberRange.client, client),
+                eq(numberRange.objectCode, 'MATERIALNR'),
+                eq(numberRange.companyCode, '*'),
+                eq(numberRange.subObject, type.externalNumberRange),
+                eq(numberRange.fiscalYear, 0),
+              ),
+            );
+          if (!range || !range.isExternal || range.status !== 'ACTIVE') {
+            throw new MaterialError(
+              `No active external material number range ${type.externalNumberRange} stands.`,
+              'Define or unblock the interval on the number ranges screen, then save again.',
+            );
+          }
+          const supplied = BigInt(materialNumber);
+          if (supplied < BigInt(range.fromNumber) || supplied > BigInt(range.toNumber)) {
+            throw new MaterialError(
+              `Material number ${materialNumber} stands outside the external interval ${range.fromNumber}–${range.toNumber} of range ${type.externalNumberRange}.`,
+              'Enter a number inside the interval, or leave the field blank to draw the next internal number.',
+            );
+          }
+        }
+      }
       if (input.materialGroup) {
         const [group] = await tx.select().from(materialGroup).where(eq(materialGroup.materialGroup, input.materialGroup));
         if (!group?.isActive) throw new MaterialError(`Material group ${input.materialGroup} does not exist or is inactive.`);

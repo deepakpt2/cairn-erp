@@ -7,6 +7,7 @@ import type {
   MaterialTypeRow,
   TypeValuationRow,
 } from '@/modules/inventory/material-type-definition';
+import type { MaterialRangeGroupOption } from '@/modules/inventory/material-number-range-groups';
 import {
   deleteAccountCategoryReferenceAction,
   deleteMaterialTypeAction,
@@ -90,11 +91,13 @@ export default function MaterialTypes({
   types,
   references,
   valuation,
+  rangeGroups,
   canMaintain,
 }: {
   types: MaterialTypeRow[];
   references: AccountCategoryReferenceRow[];
   valuation: TypeValuationRow[];
+  rangeGroups: MaterialRangeGroupOption[];
   canMaintain: boolean;
 }) {
   const [selected, setSelected] = useState<MaterialTypeRow | null>(null);
@@ -169,6 +172,9 @@ export default function MaterialTypes({
                     </td>
                     <td className="py-2 pe-3">
                       {row.internalNumberRange ?? '—'} / {row.externalNumberRange ?? '—'}
+                      {row.rangeGroup && (
+                        <span className="block text-xs text-ink-soft">{row.rangeGroup}</span>
+                      )}
                     </td>
                     <td className="py-2 pe-3">{row.accountCategoryReference}</td>
                     <td className="py-2 pe-3">
@@ -294,6 +300,44 @@ export default function MaterialTypes({
                   {references.map((r) => (
                     <option key={r.reference} value={r.reference}>
                       {r.reference} — {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="mt-range-group" className="text-sm font-medium">
+                  Number range group
+                </label>
+                <select
+                  id="mt-range-group"
+                  defaultValue={
+                    selected?.internalNumberRange && selected?.externalNumberRange
+                      ? `${selected.internalNumberRange}/${selected.externalNumberRange}`
+                      : ''
+                  }
+                  onChange={(e) => {
+                    const group = rangeGroups.find(
+                      (g) => `${g.internalKey}/${g.externalKey}` === e.target.value,
+                    );
+                    if (!group) return;
+                    const internal = document.getElementById(
+                      'mt-int-range',
+                    ) as HTMLInputElement | null;
+                    const external = document.getElementById(
+                      'mt-ext-range',
+                    ) as HTMLInputElement | null;
+                    if (internal) internal.value = group.internalKey;
+                    if (external) external.value = group.externalKey;
+                  }}
+                  className="input mt-1 w-full"
+                >
+                  <option value="">Fill both keys from a group</option>
+                  {rangeGroups.map((g) => (
+                    <option
+                      key={`${g.internalKey}/${g.externalKey}`}
+                      value={`${g.internalKey}/${g.externalKey}`}
+                    >
+                      {g.description} ({g.internalKey} / {g.externalKey})
                     </option>
                   ))}
                 </select>

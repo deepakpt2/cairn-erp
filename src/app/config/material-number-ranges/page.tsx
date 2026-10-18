@@ -1,16 +1,19 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import {
+  ACTIVITY,
+  listMaterialNumberRangeGroups,
+} from '@/modules/inventory/material-number-range-groups';
 import { t } from '@/platform/i18n';
 import MaterialNumberRanges from './MaterialNumberRanges';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/material-number-ranges';
-const MATERIAL_RANGE_ACTIVITY = 'CFG.INV.MATERIALRANGE.DEFINE';
 
 /**
- * Material number range groups (SCR-051 / MMNR; inert since stage 1).
+ * Material number range groups (SCR-051 / MMNR; live since stage 3).
  *
  * The group view over the standing number-range engine: MATERIALNR
  * intervals grouped as named internal+external pairs, the pairs material
@@ -19,12 +22,13 @@ const MATERIAL_RANGE_ACTIVITY = 'CFG.INV.MATERIALRANGE.DEFINE';
  */
 export default async function MaterialNumberRangesPage() {
   const session = await requireSession(ROUTE);
-  const canMaintain = can(session, MATERIAL_RANGE_ACTIVITY);
+  const canMaintain = can(session, ACTIVITY);
+  const { groups, ungrouped } = await listMaterialNumberRangeGroups(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
       <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">{MATERIAL_RANGE_ACTIVITY} · MMNR</span>
+        <span className="code text-ink-faint">{ACTIVITY} · MMNR</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('materialRange.title')}</h1>
           <div className="flex flex-wrap gap-2">
@@ -44,11 +48,11 @@ export default async function MaterialNumberRangesPage() {
 
       {!canMaintain && (
         <p role="status" className="text-sm text-ink-soft">
-          {t('auth.readOnly', { authority: MATERIAL_RANGE_ACTIVITY })}
+          {t('auth.readOnly', { authority: ACTIVITY })}
         </p>
       )}
 
-      <MaterialNumberRanges groups={[]} ungrouped={[]} />
+      <MaterialNumberRanges groups={groups} ungrouped={ungrouped} canMaintain={canMaintain} />
     </div>
   );
 }

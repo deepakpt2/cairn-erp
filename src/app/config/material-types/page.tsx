@@ -7,6 +7,7 @@ import {
   listMaterialTypes,
   listTypeValuation,
 } from '@/modules/inventory/material-type-definition';
+import { listMaterialRangeGroupOptions } from '@/modules/inventory/material-number-range-groups';
 import { t } from '@/platform/i18n';
 import MaterialTypes from './MaterialTypes';
 
@@ -28,10 +29,11 @@ export default async function MaterialTypesPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
   const client = session.user.client;
-  const [types, references, valuation] = await Promise.all([
+  const [types, references, valuation, rangeGroups] = await Promise.all([
     listMaterialTypes(client),
     listAccountCategoryReferences(client),
     listTypeValuation(client),
+    listMaterialRangeGroupOptions(client),
   ]);
 
   return (
@@ -59,6 +61,7 @@ export default async function MaterialTypesPage() {
         types={types}
         references={references}
         valuation={valuation}
+        rangeGroups={rangeGroups}
         canMaintain={canMaintain}
       />
     </div>
