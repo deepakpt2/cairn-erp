@@ -69,6 +69,20 @@ The new activity `CFG.INV.MATERIALRANGE.DEFINE` stands in all three seed registe
 
 ---
 
+### 26.369 B-353 — SCR-051 / MMNR closed and accepted: material number range groups and MM01 number assignment
+
+**What shipped across the five stages.** On the SCR-050 engine, material numbering gained its group layer at the owner's parity: a tenant table `material_number_range_group` keyed by the internal+external range-key pair itself (TNRGT shape, 20-character text, forced tenant RLS), maintained on the new `/config/material-number-ranges` screen — creation judged against standing ACTIVE intervals of the right assignment kind, the pair immutable as identity, the description freely editable, deletion refused while material types carry the pair with the count named. The screen reads as the group–interval matrix the contract specified, with bounds, current numbers, a non-consuming next-number preview, derived type assignment, and ungrouped intervals listed so nothing hides. The material-types screen shows the standing group's text beside a type's keys and offers the group picker that fills both key fields — membership always derived from the pair, SCR-048's storage untouched. And MM01 numbers itself: a blank material number draws the next internal number through the standing engine inside the creation transaction (allocation row as audit), while a supplied number is judged against the type's external interval **where one is configured** — the stage-3 refinement, recorded in R-99, that keeps MM01's standing free entry for rangeless types. No new interval or assignment tables exist; the package's own constraint — extend what stands rather than duplicate it — governed throughout. CAIRN-4 rotated into this part at the round's opening (407,238 bytes, frozen).
+
+**Acceptance evidence.** Service tests **4/4** (`tests/material-number-range-groups.test.ts`: creation judged — missing interval, wrong assignment kind, identical keys, duplicate pair; the matrix with derived assignment and ungrouped intervals; deletion refused under the carrying type then free after reassignment, its CREATE/CHANGE/DELETE trail standing; MM01 drawing 2000 then 2001, accepting 6500 within the external interval, refusing 5500 outside it and `EXT-1` as non-numeric, keeping free entry for the rangeless RAW while refusing to draw for it). Browser target `material-number-ranges` (T946) **7/7 journeys** against the production build: ungrouped intervals read, the group defined through the screen, OMS2 assigning RAW by the picker with the group text standing beside its keys, deletion refused in the dialog, MM01's blank number drawing 1000 with the counter standing at it, and the database remembering all of it. Neighbouring targets `material-types` (T949) and `number-range-objects` (T947) passed undisturbed. The one mid-round failure — the first strict judge refusing supplied numbers against rangeless types — was caught by the standing material suite and corrected within stage 3 before anything shipped, exactly the refusal the suite exists to give.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled (material-number-ranges 2.36 kB); suite **1233 tests across 147 files**; **106 migrations** standing; seed **90/62/59/55** read back.
+
+**Cost.** Measured: 04:40 in to 05:04 — **24 minutes** across the contract flow (including the CAIRN-5 rotation) and five stages, every stage inside its 39-minute box, despite one environment wipe mid-round (dependencies, database and browser restored from the standing script).
+
+**What stands after this.** Material numbering is complete end to end: intervals (SNRO), groups (MMNR), type assignment (OMS2), and creation drawing or judging numbers (MM01). The next round opens with the owner's word or package.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -78,6 +92,7 @@ The new activity `CFG.INV.MATERIALRANGE.DEFINE` stands in all three seed registe
 | 2.172 | 2026-10-18 | **SCR-051 stage 2 published (B-350, §26.366).** Migrations `0062` + `9042` create `material_number_range_group` (pair primary key, 20-character text, audit columns, forced tenant RLS) and its Drizzle table; verified standing on `cairn_b210` — 106 migrations. | Agent |
 | 2.173 | 2026-10-18 | **SCR-051 stage 3 published (B-351, §26.367).** The group service, the live MMNR screen, group display and picking on the material-types screen, and the MM01 tail (blank draws internal, supplied judged against the external interval where one is configured — the stage-3 refinement recorded against R-99). Typecheck, `lint:ip`, build and the material suites green. | Agent |
 | 2.174 | 2026-10-18 | **SCR-051 stage 4 published (B-352, §26.368).** `CFG.INV.MATERIALRANGE.DEFINE` seeded as capability, configuration activity and term (MMNR search alias only, full parity description); the route joins `BUILT_ROUTES`. Seed reads back 90/62/59/55. | Agent |
+| 2.175 | 2026-10-18 | **SCR-051 / MMNR CLOSED and accepted (B-353, §26.369).** Stage 5 ships 4 service tests and the T946 browser target `material-number-ranges` (7/7 journeys against the production build — group defined through the screen, RAW assigned by the OMS2 picker, deletion refused, MM01 drawing 1000, the database remembering). Neighbouring `material-types` and `number-range-objects` targets, typecheck, `lint:ip` and the production build clean; suite 1233 across 147 files, 106 migrations, seed 90/62/59/55. Cost measured at 24 minutes overall. | Agent |
 
 ---
 
