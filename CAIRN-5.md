@@ -896,6 +896,13 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 
 ---
 
+### 26.478 B-462 — SCR-071 closed: reset cleared items accepted
+
+FBRA stands in house dress at `/finance/clearing-reset` under `FIN.CLEARING.RESET`: a clearing document — named by company code, document number and fiscal year exactly as stamped on the lines — is displayed with everything it cleared (type, document and posting dates, clearing date, every cleared item), and on explicit confirmation with a mandatory reason the clearing stamp lifts from every line it cleared, its own lines included, so the items stand open again. No journal posts, no document is edited or deleted, and no posting period is judged. Eligibility is refused by name (not posted, cleared nothing in the company/year, already reset); an advisory lock with in-transaction revalidation guards the act; the retained `clearing_reset` record (clearing document, company, year, former clearing date, items reopened, reason, acting user) plus a change document written in the same transaction preserve the history, the same request key returns the standing reset, and the items may be cleared anew, each cycle on its own record. Service tests prove the display, the blank-reason refusal, the non-clearing and unknown document refusals, the stamps lifted with two receivable items totalling 850 standing open again, the clearing journal still POSTED, request-key replay, and the second reset refused as already reset. Browser target T926 walks two invoices cleared by an incoming payment through the screen to `RST-000001` with database evidence (reset record holding the former clearing date 2026-11-21 and the reason, no stamps remaining, 850.00 open again); neighbours T927 (customer ageing) and T929 (incoming payment) stay green. Acceptance caught and fixed one defect: the page judged its capability with a raw list membership test, so the administrator's `*` wildcard did not grant — it now uses the wildcard-aware capability judgement. Suite 1302 tests (167 files), browser harness 399, seed 105/66/78/87, migrations 139, typecheck and production build clean. `lint:ip` remains at its pre-existing failing baseline. Stage 5 measured 11:07–11:15 UTC (8 minutes, test commit to acceptance); the round ran across the earlier stage commits `80785a6`–`71d63ec`. Deferred, named: reset-and-reverse (FB08 — reversal machinery not built, never conflated with a reset), event-aware historical ageing across a reset (as-of reports judge current stamps; the reset record preserves the former clearing date), and special G/L separation. Payment-run clearings reset on the same stamps with run history untouched. The next T-code is **FB08** (reset-and-reverse), standing unnamed in the roadmap until the owner supplies its field package.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1026,6 +1033,7 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 | 2.293 | 2026-10-18 | **SCR-071 stage 2 published (B-459, §26.475).** The `clearing_reset` record table stands (0081 + 9056, forced tenant RLS, insert/read-only): clearing document, former clearing date, items reopened, mandatory reason, request key. Migrations 139. | Agent |
 | 2.295 | 2026-10-18 | **SCR-071 stage 4 published (B-461, §26.477).** `FIN.CLEARING.RESET` enters the capability catalogue and the term registry (FBRA alias only); read-back 105/66/78/87, idempotent. | Agent |
 | 2.294 | 2026-10-18 | **SCR-071 stage 3 published (B-460, §26.476).** The clearing reset acts: the clearing is displayed first, then — under an advisory lock with in-transaction revalidation — the stamps lift from every item and the retained reset record with its change document is written in the same transaction; the screen executes on explicit confirmation with a mandatory reason. | Agent |
+| 2.296 | 2026-10-18 | **SCR-071 closed (B-462, §26.478).** Reset cleared items (FBRA) accepted under `FIN.CLEARING.RESET`: T926 + neighbours T927/T929 green on the production build, suite 1302 tests, harness 399, seed 105/66/78/87, 139 migrations. The wildcard capability-check defect found in acceptance stands fixed. Next T-code: **FB08** (reset-and-reverse), awaiting the owner's field package. | Agent |
 
 ---
 
