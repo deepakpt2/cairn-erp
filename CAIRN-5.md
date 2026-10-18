@@ -833,6 +833,13 @@ The owner's S_ALR_87012178 package is contracted as R-118, mirroring vendor agei
 
 ---
 
+### 26.469 B-453 — SCR-070 stage 2: no schema change stands needed
+
+Ageing stores nothing: standing as of a key date reconstructs from the posted journal and its clearing stamps. The two walks — journal headers by company and posting date (`je_company_posting_idx`, 0078) and partner lines inside a company (`jel_partner_company_idx`, 0077) — already stand from SCR-066/065 and cover customer partner lines identically, verified standing in the database. Migration count unchanged at 137.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -954,6 +961,7 @@ The owner's S_ALR_87012178 package is contracted as R-118, mirroring vendor agei
 | 2.284 | 2026-10-18 | **SCR-069 closed (B-450, §26.466).** Customer balances (FD10N) accepted under `FIN.AR.BALANCE`: T928 + neighbour T929 green on the production build, suite 1296/165, seed 103/66/76/85, 137 migrations, 21 min measured. Next: SCR-070 customer ageing (S_ALR_87012178). | Agent |
 | 2.285 | 2026-10-18 | **SCR-070 customer ageing contracted (R-118, B-451, §26.467).** S_ALR_87012178 under house names, read-only: as-of key-date reconstruction from posting/clearing dates, due-date ageing at three increasing thresholds, company-currency signed amounts, per-customer buckets with item detail; `FIN.AR.AGEING` created; account groups, special G/L, layouts and partial-clearing reconstruction deferred. | Agent |
 | 2.286 | 2026-10-18 | **SCR-070 stage 1 published (B-452, §26.468).** The inert customer ageing screen `/finance/customer-ageing`: selection, empty ageing matrix and empty item detail rendered, i18n keys added. No reads, no writes. | Agent |
+| 2.287 | 2026-10-18 | **SCR-070 stage 2 verified (B-453, §26.469).** No schema change: as-of ageing reconstructs from the posted journal; the standing company/posting and partner/company indexes cover customer lines identically. Migrations unchanged at 137. | Agent |
 
 ---
 
