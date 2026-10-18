@@ -686,6 +686,13 @@ The owner's FB70 package is contracted as R-115, mirroring the proven supplier-i
 
 ---
 
+### 26.449 B-433 — SCR-067 customer invoice stage 1: the inert screen stands
+
+The customer-invoice screen stands at `/finance/customer-invoice`: header, the invoice tile (reference, the two dates, terms, judged gross, revenue line grid with tax, the balance shown, posting disabled), and the posted-document tile. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -787,6 +794,7 @@ The owner's FB70 package is contracted as R-115, mirroring the proven supplier-i
 | 2.264 | 2026-10-18 | **SCR-066 vendor ageing stage 4 (B-430, §26.446).** Capability `FIN.AP.AGEING` created; the ageing term seeded at its route with S_ALR_87012085 a search alias only. Seed reads back 100/66/73/82. | Agent |
 | 2.265 | 2026-10-18 | **SCR-066 vendor ageing closed (B-431, §26.447).** Service tests and browser target T931 (neighbour T932) green on the production build; full suite 1286/162, 133 migrations, seed 100/66/73/82. Deferrals named: posting-date basis, further sorts/summarizations, document currency, special G/L, partial/residual allocation. | Agent |
 | 2.266 | 2026-10-18 | **SCR-067 customer invoice contracted (R-115, B-432, §26.448).** FB70 under house names: customer invoices with judged gross, receivable open item, revenue and tax through standing determination, linked cancellation; `FIN.AR.INVOICE.POST` and CUSTINV created; credit memos, incoming payments, discounts and FX deferred. | Agent |
+| 2.267 | 2026-10-18 | **SCR-067 customer invoice stage 1 (B-433, §26.449).** The inert customer-invoice screen stands at `/finance/customer-invoice` — header, line grid with tax and balance, posting disabled, document tile. Typecheck and production build clean. | Agent |
 
 ---
 

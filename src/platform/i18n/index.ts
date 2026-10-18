@@ -1995,6 +1995,12 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'customerInvoice.title': 'Enter Customer Invoice',
+  'customerInvoice.subtitle':
+    'A direct customer invoice: revenue lines with their output tax, the ' +
+    'customer debited at the gross on its reconciliation account as an open ' +
+    'receivable, the due date computed from the payment terms. A posted ' +
+    'invoice is corrected by credit memo or reversal, never deleted.',
   'vendorAgeing.title': 'Vendor Ageing',
   'vendorAgeing.subtitle':
     'What a company owes its suppliers, aged as of a key date: every open ' +
