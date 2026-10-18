@@ -95,7 +95,7 @@ export const purchaseRequisitionAssignment = pgTable('purchase_requisition_assig
  */
 export const purchaseOrder = pgTable('purchase_order', {
   client: tenant(),
-  orderNumber: varchar('order_number', { length: 10 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
   documentType: varchar('document_type', { length: 20 }).notNull().default('STANDARD'),
   supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
   purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
@@ -112,7 +112,7 @@ export const purchaseOrder = pgTable('purchase_order', {
 
 export const purchaseOrderItem = pgTable('purchase_order_item', {
   client: tenant(),
-  orderNumber: varchar('order_number', { length: 10 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
   itemNumber: integer('item_number').notNull(),
   itemCategory: varchar('item_category', { length: 16 }).notNull().default('STANDARD'),
   accountAssignmentCategory: varchar('account_assignment_category', { length: 16 }),
@@ -152,7 +152,7 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
 
 export const purchaseOrderScheduleLine = pgTable('purchase_order_schedule_line', {
   client: tenant(),
-  orderNumber: varchar('order_number', { length: 10 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
   itemNumber: integer('item_number').notNull(),
   lineNumber: smallint('line_number').notNull(),
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
@@ -170,7 +170,7 @@ export const purchaseOrderScheduleLine = pgTable('purchase_order_schedule_line',
 
 export const purchaseOrderAssignment = pgTable('purchase_order_assignment', {
   client: tenant(),
-  orderNumber: varchar('order_number', { length: 10 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
   itemNumber: integer('item_number').notNull(),
   lineNumber: smallint('line_number').notNull(),
   glAccount: varchar('gl_account', { length: 10 }).notNull(),
