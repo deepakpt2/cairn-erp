@@ -354,6 +354,22 @@ The supporting register stands: `CFG.PROC.CLASS.DEFINE` as capability and config
 
 ---
 
+### 26.404 B-388 — SCR-058 / CL02 closed and accepted: classes stand
+
+**What shipped across the five stages.** The second link of the classification chain stands under house names: the delivered class-type catalogue in house words (including the PURCHASE_REQUISITION and PURCHASE_ORDER types this chain exists for), classes keyed by their immutable type and name with the Cairn lifecycle, and characteristics assigned at ordered positions — each judged standing and unblocked, each at most once per class, reordering transactional. Blocked classes take no assignment changes; deletion stands only for an assignment-less draft. The CT04 usage count became real in this round, as R-105 recorded: a characteristic standing in a class is now structurally protected in CT04, proven by test. No period gate touches the screen.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/class-definition.test.ts`: catalogue and assignment judging including the blocked-characteristic refusal, the usage protection landing in CT04, the lifecycle walk). Browser target `classes` (T939) **green journeys** against the production build: the characteristic fixture, the empty grid, PO_RELEASE created with TOTAL_VALUE through the editor, activation, the database remembering. Neighbouring targets `characteristics` (T940) and `purchase-orders` (T941) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1261 tests across 154 files**; **119 migrations** standing; seed **95/66/66/70** read back.
+
+**Cost.** Measured: 07:30 in to 07:39 — **9 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**Deferred and named, per the owner's full-parity rule.** Object classification — assigning classes and characteristic values to materials, requisitions and orders — which is the classification *use*, not its definition; language-dependent class descriptions (B-223); class-type maintenance beyond the delivered catalogue; variant-configuration dependencies; and the where-used views that arrive with the first classified objects.
+
+**What stands after this.** One link remains before the release acts: **SCR-059 — the release-strategy configuration** (`CFG.PROC.RELEASE.DEFINE`, pageless since the platform seed and twice recorded as due): release groups, codes and strategies judging documents against these classes, after which **SCR-060** delivers the release acts themselves (the ME54N/ME55/ME28/ME29N analogs) and goods receipt can follow.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -405,6 +421,7 @@ The supporting register stands: `CFG.PROC.CLASS.DEFINE` as capability and config
 | 2.214 | 2026-10-18 | **SCR-058 / CL02 stage 2 (B-385, §26.401).** Migrations `0070` + `9048` applied (119 standing): `class_type`, `classification_class` and `class_assignment` behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.215 | 2026-10-18 | **SCR-058 / CL02 stage 3 (B-386, §26.402).** The class service and live screen, and the CT04 usage count made real: assignment judging, blocked protection on both sides, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.216 | 2026-10-18 | **SCR-058 / CL02 stage 4 (B-387, §26.403).** Activity, capability and term seeded (CL01/CL02/CL03 search aliases only), the route among the built routes; seed reads back 95/66/66/70. | Agent |
+| 2.217 | 2026-10-18 | **SCR-058 / CL02 CLOSED and accepted (B-388, §26.404).** Stage 5 ships 3 service tests and the T939 browser target `classes` (green — PO_RELEASE with TOTAL_VALUE, drafted and activated). Neighbouring `characteristics` and `purchase-orders` targets, typecheck, `lint:ip` and the production build clean; suite 1261 across 154 files, 119 migrations, seed 95/66/66/70. The CT04 usage count is real. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 
 ---
 
