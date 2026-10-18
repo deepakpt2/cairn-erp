@@ -1327,6 +1327,12 @@ Stage 3 of R-128. `postOutgoingPayment` completes, mirroring R-127: per-item app
 
 Verification: typecheck clean; the SCR-078 netting test's refusal expectation stands red until its stage-5 wording update (recorded, not hidden). Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-518 / §26.534 / §30 row 2.352. **Cost (B-254, measured):** stage 2 published 16:53 UTC; stage 3 completed this turn.
 
+### 26.535 B-519 — SCR-080 stage 4: the discount determination modifiers
+
+Stage 4 of R-128. `CASH_DISCOUNT` joins `PAYMENT_DIFFERENCE` in carrying a general modifier: EXP for a discount granted (the incoming side, debit), REV for a discount received (the outgoing side, credit), so one tenant maintains both accounts on the standing determination screen. Determination lookup on both payment services now falls back to the unmodified row when no modifier-specific row stands — SCR-079-era tenant rows keep resolving. No seeding changes: the events themselves already stand from SCR-079 stage 4, and the seed counts are untouched.
+
+Verification: typecheck clean; the SCR-079 incoming completion tests stand green through the fallback (6 passed). Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-519 / §26.535 / §30 row 2.353. **Cost (B-254, measured):** stage 3 published 16:54 UTC; stage 4 completed the same minute.
+
 ---
 ---
 
@@ -1525,3 +1531,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.350 | 2026-10-18 | **SCR-080 stage 1 published (B-516, §26.532).** Outgoing-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
 | 2.351 | 2026-10-18 | **SCR-080 stage 2 published (B-517, §26.533).** `outgoing_payment` gains the discount and on-account totals; 153 migrations. The completion service follows in stage 3. | Agent |
 | 2.352 | 2026-10-18 | **SCR-080 stage 3 published (B-518, §26.534).** Completion service stands: terms-tier discount and tolerance judging, full/residual/partial outcomes, on-account and tolerated differences; the screen is live and submitting outcomes. Determination modifiers follow in stage 4. | Agent |
+| 2.353 | 2026-10-18 | **SCR-080 stage 4 published (B-519, §26.535).** `CASH_DISCOUNT` gains EXP/REV general modifiers (granted/received); both payment lookups fall back to the unmodified row. Tests and browser acceptance follow in stage 5. | Agent |

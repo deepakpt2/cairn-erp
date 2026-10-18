@@ -176,14 +176,17 @@ async function defaultTolerance(tx: Tx, client: string, companyCode: string) {
 async function determinationAccount(
   tx: Tx, client: string, chart: string, event: string, modifier = '',
 ): Promise<string | null> {
-  const rows = await tx.select().from(accountDetermination).where(and(
-    eq(accountDetermination.client, client),
-    eq(accountDetermination.chartOfAccounts, chart),
-    eq(accountDetermination.event, event),
-    eq(accountDetermination.generalModifier, modifier),
-  ));
-  const row = rows.find((r) => r.valuationClass === '') ?? rows[0];
-  return row?.glAccount ?? null;
+  const pick = async (mod: string) => {
+    const rows = await tx.select().from(accountDetermination).where(and(
+      eq(accountDetermination.client, client),
+      eq(accountDetermination.chartOfAccounts, chart),
+      eq(accountDetermination.event, event),
+      eq(accountDetermination.generalModifier, mod),
+    ));
+    const row = rows.find((r) => r.valuationClass === '') ?? rows[0];
+    return row?.glAccount ?? null;
+  };
+  return (await pick(modifier)) ?? (modifier !== '' ? pick('') : null);
 }
 
 /** The discount percentage an item's own terms allow on a given date. */
@@ -382,7 +385,7 @@ export async function postIncomingPayment(input: {
     const chart = customer.chartOfAccounts;
     let discountAccount: string | null = null;
     if (discountTotal > 0) {
-      discountAccount = await determinationAccount(tx, input.client, chart, 'CASH_DISCOUNT');
+      discountAccount = await determinationAccount(tx, input.client, chart, 'CASH_DISCOUNT', 'EXP');
       if (!discountAccount) {
         throw new IncomingPaymentError(
           `Account determination for CASH_DISCOUNT does not stand in chart ${chart}.`,
