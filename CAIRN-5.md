@@ -110,6 +110,20 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 
 ---
 
+### 26.374 B-358 — SCR-052 / MM01 closed and accepted: the material master at parity, with its sector master
+
+**What shipped across the five stages.** The owner's MM01 package was audited against the standing material master rather than rebuilt: the numbering (SCR-051), type immutability, group and unit judging, weight consistency, valuation-class judging against the type's permitted classes, price control with price unit and derived currency, price-change-with-stock refused, the frozen base unit, per-view completeness statuses and per-view transactional saves all already stood and are confirmed. The round built the two ruled gaps. **The description** stands at the reference 40 characters in column, service and form (verified lossless against standing data). **The industry sector** became a maintained tenant master — `industry_sector` behind forced RLS, the five standard sectors delivered to every tenant at onboarding and by migration, standing `MANUFACTURING` values converted to `M` in data and fixtures alike — maintained on `/config/industry-sectors` in the standing master shape, and MM01 now requires a standing active sector on create and judges any sector named, the form picking from the master. LVORM, per-type view permissions and the view-selection step were ruled out of this round and stand recorded in R-100 (LVORM is the next round's).
+
+**Acceptance evidence.** Service tests **3/3** (`tests/industry-sector-definition.test.ts`: the five delivered sectors read back, the master maintained through create/rename/deactivate/delete with its trail, MM01 refusing a blank sector, an unknown sector and an inactive one, the 41st description character refused, and the carrying sector refusing deletion with its count named). Browser target `industry-sectors` (T945) **7/7 journeys** against the production build: the delivered sectors standing, a sector defined and renamed through the screen, MM01 creating under the picked sector, the carrying sector refusing deletion, and the database remembering. Neighbouring targets `material-number-ranges` (T946) and `material-types` (T949) passed undisturbed. One standing fixture — the action-security material form, which predates the sector requirement — gained its sector field in-stage; the suite's refusal there was the new judge working, not a regression.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1237 tests across 148 files**; **108 migrations** standing; seed **91/63/60/56** read back.
+
+**Cost.** Measured: 05:21 in to 05:42 — **21 minutes** across the audit, the owner's four rulings, the contract and five stages, every stage inside its 39-minute box, despite two environment wipes restored from the standing script.
+
+**What stands after this.** The material master is at the package's parity with one recorded deferral: the deletion flag (LVORM) at general and plant scope — SCR-053, the next round by the owner's ruling. Per-type view permissions, the view-selection step, storage-location and sales views, and language-dependent descriptions remain recorded-unbuilt in R-100.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -125,6 +139,7 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 | 2.178 | 2026-10-18 | **SCR-052 stage 2 published (B-355, §26.371).** Migrations `0063` + `9043` create the industry-sector master (delivered sectors per tenant, `MANUFACTURING` converted to `M`, forced tenant RLS) and narrow the material description to 40 and sector to 1 character, verified lossless; Drizzle tables updated — 108 migrations. | Agent |
 | 2.179 | 2026-10-18 | **SCR-052 stage 3 published (B-356, §26.372).** The industry-sector service and live screen, sectors delivered at onboarding, MM01 requiring and judging the sector with the description capped at 40, standing fixtures converted to `M`. Typecheck, `lint:ip`, build and the material suites green. | Agent |
 | 2.180 | 2026-10-18 | **SCR-052 stage 4 published (B-357, §26.373).** `CFG.INV.INDUSTRYSECTOR.DEFINE` seeded as capability, configuration activity and term (OMS3 search alias only); the route joins `BUILT_ROUTES`. Seed reads back 91/63/60/56. | Agent |
+| 2.181 | 2026-10-18 | **SCR-052 / MM01 CLOSED and accepted (B-358, §26.374).** Stage 5 ships 3 service tests and the T945 browser target `industry-sectors` (7/7 journeys against the production build — delivered sectors standing, define/rename through the screen, MM01 creating under the picked sector, the carrying sector refusing deletion, the database remembering); one standing security fixture gained its sector. Neighbouring `material-number-ranges` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1237 across 148 files, 108 migrations, seed 91/63/60/56. Cost measured at 21 minutes overall. | Agent |
 
 ---
 
