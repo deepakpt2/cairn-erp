@@ -1082,6 +1082,13 @@ Stage 3 of R-123. `src/modules/finance/vendor-invoice.ts` stands at customer-inv
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-486 / §26.502 / §30 row 2.320. **Cost (B-254, measured):** stage 2 published 13:33 UTC; stage 3 completed 13:34 UTC.
 
 ---
+### 26.503 B-487 — SCR-075 stage 4: capability and term
+
+Stage 4 of R-123. `FIN.AP.INVOICE.POST` enters the capability catalogue as a posting-relevant POST capability, and the Term Registry names **Enter vendor invoice** at `/finance/vendor-invoice`, with `FB60` standing only as a search alias. No configuration activity is created, and no tenant backfill stands needed — KR and VENDINV already stand delivered.
+
+Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **109/66/83/91** (message catalogue 11), and database read-back shows `FIN.AP.INVOICE.POST|POST|true`, the term, and its FB60 alias. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-487 / §26.503 / §30 row 2.321. **Cost (B-254, measured):** stage 3 published 13:34 UTC; stage 4 completed 13:35 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1247,3 +1254,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.318 | 2026-10-18 | **SCR-075 stage 1 published (B-484, §26.500).** `/finance/vendor-invoice` stands inert under `FIN.AP.INVOICE.POST`: header, dates, reference, judged gross, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
 | 2.319 | 2026-10-18 | **SCR-075 stage 2 published (B-485, §26.501).** `vendor_invoice`/`vendor_invoice_line` stand behind RLS (migrations 0084/9059; DB at 145), cancellation-columns-only updates, lines insert-only. Backend is stage 3. | Agent |
 | 2.320 | 2026-10-18 | **SCR-075 stage 3 published (B-486, §26.502).** Vendor-invoice service stands at FB70 parity: judged gross, standing tax, KR journal crediting the vendor at gross, VENDINV number, linked cancellation; the `/finance/vendor-invoice` screen is live. Capability and term land in stage 4. | Agent |
+| 2.321 | 2026-10-18 | **SCR-075 stage 4 published (B-487, §26.503).** `FIN.AP.INVOICE.POST` and the `/finance/vendor-invoice` term (FB60 alias only) stand; seed read-back 109/66/83/91, idempotent. Tests and acceptance remain stage 5. | Agent |
