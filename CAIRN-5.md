@@ -457,6 +457,12 @@ Migrations `0073_material_document.sql` with `9051_material_document_policies.sq
 
 ---
 
+### 26.417 B-401 — SCR-061 goods receipt stage 3: the posting service and the live screen
+
+One service `src/modules/inventory/goods-receipt.ts` posts the movement: the movement type is resolved from the business action and reference category through the tenant-standing catalogue; the order judges released where a strategy claimed it; open quantity is computed from posted receipt and reversal history and judged against the material-plant overdelivery tolerance; the material judges standing, extended to the plant, and not deletion-flagged at client or plant scope — on a posting the SCR-053 flag blocks. The material period judges through the OMSY judge and the financial period through the posting engine, each on its own rules and never silently re-dating. Valuation moves with the document: a moving-average material values at the order price, a standard-price material at standard with the difference to the price-difference event; account determination missing refuses, naming the missing configuration. The balanced journal (inventory by valuation class against GR/IR clearing, under the delivered goods-receipt document type) posts through the standing engine, the stock balance and valuation totals move in the same transaction, and the caller's request key makes a retried submission return the standing document. Reversal is a new document — the original judged unreversed and stock-covered, its journal mirrored through the engine — and the original is marked REVERSED, never edited. The screen loads an order's eligible items with ordered, received and remaining quantities, posts under one act, and displays and reverses standing material documents.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -524,6 +530,7 @@ Migrations `0073_material_document.sql` with `9051_material_document_policies.sq
 | 2.230 | 2026-10-18 | **SCR-061 goods receipt contracted (R-109).** MIGO under house names: action, reference and movement as separate concepts resolved through a delivered movement catalogue, material documents immutable once posted, stock and valuation moved in the posting transaction, open quantity from posted history with material-plant tolerance, MM and FI periods judged separately, accounting through the standing engine, submission idempotency by request key. | Agent |
 | 2.231 | 2026-10-18 | **SCR-061 goods receipt stage 1 (B-399, §26.415).** The inert movement screen stands at `/inventory/goods-receipt`: action and reference selectors, the resolved movement shown, dates and header text, the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 | 2.232 | 2026-10-18 | **SCR-061 goods receipt stage 2 (B-400, §26.416).** Migrations `0073` + `9051` applied (126 standing): the movement-type catalogue, insert-only material documents and lines, and stock balances behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.233 | 2026-10-18 | **SCR-061 goods receipt stage 3 (B-401, §26.417).** The posting service resolves the movement from action and reference, judges release, open quantity against tolerance, deletion flags and both period gates, and posts document, stock, valuation and balanced journal in one transaction with request-key idempotency; reversal stands as a new document. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
