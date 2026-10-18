@@ -977,6 +977,19 @@ Stage 1 of R-121. `/finance/customer-clearing` stands inert: the selection (cust
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-471 / §26.487 / §30 row 2.305. **Cost (B-254, measured):** the contract published 12:43 UTC; stage 1 completed 12:45 UTC.
 
 ---
+### 26.488 B-472 — SCR-073 stage 2: schema verdict — no new tables
+
+Stage 2 of R-121. The verdict, judged against the standing schema rather than the package's proposal: **no table lands, no column lands, no migration is written.** The package's `customer_clearing`, `customer_clearing_item` and `customer_clearing_audit` are refused as duplicates of evidence Cairn already holds:
+
+- The clearing relationship stands on `journal_entry_line.clearing_document` (varchar 40) and `clearing_date`, indexed by `jel_clearing_idx` on `(client, clearing_document)` — the same stamps vendor clearing (SCR-064) writes, incoming payments (SCR-068) write, and the FBRA reset (SCR-071) lifts. A parallel allocation table would fork the record the reset judges.
+- Every cleared amount already stands as a line of the balanced clearing journal itself (`journal_entry` / `journal_entry_line`, composite identity `(client, document_number, fiscal_year)`), each line carrying its account, currency, document and local amounts and `business_partner` — so the package's per-item cleared amounts and currencies need no second home.
+- The audit outcome stands as the change document of the act (`recordChange`, object class `customer_clearing`, after-state carrying the clearing document, item count, clearing date and the caller's request key), which is also where request-key replay will judge a retried submission — no audit table, no correlation column.
+- Customer/company scope judges against the standing `customer_company_code` extension, and reset history stays on SCR-071's `clearing_reset` record; no `POSTED`/`RESET` status column is invented here.
+- Document type DZ already stands delivered, so stage 4 adds only the capability and the term.
+
+Verification: the standing columns, index and tables were read directly from `src/modules/finance/schema.ts`, `src/platform/change/index.ts` and the customer-company schema; local DB stays at **141 migrations**. SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-472 / §26.488 / §30 row 2.306. **Cost (B-254, measured):** stage 1 published 12:45 UTC; the verdict completed 12:52 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1127,3 +1140,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.303 | 2026-10-18 | **SCR-072 accepted and closed (B-469, §26.485).** FB08 document reversal stands: any POSTED journal reverses into a linked AB mirror with exact amounts, tenant reversal reasons 01–04, clearing refused by name toward FBRA, closed periods refused. Service tests 4/4, browser T925 green on the production build, suite 1311/169, seed 106/66/80/88, 141 migrations. Next T-code: **F-32** (SCR-073, `FIN.AR.CLEAR`), awaiting the owner field package. | Agent |
 | 2.304 | 2026-10-18 | **SCR-073 contract recorded (R-121, B-470, §26.486).** F-32 customer clearing mirrors vendor clearing on standing stamps: no clearing tables, one DZ clearing journal, three distinct dates, one currency, zero signed sum, partial/residual and special G/L deferred by name. Awaiting stage 1 (UI). | Agent |
 | 2.305 | 2026-10-18 | **SCR-073 stage 1 published (B-471, §26.487).** `/finance/customer-clearing` stands inert under `FIN.AR.CLEAR`: selection, three distinct dates, explicit confirmation, cleared-history section; refusal names the unconnected service. Schema verdict is stage 2. | Agent |
+| 2.306 | 2026-10-18 | **SCR-073 stage 2 schema verdict (B-472, §26.488).** No new tables, columns or migrations: clearing stamps, the clearing journal's own lines, the change document and SCR-071's reset record already carry the F-32 relationship. DB stays at 141 migrations. Backend is stage 3. | Agent |
