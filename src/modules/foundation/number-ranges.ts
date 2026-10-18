@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'MATERIALNR', 'BUSPARTNR',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'MATERIALNR', 'BUSPARTNR',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -41,6 +41,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'PRODCONF', description: 'Production confirmations', numberLength: 12, yearRelevant: false, subobjectHint: null },
   { objectCode: 'PAYRUN', description: 'Payment runs', numberLength: 10, yearRelevant: false, subobjectHint: null },
   { objectCode: 'VENDINV', description: 'Vendor invoices', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'CUSTINV', description: 'Customer invoices', numberLength: 10, yearRelevant: false, subobjectHint: null },
   { objectCode: 'BUSPARTNR', description: 'Business partners', numberLength: 10, yearRelevant: false, subobjectHint: null },
 ];
 

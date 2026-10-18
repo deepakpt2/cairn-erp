@@ -693,6 +693,13 @@ The customer-invoice screen stands at `/finance/customer-invoice`: header, the i
 
 ---
 
+### 26.450 B-434 — SCR-067 customer invoice stage 2: the tables and CUSTINV stand
+
+Migrations `0079` + `9054` create `customer_invoice` and `customer_invoice_line` behind forced tenant RLS (header insert/read with cancellation-column updates only, lines insert-only), and the CUSTINV number object joins the catalogue and the tenant defaults (prefix CI). **135 migrations standing.**
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -795,6 +802,7 @@ The customer-invoice screen stands at `/finance/customer-invoice`: header, the i
 | 2.265 | 2026-10-18 | **SCR-066 vendor ageing closed (B-431, §26.447).** Service tests and browser target T931 (neighbour T932) green on the production build; full suite 1286/162, 133 migrations, seed 100/66/73/82. Deferrals named: posting-date basis, further sorts/summarizations, document currency, special G/L, partial/residual allocation. | Agent |
 | 2.266 | 2026-10-18 | **SCR-067 customer invoice contracted (R-115, B-432, §26.448).** FB70 under house names: customer invoices with judged gross, receivable open item, revenue and tax through standing determination, linked cancellation; `FIN.AR.INVOICE.POST` and CUSTINV created; credit memos, incoming payments, discounts and FX deferred. | Agent |
 | 2.267 | 2026-10-18 | **SCR-067 customer invoice stage 1 (B-433, §26.449).** The inert customer-invoice screen stands at `/finance/customer-invoice` — header, line grid with tax and balance, posting disabled, document tile. Typecheck and production build clean. | Agent |
+| 2.268 | 2026-10-18 | **SCR-067 customer invoice stage 2 (B-434, §26.450).** Migrations `0079` + `9054` create the customer invoice tables behind forced tenant RLS; CUSTINV joins the number catalogue and tenant defaults. 135 migrations standing; typecheck clean. | Agent |
 
 ---
 

@@ -1,5 +1,5 @@
 /** Purchase requisitions — SCR-055 / R-103 (ME51N). Item-level documents, no header record. */
-import { pgTable, varchar, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, char, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { plant, purchasingGroup, storageLocation } from '../foundation/schema';
@@ -263,4 +263,50 @@ export const supplierInvoiceItem = pgTable('supplier_invoice_item', {
   primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
   foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [supplierInvoice.client, supplierInvoice.invoiceNumber] }).onDelete('restrict'),
   check('supplier_invoice_item_qty_ck', sql`${t.quantity} > 0`),
+]);
+
+export const customerInvoice = pgTable('customer_invoice', {
+  client: tenant(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  category: varchar('category', { length: 20 }).notNull().default('INVOICE'),
+  customerNumber: varchar('customer_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  reference: varchar('reference', { length: 16 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  grossAmount: numeric('gross_amount', { precision: 23, scale: 4 }).notNull(),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  paymentTerms: varchar('payment_terms', { length: 12 }),
+  baselineDate: date('baseline_date', { mode: 'string' }),
+  dueDate: date('due_date', { mode: 'string' }),
+  headerText: varchar('header_text', { length: 100 }),
+  status: varchar('status', { length: 12 }).notNull().default('POSTED'),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
+  cancelledBy: varchar('cancelled_by', { length: 20 }),
+  cancellationOf: varchar('cancellation_of', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber] }),
+  check('customer_invoice_category_ck', sql`${t.category} in ('INVOICE', 'CREDIT_MEMO')`),
+  check('customer_invoice_status_ck', sql`${t.status} in ('POSTED', 'CANCELLED')`),
+]);
+
+export const customerInvoiceLine = pgTable('customer_invoice_line', {
+  client: tenant(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull(),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  lineText: varchar('line_text', { length: 100 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
+  foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [customerInvoice.client, customerInvoice.invoiceNumber] }).onDelete('restrict'),
+  check('customer_invoice_line_amount_ck', sql`${t.netAmount} > 0`),
 ]);
