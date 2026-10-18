@@ -811,6 +811,13 @@ Seed adds capability `FIN.AR.BALANCE` (DISPLAY, non-posting — “Display custo
 
 ---
 
+### 26.466 B-450 — SCR-069 closed: customer balances accepted
+
+FD10N stands in house dress at `/finance/customer-balances` under `FIN.AR.BALANCE`: selection, derived period matrix and drill-down read live from the posted journal — opening from every earlier year, debit-positive turnover and chained closing per period, special periods only on request, document-currency display only where the items stand in one currency and refusal by name otherwise. Service tests prove turnover 850 / credit 550 closing at 300, the 300 opening carried into 2027, and the not-extended and no-conversion refusals; browser target T928 walks invoices of 550 and 300 and a receipt of 550 through the screen to the same 300.00 closing with period-10 drill-down and database evidence; neighbour T929 (incoming payment) stays green. Suite 1296/165, seed 103/66/76/85, migrations unchanged at 137, typecheck and production build clean. Round measured 08:55–09:16 UTC (21 minutes, contract commit to acceptance). Deferred, named: stored transaction figures with balance carryforward, currency conversion, customer ageing (SCR-070, S_ALR_87012178), and special G/L separation.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -929,6 +936,7 @@ Seed adds capability `FIN.AR.BALANCE` (DISPLAY, non-posting — “Display custo
 | 2.281 | 2026-10-18 | **SCR-069 stage 2 verified (B-447, §26.463).** No schema change: balances derive from the posted journal with no balance table; the standing partner/company index from SCR-065 covers customer lines identically. Migrations unchanged at 137. | Agent |
 | 2.282 | 2026-10-18 | **SCR-069 stage 3 published (B-448, §26.464).** Customer balances read live: standing-extension check, variant-bound periods, debit-positive opening/turnover/chained closing derived from posted customer lines, special periods on request, single-currency display or named refusal, period drill-down to line items; screen wired. | Agent |
 | 2.283 | 2026-10-18 | **SCR-069 stage 4 published (B-449, §26.465).** Capability `FIN.AR.BALANCE` and the `/finance/customer-balances` term stand, FD10N a search alias only; seed read-back 103/66/76/85. | Agent |
+| 2.284 | 2026-10-18 | **SCR-069 closed (B-450, §26.466).** Customer balances (FD10N) accepted under `FIN.AR.BALANCE`: T928 + neighbour T929 green on the production build, suite 1296/165, seed 103/66/76/85, 137 migrations, 21 min measured. Next: SCR-070 customer ageing (S_ALR_87012178). | Agent |
 
 ---
 
