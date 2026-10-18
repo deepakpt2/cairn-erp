@@ -59,7 +59,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
           </div>
         </form>
         <p className="mt-2 text-sm text-ink-soft">
-          Movement type: {document ? 'GOODS_RECEIPT_REVERSAL' : 'GOODS_RECEIPT_PO'} — resolved from the action and reference, never typed.
+          Movement type: {document ? 'RECEIPT_REVERSAL' : 'GOODS_RECEIPT_PO'} — resolved from the action and reference, never typed.
         </p>
       </section>
 

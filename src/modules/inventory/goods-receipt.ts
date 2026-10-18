@@ -45,10 +45,10 @@ export const DELIVERED_MOVEMENTS = [
   {
     movementType: 'GOODS_RECEIPT_PO', description: 'Goods receipt for purchase order',
     direction: 'RECEIPT', referenceCategory: 'PURCHASE_ORDER',
-    reversalMovementType: 'GOODS_RECEIPT_REVERSAL',
+    reversalMovementType: 'RECEIPT_REVERSAL',
   },
   {
-    movementType: 'GOODS_RECEIPT_REVERSAL', description: 'Reversal of a goods receipt',
+    movementType: 'RECEIPT_REVERSAL', description: 'Reversal of a goods receipt',
     direction: 'REVERSAL', referenceCategory: 'MATERIAL_DOCUMENT',
     reversalMovementType: null,
   },
