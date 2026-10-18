@@ -596,6 +596,13 @@ The owner's FK10N package is contracted as R-113. Read-only: period balances der
 
 ---
 
+### 26.437 B-421 — SCR-065 vendor balances stage 1: the inert screen stands
+
+The balances screen stands at `/finance/vendor-balances`: selection (supplier, company, fiscal year, display currency, period range, special-periods option — with the read-only note stated), the empty period matrix, and the drill-down tile. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -685,6 +692,7 @@ The owner's FK10N package is contracted as R-113. Read-only: period balances der
 | 2.252 | 2026-10-18 | **SCR-064 vendor clearing stage 4 (B-418, §26.434).** Capability `FIN.AP.CLEAR` created; the clearing term seeded at its route with F-44 a search alias only. Seed reads back 98/66/71/80. | Agent |
 | 2.253 | 2026-10-18 | **SCR-064 vendor clearing closed (B-419, §26.435).** Service tests and browser target T933 (neighbour T934) green on the production build; full suite 1280/160, 131 migrations, seed 98/66/71/80. Deferrals named: reset/reverse clearing, partial and residual clearing, special G/L items, exchange differences, manual vendor payment screen (F-53). | Agent |
 | 2.254 | 2026-10-18 | **SCR-065 vendor balances contracted (R-113, B-420, §26.436).** FK10N under house names, read-only: period balances derived from the posted journal (no balance table), opening/turnover/closing chained, document-currency display, drill-down to line items; `FIN.AP.BALANCE` created; stored figures/carryforward and conversion deferred. | Agent |
+| 2.255 | 2026-10-18 | **SCR-065 vendor balances stage 1 (B-421, §26.437).** The inert balances screen stands at `/finance/vendor-balances` — selection, the empty period matrix, the drill-down tile. Typecheck and production build clean. | Agent |
 
 ---
 

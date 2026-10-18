@@ -1995,6 +1995,12 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'vendorBalances.title': 'Vendor Balances',
+  'vendorBalances.subtitle':
+    'A supplier\u2019s period balances in a company, derived from the posted ' +
+    'ledger as it is read: opening balance, debit and credit turnover and ' +
+    'closing balance for every fiscal period, with the line items behind ' +
+    'any period one choice away. This screen displays; it never posts.',
   'vendorClearing.title': 'Clear Vendor Open Items',
   'vendorClearing.subtitle':
     'Clear a supplier\u2019s open items against each other: invoices, credit ' +
