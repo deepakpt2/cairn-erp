@@ -1349,6 +1349,12 @@ Stage 1 of R-129. The new `/finance/vendor-down-payment` screen stands as a shel
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-522 / §26.538 / §30 row 2.356. **Cost (B-254, measured):** contract published 17:03 UTC; stage 1 completed this turn.
 
+### 26.539 B-523 — SCR-081 stage 2: special G/L configuration and the down-payment record
+
+Stage 2 of R-129. `special_gl_config` stands keyed (client, company code, account type, indicator) with the tenant-wide scope `''` as default, each row naming its alternative reconciliation account; `vendor_down_payment` stands in the house payment-record shape, the resolved alternative account remembered on the record (`drizzle/0091_special_gl_and_down_payment.sql`). No clearing-link table (declined in R-129). The database stands at 154 migrations, both tables verified by read-back.
+
+Verification: migration applied, tables verified, typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-523 / §26.539 / §30 row 2.357. **Cost (B-254, measured):** stage 1 published 17:03 UTC; stage 2 completed this turn.
+
 ---
 ---
 
@@ -1551,3 +1557,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.354 | 2026-10-18 | **SCR-080 closed (B-520, §26.536).** Outgoing payment completion accepted: 1344 tests, T916 browser green, 153 migrations, seed 112/67/86/94. Both payment completions (F-28, F-53) now stand implemented. | Agent |
 | 2.355 | 2026-10-18 | **SCR-081 contract R-129 written (B-521, §26.537).** F-48 vendor down payment: special G/L configuration resolves the alternative reconciliation account, a KA journal stands the advance open outside ordinary payables; the clearing-link table declined (F-54 next), F-47 requests deferred. Stage 1 follows. | Agent |
 | 2.356 | 2026-10-18 | **SCR-081 stage 1 published (B-522, §26.538).** The `/finance/vendor-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
+| 2.357 | 2026-10-18 | **SCR-081 stage 2 published (B-523, §26.539).** Special G/L configuration and the down-payment record stand; 154 migrations. The posting service follows in stage 3. | Agent |

@@ -1348,6 +1348,34 @@ export const taxCode = pgTable(
  * grouping of valuation areas. Blank valuation class and blank general
  * modifier are stored values: any class, no modifier split.
  */
+/**
+ * Special G/L configuration (SCR-081, migration 0091): the alternative
+ * reconciliation account a special G/L indicator posts to, per account
+ * type. Company code '' is the tenant-wide default; a company row wins.
+ * The indicator is a stored configuration key (the reference keys are
+ * one character; nothing SAP-shaped is stored beyond that width).
+ */
+export const specialGlConfig = pgTable(
+  'special_gl_config',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    /** '' = tenant-wide default. */
+    companyCode: varchar('company_code', { length: 10 }).notNull().default(''),
+    /** AP = vendor side, AR = customer side. */
+    accountType: varchar('account_type', { length: 2 }).notNull(),
+    indicator: varchar('indicator', { length: 1 }).notNull(),
+    alternativeReconciliationAccount: varchar('alternative_reconciliation_account', { length: 10 }).notNull(),
+    description: varchar('description', { length: 60 }).notNull().default(''),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.companyCode, t.accountType, t.indicator] }),
+    check('special_gl_account_type_ck', sql`${t.accountType} in ('AP', 'AR')`),
+  ],
+);
+
 export const accountDetermination = pgTable(
   'account_determination',
   {
