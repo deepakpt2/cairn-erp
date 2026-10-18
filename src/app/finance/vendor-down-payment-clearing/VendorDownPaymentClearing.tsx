@@ -1,4 +1,23 @@
+'use client';
+
+import { useActionState, useState } from 'react';
+
 import type { DownPaymentClearingView } from '@/modules/finance/vendor-down-payment-clearing';
+import { postClearingAction, type DownPaymentClearingActionState } from './actions';
+
+const INITIAL: DownPaymentClearingActionState = { ok: false, message: '' };
+
+function Message({ state }: { state: DownPaymentClearingActionState }) {
+  if (!state.message) return null;
+  return (
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+      {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+    </p>
+  );
+}
+
+const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
+  `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
 
 export default function VendorDownPaymentClearing({ view, loadError, canEnter, today }: {
   view: DownPaymentClearingView | null;
@@ -6,8 +25,29 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
   canEnter: boolean;
   today: string;
 }) {
+  const [state, action, posting] = useActionState(postClearingAction, INITIAL);
+  const [dpSelected, setDpSelected] = useState<Set<string>>(new Set());
+  const [invSelected, setInvSelected] = useState<Set<string>>(new Set());
+  const [dpApplied, setDpApplied] = useState<Record<string, string>>({});
+  const [invApplied, setInvApplied] = useState<Record<string, string>>({});
+
+  const toggle = (set: typeof setDpSelected) => (key: string) => set((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
   const downPayments = view?.downPayments ?? [];
   const invoices = view?.invoices ?? [];
+  const sum = (
+    items: Array<{ remaining: number } & { documentNumber: string; fiscalYear: number; lineNumber: number }>,
+    selected: Set<string>, amounts: Record<string, string>,
+  ) => items.filter((i) => selected.has(itemKey(i)))
+    .reduce((s, i) => s + (amounts[itemKey(i)] === undefined || amounts[itemKey(i)] === ''
+      ? i.remaining : Number(amounts[itemKey(i)]) || 0), 0);
+  const dpTotal = Math.round(sum(downPayments, dpSelected, dpApplied) * 100) / 100;
+  const invTotal = Math.round(sum(invoices, invSelected, invApplied) * 100) / 100;
+  const balanced = dpTotal > 0 && dpTotal === invTotal;
 
   return (
     <>
@@ -41,7 +81,7 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
       {view && (
         <section aria-labelledby="vdpc-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="vdpc-items" className="text-sm font-semibold">Application</h2>
-          <form>
+          <form action={action}>
             <input type="hidden" name="vendor" value={view.vendor} />
             <input type="hidden" name="companyCode" value={view.companyCode} />
             <input type="hidden" name="indicator" value={view.indicator} />
@@ -85,15 +125,28 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
                   </thead>
                   <tbody>
                     {downPayments.map((item) => (
-                      <tr key={item.documentNumber} className="border-t border-line">
-                        <td className="px-2 py-2"><input type="checkbox" name="downPayment" disabled /></td>
+                      <tr key={itemKey(item)} className="border-t border-line">
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox" name="downPayment" value={itemKey(item)}
+                            checked={dpSelected.has(itemKey(item))}
+                            onChange={() => toggle(setDpSelected)(itemKey(item))}
+                          />
+                        </td>
                         <td className="px-2 py-2">{item.documentNumber}</td>
                         <td className="px-2 py-2">{item.postingDate}</td>
                         <td className="px-2 py-2">{item.currency}</td>
                         <td className="px-2 py-2">{item.amount.toFixed(2)}</td>
                         <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
                         <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
-                        <td className="px-2 py-2"><input className="input w-24" disabled /></td>
+                        <td className="px-2 py-2">
+                          <input
+                            name={`apply-dp-${itemKey(item)}`} className="input w-24"
+                            placeholder={item.remaining.toFixed(2)}
+                            value={dpApplied[itemKey(item)] ?? ''}
+                            onChange={(e) => setDpApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -118,8 +171,14 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
                   </thead>
                   <tbody>
                     {invoices.map((item) => (
-                      <tr key={item.documentNumber} className="border-t border-line">
-                        <td className="px-2 py-2"><input type="checkbox" name="invoice" disabled /></td>
+                      <tr key={itemKey(item)} className="border-t border-line">
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox" name="invoice" value={itemKey(item)}
+                            checked={invSelected.has(itemKey(item))}
+                            onChange={() => toggle(setInvSelected)(itemKey(item))}
+                          />
+                        </td>
                         <td className="px-2 py-2">{item.documentNumber}</td>
                         <td className="px-2 py-2">{item.postingDate}</td>
                         <td className="px-2 py-2">{item.dueDate}</td>
@@ -127,7 +186,14 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
                         <td className="px-2 py-2">{item.amount.toFixed(2)}</td>
                         <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
                         <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
-                        <td className="px-2 py-2"><input className="input w-24" disabled /></td>
+                        <td className="px-2 py-2">
+                          <input
+                            name={`settle-inv-${itemKey(item)}`} className="input w-24"
+                            placeholder={item.remaining.toFixed(2)}
+                            value={invApplied[itemKey(item)] ?? ''}
+                            onChange={(e) => setInvApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -136,12 +202,15 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
             )}
 
             <p className="mt-2 text-sm text-ink-soft">
+              Applying {dpTotal.toFixed(2)} of advances against {invTotal.toFixed(2)} of invoices.
               The applied totals of both sides must agree — a clearing transfers, it never creates or
               destroys value. Items applied in full clear in place; remainders stand open by the partial model.
-              The clearing service lands in a later stage; posting stands disabled until it does.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled>
+              <button
+                type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
+                disabled={!canEnter || posting || !balanced}
+              >
                 Post clearing
               </button>
             </div>
@@ -151,6 +220,7 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
 
       <section aria-labelledby="vdpc-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="vdpc-result" className="text-sm font-semibold">Clearing</h2>
+        <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">
           A posted clearing is history: never edited, never deleted. Resetting a clearing stands in the
           standing clearing-reset processing.

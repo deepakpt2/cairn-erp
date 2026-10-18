@@ -4,6 +4,8 @@ import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
   VENDOR_DOWN_PAYMENT_CLEARING_CAPABILITY,
+  VendorDownPaymentClearingError,
+  getDownPaymentClearing,
   type DownPaymentClearingView,
 } from '@/modules/finance/vendor-down-payment-clearing';
 import VendorDownPaymentClearing from './VendorDownPaymentClearing';
@@ -20,10 +22,20 @@ export default async function VendorDownPaymentClearingPage({ searchParams }: {
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
-  // The view service lands in stage 3; until then nothing loads.
-  void params;
-  const view: DownPaymentClearingView | null = null;
-  const loadError: string | null = null;
+  const client = session.user.client;
+  let view: DownPaymentClearingView | null = null;
+  let loadError: string | null = null;
+  if (params.vendor && params.companyCode && params.indicator) {
+    try {
+      view = await getDownPaymentClearing(
+        client, params.vendor.toUpperCase(), params.companyCode, params.indicator.toUpperCase(),
+      );
+    } catch (error) {
+      if (error instanceof VendorDownPaymentClearingError) {
+        loadError = error.remedy ? `${error.message} ${error.remedy}` : error.message;
+      } else throw error;
+    }
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   return (

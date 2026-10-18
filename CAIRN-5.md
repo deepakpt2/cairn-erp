@@ -1395,6 +1395,12 @@ Stage 2 of R-130. `vendor_down_payment_clearing` stands in the house payment-rec
 
 Verification: migration applied, table verified, typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-530 / §26.546 / §30 row 2.364. **Cost (B-254, measured):** stage 1 published 17:27 UTC; stage 2 completed this turn.
 
+### 26.547 B-531 — SCR-082 stage 3: clearing service and wired screen
+
+Stage 3 of R-130. `clearDownPayments` posts the KZ transfer journal — debit the ordinary reconciliation account per invoice (`Settles …`), credit the alternative account per down payment (`Applied from …`) — the applied totals required equal before anything moves. Eligibility re-reads under the advisory lock: open advance lines of the chosen indicator and open credit items of the vendor, each item's remaining derived from its posted offsetting lines, over-application refused by name. Full application stamps the original item and its offsetting lines under the clearing document; partial application leaves the netting pair standing. `getDownPaymentClearing` shows both sides with original, applied and remaining amounts; the screen posts the application and the record remembers indicator, account and total.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-531 / §26.547 / §30 row 2.365. **Cost (B-254, measured):** stage 2 published 17:27 UTC; stage 3 completed 17:29 UTC.
+
 ---
 ---
 
@@ -1605,3 +1611,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.362 | 2026-10-18 | **SCR-082 contract R-130 written (B-528, §26.544).** F-54 down-payment clearing: a KZ transfer posting applies advances to invoices per item, remainders standing by the partial netting model; the mapping table declined. Stage 1 follows. | Agent |
 | 2.363 | 2026-10-18 | **SCR-082 stage 1 published (B-529, §26.545).** The down-payment clearing screen shell stands with both selection grids; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.364 | 2026-10-18 | **SCR-082 stage 2 published (B-530, §26.546).** The down-payment clearing record stands; 155 migrations. The clearing service follows in stage 3. | Agent |
+| 2.365 | 2026-10-18 | **SCR-082 stage 3 published (B-531, §26.547).** Clearing service stands: KZ transfer posting with equal applied totals, full items stamped, remainders netting open; the screen is live. Capability follows in stage 4. | Agent |
