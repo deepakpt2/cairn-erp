@@ -752,6 +752,13 @@ The incoming-payment service judges the customer's standing, lists the open debi
 
 ---
 
+### 26.458 B-442 — SCR-068 incoming payment stage 4: the capability and term stand
+
+Stage 4 creates the capability `FIN.AR.PAYMENT.ENTER` and seats its term *Post incoming payment* at `/finance/incoming-payment`, with F-28 standing as a search alias only. Seed reads back **102/66/75/84**.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -862,6 +869,7 @@ The incoming-payment service judges the customer's standing, lists the open debi
 | 2.273 | 2026-10-18 | **SCR-068 incoming payment stage 1 (B-439, §26.455).** The inert incoming-payment screen stands at `/finance/incoming-payment` — header and bank data, the allocation list, posting disabled, result tile. Typecheck and production build clean. | Agent |
 | 2.274 | 2026-10-18 | **SCR-068 incoming payment stage 2 (B-440, §26.456).** Migrations `0080` + `9055` create the incoming-payment record behind forced tenant RLS with the request key unique per tenant. 137 migrations standing; typecheck clean. | Agent |
 | 2.275 | 2026-10-18 | **SCR-068 incoming payment stage 3 (B-441, §26.457).** The incoming-payment service (receivables with due dates, exact-allocation rule naming the difference, `DZ` journal, clearing in place, request-key replay) and the live screen. Typecheck and production build clean. | Agent |
+| 2.276 | 2026-10-18 | **SCR-068 incoming payment stage 4 (B-442, §26.458).** Capability `FIN.AR.PAYMENT.ENTER` created; the incoming-payment term seeded at its route with F-28 a search alias only. Seed reads back 102/66/75/84. | Agent |
 
 ---
 
