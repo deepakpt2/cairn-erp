@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { plant } from '../foundation/schema';
+import { INDUSTRY_SECTOR_DEFAULTS } from './industry-sector-definition';
 import {
   accountCategoryReference,
   materialGroup,
@@ -10,6 +11,7 @@ import {
   materialTypeValuation,
   mrpController,
   valuationClass,
+  industrySector,
 } from './schema';
 
 export const TYPE_UPDATING_DEFAULTS: Record<string, { quantityUpdating: boolean; valueUpdating: boolean }> = {
@@ -37,6 +39,13 @@ export async function seedTypeValuationForPlant(tx: Tx, client: string, plantCod
 }
 
 export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: string) {
+  // The delivered standard industry sectors (SCR-052 / R-100); tenants
+  // maintain the master on its own screen from here.
+  for (const row of INDUSTRY_SECTOR_DEFAULTS) {
+    await tx.insert(industrySector)
+      .values({ client, sector: row.sector, name: row.name, createdBy })
+      .onConflictDoNothing();
+  }
   await tx.insert(accountCategoryReference)
     .values({ client, reference: '0001', name: 'General valuation', createdBy })
     .onConflictDoNothing();

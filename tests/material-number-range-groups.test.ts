@@ -157,7 +157,7 @@ describe('SCR-051 material number range groups (MMNR)', () => {
   const basic = (patch: Partial<Extract<MaterialInput, { view: 'BASIC' }>> = {}): MaterialInput => ({
     client, materialNumber: '', changedBy: ACTOR, expectedVersion: 0, reason: 'Stage 5 acceptance',
     view: 'BASIC', description: 'Grouped component', materialType: 'TEST', materialGroup: 'RAW',
-    baseUnit: 'KG', industrySector: 'MANUFACTURING', barcode: '', grossWeight: '0', netWeight: '0',
+    baseUnit: 'KG', industrySector: 'M', barcode: '', grossWeight: '0', netWeight: '0',
     weightUnit: '', isBlocked: false, ...patch,
   });
 

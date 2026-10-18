@@ -16,7 +16,7 @@ export async function seedDevelopmentMaterials() {
     let detail = await getMaterialDetail(client, s.number);
     if (!detail) {
       await saveMaterialView({ ...common, view: 'BASIC', expectedVersion: 0, description: s.description, materialType: s.type,
-        materialGroup: s.group, baseUnit: s.unit, industrySector: 'MANUFACTURING', barcode: '', grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false });
+        materialGroup: s.group, baseUnit: s.unit, industrySector: 'M', barcode: '', grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false });
       detail = await getMaterialDetail(client, s.number);
     }
     let p = detail!.plants.find((p) => p.plant === '1000');

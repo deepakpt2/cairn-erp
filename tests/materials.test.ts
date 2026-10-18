@@ -11,7 +11,7 @@ afterAll(closeDb);
 const number = 'RAW-TEST';
 function common() { return { client: tenant.client, materialNumber: number, changedBy: 'MASTER_OPERATOR', expectedVersion: 0, reason: 'Master verification' }; }
 function basic(patch: Partial<Extract<MaterialInput, { view: 'BASIC' }>> = {}): MaterialInput {
-  return { ...common(), view: 'BASIC', description: 'Raw component', materialType: 'RAW', materialGroup: 'RAW', baseUnit: 'KG', industrySector: 'MANUFACTURING', barcode: '', grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false, ...patch };
+  return { ...common(), view: 'BASIC', description: 'Raw component', materialType: 'RAW', materialGroup: 'RAW', baseUnit: 'KG', industrySector: 'M', barcode: '', grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false, ...patch };
 }
 function mrp(patch: Partial<Extract<MaterialInput, { view: 'MRP' }>> = {}): MaterialInput {
   return { ...common(), view: 'MRP', plant: '1000', mrpType: 'REQUIREMENTS', mrpController: '001', procurementType: 'BUY', lotSizing: 'EXACT', fixedLotSize: '0', minimumLotSize: '0', maximumLotSize: '0', safetyStock: '4.125', reorderPoint: '0', plannedDeliveryDays: 7, inHouseProductionDays: 0, ...patch };

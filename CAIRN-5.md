@@ -96,6 +96,14 @@ Migration `0063` creates `industry_sector` (one-character key with its format ch
 
 ---
 
+### 26.372 B-356 — SCR-052 stage 3: the sector service live, MM01 judging, and the 40-character description enforced
+
+The sector master gains its service in the standing shape (`industry-sector-definition.ts`: judged create and rename, deactivate/reactivate, delete refused while materials carry the sector with the count named, one change document per write under `industry_sector`, the first successful write completing `CFG.INV.INDUSTRYSECTOR.DEFINE`), the screen goes live over it, and onboarding delivers the five standard sectors from `applyMaterialDefaults`. The material master closes its two contract gaps: the basic view now **requires a standing active industry sector on create and judges any sector named**, the form picking from the master, and the description is capped at 40 in service and form (the column narrowed in stage 2). Standing fixtures carrying the old free-text `MANUFACTURING` were converted to `M` — the development fixture, the material suites — as the migration converted standing data. The other views were untouched; per-view saves stand as the owner ruled.
+
+**Gates.** Typecheck and `lint:ip` clean; production build compiled (industry-sectors 2.3 kB); the four material suites pass (41 tests). The full suite and the browser target are stage 5's evidence, as staged.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -109,6 +117,7 @@ Migration `0063` creates `industry_sector` (one-character key with its format ch
 | 2.176 | 2026-10-18 | **SCR-052 / MM01 contracted (R-100).** The owner's MM01 package audited against the standing material master: most of it already stands (numbering, judging, valuation, per-view statuses) and is confirmed; the round builds the two ruled gaps — the description narrowing to 40 and a maintained industry-sector master with MM01 judging (standing `MANUFACTURING` converting to `M`) — and defers LVORM to SCR-053, per-type view permissions, the view-selection step and further views recorded as unbuilt. | Agent |
 | 2.177 | 2026-10-18 | **SCR-052 stage 1 published (B-354, §26.370).** The inert industry-sector screen `/config/industry-sectors` (OMS3 search alias in its heading code), grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 | 2.178 | 2026-10-18 | **SCR-052 stage 2 published (B-355, §26.371).** Migrations `0063` + `9043` create the industry-sector master (delivered sectors per tenant, `MANUFACTURING` converted to `M`, forced tenant RLS) and narrow the material description to 40 and sector to 1 character, verified lossless; Drizzle tables updated — 108 migrations. | Agent |
+| 2.179 | 2026-10-18 | **SCR-052 stage 3 published (B-356, §26.372).** The industry-sector service and live screen, sectors delivered at onboarding, MM01 requiring and judging the sector with the description capped at 40, standing fixtures converted to `M`. Typecheck, `lint:ip`, build and the material suites green. | Agent |
 
 ---
 

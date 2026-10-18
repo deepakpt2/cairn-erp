@@ -41,10 +41,10 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
           {options('materialType', 'material.type', choices.types.map((r) => ({ key: r.materialType, text: r.name })), 'RAW', false, !creating)}
           {options('materialGroup', 'material.group', choices.groups.map((r) => ({ key: r.materialGroup, text: r.name })), 'GENERAL')}
         </div>
-        <Field label={t('material.description')}><input name="description" defaultValue={value('description')} maxLength={200} className="field-input" /></Field>
+        <Field label={t('material.description')}><input name="description" defaultValue={value('description')} maxLength={40} className="field-input" /></Field>
         <div className="grid gap-3 sm:grid-cols-3">
           {options('baseUnit', 'material.baseUnit', unitOptions)}
-          <Field label={t('material.industry')}><input name="industrySector" defaultValue={value('industrySector', 'MANUFACTURING')} maxLength={20} className="field-input" /></Field>
+          {options('industrySector', 'material.industry', choices.sectors.map((r) => ({ key: r.sector, text: r.name })), 'M', false)}
           <Field label={t('material.barcode')}><input name="barcode" defaultValue={value('barcode')} maxLength={32} className="field-input code" /></Field>
           {decimal('grossWeight', 'material.grossWeight')}{decimal('netWeight', 'material.netWeight')}
           {options('weightUnit', 'material.weightUnit', choices.units.filter((u) => u.dimension === 'MASS').map((u) => ({ key: u.code, text: u.name })))}

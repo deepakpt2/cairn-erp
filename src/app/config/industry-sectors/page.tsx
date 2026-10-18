@@ -1,24 +1,25 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { ACTIVITY, listIndustrySectors } from '@/modules/inventory/industry-sector-definition';
 import { t } from '@/platform/i18n';
 import IndustrySectors from './IndustrySectors';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/industry-sectors';
-const ACTIVITY = 'CFG.INV.INDUSTRYSECTOR.DEFINE';
 
 /**
  * Industry sector definition (SCR-052 / OMS3; inert since stage 1).
  *
  * The sector master the material master judges against: delivered
  * standard sectors per tenant, maintained here in the standing master
- * shape. The table and service land in the following stages.
+ * shape (SCR-052 stage 3).
  */
 export default async function IndustrySectorsPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
+  const sectors = await listIndustrySectors(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -41,7 +42,7 @@ export default async function IndustrySectorsPage() {
         </p>
       )}
 
-      <IndustrySectors sectors={[]} />
+      <IndustrySectors sectors={sectors} canMaintain={canMaintain} />
     </div>
   );
 }

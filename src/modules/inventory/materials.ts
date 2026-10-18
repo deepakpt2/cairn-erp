@@ -8,7 +8,7 @@ import { unitOfMeasure } from '../../platform/tables/reference';
 import { allocateNumber } from '../../platform/numbering';
 import { numberRange } from '../../platform/tables/numbering';
 import { companyCode, plant, purchasingGroup } from '../foundation/schema';
-import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, valuationClass, mrpController, planningFile } from './schema';
+import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, industrySector, valuationClass, mrpController, planningFile } from './schema';
 import { MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from './constants';
 
 export class MaterialError extends Error {
@@ -27,8 +27,8 @@ const materialInput = z.discriminatedUnion('view', [
   common.extend({ view: z.literal('BASIC'),
     // Blank on create draws the next internal number (SCR-051 / MMNR).
     materialNumber: z.string().regex(/^([A-Z0-9][A-Z0-9_.-]{0,39})?$/, 'Use at most 40 uppercase letters, digits, dots, hyphens or underscores, or leave blank to draw a number.'),
-    description: z.string().trim().max(200), materialType: z.string().min(1).max(4),
-    materialGroup: z.string().max(9), baseUnit: z.string().max(6), industrySector: z.string().max(20), barcode: z.string().max(32),
+    description: z.string().trim().max(40), materialType: z.string().min(1).max(4),
+    materialGroup: z.string().max(9), baseUnit: z.string().max(6), industrySector: z.string().max(1), barcode: z.string().max(32),
     grossWeight: quantity, netWeight: quantity, weightUnit: z.string().max(6), isBlocked: z.boolean() }),
   common.extend({ view: z.literal('PURCHASING'), plant: z.string().min(1).max(10), purchasingGroup: z.string().max(3),
     orderUnit: z.string().max(6), overdeliveryTolerance: percent, underdeliveryTolerance: percent, manufacturerPartNumber: z.string().max(80) }),
@@ -140,6 +140,14 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       if (input.materialGroup) {
         const [group] = await tx.select().from(materialGroup).where(eq(materialGroup.materialGroup, input.materialGroup));
         if (!group?.isActive) throw new MaterialError(`Material group ${input.materialGroup} does not exist or is inactive.`);
+      }
+      // The sector master judges creation (SCR-052 / R-100): required on
+      // create, and any sector named must stand active.
+      if (!input.industrySector) {
+        if (!base) throw new MaterialError('An industry sector is required.', 'Pick the sector the material belongs to; sectors are maintained on the industry sectors screen.');
+      } else {
+        const [sector] = await tx.select().from(industrySector).where(eq(industrySector.sector, input.industrySector));
+        if (!sector?.isActive) throw new MaterialError(`Industry sector ${input.industrySector} does not exist or is inactive.`, 'Pick a standing sector from the industry sectors screen.');
       }
       await checkUnit(tx, input.baseUnit); await checkUnit(tx, input.weightUnit, true);
       if (toScaled(input.grossWeight, 3) < toScaled(input.netWeight, 3)) throw new MaterialError('Gross weight must not be less than net weight.');
@@ -253,6 +261,7 @@ export async function materialChoices(client: string) {
   return withTenant(client, async (tx) => ({
     types: await tx.select().from(materialType).where(eq(materialType.isActive, true)).orderBy(materialType.materialType),
     groups: await tx.select().from(materialGroup).where(eq(materialGroup.isActive, true)).orderBy(materialGroup.materialGroup),
+    sectors: await tx.select().from(industrySector).where(eq(industrySector.isActive, true)).orderBy(industrySector.sector),
     valuationClasses: await tx.select().from(valuationClass).where(eq(valuationClass.isActive, true)).orderBy(valuationClass.valuationClass),
     controllers: await tx.select().from(mrpController).where(eq(mrpController.isActive, true)).orderBy(mrpController.controller),
     units: await tx.select().from(unitOfMeasure).orderBy(unitOfMeasure.code),
