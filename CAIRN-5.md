@@ -529,6 +529,12 @@ One service `src/modules/finance/payment-run.ts` runs the cycle: parameters judg
 
 ---
 
+### 26.428 B-412 — SCR-063 payment run stage 4: the run term stands
+
+Stage 4 seats the term *Payment run* for the standing capability `FIN.AP.PAYMENTRUN.EXECUTE` at `/finance/payment-run`, with F110 standing as a search alias only. Seed reads back **97/66/70/79**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -609,6 +615,7 @@ One service `src/modules/finance/payment-run.ts` runs the cycle: parameters judg
 | 2.243 | 2026-10-18 | **SCR-063 payment run stage 1 (B-409, §26.425).** The inert run screen stands at `/finance/payment-run`: status, parameters and proposal areas, execution disabled. Typecheck and the production build clean. | Agent |
 | 2.244 | 2026-10-18 | **SCR-063 payment run stage 2 (B-410, §26.426).** Migrations `0075` + `9053` applied (130 standing): the run with its company and method children, proposal items with named exceptions, and insert-only payment documents behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.245 | 2026-10-18 | **SCR-063 payment run stage 3 (B-411, §26.427).** The run service judges parameters, proposes over open supplier items with named exceptions, and executes grouped journals clearing the paid lines in place with payment documents as evidence; executed runs are immutable. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.246 | 2026-10-18 | **SCR-063 payment run stage 4 (B-412, §26.428).** The payment-run term seeded at its route with F110 a search alias only. Seed reads back 97/66/70/79. | Agent |
 
 ---
 
