@@ -847,6 +847,13 @@ Ageing stores nothing: standing as of a key date reconstructs from the posted jo
 
 ---
 
+### 26.471 B-455 — SCR-070 stage 4: FIN.AR.AGEING capability and the S_ALR_87012178 term stand
+
+Seed adds capability `FIN.AR.AGEING` (DISPLAY, non-posting — “Display customer ageing analysis reconstructed as of a key date”) and its Term Registry row at `/finance/customer-ageing` with S_ALR_87012178 standing only as a search alias. Seed read-back 104/66/77/86.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -970,6 +977,7 @@ Ageing stores nothing: standing as of a key date reconstructs from the posted jo
 | 2.286 | 2026-10-18 | **SCR-070 stage 1 published (B-452, §26.468).** The inert customer ageing screen `/finance/customer-ageing`: selection, empty ageing matrix and empty item detail rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.287 | 2026-10-18 | **SCR-070 stage 2 verified (B-453, §26.469).** No schema change: as-of ageing reconstructs from the posted journal; the standing company/posting and partner/company indexes cover customer lines identically. Migrations unchanged at 137. | Agent |
 | 2.288 | 2026-10-18 | **SCR-070 stage 3 published (B-454, §26.470).** Customer ageing reads live: as-of key-date reconstruction, invoice due-date ageing, three increasing thresholds or named refusal, signed company-currency buckets per customer with company totals and item detail; screen wired. | Agent |
+| 2.289 | 2026-10-18 | **SCR-070 stage 4 published (B-455, §26.471).** Capability `FIN.AR.AGEING` and the `/finance/customer-ageing` term stand, S_ALR_87012178 a search alias only; seed read-back 104/66/77/86. | Agent |
 
 ---
 
