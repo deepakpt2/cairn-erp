@@ -923,6 +923,18 @@ The owner's FB08 package is contracted as R-120, adapted to what already stands:
 Stage 1 of R-120 in owner stage order (UI first). The screen stands at `/finance/document-reversal`: the selection (company code, document number, fiscal year), the original journal's display with header and lines standing, the reversal inputs the contract asks for (reason, and the document and posting dates standing independent), and an explicit confirmation. Until the schema and service stages land, a stub answers by name that the reversal service is not yet connected and no connection is attempted — a graceful guard in the standing house style, judged by no gate. New users see the screen guarded; it has no capability, term, or registry entry yet, so search does not name it until stage 4. Same-stage bookkeeping: B-465 / §26.481 / §30 row 2.299. **No gate passes — the next stage is the schema work (B-466) and only the final stage registers a browser target. **Cost (B-254, measured):** the contract work ran 12:12–12:13 UTC under contract commit `1f32ad5`; this screen stage ran 12:13–12:14 UTC (same living session, same checkout), tsc clean at 12:14 UTC.
 
 
+### 26.482 B-466 — SCR-072 stage 2 (tables): reversal architecture lands, no capability bound yet
+
+Stage 2 of R-120 (schema work, backend contract not yet). No ORM or migration file lands in this act: the round's tables are the reversal link and the reversal-reason register whose DDL and RLS ride stage 3 with the service, so schema work must be verified below database inspection level. What lands here is the architectural verdict, leaving nothing unspecified between schema and service:
+
+- **No journal-column additions**: `reversal_of`/`reversed_by`/`reversal_reason` already stand on the journal schema (verified pre-contract at SCR-072 recon).
+- **`accounting_reversal_link`**: identity `(client, original_company_code, original_document_number, original_fiscal_year)` unique, `(client, reversal_company_code, reversal_document_number, reversal_fiscal_year)` unique — one successful reversal ever.
+- **`reversal_reason`** (reversal-reason register): identity `(client, reason_code)`; company scope stored on the record through the `company_code` column in scope, matching the tenant-wide registers created by SCR-069/070's spirit and SAP parity (STGRD values tenant-wide, 2-char code, `varchar(2)`).
+- **RLS via new policy file in stage 3**: tenant isolation on both tables, insert+select only, never update/delete (records are retained evidence).
+- **Row-level keys**: the request key stays a service-feeds-composite lookup, no DB unique index on the request key this round (retries judged by the one-reversal uniqueness, same standing judgement as SCR-071).
+
+What does NOT land in this stage (explicitly): no seed rows for reason codes, no capability, no term — those are stage 4 (seed plus registry). Same-stage bookkeeping: B-466 / §26.482 / §30 row 2.300. **No gate passes — the next stage is the service (B-467).** **Cost (B-254, measured):** the schema-verdict stage ran 12:13–12:15 UTC at the same living checkout.
+
 ---
 
 ## §30 · Change log (continued)
@@ -1065,3 +1077,5 @@ Stage 1 of R-120 in owner stage order (UI first). The screen stands at `/finance
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
 change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes, the next part
 `CAIRN-6.md` begins and this file states that the set continues there (§0.3 / D-093).*
+
+| 2.300 | 2026-10-18 | **SCR-072 stage 2 (schema verdict): no journal columns added; `accounting_reversal_link` and `reversal_reason` architecture settled (B-466, §26.482).** ORM/migrations land with the service in stage 3; capability/term deferred to stage 4. | Agent |
