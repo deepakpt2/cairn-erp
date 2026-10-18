@@ -1995,6 +1995,13 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'goodsReceipt.title': 'Post Goods Receipt',
+  'goodsReceipt.subtitle':
+    'A goods receipt moves stock in against a reference — a purchase order ' +
+    'this round — and posts the material document, the stock, the valuation ' +
+    'and the accounting in one transaction. The business action and the ' +
+    'reference are separate choices; the movement type follows from them. ' +
+    'A posted document is never edited: it is corrected by reversal.',
   'purchaseRequisition.title': 'Create Purchase Requisition',
   'purchaseRequisition.subtitle':
     'A requisition is an item-level purchasing document: each item names what is ' +

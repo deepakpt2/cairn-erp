@@ -445,6 +445,12 @@ Deferred and named: **workflow agent assignment and notification** — a release
 
 ---
 
+### 26.415 B-399 — SCR-061 goods receipt stage 1: the movement screen stands
+
+Stage 1 ships the goods-receipt screen at `/inventory/goods-receipt`: the operation and reference bar — business action and reference category as separate selectors, the reference document, the movement type shown as resolved (never typed as a code), document and posting dates, header text — above an empty item area whose post act stands disabled until stage 3 wires the posting service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -510,6 +516,7 @@ Deferred and named: **workflow agent assignment and notification** — a release
 | 2.228 | 2026-10-18 | **SCR-060 release acts stage 4 (B-397, §26.413).** `PROC.PR.RELEASE` seeded beside the standing order capability; ME54N/ME55 and ME28/ME29N stand as search aliases on the requisition and order terms only. Seed reads back 97/66/67/75. | Agent |
 | 2.229 | 2026-10-18 | **SCR-060 release acts CLOSED and accepted (B-398, §26.414).** Stage 5 ships 3 service tests and the T937 browser target `release-acts` (green — determination on create, sequence judged, release and cancel, database evidence). Neighbouring `release-strategies` and `purchase-orders` targets clean; suite 1268 across 156 files, 123 migrations, seed 97/66/67/75. Agent assignment and notification deferred and named. Cost measured at 11 minutes. | Agent |
 | 2.230 | 2026-10-18 | **SCR-061 goods receipt contracted (R-109).** MIGO under house names: action, reference and movement as separate concepts resolved through a delivered movement catalogue, material documents immutable once posted, stock and valuation moved in the posting transaction, open quantity from posted history with material-plant tolerance, MM and FI periods judged separately, accounting through the standing engine, submission idempotency by request key. | Agent |
+| 2.231 | 2026-10-18 | **SCR-061 goods receipt stage 1 (B-399, §26.415).** The inert movement screen stands at `/inventory/goods-receipt`: action and reference selectors, the resolved movement shown, dates and header text, the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 
 ---
 
