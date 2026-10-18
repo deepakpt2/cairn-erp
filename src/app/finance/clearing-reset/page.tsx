@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 
 import { CLEARING_RESET_CAPABILITY, ClearingResetError, getClearingDocument, resetClearing } from '@/modules/finance/clearing-reset';
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export default async function ClearingResetPage({
 }) {
   const session = await requireSession(ROUTE);
   const sp = await searchParams;
-  const grant = session.user.capabilities.includes(CLEARING_RESET_CAPABILITY);
+  const grant = can(session, CLEARING_RESET_CAPABILITY);
 
   const selected = selectSchema.safeParse({
     companyCode: sp.companyCode, clearingDocument: sp.clearingDocument, fiscalYear: sp.fiscalYear,
@@ -48,7 +48,7 @@ export default async function ClearingResetPage({
   async function doReset(formData: FormData) {
     'use server';
     const s = await requireSession(ROUTE);
-    if (!s.user.capabilities.includes(CLEARING_RESET_CAPABILITY)) return;
+    if (!can(s, CLEARING_RESET_CAPABILITY)) return;
     const parsed = resetSchema.safeParse({
       companyCode: formData.get('companyCode'), clearingDocument: formData.get('clearingDocument'),
       fiscalYear: formData.get('fiscalYear'), reason: formData.get('reason'), requestKey: formData.get('requestKey'),
