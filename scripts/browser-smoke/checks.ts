@@ -71,6 +71,7 @@ import { paymentRunF110 } from './payment-run';
 import { vendorClearingF44 } from './vendor-clearing';
 import { vendorBalancesFk10n } from './vendor-balances';
 import { vendorAgeingAnalysis } from './vendor-ageing';
+import { customerInvoiceFb70 } from './customer-invoice';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4915,6 +4916,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'vendor-clearing': vendorClearingF44,
   'vendor-balances': vendorBalancesFk10n,
   'vendor-ageing': vendorAgeingAnalysis,
+  'customer-invoice': customerInvoiceFb70,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

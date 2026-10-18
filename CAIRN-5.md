@@ -714,6 +714,15 @@ Stage 4 creates the capability `FIN.AR.INVOICE.POST` and seats its term *Enter c
 
 ---
 
+### 26.453 B-437 — SCR-067 customer invoice closed (R-115)
+
+Stage 5 accepts the round, with one screen correction found by the browser target and fixed in stage: the cancellation's confirmation now renders inside the document tile it reports on. The service tests prove the invoice posts with output tax at the standing rate, the receivable debit standing as the customer's open item at gross with due 2026-11-15 computed from the terms, a same-request-key retry returning the standing document, an unreconciled gross and a duplicate reference refused by name, and cancellation by linked mirror refusing a second act. Browser target **T930** drives the journey on the production build; neighbour **T931** stays green. The full suite stands at **1290 tests across 163 files**; typecheck and the production build clean; 135 migrations; seed **101/66/74/83**.
+
+Named deferrals carried forward, by the contract: customer credit memos (FB75); incoming payments and customer clearing (F-28, its own roadmap row); cash-discount taking beyond the computed due date; jurisdiction-level tax procedures beyond the standing single-rate codes; exchange-rate translation of foreign-currency invoices.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -819,6 +828,7 @@ Stage 4 creates the capability `FIN.AR.INVOICE.POST` and seats its term *Enter c
 | 2.268 | 2026-10-18 | **SCR-067 customer invoice stage 2 (B-434, §26.450).** Migrations `0079` + `9054` create the customer invoice tables behind forced tenant RLS; CUSTINV joins the number catalogue and tenant defaults. 135 migrations standing; typecheck clean. | Agent |
 | 2.269 | 2026-10-18 | **SCR-067 customer invoice stage 3 (B-435, §26.451).** The customer-invoice service (standing judged, tax at standing rates, gross reconciled, duplicates refused, receivable journal, linked cancellation) and the live screen. Typecheck and production build clean. | Agent |
 | 2.270 | 2026-10-18 | **SCR-067 customer invoice stage 4 (B-436, §26.452).** Capability `FIN.AR.INVOICE.POST` created; the customer-invoice term seeded at its route with FB70 a search alias only. Seed reads back 101/66/74/83. | Agent |
+| 2.271 | 2026-10-18 | **SCR-067 customer invoice closed (B-437, §26.453).** Service tests and browser target T930 (neighbour T931) green on the production build; full suite 1290/163, 135 migrations, seed 101/66/74/83. Deferrals named: customer credit memos (FB75), incoming payments/clearing (F-28), discount taking, jurisdiction tax, FX translation. | Agent |
 
 ---
 

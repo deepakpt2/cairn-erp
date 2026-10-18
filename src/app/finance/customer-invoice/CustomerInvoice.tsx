@@ -152,6 +152,7 @@ export default function CustomerInvoice({ invoice, taxes, canPost, today }: {
       {shownInvoice && (
         <section aria-labelledby="ci-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="ci-document" className="text-sm font-semibold">Posted document</h2>
+          <Message state={cancelState} />
           <p className="mt-2 text-sm">
             Invoice <strong>{shownInvoice.invoiceNumber}</strong> for customer {shownInvoice.customerNumber} stands{' '}
             <strong>{shownInvoice.status}</strong>: gross {shownInvoice.grossAmount} {shownInvoice.currency},
