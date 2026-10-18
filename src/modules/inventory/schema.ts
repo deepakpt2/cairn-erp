@@ -57,6 +57,23 @@ export const materialGroup = pgTable('material_group', {
   isActive: boolean('is_active').notNull().default(true), ...auditColumns,
 }, (t) => [primaryKey({ columns: [t.client, t.materialGroup] })]);
 
+/**
+ * Material number range groups (SCR-051 / MMNR; R-99).
+ *
+ * A group is a named pair of MATERIALNR intervals — one internal and one
+ * external range key, the pair itself the identity (TNRGT parity). The
+ * description is the group's text (at most 20, one tenant language);
+ * material types are assigned by carrying the same pair of keys, so
+ * membership is derived and never stored twice.
+ */
+export const materialNumberRangeGroup = pgTable('material_number_range_group', {
+  client: tenant(),
+  internalRangeKey: varchar('internal_range_key', { length: 2 }).notNull(),
+  externalRangeKey: varchar('external_range_key', { length: 2 }).notNull(),
+  description: varchar('description', { length: 20 }).notNull(),
+  ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.internalRangeKey, t.externalRangeKey] })]);
+
 export const valuationClass = pgTable('valuation_class', {
   client: tenant(), valuationClass: varchar('valuation_class', { length: 20 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),

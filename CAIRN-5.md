@@ -47,12 +47,19 @@ The MMNR round opens with the screen's shape and nothing behind it: `/config/mat
 
 ---
 
+### 26.366 B-350 — SCR-051 stage 2: the group table stands
+
+Migration `0062` creates `material_number_range_group` — client (cascading from the tenant), the internal and external range keys as the pair primary key with their two-character format checks, the 20-character description, and the four audit columns — and `9042` puts it behind the standing tenant-isolation RLS pattern (forced, one policy on `cairn.client`, DML for `cairn_app`). The Drizzle table stands beside `materialGroup` in `src/modules/inventory/schema.ts`. Verified on `cairn_b210`: the table stands with row security enabled and forced and its one policy in place; **106 migrations now stand**. No service reads or writes it yet — that is stage 3.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
 |---|---|---|---|
 | 2.170 | 2026-10-18 | **CAIRN-5 opens; SCR-051 / MMNR contracted (R-99).** `CAIRN-4.md` passed the 360,000-byte rotation trigger (407,238 bytes) and is frozen to pointer edits; this part continues §1.4 from R-99, §26 from 26.365 and this log from 2.170 (§0.3 / D-093). The owner's MMNR package is recorded as R-99: no new interval or assignment tables (the standing `number_range` and SCR-048 type keys already hold them, per the package's own constraint), a group table keyed by its internal+external range-key pair with a 20-character text, the MMNR group–interval matrix screen, group display and picking on the material-types screen, and MM01 drawing internal numbers and judging supplied numbers against the external interval. | Agent |
 | 2.171 | 2026-10-18 | **SCR-051 stage 1 published (B-349, §26.365).** The inert MMNR screen `/config/material-number-ranges`: group–interval matrix and ungrouped-intervals table rendered empty, i18n keys added. No reads, no writes. | Agent |
+| 2.172 | 2026-10-18 | **SCR-051 stage 2 published (B-350, §26.366).** Migrations `0062` + `9042` create `material_number_range_group` (pair primary key, 20-character text, audit columns, forced tenant RLS) and its Drizzle table; verified standing on `cairn_b210` — 106 migrations. | Agent |
 
 ---
 
