@@ -1417,6 +1417,12 @@ Stage 5 of R-130 closes the round. The clearing tests (`tests/vendor-down-paymen
 
 The owner supplied the F-29 field package (2026-10-18); SAP codes stand as search aliases only. This round mirrors R-129 (SCR-081) on the customer side. **Contract decisions.** The package's `customer_down_payment` record is **adapted** to the house payment-record pattern; its clearing-link table is **declined** — clearing (F-39) is the named next round and will carry its truth on journal lines and clearing stamps, as in R-130. The down payment posts a DZ journal: debit the bank, credit the indicator's configured alternative customer reconciliation account (customer partner, line text `Down payment …`), so the advance received stands open outside the customer's ordinary receivables until cleared. The special G/L resolution generalises this round to the AR account type (company scope first, then tenant-wide) — the vendor path resolves unchanged. The customer must stand extended to the company and unblocked; configuration is re-read under the payment's advisory lock; value date is stored, not judged; replay by request key behaves as the standing payments. **Deferred by name:** down-payment requests (F-37 — the package itself keeps them a separate noted-item process; request reference and payment method go with it), down-payment clearing (F-39, next round), tax adjustments, foreign-currency differences and drafts. Stage order: 1 the `/finance/customer-down-payment` screen → 2 schema (payment record) → 3 service and screen wiring → 4 supporting (capability and term) → 5 tests and browser acceptance. Same-stage bookkeeping: B-534 / §26.550 / §30 row 2.368.
 
+### 26.551 B-535 — SCR-083 stage 1: the customer down-payment screen
+
+Stage 1 of R-131. The `/finance/customer-down-payment` screen stands as a shell mirroring its vendor twin: company code, customer, document and posting dates, bank G/L account, amount, currency, the special G/L indicator, reference, value date and text — with the resolution note and posting disabled until the service lands in stage 3. A minimal module carries the capability and error vocabulary; no reads or writes stand yet.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-535 / §26.551 / §30 row 2.369. **Cost (B-254, measured):** contract published 17:53 UTC; stage 1 completed this turn.
+
 ---
 ---
 
@@ -1631,3 +1637,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.366 | 2026-10-18 | **SCR-082 stage 4 published (B-532, §26.548).** Capability F-54 seeded (115 capabilities / 89 terms / 98 aliases). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.367 | 2026-10-18 | **SCR-082 closed (B-533, §26.549).** Down-payment clearing accepted: 1352 tests, T914 browser green, 155 migrations, seed 115/68/89/98. The vendor advance chain (F-48 → F-54) stands complete; the customer mirror (F-29/F-39) is next. | Agent |
 | 2.368 | 2026-10-18 | **SCR-083 contract R-131 written (B-534, §26.550).** F-29 customer down payment mirrors R-129: AR special G/L resolution, a DZ journal stands the advance received outside ordinary receivables; the link table declined (F-39 next), F-37 requests deferred. Stage 1 follows. | Agent |
+| 2.369 | 2026-10-18 | **SCR-083 stage 1 published (B-535, §26.551).** The `/finance/customer-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
