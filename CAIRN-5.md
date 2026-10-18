@@ -186,6 +186,12 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 
 ---
 
+### 26.383 B-367 — SCR-054 stage 4: the period activity seeded and the route built
+
+`CFG.INV.MATPERIOD.DEFINE` stands in all three seed registers: the capability, the configuration activity (materials-management area, after company codes, onboarding stage), and the term *Define material period control* with OMSY, MMPV and MMRV as search aliases only and the full parity description. The route joins `BUILT_ROUTES`. `npm run seed` reads back **92 capabilities / 64 activities / 62 terms / 60 aliases**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -212,6 +218,7 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 | 2.189 | 2026-10-18 | **SCR-054 stage 1 published (B-364, §26.380).** The inert material period control screen `/config/material-period-control`: company control grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 | 2.190 | 2026-10-18 | **SCR-054 stage 2 published (B-365, §26.381).** Migrations `0065` + `9044` create `material_period_control` (company-keyed, both indicators, forced tenant RLS) and its Drizzle table — 111 migrations. | Agent |
 | 2.191 | 2026-10-18 | **SCR-054 stage 3 published (B-366, §26.382).** The material period service (initialize judged against the variant, separate indicator maintenance, the guarded one-period shift, the exported posting judge) and the live screen. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.192 | 2026-10-18 | **SCR-054 stage 4 published (B-367, §26.383).** `CFG.INV.MATPERIOD.DEFINE` seeded as capability, configuration activity and term (OMSY/MMPV/MMRV search aliases only); the route joins `BUILT_ROUTES`. Seed reads back 92/64/62/60. | Agent |
 
 ---
 
