@@ -212,6 +212,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'purchase-orders') return '/purchasing/orders';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
+  if (target.id === 'release-strategies') return '/config/release-strategies';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
