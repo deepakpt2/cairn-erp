@@ -219,3 +219,83 @@ export const planningFile = pgTable('planning_file', {
   primaryKey({ columns: [t.client, t.materialNumber, t.plant] }),
   foreignKey({ columns: [t.client, t.materialNumber, t.plant], foreignColumns: [materialPlant.client, materialPlant.materialNumber, materialPlant.plant] }).onDelete('cascade'),
 ]);
+
+/**
+ * Goods movements (SCR-061 / R-109). A material document is born
+ * POSTED and immutable; its lines justify `stock_quantity`, and the
+ * movement types that may be posted are tenant-standing data with
+ * configured semantics, never a hard-coded list.
+ */
+export const movementType = pgTable('movement_type', {
+  client: tenant(), movementType: varchar('movement_type', { length: 20 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  direction: varchar('direction', { length: 10 }).notNull(),
+  referenceCategory: varchar('reference_category', { length: 20 }).notNull(),
+  reversalMovementType: varchar('reversal_movement_type', { length: 20 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.movementType] }),
+  check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL')`),
+  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT')`),
+]);
+
+export const materialDocument = pgTable('material_document', {
+  client: tenant(),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }).notNull(),
+  documentYear: integer('document_year').notNull(),
+  documentDate: varchar('document_date', { length: 10 }).notNull(),
+  postingDate: varchar('posting_date', { length: 10 }).notNull(),
+  headerText: varchar('header_text', { length: 25 }),
+  status: varchar('status', { length: 10 }).notNull().default('POSTED'),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
+  reversalOf: varchar('reversal_of', { length: 20 }),
+  reversedBy: varchar('reversed_by', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialDocumentNumber] }),
+  check('material_document_status_ck', sql`${t.status} in ('POSTED', 'REVERSED')`),
+]);
+
+export const materialDocumentLine = pgTable('material_document_line', {
+  client: tenant(),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  movementType: varchar('movement_type', { length: 20 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  entryQuantity: quantity('entry_quantity').notNull(),
+  entryUnit: varchar('entry_unit', { length: 10 }).notNull(),
+  baseQuantity: quantity('base_quantity').notNull(),
+  baseUnit: varchar('base_unit', { length: 10 }).notNull(),
+  unitPrice: money('unit_price').notNull().default('0'),
+  priceUnit: quantity('price_unit').notNull().default('1'),
+  currency: char('currency', { length: 3 }),
+  value: money('value').notNull().default('0'),
+  purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }),
+  purchaseOrderItem: integer('purchase_order_item'),
+  reversalOfDocument: varchar('reversal_of_document', { length: 20 }),
+  reversalOfLine: integer('reversal_of_line'),
+  itemText: varchar('item_text', { length: 100 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialDocumentNumber, t.lineNumber] }),
+  foreignKey({ columns: [t.client, t.materialDocumentNumber], foreignColumns: [materialDocument.client, materialDocument.materialDocumentNumber] }).onDelete('restrict'),
+  foreignKey({ columns: [t.client, t.movementType], foreignColumns: [movementType.client, movementType.movementType] }).onDelete('restrict'),
+  check('material_document_line_qty_ck', sql`${t.entryQuantity} > 0 and ${t.baseQuantity} > 0`),
+]);
+
+export const stockQuantity = pgTable('stock_quantity', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }).notNull().default(''),
+  stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  quantity: quantity('quantity').notNull().default('0'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.storageLocation, t.stockType] }),
+  check('stock_quantity_nonnegative_ck', sql`${t.quantity} >= 0`),
+]);

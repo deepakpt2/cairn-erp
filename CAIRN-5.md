@@ -451,6 +451,12 @@ Stage 1 ships the goods-receipt screen at `/inventory/goods-receipt`: the operat
 
 ---
 
+### 26.416 B-400 — SCR-061 goods receipt stage 2: the movement tables stand
+
+Migrations `0073_material_document.sql` with `9051_material_document_policies.sql` — **126 migrations standing**. `movement_type` stands as tenant data with configured semantics (direction, reference category, its reversal partner); `material_document` and `material_document_line` stand insert-only for the application role — the header may only ever update its reversal columns, so a posted document cannot be edited at the permission level either; `stock_quantity` stands per material, plant, storage location and stock type, never negative. The document number and year stand beside each other; the caller's request key stands unique per tenant for idempotent submission.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -517,6 +523,7 @@ Stage 1 ships the goods-receipt screen at `/inventory/goods-receipt`: the operat
 | 2.229 | 2026-10-18 | **SCR-060 release acts CLOSED and accepted (B-398, §26.414).** Stage 5 ships 3 service tests and the T937 browser target `release-acts` (green — determination on create, sequence judged, release and cancel, database evidence). Neighbouring `release-strategies` and `purchase-orders` targets clean; suite 1268 across 156 files, 123 migrations, seed 97/66/67/75. Agent assignment and notification deferred and named. Cost measured at 11 minutes. | Agent |
 | 2.230 | 2026-10-18 | **SCR-061 goods receipt contracted (R-109).** MIGO under house names: action, reference and movement as separate concepts resolved through a delivered movement catalogue, material documents immutable once posted, stock and valuation moved in the posting transaction, open quantity from posted history with material-plant tolerance, MM and FI periods judged separately, accounting through the standing engine, submission idempotency by request key. | Agent |
 | 2.231 | 2026-10-18 | **SCR-061 goods receipt stage 1 (B-399, §26.415).** The inert movement screen stands at `/inventory/goods-receipt`: action and reference selectors, the resolved movement shown, dates and header text, the item area empty and post disabled. Typecheck and the production build clean. | Agent |
+| 2.232 | 2026-10-18 | **SCR-061 goods receipt stage 2 (B-400, §26.416).** Migrations `0073` + `9051` applied (126 standing): the movement-type catalogue, insert-only material documents and lines, and stock balances behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 
