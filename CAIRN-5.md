@@ -289,6 +289,12 @@ The capability `PROC.PO.CREATE` already stood from the platform seed; stage 4 ad
 
 ---
 
+### 26.395 B-379 — SCR-057 / CT04 stage 1: the inert characteristics screen stands
+
+Stage 1 ships the inert screen at `/config/characteristics` under the `characteristic` i18n keys: the characteristics grid standing empty beside the editor — name, description, the five formats, length and decimals, single/multiple assignment, and the allowed-values list. The save act stands disabled until stage 3 wires the service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -330,6 +336,7 @@ The capability `PROC.PO.CREATE` already stood from the platform seed; stage 4 ad
 | 2.204 | 2026-10-18 | **SCR-056 / ME21N stage 4 (B-377, §26.393).** The purchase order term seeded with ME21N/ME22N/ME23N as search aliases on the standing capability; seed reads back 93/64/64/66. | Agent |
 | 2.205 | 2026-10-18 | **SCR-056 / ME21N CLOSED and accepted (B-378, §26.394).** Stage 5 ships 3 service tests, corrective migration `0068` (order-number width), and the T941 browser target `purchase-orders` (green — POF-0000001 through the header and item grid). Neighbouring `purchase-requisitions` and `material-period-control` targets, typecheck, `lint:ip` and the production build clean; suite 1253 across 152 files, 116 migrations, seed 93/64/64/66. Deferred and named in the entry, release strategy next. Cost measured at 9 minutes. | Agent |
 | 2.206 | 2026-10-18 | **SCR-057 / CT04 contracted (R-105).** Characteristics for classification at the owner's corrected CT04 shape under house names: tenant-name key, five judged formats, allowed values under the declared case policy, DRAFT/ACTIVE/BLOCKED as a Cairn lifecycle, deletion standing only for unused drafts, no period gate on maintenance, language-dependent texts deferred under B-223. First link of the classification chain toward release strategies. | Agent |
+| 2.207 | 2026-10-18 | **SCR-057 / CT04 stage 1 (B-379, §26.395).** The inert characteristics screen stands at `/config/characteristics`: empty grid, editor with format/length/assignment fields and the allowed-values list, save disabled. Typecheck clean. | Agent |
 
 ---
 

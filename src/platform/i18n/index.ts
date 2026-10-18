@@ -1970,6 +1970,12 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'characteristic.title': 'Define Characteristics',
+  'characteristic.subtitle':
+    'Characteristics are the tenant vocabulary classification judges by: a named ' +
+    'value with a format, a length, and the values it may take. Release strategies ' +
+    'will be built from these. A characteristic is born in draft, activates through ' +
+    'its act, and blocks rather than deletes once it has lived.',
   'purchaseOrder.title': 'Create Purchase Order',
   'purchaseOrder.subtitle':
     'A purchase order is a header with items, schedule lines and account ' +
