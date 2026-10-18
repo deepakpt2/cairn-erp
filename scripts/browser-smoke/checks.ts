@@ -57,6 +57,7 @@ import { materialGroupsOmsf } from './material-groups';
 import { numberRangeObjectsSnro } from './number-range-objects';
 import { materialNumberRangesMmnr } from './material-number-ranges';
 import { industrySectorsOms3 } from './industry-sectors';
+import { industriesOb44 } from './industries';
 import { materialDeletionFlagMm06 } from './material-deletion-flag';
 import { materialPeriodControlOmsy } from './material-period-control';
 import { purchaseRequisitionsMe51n } from './purchase-requisitions';
@@ -4936,6 +4937,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'number-range-objects': numberRangeObjectsSnro,
   'material-number-ranges': materialNumberRangesMmnr,
   'industry-sectors': industrySectorsOms3,
+  'industries': industriesOb44,
   'material-deletion-flag': materialDeletionFlagMm06,
   'material-period-control': materialPeriodControlOmsy,
   'purchase-requisitions': purchaseRequisitionsMe51n,

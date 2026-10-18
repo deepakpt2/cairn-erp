@@ -50,6 +50,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'number-range-objects': { database: 'cairn_b210', port: '5432', batch: 'SCR-050 local loopback' },
   'material-number-ranges': { database: 'cairn_b210', port: '5432', batch: 'SCR-051 local loopback' },
   'industry-sectors': { database: 'cairn_b210', port: '5432', batch: 'SCR-052 local loopback' },
+  'industries': { database: 'cairn_b210', port: '5432', batch: 'SCR-077 local loopback' },
   'material-deletion-flag': { database: 'cairn_b210', port: '5432', batch: 'SCR-053 local loopback' },
   'material-period-control': { database: 'cairn_b210', port: '5432', batch: 'SCR-054 local loopback' },
   'purchase-requisitions': { database: 'cairn_b210', port: '5432', batch: 'SCR-055 local loopback' },

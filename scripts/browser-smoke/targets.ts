@@ -39,6 +39,7 @@ export const TARGETS = [
   { id: 'number-range-objects', client: 'T947', label: 'SCR-050 SNRO object registry, external interval creation, guarded current-number act' },
   { id: 'material-number-ranges', client: 'T946', label: 'SCR-051 MMNR group definition, OMS2 group assignment, deletion refusal, MM01 internal draw' },
   { id: 'industry-sectors', client: 'T945', label: 'SCR-052 OMS3 industry sector master, MM01 sector judging, deletion refusal' },
+  { id: 'industries', client: 'T919', label: 'SCR-077 OB44 industry master, language descriptions, partner deletion refusal' },
   { id: 'material-deletion-flag', client: 'T944', label: 'SCR-053 MM06 deletion flag acts at client and plant scope, cancellation' },
   { id: 'material-period-control', client: 'T943', label: 'SCR-054 OMSY period initialization, backposting indicators, period shift' },
   { id: 'purchase-requisitions', client: 'T942', label: 'SCR-055 ME51N requisition creation through the item grid' },
