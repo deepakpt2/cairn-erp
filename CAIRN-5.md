@@ -496,6 +496,12 @@ One service `src/modules/purchasing/invoice-verification.ts` verifies and posts:
 
 ---
 
+### 26.423 B-407 — SCR-062 invoice verification stage 4: the verification term stands
+
+Stage 4 seats the term *Enter incoming invoice* for the standing capability `PROC.INV.RECORD` at `/purchasing/invoice-verification`, with MIRO and MR8M standing as search aliases only — the reference transaction names never stored codes. Seed reads back **97/66/69/78**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -570,6 +576,7 @@ One service `src/modules/purchasing/invoice-verification.ts` verifies and posts:
 | 2.237 | 2026-10-18 | **SCR-062 invoice verification stage 1 (B-404, §26.420).** The inert verification screen stands at `/purchasing/invoice-verification`: header with category, order, supplier reference, gross amount and both dates; the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 | 2.238 | 2026-10-18 | **SCR-062 invoice verification stage 2 (B-405, §26.421).** Migrations `0074` + `9052` applied (128 standing): supplier invoices and items insert-only behind forced tenant RLS, the duplicate index and the unique request key standing. Typecheck clean. | Agent |
 | 2.239 | 2026-10-18 | **SCR-062 invoice verification stage 3 (B-406, §26.422).** The verification service judges invoiceable quantity from posted history, reconciles the gross against net plus standing-rate tax, posts variance to the price-difference event and the balanced journal through the standing engine, refuses duplicates and returns the standing document on a retry; cancellation stands as a linked mirror. The TAX determination event joins the catalogue; the screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.240 | 2026-10-18 | **SCR-062 invoice verification stage 4 (B-407, §26.423).** The incoming-invoice term seeded at its route with MIRO and MR8M search aliases only. Seed reads back 97/66/69/78. | Agent |
 
 ---
 
