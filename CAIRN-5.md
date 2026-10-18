@@ -219,6 +219,12 @@ Migration `0066_purchase_requisition.sql` with `9045_purchase_requisition_polici
 
 ---
 
+### 26.387 B-371 — SCR-055 / ME51N stage 3: the requisition service and live screen
+
+`src/modules/purchasing/requisitions.ts` stands behind the screen: creation draws its number from the PURCHREQ range through the standing engine (subobject NB, never MAX+1; a missing range refuses with the remedy named) and judges every item against the standing masters — plant and its company code, storage location, purchasing group, the material and its plant extension, unit, delivery date, the estimated price read with price unit and currency (defaulted from the company, never hard-coded). Cost-centre assignments judge the centre standing valid on the requisition date inside the plant company's controlling area, unlocked, with a P&L account in the company chart; percentages must total a hundred. A flagged-for-deletion material **warns and never blocks**, as R-101's marker demands. The FI and material period gates are, by contract, never consulted on save. Changes keep item numbers stable, add items at the next ten-step, carry the deletion mark, and replace assignment rows; create and change each write one change document under `purchase_requisition`. The screen is live: document overview, the item grid with plant/storage-location/purchasing-group pickers, per-item stock/cost-centre assignment with multiple percentage rows, and the deletion-mark column in change mode.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -250,6 +256,7 @@ Migration `0066_purchase_requisition.sql` with `9045_purchase_requisition_polici
 | 2.194 | 2026-10-18 | **SCR-055 / ME51N contracted (R-103).** Pre-round audit confirmed every previously contracted page stands (34 built routes, none missing; the 16 pageless seeded routes are uncontracted future-domain placeholders, movement-type configuration and release strategies recorded as obligations of their rounds). The requisition is item-level with no header record, numbers from the PURCHREQ range, standard item category and stock/cost-centre assignment this round, the period gates explicitly not judged on save, release and conversion deferred and named. | Agent |
 | 2.195 | 2026-10-18 | **SCR-055 / ME51N stage 1 (B-369, §26.385).** The inert requisition screen stands at `/purchasing/requisitions`: document overview, item grid and stock/cost-centre assignment panel, save disabled. Typecheck clean. | Agent |
 | 2.196 | 2026-10-18 | **SCR-055 / ME51N stage 2 (B-370, §26.386).** Migrations `0066` + `9045` applied (113 standing): item-level `purchase_requisition_item` and `purchase_requisition_assignment` behind forced tenant RLS, Drizzle tables in the new `src/modules/purchasing` module. Typecheck clean. | Agent |
+| 2.197 | 2026-10-18 | **SCR-055 / ME51N stage 3 (B-371, §26.387).** The requisition service and live screen: PURCHREQ draw, master judging, cost-centre assignment at a hundred percent, deletion flags warning only, period gates never consulted, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 

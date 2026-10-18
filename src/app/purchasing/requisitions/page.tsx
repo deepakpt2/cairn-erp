@@ -1,7 +1,13 @@
 import Link from 'next/link';
 
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import {
+  PR_CREATE_CAPABILITY,
+  getRequisition,
+  listRequisitions,
+  requisitionChoices,
+} from '@/modules/purchasing/requisitions';
 import Requisitions from './Requisitions';
 
 export const dynamic = 'force-dynamic';
@@ -9,14 +15,17 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/purchasing/requisitions';
 
 /**
- * Purchase requisitions (SCR-055 / ME51N; inert since stage 1).
- *
- * The item-level requisition document: an item grid with per-item
- * account assignment, created and changed against the standing masters
- * (SCR-055 stage 3 wires the acts).
+ * Purchase requisitions (SCR-055 / ME51N create, ME52N change, ME53N
+ * display; inert in stage 1, live since stage 3).
  */
-export default async function PurchaseRequisitionsPage() {
-  await requireSession(ROUTE);
+export default async function PurchaseRequisitionsPage({ searchParams }: {
+  searchParams: Promise<{ req?: string }>;
+}) {
+  const session = await requireSession(ROUTE);
+  const params = await searchParams;
+  const client = session.user.client;
+  const [documents, choices] = await Promise.all([listRequisitions(client), requisitionChoices(client)]);
+  const selected = params.req ? await getRequisition(client, params.req) : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -31,7 +40,12 @@ export default async function PurchaseRequisitionsPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseRequisition.subtitle')}</p>
       </header>
 
-      <Requisitions />
+      <Requisitions
+        documents={documents}
+        choices={choices}
+        selected={selected}
+        canCreate={can(session, PR_CREATE_CAPABILITY)}
+      />
     </div>
   );
 }
