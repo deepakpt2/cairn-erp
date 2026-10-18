@@ -315,6 +315,42 @@ export const incomingPayment = pgTable('incoming_payment', {
   primaryKey({ columns: [t.client, t.paymentNumber] }),
 ]);
 
+/** Reversal reason register (SCR-072 / R-120). Tenant-configured reversal reasons; 2-char code at STGRD parity. Never edited while in use — deactivation only. */
+export const reversalReason = pgTable('reversal_reason', {
+  client: tenantClient(),
+  reasonCode: varchar('reason_code', { length: 2 }).notNull(),
+  reasonDescription: varchar('reason_description', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.reasonCode] }),
+]);
+
+/** Accounting reversal link (SCR-072 / R-120). One successful reversal ever per original; identity unique both ways. */
+export const accountingReversalLink = pgTable('accounting_reversal_link', {
+  client: tenantClient(),
+  originalCompanyCode: varchar('original_company_code', { length: 10 }).notNull(),
+  originalDocumentNumber: varchar('original_document_number', { length: 40 }).notNull(),
+  originalFiscalYear: integer('original_fiscal_year').notNull(),
+  reversalCompanyCode: varchar('reversal_company_code', { length: 10 }).notNull(),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }).notNull(),
+  reversalFiscalYear: integer('reversal_fiscal_year').notNull(),
+  reversalReason: varchar('reversal_reason', { length: 2 }).notNull(),
+  reversalDocumentDate: date('reversal_document_date', { mode: 'string' }).notNull(),
+  reversalPostingPeriod: integer('reversal_posting_period').notNull(),
+  reversalPostingDate: date('reversal_posting_date', { mode: 'string' }).notNull(),
+  reversalCurrency: char('reversal_currency', { length: 3 }),
+  reversedBy: varchar('reversed_by', { length: 60 }).notNull(),
+  reversalAmountLocal: numeric('reversal_amount_local', { precision: 23, scale: 4 }).notNull().default('0'),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.originalCompanyCode, t.originalDocumentNumber, t.originalFiscalYear] }),
+  uniqueIndex('accounting_reversal_link_reversal_uq').on(t.client, t.reversalCompanyCode, t.reversalDocumentNumber, t.reversalFiscalYear),
+  index('accounting_reversal_link_reason_idx').on(t.client, t.reversalReason),
+  index('accounting_reversal_link_reversal_idx').on(t.client, t.reversalDocumentNumber),
+]);
+
 /** Clearing reset record (SCR-071 / R-119). Retained evidence of a reset: never edited or deleted. */
 export const clearingReset = pgTable('clearing_reset', {
   client: tenantClient(),

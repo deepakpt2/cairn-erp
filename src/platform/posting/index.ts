@@ -49,6 +49,8 @@ export interface PostingLineInput {
   debitCredit: 'S' | 'H';
   /** Positive decimal string. Direction lives in debitCredit, never in the sign. */
   amount: string;
+  /** Exact local-currency amount when a mirror must preserve it rather than translate it again. */
+  amountLocal?: string;
   /** Account assignments — any of these may be present on a line. */
   costCenter?: string;
   profitCenter?: string;
@@ -78,6 +80,9 @@ export interface PostJournalInput {
   lines: PostingLineInput[];
   /** The document that caused this posting, if any — creates the flow link. */
   origin?: DocumentRef;
+  /** Set only by the reversal engine so the mirror itself stands marked as a reversal. */
+  reversalOf?: string;
+  reversalReason?: string;
   postedBy: string;
   transactionCode?: string;
 }
@@ -175,6 +180,8 @@ export async function postJournalEntry(
     reference: input.reference,
     headerText: input.headerText,
     status: 'POSTED',
+    reversalOf: input.reversalOf,
+    reversalReason: input.reversalReason,
     originClass: input.origin?.documentClass,
     originKey: input.origin?.documentKey,
     createdBy: input.postedBy,
@@ -182,10 +189,10 @@ export async function postJournalEntry(
 
   await tx.insert(journalEntryLine).values(
     input.lines.map((line, index) => {
-      const amountLocal =
+      const amountLocal = line.amountLocal ?? (
         input.currency === input.localCurrency
           ? line.amount
-          : fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate));
+          : fromScaled(multiplyScaled(toScaled(line.amount), exchangeRate)));
       return {
         client: input.client,
         documentNumber,
@@ -284,6 +291,10 @@ export async function reverseJournalEntry(
     reason: string;
     reversedBy: string;
     transactionCode?: string;
+    /** SCR-072 / R-120: the reversal is its own accounting document type (default AB); the original's fiscal identity is not reused. */
+    reversalDocumentType?: string;
+    /** SCR-072 / R-120: document date stands independent of the posting date. */
+    reversalDocumentDate?: string;
   },
 ): Promise<PostedJournal> {
   const original = await tx
@@ -324,17 +335,41 @@ export async function reverseJournalEntry(
       ),
     );
 
-  const reversalPeriod = Number(input.reversalDate.slice(5, 7));
-  const reversalFiscalYear = Number(input.reversalDate.slice(0, 4));
+  if (header.status !== 'POSTED') {
+    throw new PostingError(
+      `Document ${input.documentNumber} cannot be reversed from standing ${header.status}.`,
+      'Only a posted document can be reversed.',
+    );
+  }
+  if (header.reversalOf) {
+    throw new PostingError(
+      `Document ${input.documentNumber} is itself a reversal and cannot be reversed.`,
+      'Post a corrective entry instead; a reversal cannot be reversed.',
+    );
+  }
+
+  const company = await getCompanyCode(tx, input.client, header.companyCode);
+  if (!company?.fiscalYearVariant) {
+    throw new PostingError(
+      `Company code ${header.companyCode} is not configured.`,
+      'Create it in Company Codes (CFG.ORG.COMPANYCODE.DEFINE) before reversing.',
+    );
+  }
+  const reversalPosition = await derivePosition(
+    tx,
+    input.client,
+    company.fiscalYearVariant,
+    input.reversalDate,
+  );
 
   const reversal = await postJournalEntry(tx, {
     client: input.client,
     companyCode: header.companyCode,
-    documentType: header.documentType,
-    documentDate: input.reversalDate,
+    documentType: input.reversalDocumentType ?? header.documentType,
+    documentDate: input.reversalDocumentDate ?? input.reversalDate,
     postingDate: input.reversalDate,
-    fiscalYear: reversalFiscalYear,
-    postingPeriod: reversalPeriod,
+    fiscalYear: reversalPosition.fiscalYear,
+    postingPeriod: reversalPosition.period,
     currency: header.documentCurrency,
     localCurrency: header.localCurrency,
     exchangeRate: header.exchangeRate,
@@ -344,6 +379,8 @@ export async function reverseJournalEntry(
       documentClass: JOURNAL_DOCUMENT_CLASS,
       documentKey: input.documentNumber,
     },
+    reversalOf: input.documentNumber,
+    reversalReason: input.reason,
     postedBy: input.reversedBy,
     transactionCode: input.transactionCode,
     lines: lines
@@ -353,6 +390,7 @@ export async function reverseJournalEntry(
         // Swapping the indicator is what makes the reversal a mirror, not a deletion.
         debitCredit: line.debitCredit === 'S' ? ('H' as const) : ('S' as const),
         amount: line.amountDocument,
+        amountLocal: line.amountLocal,
         costCenter: line.costCenter ?? undefined,
         profitCenter: line.profitCenter ?? undefined,
         internalOrder: line.internalOrder ?? undefined,

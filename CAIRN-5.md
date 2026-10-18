@@ -925,15 +925,25 @@ Stage 1 of R-120 in owner stage order (UI first). The screen stands at `/finance
 
 ### 26.482 B-466 — SCR-072 stage 2 (tables): reversal architecture lands, no capability bound yet
 
-Stage 2 of R-120 (schema work, backend contract not yet). No ORM or migration file lands in this act: the round's tables are the reversal link and the reversal-reason register whose DDL and RLS ride stage 3 with the service, so schema work must be verified below database inspection level. What lands here is the architectural verdict, leaving nothing unspecified between schema and service:
+Stage 2 of R-120 (schema work, backend contract not yet). The round's tables — the reversal link and the reversal-reason register — whose DDL and RLS ride stage 3 with the service, so schema work must be verified below database inspection level. What lands here is the architectural verdict, leaving nothing unspecified between schema and service:
 
 - **Journal columns stand ready**: `reversal_of`/`reversed_by`/`reversal_reason` already stand on the journal schema (verified 2026-10-18 at schema.ts 142–144), so stage 3 closes only on the new tables, not journal edits.
 - **`accounting_reversal_link`**: identity `(client, original_company_code, original_document_number, original_fiscal_year)` unique, `(client, reversal_company_code, reversal_document_number, reversal_fiscal_year)` unique — one successful reversal ever.
-- **`reversal_reason`** (reversal-reason register): identity `(client, reason_code)`; company scope stored on the record through the `company_code` column in scope, matching the tenant-wide registers created by SCR-069/070's spirit and SAP parity (STGRD values tenant-wide, 2-char code, `varchar(2)`).
+- **`reversal_reason`** (reversal-reason register): identity `(client, reason_code)`; a tenant-wide register at SAP parity (STGRD values tenant-wide, 2-char code, `varchar(2)`).
 - **RLS via new policy file in stage 3**: tenant isolation on both tables, insert+select only, never update/delete (records are retained evidence).
-- **Row-level keys**: the request key stays a service-feeds-composite lookup, no DB unique index on the request key this round (retries judged by the one-reversal uniqueness, same standing judgement as SCR-071).
+- **Row-level keys**: the request key is a service lookup backed in stage 3 by a partial unique index, so a retry returns the standing reversal while the one-reversal identities remain unique both ways.
 
 What does NOT land in this stage (explicitly): no seed rows for reason codes, no capability, no term — those are stage 4 (seed plus registry). Same-stage bookkeeping: B-466 / §26.482 / §30 row 2.300. **No gate passes — the next stage is the service (B-467).** **Cost (B-254, measured):** the schema-verdict stage ran 12:13–12:15 UTC at the same living checkout.
+
+### 26.483 B-467 — SCR-072 stage 3: reversal service, engine corrections and live screen
+
+Stage 3 of R-120. Migrations `0082` + `9057` create `reversal_reason` and `accounting_reversal_link` with forced tenant RLS and insert/select-only grants; the migration runner now stands at 141. The posting engine's reversal path now derives fiscal year and period from the reversal posting date through the company code's fiscal-year variant, keeps the reversal document date independent, preserves each original line's exact local amount as well as its document amount, stamps the mirror with `reversal_of` and the reason, refuses a non-POSTED original, and refuses reversal-of-reversal. The FB08 service passes document type `AB`, while the older domain cancellation callers retain their standing behaviour unless they opt into the new fields.
+
+`reverseDocument` runs under a document advisory lock and revalidates the original in one transaction: standing-link/request-key replay first, POSTED and not-itself-a-reversal standing, no cleared line and no item cleared by the named document (each refusal names the clearing and points to Reset Cleared Items / FBRA), and an active two-character tenant reversal reason. It then posts the mirror through the engine, writes the both-ways-unique link and a REVERSE change document, and returns the AB reversal identity and derived period. `getDocumentForReversal` exposes the original header, every line with document/local amounts and clearing stamps, totals, reversal standing, active reasons, eligibility and the period derived for a candidate posting date. The screen is live on that service: it displays the original before offering the act, offers only active reasons, keeps document and posting dates separate, can derive the period for a checked posting date, requires explicit confirmation, and reports the posted AB document.
+
+Verification at this stage: migration runner reports 141 already applied on the standing database, `npx tsc --noEmit` is clean, the standing posting suite passes 10/10, and the three standing reversal-caller suites (customer invoice, invoice verification, goods receipt) pass 7/7. Capability, seed reasons and Term Registry entry remain stage 4; service/browser acceptance remains stage 5, so SCR-072 is **not yet accepted**. Same-stage bookkeeping: B-467 / §26.483 / §30 row 2.301. **Cost (B-254, measured):** stage 2 closed at 12:15 UTC and stage-3 verification completed at 12:23 UTC in the same checkout.
+
+---
 
 ---
 
@@ -1080,3 +1090,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 
 | 2.300 | 2026-10-18 | **SCR-072 stage 2 (schema verdict): journal closure columns verified existing; `accounting_reversal_link` and `reversal_reason` architecture settled (B-466, §26.482).** ORM/migrations land with the service in stage 3; capability/term deferred to stage 4. | Agent |
 
+| 2.301 | 2026-10-18 | **SCR-072 stage 3 published (B-467, §26.483).** Reversal tables/RLS stand (141 migrations); the engine derives the reversal period through the fiscal-year variant, preserves exact local amounts and stamps the mirror; the FB08 service judges clearing/reason/standing under lock and posts type AB; the screen is live. Posting 10/10 and reversal-caller suites 7/7, tsc clean; capability/seed/term and acceptance remain stages 4–5. | Agent |
