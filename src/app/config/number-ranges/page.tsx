@@ -5,7 +5,7 @@ import { listNumberRanges, rangeKey, rangeAllocations, NUMBER_OBJECTS, NUMBER_RA
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { formatNumber } from '@/platform/numbering';
-import { RangeForm } from './RangeForm';
+import { AdjustCurrentForm, RangeForm } from './RangeForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,6 +44,12 @@ export default async function NumberRangesPage({ searchParams }: {
     {(params.new === '1' || selected) && editable && !legacy && <RangeForm key={selected ? rangeKey(selected) : 'new'}
       initial={selected ?? { objectCode: 'RF_BELEG', companyCode: companies[0]?.companyCode ?? '', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, currentNumber: 0, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE' }}
       companies={companies.filter((c) => c.isActive).map(({ companyCode, name }) => ({ companyCode, name }))} objects={NUMBER_OBJECTS} editing={!!selected} />}
+    {selected && editable && !legacy && (
+      <AdjustCurrentForm
+        key={`adjust-${rangeKey(selected)}`}
+        initial={selected}
+      />
+    )}
     {!editable && <p className="text-sm text-ink-soft">{t('auth.readOnly', { authority: NUMBER_RANGE_ACTIVITY })}</p>}
 
     <form className="flex flex-wrap items-end gap-2" method="get"><label><span className="field-label">{t('nr.object')}</span><select className="field-input code" name="object" defaultValue={params.object ?? ''}><option value="">{t('common.all')}</option>{NUMBER_OBJECTS.map((o) => <option key={o} value={o}>{o}</option>)}</select></label><button className="btn btn-default">{t('common.filter')}</button></form>

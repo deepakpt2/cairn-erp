@@ -541,6 +541,20 @@ const en: Catalogue = {
   'nr.from': "First number",
   'nr.to': "Last number",
   'nr.current': "Last issued",
+  'nr.assignment': 'Number assignment',
+  'nr.assignmentInternal': 'Internal — the system assigns the next number',
+  'nr.assignmentExternal': 'External — the user supplies the number',
+  'nr.buffered': 'Buffered allocation',
+  'nr.bufferedHint':
+    'A buffered interval reserves a block of numbers at once. A document that later ' +
+    'rolls back leaves its number consumed: gaps are the accepted behaviour of a ' +
+    'buffered interval.',
+  'nr.bufferSize': 'Numbers in buffer',
+  'nr.adjustTitle': 'Adjust current number',
+  'nr.adjustHint':
+    'Setting the counter by hand is its own act, documented like any other. Setting ' +
+    'it below the last issued number re-issues numbers already given out.',
+  'nr.adjustSave': 'Adjust current number',
   'nr.currentHint': "Read-only. Only a successful document posting advances this counter.",
   'nr.status': "Status",
   'nr.active': "Active",

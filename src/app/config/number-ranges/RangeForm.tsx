@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { formatNumber } from '@/platform/numbering/format';
-import { saveNumberRange } from './actions';
+import { adjustNumberRangeCurrentAction, saveNumberRange } from './actions';
 
 export interface RangeDraft {
   objectCode: string; companyCode: string; subObject: string; fiscalYear: number;
   prefix: string; fromNumber: number; toNumber: number; currentNumber: number;
   numberLength: number; displayStyle: string; status: string;
+  isExternal?: boolean; isBuffered?: boolean; bufferSize?: number;
 }
 
 export function RangeForm({ initial, companies, objects, editing }: {
@@ -26,6 +27,7 @@ export function RangeForm({ initial, companies, objects, editing }: {
   const [width, setWidth] = useState(initial.numberLength);
   const [style, setStyle] = useState(initial.displayStyle);
   const [from, setFrom] = useState(initial.fromNumber);
+  const [buffered, setBuffered] = useState(false);
   const preview = formatNumber({ value: editing ? initial.currentNumber + 1 : from, prefix,
     fiscalYear: year || new Date().getUTCFullYear(), length: width, style });
 
@@ -65,6 +67,37 @@ export function RangeForm({ initial, companies, objects, editing }: {
         <Field label={t('nr.style')}>{editing ? <input name="displayStyle" value={style} readOnly className="field-input code bg-sunken" /> : <select name="displayStyle" value={style} onChange={(e) => setStyle(e.target.value)} className="field-input"><option value="READABLE">{t('nr.readable')}</option><option value="CLASSIC">{t('nr.classic')}</option></select>}</Field>
         <Field label={t('nr.preview')}><output className="field-input code border-accent-line bg-accent-soft">{preview}</output></Field>
       </div>
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Field label={t('nr.assignment')}>
+          {editing ? <input value={initial.isExternal ? t('nr.assignmentExternal') : t('nr.assignmentInternal')} readOnly className="field-input bg-sunken" /> : (
+            <select name="isExternal" className="field-input">
+              <option value="">{t('nr.assignmentInternal')}</option>
+              <option value="external">{t('nr.assignmentExternal')}</option>
+            </select>
+          )}
+        </Field>
+        <Field label={t('nr.buffered')}>
+          {editing ? <input value={initial.isBuffered ? `${t('nr.buffered')} · ${initial.bufferSize ?? 0}` : '—'} readOnly className="field-input bg-sunken" /> : (
+            <select name="isBuffered" className="field-input" onChange={(e) => setBuffered(e.target.value === 'buffered')}>
+              <option value="">—</option>
+              <option value="buffered">{t('nr.buffered')}</option>
+            </select>
+          )}
+        </Field>
+        {!editing && buffered && (
+          <Field label={t('nr.bufferSize')}>
+            <input name="bufferSize" type="number" min={1} max={100000} defaultValue={10} required className="field-input tabular" />
+          </Field>
+        )}
+        {editing && (
+          <>
+            <input type="hidden" name="isExternal" value={initial.isExternal ? 'external' : ''} />
+            <input type="hidden" name="isBuffered" value={initial.isBuffered ? 'buffered' : ''} />
+            <input type="hidden" name="bufferSize" value={initial.bufferSize ?? 0} />
+          </>
+        )}
+      </div>
+      {!editing && buffered && <p className="text-2xs text-ink-soft">{t('nr.bufferedHint')}</p>}
       <Field label={t('nr.reason')}><input name="reason" required minLength={3} maxLength={500} defaultValue={editing ? '' : t('nr.initialReason')} className="field-input" /></Field>
       <p className="text-2xs text-ink-soft">{t('nr.safety')}</p>
       <div className="flex items-center gap-2"><button className="btn btn-primary" disabled={pending || (state.ok && !!state.key)}>{pending ? t('common.saving') : t('common.save')}</button><Link href="/config/number-ranges" className="btn btn-default">{t('common.cancel')}</Link></div>
@@ -73,4 +106,38 @@ export function RangeForm({ initial, companies, objects, editing }: {
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="block"><span className="field-label">{label}</span>{children}</label>;
+}
+
+/** The guarded current-number act (SCR-050): its own form, its own reason. */
+export function AdjustCurrentForm({ initial }: { initial: RangeDraft }) {
+  const [state, action, pending] = useActionState(adjustNumberRangeCurrentAction, { ok: true });
+  return (
+    <section className="panel p-4" aria-labelledby="adjust-current-title">
+      <h2 id="adjust-current-title" className="panel-title mb-3">{t('nr.adjustTitle')}</h2>
+      <p className="mb-3 text-2xs text-ink-soft">{t('nr.adjustHint')}</p>
+      {state.message && (
+        <div role="status" className={`mb-3 border p-3 text-sm ${state.ok ? 'border-signal-ok/30 bg-signal-ok-soft text-signal-ok' : 'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}>
+          <p>{state.message}</p>
+          {state.remedy && <p className="mt-1 text-ink-soft">{state.remedy}</p>}
+        </div>
+      )}
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="objectCode" value={initial.objectCode} />
+        <input type="hidden" name="companyCode" value={initial.companyCode} />
+        <input type="hidden" name="subObject" value={initial.subObject} />
+        <input type="hidden" name="fiscalYear" value={initial.fiscalYear} />
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Field label={t('nr.current')}>
+            <input name="currentNumber" type="number" min={0} max={Number.MAX_SAFE_INTEGER} defaultValue={initial.currentNumber} required className="field-input tabular" />
+          </Field>
+          <div className="sm:col-span-3">
+            <Field label={t('nr.reason')}>
+              <input name="reason" required minLength={3} maxLength={500} className="field-input" />
+            </Field>
+          </div>
+        </div>
+        <button className="btn btn-primary" disabled={pending}>{pending ? t('common.saving') : t('nr.adjustSave')}</button>
+      </form>
+    </section>
+  );
 }

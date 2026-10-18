@@ -1,45 +1,203 @@
 'use client';
 
-/**
- * Number range objects — inert stage 1 (SCR-050 / SNRO).
- *
- * The layout the live screen will keep: the object grid with its
- * facts. Nothing here reads or writes yet; the registry and its
- * standing objects list here once the service lands, beside the
- * interval maintenance the number-ranges screen already performs.
- */
-export default function NumberRangeObjects({ canMaintain }: { canMaintain: boolean }) {
+import { useActionState, useState } from 'react';
+
+import type { NumberRangeObjectRow } from '@/modules/foundation/number-ranges';
+import {
+  saveNumberRangeObjectAction,
+  type NumberRangeObjectActionState,
+} from './actions';
+
+function RequiredMark() {
+  return (
+    <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
+  );
+}
+
+function Message({ state }: { state: NumberRangeObjectActionState }) {
+  if (!state.message) return null;
+  return (
+    <div
+      role={state.ok ? 'status' : 'alert'}
+      className="border border-line bg-white p-3 text-sm text-ink"
+    >
+      <p>{state.message}</p>
+      {state.remedy && <p className="mt-1 text-xs text-ink-soft">{state.remedy}</p>}
+    </div>
+  );
+}
+
+export default function NumberRangeObjects({
+  objects,
+  canMaintain,
+}: {
+  objects: NumberRangeObjectRow[];
+  canMaintain: boolean;
+}) {
+  const [selected, setSelected] = useState<NumberRangeObjectRow | null>(null);
+  const [state, formAction, pending] = useActionState<
+    NumberRangeObjectActionState,
+    FormData
+  >(saveNumberRangeObjectAction, { ok: true });
+
   return (
     <div className="space-y-6">
-      <p role="status" className="text-sm text-ink-soft">
-        This screen stands inert: the object registry arrives in a later stage. The
-        objects the applications number from will stand in the grid below, and every
-        write will carry a reason and a change document.
-      </p>
-
-      <section aria-labelledby="number-range-objects-grid" className="space-y-2">
+      <section aria-labelledby="number-range-objects-grid" className="space-y-3">
         <h2 id="number-range-objects-grid" className="text-base font-semibold">
           Number range objects
         </h2>
-        <p className="max-w-3xl text-sm text-ink-soft">
-          One row per object: its name of at most ten letters or digits — owned by the
-          application, so no screen creates or deletes an object — its description of at
-          most 60 characters, the number length its intervals format to, whether its
-          intervals run per fiscal year or stand for all years, and the optional
-          consumption warning that flags an interval before it runs dry. An interval's
-          buffering choice stands beside it: a buffered interval reserves its block at
-          once, so a document that later rolls back leaves its number consumed and the
-          gap visible, where an unbuffered interval never lets a number escape.
-        </p>
-        <p className="text-sm text-ink-faint">No objects are listed yet.</p>
-      </section>
+        {objects.length === 0 ? (
+          <p className="text-sm text-ink-faint">No objects stand yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-line text-ink-soft">
+                  <th className="py-2 pe-3">Object</th>
+                  <th className="py-2 pe-3">Description</th>
+                  <th className="py-2 pe-3">Number length</th>
+                  <th className="py-2 pe-3">Warning at</th>
+                  <th className="py-2 pe-3">Year relevance</th>
+                  <th className="py-2 pe-3">Subobject</th>
+                  <th className="py-2 pe-3">Intervals</th>
+                  {canMaintain && <th className="py-2">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {objects.map((row) => (
+                  <tr key={row.objectCode} className="border-b border-line/60">
+                    <td className="py-2 pe-3 font-medium">{row.objectCode}</td>
+                    <td className="py-2 pe-3">{row.description}</td>
+                    <td className="py-2 pe-3">{row.numberLength}</td>
+                    <td className="py-2 pe-3">
+                      {row.warningPercent ? `${row.warningPercent}%` : '—'}
+                    </td>
+                    <td className="py-2 pe-3">{row.yearRelevant ? 'Per fiscal year' : 'All years'}</td>
+                    <td className="py-2 pe-3">{row.subobjectHint ?? '—'}</td>
+                    <td className="py-2 pe-3">{row.intervalCount}</td>
+                    {canMaintain && (
+                      <td className="py-2">
+                        <button
+                          type="button"
+                          className="btn btn-default"
+                          onClick={() => setSelected(row)}
+                        >
+                          Change
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-      {canMaintain ? null : (
-        <p className="text-sm text-ink-faint">
-          You are viewing this screen read-only; maintaining number range objects needs
-          its own authority.
-        </p>
-      )}
+        {canMaintain && selected && (
+          <form
+            key={selected.objectCode}
+            action={formAction}
+            className="space-y-3 border border-line bg-white p-4"
+          >
+            <h3 className="text-sm font-semibold">
+              Change number range object {selected.objectCode}
+            </h3>
+            <input type="hidden" name="objectCode" value={selected.objectCode} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <label htmlFor="nro-description" className="text-sm font-medium">
+                  Description<RequiredMark />
+                </label>
+                <input
+                  id="nro-description"
+                  name="description"
+                  required
+                  maxLength={60}
+                  defaultValue={selected.description}
+                  className="input mt-1 w-full"
+                />
+              </div>
+              <div>
+                <label htmlFor="nro-length" className="text-sm font-medium">
+                  Number length<RequiredMark />
+                </label>
+                <input
+                  id="nro-length"
+                  name="numberLength"
+                  type="number"
+                  min={1}
+                  max={40}
+                  required
+                  defaultValue={selected.numberLength}
+                  className="input mt-1 w-full"
+                />
+              </div>
+              <div>
+                <label htmlFor="nro-warning" className="text-sm font-medium">
+                  Consumption warning %
+                </label>
+                <input
+                  id="nro-warning"
+                  name="warningPercent"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="99.9"
+                  defaultValue={selected.warningPercent ?? ''}
+                  className="input mt-1 w-full"
+                />
+              </div>
+              <div>
+                <label htmlFor="nro-subobject" className="text-sm font-medium">
+                  Subobject means
+                </label>
+                <input
+                  id="nro-subobject"
+                  name="subobjectHint"
+                  maxLength={30}
+                  defaultValue={selected.subobjectHint ?? ''}
+                  className="input mt-1 w-full"
+                />
+              </div>
+              <div className="flex items-end gap-2 pb-1">
+                <input
+                  id="nro-year"
+                  name="yearRelevant"
+                  type="checkbox"
+                  defaultChecked={selected.yearRelevant}
+                  className="h-4 w-4"
+                />
+                <label htmlFor="nro-year" className="text-sm">
+                  Intervals run per fiscal year
+                </label>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="nro-reason" className="text-sm font-medium">
+                  Reason<RequiredMark />
+                </label>
+                <input id="nro-reason" name="reason" required className="input mt-1 w-full" />
+              </div>
+            </div>
+            <p className="max-w-3xl text-xs text-ink-soft">
+              Object names belong to the application and are never created or deleted here;
+              this form maintains the facts applications and interval screens read.
+            </p>
+            <div className="flex gap-2">
+              <button type="submit" className="btn btn-primary" disabled={pending}>
+                Save changes
+              </button>
+              <button
+                type="button"
+                className="btn btn-default"
+                onClick={() => setSelected(null)}
+              >
+                Close
+              </button>
+            </div>
+            <Message state={state} />
+          </form>
+        )}
+      </section>
     </div>
   );
 }

@@ -2,7 +2,10 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { NUMBER_RANGE_ACTIVITY } from '@/modules/foundation/number-ranges';
+import {
+  listNumberRangeObjects,
+  NUMBER_RANGE_ACTIVITY,
+} from '@/modules/foundation/number-ranges';
 import NumberRangeObjects from './NumberRangeObjects';
 
 export const dynamic = 'force-dynamic';
@@ -21,6 +24,7 @@ const ROUTE = '/config/number-range-objects';
 export default async function NumberRangeObjectsPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, NUMBER_RANGE_ACTIVITY);
+  const objects = await listNumberRangeObjects(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -46,7 +50,7 @@ export default async function NumberRangeObjectsPage() {
         </p>
       )}
 
-      <NumberRangeObjects canMaintain={canMaintain} />
+      <NumberRangeObjects objects={objects} canMaintain={canMaintain} />
     </div>
   );
 }

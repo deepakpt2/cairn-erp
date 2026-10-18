@@ -1619,6 +1619,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.362 B-346 — SCR-050 / SNRO stage 3: the registry live, external and buffered intervals maintainable, the NRLEVEL act standing
+
+**What shipped.** The number-range-objects screen is live: `listNumberRangeObjects`/`saveNumberRangeObject` maintain each object's description (≤60), number length, one-decimal consumption warning, year relevance and subobject hint with the standing discipline (mandatory reason, one change document, length/warning/year-relevance security-relevant, unknown object names refused — names belong to the application). Interval maintenance takes the parity it refused: **external and buffered intervals are creatable**, the two assignments set at creation and immutable under an interval's issued numbers exactly as its bounds and format already were, and a buffered interval requires its numbers-in-buffer quantity. Behind the form, allocation honours buffering (the engine's `allocateNumber`): a buffered interval **reserves a whole block in an independently committed step** and hands numbers from the in-process remainder, so a rolled-back document leaves its number consumed and an abandoned block remainder leaks on restart — the reference's gap behaviour, implemented rather than described; the unbuffered path (one atomic increment inside the posting transaction) is untouched. The **guarded current-number act** (`adjustNumberRangeCurrent`) sets an interval's counter anywhere within its bounds as its own act — its own panel under the interval form, mandatory reason, `currentNumber` security-relevant — and reports whether the target re-issues numbers already given out, the screen stating the warning in words when it does. The standing guards all still stand: overlap refusal under advisory-lock serialisation, the upper bound never below the last issued number, blocked-as-disable.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled (number-range-objects 1.82 kB, number-ranges 2.6 kB); suite **1222 tests across 145 files**.
+
+**Cost.** Measured: 03:36 in to 03:44 — **8 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1732,6 +1742,7 @@ recorded change, date and reason stated.
 | 2.164 | 2026-10-18 | **SCR-050 / SNRO package recorded as R-98: number range objects at full SAP parity.** Stored object codes rename to at most 10 characters (`JOURNAL_ENTRY`→`RF_BELEG`, `MATERIAL`→`MATERIALNR`, product stems elsewhere — the row carries the map); a tenant `number_range_object` registry carries description, number length, warning percentage and year relevance while object names stay application-owned; the standing screen gains external and buffered interval maintenance, buffered allocation reserving blocks whose rolled-back numbers stay consumed (gaps accepted, journal included), and the guarded current-number act that may rewind with the repetition warning stated. SCR-051 (MMNR) follows on this foundation. | Agent |
 | 2.165 | 2026-10-18 | **SCR-050 / SNRO stage 1 (B-344, §26.360): the inert number-range-objects screen.** `/config/number-range-objects` stands introduced (`CFG.PLT.NUMBERRANGE.DEFINE · SNRO`), cross-linked with the live intervals screen, its object grid and buffering's consequences stated in help text. Typecheck, `lint:ip`, production build (route 904 B) clean; suite 1222 across 145 files. Cost measured at 3 minutes. | Agent |
 | 2.166 | 2026-10-18 | **SCR-050 / SNRO stage 2 (B-345, §26.361): the registry and the great rename.** Migration 0061 renames every stored object code to its SAP-width name (the row carries the map), creates and seeds `number_range_object` for all clients, and 9041 puts forced RLS on it — 104 migrations. ~70 code references follow; new tenants are seeded from the standard package; the GL reconciliation `MATERIAL` correctly stands apart. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 9 minutes. | Agent |
+| 2.167 | 2026-10-18 | **SCR-050 / SNRO stage 3 (B-346, §26.362): the live screens.** The object registry is maintainable (metadata only; names application-owned); external and buffered intervals are creatable with creation-time immutability, buffered allocation reserving independently committed blocks whose rolled-back numbers stay consumed; and the guarded current-number act sets a counter within its bounds as its own documented act, warning when it would re-issue. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 8 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

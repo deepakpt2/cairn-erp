@@ -4,6 +4,7 @@ import { formatNumber } from './format';
 export { formatNumber } from './format';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Tx } from '../db/client';
+import { db } from '../db/client';
 import { numberRange, numberRangeAllocation } from '../tables/numbering';
 
 export interface AllocateOptions {
@@ -37,11 +38,166 @@ export class NumberRangeError extends Error {
   }
 }
 
+/**
+ * Buffered allocation (SCR-050 / SNRO parity). A buffered interval's
+ * counter advances by a whole block in its own committed step; numbers
+ * are then handed from the in-process remainder of the block. A
+ * document that later rolls back leaves its number consumed — the gap
+ * is the accepted, visible behaviour of a buffered interval, exactly
+ * as in the reference. Restarting the process abandons the rest of a
+ * block the same way. Allocations are still recorded in the caller's
+ * transaction, so an uninterrupted run's trail stays complete.
+ */
+interface BufferedBlock {
+  next: number;
+  upto: number;
+  prefix: string;
+  numberLength: number;
+  displayStyle: string;
+  rangeFiscalYear: number;
+}
+
+const bufferedBlocks = new Map<string, BufferedBlock>();
+
+async function allocateBuffered(
+  tx: Tx,
+  options: AllocateOptions,
+  subObject: string,
+  companyCode: string,
+  fiscalYear: number,
+): Promise<AllocatedNumber | null> {
+  const label = `${options.objectCode} / ${companyCode} / ${subObject}`;
+  const remedy = 'Maintain the interval in Number Range Maintenance (CFG.PLT.NUMBERRANGE.DEFINE).';
+
+  const candidates = await tx
+    .select()
+    .from(numberRange)
+    .where(
+      and(
+        eq(numberRange.client, options.client),
+        eq(numberRange.objectCode, options.objectCode),
+        eq(numberRange.companyCode, companyCode),
+        eq(numberRange.subObject, subObject),
+      ),
+    );
+  const range =
+    candidates.find((r) => r.fiscalYear === fiscalYear) ??
+    candidates.find((r) => r.fiscalYear === 0);
+  if (!range || !range.isBuffered) return null;
+  if (range.status !== 'ACTIVE') {
+    throw new NumberRangeError(`The number range for ${label} is ${range.status}.`, remedy);
+  }
+  if (range.isExternal) {
+    throw new NumberRangeError(
+      `The number range for ${label} requires externally supplied numbers.`,
+      'Automatic allocation is not allowed for an external interval. Use an internal interval.',
+    );
+  }
+
+  const cacheKey = [
+    options.client, options.objectCode, companyCode, subObject, range.fiscalYear,
+  ].join('/');
+  let block = bufferedBlocks.get(cacheKey);
+  if (!block || block.next > block.upto) {
+    const size = Math.max(1, range.bufferSize || 1);
+    const reserved = await db().transaction(async (reserveTx) => {
+      await reserveTx.execute(sql`select set_config('cairn.client', ${options.client}, true)`);
+      const [locked] = await reserveTx
+        .select()
+        .from(numberRange)
+        .where(
+          and(
+            eq(numberRange.client, options.client),
+            eq(numberRange.objectCode, options.objectCode),
+            eq(numberRange.companyCode, companyCode),
+            eq(numberRange.subObject, subObject),
+            eq(numberRange.fiscalYear, range.fiscalYear),
+          ),
+        )
+        .for('update');
+      if (!locked || locked.status !== 'ACTIVE' || locked.currentNumber >= locked.toNumber) {
+        return null;
+      }
+      const upto = Math.min(locked.currentNumber + size, locked.toNumber);
+      await reserveTx
+        .update(numberRange)
+        .set({ currentNumber: upto, changedBy: options.allocatedBy, changedAt: new Date() })
+        .where(
+          and(
+            eq(numberRange.client, options.client),
+            eq(numberRange.objectCode, options.objectCode),
+            eq(numberRange.companyCode, companyCode),
+            eq(numberRange.subObject, subObject),
+            eq(numberRange.fiscalYear, range.fiscalYear),
+          ),
+        );
+      return {
+        first: locked.currentNumber + 1,
+        upto,
+        prefix: locked.prefix,
+        numberLength: locked.numberLength,
+        displayStyle: locked.displayStyle,
+      };
+    });
+    if (!reserved) {
+      throw new NumberRangeError(
+        `Number range for ${label} is exhausted (last number ${range.currentNumber} of ${range.toNumber}).`,
+        `Extend the upper limit. ${remedy}`,
+      );
+    }
+    block = {
+      next: reserved.first,
+      upto: reserved.upto,
+      prefix: reserved.prefix,
+      numberLength: reserved.numberLength,
+      displayStyle: reserved.displayStyle,
+      rangeFiscalYear: range.fiscalYear,
+    };
+    bufferedBlocks.set(cacheKey, block);
+  }
+
+  const value = block.next;
+  block.next += 1;
+  const display = formatNumber({
+    value,
+    prefix: block.prefix,
+    length: block.numberLength,
+    style: block.displayStyle,
+    fiscalYear,
+  });
+  const allocationId = randomUUID();
+  await tx.insert(numberRangeAllocation).values({
+    id: allocationId,
+    client: options.client,
+    objectCode: options.objectCode,
+    companyCode,
+    subObject,
+    fiscalYear,
+    rangeFiscalYear: block.rangeFiscalYear,
+    allocatedNumber: value,
+    displayedNumber: display,
+    allocatedBy: options.allocatedBy,
+  });
+  return {
+    value,
+    display,
+    objectCode: options.objectCode,
+    companyCode,
+    subObject,
+    fiscalYear,
+    rangeFiscalYear: block.rangeFiscalYear,
+    allocationId,
+  };
+}
+
 /** Must run in the transaction that writes the consuming document. */
 export async function allocateNumber(tx: Tx, options: AllocateOptions): Promise<AllocatedNumber> {
   const subObject = options.subObject ?? '*';
   const fiscalYear = options.fiscalYear ?? 0;
   const companyCode = options.companyCode ?? '*';
+
+  const buffered = await allocateBuffered(tx, options, subObject, companyCode, fiscalYear);
+  if (buffered) return buffered;
 
   // Select the authoritative interval FIRST. A defined year-specific interval
   // that is blocked, external or exhausted must not be bypassed by a fallback.
