@@ -266,6 +266,12 @@ Migration `0067_purchase_order.sql` with `9046_purchase_order_policies.sql` — 
 
 ---
 
+### 26.393 B-377 — SCR-056 / ME21N stage 4: the purchase order term seeded
+
+The capability `PROC.PO.CREATE` already stood from the platform seed; stage 4 adds its term *Create purchase order* at `/purchasing/orders`, tier built, with ME21N, ME22N and ME23N as search aliases only. The seed reads back **93/64/64/66**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -304,6 +310,7 @@ Migration `0067_purchase_order.sql` with `9046_purchase_order_policies.sql` — 
 | 2.201 | 2026-10-18 | **SCR-056 / ME21N stage 1 (B-374, §26.390).** The inert purchase order screen stands at `/purchasing/orders`: overview, header, item grid with computed net value, schedule-line and assignment panels, save disabled. Typecheck clean. | Agent |
 | 2.202 | 2026-10-18 | **SCR-056 / ME21N stage 2 (B-375, §26.391).** Migrations `0067` + `9046` applied (115 standing): `purchase_order` header, items, schedule lines and assignments behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.203 | 2026-10-18 | **SCR-056 / ME21N stage 3 (B-376, §26.392).** The purchase order service and live screen: supplier and organizational judging, schedule reconciliation, baseline net value, requisition conversion with ordered-quantity judging, one change document per act, period gates never consulted. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.204 | 2026-10-18 | **SCR-056 / ME21N stage 4 (B-377, §26.393).** The purchase order term seeded with ME21N/ME22N/ME23N as search aliases on the standing capability; seed reads back 93/64/64/66. | Agent |
 
 ---
 
