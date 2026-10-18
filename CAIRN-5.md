@@ -869,6 +869,13 @@ The owner's FBRA package is contracted as R-119: reset-only this round — the c
 
 ---
 
+### 26.474 B-458 — SCR-071 stage 1: the inert clearing reset screen stands
+
+`/finance/clearing-reset` renders the clearing-document selection (company, document, fiscal year), the empty cleared-items review and the reset result area, all disabled. i18n keys `clearingReset.title/subtitle` added. No reads, no writes — the retained reset record follows at stage 2.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -995,6 +1002,7 @@ The owner's FBRA package is contracted as R-119: reset-only this round — the c
 | 2.289 | 2026-10-18 | **SCR-070 stage 4 published (B-455, §26.471).** Capability `FIN.AR.AGEING` and the `/finance/customer-ageing` term stand, S_ALR_87012178 a search alias only; seed read-back 104/66/77/86. | Agent |
 | 2.290 | 2026-10-18 | **SCR-070 closed (B-456, §26.472).** Customer ageing (S_ALR_87012178) accepted under `FIN.AR.AGEING`: T927 + neighbour T928 green on the production build, suite 1299 tests, seed 104/66/77/86, 137 migrations, 12 min measured. | Agent |
 | 2.291 | 2026-10-18 | **SCR-071 reset cleared items contracted (R-119, B-457, §26.473).** FBRA under house names: reset-only (no posting, no period judged), named-document eligibility, advisory lock, mandatory reason, retained `clearing_reset` record; `FIN.CLEARING.RESET` created; reset-and-reverse (FB08) and event-aware ageing history deferred. | Agent |
+| 2.292 | 2026-10-18 | **SCR-071 stage 1 published (B-458, §26.474).** The inert clearing reset screen `/finance/clearing-reset`: selection, empty cleared-items review and reset area rendered, i18n keys added. No reads, no writes. | Agent |
 
 ---
 

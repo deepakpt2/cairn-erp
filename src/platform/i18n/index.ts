@@ -2031,6 +2031,13 @@ const en: Catalogue = {
     'ledger as it is read: opening balance, debit and credit turnover and ' +
     'closing balance for every fiscal period, with the line items behind ' +
     'any period one choice away. This screen displays; it never posts.',
+  'clearingReset.title': 'Reset Cleared Items',
+  'clearingReset.subtitle':
+    'A clearing undone: the clearing stamp lifts from every item the ' +
+    'named clearing document cleared, and the items stand open again. ' +
+    'No journal posts, no document changes — the reset stands on ' +
+    'record with its reason, and the clearing document itself is ' +
+    'reversed only by the separate reversal act.',
   'vendorClearing.title': 'Clear Vendor Open Items',
   'vendorClearing.subtitle':
     'Clear a supplier\u2019s open items against each other: invoices, credit ' +
