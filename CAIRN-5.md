@@ -213,6 +213,12 @@ The pre-round completeness audit stands at the head of this round: every previou
 
 ---
 
+### 26.386 B-370 — SCR-055 / ME51N stage 2: the requisition tables stand
+
+Migration `0066_purchase_requisition.sql` with `9045_purchase_requisition_policies.sql` — **113 migrations standing**. `purchase_requisition_item` is keyed `(client, requisition_number, item_number)` with no header record anywhere: document type, the standard item category, the nullable assignment category, optional material (foreign key to the material master), short text at the package's 40, quantity and unit, both dates as dates, plant/storage-location/purchasing-group/material-group foreign keys, the estimated price read with price unit and currency, the deletion mark, and the creation source. `purchase_requisition_assignment` hangs off items with G/L, cost centre and distribution percentage — its masters judged by the service, being validity- and chart-scoped. Both tables carry the four audit columns behind forced tenant RLS in the standing shape. One correction inside the stage: the material foreign key names the master's `material_number` column, fixed before the migration landed.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -243,6 +249,7 @@ The pre-round completeness audit stands at the head of this round: every previou
 | 2.193 | 2026-10-18 | **SCR-054 / OMSY CLOSED and accepted (B-368, §26.384).** Stage 5 ships 3 service tests and the T943 browser target `material-period-control` (7/7 journeys against the production build — uninitialized company, initialization at 2026/10, backposting allowed, the shift to 2026/11, the database remembering). Neighbouring `material-deletion-flag` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1245 across 150 files, 111 migrations, seed 92/64/62/60. Cost measured at 12 minutes. | Agent |
 | 2.194 | 2026-10-18 | **SCR-055 / ME51N contracted (R-103).** Pre-round audit confirmed every previously contracted page stands (34 built routes, none missing; the 16 pageless seeded routes are uncontracted future-domain placeholders, movement-type configuration and release strategies recorded as obligations of their rounds). The requisition is item-level with no header record, numbers from the PURCHREQ range, standard item category and stock/cost-centre assignment this round, the period gates explicitly not judged on save, release and conversion deferred and named. | Agent |
 | 2.195 | 2026-10-18 | **SCR-055 / ME51N stage 1 (B-369, §26.385).** The inert requisition screen stands at `/purchasing/requisitions`: document overview, item grid and stock/cost-centre assignment panel, save disabled. Typecheck clean. | Agent |
+| 2.196 | 2026-10-18 | **SCR-055 / ME51N stage 2 (B-370, §26.386).** Migrations `0066` + `9045` applied (113 standing): item-level `purchase_requisition_item` and `purchase_requisition_assignment` behind forced tenant RLS, Drizzle tables in the new `src/modules/purchasing` module. Typecheck clean. | Agent |
 
 ---
 
