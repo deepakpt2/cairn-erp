@@ -1423,6 +1423,12 @@ Stage 1 of R-131. The `/finance/customer-down-payment` screen stands as a shell 
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-535 / §26.551 / §30 row 2.369. **Cost (B-254, measured):** contract published 17:53 UTC; stage 1 completed this turn.
 
+### 26.552 B-536 — SCR-083 stage 2: the customer down-payment record
+
+Stage 2 of R-131. `customer_down_payment` stands in the house payment-record shape (the resolved alternative account remembered on the record) in `drizzle/0093_customer_down_payment.sql`. No clearing-link table (declined in R-131). The database stands at 156 migrations, the table verified by read-back.
+
+Verification: migration applied, table verified, typecheck clean. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-536 / §26.552 / §30 row 2.370. **Cost (B-254, measured):** stage 1 published this turn; stage 2 completed this turn.
+
 ---
 ---
 
@@ -1638,3 +1644,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.367 | 2026-10-18 | **SCR-082 closed (B-533, §26.549).** Down-payment clearing accepted: 1352 tests, T914 browser green, 155 migrations, seed 115/68/89/98. The vendor advance chain (F-48 → F-54) stands complete; the customer mirror (F-29/F-39) is next. | Agent |
 | 2.368 | 2026-10-18 | **SCR-083 contract R-131 written (B-534, §26.550).** F-29 customer down payment mirrors R-129: AR special G/L resolution, a DZ journal stands the advance received outside ordinary receivables; the link table declined (F-39 next), F-37 requests deferred. Stage 1 follows. | Agent |
 | 2.369 | 2026-10-18 | **SCR-083 stage 1 published (B-535, §26.551).** The `/finance/customer-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
+| 2.370 | 2026-10-18 | **SCR-083 stage 2 published (B-536, §26.552).** The customer down-payment record stands; 156 migrations. The posting service follows in stage 3. | Agent |
