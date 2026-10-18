@@ -248,6 +248,12 @@ The supporting register stands: capability `PROC.PR.CREATE` and the term *Create
 
 ---
 
+### 26.390 B-374 — SCR-056 / ME21N stage 1: the inert purchase order screen stands
+
+Stage 1 ships the inert screen at `/purchasing/orders` under the `purchaseOrder` i18n keys: the standing-orders overview empty, the header (supplier, purchasing organization and group, company code, currency), the item grid — material through the requisition reference with the computed net value shown beside it — and the per-item schedule-line and stock/cost-centre panels. The save act stands disabled until stage 3 wires the service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -283,6 +289,7 @@ The supporting register stands: capability `PROC.PR.CREATE` and the term *Create
 | 2.198 | 2026-10-18 | **SCR-055 / ME51N stage 4 (B-372, §26.388).** Capability `PROC.PR.CREATE` and the requisition term seeded with ME51N/ME52N/ME53N as search aliases; seed reads back 93/64/63/63. | Agent |
 | 2.199 | 2026-10-18 | **SCR-055 / ME51N CLOSED and accepted (B-373, §26.389).** Stage 5 ships 3 service tests and the T942 browser target `purchase-requisitions` (green — PR-0000001 through the item grid, the database remembering). Neighbouring `material-period-control` and `material-deletion-flag` targets, typecheck, `lint:ip` and the production build clean; suite 1249 across 151 files, 113 migrations, seed 93/64/63/63. Deferred and named in the entry. Cost measured at 11 minutes. | Agent |
 | 2.200 | 2026-10-18 | **SCR-056 / ME21N contracted (R-104).** Header/item/schedule-line/assignment purchase orders at SAP parity under house names: PURCHORD draw, supplier and organizational judging, requisition conversion with ordered-quantity judging, the baseline net-value semantics stated, period gates explicitly never consulted on save, release strategy recorded as due before goods receipt. | Agent |
+| 2.201 | 2026-10-18 | **SCR-056 / ME21N stage 1 (B-374, §26.390).** The inert purchase order screen stands at `/purchasing/orders`: overview, header, item grid with computed net value, schedule-line and assignment panels, save disabled. Typecheck clean. | Agent |
 
 ---
 

@@ -1970,6 +1970,13 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'purchaseOrder.title': 'Create Purchase Order',
+  'purchaseOrder.subtitle':
+    'A purchase order is a header with items, schedule lines and account ' +
+    'assignments: what is bought, from which supplier, at what net price, ' +
+    'delivered where and by when. An item may convert a requisition item, ' +
+    'never beyond its quantity. Saving an order posts nothing — goods ' +
+    'receipt and invoice verification carry the period gates.',
   'purchaseRequisition.title': 'Create Purchase Requisition',
   'purchaseRequisition.subtitle':
     'A requisition is an item-level purchasing document: each item names what is ' +
