@@ -418,6 +418,12 @@ Stage 1 ships the release panels on the requisition and order screens: on a stan
 
 ---
 
+### 26.413 B-397 — SCR-060 release acts stage 4: the requisition release capability and the act aliases stand
+
+Stage 4 seats the seed half of the act contract: `PROC.PR.RELEASE` joins the standing `PROC.PO.RELEASE` in the capability catalogue, and the act transactions stand as search aliases only — ME54N and ME55 on the purchase-requisition term, ME28 and ME29N on the purchase-order term — SAP codes never in stored codes. Seed reads back **97/66/67/75**.
+
+---
+
 ### 26.411 B-395 — SCR-060 release acts stage 2: the document release table stands
 
 Migration `0072_document_release.sql` with `9050_document_release_policies.sql` — **123 migrations standing**. `document_release` stands one row per judged document — category, number, its group and strategy by foreign key, the step it stands on, and PENDING/RELEASED — behind forced tenant RLS with the four audit columns. No strategy matching means no row: the absence is the not-required state.
@@ -427,6 +433,12 @@ Migration `0072_document_release.sql` with `9050_document_release_policies.sql` 
 ### 26.412 B-396 — SCR-060 release acts stage 3: release acts in the services, live panels
 
 One service `src/modules/purchasing/release.ts`, one law for both documents: `syncDocumentRelease` runs inside create and change in the same transaction and judges the document's standing attributes through the SCR-059 judge — attributes are honestly shared only: TOTAL_VALUE from standing items; PLANT, PURCHASING_GROUP and COMPANY_CODE only when every standing item agrees (company following the plant); orders add header values and SUPPLIER/PURCHASING_ORG. No claimant deletes the row; a fresh claimant starts PENDING at step zero; a different claimant restarts at step zero. Change to a RELEASED document is refused naming cancel as the remedy, in both document services. `releaseDocument` takes a per-document advisory lock, judges the offered code against the standing next step, advances one step per act — the last releases the document and moves the order header's `release_status` with it — and records every act on the document's own change-document object class. Cancel returns the document to step zero under the same capability (`PROC.PO.RELEASE` standing, `PROC.PR.RELEASE` seated next step). Both screens carry the live panel — state, strategy and step progress judged server-side, code chosen from the strategy's own steps, the standing general message line — and the overview names release standing per document.
+
+---
+
+### 26.413 B-397 — SCR-060 release acts stage 4: the requisition release capability and the act aliases stand
+
+Stage 4 seats the seed half of the act contract: `PROC.PR.RELEASE` joins the standing `PROC.PO.RELEASE` in the capability catalogue, and the act transactions stand as search aliases only — ME54N and ME55 on the purchase-requisition term, ME28 and ME29N on the purchase-order term — SAP codes never in stored codes. Seed reads back **97/66/67/75**.
 
 ---
 
