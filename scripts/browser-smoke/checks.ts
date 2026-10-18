@@ -1828,6 +1828,31 @@ async function companyCodeCoaAssignment(ctx: BrowserContext) {
     'Not assigned',
   ]);
   console.log('  ✓ refreshed UI and cookie-backed Auditor show the saved assignment read-only, with no replacement control');
+
+  // The dedicated assignment screen: findable, shows every standing assignment,
+  // and judges a replacement attempt by name while a repeat changes nothing.
+  await page.goto(`${BASE}/config/company-codes/assign-chart-of-accounts`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { level: 1, name: 'Assign chart of accounts to company code', exact: true }).waitFor();
+  const standing = page.locator('section[aria-labelledby="coa-standing"]');
+  await standing.locator('tbody tr').filter({ hasText: code }).getByText(activeChart).waitFor();
+  assert.equal(await page.locator('select[name="companyCode"]').count(), 0, 'A read-only viewer gets no assignment form on the dedicated screen.');
+
+  await signInAs('company.assigner');
+  await page.goto(`${BASE}/config/company-codes/assign-chart-of-accounts`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { level: 1, name: 'Assign chart of accounts to company code', exact: true }).waitFor();
+  const assignSection = page.locator('section[aria-labelledby="coa-assign"]');
+  await assignSection.locator('select[name="companyCode"]').selectOption(code);
+  await assignSection.locator('select[name="chartOfAccounts"]').selectOption('CA01');
+  await assignSection.locator('input[name="reason"]').fill('Browser dedicated-screen replacement attempt');
+  await assignSection.getByRole('button', { name: 'Assign', exact: true }).click();
+  await assignSection.getByText(new RegExp(`Company code ${code} already has chart of accounts ${activeChart} assigned`)).waitFor();
+
+  await assignSection.locator('select[name="companyCode"]').selectOption(code);
+  await assignSection.locator('select[name="chartOfAccounts"]').selectOption(activeChart);
+  await assignSection.locator('input[name="reason"]').fill('Browser dedicated-screen repeat');
+  await assignSection.getByRole('button', { name: 'Assign', exact: true }).click();
+  await assignSection.getByText(`Chart of accounts ${activeChart} is already assigned to Company Code ${code}.`, { exact: true }).waitFor();
+  console.log('  ✓ the dedicated screen shows the standing assignment, refuses replacement by name, and a repeat changes nothing');
 }
 
 async function paymentTerms(ctx: BrowserContext) {

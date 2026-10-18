@@ -25,6 +25,8 @@ export const companyCodeCoaAssignmentValuesSchema = z.object({
 export const companyCodeCoaAssignmentInputSchema = companyCodeCoaAssignmentValuesSchema.extend({
   client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
   changedBy: z.string().trim().min(1).max(60),
+  /** Optional for the original per-row act; the dedicated screen requires it. */
+  reason: z.string().trim().max(500).optional(),
 }).strict();
 
 export type CompanyCodeCoaAssignmentInput = z.input<typeof companyCodeCoaAssignmentInputSchema>;
@@ -177,6 +179,7 @@ export async function assignCompanyCodeCoa(raw: CompanyCodeCoaAssignmentInput) {
       before: { chartOfAccounts: null },
       after: { chartOfAccounts: values.chartOfAccounts },
       securityRelevantFields: ['chartOfAccounts'],
+      reason: parsed.data.reason,
     });
     await markActivityComplete(tx, client, ASSIGNMENT_ACTIVITY, changedBy);
 

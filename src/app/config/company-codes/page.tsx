@@ -67,6 +67,9 @@ export default async function CompanyCodesPage() {
         <Link href="/config/fiscal-year-variants/assign-company-codes" className="mt-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
           {t('cc.assignFiscalYearVariant')}
         </Link>
+        <Link href="/config/company-codes/assign-chart-of-accounts" className="mt-2 ml-2 inline-flex min-h-11 items-center border border-line bg-white px-3 text-sm font-medium text-accent hover:bg-sunken sm:min-h-9">
+          {t('cc.assignCoaScreen')}
+        </Link>
       </header>
 
       {canDefine && references && (
