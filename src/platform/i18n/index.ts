@@ -2063,6 +2063,12 @@ const en: Catalogue = {
     'No journal posts, no document changes — the reset stands on ' +
     'record with its reason, and the clearing document itself is ' +
     'reversed only by the separate reversal act.',
+  'customerClearing.title': 'Clear Customer Open Items',
+  'customerClearing.subtitle':
+    'Clear a customer\u2019s open items against each other: invoices, credit ' +
+    'memos and payments stand in one grid until their signed sum stands ' +
+    'at zero, when one clearing journal clears them in place under three ' +
+    'distinct dates \u2014 clearing, posting and document.',
   'vendorClearing.title': 'Clear Vendor Open Items',
   'vendorClearing.subtitle':
     'Clear a supplier\u2019s open items against each other: invoices, credit ' +
