@@ -225,6 +225,12 @@ Migration `0066_purchase_requisition.sql` with `9045_purchase_requisition_polici
 
 ---
 
+### 26.388 B-372 — SCR-055 / ME51N stage 4: capability and term seeded
+
+The supporting register stands: capability `PROC.PR.CREATE` and the term *Create purchase requisition* at `/purchasing/requisitions`, tier built, with ME51N, ME52N and ME53N as search aliases only — the three reference transactions sharing one screen for create, change and display, as the MM01 view pattern did before. The seed reads back **93/64/63/63**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -257,6 +263,7 @@ Migration `0066_purchase_requisition.sql` with `9045_purchase_requisition_polici
 | 2.195 | 2026-10-18 | **SCR-055 / ME51N stage 1 (B-369, §26.385).** The inert requisition screen stands at `/purchasing/requisitions`: document overview, item grid and stock/cost-centre assignment panel, save disabled. Typecheck clean. | Agent |
 | 2.196 | 2026-10-18 | **SCR-055 / ME51N stage 2 (B-370, §26.386).** Migrations `0066` + `9045` applied (113 standing): item-level `purchase_requisition_item` and `purchase_requisition_assignment` behind forced tenant RLS, Drizzle tables in the new `src/modules/purchasing` module. Typecheck clean. | Agent |
 | 2.197 | 2026-10-18 | **SCR-055 / ME51N stage 3 (B-371, §26.387).** The requisition service and live screen: PURCHREQ draw, master judging, cost-centre assignment at a hundred percent, deletion flags warning only, period gates never consulted, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.198 | 2026-10-18 | **SCR-055 / ME51N stage 4 (B-372, §26.388).** Capability `PROC.PR.CREATE` and the requisition term seeded with ME51N/ME52N/ME53N as search aliases; seed reads back 93/64/63/63. | Agent |
 
 ---
 
