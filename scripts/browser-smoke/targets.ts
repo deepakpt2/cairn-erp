@@ -39,6 +39,7 @@ export const TARGETS = [
   { id: 'number-range-objects', client: 'T947', label: 'SCR-050 SNRO object registry, external interval creation, guarded current-number act' },
   { id: 'material-number-ranges', client: 'T946', label: 'SCR-051 MMNR group definition, OMS2 group assignment, deletion refusal, MM01 internal draw' },
   { id: 'industry-sectors', client: 'T945', label: 'SCR-052 OMS3 industry sector master, MM01 sector judging, deletion refusal' },
+  { id: 'material-deletion-flag', client: 'T944', label: 'SCR-053 MM06 deletion flag acts at client and plant scope, cancellation' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

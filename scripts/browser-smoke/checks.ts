@@ -57,6 +57,7 @@ import { materialGroupsOmsf } from './material-groups';
 import { numberRangeObjectsSnro } from './number-range-objects';
 import { materialNumberRangesMmnr } from './material-number-ranges';
 import { industrySectorsOms3 } from './industry-sectors';
+import { materialDeletionFlagMm06 } from './material-deletion-flag';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4887,6 +4888,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'number-range-objects': numberRangeObjectsSnro,
   'material-number-ranges': materialNumberRangesMmnr,
   'industry-sectors': industrySectorsOms3,
+  'material-deletion-flag': materialDeletionFlagMm06,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
