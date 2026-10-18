@@ -1367,6 +1367,12 @@ Stage 4 of R-129. The capability `FIN.AP.DOWNPAYMENT.POST` (F-48) and the config
 
 Verification: seed applied with the new counts standing; typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-525 / §26.541 / §30 row 2.359. **Cost (B-254, measured):** stage 3 published 17:05 UTC; stage 4 completed 17:07 UTC.
 
+### 26.542 B-526 — SCR-081 stage 5: acceptance and closure
+
+Stage 5 of R-129 closes the round. The service tests (`tests/vendor-down-payment.test.ts`, 3 cases) stand green: an unconfigured indicator and a malformed one refused by name; a 10,000 down payment posting KA — debit 230000 `Down payment A`, credit bank — with the record remembering indicator, resolved account and value date; the advance absent from the vendor's ordinary payables (only the 550 invoice stands) yet listed as an open advance; replay returning the same document; the company scope resolving over the tenant-wide default (240000 over 230000); and indicator deletion refused while posted down payments reference it. One omission was repaired on the way: the delivered document types lacked KA, which now stands in the standard package beside KZ.
+
+**Acceptance.** The full suite stands green at 1348 tests; the production build carries target `vendor-down-payment` (T915) green — the maintenance screen showing indicator A → 230000, the payment posting through the form, the KA journal evidenced in the database. The seed stands at 114 capabilities / 68 configuration activities / 88 terms / 97 aliases, twice idempotent; the database stands at 154 migrations. Typecheck clean. **SCR-081 is accepted and closed.** Deferred by name: down-payment requests (F-47), down-payment clearing (F-54 — the next round), the customer mirror (F-29/F-39), withholding tax, foreign-currency differences and drafts. Same-stage bookkeeping: B-526 / §26.542 / §30 row 2.360. **Cost (B-254, measured):** stage 4 published 17:07 UTC; stage 5 completed 17:12 UTC.
+
 ---
 ---
 
@@ -1572,3 +1578,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.357 | 2026-10-18 | **SCR-081 stage 2 published (B-523, §26.539).** Special G/L configuration and the down-payment record stand; 154 migrations. The posting service follows in stage 3. | Agent |
 | 2.358 | 2026-10-18 | **SCR-081 stage 3 published (B-524, §26.540).** Down-payment service stands: indicator resolution under lock, KA journal on the alternative account, replay by request key; the screen is live. Capability and configuration maintenance follow in stage 4. | Agent |
 | 2.359 | 2026-10-18 | **SCR-081 stage 4 published (B-525, §26.541).** Capability F-48 and the special G/L configuration activity seeded (114/68/88/97); the `/config/special-gl` maintenance screen stands with reasoned changes and deletion guard. Tests and browser acceptance follow in stage 5. | Agent |
+| 2.360 | 2026-10-18 | **SCR-081 closed (B-526, §26.542).** Vendor down payment accepted: 1348 tests, T915 browser green, 154 migrations, seed 114/68/88/97. Special G/L configuration stands; F-54 down-payment clearing is next. | Agent |
