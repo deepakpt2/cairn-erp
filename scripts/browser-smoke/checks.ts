@@ -212,7 +212,7 @@ export async function onboard(ctx: BrowserContext) {
     'The builder must supply the standard structure; tenant creation no longer does.',
   );
   console.log('  ✓ builder supplied the standard structure');
-  assert.equal((await withTenant(CLIENT, (tx) => tx.execute(sql`select count(*)::int as n from number_range where object_code = 'JOURNAL_ENTRY'`)) as unknown as Array<{ n: number }>)[0].n, 0);
+  assert.equal((await withTenant(CLIENT, (tx) => tx.execute(sql`select count(*)::int as n from number_range where object_code = 'RF_BELEG'`)) as unknown as Array<{ n: number }>)[0].n, 0);
   console.log('  ✓ UI-created tenant has no hidden accounting intervals');
 }
 
@@ -250,7 +250,7 @@ async function foundation(ctx: BrowserContext) {
   await page.locator('[name="line_1_amount"]').fill('90');
   await page.getByRole('button', { name: 'Post', exact: true }).click();
   await page.getByText(/difference 10\.0000/).waitFor();
-  const counter = (await withTenant(CLIENT, (tx) => tx.execute(sql`select current_number from number_range where object_code = 'JOURNAL_ENTRY'`))) as unknown as Array<{ current_number: string }>;
+  const counter = (await withTenant(CLIENT, (tx) => tx.execute(sql`select current_number from number_range where object_code = 'RF_BELEG'`))) as unknown as Array<{ current_number: string }>;
   assert.equal(counter[0].current_number, '1');
   console.log('  ✓ an unbalanced UI posting consumes no number');
 
@@ -259,7 +259,7 @@ async function foundation(ctx: BrowserContext) {
   await page.getByText('Browser acceptance entry', { exact: true }).waitFor();
   console.log('  ✓ document list and scoped detail render the posted entry');
 
-  await page.goto(`${BASE}/config/number-ranges?history=${encodeURIComponent('JOURNAL_ENTRY/1000/GENERAL/0')}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/config/number-ranges?history=${encodeURIComponent('RF_BELEG/1000/GENERAL/0')}`, { waitUntil: 'domcontentloaded' });
   await page.getByText('Browser implementation verification', { exact: true }).waitFor();
   await page.getByRole('link', { name: rows[0].document_number, exact: true }).waitFor();
   console.log('  ✓ change history and number-allocation evidence drill into the document');

@@ -53,7 +53,7 @@ describe('SCR-048 material types (OMS2)', () => {
         await tx.execute(sql`
           insert into number_range (client, object_code, company_code, sub_object, fiscal_year,
             from_number, to_number, current_number, is_external, status, created_by)
-          values (${c}, 'MATERIAL', '*', ${sub}, 0, 1, 999999, 0, ${external}, 'ACTIVE', ${ACTOR})
+          values (${c}, 'MATERIALNR', '*', ${sub}, 0, 1, 999999, 0, ${external}, 'ACTIVE', ${ACTOR})
           on conflict do nothing
         `);
       }

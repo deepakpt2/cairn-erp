@@ -12,11 +12,43 @@ import {
   integer,
   bigint,
   boolean,
+  numeric,
   timestamp,
   primaryKey,
   index,
 } from 'drizzle-orm/pg-core';
 import { auditColumns, client } from './tenancy';
+
+/**
+ * Number range objects (SCR-050 / SNRO; R-98).
+ *
+ * One registry row per standing object per tenant: the maintainable
+ * facts (description, number length, consumption warning, year
+ * relevance, subobject hint). Object names belong to the application —
+ * no screen creates or deletes an object; this table describes the
+ * objects the code numbers from.
+ */
+export const numberRangeObject = pgTable(
+  'number_range_object',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    /** SAP-width object name (at most 10): RF_BELEG, MATERIALNR, … */
+    objectCode: varchar('object_code', { length: 10 }).notNull(),
+    description: varchar('description', { length: 60 }).notNull(),
+    /** The number-format length the object's intervals format to. */
+    numberLength: integer('number_length').notNull().default(10),
+    /** Optional consumption-warning percentage (one decimal), like the reference. */
+    warningPercent: numeric('warning_percent', { precision: 3, scale: 1 }),
+    /** Whether the object's intervals run per fiscal year. */
+    yearRelevant: boolean('year_relevant').notNull().default(false),
+    /** What the interval subobject means for this object, where it has one. */
+    subobjectHint: varchar('subobject_hint', { length: 30 }),
+    ...auditColumns,
+  },
+  (t) => [primaryKey({ columns: [t.client, t.objectCode] })],
+);
 
 export const numberRange = pgTable(
   'number_range',
@@ -24,7 +56,7 @@ export const numberRange = pgTable(
     client: varchar('client', { length: 4 })
       .notNull()
       .references(() => client.client, { onDelete: 'cascade' }),
-    /** Business object the number belongs to, e.g. PURCHASE_ORDER, JOURNAL_ENTRY */
+    /** Business object the number belongs to, e.g. PURCHORD, RF_BELEG */
     objectCode: varchar('object_code', { length: 40 }).notNull(),
     /** '*' for tenant-wide objects; a company code for accounting numbering. */
     companyCode: varchar('company_code', { length: 10 }).notNull().default('*'),

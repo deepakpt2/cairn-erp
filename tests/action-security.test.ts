@@ -40,7 +40,7 @@ let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
 beforeAll(async () => {
   alpha = await createTenant('action-alpha'); beta = await createTenant('action-beta');
-  await maintainNumberRange({ client: alpha.client, objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', changedBy: 'TEST', reason: 'Action test setup' });
+  await maintainNumberRange({ client: alpha.client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', changedBy: 'TEST', reason: 'Action test setup' });
 });
 afterAll(async () => { await destroyTenant(alpha.client); await destroyTenant(beta.client); await closeDb(); });
 function signedIn(capabilities = ['*']) {
@@ -50,7 +50,7 @@ function form(values: Record<string, string>) {
   const data = new FormData(); for (const [k, v] of Object.entries(values)) data.set(k, v); return data;
 }
 function periodForm() { return form({ client: beta.client, changedBy: 'FORGED', variant: 'C001', accountType: 'S', periodFrom: '1', periodTo: '11', allowSpecialPeriods: 'on' }); }
-function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', fiscalYear: '0', prefix: 'JE', fromNumber: '1', toNumber: '1000000', numberLength: '6', displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CHANGE', reason: 'Security verification' }); }
+function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: '0', prefix: 'JE', fromNumber: '1', toNumber: '1000000', numberLength: '6', displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CHANGE', reason: 'Security verification' }); }
 function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
 
 describe('server action security', () => {

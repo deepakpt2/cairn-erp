@@ -116,7 +116,7 @@ async function judgeNumberRange(
     .where(
       and(
         eq(numberRange.client, client),
-        eq(numberRange.objectCode, 'MATERIAL'),
+        eq(numberRange.objectCode, 'MATERIALNR'),
         eq(numberRange.subObject, rangeKey),
       ),
     );

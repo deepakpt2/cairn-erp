@@ -106,16 +106,16 @@ const STANDARD_RANGES: Array<{
   prefix: string;
   length: number;
 }> = [
-  { objectCode: 'MATERIAL_DOCUMENT', subObject: '*', prefix: 'MD', length: 8 },
-  { objectCode: 'PURCHASE_ORDER', subObject: 'POF', prefix: 'POF', length: 7 },
-  { objectCode: 'PURCHASE_REQUISITION', subObject: 'NB', prefix: 'PR', length: 7 },
-  { objectCode: 'SALES_ORDER', subObject: 'OR', prefix: 'SO', length: 7 },
+  { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', length: 8 },
+  { objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', length: 7 },
+  { objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', length: 7 },
+  { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', length: 7 },
   { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', length: 7 },
-  { objectCode: 'BILLING_DOCUMENT', subObject: 'F2', prefix: 'INV', length: 7 },
-  { objectCode: 'PRODUCTION_ORDER', subObject: '*', prefix: 'PRD', length: 7 },
-  { objectCode: 'PRODUCTION_CONFIRMATION', subObject: '*', prefix: 'CNF', length: 7 },
-  { objectCode: 'PAYMENT_RUN', subObject: '*', prefix: 'PMT', length: 6 },
-  { objectCode: 'VENDOR_INVOICE', subObject: '*', prefix: 'VI', length: 7 },
+  { objectCode: 'BILLING', subObject: 'F2', prefix: 'INV', length: 7 },
+  { objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', length: 7 },
+  { objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', length: 7 },
+  { objectCode: 'PAYRUN', subObject: '*', prefix: 'PMT', length: 6 },
+  { objectCode: 'VENDINV', subObject: '*', prefix: 'VI', length: 7 },
 ];
 
 export interface CreateTenantInput {

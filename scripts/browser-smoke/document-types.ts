@@ -69,7 +69,7 @@ export async function documentTypesOba7(ctx: Context) {
   const deliveredRow = gridRow(page, 'SA');
   await deliveredRow.waitFor();
   assert.match(await deliveredRow.innerText(), /General journal entry/, 'The delivered type SA stands as shipped.');
-  assert.match(await deliveredRow.innerText(), /JOURNAL_ENTRY · GENERAL/, 'Drawing on the interval the package assigned.');
+  assert.match(await deliveredRow.innerText(), /RF_BELEG · GENERAL/, 'Drawing on the interval the package assigned.');
   console.log('  ✓ the workbench routes here and the delivered registry stands');
 
   // ── 2. Creating a type against a defined interval writes and documents it ─
@@ -203,7 +203,7 @@ async function fillCreate(page: Page, code: string, name: string): Promise<strin
   const values = (await intervalSelect.locator('option').all())
     .map(async (option) => option.getAttribute('value'));
   const options = await Promise.all(values);
-  const interval = options.find((value) => value === 'JOURNAL_ENTRY|GENERAL') ?? options.find((value) => value);
+  const interval = options.find((value) => value === 'RF_BELEG|GENERAL') ?? options.find((value) => value);
   assert.ok(interval, 'The screen offers at least one defined interval.');
   await intervalSelect.selectOption(interval as string);
   // Customers beside the pre-checked G/L accounts, so the stored letter set

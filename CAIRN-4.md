@@ -1609,6 +1609,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.361 B-345 — SCR-050 / SNRO stage 2: the registry stands and every object answers to its SAP-width name
+
+**What shipped.** Migration `0061_number_range_object.sql` performs the great rename in the stored rows — `number_range`, its allocations and document types' range objects moving to the R-98 map (`JOURNAL_ENTRY`→`RF_BELEG`, `MATERIAL`→`MATERIALNR`, `MATERIAL_DOCUMENT`→`MATDOC`, `PURCHASE_ORDER`→`PURCHORD`, `PURCHASE_REQUISITION`→`PURCHREQ`, `SALES_ORDER`→`SALESORD`, `BILLING_DOCUMENT`→`BILLING`, `PRODUCTION_ORDER`→`PRODORDER`, `PRODUCTION_CONFIRMATION`→`PRODCONF`, `PAYMENT_RUN`→`PAYRUN`, `VENDOR_INVOICE`→`VENDINV`, `BUSINESS_PARTNER`→`BUSPARTNR`) — and creates `number_range_object`, seeded for every standing client with the thirteen objects' provisioned facts (description, number length, year relevance, subobject hint), `9041_..._policies.sql` putting forced RLS on it: **104 migrations standing**. The code sweep renamed ~70 references — the engine's object vocabulary, the material types' range judge, provisioning, tests and the browser harness now speak `RF_BELEG`/`MATERIALNR` — while the GL reconciliation vocabulary's `MATERIAL` was correctly left alone, being a different domain wearing a similar word. New tenants get the registry from `seedNumberRangeObjects` inside the standard package, so the round's later stages read the same registry everywhere. One instructive failure on the way: the registry's format check first rejected `RF_BELEG` itself — SAP object names carry underscores, and the check now says so.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1222 tests across 145 files**, the document-type suite's one hardcoded expectation following the rename the product message already spoke.
+
+**Cost.** Measured: 03:24 in to 03:33 — **9 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1721,6 +1731,7 @@ recorded change, date and reason stated.
 | 2.163 | 2026-10-18 | **SCR-049 / OMSF CLOSED and accepted (B-343, §26.359).** Stage 5 ships 6 service tests and the T948 browser target `material-groups` (8/8 journeys against the production build — provisioned groups at parity shape with their long texts, creation and the duplicate refusal, the description change, the used-group deletion refusal, deactivation, the database remembering all of it); one target-side name corrected to the very 20-character cap under test, and an environment restore after a snapshot wipe inside the round. Neighbouring `material-types` and `material-basic` targets, typecheck, `lint:ip` and the production build clean; suite 1222 across 145 files, 102 migrations, seed 89/61/58/54. Cost measured at 49 minutes overall. | Agent |
 | 2.164 | 2026-10-18 | **SCR-050 / SNRO package recorded as R-98: number range objects at full SAP parity.** Stored object codes rename to at most 10 characters (`JOURNAL_ENTRY`→`RF_BELEG`, `MATERIAL`→`MATERIALNR`, product stems elsewhere — the row carries the map); a tenant `number_range_object` registry carries description, number length, warning percentage and year relevance while object names stay application-owned; the standing screen gains external and buffered interval maintenance, buffered allocation reserving blocks whose rolled-back numbers stay consumed (gaps accepted, journal included), and the guarded current-number act that may rewind with the repetition warning stated. SCR-051 (MMNR) follows on this foundation. | Agent |
 | 2.165 | 2026-10-18 | **SCR-050 / SNRO stage 1 (B-344, §26.360): the inert number-range-objects screen.** `/config/number-range-objects` stands introduced (`CFG.PLT.NUMBERRANGE.DEFINE · SNRO`), cross-linked with the live intervals screen, its object grid and buffering's consequences stated in help text. Typecheck, `lint:ip`, production build (route 904 B) clean; suite 1222 across 145 files. Cost measured at 3 minutes. | Agent |
+| 2.166 | 2026-10-18 | **SCR-050 / SNRO stage 2 (B-345, §26.361): the registry and the great rename.** Migration 0061 renames every stored object code to its SAP-width name (the row carries the map), creates and seeds `number_range_object` for all clients, and 9041 puts forced RLS on it — 104 migrations. ~70 code references follow; new tenants are seeded from the standard package; the GL reconciliation `MATERIAL` correctly stands apart. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 9 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

@@ -49,7 +49,7 @@ export async function materialTypesOms2(ctx: Context) {
       await tx.execute(sql`
         insert into number_range (client, object_code, company_code, sub_object, fiscal_year,
           from_number, to_number, current_number, is_external, status, created_by)
-        values (${client}, 'MATERIAL', '*', ${sub}, 0, 1, 999999, 0, ${external}, 'ACTIVE', 'BROWSER_SMOKE')
+        values (${client}, 'MATERIALNR', '*', ${sub}, 0, 1, 999999, 0, ${external}, 'ACTIVE', 'BROWSER_SMOKE')
         on conflict do nothing
       `);
     }

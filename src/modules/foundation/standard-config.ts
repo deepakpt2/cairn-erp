@@ -212,17 +212,17 @@ const DOCUMENT_TYPES: Array<{
   accountTypes: string;
   requiresReference?: boolean;
 }> = [
-  { code: 'SA', name: 'General journal entry', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'S' },
-  { code: 'KR', name: 'Vendor invoice', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SK', requiresReference: true },
-  { code: 'KZ', name: 'Vendor payment', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SK' },
-  { code: 'DR', name: 'Customer invoice', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SD', requiresReference: true },
-  { code: 'DZ', name: 'Customer payment', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SD' },
-  { code: 'AB', name: 'Accounting document', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'S' },
-  { code: 'AF', name: 'Depreciation run', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SA' },
-  { code: 'WE', name: 'Goods receipt', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SM' },
-  { code: 'WA', name: 'Goods issue', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SM' },
-  { code: 'RV', name: 'Billing document', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'SD' },
-  { code: 'PR', name: 'Payroll posting', rangeObject: 'JOURNAL_ENTRY', rangeSub: 'GENERAL', accountTypes: 'S' },
+  { code: 'SA', name: 'General journal entry', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
+  { code: 'KR', name: 'Vendor invoice', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SK', requiresReference: true },
+  { code: 'KZ', name: 'Vendor payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SK' },
+  { code: 'DR', name: 'Customer invoice', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD', requiresReference: true },
+  { code: 'DZ', name: 'Customer payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
+  { code: 'AB', name: 'Accounting document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
+  { code: 'AF', name: 'Depreciation run', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SA' },
+  { code: 'WE', name: 'Goods receipt', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SM' },
+  { code: 'WA', name: 'Goods issue', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SM' },
+  { code: 'RV', name: 'Billing document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
+  { code: 'PR', name: 'Payroll posting', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
 ];
 
 export async function applyStandardPackage(
@@ -542,6 +542,8 @@ export async function applyStandardPackage(
     },
   });
 
+  const { seedNumberRangeObjects } = await import('./number-ranges');
+  await seedNumberRangeObjects(tx, input.client, input.activatedBy);
   const { applyMaterialDefaults } = await import('../inventory/standard-config');
   await applyMaterialDefaults(tx, input.client, input.activatedBy);
   await applyPaymentTermDefaults(tx, input.client, input.activatedBy);

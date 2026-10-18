@@ -28,7 +28,7 @@ describe('number range engine', () => {
       const allocated = await withTenant(tenant.client, (tx) =>
         allocateNumber(tx, {
           client: tenant.client,
-          objectCode: 'JOURNAL_ENTRY',
+          objectCode: 'RF_BELEG',
           companyCode: tenant.companyCode,
           subObject: 'GENERAL',
           fiscalYear,
@@ -49,7 +49,7 @@ describe('number range engine', () => {
     const allocated = await withTenant(tenant.client, (tx) =>
       allocateNumber(tx, {
         client: tenant.client,
-        objectCode: 'JOURNAL_ENTRY',
+        objectCode: 'RF_BELEG',
         companyCode: tenant.companyCode,
         subObject: 'GENERAL',
         fiscalYear,
@@ -68,7 +68,7 @@ describe('number range engine', () => {
         withTenant(tenant.client, (tx) =>
           allocateNumber(tx, {
             client: tenant.client,
-            objectCode: 'JOURNAL_ENTRY',
+            objectCode: 'RF_BELEG',
             companyCode: tenant.companyCode,
             subObject: 'GENERAL',
             fiscalYear,
@@ -97,7 +97,7 @@ describe('number range engine', () => {
       withTenant(tenant.client, async (tx) => {
         await allocateNumber(tx, {
           client: tenant.client,
-          objectCode: 'JOURNAL_ENTRY',
+          objectCode: 'RF_BELEG',
           companyCode: tenant.companyCode,
           subObject: 'GENERAL',
           fiscalYear,
@@ -117,7 +117,7 @@ describe('number range engine', () => {
     const next = await withTenant(tenant.client, (tx) =>
       allocateNumber(tx, {
         client: tenant.client,
-        objectCode: 'JOURNAL_ENTRY',
+        objectCode: 'RF_BELEG',
         companyCode: tenant.companyCode,
         subObject: 'GENERAL',
         fiscalYear,
@@ -138,7 +138,7 @@ describe('number range engine', () => {
       await withTenant(small.client, (tx) =>
         allocateNumber(tx, {
           client: small.client,
-          objectCode: 'JOURNAL_ENTRY',
+          objectCode: 'RF_BELEG',
           subObject: EXHAUST_SUB_OBJECT,
           fiscalYear,
           allocatedBy: 'TEST',
@@ -147,7 +147,7 @@ describe('number range engine', () => {
       await withTenant(small.client, (tx) =>
         allocateNumber(tx, {
           client: small.client,
-          objectCode: 'JOURNAL_ENTRY',
+          objectCode: 'RF_BELEG',
           subObject: EXHAUST_SUB_OBJECT,
           fiscalYear,
           allocatedBy: 'TEST',
@@ -157,7 +157,7 @@ describe('number range engine', () => {
       const error = (await withTenant(small.client, (tx) =>
         allocateNumber(tx, {
           client: small.client,
-          objectCode: 'JOURNAL_ENTRY',
+          objectCode: 'RF_BELEG',
           subObject: EXHAUST_SUB_OBJECT,
           fiscalYear,
           allocatedBy: 'TEST',
@@ -175,7 +175,7 @@ describe('number range engine', () => {
 
   it('reports range state for the monitor', async () => {
     const ranges = await withTenant(tenant.client, (tx) =>
-      rangeStatus(tx, tenant.client, 'JOURNAL_ENTRY'),
+      rangeStatus(tx, tenant.client, 'RF_BELEG'),
     );
     expect(ranges.length).toBeGreaterThan(0);
     expect(ranges[0].currentNumber).toBeGreaterThan(0);
@@ -184,7 +184,7 @@ describe('number range engine', () => {
 
 async function currentCounter(t: TestTenant): Promise<number> {
   const ranges = await withTenant(t.client, (tx) =>
-    rangeStatus(tx, t.client, 'JOURNAL_ENTRY'),
+    rangeStatus(tx, t.client, 'RF_BELEG'),
   );
   return Number(ranges[0].currentNumber);
 }
@@ -205,7 +205,7 @@ const EXHAUST_SUB_OBJECT = 'ZZ';
 async function defineTestRanges0(tx: Tx, client: string, fiscalYear: number) {
   await defineRange(tx, {
     client,
-    objectCode: 'JOURNAL_ENTRY',
+    objectCode: 'RF_BELEG',
     subObject: EXHAUST_SUB_OBJECT,
     fiscalYear,
     prefix: 'ZZ',

@@ -16,8 +16,8 @@ import { seedDevelopmentMaterials } from '../src/modules/inventory/development-f
 
 async function ensureDevelopmentInterval() {
   const { ranges } = await listNumberRanges('0100');
-  if (!ranges.some((r) => r.objectCode === 'JOURNAL_ENTRY' && r.companyCode === '1000' && r.subObject === 'GENERAL' && r.fiscalYear === 0)) {
-    await maintainNumberRange({ client: '0100', objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', reason: 'Development fixture setup', changedBy: 'DEV_SEED' });
+  if (!ranges.some((r) => r.objectCode === 'RF_BELEG' && r.companyCode === '1000' && r.subObject === 'GENERAL' && r.fiscalYear === 0)) {
+    await maintainNumberRange({ client: '0100', objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', reason: 'Development fixture setup', changedBy: 'DEV_SEED' });
   }
 }
 

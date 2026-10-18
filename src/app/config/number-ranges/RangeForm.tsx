@@ -40,12 +40,12 @@ export function RangeForm({ initial, companies, objects, editing }: {
       <div className="grid gap-3 sm:grid-cols-4">
         <Field label={t('nr.object')}>
           {editing ? <input name="objectCode" value={objectCode} readOnly className="field-input code bg-sunken" /> :
-            <select name="objectCode" value={objectCode} className="field-input code" onChange={(e) => { setObjectCode(e.target.value); setCompanyCode(e.target.value === 'JOURNAL_ENTRY' ? companies[0]?.companyCode ?? '' : '*'); }}>
+            <select name="objectCode" value={objectCode} className="field-input code" onChange={(e) => { setObjectCode(e.target.value); setCompanyCode(e.target.value === 'RF_BELEG' ? companies[0]?.companyCode ?? '' : '*'); }}>
               {objects.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>}
         </Field>
         <Field label={t('nr.scope')}>
-          {editing || objectCode !== 'JOURNAL_ENTRY' ? <input name="companyCode" value={companyCode} readOnly className="field-input code bg-sunken" /> :
+          {editing || objectCode !== 'RF_BELEG' ? <input name="companyCode" value={companyCode} readOnly className="field-input code bg-sunken" /> :
             <select name="companyCode" value={companyCode} onChange={(e) => setCompanyCode(e.target.value)} className="field-input code" required>
               {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode} · {c.name}</option>)}
             </select>}

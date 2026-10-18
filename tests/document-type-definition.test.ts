@@ -142,7 +142,7 @@ function creation(overrides: Partial<DocumentTypeInput> = {}): DocumentTypeInput
     mode: 'CREATE',
     documentType: CODE,
     name: 'Fixture posting type',
-    numberRangeObject: 'JOURNAL_ENTRY',
+    numberRangeObject: 'RF_BELEG',
     numberRangeSubObject: 'GENERAL',
     allowedAccountTypes: ['S', 'D'],
     reversalMode: 'REVERSE_AND_ALT_DATE',
@@ -179,11 +179,11 @@ describe('OBA7 define document types', () => {
     const rows = await listDocumentTypes(fixture().client);
     expect(rows.length).toBeGreaterThanOrEqual(11);
     expect(rows.find((row) => row.documentType === 'SA')).toMatchObject({
-      numberRangeObject: 'JOURNAL_ENTRY', numberRangeSubObject: 'GENERAL',
+      numberRangeObject: 'RF_BELEG', numberRangeSubObject: 'GENERAL',
       allowedAccountTypes: 'S', isActive: true, usedByEntries: 0,
     });
     const intervals = await listIntervalChoices(fixture().client);
-    expect(intervals).toContainEqual({ objectCode: 'JOURNAL_ENTRY', subObject: 'GENERAL' });
+    expect(intervals).toContainEqual({ objectCode: 'RF_BELEG', subObject: 'GENERAL' });
   });
 
   it('creates a type, stores its account types in canonical order and completes the activity', async () => {
@@ -243,7 +243,7 @@ describe('OBA7 define document types', () => {
 
   it('refuses an interval nobody defined for the object, and a reverse type that does not stand', async () => {
     await expect(saveDocumentType(creation({ documentType: SPARE, numberRangeSubObject: 'NOSUCH' })))
-      .rejects.toThrow(/is not defined for object JOURNAL_ENTRY/);
+      .rejects.toThrow(/is not defined for object RF_BELEG/);
     await expect(saveDocumentType(creation({ documentType: SPARE, reversalDocumentType: 'ZZ' })))
       .rejects.toThrow(/is not defined in this tenant/);
     expect(await storedType(SPARE)).toBeUndefined();

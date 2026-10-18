@@ -22,7 +22,7 @@ export default async function NumberRangesPage({ searchParams }: {
   const changes = historical ? await withTenant(client, (tx) => changeHistory(tx, client, 'number_range', rangeKey(historical))) : [];
   const allocations = historical ? await rangeAllocations(client, historical) : [];
   const shown = params.object ? ranges.filter((r) => r.objectCode === params.object) : ranges;
-  const legacy = selected?.objectCode === 'JOURNAL_ENTRY' && selected.companyCode === '*';
+  const legacy = selected?.objectCode === 'RF_BELEG' && selected.companyCode === '*';
 
   return <div className="mx-auto max-w-6xl space-y-4 p-6">
     <header className="border-b border-line pb-4">
@@ -37,12 +37,12 @@ export default async function NumberRangesPage({ searchParams }: {
     <section className={`border p-3 ${readiness.ready ? 'border-signal-ok/30 bg-signal-ok-soft' : 'border-signal-warn/30 bg-signal-warn-soft'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className={`text-sm font-semibold ${readiness.ready ? 'text-signal-ok' : 'text-signal-warn'}`}>{t(readiness.ready ? 'nr.ready' : 'nr.setupRequired')}</h2><span className="code text-ink-soft">{readiness.fiscalYear}</span></div>
       {readiness.missing.map((m) => <p key={`${m.companyCode}/${m.subObject}`} className="mt-1 text-sm"><span className="code">{m.companyCode} / {m.subObject}</span> · {t(`nr.state.${m.state}`)}</p>)}
-      <p className="mt-2 text-2xs text-ink-soft">{t('nr.assignments')}: {types.filter((type) => type.numberRangeObject === 'JOURNAL_ENTRY').map((type) => `${type.documentType} → ${type.numberRangeSubObject}`).join(' · ')}</p>
+      <p className="mt-2 text-2xs text-ink-soft">{t('nr.assignments')}: {types.filter((type) => type.numberRangeObject === 'RF_BELEG').map((type) => `${type.documentType} → ${type.numberRangeSubObject}`).join(' · ')}</p>
       {readiness.ready && <Link href="/finance/journal/new" className="mt-2 inline-block text-sm text-accent underline">{t('journal.postTitle')}</Link>}
     </section>
 
     {(params.new === '1' || selected) && editable && !legacy && <RangeForm key={selected ? rangeKey(selected) : 'new'}
-      initial={selected ?? { objectCode: 'JOURNAL_ENTRY', companyCode: companies[0]?.companyCode ?? '', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, currentNumber: 0, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE' }}
+      initial={selected ?? { objectCode: 'RF_BELEG', companyCode: companies[0]?.companyCode ?? '', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, currentNumber: 0, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE' }}
       companies={companies.filter((c) => c.isActive).map(({ companyCode, name }) => ({ companyCode, name }))} objects={NUMBER_OBJECTS} editing={!!selected} />}
     {!editable && <p className="text-sm text-ink-soft">{t('auth.readOnly', { authority: NUMBER_RANGE_ACTIVITY })}</p>}
 
@@ -56,7 +56,7 @@ export default async function NumberRangesPage({ searchParams }: {
           <td className="tabular whitespace-nowrap">{r.fromNumber}–{r.toNumber}</td><td className="tabular">{r.currentNumber < r.fromNumber ? '—' : r.currentNumber}</td><td className="tabular">{r.toNumber - r.currentNumber}</td>
           <td className="code whitespace-nowrap">{r.currentNumber >= r.toNumber ? '—' : formatNumber({ value: r.currentNumber + 1, prefix: r.prefix, length: r.numberLength, style: r.displayStyle, fiscalYear: r.fiscalYear || readiness.fiscalYear })}</td>
           <td><span className={`chip ${r.status !== 'ACTIVE' ? 'chip-warn' : r.currentNumber >= r.toNumber ? 'chip-error' : 'chip-ok'}`}>{r.status !== 'ACTIVE' ? t('nr.blocked') : r.currentNumber >= r.toNumber ? t('nr.state.EXHAUSTED') : t('nr.active')}</span></td>
-          <td className="whitespace-nowrap text-end">{editable && !(r.objectCode === 'JOURNAL_ENTRY' && r.companyCode === '*') && <Link href={`/config/number-ranges?edit=${encodeURIComponent(rangeKey(r))}`} className="me-3 text-accent underline">{t('common.change')}</Link>}<Link href={`/config/number-ranges?history=${encodeURIComponent(rangeKey(r))}`} className="text-accent underline">{t('nr.history')}</Link></td>
+          <td className="whitespace-nowrap text-end">{editable && !(r.objectCode === 'RF_BELEG' && r.companyCode === '*') && <Link href={`/config/number-ranges?edit=${encodeURIComponent(rangeKey(r))}`} className="me-3 text-accent underline">{t('common.change')}</Link>}<Link href={`/config/number-ranges?history=${encodeURIComponent(rangeKey(r))}`} className="text-accent underline">{t('nr.history')}</Link></td>
         </tr>)}
         {!shown.length && <tr><td colSpan={10} className="text-ink-soft">{t('nr.empty')}</td></tr>}
       </tbody></table>
@@ -67,7 +67,7 @@ export default async function NumberRangesPage({ searchParams }: {
       {changes.map((c) => <div key={c.id} className="border-b border-line p-3 text-sm"><p className="font-medium">{c.changedAt.toISOString()} · {c.changedBy} · {c.changeType}</p><p className="text-ink-soft">{c.reason}</p><ul className="mt-1 text-2xs text-ink-soft">{c.items.map((i) => <li key={i.id}>{i.fieldLabel}: {i.oldValue ?? '—'} → {i.newValue ?? '—'}{i.isSecurityRelevant === 'true' ? ` · ${t('nr.controlChange')}` : ''}</li>)}</ul></div>)}
       {!changes.length && <p className="p-3 text-sm text-ink-soft">{t('nr.noChanges')}</p>}
       <div className="panel-header"><h3 className="panel-title">{t('nr.allocations')}</h3></div>
-      <table className="grid-table"><thead><tr>{['nr.number', 'nr.year', 'nr.document', 'nr.by', 'nr.at'].map((k) => <th key={k}>{t(k)}</th>)}</tr></thead><tbody>{allocations.map((a) => <tr key={a.id}><td className="code">{a.displayedNumber}</td><td className="tabular">{a.fiscalYear || '—'}</td><td className="code">{a.documentId && a.objectCode === 'JOURNAL_ENTRY' ? <Link className="text-accent underline" href={`/finance/journal?document=${encodeURIComponent(a.documentId)}`}>{a.documentId}</Link> : a.documentId ?? '—'}</td><td>{a.allocatedBy}</td><td className="tabular">{a.allocatedAt.toISOString()}</td></tr>)}</tbody></table>
+      <table className="grid-table"><thead><tr>{['nr.number', 'nr.year', 'nr.document', 'nr.by', 'nr.at'].map((k) => <th key={k}>{t(k)}</th>)}</tr></thead><tbody>{allocations.map((a) => <tr key={a.id}><td className="code">{a.displayedNumber}</td><td className="tabular">{a.fiscalYear || '—'}</td><td className="code">{a.documentId && a.objectCode === 'RF_BELEG' ? <Link className="text-accent underline" href={`/finance/journal?document=${encodeURIComponent(a.documentId)}`}>{a.documentId}</Link> : a.documentId ?? '—'}</td><td>{a.allocatedBy}</td><td className="tabular">{a.allocatedAt.toISOString()}</td></tr>)}</tbody></table>
       {!allocations.length && <p className="p-3 text-sm text-ink-soft">{t('nr.noAllocations')}</p>}
     </section>}
   </div>;

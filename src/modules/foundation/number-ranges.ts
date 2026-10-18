@@ -11,11 +11,49 @@ import { hasCompanyCodeAssignments } from './company-code-assignments';
 import { ConfigError } from './services';
 
 export const NUMBER_OBJECTS = [
-  'JOURNAL_ENTRY', 'MATERIAL_DOCUMENT', 'PURCHASE_ORDER', 'PURCHASE_REQUISITION',
-  'SALES_ORDER', 'DELIVERY', 'BILLING_DOCUMENT', 'PRODUCTION_ORDER',
-  'PRODUCTION_CONFIRMATION', 'PAYMENT_RUN', 'VENDOR_INVOICE', 'MATERIAL', 'BUSINESS_PARTNER',
+  'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
+  'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'MATERIALNR', 'BUSPARTNR',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
+
+/**
+ * The standing objects and their provisioned registry facts (SCR-050).
+ * Object names are application-owned; tenants maintain the facts and
+ * the intervals, never the roster.
+ */
+export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
+  objectCode: (typeof NUMBER_OBJECTS)[number];
+  description: string;
+  numberLength: number;
+  yearRelevant: boolean;
+  subobjectHint: string | null;
+}> = [
+  { objectCode: 'RF_BELEG', description: 'Accounting documents', numberLength: 10, yearRelevant: true, subobjectHint: 'Company code' },
+  { objectCode: 'MATDOC', description: 'Material documents', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'MATERIALNR', description: 'Material master records', numberLength: 18, yearRelevant: false, subobjectHint: 'Number range group' },
+  { objectCode: 'PURCHORD', description: 'Purchase orders', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PURCHREQ', description: 'Purchase requisitions', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'SALESORD', description: 'Sales orders', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'DELIVERY', description: 'Deliveries', numberLength: 8, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'BILLING', description: 'Billing documents', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PRODORDER', description: 'Production orders', numberLength: 12, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PRODCONF', description: 'Production confirmations', numberLength: 12, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PAYRUN', description: 'Payment runs', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'VENDINV', description: 'Vendor invoices', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'BUSPARTNR', description: 'Business partners', numberLength: 10, yearRelevant: false, subobjectHint: null },
+];
+
+/** Seed the object registry for a tenant being provisioned. */
+export async function seedNumberRangeObjects(tx: Tx, client: string, createdBy: string) {
+  const { numberRangeObject } = await import('../../platform/tables/numbering');
+  for (const object of NUMBER_OBJECT_DEFAULTS) {
+    await tx
+      .insert(numberRangeObject)
+      .values({ client, ...object, createdBy })
+      .onConflictDoNothing();
+  }
+}
 
 const maintenanceSchema = z.object({
   client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
@@ -59,8 +97,8 @@ export async function listNumberRanges(client: string) {
 /** The same resolution rules as allocation; a blocked specific year never falls back. */
 export async function journalRangeReadiness(tx: Tx, client: string, fiscalYear = new Date().getUTCFullYear()) {
   const companies = await tx.select().from(companyCode).where(eq(companyCode.isActive, true));
-  const types = await tx.select().from(documentType).where(and(eq(documentType.isActive, true), eq(documentType.numberRangeObject, 'JOURNAL_ENTRY')));
-  const ranges = await tx.select().from(numberRange).where(eq(numberRange.objectCode, 'JOURNAL_ENTRY'));
+  const types = await tx.select().from(documentType).where(and(eq(documentType.isActive, true), eq(documentType.numberRangeObject, 'RF_BELEG')));
+  const ranges = await tx.select().from(numberRange).where(eq(numberRange.objectCode, 'RF_BELEG'));
   const missing: Array<{ companyCode: string; subObject: string; state: string }> = [];
   for (const company of companies) {
     if (!hasCompanyCodeAssignments(company)) {
@@ -86,7 +124,7 @@ export async function maintainNumberRange(raw: NumberRangeInput) {
   }
   const input = parsed.data;
   const { client, changedBy } = input;
-  if ((input.objectCode === 'JOURNAL_ENTRY') === (input.companyCode === '*')) {
+  if ((input.objectCode === 'RF_BELEG') === (input.companyCode === '*')) {
     throw new ConfigError('Accounting intervals require a company code; operational intervals are tenant-wide (*).', 'Choose the correct scope for the object.');
   }
 
@@ -111,7 +149,7 @@ export async function maintainNumberRange(raw: NumberRangeInput) {
     const others = await tx.select().from(numberRange).where(and(eq(numberRange.objectCode, input.objectCode), eq(numberRange.companyCode, input.companyCode)));
     const overlap = others.find((r) => rangeKey(r) !== rangeKey(input)
       && (r.fiscalYear === input.fiscalYear || r.fiscalYear === 0 || input.fiscalYear === 0)
-      && (input.objectCode === 'JOURNAL_ENTRY' || r.subObject === input.subObject || r.prefix === input.prefix || r.displayStyle === 'CLASSIC' || input.displayStyle === 'CLASSIC')
+      && (input.objectCode === 'RF_BELEG' || r.subObject === input.subObject || r.prefix === input.prefix || r.displayStyle === 'CLASSIC' || input.displayStyle === 'CLASSIC')
       && r.fromNumber <= input.toNumber && r.toNumber >= input.fromNumber);
     if (overlap) throw new ConfigError(`The interval overlaps ${rangeKey(overlap)} (${overlap.fromNumber}–${overlap.toNumber}).`, 'Use disjoint limits. Year-independent ranges also cover every fiscal year. Blocked ranges still reserve their numbers.');
 

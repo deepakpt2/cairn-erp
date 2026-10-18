@@ -15,12 +15,12 @@ afterEach(async () => { await destroyTenant(tenant.client); });
 afterAll(closeDb);
 
 function input(patch: Partial<NumberRangeInput> = {}): NumberRangeInput {
-  return { client: tenant.client, objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0,
+  return { client: tenant.client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0,
     prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE',
     mode: 'CREATE', reason: 'Initial setup for test', changedBy: 'RANGE_ADMIN', ...patch };
 }
 function allocate(fiscalYear = year) {
-  return withTenant(tenant.client, (tx) => allocateNumber(tx, { client: tenant.client, objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', fiscalYear, allocatedBy: 'TEST' }));
+  return withTenant(tenant.client, (tx) => allocateNumber(tx, { client: tenant.client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear, allocatedBy: 'TEST' }));
 }
 function post(companyCode = '1000', documentType = 'SA') {
   return withTenant(tenant.client, (tx) => postJournalEntry(tx, {
@@ -32,7 +32,7 @@ function post(companyCode = '1000', documentType = 'SA') {
 }
 
 async function range(fiscalYear = 0) {
-  return (await listNumberRanges(tenant.client)).ranges.find((r) => r.objectCode === 'JOURNAL_ENTRY' && r.companyCode === '1000' && r.subObject === 'GENERAL' && r.fiscalYear === fiscalYear)!;
+  return (await listNumberRanges(tenant.client)).ranges.find((r) => r.objectCode === 'RF_BELEG' && r.companyCode === '1000' && r.subObject === 'GENERAL' && r.fiscalYear === fiscalYear)!;
 }
 
 describe('number range maintenance', () => {
@@ -144,7 +144,7 @@ describe('number range maintenance', () => {
   });
 
   it('cannot automatically allocate from an external interval', async () => {
-    await withTenant(tenant.client, (tx) => defineRange(tx, { client: tenant.client, objectCode: 'JOURNAL_ENTRY', companyCode: '1000', subObject: 'GENERAL', isExternal: true, createdBy: 'TEST' }));
+    await withTenant(tenant.client, (tx) => defineRange(tx, { client: tenant.client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', isExternal: true, createdBy: 'TEST' }));
     await expect(allocate()).rejects.toThrow('externally supplied');
     expect((await range()).currentNumber).toBe(0);
   });
@@ -152,7 +152,7 @@ describe('number range maintenance', () => {
   it('requires a real company for accounting ranges and tenant-wide scope for operations', async () => {
     await expect(maintainNumberRange(input({ companyCode: '*' }))).rejects.toThrow('require a company');
     await expect(maintainNumberRange(input({ companyCode: '9999' }))).rejects.toThrow('does not exist');
-    await expect(maintainNumberRange(input({ objectCode: 'PURCHASE_ORDER' }))).rejects.toThrow('tenant-wide');
+    await expect(maintainNumberRange(input({ objectCode: 'PURCHORD' }))).rejects.toThrow('tenant-wide');
   });
 
   it('keeps classic presentation separate from immutable identity', async () => {

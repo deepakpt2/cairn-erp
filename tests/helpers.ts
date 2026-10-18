@@ -103,7 +103,7 @@ export async function defineTestRanges(
   await withTenant(tenant.client, async (tx) => {
     await defineRange(tx, {
       client: tenant.client,
-      objectCode: 'JOURNAL_ENTRY',
+      objectCode: 'RF_BELEG',
       companyCode: tenant.companyCode,
       subObject: 'GENERAL',
       fiscalYear,
