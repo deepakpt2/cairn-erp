@@ -46,6 +46,7 @@ export const TARGETS = [
   { id: 'characteristics', client: 'T940', label: 'SCR-057 CT04 characteristic creation and activation' },
   { id: 'classes', client: 'T939', label: 'SCR-058 CL02 class creation with assignment and activation' },
   { id: 'release-strategies', client: 'T938', label: 'SCR-059 release group, strategy creation and activation' },
+  { id: 'release-acts', client: 'T937', label: 'SCR-060 release acts on a purchase order: determination, sequence, release, cancel' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

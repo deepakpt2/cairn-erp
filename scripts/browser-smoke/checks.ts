@@ -64,6 +64,7 @@ import { purchaseOrdersMe21n } from './purchase-orders';
 import { characteristicsCt04 } from './characteristics';
 import { classesCl02 } from './classes';
 import { releaseStrategiesConfig } from './release-strategies';
+import { releaseActs } from './release-acts';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4901,6 +4902,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'characteristics': characteristicsCt04,
   'classes': classesCl02,
   'release-strategies': releaseStrategiesConfig,
+  'release-acts': releaseActs,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

@@ -418,12 +418,6 @@ Stage 1 ships the release panels on the requisition and order screens: on a stan
 
 ---
 
-### 26.413 B-397 — SCR-060 release acts stage 4: the requisition release capability and the act aliases stand
-
-Stage 4 seats the seed half of the act contract: `PROC.PR.RELEASE` joins the standing `PROC.PO.RELEASE` in the capability catalogue, and the act transactions stand as search aliases only — ME54N and ME55 on the purchase-requisition term, ME28 and ME29N on the purchase-order term — SAP codes never in stored codes. Seed reads back **97/66/67/75**.
-
----
-
 ### 26.411 B-395 — SCR-060 release acts stage 2: the document release table stands
 
 Migration `0072_document_release.sql` with `9050_document_release_policies.sql` — **123 migrations standing**. `document_release` stands one row per judged document — category, number, its group and strategy by foreign key, the step it stands on, and PENDING/RELEASED — behind forced tenant RLS with the four audit columns. No strategy matching means no row: the absence is the not-required state.
@@ -439,6 +433,14 @@ One service `src/modules/purchasing/release.ts`, one law for both documents: `sy
 ### 26.413 B-397 — SCR-060 release acts stage 4: the requisition release capability and the act aliases stand
 
 Stage 4 seats the seed half of the act contract: `PROC.PR.RELEASE` joins the standing `PROC.PO.RELEASE` in the capability catalogue, and the act transactions stand as search aliases only — ME54N and ME55 on the purchase-requisition term, ME28 and ME29N on the purchase-order term — SAP codes never in stored codes. Seed reads back **97/66/67/75**.
+
+---
+
+### 26.414 B-398 — SCR-060 release acts CLOSED and accepted
+
+Stage 5 ships 3 service tests and the T937 browser target `release-acts` (green — an order claimed at creation, the wrong code refused, the steps released in sequence, full release, cancel back to the first step, and the database remembering every act). Neighbouring `release-strategies` and `purchase-orders` targets stand undisturbed; typecheck, `lint:ip` and the production build are clean; the suite stands at **1268 tests across 156 files**, **123 migrations**, seed **97/66/67/75**. Release now stands spent end to end: strategies judge (SCR-059), documents are determined inside their own creation and change, the sequenced acts move one code at a time under the category capabilities, the order header follows, and a released document refuses change until its release is cancelled.
+
+Deferred and named: **workflow agent assignment and notification** — a release code remains an authority, not a person; which named users may act under which code, and telling them, belongs to the workflow round. Release criteria beyond the delivered attribute catalogue and item-level release for requisitions likewise stand deferred, as recorded at SCR-059. Goods receipt (MIGO) against released orders is the next purchasing round. Cost measured at 11 minutes (04:54–05:05 UTC).
 
 ---
 
@@ -503,6 +505,9 @@ Stage 4 seats the seed half of the act contract: `PROC.PR.RELEASE` joins the sta
 | 2.224 | 2026-10-18 | **SCR-060 release acts contracted (R-108).** Determination inside create and change, `document_release` standing state, sequenced release and cancel-release under category capabilities, released documents refusing change, agent assignment deferred and named. | Agent |
 | 2.225 | 2026-10-18 | **SCR-060 release acts stage 1 (B-394, §26.410).** Release panels stand on the requisition and order screens, acts disabled. Typecheck clean. | Agent |
 | 2.226 | 2026-10-18 | **SCR-060 release acts stage 2 (B-395, §26.411).** Migrations `0072` + `9050` applied (123 standing): `document_release` standing state behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.227 | 2026-10-18 | **SCR-060 release acts stage 3 (B-396, §26.412).** The release service judges determination inside document create and change for both documents, refuses change to released documents naming cancel as the remedy, and performs sequenced release and cancel-release with one change document per act and the order header following; both screens carry the live panel and per-document release standing. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.228 | 2026-10-18 | **SCR-060 release acts stage 4 (B-397, §26.413).** `PROC.PR.RELEASE` seeded beside the standing order capability; ME54N/ME55 and ME28/ME29N stand as search aliases on the requisition and order terms only. Seed reads back 97/66/67/75. | Agent |
+| 2.229 | 2026-10-18 | **SCR-060 release acts CLOSED and accepted (B-398, §26.414).** Stage 5 ships 3 service tests and the T937 browser target `release-acts` (green — determination on create, sequence judged, release and cancel, database evidence). Neighbouring `release-strategies` and `purchase-orders` targets clean; suite 1268 across 156 files, 123 migrations, seed 97/66/67/75. Agent assignment and notification deferred and named. Cost measured at 11 minutes. | Agent |
 
 ---
 
