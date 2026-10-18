@@ -572,6 +572,13 @@ The clearing service judges the supplier's standing in the company, lists open a
 
 ---
 
+### 26.434 B-418 — SCR-064 vendor clearing stage 4: the capability and term stand
+
+Stage 4 creates the capability `FIN.AP.CLEAR` and seats its term *Clear vendor open items* at `/finance/vendor-clearing`, with F-44 standing as a search alias only. Seed reads back **98/66/71/80**.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -658,6 +665,7 @@ The clearing service judges the supplier's standing in the company, lists open a
 | 2.249 | 2026-10-18 | **SCR-064 vendor clearing stage 1 (B-415, §26.431).** The inert clearing screen stands at `/finance/vendor-clearing` — selection with the three distinct dates, the empty open-item grid, posting disabled, cleared history. Typecheck and production build clean. | Agent |
 | 2.250 | 2026-10-18 | **SCR-064 vendor clearing stage 2 (B-416, §26.432).** No new tables — clearing reuses the standing journal and clearing columns; migration `0076` adds the partner/clearing index. 131 migrations standing. | Agent |
 | 2.251 | 2026-10-18 | **SCR-064 vendor clearing stage 3 (B-417, §26.433).** The clearing service (standing judged, items revalidated under lock, one currency, exact-zero balance, clearing journal through the posting engine, clearing stamped in place) and the live screen. Typecheck and production build clean. | Agent |
+| 2.252 | 2026-10-18 | **SCR-064 vendor clearing stage 4 (B-418, §26.434).** Capability `FIN.AP.CLEAR` created; the clearing term seeded at its route with F-44 a search alias only. Seed reads back 98/66/71/80. | Agent |
 
 ---
 
