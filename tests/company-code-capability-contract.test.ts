@@ -23,7 +23,7 @@ describe('Company Code capability contract', () => {
       "{ code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', module: 'FND', action: 'CONFIGURE', posting: false, description: 'Assign a chart of accounts to a Company Code' },",
     );
     expect(seedSource).toContain(
-      "{ code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', area: 'ENTERPRISE_STRUCTURE', title: 'Assign chart of accounts to company code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'], enables: 'Account posting', wizardStage: 'ONBOARDING', route: '/config/company-codes' },",
+      "{ code: 'CFG.ORG.COMPANYCODE.ASSIGN_COA', area: 'ENTERPRISE_STRUCTURE', title: 'Assign chart of accounts to company code', kind: 'ASSIGN', prerequisites: ['CFG.ORG.COMPANYCODE.DEFINE', 'CFG.FIN.COA.DEFINE'], enables: 'Account posting', wizardStage: 'ONBOARDING', route: '/config/company-codes/assign-chart-of-accounts' },",
     );
     expect(capabilitySeed).not.toMatch(/role_capability/i);
   });
