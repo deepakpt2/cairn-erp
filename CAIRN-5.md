@@ -997,6 +997,13 @@ Stage 3 of R-121. `src/modules/finance/customer-clearing.ts` stands at vendor-cl
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-473 / §26.489 / §30 row 2.307. **Cost (B-254, measured):** stage 2 published 12:53 UTC; stage 3 completed 12:58 UTC.
 
 ---
+### 26.490 B-474 — SCR-073 stage 4: capability and term
+
+Stage 4 of R-121. `FIN.AR.CLEAR` enters the capability catalogue as a posting-relevant POST capability, and the Term Registry names **Clear customer open items** at `/finance/customer-clearing`, with `F-32` standing only as a search alias. No configuration activity is created: this is a finance transaction, following the transaction-screen precedent, and no reversal reasons or tenant backfill stand needed — DZ is already delivered.
+
+Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **107/66/81/89** (message catalogue 11), and database read-back shows `FIN.AR.CLEAR|FIN|POST|true`, the term, and its F-32 alias. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-474 / §26.490 / §30 row 2.308. **Cost (B-254, measured):** stage 3 published 12:58 UTC; stage 4 completed 13:01 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1149,3 +1156,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.305 | 2026-10-18 | **SCR-073 stage 1 published (B-471, §26.487).** `/finance/customer-clearing` stands inert under `FIN.AR.CLEAR`: selection, three distinct dates, explicit confirmation, cleared-history section; refusal names the unconnected service. Schema verdict is stage 2. | Agent |
 | 2.306 | 2026-10-18 | **SCR-073 stage 2 schema verdict (B-472, §26.488).** No new tables, columns or migrations: clearing stamps, the clearing journal's own lines, the change document and SCR-071's reset record already carry the F-32 relationship. DB stays at 141 migrations. Backend is stage 3. | Agent |
 | 2.307 | 2026-10-18 | **SCR-073 stage 3 published (B-473, §26.489).** Customer-clearing service stands at vendor parity with confirmation and request-key replay; the DZ clearing journal stamps items in place; the `/finance/customer-clearing` screen is live. Capability and term land in stage 4. | Agent |
+| 2.308 | 2026-10-18 | **SCR-073 stage 4 published (B-474, §26.490).** `FIN.AR.CLEAR` and the `/finance/customer-clearing` term (F-32 alias only) stand; seed read-back 107/66/81/89, idempotent. Tests and acceptance remain stage 5. | Agent |
