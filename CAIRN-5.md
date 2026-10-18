@@ -63,6 +63,12 @@ The round's whole backend lands as one stage, as staged: `material-number-range-
 
 ---
 
+### 26.368 B-352 — SCR-051 stage 4: the activity seeded and the route built
+
+The new activity `CFG.INV.MATERIALRANGE.DEFINE` stands in all three seed registers: the capability, the configuration activity (materials-management area, after material types and number ranges, onboarding stage, route `/config/material-number-ranges`), and the term *Define material number ranges* with MMNR as a search alias only and the full parity description. The route joins `BUILT_ROUTES` so the workbench offers it. `npm run seed` reads back **90 capabilities / 62 activities / 59 terms / 55 aliases** — one more of each than SCR-050 closed with, the term's route verified in the registry.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -71,6 +77,7 @@ The round's whole backend lands as one stage, as staged: `material-number-range-
 | 2.171 | 2026-10-18 | **SCR-051 stage 1 published (B-349, §26.365).** The inert MMNR screen `/config/material-number-ranges`: group–interval matrix and ungrouped-intervals table rendered empty, i18n keys added. No reads, no writes. | Agent |
 | 2.172 | 2026-10-18 | **SCR-051 stage 2 published (B-350, §26.366).** Migrations `0062` + `9042` create `material_number_range_group` (pair primary key, 20-character text, audit columns, forced tenant RLS) and its Drizzle table; verified standing on `cairn_b210` — 106 migrations. | Agent |
 | 2.173 | 2026-10-18 | **SCR-051 stage 3 published (B-351, §26.367).** The group service, the live MMNR screen, group display and picking on the material-types screen, and the MM01 tail (blank draws internal, supplied judged against the external interval where one is configured — the stage-3 refinement recorded against R-99). Typecheck, `lint:ip`, build and the material suites green. | Agent |
+| 2.174 | 2026-10-18 | **SCR-051 stage 4 published (B-352, §26.368).** `CFG.INV.MATERIALRANGE.DEFINE` seeded as capability, configuration activity and term (MMNR search alias only, full parity description); the route joins `BUILT_ROUTES`. Seed reads back 90/62/59/55. | Agent |
 
 ---
 

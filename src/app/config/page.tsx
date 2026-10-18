@@ -92,6 +92,7 @@ export default async function WorkbenchPage({
     '/config/profit-center-hierarchy',
     '/config/material-types',
     '/config/material-groups',
+    '/config/material-number-ranges',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',
