@@ -1962,6 +1962,11 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'industrySector.title': 'Define Industry Sectors',
+  'industrySector.subtitle':
+    'Industry sectors defined once per tenant: the one-character classification a ' +
+    'material is created under. Materials are judged against this master at creation; ' +
+    'a sector in use is never deleted under its materials.',
   'materialGroup.title': 'Define Material Groups',
   'materialGroup.subtitle':
     'Material groups defined once per tenant: the classification materials carry for ' +

@@ -84,6 +84,12 @@ The new activity `CFG.INV.MATERIALRANGE.DEFINE` stands in all three seed registe
 
 ---
 
+### 26.370 B-354 — SCR-052 stage 1: the inert industry-sector screen
+
+The round's new master opens as shape only: `/config/industry-sectors` renders the sector grid (key, name, material count, status) fed empty, under the activity code `CFG.INV.INDUSTRYSECTOR.DEFINE` the seeding stage will register, with its two i18n keys. The description narrowing, the sector table and the MM01 judging are the following stages, as staged.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -95,6 +101,7 @@ The new activity `CFG.INV.MATERIALRANGE.DEFINE` stands in all three seed registe
 | 2.174 | 2026-10-18 | **SCR-051 stage 4 published (B-352, §26.368).** `CFG.INV.MATERIALRANGE.DEFINE` seeded as capability, configuration activity and term (MMNR search alias only, full parity description); the route joins `BUILT_ROUTES`. Seed reads back 90/62/59/55. | Agent |
 | 2.175 | 2026-10-18 | **SCR-051 / MMNR CLOSED and accepted (B-353, §26.369).** Stage 5 ships 4 service tests and the T946 browser target `material-number-ranges` (7/7 journeys against the production build — group defined through the screen, RAW assigned by the OMS2 picker, deletion refused, MM01 drawing 1000, the database remembering). Neighbouring `material-types` and `number-range-objects` targets, typecheck, `lint:ip` and the production build clean; suite 1233 across 147 files, 106 migrations, seed 90/62/59/55. Cost measured at 24 minutes overall. | Agent |
 | 2.176 | 2026-10-18 | **SCR-052 / MM01 contracted (R-100).** The owner's MM01 package audited against the standing material master: most of it already stands (numbering, judging, valuation, per-view statuses) and is confirmed; the round builds the two ruled gaps — the description narrowing to 40 and a maintained industry-sector master with MM01 judging (standing `MANUFACTURING` converting to `M`) — and defers LVORM to SCR-053, per-type view permissions, the view-selection step and further views recorded as unbuilt. | Agent |
+| 2.177 | 2026-10-18 | **SCR-052 stage 1 published (B-354, §26.370).** The inert industry-sector screen `/config/industry-sectors` (OMS3 search alias in its heading code), grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 
 ---
 
