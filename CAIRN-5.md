@@ -145,6 +145,12 @@ Migration `0064` adds `marked_for_deletion` (boolean, default false) to `materia
 
 ---
 
+### 26.378 B-362 — SCR-053 stage 4: the MM06 term seeded
+
+The term registry gains `INV.MATERIAL.FLAGDELETION` — *Flag material for deletion*, a built-tier transaction over the material screen's route with **MM06 as a search alias only** and the full parity description (confirmed acts, the marker-not-lock rule, the extension refusal, archiving named unbuilt). No capability or activity follows it: the acts judge under the standing material-maintenance authority. `npm run seed` reads back **91 capabilities / 63 activities / 61 terms / 57 aliases**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -165,6 +171,7 @@ Migration `0064` adds `marked_for_deletion` (boolean, default false) to `materia
 | 2.183 | 2026-10-18 | **SCR-053 stage 1 published (B-359, §26.375).** The inert deletion-flag panel on the material screen: client and plant scopes with their standing stock, rendered unflagged until the service lands. No writes. | Agent |
 | 2.184 | 2026-10-18 | **SCR-053 stage 2 published (B-360, §26.376).** Migration `0064` adds the deletion-flag columns to the material and plant tables with their Drizzle columns — 109 migrations. | Agent |
 | 2.185 | 2026-10-18 | **SCR-053 stage 3 published (B-361, §26.377).** The deletion-flag acts live (confirmed, reasoned, security-relevant change documents, stock-at-scope returned), the panel's set/cancel dialogs, and the client-flag refusal of new plant extensions. Typecheck, `lint:ip`, build and the material suites green. | Agent |
+| 2.186 | 2026-10-18 | **SCR-053 stage 4 published (B-362, §26.378).** The `INV.MATERIAL.FLAGDELETION` term seeded (MM06 search alias only) over the material route. Seed reads back 91/63/61/57. | Agent |
 
 ---
 
