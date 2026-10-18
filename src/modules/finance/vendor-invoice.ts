@@ -41,6 +41,8 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export interface VendorInvoiceView {
   invoiceNumber: string;
   fiscalYear: number;
+  category: string;
+  creditOf: string | null;
   vendorNumber: string;
   companyCode: string;
   documentDate: string;
@@ -69,6 +71,7 @@ function toView(
 ): VendorInvoiceView {
   return {
     invoiceNumber: header.invoiceNumber, fiscalYear: header.fiscalYear,
+    category: header.category, creditOf: header.creditOf,
     vendorNumber: header.vendorNumber, companyCode: header.companyCode,
     documentDate: header.documentDate, postingDate: header.postingDate,
     reference: header.reference, currency: header.currency,
@@ -338,6 +341,7 @@ export async function postVendorInvoice(input: PostVendorInvoiceInput): Promise<
 
     await tx.insert(vendorInvoice).values({
       client: input.client, invoiceNumber: number, fiscalYear: position.fiscalYear,
+      category: 'INVOICE', creditOf: null,
       vendorNumber: input.vendorNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
@@ -407,6 +411,7 @@ export async function cancelVendorInvoice(input: {
 
     await tx.insert(vendorInvoice).values({
       client: input.client, invoiceNumber: number, fiscalYear: position.fiscalYear,
+      category: original.category, creditOf: original.creditOf,
       vendorNumber: original.vendorNumber, companyCode: original.companyCode,
       documentDate: original.documentDate, postingDate: input.postingDate,
       reference: original.reference, currency: original.currency,

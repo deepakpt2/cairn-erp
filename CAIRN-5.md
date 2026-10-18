@@ -1114,6 +1114,13 @@ Stage 2 of R-124. `vendor_invoice` gains `category` (`INVOICE` / `CREDIT_MEMO`, 
 Verification: the migration applied cleanly and the runner re-reports **146 already applied**; typecheck clean. SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-491 / §26.507 / §30 row 2.325. **Cost (B-254, measured):** stage 1 published 13:54 UTC; stage 2 completed 14:00 UTC.
 
 ---
+### 26.508 B-492 — SCR-076 stage 3: credit memo service and live screen
+
+Stage 3 of R-124. `src/modules/finance/vendor-credit-memo.ts` stands beside the invoice service on the shared `vendor_invoice` record: the vendor judges as the invoice judges it; the gross credit is judged as net plus tax with the input tax reversing at standing rates; a reference standing POSTED across invoices and memos refuses naming the standing document; a named original must stand POSTED for the same vendor and company, partial credits stand permitted, and the cumulative memo gross against an original may never exceed its gross — the excess refused with both figures named. One balanced KG journal debits the vendor's reconciliation account at the gross credit with the vendor as partner and credits the offsets and tax, the number drawn from VENDINV, request-key replay returning the standing memo. The invoice view now carries its category and credit-of link, cancellations preserve them, and the memo cancels through the invoice's linked mirror. The screen is live with the optional original-invoice field and the balance line.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-492 / §26.508 / §30 row 2.326. **Cost (B-254, measured):** stage 2 published 14:00 UTC; stage 3 completed 14:01 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1284,3 +1291,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.323 | 2026-10-18 | **SCR-076 contract recorded (R-124, B-489, §26.505).** FB65 vendor credit memo extends the vendor invoice: category + optional credit-of link on `vendor_invoice`, KG journal debiting the vendor at the gross credit, judged gross, partial credits capped at the original. Awaiting stage 1 (UI). | Agent |
 | 2.324 | 2026-10-18 | **SCR-076 stage 1 published (B-490, §26.506).** `/finance/vendor-credit-memo` stands inert under `FIN.AP.CREDITMEMO.POST`: header, dates, reference, judged gross credit, optional original link, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
 | 2.325 | 2026-10-18 | **SCR-076 stage 2 published (B-491, §26.507).** `vendor_invoice` gains category and credit-of (migration 0085; DB at 146) behind its standing RLS. Backend is stage 3. | Agent |
+| 2.326 | 2026-10-18 | **SCR-076 stage 3 published (B-492, §26.508).** Credit-memo service stands: KG journal debiting the vendor at the gross credit, judged gross, original link with cumulative cap, shared cancellation; the `/finance/vendor-credit-memo` screen is live. Capability, term and KG land in stage 4. | Agent |
