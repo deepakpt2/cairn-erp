@@ -56,6 +56,7 @@ export const TARGETS = [
   { id: 'vendor-ageing', client: 'T931', label: 'SCR-066 vendor ageing: as-of key date, buckets, item detail' },
   { id: 'customer-invoice', client: 'T930', label: 'SCR-067 customer invoice: tax, receivable, cancellation' },
   { id: 'incoming-payment', client: 'T929', label: 'SCR-068 incoming payment: allocation, clearing in place' },
+  { id: 'incoming-payment-completion', client: 'T917', label: 'SCR-079 F-28 completion: terms discount taken, item cleared at full open amount' },
   { id: 'outgoing-payment', client: 'T918', label: 'SCR-078 F-53 outgoing payment: netting allocation, KZ journal, clearing in place' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },

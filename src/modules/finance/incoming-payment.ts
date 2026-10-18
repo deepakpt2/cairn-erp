@@ -308,8 +308,8 @@ export async function postIncomingPayment(input: {
     const settled: Settled[] = [];
     for (const h of held) {
       const open = Number(h.amount);
-      const applied = h.ref.applied === undefined ? open : Number(h.ref.applied);
       const discount = Number(h.ref.discount ?? 0);
+      const applied = h.ref.applied === undefined ? round2(open - discount) : Number(h.ref.applied);
       if (!(applied >= 0) || !(discount >= 0)) {
         throw new IncomingPaymentError(
           `Document ${h.ref.documentNumber} line ${h.ref.lineNumber}: applied and discount amounts may not stand negative.`,
@@ -393,7 +393,7 @@ export async function postIncomingPayment(input: {
     let differenceAccount: string | null = null;
     if (differenceLine) {
       differenceAccount = await determinationAccount(
-        tx, input.client, chart, 'PAYMENT_DIFFERENCE', differenceLine.debitCredit === 'H' ? 'REVENUE' : 'EXPENSE',
+        tx, input.client, chart, 'PAYMENT_DIFFERENCE', differenceLine.debitCredit === 'H' ? 'REV' : 'EXP',
       );
       if (!differenceAccount) {
         throw new IncomingPaymentError(

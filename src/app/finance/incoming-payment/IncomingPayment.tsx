@@ -177,12 +177,13 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                 tolerance group, as a payment difference.
               </p>
               <p role="status" className="mt-2 text-sm text-ink-soft">
-                The completion service lands in a later stage; posting stands disabled until it does.
+                Posting checks each discount against its terms and the tolerance group, and any
+                unassigned remainder against the same tolerances.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled
+                  disabled={posting || chosen.length === 0}
                 >
                   Post payment
                 </button>

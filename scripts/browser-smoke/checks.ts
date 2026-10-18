@@ -74,6 +74,7 @@ import { vendorBalancesFk10n } from './vendor-balances';
 import { vendorAgeingAnalysis } from './vendor-ageing';
 import { customerInvoiceFb70 } from './customer-invoice';
 import { incomingPaymentF28 } from './incoming-payment';
+import { incomingPaymentCompletionF28 } from './incoming-payment-completion';
 import { outgoingPaymentF53 } from './outgoing-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4955,6 +4956,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'vendor-ageing': vendorAgeingAnalysis,
   'customer-invoice': customerInvoiceFb70,
   'incoming-payment': incomingPaymentF28,
+  'incoming-payment-completion': incomingPaymentCompletionF28,
   'outgoing-payment': outgoingPaymentF53,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,

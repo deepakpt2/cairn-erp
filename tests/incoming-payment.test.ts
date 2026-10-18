@@ -95,7 +95,7 @@ describe('SCR-068 incoming payment (F-28)', () => {
     const first = view.openItems[0];
     await expect(postIncomingPayment(payment({
       items: [{ documentNumber: first.documentNumber, fiscalYear: first.fiscalYear, lineNumber: first.lineNumber }],
-    }))).rejects.toThrow('leaves a difference of -300.00 USD');
+    }))).rejects.toThrow('leaves an unassigned difference of 300.00 USD beyond the tolerance');
   });
 
   it('posts the payment, clears in place under the clearing date, and replays by request key', async () => {
