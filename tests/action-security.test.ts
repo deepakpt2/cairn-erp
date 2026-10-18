@@ -270,7 +270,7 @@ describe('server action security', () => {
 
   it('ignores a forged tenant and audit actor when creating a material', async () => {
     signedIn(['INV.MATERIAL.MAINTAIN']);
-    const data = form({ client: beta.client, changedBy: 'FORGED', view: 'BASIC', materialNumber: 'ACTION-MATERIAL', expectedVersion: '0', description: 'Action master', materialType: 'RAW', materialGroup: 'RAW', baseUnit: 'KG', grossWeight: '0', netWeight: '0' });
+    const data = form({ client: beta.client, changedBy: 'FORGED', view: 'BASIC', materialNumber: 'ACTION-MATERIAL', expectedVersion: '0', description: 'Action master', materialType: 'RAW', materialGroup: 'RAW', baseUnit: 'KG', industrySector: 'M', grossWeight: '0', netWeight: '0' });
     const result = await saveMaterialAction({ ok: true }, data);
     expect(result.ok).toBe(true);
     expect((await getMaterialDetail(alpha.client, 'ACTION-MATERIAL'))?.base.createdBy).toBe('real.operator');
