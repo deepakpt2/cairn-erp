@@ -215,6 +215,12 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
     }
     const [before] = await tx.select().from(materialPlant).where(plantKey(client, materialNumber, input.plant)).for('update');
     checkVersion(before, expectedVersion);
+    if (!before && base.markedForDeletion) {
+      throw new MaterialError(
+        `Material ${materialNumber} is flagged for deletion at client level, so it cannot be extended to plant ${input.plant}.`,
+        'Cancel the client-level deletion flag on the material first, then extend it.',
+      );
+    }
     let values: Record<string, string | number | null>;
     let statusColumn: 'purchasingStatus' | 'mrpStatus'; let complete: boolean;
     if (view === 'PURCHASING') {
@@ -254,6 +260,120 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
     });
     await dirtyPlanning(tx, client, materialNumber, input.plant, changedBy, `${view}_MASTER_CHANGED`);
     return { materialNumber, view, status, version, changed: true };
+  });
+}
+
+export interface MaterialDeletionFlagInput {
+  client: string;
+  materialNumber: string;
+  changedBy: string;
+  scope: 'CLIENT' | 'PLANT';
+  plant?: string;
+  flagged: boolean;
+  reason: string;
+}
+
+/**
+ * The deletion-flag act (SCR-053 / MM06; R-101).
+ *
+ * Setting or cancelling the flag at one scope — the material itself or
+ * one plant record. The flag is a marker: it is never refused for stock
+ * or documents, stops no posting, and deletes nothing; the stock
+ * standing at the scope is returned so the caller can warn in numbers.
+ * One change document per act, the flag security-relevant, a reason
+ * mandatory. A plant flag never touches the client flag, nor the
+ * reverse; the client flag covers every plant when read.
+ */
+export async function setMaterialDeletionFlag(input: MaterialDeletionFlagInput) {
+  const reason = (input.reason ?? '').trim();
+  if (!reason) {
+    throw new MaterialError(
+      'A reason is required to set or cancel a deletion flag.',
+      'State why the flag is being changed.',
+    );
+  }
+  const { client, materialNumber, changedBy } = input;
+  return withTenant(client, async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/material/${materialNumber}`}, 0))`);
+    const [base] = await tx
+      .select()
+      .from(material)
+      .where(key(client, materialNumber))
+      .for('update');
+    if (!base) throw new MaterialError(`Material ${materialNumber} does not exist.`);
+
+    if (input.scope === 'CLIENT') {
+      const stock = await tx
+        .select({ total: sql<string>`coalesce(sum(${materialValuation.totalStockQuantity}), 0)` })
+        .from(materialValuation)
+        .where(and(eq(materialValuation.client, client), eq(materialValuation.materialNumber, materialNumber)));
+      const stockAtScope = stock[0]?.total ?? '0';
+      if (base.markedForDeletion === input.flagged) {
+        return { scope: input.scope, flagged: input.flagged, changed: false, stockAtScope };
+      }
+      await tx
+        .update(material)
+        .set({ markedForDeletion: input.flagged, changedBy, changedAt: new Date() })
+        .where(key(client, materialNumber));
+      await recordChange(tx, {
+        client,
+        objectClass: 'material',
+        objectKey: materialNumber,
+        changeType: 'CHANGE',
+        changedBy,
+        reason,
+        transactionCode: 'INV.MATERIAL.MAINTAIN',
+        before: { markedForDeletion: base.markedForDeletion },
+        after: { markedForDeletion: input.flagged },
+        securityRelevantFields: ['markedForDeletion'],
+      });
+      return { scope: input.scope, flagged: input.flagged, changed: true, stockAtScope };
+    }
+
+    const plantCode = (input.plant ?? '').trim();
+    if (!plantCode) throw new MaterialError('A plant is required for a plant-level flag.');
+    const [extension] = await tx
+      .select()
+      .from(materialPlant)
+      .where(plantKey(client, materialNumber, plantCode))
+      .for('update');
+    if (!extension) {
+      throw new MaterialError(
+        `Material ${materialNumber} is not extended to plant ${plantCode}.`,
+        'Extend the material to the plant first; only a standing plant record can carry its flag.',
+      );
+    }
+    const [valuation] = await tx
+      .select()
+      .from(materialValuation)
+      .where(
+        and(
+          eq(materialValuation.client, client),
+          eq(materialValuation.materialNumber, materialNumber),
+          eq(materialValuation.valuationArea, plantCode),
+        ),
+      );
+    const stockAtScope = valuation?.totalStockQuantity ?? '0';
+    if (extension.markedForDeletion === input.flagged) {
+      return { scope: input.scope, flagged: input.flagged, changed: false, stockAtScope };
+    }
+    await tx
+      .update(materialPlant)
+      .set({ markedForDeletion: input.flagged, changedBy, changedAt: new Date() })
+      .where(plantKey(client, materialNumber, plantCode));
+    await recordChange(tx, {
+      client,
+      objectClass: 'material_plant',
+      objectKey: `${materialNumber}/${plantCode}`,
+      changeType: 'CHANGE',
+      changedBy,
+      reason,
+        transactionCode: 'INV.MATERIAL.MAINTAIN',
+      before: { markedForDeletion: extension.markedForDeletion },
+      after: { markedForDeletion: input.flagged },
+      securityRelevantFields: ['markedForDeletion'],
+    });
+    return { scope: input.scope, flagged: input.flagged, changed: true, stockAtScope };
   });
 }
 

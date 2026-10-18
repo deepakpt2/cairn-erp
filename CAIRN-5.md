@@ -137,6 +137,14 @@ Migration `0064` adds `marked_for_deletion` (boolean, default false) to `materia
 
 ---
 
+### 26.377 B-361 — SCR-053 stage 3: the flag acts live on the material screen
+
+`setMaterialDeletionFlag` stands in the material service: one confirmed act per scope — the material lock taken, the row locked, the flag written, one change document with the flag security-relevant and a mandatory reason — returning the stock standing at the scope so callers warn in numbers. The deletion-flag panel goes live over it: set/cancel dialogs per scope naming the scope, its stock and the marker-not-lock nature of the flag before confirming, a plant row covered by the client flag saying so. And the contract's one hard rule lands: **a client-flagged material refuses new plant extensions** in the plant-view save, naming the cancellation remedy. Flagging itself refuses nothing — no stock level, no document — exactly as the package rules.
+
+**Gates.** Typecheck and `lint:ip` clean; production build compiled; the material and action-security suites pass (57 tests). The full suite and browser evidence are stage 5's, as staged.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -156,6 +164,7 @@ Migration `0064` adds `marked_for_deletion` (boolean, default false) to `materia
 | 2.182 | 2026-10-18 | **SCR-053 / MM06 contracted (R-101).** The owner's corrected MM06 package: client- and plant-level deletion flags on the standing material tables as confirmed, reasoned, reversible acts — a marker with stock warnings, never a blanket lock, refusing only new plant extensions under a client flag. Storage-location flags, scheduled flagging, archiving/physical deletion, and goods-movement enforcement are recorded as deferred in R-101 for the end-of-round report. | Agent |
 | 2.183 | 2026-10-18 | **SCR-053 stage 1 published (B-359, §26.375).** The inert deletion-flag panel on the material screen: client and plant scopes with their standing stock, rendered unflagged until the service lands. No writes. | Agent |
 | 2.184 | 2026-10-18 | **SCR-053 stage 2 published (B-360, §26.376).** Migration `0064` adds the deletion-flag columns to the material and plant tables with their Drizzle columns — 109 migrations. | Agent |
+| 2.185 | 2026-10-18 | **SCR-053 stage 3 published (B-361, §26.377).** The deletion-flag acts live (confirmed, reasoned, security-relevant change documents, stock-at-scope returned), the panel's set/cancel dialogs, and the client-flag refusal of new plant extensions. Typecheck, `lint:ip`, build and the material suites green. | Agent |
 
 ---
 

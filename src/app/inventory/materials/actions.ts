@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireSession, requireCapability, AuthzError } from '@/platform/auth/current';
-import { MaterialError, saveMaterialView, type MaterialInput } from '@/modules/inventory/materials';
+import { MaterialError, saveMaterialView, setMaterialDeletionFlag, type MaterialInput } from '@/modules/inventory/materials';
 import { MATERIAL_VIEW_CAPABILITY, MATERIAL_VIEWS } from '@/modules/inventory/constants';
 import { t } from '@/platform/i18n';
 
@@ -26,6 +26,37 @@ export async function saveMaterialAction(_previous: MaterialState, form: FormDat
     const result = await saveMaterialView(input);
     revalidatePath('/inventory/materials');
     return { ok: true, message: t(result.changed ? 'material.saved' : 'material.unchanged', { status: t(`material.state.${result.status}`) }), materialNumber: result.materialNumber, status: result.status, version: result.version };
+  } catch (error) {
+    if (error instanceof MaterialError || error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
+  }
+}
+
+export async function setMaterialDeletionFlagAction(_previous: MaterialState, form: FormData): Promise<MaterialState> {
+  const session = await requireSession('/inventory/materials');
+  const read = (name: string) => String(form.get(name) ?? '').trim();
+  try {
+    await requireCapability(MATERIAL_VIEW_CAPABILITY.BASIC, session);
+    const scope = read('scope') === 'PLANT' ? 'PLANT' : 'CLIENT';
+    const flagged = read('flagged') === 'true';
+    const result = await setMaterialDeletionFlag({
+      client: session.user.client,
+      materialNumber: read('materialNumber'),
+      changedBy: session.user.username,
+      scope,
+      plant: read('plant'),
+      flagged,
+      reason: read('reason'),
+    });
+    revalidatePath('/inventory/materials');
+    const where = scope === 'PLANT' ? ` for plant ${read('plant')}` : ' at client level';
+    return {
+      ok: true,
+      message: result.changed
+        ? `Deletion flag ${flagged ? 'set' : 'cancelled'}${where}. Stock at this scope: ${result.stockAtScope}.`
+        : `The flag already stands ${flagged ? 'set' : 'cancelled'}${where}; nothing was changed.`,
+      materialNumber: read('materialNumber'),
+    };
   } catch (error) {
     if (error instanceof MaterialError || error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
