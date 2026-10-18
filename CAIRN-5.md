@@ -295,6 +295,12 @@ Stage 1 ships the inert screen at `/config/characteristics` under the `character
 
 ---
 
+### 26.396 B-380 — SCR-057 / CT04 stage 2: the characteristic tables stand
+
+Migration `0069_characteristic.sql` with `9047_characteristic_policies.sql` — **117 migrations standing**. `characteristic` is keyed `(client, characteristic_name)` with the naming policy as a database check (uppercase letters, digits, underscore, at most 30), the five formats, length and decimals, unit and currency references to the standing reference tables, the indicator set, single/multiple assignment, and the Cairn lifecycle; `characteristic_value` hangs beneath with sort order. Intervals are confined to NUM, DATE and TIME by check. Both tables carry the audit columns behind forced tenant RLS.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -337,6 +343,7 @@ Stage 1 ships the inert screen at `/config/characteristics` under the `character
 | 2.205 | 2026-10-18 | **SCR-056 / ME21N CLOSED and accepted (B-378, §26.394).** Stage 5 ships 3 service tests, corrective migration `0068` (order-number width), and the T941 browser target `purchase-orders` (green — POF-0000001 through the header and item grid). Neighbouring `purchase-requisitions` and `material-period-control` targets, typecheck, `lint:ip` and the production build clean; suite 1253 across 152 files, 116 migrations, seed 93/64/64/66. Deferred and named in the entry, release strategy next. Cost measured at 9 minutes. | Agent |
 | 2.206 | 2026-10-18 | **SCR-057 / CT04 contracted (R-105).** Characteristics for classification at the owner's corrected CT04 shape under house names: tenant-name key, five judged formats, allowed values under the declared case policy, DRAFT/ACTIVE/BLOCKED as a Cairn lifecycle, deletion standing only for unused drafts, no period gate on maintenance, language-dependent texts deferred under B-223. First link of the classification chain toward release strategies. | Agent |
 | 2.207 | 2026-10-18 | **SCR-057 / CT04 stage 1 (B-379, §26.395).** The inert characteristics screen stands at `/config/characteristics`: empty grid, editor with format/length/assignment fields and the allowed-values list, save disabled. Typecheck clean. | Agent |
+| 2.208 | 2026-10-18 | **SCR-057 / CT04 stage 2 (B-380, §26.396).** Migrations `0069` + `9047` applied (117 standing): `characteristic` and `characteristic_value` behind forced tenant RLS, Drizzle tables in `characteristic-schema.ts`. Typecheck clean. | Agent |
 
 ---
 
