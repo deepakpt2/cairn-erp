@@ -1247,6 +1247,13 @@ Acceptance evidence: service tests 2/2 (`tests/outgoing-payment.test.ts`, includ
 Completion per B-444: the accounts-payable and accounts-receivable chains now stand complete on the roadmap, and the next unbuilt roadmap item is **FF.5 (bank statement import, `FIN.BANK.STATEMENT.IMPORT`)**, which would stand as SCR-079 — its field package is requested from the owner; no contract is drafted before it arrives. Same-stage bookkeeping: B-506 / §26.522 / §30 row 2.340. **Cost (B-254, measured):** the round opened 14:35 UTC; SCR-078 closed 14:54 UTC — nineteen minutes across five stages, inside the time-box.
 
 ---
+### 26.523 B-507 — Owner decision: bank statement import deferred
+
+The owner asked whether FF.5 (bank statement import) can wait, whether the app needs it to run, and whether bank entries can be made manually. The answers stand recorded: **yes, it defers; no, the app does not need it; yes, bank entries stand manual today.** Bank statement import is a reconciliation convenience layered over the general ledger, not a foundation: nothing in the built estate names it as a prerequisite, house banks (FI12) stand without it, and the payment acts (F-28, F-53, F110) already post their bank lines directly. Manual bank entries stand available through the general journal, and customer receipts and vendor payments already debit and credit the bank account as they clear. What deferral postpones is only the automated matching of statement lines to those postings — FEBAN statement posting and F.13 automatic clearing travel with it and defer alongside, since both read imported statements.
+
+`FIN.BANK.STATEMENT.IMPORT` (FF.5) therefore stands **deferred by owner decision**, to be taken up when bank reconciliation is wanted rather than by roadmap order. The next round stands open for the owner's choice of T-code package (the deferred payment outcomes — partial payments, residuals, cash discount — and the asset chain AS01/AFAB are the standing candidates by roadmap position). Same-item bookkeeping: B-507 / §26.523 / §30 row 2.341. **Cost (B-254, measured):** the question arrived after SCR-078 closed 14:54 UTC; this note stands written 14:56 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1432,3 +1439,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.338 | 2026-10-18 | **SCR-078 stage 3 published (B-504, §26.520).** Outgoing payment service stands: netting allocation judged exactly, KZ journal crediting the bank, clearing stamped in place; `/finance/outgoing-payment` is live. Capability and term follow in stage 4. | Agent |
 | 2.339 | 2026-10-18 | **SCR-078 stage 4 published (B-505, §26.521).** `FIN.AP.PAYMENT.POST` and the Post Outgoing Payment term (F-53 alias) seeded (112/67/86/94). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.340 | 2026-10-18 | **SCR-078 ACCEPTED AND CLOSED (B-506, §26.522).** F-53 Post Outgoing Payment stands: netting allocation judged exactly (credit memos against the payment), KZ journal crediting the bank, clearing stamped in place on the standing model. T918 green; suite 1334; seed 112/67/86/94; 150 migrations. Next: FF.5 (SCR-079) — field package requested. | Agent |
+| 2.341 | 2026-10-18 | **Owner decision recorded (B-507, §26.523).** FF.5 bank statement import deferred: not needed to run the app, bank entries stand manual via the journal and the payment acts; FEBAN/F.13 defer with it. Next round awaits the owner's T-code package. | Agent |
