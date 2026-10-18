@@ -1995,6 +1995,13 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'paymentRun.title': 'Payment Run',
+  'paymentRun.subtitle':
+    'A payment run gathers the supplier payables that stand due, proposes ' +
+    'what to pay, and executes against a house bank: one balanced journal ' +
+    'per supplier, the paid items cleared in place. The posting date — ' +
+    'never the run date — judges the financial period, and an executed ' +
+    'run is history: it cannot be run again or deleted.',
   'invoiceVerification.title': 'Enter Incoming Invoice',
   'invoiceVerification.subtitle':
     'Invoice verification matches a supplier invoice against the purchase ' +

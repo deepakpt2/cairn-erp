@@ -511,6 +511,12 @@ Deferred and named: credit memos and subsequent debit/credit postings (their cat
 
 ---
 
+### 26.425 B-409 — SCR-063 payment run stage 1: the run screen stands
+
+Stage 1 ships the payment-run screen at `/finance/payment-run`: status, the parameter set — run date and five-character identification as the run key, posting date, documents-entered-up-to cutoff, next payment date, companies, methods and supplier range — and the proposal area with execution disabled until stage 3 wires the run service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -588,6 +594,7 @@ Deferred and named: credit memos and subsequent debit/credit postings (their cat
 | 2.240 | 2026-10-18 | **SCR-062 invoice verification stage 4 (B-407, §26.423).** The incoming-invoice term seeded at its route with MIRO and MR8M search aliases only. Seed reads back 97/66/69/78. | Agent |
 | 2.241 | 2026-10-18 | **SCR-062 invoice verification CLOSED and accepted (B-408, §26.424).** Stage 5 ships 2 service tests and the T935 browser target `invoice-verification` (green — balance, tax, posting, cancellation, database evidence). Neighbouring `goods-receipt` target clean; suite 1274 across 158 files, 128 migrations, seed 97/66/69/78. Credit memos, delivery costs and parked invoices deferred and named. Cost measured at 10 minutes. | Agent |
 | 2.242 | 2026-10-18 | **SCR-063 payment run contracted (R-111).** F110 under house names: run parameters with company and method children, proposal over open supplier items with named exceptions, execution grouped by supplier and bank with clearing written on the paid lines, the FI period judged on the posting date, executed runs immutable. | Agent |
+| 2.243 | 2026-10-18 | **SCR-063 payment run stage 1 (B-409, §26.425).** The inert run screen stands at `/finance/payment-run`: status, parameters and proposal areas, execution disabled. Typecheck and the production build clean. | Agent |
 
 ---
 
