@@ -62,7 +62,6 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
             {' '}{view.openItems.length} open items standing at {view.openBalance.toFixed(2)}.
           </p>
         )}
-        <Message state={state} />
       </section>
 
       {view && (

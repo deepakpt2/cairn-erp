@@ -759,6 +759,15 @@ Stage 4 creates the capability `FIN.AR.PAYMENT.ENTER` and seats its term *Post i
 
 ---
 
+### 26.459 B-443 — SCR-068 incoming payment closed (R-116)
+
+Stage 5 accepts the round, with one screen correction found by the browser target and fixed in stage: the posting confirmation now renders only in the result tile, not also in the header tile. The service tests prove the receipt posts a `DZ` journal debiting the bank and crediting the reconciliation account per allocation with the customer as partner, clears the settled items (and the payment's own partner lines) in place under clearing date 2026-11-21, returns the standing payment on a same-request-key retry, refuses a short allocation naming the difference (allocated 550.00 against 850.00, difference -300.00 USD) and refuses an already-cleared item. Browser target **T929** drives the journey on the production build — two receivables of 550 and 300 loaded on screen, difference standing at 0.00 before posting, payment posted as document 1000/2026/3, the database remembering items cleared on 2026-11-21; neighbour **T930** stays green. The full suite stands at **1293 tests across 164 files**; typecheck and production build clean; 137 migrations; seed **102/66/75/84**.
+
+Named deferrals carried forward, by the contract: partial payments, residual items and on-account postings (distinct outcomes, never silently forced to zero); cash-discount taking and tolerance/write-off; clearing reset (FBRA) and payment reversal (FB08) as distinct later acts; special G/L indicators; exchange-rate translation of foreign-currency payments.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -870,6 +879,7 @@ Stage 4 creates the capability `FIN.AR.PAYMENT.ENTER` and seats its term *Post i
 | 2.274 | 2026-10-18 | **SCR-068 incoming payment stage 2 (B-440, §26.456).** Migrations `0080` + `9055` create the incoming-payment record behind forced tenant RLS with the request key unique per tenant. 137 migrations standing; typecheck clean. | Agent |
 | 2.275 | 2026-10-18 | **SCR-068 incoming payment stage 3 (B-441, §26.457).** The incoming-payment service (receivables with due dates, exact-allocation rule naming the difference, `DZ` journal, clearing in place, request-key replay) and the live screen. Typecheck and production build clean. | Agent |
 | 2.276 | 2026-10-18 | **SCR-068 incoming payment stage 4 (B-442, §26.458).** Capability `FIN.AR.PAYMENT.ENTER` created; the incoming-payment term seeded at its route with F-28 a search alias only. Seed reads back 102/66/75/84. | Agent |
+| 2.277 | 2026-10-18 | **SCR-068 incoming payment closed (B-443, §26.459).** Service tests and browser target T929 (neighbour T930) green on the production build; full suite 1293/164, 137 migrations, seed 102/66/75/84. Deferrals named: partial/residual/on-account payments, discounts and write-offs, clearing reset (FBRA) and reversal (FB08), special G/L, FX translation. | Agent |
 
 ---
 

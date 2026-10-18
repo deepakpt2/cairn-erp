@@ -54,6 +54,7 @@ export const TARGETS = [
   { id: 'vendor-balances', client: 'T932', label: 'SCR-065 vendor balances: derived periods, drill-down' },
   { id: 'vendor-ageing', client: 'T931', label: 'SCR-066 vendor ageing: as-of key date, buckets, item detail' },
   { id: 'customer-invoice', client: 'T930', label: 'SCR-067 customer invoice: tax, receivable, cancellation' },
+  { id: 'incoming-payment', client: 'T929', label: 'SCR-068 incoming payment: allocation, clearing in place' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

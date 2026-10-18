@@ -65,6 +65,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'vendor-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-065 local loopback' },
   'vendor-ageing': { database: 'cairn_b210', port: '5432', batch: 'SCR-066 local loopback' },
   'customer-invoice': { database: 'cairn_b210', port: '5432', batch: 'SCR-067 local loopback' },
+  'incoming-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-068 local loopback' },
   'fiscal-year-variants': { database: 'cairn_b210', port: '5432', batch: 'SCR-029 local loopback' },
   // Every target is bound, including the ones that predate this guard. The runner verifies a
   // guard that exists and simply runs a target that has none, so an unregistered target would
