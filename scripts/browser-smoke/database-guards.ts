@@ -71,6 +71,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'outgoing-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-078 local loopback' },
   'outgoing-payment-completion': { database: 'cairn_b210', port: '5432', batch: 'SCR-080 local loopback' },
   'vendor-down-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-081 local loopback' },
+  'vendor-down-payment-clearing': { database: 'cairn_b210', port: '5432', batch: 'SCR-082 local loopback' },
   'customer-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-069 local loopback' },
   'customer-ageing': { database: 'cairn_b210', port: '5432', batch: 'SCR-070 local loopback' },
   'clearing-reset': { database: 'cairn_b210', port: '5432', batch: 'SCR-071 local loopback' },

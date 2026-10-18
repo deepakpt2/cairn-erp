@@ -78,6 +78,7 @@ import { incomingPaymentCompletionF28 } from './incoming-payment-completion';
 import { outgoingPaymentF53 } from './outgoing-payment';
 import { outgoingPaymentCompletionF53 } from './outgoing-payment-completion';
 import { vendorDownPaymentF48 } from './vendor-down-payment';
+import { vendorDownPaymentClearingF54 } from './vendor-down-payment-clearing';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
 import { clearingResetFbra } from './clearing-reset';
@@ -4962,6 +4963,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'outgoing-payment': outgoingPaymentF53,
   'outgoing-payment-completion': outgoingPaymentCompletionF53,
   'vendor-down-payment': vendorDownPaymentF48,
+  'vendor-down-payment-clearing': vendorDownPaymentClearingF54,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,
   'clearing-reset': clearingResetFbra,

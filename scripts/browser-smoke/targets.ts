@@ -60,6 +60,7 @@ export const TARGETS = [
   { id: 'outgoing-payment', client: 'T918', label: 'SCR-078 F-53 outgoing payment: netting allocation, KZ journal, clearing in place' },
   { id: 'outgoing-payment-completion', client: 'T916', label: 'SCR-080 F-53 completion: terms discount received, item cleared at full open amount' },
   { id: 'vendor-down-payment', client: 'T915', label: 'SCR-081 F-48 vendor down payment: indicator resolution, KA journal on the alternative account' },
+  { id: 'vendor-down-payment-clearing', client: 'T914', label: 'SCR-082 F-54 down-payment clearing: advance applied to invoice, remainder standing' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
   { id: 'clearing-reset', client: 'T926', label: 'SCR-071 clearing reset: display clearing, reset, items reopened' },

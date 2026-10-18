@@ -231,7 +231,8 @@ export async function getDownPaymentClearing(
 
 export interface ClearingItemRef {
   documentNumber: string; fiscalYear: number; lineNumber: number;
-  applied: number;
+  /** Amount applied now; defaults to the item's full remaining amount. */
+  applied?: number;
 }
 
 export interface PostedClearing {
@@ -267,19 +268,11 @@ export async function clearDownPayments(input: {
     throw new VendorDownPaymentClearingError('Select at least one invoice to settle.', 'Tick the invoices this clearing settles.');
   }
   for (const ref of [...input.downPayments, ...input.invoices]) {
-    if (!(ref.applied > 0)) {
+    if (ref.applied !== undefined && !(ref.applied > 0)) {
       throw new VendorDownPaymentClearingError(
         `Document ${ref.documentNumber} line ${ref.lineNumber}: the applied amount must stand above zero.`,
       );
     }
-  }
-  const dpTotal = round2(input.downPayments.reduce((s, r) => s + r.applied, 0));
-  const invTotal = round2(input.invoices.reduce((s, r) => s + r.applied, 0));
-  if (dpTotal !== invTotal) {
-    throw new VendorDownPaymentClearingError(
-      `The applied totals do not agree: down payments ${dpTotal.toFixed(2)} against invoices ${invTotal.toFixed(2)} ${input.currency.toUpperCase()}.`,
-      'Apply exactly as much advance as the invoices settle — a clearing transfers value, it never creates it.',
-    );
   }
   for (const [label, value] of [['Document date', input.documentDate], ['Posting date', input.postingDate], ['Clearing date', input.clearingDate]] as const) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new VendorDownPaymentClearingError(`${label} ${value} is not a calendar date.`);
@@ -306,7 +299,7 @@ export async function clearDownPayments(input: {
     const recon = vendor.reconciliationAccount!;
 
     interface Held {
-      ref: ClearingItemRef; remaining: number; currency: string; lineText: string;
+      ref: ClearingItemRef; applied: number; remaining: number; currency: string; lineText: string;
     }
     const holdSide = async (
       refs: ClearingItemRef[], account: string, debitCredit: 'S' | 'H',
@@ -337,13 +330,19 @@ export async function clearDownPayments(input: {
           tx, input.client, input.companyCode, account, input.vendorNumber, textOf(ref.documentNumber), creditSide,
         );
         const remaining = round2(Number(line.amountLocal) - already);
-        if (round2(ref.applied) - remaining > 0.005) {
+        const applied = ref.applied === undefined ? remaining : round2(ref.applied);
+        if (!(applied > 0)) {
           throw new VendorDownPaymentClearingError(
-            `The applied ${round2(ref.applied).toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remaining.toFixed(2)}.`,
+            `Document ${ref.documentNumber} line ${ref.lineNumber}: the applied amount must stand above zero.`,
+          );
+        }
+        if (applied - remaining > 0.005) {
+          throw new VendorDownPaymentClearingError(
+            `The applied ${applied.toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remaining.toFixed(2)}.`,
             'Apply no more than the item stands open at.',
           );
         }
-        held.push({ ref, remaining, currency: line.currency, lineText: textOf(ref.documentNumber) });
+        held.push({ ref, applied, remaining, currency: line.currency, lineText: textOf(ref.documentNumber) });
       }
       return held;
     };
@@ -354,6 +353,14 @@ export async function clearDownPayments(input: {
     const invHeld = await holdSide(
       input.invoices, recon, 'H', 'invoice', (doc) => `Settles ${doc}`, false,
     );
+
+    const dpTotal = round2(dpHeld.reduce((s, h) => s + h.applied, 0));
+    if (dpTotal !== round2(invHeld.reduce((s, h) => s + h.applied, 0))) {
+      throw new VendorDownPaymentClearingError(
+        `The applied totals do not agree: down payments ${dpTotal.toFixed(2)} against invoices ${round2(invHeld.reduce((s, h) => s + h.applied, 0)).toFixed(2)} ${input.currency.toUpperCase()}.`,
+        'Apply exactly as much advance as the invoices settle — a clearing transfers value, it never creates it.',
+      );
+    }
 
     const currencies = [...new Set([
       ...dpHeld.map((h) => h.currency), ...invHeld.map((h) => h.currency), input.currency.toUpperCase(),
@@ -381,12 +388,12 @@ export async function clearDownPayments(input: {
       lines: [
         ...invHeld.map((h) => ({
           glAccount: recon, debitCredit: 'S' as const,
-          amount: round2(h.ref.applied).toFixed(2), businessPartner: input.vendorNumber,
+          amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
           lineText: h.lineText,
         })),
         ...dpHeld.map((h) => ({
           glAccount: alternativeAccount, debitCredit: 'H' as const,
-          amount: round2(h.ref.applied).toFixed(2), businessPartner: input.vendorNumber,
+          amount: h.applied.toFixed(2), businessPartner: input.vendorNumber,
           lineText: h.lineText,
         })),
       ],
@@ -423,10 +430,10 @@ export async function clearDownPayments(input: {
       ));
     };
     for (const h of invHeld) {
-      if (round2(h.ref.applied) >= h.remaining - 0.005) await stampItem(h, recon);
+      if (h.applied >= h.remaining - 0.005) await stampItem(h, recon);
     }
     for (const h of dpHeld) {
-      if (round2(h.ref.applied) >= h.remaining - 0.005) await stampItem(h, alternativeAccount);
+      if (h.applied >= h.remaining - 0.005) await stampItem(h, alternativeAccount);
     }
 
     const clearingNumber = journal.documentNumber;

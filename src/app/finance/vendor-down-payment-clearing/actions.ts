@@ -27,9 +27,10 @@ function parseItems(form: FormData, boxName: string, amountPrefix: string): Clea
   return form.getAll(boxName).map((value) => {
     const [documentNumber, fiscalYear, lineNumber] = String(value).split('|');
     const key = `${documentNumber}|${fiscalYear}|${lineNumber}`;
+    const amountText = text(form, `${amountPrefix}${key}`);
     return {
       documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber),
-      applied: Number(text(form, `${amountPrefix}${key}`)),
+      applied: amountText ? Number(amountText) : undefined,
     };
   });
 }

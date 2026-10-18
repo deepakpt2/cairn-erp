@@ -1407,6 +1407,12 @@ Stage 4 of R-130. The capability `FIN.AP.DOWNPAYMENT.CLEAR` (F-54 as search alia
 
 Verification: seed applied with the new counts standing; typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-532 / §26.548 / §30 row 2.366. **Cost (B-254, measured):** stage 3 published 17:29 UTC; stage 4 completed this turn.
 
+### 26.549 B-533 — SCR-082 stage 5: acceptance and closure
+
+Stage 5 of R-130 closes the round. The clearing tests (`tests/vendor-down-payment-clearing.test.ts`, 3 cases) stand green: both sides shown with remainders; unequal applied totals and over-application refused by name; 550 of the 10,000 advance clearing the 550 invoice in full (KZ transfer evidenced, invoice and its offsetting line stamped, the advance standing at 9,450); replay returning the same clearing; and the final application stamping the advance itself when it completes, both grids emptying. One defect was found by the browser run and repaired: a blank settle amount reached the service as zero — blank now defaults to the item's remaining amount on both sides, the applied totals judged on the effective amounts.
+
+**Acceptance.** The full suite stands green at 1352 tests; the production build carries target `vendor-down-payment-clearing` (T914) green — both grids loaded, 550 applied through the form, the invoice cleared and the advance standing in the database. The seed stands at 115 capabilities / 68 configuration activities / 89 terms / 98 aliases, twice idempotent; the database stands at 155 migrations. Typecheck clean. **SCR-082 is accepted and closed.** Deferred by name: clearing reset beyond the standing FIN.CLEARING.RESET, down-payment requests (F-47), the customer mirror (F-29 down payment, then F-39 clearing), tax and exchange differences, and drafts. Same-stage bookkeeping: B-533 / §26.549 / §30 row 2.367. **Cost (B-254, measured):** stage 4 published 17:29 UTC; stage 5 completed this turn.
+
 ---
 ---
 
@@ -1619,3 +1625,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.364 | 2026-10-18 | **SCR-082 stage 2 published (B-530, §26.546).** The down-payment clearing record stands; 155 migrations. The clearing service follows in stage 3. | Agent |
 | 2.365 | 2026-10-18 | **SCR-082 stage 3 published (B-531, §26.547).** Clearing service stands: KZ transfer posting with equal applied totals, full items stamped, remainders netting open; the screen is live. Capability follows in stage 4. | Agent |
 | 2.366 | 2026-10-18 | **SCR-082 stage 4 published (B-532, §26.548).** Capability F-54 seeded (115 capabilities / 89 terms / 98 aliases). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.367 | 2026-10-18 | **SCR-082 closed (B-533, §26.549).** Down-payment clearing accepted: 1352 tests, T914 browser green, 155 migrations, seed 115/68/89/98. The vendor advance chain (F-48 → F-54) stands complete; the customer mirror (F-29/F-39) is next. | Agent |
