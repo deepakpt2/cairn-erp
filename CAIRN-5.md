@@ -1435,6 +1435,12 @@ Stage 3 of R-131. `postCustomerDownPayment` posts the DZ journal — debit the b
 
 Verification: typecheck clean; the SCR-081 vendor down-payment tests stand green through the generalised resolution. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-537 / §26.553 / §30 row 2.371. **Cost (B-254, measured):** stage 2 published 17:55 UTC; stage 3 completed this turn.
 
+### 26.554 B-538 — SCR-083 stage 4: the down-payment capability
+
+Stage 4 of R-131. The capability `FIN.AR.DOWNPAYMENT.POST` (F-29 as search alias) joins the seed — 116 capabilities, 90 terms, 99 aliases; configuration activities stand unchanged at 68. The special G/L maintenance from SCR-081 already carries the AR account type, so nothing further is seeded: the indicator's configuration is the tenant's own.
+
+Verification: seed applied with the new counts standing; typecheck clean. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-538 / §26.554 / §30 row 2.372. **Cost (B-254, measured):** stage 3 published 17:56 UTC; stage 4 completed the same minute.
+
 ---
 ---
 
@@ -1652,3 +1658,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.369 | 2026-10-18 | **SCR-083 stage 1 published (B-535, §26.551).** The `/finance/customer-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.370 | 2026-10-18 | **SCR-083 stage 2 published (B-536, §26.552).** The customer down-payment record stands; 156 migrations. The posting service follows in stage 3. | Agent |
 | 2.371 | 2026-10-18 | **SCR-083 stage 3 published (B-537, §26.553).** Customer down-payment service stands: AR indicator resolution under lock, DZ journal on the alternative account, replay by request key; the screen is live. Capability follows in stage 4. | Agent |
+| 2.372 | 2026-10-18 | **SCR-083 stage 4 published (B-538, §26.554).** Capability F-29 seeded (116 capabilities / 90 terms / 99 aliases). Tests and browser acceptance follow in stage 5. | Agent |
