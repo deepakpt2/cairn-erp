@@ -569,6 +569,21 @@ export async function applyStandardPackage(
   await seedNumberRangeObjects(tx, input.client, input.activatedBy);
   const { applyMaterialDefaults } = await import('../inventory/standard-config');
   await applyMaterialDefaults(tx, input.client, input.activatedBy);
+  // The delivered standard industries (SCR-077 / R-125); tenants maintain
+  // the master on its own screen from here.
+  const { INDUSTRY_DEFAULTS } = await import('./industry-definition');
+  const { industry, industryText } = await import('./business-partner-schema');
+  for (const row of INDUSTRY_DEFAULTS) {
+    await tx.insert(industry)
+      .values({ client: input.client, industryCode: row.code, createdBy: input.activatedBy })
+      .onConflictDoNothing();
+    await tx.insert(industryText)
+      .values({
+        client: input.client, industryCode: row.code,
+        languageCode: 'en', description: row.description,
+      })
+      .onConflictDoNothing();
+  }
   await applyPaymentTermDefaults(tx, input.client, input.activatedBy);
 
   return {

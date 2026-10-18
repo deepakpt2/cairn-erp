@@ -1177,6 +1177,13 @@ Stage 3 of R-125. `src/modules/foundation/industry-definition.ts` maintains the 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-498 / §26.514 / §30 row 2.332. **Cost (B-254, measured):** stage 2 published 14:25 UTC; stage 3 completed 14:26 UTC.
 
 ---
+### 26.515 B-499 — SCR-077 stage 4: activity, capability, term and delivery
+
+Stage 4 of R-125. The configuration activity `CFG.ORG.INDUSTRY.DEFINE` (ENTERPRISE_STRUCTURE, "Maintain Industries", enabling business partner classification), its ORG CONFIGURE capability and the Maintain Industries term (OB44 as a search alias only) join the seed; the standard package now delivers the five industries with their English descriptions at onboarding, standing tenants already holding them from the stage-2 migration. The seed reads back **111 capabilities / 67 config activities / 85 terms / 93 aliases** across two runs.
+
+Verification: typecheck clean; seed idempotent. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-499 / §26.515 / §30 row 2.333. **Cost (B-254, measured):** stage 3 published 14:26 UTC; stage 4 completed 14:28 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1354,3 +1361,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.330 | 2026-10-18 | **SCR-077 stage 1 published (B-496, §26.512).** Inert `/config/industries` screen stands with the grid and create shapes under `CFG.ORG.INDUSTRY.DEFINE`. Schema follows in stage 2. | Agent |
 | 2.331 | 2026-10-18 | **SCR-077 stage 2 published (B-497, §26.513).** `industry`/`industry_text` stand with the restricting partner reference; five industries delivered to standing tenants; 148 migrations. Service follows in stage 3. | Agent |
 | 2.332 | 2026-10-18 | **SCR-077 stage 3 published (B-498, §26.514).** Industry service stands (language-judged texts, partner-count deletion guard) and `/config/industries` is live. Activity, capability, term and onboarding delivery follow in stage 4. | Agent |
+| 2.333 | 2026-10-18 | **SCR-077 stage 4 published (B-499, §26.515).** `CFG.ORG.INDUSTRY.DEFINE` activity/capability and the Maintain Industries term (OB44 alias) seeded (111/67/85/93); the five industries deliver at onboarding. Tests and browser acceptance follow in stage 5. | Agent |
