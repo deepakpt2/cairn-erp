@@ -469,6 +469,14 @@ Stage 4 seats the term half of the contract: `INV.GR.POST` (capability standing 
 
 ---
 
+### 26.419 B-403 — SCR-061 goods receipt CLOSED and accepted
+
+Stage 5 ships 2 service tests and the T936 browser target `goods-receipt` (green — an order created through the grid, the receipt posted from the movement screen, stock at five with the journal balancing, the reversal posting as a new document and the stock whole again). Neighbouring `purchase-orders` and `release-acts` targets stand undisturbed; typecheck, `lint:ip` and the production build are clean; the suite stands at **1271 tests across 157 files**, **126 migrations**, seed **97/66/68/76**. Goods receipt now stands spent: the movement is resolved from action and reference through the configured catalogue, the released-order gate SCR-056 recorded is discharged, the SCR-053 deletion flag blocks on a posting, and document, stock, valuation and accounting move in one transaction — the first inventory book of record.
+
+Deferred and named: goods issue and transfer movements (their movement types join the same catalogue in their own rounds); quality-inspection and blocked stock and further stock types; batches, special stock and serial numbers; account-assigned receipts against cost-centre orders; receipts without reference and production-order references; entry-unit conversion beyond the order unit; a stored delivery-completed flag (completion is derived from posted history); and partial, item-level reversal — reversal stands whole-document this round. Workflow agent assignment remains deferred as recorded at SCR-060. Invoice verification (MIRO) against the GR/IR balance is the next purchasing round. Cost measured at 15 minutes (05:36–05:51 UTC).
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -538,6 +546,7 @@ Stage 4 seats the term half of the contract: `INV.GR.POST` (capability standing 
 | 2.232 | 2026-10-18 | **SCR-061 goods receipt stage 2 (B-400, §26.416).** Migrations `0073` + `9051` applied (126 standing): the movement-type catalogue, insert-only material documents and lines, and stock balances behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.233 | 2026-10-18 | **SCR-061 goods receipt stage 3 (B-401, §26.417).** The posting service resolves the movement from action and reference, judges release, open quantity against tolerance, deletion flags and both period gates, and posts document, stock, valuation and balanced journal in one transaction with request-key idempotency; reversal stands as a new document. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.234 | 2026-10-18 | **SCR-061 goods receipt stage 4 (B-402, §26.418).** The goods-receipt term seeded at its route with MIGO a search alias only. Seed reads back 97/66/68/76. | Agent |
+| 2.235 | 2026-10-18 | **SCR-061 goods receipt CLOSED and accepted (B-403, §26.419).** Stage 5 ships 2 service tests and the T936 browser target `goods-receipt` (green — posting, balanced journal, reversal, stock whole). Neighbouring `purchase-orders` and `release-acts` targets clean; suite 1271 across 157 files, 126 migrations, seed 97/66/68/76. Goods issue, transfer, batches and account-assigned receipts deferred and named. Cost measured at 15 minutes. | Agent |
 
 ---
 

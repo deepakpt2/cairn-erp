@@ -174,13 +174,13 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
               </tbody>
             </table>
           </div>
+          {reverseState.message && (
+            <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+              {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
+            </p>
+          )}
           {document.status === 'POSTED' && !document.reversalOf && (
             <>
-              {reverseState.message && (
-                <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
-                  {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
-                </p>
-              )}
               <form action={reverseAction} className="mt-3 flex flex-wrap items-end gap-3">
                 <input type="hidden" name="materialDocumentNumber" value={document.materialDocumentNumber} />
                 <input type="hidden" name="requestKey" value={reverseKey} />
