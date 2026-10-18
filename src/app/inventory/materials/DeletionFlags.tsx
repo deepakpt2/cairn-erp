@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import { setMaterialDeletionFlagAction, type MaterialState } from './actions';
@@ -54,6 +54,12 @@ export default function DeletionFlags({
     setMaterialDeletionFlagAction,
     { ok: true },
   );
+
+  // A successful act closes its own confirmation; the message then
+  // stands under the panel. A refused act keeps the dialog open.
+  useEffect(() => {
+    if (state.ok && state.message) setConfirming(null);
+  }, [state]);
 
   const act = (scope: 'CLIENT' | 'PLANT', plant: string, flagged: boolean, stock: string) =>
     canMaintain ? (
