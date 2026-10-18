@@ -74,6 +74,7 @@ import { vendorAgeingAnalysis } from './vendor-ageing';
 import { customerInvoiceFb70 } from './customer-invoice';
 import { incomingPaymentF28 } from './incoming-payment';
 import { customerBalancesFd10n } from './customer-balances';
+import { customerAgeingAnalysis } from './customer-ageing';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4921,6 +4922,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'customer-invoice': customerInvoiceFb70,
   'incoming-payment': incomingPaymentF28,
   'customer-balances': customerBalancesFd10n,
+  'customer-ageing': customerAgeingAnalysis,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
