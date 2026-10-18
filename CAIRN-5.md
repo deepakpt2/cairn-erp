@@ -707,6 +707,13 @@ The customer-invoice service judges the customer's standing in the company, calc
 
 ---
 
+### 26.452 B-436 — SCR-067 customer invoice stage 4: the capability and term stand
+
+Stage 4 creates the capability `FIN.AR.INVOICE.POST` and seats its term *Enter customer invoice* at `/finance/customer-invoice`, with FB70 standing as a search alias only. Seed reads back **101/66/74/83**.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -811,6 +818,7 @@ The customer-invoice service judges the customer's standing in the company, calc
 | 2.267 | 2026-10-18 | **SCR-067 customer invoice stage 1 (B-433, §26.449).** The inert customer-invoice screen stands at `/finance/customer-invoice` — header, line grid with tax and balance, posting disabled, document tile. Typecheck and production build clean. | Agent |
 | 2.268 | 2026-10-18 | **SCR-067 customer invoice stage 2 (B-434, §26.450).** Migrations `0079` + `9054` create the customer invoice tables behind forced tenant RLS; CUSTINV joins the number catalogue and tenant defaults. 135 migrations standing; typecheck clean. | Agent |
 | 2.269 | 2026-10-18 | **SCR-067 customer invoice stage 3 (B-435, §26.451).** The customer-invoice service (standing judged, tax at standing rates, gross reconciled, duplicates refused, receivable journal, linked cancellation) and the live screen. Typecheck and production build clean. | Agent |
+| 2.270 | 2026-10-18 | **SCR-067 customer invoice stage 4 (B-436, §26.452).** Capability `FIN.AR.INVOICE.POST` created; the customer-invoice term seeded at its route with FB70 a search alias only. Seed reads back 101/66/74/83. | Agent |
 
 ---
 
