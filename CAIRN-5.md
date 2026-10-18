@@ -987,7 +987,7 @@ Stage 2 of R-121. The verdict, judged against the standing schema rather than th
 - Customer/company scope judges against the standing `customer_company_code` extension, and reset history stays on SCR-071's `clearing_reset` record; no `POSTED`/`RESET` status column is invented here.
 - Document type DZ already stands delivered, so stage 4 adds only the capability and the term.
 
-Verification: the standing columns, index and tables were read directly from `src/modules/finance/schema.ts`, `src/platform/change/index.ts` and the customer-company schema; local DB stays at **141 migrations**. SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-472 / §26.488 / §30 row 2.306. **Cost (B-254, measured):** stage 1 published 12:45 UTC; the verdict completed 12:52 UTC.
+Verification: the standing columns, index and tables were read directly from `src/modules/finance/schema.ts`, `src/platform/change/index.ts` and the customer-company schema; local DB stays at **141 migrations**. SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-472 / §26.488 / §30 row 2.306. **Cost (B-254, measured):** stage 1 published 12:45 UTC; the verdict completed 12:53 UTC.
 
 ---
 ---
