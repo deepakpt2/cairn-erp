@@ -1970,6 +1970,12 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'purchaseRequisition.title': 'Create Purchase Requisition',
+  'purchaseRequisition.subtitle':
+    'A requisition is an item-level purchasing document: each item names what is ' +
+    'needed, how much, where to, and by when, with cost-centre assignments where ' +
+    'the item is consumed rather than stocked. Saving a requisition posts nothing — ' +
+    'financial and material posting periods are judged by the follow-on documents.',
   'materialPeriod.title': 'Define Material Period Control',
   'materialPeriod.subtitle':
     'One control record per company code: the current material posting year and ' +

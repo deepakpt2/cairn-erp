@@ -207,6 +207,12 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 
 ---
 
+### 26.385 B-369 — SCR-055 / ME51N stage 1: the inert requisition screen stands
+
+The pre-round completeness audit stands at the head of this round: every previously contracted page exists (34 built workbench routes, none missing), the sixteen pageless seeded config routes are uncontracted future-domain placeholders — movement-type configuration and release strategies recorded as obligations of their own rounds — and the standing deferred register (MM06 enforcement, archiving, React #418, deferred i18n, user maintenance) is unchanged. Contract R-103 then records the requisition at the owner's corrected shape: item-level with no header record, numbers from the PURCHREQ range, the standard item category and stock/cost-centre assignment this round, and the period gates explicitly never judged on save. Stage 1 ships the inert screen at `/purchasing/requisitions` — the document overview standing empty, the new-requisition item grid (material through currency, items stepping by ten) and the per-item stock/cost-centre assignment panel — under the `purchaseRequisition` i18n keys, the create act disabled until stage 3 wires the service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -236,6 +242,7 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 | 2.192 | 2026-10-18 | **SCR-054 stage 4 published (B-367, §26.383).** `CFG.INV.MATPERIOD.DEFINE` seeded as capability, configuration activity and term (OMSY/MMPV/MMRV search aliases only); the route joins `BUILT_ROUTES`. Seed reads back 92/64/62/60. | Agent |
 | 2.193 | 2026-10-18 | **SCR-054 / OMSY CLOSED and accepted (B-368, §26.384).** Stage 5 ships 3 service tests and the T943 browser target `material-period-control` (7/7 journeys against the production build — uninitialized company, initialization at 2026/10, backposting allowed, the shift to 2026/11, the database remembering). Neighbouring `material-deletion-flag` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1245 across 150 files, 111 migrations, seed 92/64/62/60. Cost measured at 12 minutes. | Agent |
 | 2.194 | 2026-10-18 | **SCR-055 / ME51N contracted (R-103).** Pre-round audit confirmed every previously contracted page stands (34 built routes, none missing; the 16 pageless seeded routes are uncontracted future-domain placeholders, movement-type configuration and release strategies recorded as obligations of their rounds). The requisition is item-level with no header record, numbers from the PURCHREQ range, standard item category and stock/cost-centre assignment this round, the period gates explicitly not judged on save, release and conversion deferred and named. | Agent |
+| 2.195 | 2026-10-18 | **SCR-055 / ME51N stage 1 (B-369, §26.385).** The inert requisition screen stands at `/purchasing/requisitions`: document overview, item grid and stock/cost-centre assignment panel, save disabled. Typecheck clean. | Agent |
 
 ---
 
