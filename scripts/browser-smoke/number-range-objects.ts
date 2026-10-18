@@ -73,7 +73,9 @@ export async function numberRangeObjectsSnro(ctx: Context) {
   console.log('  ✓ the external interval stands through the screen');
 
   // ── 4. The guarded current-number act ────────────────────────────────────
-  const xtRow = page.locator('tr').filter({ hasText: 'XT' }).first();
+  const xtRow = page.locator('tr').filter({
+    has: page.getByRole('cell', { name: 'XT', exact: true }),
+  });
   await xtRow.getByRole('link', { name: 'Change', exact: true }).click();
   await page.getByRole('heading', { level: 2, name: 'Adjust current number', exact: true }).waitFor();
   await page.locator('input[name="currentNumber"]').fill('150');
