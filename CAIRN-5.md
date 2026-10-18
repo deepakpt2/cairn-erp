@@ -1163,6 +1163,13 @@ Stage 1 of R-125. `/config/industries` renders the industry's shape — the grid
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-496 / §26.512 / §30 row 2.330. **Cost (B-254, measured):** contract R-125 published 14:22 UTC; stage 1 completed 14:26 UTC.
 
 ---
+### 26.513 B-497 — SCR-077 stage 2: industry schema and the partner reference
+
+Stage 2 of R-125. `industry` stands tenant-scoped with its code check (`^[A-Z0-9]{1,4}$`), the standing active flag and audit columns; `industry_text` carries one description per language (at most 20 characters, non-blank by check), its industry reference restricting; `business_partner.industry` stands added under a composite foreign key restricting on delete, so the database refuses what the service will refuse. Migration `0086_industry.sql` delivers the five industries with their English descriptions to every standing tenant, and `9060_industry_policies.sql` isolates both new tables — the database now stands at **148 migrations**, the delivered industries verified standing.
+
+Verification: migrations applied and idempotent on rerun; typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-497 / §26.513 / §30 row 2.331. **Cost (B-254, measured):** stage 1 published 14:24 UTC; stage 2 completed 14:25 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1338,3 +1345,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.328 | 2026-10-18 | **SCR-076 ACCEPTED AND CLOSED (B-494, §26.510).** FB65 vendor credit memo stands on the shared invoice record: judged gross credit, KG journal debiting the vendor, original link with cumulative cap, cross-kind duplicate reference refused, cancellation carrying the link. T921 green; suite 1327/173; seed 110/66/84/92; 146 migrations. Next: F-53 (SCR-077) — field package requested. | Agent |
 | 2.329 | 2026-10-18 | **SCR-077 contract R-125 written (B-495, §26.511).** OB44 Maintain Industries: tenant industry master (code ≤4) with per-language descriptions (≤20) judged against configured languages, five delivered industries, a restricting partner reference, delete refused while partners carry the code. Partner-screen picker deferred, named. Stage 1 follows. | Agent |
 | 2.330 | 2026-10-18 | **SCR-077 stage 1 published (B-496, §26.512).** Inert `/config/industries` screen stands with the grid and create shapes under `CFG.ORG.INDUSTRY.DEFINE`. Schema follows in stage 2. | Agent |
+| 2.331 | 2026-10-18 | **SCR-077 stage 2 published (B-497, §26.513).** `industry`/`industry_text` stand with the restricting partner reference; five industries delivered to standing tenants; 148 migrations. Service follows in stage 3. | Agent |
