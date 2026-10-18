@@ -1272,6 +1272,13 @@ The owner's F-28 completion package stands as SCR-079. It extends SCR-068 rather
 **Stage order (standing):** UI rework → schema (payment totals) → service and screen wiring → supporting (the two determination events in the OBYC catalogue) → service tests and browser acceptance. This completion also updates `FUNCTIONS-AND-ROADMAP.md` at closure per B-508 — F-28's row already reads Implemented, so the update records the deferred outcomes closing. Same-stage bookkeeping: B-509 / §26.525 / §30 row 2.343. **Cost (B-254, measured):** the package arrived 16:26 UTC; the contract stands written the same minute-span, before stage 1.
 
 ---
+### 26.526 B-510 — SCR-079 stage 1: completion screen rework
+
+Stage 1 of R-127. The incoming-payment screen gains the completion shape: per item an **Applied** amount (defaulting to the open amount), a **Discount** taken, and an **Outcome** choice (Residual or Partial) beside the outstanding figure; an **On-account amount** joins the payment block; and the balance line now reads allocated against unassigned in the completion terms. Posting stands disabled with the reason shown until the completion service lands in stage 3 — the standing exact-allocation screen behaviour returns with it, widened, at that stage.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-510 / §26.526 / §30 row 2.344. **Cost (B-254, measured):** contract R-127 published 16:27 UTC; stage 1 completed the same minute-span.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1460,3 +1467,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.341 | 2026-10-18 | **Owner decision recorded (B-507, §26.523).** FF.5 bank statement import deferred: not needed to run the app, bank entries stand manual via the journal and the payment acts; FEBAN/F.13 defer with it. Next round awaits the owner's T-code package. | Agent |
 | 2.342 | 2026-10-18 | **Standing instruction recorded (B-508, §26.524).** `FUNCTIONS-AND-ROADMAP.md` updates on each completion or deferred decision, same turn, its As-of line naming the latest event. | Agent |
 | 2.343 | 2026-10-18 | **SCR-079 contract R-127 written (B-509, §26.525).** F-28 completion: per-item applied/discount with terms-tier suggestion judged against the tolerance default, full/residual/partial outcomes, on-account amounts and tolerated differences posted — the allocation table declined, journal lines carry outcomes. F-53 completion follows named. Stage 1 follows. | Agent |
+| 2.344 | 2026-10-18 | **SCR-079 stage 1 published (B-510, §26.526).** Incoming-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
