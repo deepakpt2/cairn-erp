@@ -28,6 +28,9 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
   const [state, action, posting] = useActionState(postPaymentAction, INITIAL);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amount, setAmount] = useState('');
+  const [applied, setApplied] = useState<Record<string, string>>({});
+  const [discounts, setDiscounts] = useState<Record<string, string>>({});
+  const [onAccount, setOnAccount] = useState('');
 
   const toggle = (key: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -37,7 +40,12 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
 
   const items = view?.openItems ?? [];
   const chosen = items.filter((i) => selected.has(itemKey(i)));
-  const allocated = chosen.reduce((s, i) => s + i.signed, 0);
+  const discountOf = (i: (typeof items)[number]) => Number(discounts[itemKey(i)]) || 0;
+  const appliedOf = (i: (typeof items)[number]) => {
+    const v = applied[itemKey(i)];
+    return v === undefined || v === '' ? i.signed - discountOf(i) : Number(v) || 0;
+  };
+  const allocated = chosen.reduce((s, i) => s + appliedOf(i) + discountOf(i), 0) + (Number(onAccount) || 0);
   const difference = Math.round((allocated - (Number(amount) || 0)) * 10000) / 10000;
 
   return (
@@ -108,6 +116,11 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Value date (optional)</span>
                   <input type="date" name="valueDate" className="input w-full" />
                 </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">On-account amount</span>
+                  <input name="onAccount" className="input w-full" placeholder="0.00"
+                    value={onAccount} onChange={(e) => setOnAccount(e.target.value)} />
+                </label>
               </div>
               <div className="mt-3 overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
@@ -116,6 +129,8 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                       <th className="px-2 py-2">Select</th><th className="px-2 py-2">Document</th>
                       <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Due date</th>
                       <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Outstanding</th>
+                      <th className="px-2 py-2">Applied</th><th className="px-2 py-2">Discount</th>
+                      <th className="px-2 py-2">Outcome</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -133,6 +148,27 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                         <td className="px-2 py-2">{item.dueDate}</td>
                         <td className="px-2 py-2">{item.currency}</td>
                         <td className="px-2 py-2">{item.signed.toFixed(2)}</td>
+                        <td className="px-2 py-2">
+                          <input
+                            name={`applied-${itemKey(item)}`} className="input w-24"
+                            placeholder={item.signed.toFixed(2)}
+                            value={applied[itemKey(item)] ?? ''}
+                            onChange={(e) => setApplied((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <input
+                            name={`discount-${itemKey(item)}`} className="input w-20" placeholder="0.00"
+                            value={discounts[itemKey(item)] ?? ''}
+                            onChange={(e) => setDiscounts((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <select name={`outcome-${itemKey(item)}`} className="input w-28" defaultValue="RESIDUAL">
+                            <option value="RESIDUAL">Residual</option>
+                            <option value="PARTIAL">Partial</option>
+                          </select>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -140,12 +176,14 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
               </div>
               <p className="mt-2 text-sm text-ink-soft">
                 Allocated {allocated.toFixed(2)} · difference {difference.toFixed(2)}.
-                The net allocation must equal the payment before posting — a difference is never silently resolved.
+                Each item settles by what is applied plus any discount taken, as chosen per item. What remains
+                unassigned posts on account or, within the tolerance group, as a payment difference.
+                The completion service lands in a later stage; posting stands disabled until it does.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled={!canEnter || posting || chosen.length === 0 || difference !== 0}
+                  disabled
                 >
                   Post payment
                 </button>
