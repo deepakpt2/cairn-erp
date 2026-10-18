@@ -1995,6 +1995,12 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'vendorClearing.title': 'Clear Vendor Open Items',
+  'vendorClearing.subtitle':
+    'Clear a supplier\u2019s open items against each other: invoices, credit ' +
+    'memos and payments stand in one grid until their signed sum stands at ' +
+    'zero, when one clearing journal clears them in place under three ' +
+    'distinct dates \u2014 clearing, posting and document.',
   'paymentRun.title': 'Payment Run',
   'paymentRun.subtitle':
     'A payment run gathers the supplier payables that stand due, proposes ' +

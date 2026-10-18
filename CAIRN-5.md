@@ -551,6 +551,13 @@ The owner's F-44 package is contracted as R-112. The round clears supplier open 
 
 ---
 
+### 26.431 B-415 — SCR-064 vendor clearing stage 1: the inert screen stands
+
+The clearing screen stands at `/finance/vendor-clearing`: selection (supplier, company code, and the clearing, posting and document dates kept distinct and explained), the open-item grid rendered empty with its assigned/difference line, posting disabled, and the cleared-history tile. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -634,6 +641,7 @@ The owner's F-44 package is contracted as R-112. The round clears supplier open 
 | 2.246 | 2026-10-18 | **SCR-063 payment run stage 4 (B-412, §26.428).** The payment-run term seeded at its route with F110 a search alias only. Seed reads back 97/66/70/79. | Agent |
 | 2.247 | 2026-10-18 | **SCR-063 payment run closed (B-413, §26.429).** Service tests and browser target T934 (neighbour T935) green on the production build; full suite 1277/159, 130 migrations, seed 97/66/70/79. Deferrals named: customer items, partial payments, cash-discount taking, payment media and bank statement reconciliation, cross-company central payment. | Agent |
 | 2.248 | 2026-10-18 | **SCR-064 vendor clearing contracted (R-112, B-414, §26.430).** F-44 under house names: open-item grid over uncleared supplier lines, clearing/posting/document dates kept distinct, exact-zero balance in one currency, clearing in place under a clearing journal; reset and partial clearing deferred, `FIN.AP.CLEAR` created this round. | Agent |
+| 2.249 | 2026-10-18 | **SCR-064 vendor clearing stage 1 (B-415, §26.431).** The inert clearing screen stands at `/finance/vendor-clearing` — selection with the three distinct dates, the empty open-item grid, posting disabled, cleared history. Typecheck and production build clean. | Agent |
 
 ---
 
