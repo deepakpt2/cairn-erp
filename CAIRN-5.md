@@ -313,6 +313,22 @@ The supporting register stands: `CFG.PROC.CHARACTERISTIC.DEFINE` as capability a
 
 ---
 
+### 26.399 B-383 — SCR-057 / CT04 closed and accepted: characteristics stand
+
+**What shipped across the five stages.** The classification vocabulary stands under house names: `characteristic` keyed by its never-renamed tenant name (the naming policy a database check), five judged formats with per-format length/decimal/interval rules, unit and currency judged against the standing reference masters, allowed values unique under the case policy the characteristic declares, and the Cairn lifecycle — born DRAFT, activated and blocked through reasoned acts, deleted only as a valueless draft. Structural edits consult the usage count that stands honestly at zero until the class round gives it rows. No period gate touches this screen. Every act writes one change document, the format security-relevant.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/characteristic-definition.test.ts`: naming and format judges including the case-insensitive duplicate refusal, the lifecycle walk with blocked structural protection, draft-only deletion). Browser target `characteristics` (T940) **green journeys** against the production build: the empty grid, TOTAL_VALUE created as a draft through the editor, activation through its reasoned act, the database remembering. Neighbouring targets `purchase-orders` (T941) and `purchase-requisitions` (T942) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1257 tests across 153 files**; **117 migrations** standing; seed **94/65/65/67** read back.
+
+**Cost.** Measured: 07:05 in to 07:14 — **9 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**Deferred and named, per the owner's full-parity rule.** Language-dependent descriptions and value texts (B-223 — Cairn masters carry the tenant language); user-defined formats (no engine exists to judge them); value-assignment enforcement itself, which belongs to the classification records the class round creates; engineering-change effective dating; and the usage counts that become real when classes reference characteristics.
+
+**What stands after this.** The chain advances one link: **SCR-058 / CL02** (classes grouping ACTIVE characteristics, class types for requisition and order) is next, then the release-strategy configuration that finally spends `CFG.PROC.RELEASE.DEFINE`, then the release acts.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -358,6 +374,7 @@ The supporting register stands: `CFG.PROC.CHARACTERISTIC.DEFINE` as capability a
 | 2.208 | 2026-10-18 | **SCR-057 / CT04 stage 2 (B-380, §26.396).** Migrations `0069` + `9047` applied (117 standing): `characteristic` and `characteristic_value` behind forced tenant RLS, Drizzle tables in `characteristic-schema.ts`. Typecheck clean. | Agent |
 | 2.209 | 2026-10-18 | **SCR-057 / CT04 stage 3 (B-381, §26.397).** The characteristic service and live screen: naming and format judges, case-policy value uniqueness, DRAFT/ACTIVE/BLOCKED acts, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.210 | 2026-10-18 | **SCR-057 / CT04 stage 4 (B-382, §26.398).** Activity, capability and term seeded (CT04 a search alias only), the route among the built routes; seed reads back 94/65/65/67. | Agent |
+| 2.211 | 2026-10-18 | **SCR-057 / CT04 CLOSED and accepted (B-383, §26.399).** Stage 5 ships 3 service tests and the T940 browser target `characteristics` (green — TOTAL_VALUE drafted and activated through the editor). Neighbouring `purchase-orders` and `purchase-requisitions` targets, typecheck, `lint:ip` and the production build clean; suite 1257 across 153 files, 117 migrations, seed 94/65/65/67. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 
 ---
 
