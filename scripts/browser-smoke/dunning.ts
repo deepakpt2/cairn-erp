@@ -78,6 +78,8 @@ export async function dunningF150(ctx: Context) {
   await paramForm.locator('input[name="dunningDate"]').fill('2026-11-20');
   await paramForm.locator('input[name="postedThrough"]').fill('2026-11-20');
   await paramForm.locator('input[name="companyCodes"]').fill('1000');
+  await paramForm.getByRole('button', { name: 'Load run', exact: true }).click();
+  await page.waitForLoadState('networkidle');
   await params.locator('input[name="confirmed"]').check();
   await params.getByRole('button', { name: 'Execute run', exact: true }).click();
   await page.waitForLoadState('networkidle');
