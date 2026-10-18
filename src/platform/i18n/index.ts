@@ -2021,6 +2021,8 @@ const en: Catalogue = {
     'equal the receipt — a difference is explained, never discarded.',
   'outgoingPayment.title': 'Post Outgoing Payment',
   'vendorDownPayment.title': 'Post Vendor Down Payment',
+  'vendorDownPaymentClearing.title': 'Clear Vendor Down Payment',
+  'vendorDownPaymentClearing.subtitle': 'Apply standing down payments to open vendor invoices: a transfer posting settles both sides, remainders standing open by the partial model.',
   'specialGl.title': 'Special G/L Indicators',
   'specialGl.subtitle': 'The alternative reconciliation account each special G/L indicator posts to, per account type and company scope; the tenant-wide scope stands as the default a company row overrides.',
   'vendorDownPayment.subtitle': 'Pay a vendor in advance against a special G/L indicator; the advance stands open outside ordinary payables until cleared against invoices.',
