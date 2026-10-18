@@ -52,6 +52,7 @@ export const TARGETS = [
   { id: 'payment-run', client: 'T934', label: 'SCR-063 payment run: parameters, proposal, execution, clearing' },
   { id: 'vendor-clearing', client: 'T933', label: 'SCR-064 vendor clearing: open items, zero balance, three dates' },
   { id: 'vendor-balances', client: 'T932', label: 'SCR-065 vendor balances: derived periods, drill-down' },
+  { id: 'vendor-ageing', client: 'T931', label: 'SCR-066 vendor ageing: as-of key date, buckets, item detail' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

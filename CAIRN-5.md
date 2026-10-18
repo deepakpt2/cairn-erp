@@ -669,6 +669,15 @@ Stage 4 creates the capability `FIN.AP.AGEING` (display) and seats its term *Ven
 
 ---
 
+### 26.447 B-431 — SCR-066 vendor ageing closed (R-114)
+
+Stage 5 accepts the round. The service tests prove the reconstruction: at the invoice posting date both invoices stand not yet due at −800 and the later payment does not stand at all; at 2026-12-20 the invoices sit 35 days overdue against the payment at 61, netting −300; an item cleared on 2026-12-01 still stands at a 2026-11-30 key date and is gone by 2026-12-20; non-increasing thresholds refuse by name. Browser target **T931** drives the journey on the production build with the supplier's item detail; neighbour **T932** stays green. The full suite stands at **1286 tests across 162 files**; typecheck and the production build clean; 133 migrations; seed **100/66/73/82**.
+
+Named deferrals carried forward, by the contract: posting-date ageing basis; sort rules beyond supplier-then-due-date; document and item summarizations; document-currency display; special G/L items; partial-payment and residual-item allocation in the outstanding amount.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -768,6 +777,7 @@ Stage 4 creates the capability `FIN.AP.AGEING` (display) and seats its term *Ven
 | 2.262 | 2026-10-18 | **SCR-066 vendor ageing stage 2 (B-428, §26.444).** No ageing table by contract — standing reconstructs from the journal; migration `0078` adds the company/posting-date header index. 133 migrations standing. | Agent |
 | 2.263 | 2026-10-18 | **SCR-066 vendor ageing stage 3 (B-429, §26.445).** Standing reconstructs as of the key date and ages on the due-date rule into per-supplier buckets with a company total; the screen is live with item detail and the balances drill-down. Typecheck and production build clean. | Agent |
 | 2.264 | 2026-10-18 | **SCR-066 vendor ageing stage 4 (B-430, §26.446).** Capability `FIN.AP.AGEING` created; the ageing term seeded at its route with S_ALR_87012085 a search alias only. Seed reads back 100/66/73/82. | Agent |
+| 2.265 | 2026-10-18 | **SCR-066 vendor ageing closed (B-431, §26.447).** Service tests and browser target T931 (neighbour T932) green on the production build; full suite 1286/162, 133 migrations, seed 100/66/73/82. Deferrals named: posting-date basis, further sorts/summarizations, document currency, special G/L, partial/residual allocation. | Agent |
 
 ---
 
