@@ -1170,6 +1170,13 @@ Stage 2 of R-125. `industry` stands tenant-scoped with its code check (`^[A-Z0-9
 Verification: migrations applied and idempotent on rerun; typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-497 / §26.513 / §30 row 2.331. **Cost (B-254, measured):** stage 1 published 14:24 UTC; stage 2 completed 14:25 UTC.
 
 ---
+### 26.514 B-498 — SCR-077 stage 3: industry service and live screen
+
+Stage 3 of R-125. `src/modules/foundation/industry-definition.ts` maintains the master in the standing shape: create judges the code's format, refuses a standing code by name, requires the default-language description and judges every text against the configured system languages (an unconfigured language refuses naming it, a blank or over-long description likewise); change upserts descriptions language by language against the standing industry; the code itself never changes. Deletion counts the partners carrying the industry and refuses with the count named, an unreferenced industry deleting with its texts in one transaction; deactivation and reactivation stand beside it. A reason stands mandatory on every write, one change document per write under object class `industry`. `/config/industries` is live: the grid carries code, default-language description, languages, partner count and standing, with the create/change form and the lifecycle dialogs.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-498 / §26.514 / §30 row 2.332. **Cost (B-254, measured):** stage 2 published 14:25 UTC; stage 3 completed 14:26 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1346,3 +1353,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.329 | 2026-10-18 | **SCR-077 contract R-125 written (B-495, §26.511).** OB44 Maintain Industries: tenant industry master (code ≤4) with per-language descriptions (≤20) judged against configured languages, five delivered industries, a restricting partner reference, delete refused while partners carry the code. Partner-screen picker deferred, named. Stage 1 follows. | Agent |
 | 2.330 | 2026-10-18 | **SCR-077 stage 1 published (B-496, §26.512).** Inert `/config/industries` screen stands with the grid and create shapes under `CFG.ORG.INDUSTRY.DEFINE`. Schema follows in stage 2. | Agent |
 | 2.331 | 2026-10-18 | **SCR-077 stage 2 published (B-497, §26.513).** `industry`/`industry_text` stand with the restricting partner reference; five industries delivered to standing tenants; 148 migrations. Service follows in stage 3. | Agent |
+| 2.332 | 2026-10-18 | **SCR-077 stage 3 published (B-498, §26.514).** Industry service stands (language-judged texts, partner-count deletion guard) and `/config/industries` is live. Activity, capability, term and onboarding delivery follow in stage 4. | Agent |
