@@ -418,6 +418,12 @@ Stage 1 ships the release panels on the requisition and order screens: on a stan
 
 ---
 
+### 26.411 B-395 — SCR-060 release acts stage 2: the document release table stands
+
+Migration `0072_document_release.sql` with `9050_document_release_policies.sql` — **123 migrations standing**. `document_release` stands one row per judged document — category, number, its group and strategy by foreign key, the step it stands on, and PENDING/RELEASED — behind forced tenant RLS with the four audit columns. No strategy matching means no row: the absence is the not-required state.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -478,6 +484,7 @@ Stage 1 ships the release panels on the requisition and order screens: on a stan
 | 2.223 | 2026-10-18 | **SCR-059 release strategies CLOSED and accepted (B-393, §26.409).** Stage 5 ships 2 service tests and the T938 browser target `release-strategies` (green — group, strategy, activation, the database remembering). Neighbouring `classes` and `characteristics` targets, typecheck, `lint:ip` and the production build clean; suite 1264 across 155 files, 121 migrations, seed 96/66/67/71. The pageless-route obligation is closed. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.224 | 2026-10-18 | **SCR-060 release acts contracted (R-108).** Determination inside create and change, `document_release` standing state, sequenced release and cancel-release under category capabilities, released documents refusing change, agent assignment deferred and named. | Agent |
 | 2.225 | 2026-10-18 | **SCR-060 release acts stage 1 (B-394, §26.410).** Release panels stand on the requisition and order screens, acts disabled. Typecheck clean. | Agent |
+| 2.226 | 2026-10-18 | **SCR-060 release acts stage 2 (B-395, §26.411).** Migrations `0072` + `9050` applied (123 standing): `document_release` standing state behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 

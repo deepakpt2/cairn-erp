@@ -186,3 +186,24 @@ export const purchaseOrderAssignment = pgTable('purchase_order_assignment', {
   check('po_assignment_percentage_ck', sql`${t.distributionPercentage} > 0 and ${t.distributionPercentage} <= 100`),
   check('po_assignment_line_ck', sql`${t.lineNumber} > 0`),
 ]);
+
+/**
+ * Document release state — SCR-060 / R-108. One row per judged
+ * document: its strategy, the step it stands on, and its status.
+ * Events live in the documents' change history, not here.
+ */
+export const documentRelease = pgTable('document_release', {
+  client: tenant(),
+  documentCategory: varchar('document_category', { length: 20 }).notNull(),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  strategyCode: varchar('strategy_code', { length: 12 }).notNull(),
+  currentStep: smallint('current_step').notNull().default(0),
+  status: varchar('status', { length: 10 }).notNull().default('PENDING'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentCategory, t.documentNumber] }),
+  check('document_release_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER')`),
+  check('document_release_status_ck', sql`${t.status} in ('PENDING', 'RELEASED')`),
+  check('document_release_step_ck', sql`${t.currentStep} >= 0`),
+]);
