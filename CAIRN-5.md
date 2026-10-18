@@ -768,6 +768,13 @@ Named deferrals carried forward, by the contract: partial payments, residual ite
 
 ---
 
+### 26.460 B-444 — Standing instruction: every completion names the next T-code
+
+The owner rules that completing a task must specify the next T-code, not merely ask for one. Applied immediately: **SCR-069 is FD10N — customer balances** (`FIN.AR.BALANCE`, the accounts-receivable mirror of SCR-065), followed by customer ageing (S_ALR_87012178) as SCR-070. No contract is drafted and no implementation starts until the owner's FD10N field package arrives.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -880,6 +887,7 @@ Named deferrals carried forward, by the contract: partial payments, residual ite
 | 2.275 | 2026-10-18 | **SCR-068 incoming payment stage 3 (B-441, §26.457).** The incoming-payment service (receivables with due dates, exact-allocation rule naming the difference, `DZ` journal, clearing in place, request-key replay) and the live screen. Typecheck and production build clean. | Agent |
 | 2.276 | 2026-10-18 | **SCR-068 incoming payment stage 4 (B-442, §26.458).** Capability `FIN.AR.PAYMENT.ENTER` created; the incoming-payment term seeded at its route with F-28 a search alias only. Seed reads back 102/66/75/84. | Agent |
 | 2.277 | 2026-10-18 | **SCR-068 incoming payment closed (B-443, §26.459).** Service tests and browser target T929 (neighbour T930) green on the production build; full suite 1293/164, 137 migrations, seed 102/66/75/84. Deferrals named: partial/residual/on-account payments, discounts and write-offs, clearing reset (FBRA) and reversal (FB08), special G/L, FX translation. | Agent |
+| 2.278 | 2026-10-18 | **Standing instruction recorded (B-444, §26.460).** Every completion report now names the next T-code. Next: SCR-069 = FD10N customer balances (`FIN.AR.BALANCE`), then SCR-070 = customer ageing (S_ALR_87012178); awaiting the owner's FD10N field package before any contract or implementation. | Agent |
 
 ---
 
