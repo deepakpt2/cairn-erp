@@ -2020,6 +2020,8 @@ const en: Catalogue = {
     'item clears in place under the payment document. The allocation must ' +
     'equal the receipt — a difference is explained, never discarded.',
   'outgoingPayment.title': 'Post Outgoing Payment',
+  'vendorDownPayment.title': 'Post Vendor Down Payment',
+  'vendorDownPayment.subtitle': 'Pay a vendor in advance against a special G/L indicator; the advance stands open outside ordinary payables until cleared against invoices.',
   'outgoingPayment.subtitle':
     'A vendor payment allocated against the open payables it settles: ' +
     'the vendor debits per allocation, the bank credits, and every settled ' +
