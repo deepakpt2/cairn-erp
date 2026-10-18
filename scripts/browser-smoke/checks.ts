@@ -78,6 +78,7 @@ import { customerAgeingAnalysis } from './customer-ageing';
 import { clearingResetFbra } from './clearing-reset';
 import { documentReversalFb08 } from './document-reversal';
 import { customerClearingF32 } from './customer-clearing';
+import { dunningF150 } from './dunning';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4954,6 +4955,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'clearing-reset': clearingResetFbra,
   'document-reversal': documentReversalFb08,
   'customer-clearing': customerClearingF32,
+  'dunning': dunningF150,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,

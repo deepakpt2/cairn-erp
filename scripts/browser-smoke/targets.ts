@@ -60,6 +60,7 @@ export const TARGETS = [
   { id: 'clearing-reset', client: 'T926', label: 'SCR-071 clearing reset: display clearing, reset, items reopened' },
   { id: 'document-reversal', client: 'T925', label: 'SCR-072 document reversal: display original, reverse, AB mirror linked' },
   { id: 'customer-clearing', client: 'T924', label: 'SCR-073 customer clearing: open items grid, DZ clearing, items stamped' },
+  { id: 'dunning', client: 'T923', label: 'SCR-074 dunning: run proposes overdue account, finalize, notice stands' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
