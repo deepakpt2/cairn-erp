@@ -603,6 +603,13 @@ The balances screen stands at `/finance/vendor-balances`: selection (supplier, c
 
 ---
 
+### 26.438 B-422 — SCR-065 vendor balances stage 2: the index stands, no balance table
+
+Balances derive from the journal at read time, so no summary table stands to drift. Migration `0077` adds the partner/company index the derivation walks. **132 migrations standing.**
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -693,6 +700,7 @@ The balances screen stands at `/finance/vendor-balances`: selection (supplier, c
 | 2.253 | 2026-10-18 | **SCR-064 vendor clearing closed (B-419, §26.435).** Service tests and browser target T933 (neighbour T934) green on the production build; full suite 1280/160, 131 migrations, seed 98/66/71/80. Deferrals named: reset/reverse clearing, partial and residual clearing, special G/L items, exchange differences, manual vendor payment screen (F-53). | Agent |
 | 2.254 | 2026-10-18 | **SCR-065 vendor balances contracted (R-113, B-420, §26.436).** FK10N under house names, read-only: period balances derived from the posted journal (no balance table), opening/turnover/closing chained, document-currency display, drill-down to line items; `FIN.AP.BALANCE` created; stored figures/carryforward and conversion deferred. | Agent |
 | 2.255 | 2026-10-18 | **SCR-065 vendor balances stage 1 (B-421, §26.437).** The inert balances screen stands at `/finance/vendor-balances` — selection, the empty period matrix, the drill-down tile. Typecheck and production build clean. | Agent |
+| 2.256 | 2026-10-18 | **SCR-065 vendor balances stage 2 (B-422, §26.438).** No balance table by contract — balances derive from the posted journal; migration `0077` adds the partner/company index. 132 migrations standing. | Agent |
 
 ---
 
