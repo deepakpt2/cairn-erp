@@ -14,6 +14,19 @@ export const accountCategoryReference = pgTable('account_category_reference', {
   name: varchar('name', { length: 40 }).notNull(), ...auditColumns,
 }, (t) => [primaryKey({ columns: [t.client, t.reference] })]);
 
+/**
+ * Industry sectors (SCR-052 / MM01; R-100).
+ *
+ * The one-character sector key a material is created under, maintained
+ * as a tenant master in the standing shape. The standard sectors are
+ * delivered per tenant; materials judge against the active rows.
+ */
+export const industrySector = pgTable('industry_sector', {
+  client: tenant(), sector: varchar('sector', { length: 1 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true), ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.sector] })]);
+
 export const materialType = pgTable('material_type', {
   client: tenant(), materialType: varchar('material_type', { length: 4 }).notNull(),
   name: varchar('name', { length: 25 }).notNull(),
@@ -89,11 +102,11 @@ export const mrpController = pgTable('mrp_controller', {
 
 export const material = pgTable('material', {
   client: tenant(), materialNumber: varchar('material_number', { length: 40 }).notNull(),
-  description: varchar('description', { length: 200 }).notNull().default(''),
+  description: varchar('description', { length: 40 }).notNull().default(''),
   materialType: varchar('material_type', { length: 12 }).notNull(),
   materialGroup: varchar('material_group', { length: 20 }),
   baseUnit: varchar('base_unit', { length: 6 }).references(() => unitOfMeasure.code),
-  industrySector: varchar('industry_sector', { length: 20 }),
+  industrySector: varchar('industry_sector', { length: 1 }),
   barcode: varchar('barcode', { length: 32 }),
   grossWeight: quantity('gross_weight').notNull().default('0'),
   netWeight: quantity('net_weight').notNull().default('0'),

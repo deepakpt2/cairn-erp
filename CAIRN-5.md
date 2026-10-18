@@ -90,6 +90,12 @@ The round's new master opens as shape only: `/config/industry-sectors` renders t
 
 ---
 
+### 26.371 B-355 — SCR-052 stage 2: the sector table and the narrowed material columns
+
+Migration `0063` creates `industry_sector` (one-character key with its format check, 40-character name, active flag, audit columns), delivers the five standard sectors to every standing tenant, converts standing materials — `MANUFACTURING` and anything not a delivered key becomes `M` — and narrows both material columns: `industry_sector` to `varchar(1)`, `description` to the reference `varchar(40)`. The narrowing was verified lossless before it ran: no standing description exceeds 40 characters. `9043` puts the table behind the standing forced tenant RLS. The Drizzle table stands in `src/modules/inventory/schema.ts` beside the other inventory masters. **108 migrations now stand.** One false start, corrected in-stage: the sector name first stood at 30 characters and `Plant engineering and construction` (34) refused it — the name stands at 40, the house reference width.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -102,6 +108,7 @@ The round's new master opens as shape only: `/config/industry-sectors` renders t
 | 2.175 | 2026-10-18 | **SCR-051 / MMNR CLOSED and accepted (B-353, §26.369).** Stage 5 ships 4 service tests and the T946 browser target `material-number-ranges` (7/7 journeys against the production build — group defined through the screen, RAW assigned by the OMS2 picker, deletion refused, MM01 drawing 1000, the database remembering). Neighbouring `material-types` and `number-range-objects` targets, typecheck, `lint:ip` and the production build clean; suite 1233 across 147 files, 106 migrations, seed 90/62/59/55. Cost measured at 24 minutes overall. | Agent |
 | 2.176 | 2026-10-18 | **SCR-052 / MM01 contracted (R-100).** The owner's MM01 package audited against the standing material master: most of it already stands (numbering, judging, valuation, per-view statuses) and is confirmed; the round builds the two ruled gaps — the description narrowing to 40 and a maintained industry-sector master with MM01 judging (standing `MANUFACTURING` converting to `M`) — and defers LVORM to SCR-053, per-type view permissions, the view-selection step and further views recorded as unbuilt. | Agent |
 | 2.177 | 2026-10-18 | **SCR-052 stage 1 published (B-354, §26.370).** The inert industry-sector screen `/config/industry-sectors` (OMS3 search alias in its heading code), grid rendered empty, i18n keys added. No reads, no writes. | Agent |
+| 2.178 | 2026-10-18 | **SCR-052 stage 2 published (B-355, §26.371).** Migrations `0063` + `9043` create the industry-sector master (delivered sectors per tenant, `MANUFACTURING` converted to `M`, forced tenant RLS) and narrow the material description to 40 and sector to 1 character, verified lossless; Drizzle tables updated — 108 migrations. | Agent |
 
 ---
 
