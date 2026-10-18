@@ -158,7 +158,8 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                         </td>
                         <td className="px-2 py-2">
                           <input
-                            name={`discount-${itemKey(item)}`} className="input w-20" placeholder="0.00"
+                            name={`discount-${itemKey(item)}`} className="input w-20"
+                            placeholder={item.discountAmount > 0 ? item.discountAmount.toFixed(2) : '0.00'}
                             value={discounts[itemKey(item)] ?? ''}
                             onChange={(e) => setDiscounts((p) => ({ ...p, [itemKey(item)]: e.target.value }))}
                           />
@@ -178,12 +179,11 @@ export default function OutgoingPayment({ view, loadError, canEnter, today }: {
                 Allocated {allocated.toFixed(2)} · difference {difference.toFixed(2)}.
                 Each item settles by what is applied plus any discount taken, as chosen per item. What remains
                 unassigned posts on account or, within the tolerance group, as a payment difference.
-                The completion service lands in a later stage; posting stands disabled until it does.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled
+                  disabled={!canEnter || posting || (chosen.length === 0 && !(Number(onAccount) > 0))}
                 >
                   Post payment
                 </button>

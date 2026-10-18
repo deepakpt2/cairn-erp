@@ -1321,6 +1321,12 @@ Stage 2 of R-128. `outgoing_payment` gains `discount_amount` and `on_account_amo
 
 Verification: migration applied, columns verified, typecheck clean. Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-517 / §26.533 / §30 row 2.351. **Cost (B-254, measured):** stage 1 published 16:52 UTC; stage 2 completed this turn.
 
+### 26.534 B-518 — SCR-080 stage 3: completion service and wired screen
+
+Stage 3 of R-128. `postOutgoingPayment` completes, mirroring R-127: per-item applied/discount judged against the vendor invoice's terms tiers at the posting date and the default tolerance group's cash-discount maximum; FULL clears, RESIDUAL clears with the remainder standing as a new open credit line (`Residual item for …`), PARTIAL leaves the original open with the payment's debit line standing (`Partial payment for …`); debit-signed items net in full without discount; on-account stands an open debit line (`On account`) and items are not mandatory when it stands; the unassigned remainder is judged against the tolerance amount and percent limits and posts through `PAYMENT_DIFFERENCE` (expense when more was paid, revenue when less), beyond refused by name. Discounts received post credit through `CASH_DISCOUNT` with the REV modifier (lookup falling back to the unmodified row until stage 4 aligns the catalogue and the incoming call). Only `Settles` payment lines clear. `getPayables` suggests per-item terms/discount as of today; the screen posts the per-item fields and the record remembers the discount and on-account totals. The standing SCR-078 test expecting the old exact-allocation refusal is superseded by R-128 and is updated in stage 5.
+
+Verification: typecheck clean; the SCR-078 netting test's refusal expectation stands red until its stage-5 wording update (recorded, not hidden). Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-518 / §26.534 / §30 row 2.352. **Cost (B-254, measured):** stage 2 published 16:53 UTC; stage 3 completed this turn.
+
 ---
 ---
 
@@ -1518,3 +1524,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.349 | 2026-10-18 | **SCR-080 contract R-128 written (B-515, §26.531).** F-53 completion mirrors R-127 on the vendor side: per-item applied/discount judged by invoice terms and the default tolerance group, full/residual/partial outcomes, on-account and tolerated differences; the allocation table declined, journal lines carry outcomes. Stage 1 follows. | Agent |
 | 2.350 | 2026-10-18 | **SCR-080 stage 1 published (B-516, §26.532).** Outgoing-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
 | 2.351 | 2026-10-18 | **SCR-080 stage 2 published (B-517, §26.533).** `outgoing_payment` gains the discount and on-account totals; 153 migrations. The completion service follows in stage 3. | Agent |
+| 2.352 | 2026-10-18 | **SCR-080 stage 3 published (B-518, §26.534).** Completion service stands: terms-tier discount and tolerance judging, full/residual/partial outcomes, on-account and tolerated differences; the screen is live and submitting outcomes. Determination modifiers follow in stage 4. | Agent |

@@ -38,7 +38,16 @@ export async function postPaymentAction(
   try {
     const items = form.getAll('item').map((value) => {
       const [documentNumber, fiscalYear, lineNumber] = String(value).split('|');
-      return { documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber) };
+      const key = `${documentNumber}|${fiscalYear}|${lineNumber}`;
+      const appliedText = text(form, `applied-${key}`);
+      const discountText = text(form, `discount-${key}`);
+      const outcomeText = text(form, `outcome-${key}`);
+      return {
+        documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber),
+        applied: appliedText ? Number(appliedText) : undefined,
+        discount: discountText ? Number(discountText) : undefined,
+        outcome: (outcomeText === 'PARTIAL' ? 'PARTIAL' : 'RESIDUAL') as 'RESIDUAL' | 'PARTIAL',
+      };
     });
     const result = await postOutgoingPayment({
       client: session.user.client, changedBy: session.user.username,
@@ -50,6 +59,7 @@ export async function postPaymentAction(
       amount: Number(text(form, 'amount')),
       currency: text(form, 'currency').toUpperCase(),
       reference: text(form, 'reference') || undefined,
+      onAccountAmount: Number(text(form, 'onAccount')) || 0,
       valueDate: text(form, 'valueDate') || undefined,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
       items,
