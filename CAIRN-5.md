@@ -1444,6 +1444,10 @@ Verification: seed applied with the new counts standing; typecheck clean. Accept
 ---
 ---
 
+## §26.555 — SCR-083 acceptance and closure
+
+**B-539 — SCR-083 CLOSED with browser acceptance.** Targeted suite 3/3 (real refusal paths and the down-payment record read back), **full suite 1356 green** (1352 + 3 SCR-083 + 1 fixture); browser **T913 green** against the production build (DB cairn_b210:5432): fixture stood the AR indicator A tenant-wide, posted an 8,000 down payment, and the database remembered journal 1000/2026/1 debiting bank 101000 and crediting the alternative account 230000 with 'Down payment A' and the record amount 8000.0000. Seed twice idempotent at 116 capabilities / 90 terms. F-29 is done; F-37 down-payment requests and tax adjustment join the later named-items queue. **Next: T-code F-39 — clear customer down payment** (mirrors the SCR-082 clearing round for customers: transfer an advance to the ordinary receivable account against the invoice); the owner's package is requested.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1659,3 +1663,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.370 | 2026-10-18 | **SCR-083 stage 2 published (B-536, §26.552).** The customer down-payment record stands; 156 migrations. The posting service follows in stage 3. | Agent |
 | 2.371 | 2026-10-18 | **SCR-083 stage 3 published (B-537, §26.553).** Customer down-payment service stands: AR indicator resolution under lock, DZ journal on the alternative account, replay by request key; the screen is live. Capability follows in stage 4. | Agent |
 | 2.372 | 2026-10-18 | **SCR-083 stage 4 published (B-538, §26.554).** Capability F-29 seeded (116 capabilities / 90 terms / 99 aliases). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.373 | 2026-10-18 | **SCR-083 stage 5 published — CLOSED (B-539, §26.555).** Tests 3/3, full suite 1356 green, browser T913 green; customer down payments stand accepted. Next: T-code F-39 clear customer down payment. | Agent |
