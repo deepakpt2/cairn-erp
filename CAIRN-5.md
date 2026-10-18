@@ -377,6 +377,12 @@ Stage 1 ships the inert screen at `/config/release-strategies` under the `releas
 
 ---
 
+### 26.406 B-390 — SCR-059 release strategies stage 2: the strategy tables stand
+
+Migration `0071_release_strategy.sql` with `9049_release_strategy_policies.sql` — **121 migrations standing**. `release_group` carries the document category; `release_code` hangs beneath its group; `release_strategy` binds a group to a classification class by foreign key with priority and the Cairn lifecycle; `release_strategy_criterion` and `release_strategy_step` stand beneath the strategy, the step's code foreign-keyed to the group's codes so a strategy can only sequence codes its group owns. All five tables carry the audit columns behind forced tenant RLS.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -431,6 +437,7 @@ Stage 1 ships the inert screen at `/config/release-strategies` under the `releas
 | 2.217 | 2026-10-18 | **SCR-058 / CL02 CLOSED and accepted (B-388, §26.404).** Stage 5 ships 3 service tests and the T939 browser target `classes` (green — PO_RELEASE with TOTAL_VALUE, drafted and activated). Neighbouring `characteristics` and `purchase-orders` targets, typecheck, `lint:ip` and the production build clean; suite 1261 across 154 files, 119 migrations, seed 95/66/66/70. The CT04 usage count is real. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.218 | 2026-10-18 | **SCR-059 release strategies contracted (R-107).** Groups, codes and strategies judging documents against the CL02 classes through the delivered attribute catalogue, determination as a pure judge, the release acts explicitly the next round so nothing merges. The pageless `CFG.PROC.RELEASE.DEFINE` obligation is taken up. | Agent |
 | 2.219 | 2026-10-18 | **SCR-059 release strategies stage 1 (B-389, §26.405).** The inert screen stands at `/config/release-strategies`: empty grid, strategy editor with criteria and sequenced release codes, save disabled. Typecheck clean. | Agent |
+| 2.220 | 2026-10-18 | **SCR-059 release strategies stage 2 (B-390, §26.406).** Migrations `0071` + `9049` applied (121 standing): groups, codes, strategies, criteria and steps behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 

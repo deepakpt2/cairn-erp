@@ -111,3 +111,99 @@ export const classAssignment = pgTable('class_assignment', {
   }),
   check('class_assignment_position_ck', sql`${t.position} > 0`),
 ]);
+
+/**
+ * Release strategies — SCR-059 / R-107. Groups own codes; a strategy
+ * binds a group to a classification class; criteria judge document
+ * attributes; steps sequence the codes that must act.
+ */
+export const releaseGroup = pgTable('release_group', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  documentCategory: varchar('document_category', { length: 20 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode] }),
+  check('release_group_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER')`),
+]);
+
+export const releaseCode = pgTable('release_code', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  code: varchar('code', { length: 8 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode, t.code] }),
+  foreignKey({
+    columns: [t.client, t.groupCode],
+    foreignColumns: [releaseGroup.client, releaseGroup.groupCode],
+  }),
+]);
+
+export const releaseStrategy = pgTable('release_strategy', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  strategyCode: varchar('strategy_code', { length: 12 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  classType: varchar('class_type', { length: 20 }).notNull(),
+  className: varchar('class_name', { length: 18 }).notNull(),
+  priority: integer('priority').notNull().default(100),
+  lifecycleStatus: varchar('lifecycle_status', { length: 8 }).notNull().default('DRAFT'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode, t.strategyCode] }),
+  foreignKey({
+    columns: [t.client, t.groupCode],
+    foreignColumns: [releaseGroup.client, releaseGroup.groupCode],
+  }),
+  foreignKey({
+    columns: [t.client, t.classType, t.className],
+    foreignColumns: [classificationClass.client, classificationClass.classType, classificationClass.className],
+  }),
+  check('release_strategy_priority_ck', sql`${t.priority} > 0`),
+  check('release_strategy_lifecycle_ck', sql`${t.lifecycleStatus} in ('DRAFT', 'ACTIVE', 'BLOCKED')`),
+]);
+
+export const releaseStrategyCriterion = pgTable('release_strategy_criterion', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  strategyCode: varchar('strategy_code', { length: 12 }).notNull(),
+  characteristicName: varchar('characteristic_name', { length: 30 }).notNull(),
+  operator: varchar('operator', { length: 8 }).notNull(),
+  valueFrom: varchar('value_from', { length: 30 }).notNull(),
+  valueTo: varchar('value_to', { length: 30 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode, t.strategyCode, t.characteristicName] }),
+  foreignKey({
+    columns: [t.client, t.groupCode, t.strategyCode],
+    foreignColumns: [releaseStrategy.client, releaseStrategy.groupCode, releaseStrategy.strategyCode],
+  }),
+  foreignKey({
+    columns: [t.client, t.characteristicName],
+    foreignColumns: [characteristic.client, characteristic.characteristicName],
+  }),
+  check('release_criterion_operator_ck', sql`${t.operator} in ('EQ', 'GE', 'GT', 'LE', 'LT', 'BETWEEN')`),
+]);
+
+export const releaseStrategyStep = pgTable('release_strategy_step', {
+  client: tenant(),
+  groupCode: varchar('group_code', { length: 12 }).notNull(),
+  strategyCode: varchar('strategy_code', { length: 12 }).notNull(),
+  step: smallint('step').notNull(),
+  releaseCode: varchar('release_code', { length: 8 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.groupCode, t.strategyCode, t.step] }),
+  foreignKey({
+    columns: [t.client, t.groupCode, t.strategyCode],
+    foreignColumns: [releaseStrategy.client, releaseStrategy.groupCode, releaseStrategy.strategyCode],
+  }),
+  foreignKey({
+    columns: [t.client, t.groupCode, t.releaseCode],
+    foreignColumns: [releaseCode.client, releaseCode.groupCode, releaseCode.code],
+  }),
+  check('release_step_ck', sql`${t.step} > 0`),
+]);
