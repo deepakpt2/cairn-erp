@@ -797,6 +797,13 @@ Balances derive at read time from the posted journal, so no `customer_period_bal
 
 ---
 
+### 26.464 B-448 — SCR-069 stage 3: customer balances read live from the ledger
+
+`src/modules/finance/customer-balances.ts` mirrors the vendor service on the receivable side: the customer must stand extended to the company (`customer_company_code`), the year is read through the company's fiscal-year variant, opening is the signed (debit-positive) sum of every earlier year, and debit/credit turnover chains the closing period by period — regular periods always, special periods only on request. Company-currency display uses local amounts; a single standing document currency may display document amounts; anything else refuses by name with no conversion. A selected period drills to the customer line items with document, line, posting date, type, debit/credit, document and local amounts and clearing standing. The screen at `/finance/customer-balances` is wired to it. Read-only; nothing posts.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -913,6 +920,7 @@ Balances derive at read time from the posted journal, so no `customer_period_bal
 | 2.279 | 2026-10-18 | **SCR-069 customer balances contracted (R-117, B-445, §26.461).** FD10N under house names, read-only: balances derived from the posted journal with no balance table, debit-positive opening/turnover/closing chained per period, special periods on request, currency refused by name where conversion would be needed, period drill-down to line items; `FIN.AR.BALANCE` created; stored figures/carryforward, conversion, ageing and special G/L deferred. | Agent |
 | 2.280 | 2026-10-18 | **SCR-069 stage 1 published (B-446, §26.462).** The inert customer balances screen `/finance/customer-balances`: selection, empty period matrix and empty drill-down rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.281 | 2026-10-18 | **SCR-069 stage 2 verified (B-447, §26.463).** No schema change: balances derive from the posted journal with no balance table; the standing partner/company index from SCR-065 covers customer lines identically. Migrations unchanged at 137. | Agent |
+| 2.282 | 2026-10-18 | **SCR-069 stage 3 published (B-448, §26.464).** Customer balances read live: standing-extension check, variant-bound periods, debit-positive opening/turnover/chained closing derived from posted customer lines, special periods on request, single-currency display or named refusal, period drill-down to line items; screen wired. | Agent |
 
 ---
 
