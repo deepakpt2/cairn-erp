@@ -93,6 +93,7 @@ export default async function WorkbenchPage({
     '/config/material-types',
     '/config/material-groups',
     '/config/material-number-ranges',
+    '/config/industry-sectors',
     '/config/posting-period-variants',
     '/config/posting-period-variants/assign-company-codes',
     '/config/plants',

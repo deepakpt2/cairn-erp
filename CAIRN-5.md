@@ -104,6 +104,12 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 
 ---
 
+### 26.373 B-357 — SCR-052 stage 4: the sector activity seeded and the route built
+
+`CFG.INV.INDUSTRYSECTOR.DEFINE` stands in all three seed registers: the capability, the configuration activity (materials-management area, onboarding stage, route `/config/industry-sectors`), and the term *Define industry sectors* with OMS3 as a search alias only and the full parity description. The route joins `BUILT_ROUTES`. `npm run seed` reads back **91 capabilities / 63 activities / 60 terms / 56 aliases**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -118,6 +124,7 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 | 2.177 | 2026-10-18 | **SCR-052 stage 1 published (B-354, §26.370).** The inert industry-sector screen `/config/industry-sectors` (OMS3 search alias in its heading code), grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 | 2.178 | 2026-10-18 | **SCR-052 stage 2 published (B-355, §26.371).** Migrations `0063` + `9043` create the industry-sector master (delivered sectors per tenant, `MANUFACTURING` converted to `M`, forced tenant RLS) and narrow the material description to 40 and sector to 1 character, verified lossless; Drizzle tables updated — 108 migrations. | Agent |
 | 2.179 | 2026-10-18 | **SCR-052 stage 3 published (B-356, §26.372).** The industry-sector service and live screen, sectors delivered at onboarding, MM01 requiring and judging the sector with the description capped at 40, standing fixtures converted to `M`. Typecheck, `lint:ip`, build and the material suites green. | Agent |
+| 2.180 | 2026-10-18 | **SCR-052 stage 4 published (B-357, §26.373).** `CFG.INV.INDUSTRYSECTOR.DEFINE` seeded as capability, configuration activity and term (OMS3 search alias only); the route joins `BUILT_ROUTES`. Seed reads back 91/63/60/56. | Agent |
 
 ---
 
