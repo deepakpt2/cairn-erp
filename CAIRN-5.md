@@ -192,6 +192,20 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 
 ---
 
+### 26.384 B-368 — SCR-054 / OMSY closed and accepted: material period control per company code
+
+**What shipped across the five stages.** The MM period gate stands: one `material_period_control` record per company code behind forced tenant RLS — current and previous material year/period, the previous-year reference, and the two backposting indicators kept separate — initialized once through a privileged act judged against the company's fiscal-year variant (special periods never material periods; a company with no variant assigned refused with the assignment named; an established record never reinitialized), afterwards advancing only through the guarded shift of exactly one period, which makes the old current the previous, writes the previous-year reference at a year boundary, and itself clears the backposting allowance where disallow-after-change stands. Indicators maintain separately, every act reasoned and documented, nothing deleted. The posting judge `materialPeriodAllows` stands exported for the goods-movement round: current always open, previous only under the allowance, an uninitialized company opening nothing. OMSY, MMPV and MMRV live as search aliases on the one term.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/material-period-control.test.ts`: initialization judged — variantless company refused, period 13 refused, reinitialization refused, previous computed as 2026/09; the indicators maintained separately with the judge following them; three shifts honouring the disallow indicator and crossing the year boundary with the reference written, five change documents standing). Browser target `material-period-control` (T943) **7/7 journeys** against the production build: the company standing uninitialized, the record initialized at 2026/10 through its act, backposting allowed, the period shifted to 2026/11, and the database remembering. One target-side fix: the company filter now matches the cell that also carries the company name. Neighbouring targets `material-deletion-flag` (T944) and `material-types` (T949) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1245 tests across 150 files**; **111 migrations** standing; seed **92/64/62/60** read back.
+
+**Cost.** Measured: 06:08 in to 06:20 — **12 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**What stands after this.** The period gate exists and nothing posts against it yet — by design. **SCR-055 / MIGO** (goods movements) is next on the schedule: the first stock postings, judged against this control through `materialPeriodAllows` and against the FI periods beside it, and the round that discharges the R-101 deletion-flag enforcement obligation.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -219,6 +233,7 @@ The period service stands: `listMaterialPeriodControl` reading every company aga
 | 2.190 | 2026-10-18 | **SCR-054 stage 2 published (B-365, §26.381).** Migrations `0065` + `9044` create `material_period_control` (company-keyed, both indicators, forced tenant RLS) and its Drizzle table — 111 migrations. | Agent |
 | 2.191 | 2026-10-18 | **SCR-054 stage 3 published (B-366, §26.382).** The material period service (initialize judged against the variant, separate indicator maintenance, the guarded one-period shift, the exported posting judge) and the live screen. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.192 | 2026-10-18 | **SCR-054 stage 4 published (B-367, §26.383).** `CFG.INV.MATPERIOD.DEFINE` seeded as capability, configuration activity and term (OMSY/MMPV/MMRV search aliases only); the route joins `BUILT_ROUTES`. Seed reads back 92/64/62/60. | Agent |
+| 2.193 | 2026-10-18 | **SCR-054 / OMSY CLOSED and accepted (B-368, §26.384).** Stage 5 ships 3 service tests and the T943 browser target `material-period-control` (7/7 journeys against the production build — uninitialized company, initialization at 2026/10, backposting allowed, the shift to 2026/11, the database remembering). Neighbouring `material-deletion-flag` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1245 across 150 files, 111 migrations, seed 92/64/62/60. Cost measured at 12 minutes. | Agent |
 
 ---
 
