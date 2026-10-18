@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ACTIVITY, listCharacteristics } from '@/modules/foundation/characteristic-definition';
 import Characteristics from './Characteristics';
 
 export const dynamic = 'force-dynamic';
@@ -9,12 +10,12 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/characteristics';
 
 /**
- * Characteristics for classification (SCR-057 / CT04; inert since
- * stage 1). The vocabulary release strategies will judge by
- * (SCR-057 stage 3 wires the acts).
+ * Characteristics for classification (SCR-057 / CT04; inert in
+ * stage 1, live since stage 3).
  */
 export default async function CharacteristicsPage() {
-  await requireSession(ROUTE);
+  const session = await requireSession(ROUTE);
+  const rows = await listCharacteristics(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -29,7 +30,7 @@ export default async function CharacteristicsPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('characteristic.subtitle')}</p>
       </header>
 
-      <Characteristics />
+      <Characteristics rows={rows} canMaintain={can(session, ACTIVITY)} />
     </div>
   );
 }

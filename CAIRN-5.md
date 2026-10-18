@@ -301,6 +301,12 @@ Migration `0069_characteristic.sql` with `9047_characteristic_policies.sql` — 
 
 ---
 
+### 26.397 B-381 — SCR-057 / CT04 stage 3: the characteristic service and live screen
+
+`src/modules/foundation/characteristic-definition.ts` stands behind the screen: the name judged by the naming policy and never renamed, format/length/decimal and interval judges per format, unit and currency judged against the reference masters (currency required for CURR, refused elsewhere), and allowed values deduplicated under the case policy the characteristic declares — a duplicate under a non-case-sensitive characteristic is refused, naming the policy. Structural edits read the usage count that stands at zero until the class round gives it rows, and blocked characteristics refuse structural change. Creation lands in DRAFT; activation and blocking are separate reasoned acts; deletion stands only for a valueless draft. Every act writes one change document under `characteristic` with the format security-relevant, and the first write completes the activity. The screen is live in the master shape: grid with format, assignment, values and lifecycle, the editor, and reason dialogs for activation, blocking and deletion.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -344,6 +350,7 @@ Migration `0069_characteristic.sql` with `9047_characteristic_policies.sql` — 
 | 2.206 | 2026-10-18 | **SCR-057 / CT04 contracted (R-105).** Characteristics for classification at the owner's corrected CT04 shape under house names: tenant-name key, five judged formats, allowed values under the declared case policy, DRAFT/ACTIVE/BLOCKED as a Cairn lifecycle, deletion standing only for unused drafts, no period gate on maintenance, language-dependent texts deferred under B-223. First link of the classification chain toward release strategies. | Agent |
 | 2.207 | 2026-10-18 | **SCR-057 / CT04 stage 1 (B-379, §26.395).** The inert characteristics screen stands at `/config/characteristics`: empty grid, editor with format/length/assignment fields and the allowed-values list, save disabled. Typecheck clean. | Agent |
 | 2.208 | 2026-10-18 | **SCR-057 / CT04 stage 2 (B-380, §26.396).** Migrations `0069` + `9047` applied (117 standing): `characteristic` and `characteristic_value` behind forced tenant RLS, Drizzle tables in `characteristic-schema.ts`. Typecheck clean. | Agent |
+| 2.209 | 2026-10-18 | **SCR-057 / CT04 stage 3 (B-381, §26.397).** The characteristic service and live screen: naming and format judges, case-policy value uniqueness, DRAFT/ACTIVE/BLOCKED acts, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
