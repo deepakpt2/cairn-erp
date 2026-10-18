@@ -1286,6 +1286,13 @@ Stage 2 of R-127. `incoming_payment` gains `discount_amount` and `on_account_amo
 Verification: migrations applied and idempotent on rerun; typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-511 / §26.527 / §30 row 2.345. **Cost (B-254, measured):** stage 1 published 16:28 UTC; stage 2 completed 16:30 UTC, the environment restore inside it notwithstanding.
 
 ---
+### 26.528 B-512 — SCR-079 stage 3: completion service and wired screen
+
+Stage 3 of R-127. `postIncomingPayment` now completes: per item, applied and discount judge against the open amount; a taken discount is judged against the item's own terms tiers at the posting date (its invoice's baseline and tier days) and against the default tolerance group's cash-discount ceiling, each excess refused by name. Full items clear as before; a residually settled item clears and leaves its remainder as a new open customer debit in the same DZ document; a partial item stands open with the payment's credit line open against it; an explicit on-account amount stands as a further open credit; and what remains unassigned is judged against the tolerance group's revenue/expense amount and percentage limits, posting to the payment-difference account within them and refusing beyond them with the figures named. Discount and difference accounts resolve through account determination (`CASH_DISCOUNT`, `PAYMENT_DIFFERENCE` with REVENUE/EXPENSE modifier), judged standing only when their amounts are non-zero. The open-item view now suggests each item's eligible discount from its terms. Only the allocation credit lines clear against the payment document — residual, partial and on-account lines stand open, their line text naming the outcome. The screen submits applied, discount and outcome per item and is live again, the discount suggestion standing in its placeholder.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-512 / §26.528 / §30 row 2.346. **Cost (B-254, measured):** stage 2 published 16:30 UTC; stage 3 completed 16:31 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1476,3 +1483,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.343 | 2026-10-18 | **SCR-079 contract R-127 written (B-509, §26.525).** F-28 completion: per-item applied/discount with terms-tier suggestion judged against the tolerance default, full/residual/partial outcomes, on-account amounts and tolerated differences posted — the allocation table declined, journal lines carry outcomes. F-53 completion follows named. Stage 1 follows. | Agent |
 | 2.344 | 2026-10-18 | **SCR-079 stage 1 published (B-510, §26.526).** Incoming-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
 | 2.345 | 2026-10-18 | **SCR-079 stage 2 published (B-511, §26.527).** `incoming_payment` gains the discount and on-account totals; 151 migrations. The completion service follows in stage 3. | Agent |
+| 2.346 | 2026-10-18 | **SCR-079 stage 3 published (B-512, §26.528).** Completion service stands: terms-tier discount and tolerance judging, full/residual/partial outcomes, on-account and tolerated differences; the screen is live and submitting outcomes. Determination events follow in stage 4. | Agent |

@@ -40,11 +40,11 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
 
   const items = view?.openItems ?? [];
   const chosen = items.filter((i) => selected.has(itemKey(i)));
+  const discountOf = (i: (typeof items)[number]) => Number(discounts[itemKey(i)]) || 0;
   const appliedOf = (i: (typeof items)[number]) => {
     const v = applied[itemKey(i)];
-    return v === undefined || v === '' ? i.signed : Number(v) || 0;
+    return v === undefined || v === '' ? i.signed - discountOf(i) : Number(v) || 0;
   };
-  const discountOf = (i: (typeof items)[number]) => Number(discounts[itemKey(i)]) || 0;
   const allocated = chosen.reduce((s, i) => s + appliedOf(i) + discountOf(i), 0) + (Number(onAccount) || 0);
   const difference = Math.round((allocated - (Number(amount) || 0)) * 10000) / 10000;
 

@@ -50,6 +50,7 @@ export async function postPaymentAction(
       amount: Number(text(form, 'amount')),
       currency: text(form, 'currency').toUpperCase(),
       reference: text(form, 'reference') || undefined,
+      onAccountAmount: Number(text(form, 'onAccount')) || 0,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
       items,
     });
