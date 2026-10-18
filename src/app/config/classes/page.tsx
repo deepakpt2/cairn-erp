@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ACTIVITY, listClasses } from '@/modules/foundation/class-definition';
 import Classes from './Classes';
 
 export const dynamic = 'force-dynamic';
@@ -9,12 +10,12 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/classes';
 
 /**
- * Classes for classification (SCR-058 / CL02; inert since stage 1).
- * Characteristics grouped under class types (SCR-058 stage 3 wires
- * the acts).
+ * Classes for classification (SCR-058 / CL02; inert in stage 1, live
+ * since stage 3).
  */
 export default async function ClassesPage() {
-  await requireSession(ROUTE);
+  const session = await requireSession(ROUTE);
+  const choices = await listClasses(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -29,7 +30,7 @@ export default async function ClassesPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('classificationClass.subtitle')}</p>
       </header>
 
-      <Classes />
+      <Classes data={choices} canMaintain={can(session, ACTIVITY)} />
     </div>
   );
 }

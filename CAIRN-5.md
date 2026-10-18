@@ -342,6 +342,12 @@ Migration `0070_classification_class.sql` with `9048_classification_class_polici
 
 ---
 
+### 26.402 B-386 — SCR-058 / CL02 stage 3: the class service and live screen
+
+`src/modules/foundation/class-definition.ts` stands behind the screen: the delivered class-type catalogue ensured per tenant, the class keyed by its immutable type and name, and assignments judged characteristic by characteristic — standing, not blocked, at most once, positions taken from the maintained order in one transaction. Blocked classes refuse assignment changes; deletion stands only for an assignment-less draft; every act writes one change document under `classification_class`. The CT04 usage count became real in this stage, as R-105 recorded: a characteristic standing in any class now counts as used, and CT04 protects its structure accordingly. The screen is live in the master shape: grid with type, characteristics and lifecycle, the editor with characteristic suggestions from the standing master, and reason dialogs for activation, blocking and deletion.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -391,6 +397,7 @@ Migration `0070_classification_class.sql` with `9048_classification_class_polici
 | 2.212 | 2026-10-18 | **SCR-058 / CL02 contracted (R-106).** Classes for classification under house names: the delivered class-type catalogue (including the purchase requisition and order release types), classes keyed by type and name, characteristic assignments at unique positions, blocked characteristics refused, draft-only deletion, the CT04 usage count made real, language texts deferred under B-223, object classification explicitly not this round. | Agent |
 | 2.213 | 2026-10-18 | **SCR-058 / CL02 stage 1 (B-384, §26.400).** The inert classes screen stands at `/config/classes`: empty grid, editor with the type catalogue and positioned characteristic assignments, save disabled. Typecheck clean. | Agent |
 | 2.214 | 2026-10-18 | **SCR-058 / CL02 stage 2 (B-385, §26.401).** Migrations `0070` + `9048` applied (119 standing): `class_type`, `classification_class` and `class_assignment` behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.215 | 2026-10-18 | **SCR-058 / CL02 stage 3 (B-386, §26.402).** The class service and live screen, and the CT04 usage count made real: assignment judging, blocked protection on both sides, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 

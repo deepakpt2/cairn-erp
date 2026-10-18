@@ -14,10 +14,10 @@
 import { and, asc, eq } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
-import { withTenant } from '../../platform/db/client';
+import { withTenant, type Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { currency as currencyReference, unitOfMeasure } from '../../platform/tables/reference';
-import { characteristic, characteristicValue } from './characteristic-schema';
+import { characteristic, characteristicValue, classAssignment } from './characteristic-schema';
 
 export const ACTIVITY = 'CFG.PROC.CHARACTERISTIC.DEFINE';
 const OBJECT_CLASS = 'characteristic';
@@ -70,9 +70,12 @@ function requireName(raw: string): string {
   return name;
 }
 
-/** Class assignments land with the class round; until then usage is zero. */
-async function usageCount(): Promise<number> {
-  return 0;
+/** Usage is real since the class round (SCR-058): a characteristic
+ * standing in any class counts as used, protecting its structure. */
+async function usageCount(tx: Tx, client: string, characteristicName: string): Promise<number> {
+  const rows = await tx.select().from(classAssignment)
+    .where(and(eq(classAssignment.client, client), eq(classAssignment.characteristicName, characteristicName)));
+  return rows.length;
 }
 
 export interface CharacteristicRow {
@@ -271,7 +274,7 @@ export async function saveCharacteristic(input: CharacteristicInput) {
         'Reactivate the characteristic first, or change only its description.',
       );
     }
-    if (structural && (await usageCount()) > 0) {
+    if (structural && (await usageCount(tx, client, name)) > 0) {
       throw new CharacteristicError(
         `Characteristic ${name} is in use; its structure cannot change under standing assignments.`,
       );
