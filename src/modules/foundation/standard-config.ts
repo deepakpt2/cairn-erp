@@ -44,7 +44,7 @@ import {
   purchasingGroup,
   supplierPartnerFunction,
 } from './schema';
-import { glAccount } from '../finance/schema';
+import { glAccount, reversalReason } from '../finance/schema';
 import { glAccountGroup } from '../finance/gl-account-group-schema';
 import {
   deriveGlAccountType,
@@ -223,6 +223,14 @@ const DOCUMENT_TYPES: Array<{
   { code: 'WA', name: 'Goods issue', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SM' },
   { code: 'RV', name: 'Billing document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
   { code: 'PR', name: 'Payroll posting', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
+];
+
+/** Initial tenant-configured reversal reasons (SCR-072 / R-120); maintenance UI is a later act. */
+const REVERSAL_REASONS: Array<{ code: string; description: string }> = [
+  { code: '01', description: 'Reversal in current period' },
+  { code: '02', description: 'Reversal in closed period' },
+  { code: '03', description: 'Accrual or deferral reversal' },
+  { code: '04', description: 'Duplicate or incorrect posting' },
 ];
 
 export async function applyStandardPackage(
@@ -480,6 +488,20 @@ export async function applyStandardPackage(
         numberRangeSubObject: documentTypeSpec.rangeSub,
         allowedAccountTypes: documentTypeSpec.accountTypes,
         requiresReference: documentTypeSpec.requiresReference ?? false,
+        createdBy: activatedBy,
+      })
+      .onConflictDoNothing();
+  }
+
+  /* ── Reversal reasons ─────────────────────────────────────────────────────── */
+  for (const reason of REVERSAL_REASONS) {
+    await tx
+      .insert(reversalReason)
+      .values({
+        client,
+        reasonCode: reason.code,
+        reasonDescription: reason.description,
+        isActive: true,
         createdBy: activatedBy,
       })
       .onConflictDoNothing();

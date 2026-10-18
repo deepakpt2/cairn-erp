@@ -945,6 +945,16 @@ Verification at this stage: migration runner reports 141 already applied on the 
 
 ---
 
+### 26.484 B-468 — SCR-072 stage 4: capability, term and delivered reversal reasons
+
+Stage 4 of R-120. `FIN.DOCUMENT.REVERSE` enters the capability catalogue as a posting-relevant REVERSE capability, and the Term Registry names **Reverse accounting document** at `/finance/document-reversal`, with `FB08` standing only as a search alias. No configuration activity is created: this is a finance transaction, following the clearing-reset precedent, and the configuration workbench therefore gains no route.
+
+The initial reversal reasons now stand tenant-delivered rather than hand-inserted: the standard configuration package creates the active codes `01` (Reversal in current period), `02` (Reversal in closed period), `03` (Accrual or deferral reversal) and `04` (Duplicate or incorrect posting) for every package-activated tenant, and `npm run seed` backfills the same four codes for every standing client without overwriting a tenant's own row. Reason maintenance on its own screen remains deferred, as contracted.
+
+Verification: typecheck is clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **106/66/80/88** (message catalogue 11), and database read-back shows the capability, the term with its FB08 alias, and the four active reasons. Acceptance remains stage 5, so SCR-072 is **not yet accepted**. Same-stage bookkeeping: B-468 / §26.484 / §30 row 2.302. **Cost (B-254, measured):** stage 3 published at 12:24 UTC; stage-4 seed verification completed at 12:25 UTC.
+
+---
+
 ---
 
 ## §30 · Change log (continued)
@@ -1091,3 +1101,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.300 | 2026-10-18 | **SCR-072 stage 2 (schema verdict): journal closure columns verified existing; `accounting_reversal_link` and `reversal_reason` architecture settled (B-466, §26.482).** ORM/migrations land with the service in stage 3; capability/term deferred to stage 4. | Agent |
 
 | 2.301 | 2026-10-18 | **SCR-072 stage 3 published (B-467, §26.483).** Reversal tables/RLS stand (141 migrations); the engine derives the reversal period through the fiscal-year variant, preserves exact local amounts and stamps the mirror; the FB08 service judges clearing/reason/standing under lock and posts type AB; the screen is live. Posting 10/10 and reversal-caller suites 7/7, tsc clean; capability/seed/term and acceptance remain stages 4–5. | Agent |
+| 2.302 | 2026-10-18 | **SCR-072 stage 4 published (B-468, §26.484).** `FIN.DOCUMENT.REVERSE` and the `/finance/document-reversal` term (FB08 alias only) stand; the standard package and seed deliver active reversal reasons 01–04. Seed read-back 106/66/80/88, idempotent; acceptance remains stage 5. | Agent |
