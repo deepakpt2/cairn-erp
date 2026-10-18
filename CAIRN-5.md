@@ -648,6 +648,13 @@ The ageing screen stands at `/finance/vendor-ageing`: selection (company, suppli
 
 ---
 
+### 26.444 B-428 — SCR-066 vendor ageing stage 2: the header index stands
+
+Ageing stores nothing; migration `0078` adds the journal-header walk (company, posting date) the as-of reconstruction joins on, beside the partner/company line index standing from SCR-065. **133 migrations standing.**
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -744,6 +751,7 @@ The ageing screen stands at `/finance/vendor-ageing`: selection (company, suppli
 | 2.259 | 2026-10-18 | **SCR-065 vendor balances closed (B-425, §26.441).** Service tests and browser target T932 (neighbour T933) green on the production build; full suite 1283/161, 132 migrations, seed 99/66/72/81. Deferrals named: stored transaction figures with carryforward, currency conversion, ageing analysis, special G/L separation. | Agent |
 | 2.260 | 2026-10-18 | **SCR-066 vendor ageing contracted (R-114, B-426, §26.442).** S_ALR_87012085 under house names, read-only: standing reconstructed as of the key date, due-date ageing buckets per supplier, drill-down to the balances items; `FIN.AP.AGEING` created; alternative bases/sorts, document currency and special G/L deferred. | Agent |
 | 2.261 | 2026-10-18 | **SCR-066 vendor ageing stage 1 (B-427, §26.443).** The inert ageing screen stands at `/finance/vendor-ageing` — selection and the empty ageing grid. Typecheck and production build clean. | Agent |
+| 2.262 | 2026-10-18 | **SCR-066 vendor ageing stage 2 (B-428, §26.444).** No ageing table by contract — standing reconstructs from the journal; migration `0078` adds the company/posting-date header index. 133 migrations standing. | Agent |
 
 ---
 
