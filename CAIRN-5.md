@@ -883,6 +883,12 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 
 ---
 
+### 26.476 B-460 — SCR-071 stage 3: the clearing reset acts
+
+`src/modules/finance/clearing-reset.ts` carries the round: `getClearingDocument` displays what a clearing document cleared — itself refused by name where the document does not stand posted in the named company and year, or cleared nothing there — and `resetClearing` lifts the clearing stamp from every line that document cleared inside one transaction, revalidating under an advisory lock, with the retained `clearing_reset` record and its change document in the same transaction. A standing reset answers a repeated request key; a cleared document already reset refuses by name with its reset number. The screen now selects, reviews the cleared items, and executes only on an explicit confirmation carrying a mandatory reason — one result message, in the Reset section the acceptance asserts on.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1011,6 +1017,7 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 | 2.291 | 2026-10-18 | **SCR-071 reset cleared items contracted (R-119, B-457, §26.473).** FBRA under house names: reset-only (no posting, no period judged), named-document eligibility, advisory lock, mandatory reason, retained `clearing_reset` record; `FIN.CLEARING.RESET` created; reset-and-reverse (FB08) and event-aware ageing history deferred. | Agent |
 | 2.292 | 2026-10-18 | **SCR-071 stage 1 published (B-458, §26.474).** The inert clearing reset screen `/finance/clearing-reset`: selection, empty cleared-items review and reset area rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.293 | 2026-10-18 | **SCR-071 stage 2 published (B-459, §26.475).** The `clearing_reset` record table stands (0081 + 9056, forced tenant RLS, insert/read-only): clearing document, former clearing date, items reopened, mandatory reason, request key. Migrations 139. | Agent |
+| 2.294 | 2026-10-18 | **SCR-071 stage 3 published (B-460, §26.476).** The clearing reset acts: the clearing is displayed first, then — under an advisory lock with in-transaction revalidation — the stamps lift from every item and the retained reset record with its change document is written in the same transaction; the screen executes on explicit confirmation with a mandatory reason. | Agent |
 
 ---
 
