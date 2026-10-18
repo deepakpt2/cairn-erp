@@ -1156,6 +1156,13 @@ The owner's OB44 package stands as SCR-077, superseding the F-53 package request
 **Stage order (standing):** inert UI → schema (`industry`, `industry_text`, the partner reference; RLS policies) → service and live screen → supporting (activity, capability, term, delivered industries with standing-tenant backfill) → service tests and browser acceptance. Same-stage bookkeeping: B-495 / §26.511 / §30 row 2.329. **Cost (B-254, measured):** the package arrived 14:21 UTC; the contract stands written the same minute-span, before stage 1.
 
 ---
+### 26.512 B-496 — SCR-077 stage 1: inert Maintain Industries screen
+
+Stage 1 of R-125. `/config/industries` renders the industry's shape — the grid (industry, description, language, partner count, active standing) and the create form (code of at most four, description of at most twenty, language, mandatory reason) — under `CFG.ORG.INDUSTRY.DEFINE` with OB44 as the displayed search alias. Nothing is persisted and every control stands disabled until the service lands; `industry.title`/`industry.subtitle` join the catalogue.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-496 / §26.512 / §30 row 2.330. **Cost (B-254, measured):** contract R-125 published 14:22 UTC; stage 1 completed 14:26 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1330,3 +1337,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.327 | 2026-10-18 | **SCR-076 stage 4 published (B-493, §26.509).** KG document type delivered and backfilled to standing tenants; `FIN.AP.CREDITMEMO.POST` and the Enter vendor credit memo term (FB65 alias) seeded (110/84/92). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.328 | 2026-10-18 | **SCR-076 ACCEPTED AND CLOSED (B-494, §26.510).** FB65 vendor credit memo stands on the shared invoice record: judged gross credit, KG journal debiting the vendor, original link with cumulative cap, cross-kind duplicate reference refused, cancellation carrying the link. T921 green; suite 1327/173; seed 110/66/84/92; 146 migrations. Next: F-53 (SCR-077) — field package requested. | Agent |
 | 2.329 | 2026-10-18 | **SCR-077 contract R-125 written (B-495, §26.511).** OB44 Maintain Industries: tenant industry master (code ≤4) with per-language descriptions (≤20) judged against configured languages, five delivered industries, a restricting partner reference, delete refused while partners carry the code. Partner-screen picker deferred, named. Stage 1 follows. | Agent |
+| 2.330 | 2026-10-18 | **SCR-077 stage 1 published (B-496, §26.512).** Inert `/config/industries` screen stands with the grid and create shapes under `CFG.ORG.INDUSTRY.DEFINE`. Schema follows in stage 2. | Agent |

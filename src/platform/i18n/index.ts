@@ -2133,6 +2133,11 @@ const en: Catalogue = {
     'Industry sectors defined once per tenant: the one-character classification a ' +
     'material is created under. Materials are judged against this master at creation; ' +
     'a sector in use is never deleted under its materials.',
+  'industry.title': 'Maintain Industries',
+  'industry.subtitle':
+    'Industries defined once per tenant: the classification a business partner ' +
+    'carries, described in each configured language. An industry in use by ' +
+    'partners is never deleted under them; the code itself never changes.',
   'materialGroup.title': 'Define Material Groups',
   'materialGroup.subtitle':
     'Material groups defined once per tenant: the classification materials carry for ' +
