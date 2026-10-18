@@ -254,6 +254,12 @@ Stage 1 ships the inert screen at `/purchasing/orders` under the `purchaseOrder`
 
 ---
 
+### 26.391 B-375 — SCR-056 / ME21N stage 2: the purchase order tables stand
+
+Migration `0067_purchase_order.sql` with `9046_purchase_order_policies.sql` — **115 migrations standing**. The order has a true header (unlike the requisition): `purchase_order` keyed `(client, order_number)` with document type, supplier, purchasing organization and group, company code, currency, document date and the release status the later release round will move; `purchase_order_item` with the baseline net value, tax code, the requisition reference pair (both-or-neither by check) and the deletion mark; `purchase_order_schedule_line` and `purchase_order_assignment` beneath items. Supplier, organization, company, material, plant, storage-location and requisition references stand as foreign keys; cost-centre and G/L references judge in the service, as before. All four tables carry the audit columns behind forced tenant RLS.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -290,6 +296,7 @@ Stage 1 ships the inert screen at `/purchasing/orders` under the `purchaseOrder`
 | 2.199 | 2026-10-18 | **SCR-055 / ME51N CLOSED and accepted (B-373, §26.389).** Stage 5 ships 3 service tests and the T942 browser target `purchase-requisitions` (green — PR-0000001 through the item grid, the database remembering). Neighbouring `material-period-control` and `material-deletion-flag` targets, typecheck, `lint:ip` and the production build clean; suite 1249 across 151 files, 113 migrations, seed 93/64/63/63. Deferred and named in the entry. Cost measured at 11 minutes. | Agent |
 | 2.200 | 2026-10-18 | **SCR-056 / ME21N contracted (R-104).** Header/item/schedule-line/assignment purchase orders at SAP parity under house names: PURCHORD draw, supplier and organizational judging, requisition conversion with ordered-quantity judging, the baseline net-value semantics stated, period gates explicitly never consulted on save, release strategy recorded as due before goods receipt. | Agent |
 | 2.201 | 2026-10-18 | **SCR-056 / ME21N stage 1 (B-374, §26.390).** The inert purchase order screen stands at `/purchasing/orders`: overview, header, item grid with computed net value, schedule-line and assignment panels, save disabled. Typecheck clean. | Agent |
+| 2.202 | 2026-10-18 | **SCR-056 / ME21N stage 2 (B-375, §26.391).** Migrations `0067` + `9046` applied (115 standing): `purchase_order` header, items, schedule lines and assignments behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 
