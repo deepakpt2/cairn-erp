@@ -57,17 +57,17 @@ async function judgeVendor(tx: Tx, client: string, vendorNumber: string, company
 
 /** The alternative reconciliation account an indicator resolves to. */
 export async function resolveSpecialGlAccount(
-  tx: Tx, client: string, companyCode: string, indicator: string,
+  tx: Tx, client: string, companyCode: string, indicator: string, accountType: 'AP' | 'AR' = 'AP',
 ): Promise<string> {
   const rows = await tx.select().from(specialGlConfig).where(and(
     eq(specialGlConfig.client, client),
-    eq(specialGlConfig.accountType, 'AP'),
+    eq(specialGlConfig.accountType, accountType),
     eq(specialGlConfig.indicator, indicator),
   ));
   const row = rows.find((r) => r.companyCode === companyCode) ?? rows.find((r) => r.companyCode === '');
   if (!row) {
     throw new VendorDownPaymentError(
-      `Special G/L indicator ${indicator} is not configured for vendors in company ${companyCode}.`,
+      `Special G/L indicator ${indicator} is not configured for ${accountType === 'AP' ? 'vendors' : 'customers'} in company ${companyCode}.`,
       'Maintain the special G/L configuration for the indicator, then post again.',
     );
   }

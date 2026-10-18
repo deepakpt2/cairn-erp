@@ -1429,6 +1429,12 @@ Stage 2 of R-131. `customer_down_payment` stands in the house payment-record sha
 
 Verification: migration applied, table verified, typecheck clean. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-536 / §26.552 / §30 row 2.370. **Cost (B-254, measured):** stage 1 published this turn; stage 2 completed this turn.
 
+### 26.553 B-537 — SCR-083 stage 3: posting service and wired screen
+
+Stage 3 of R-131. `postCustomerDownPayment` posts the DZ journal — debit the bank, credit the indicator's alternative customer reconciliation account (customer partner, line text naming the down payment) — and remembers the receipt with the account it resolved. The special G/L resolution generalises to the AR account type this stage (the vendor path resolves unchanged, its tests standing green). The customer must stand extended and unblocked; configuration is re-read under the receipt's advisory lock; replay by request key behaves as the standing payments, and `getCustomerDownPayments` lists the advances still standing open for the clearing round to come. The screen is live and posts.
+
+Verification: typecheck clean; the SCR-081 vendor down-payment tests stand green through the generalised resolution. Acceptance remains stage 5, so SCR-083 is **not yet accepted**. Same-stage bookkeeping: B-537 / §26.553 / §30 row 2.371. **Cost (B-254, measured):** stage 2 published 17:55 UTC; stage 3 completed this turn.
+
 ---
 ---
 
@@ -1645,3 +1651,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.368 | 2026-10-18 | **SCR-083 contract R-131 written (B-534, §26.550).** F-29 customer down payment mirrors R-129: AR special G/L resolution, a DZ journal stands the advance received outside ordinary receivables; the link table declined (F-39 next), F-37 requests deferred. Stage 1 follows. | Agent |
 | 2.369 | 2026-10-18 | **SCR-083 stage 1 published (B-535, §26.551).** The `/finance/customer-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.370 | 2026-10-18 | **SCR-083 stage 2 published (B-536, §26.552).** The customer down-payment record stands; 156 migrations. The posting service follows in stage 3. | Agent |
+| 2.371 | 2026-10-18 | **SCR-083 stage 3 published (B-537, §26.553).** Customer down-payment service stands: AR indicator resolution under lock, DZ journal on the alternative account, replay by request key; the screen is live. Capability follows in stage 4. | Agent |

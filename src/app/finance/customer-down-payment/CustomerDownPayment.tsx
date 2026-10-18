@@ -1,12 +1,31 @@
+'use client';
+
+import { useActionState } from 'react';
+
+import { postDownPaymentAction, type CustomerDownPaymentActionState } from './actions';
+
+const INITIAL: CustomerDownPaymentActionState = { ok: false, message: '' };
+
+function Message({ state }: { state: CustomerDownPaymentActionState }) {
+  if (!state.message) return null;
+  return (
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+      {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+    </p>
+  );
+}
+
 export default function CustomerDownPayment({ canEnter, today }: {
   canEnter: boolean;
   today: string;
 }) {
+  const [state, action, posting] = useActionState(postDownPaymentAction, INITIAL);
+
   return (
     <>
       <section aria-labelledby="cdp-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="cdp-header" className="text-sm font-semibold">Header and bank data</h2>
-        <form>
+        <form action={action}>
           <input type="hidden" name="requestKey" value="" />
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
@@ -57,12 +76,12 @@ export default function CustomerDownPayment({ canEnter, today }: {
           <p className="mt-2 text-sm text-ink-soft">
             The indicator resolves to its configured alternative reconciliation account, which the receipt
             credits; the advance then stands open outside the customer&apos;s ordinary receivables until cleared
-            against invoices. The posting service lands in a later stage; posting stands disabled until it does.
+            against invoices.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-              disabled
+              disabled={!canEnter || posting}
             >
               Post down payment
             </button>
@@ -72,6 +91,7 @@ export default function CustomerDownPayment({ canEnter, today }: {
 
       <section aria-labelledby="cdp-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="cdp-result" className="text-sm font-semibold">Down payment</h2>
+        <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">
           A posted down payment is history: never edited, never deleted. Corrections run through document
           reversal, and clearing against invoices stands in its own processing.
