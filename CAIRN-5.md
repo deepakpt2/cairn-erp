@@ -558,6 +558,13 @@ The clearing screen stands at `/finance/vendor-clearing`: selection (supplier, c
 
 ---
 
+### 26.432 B-416 — SCR-064 vendor clearing stage 2: the index stands, no new tables
+
+Clearing needs no tables of its own: the clearing document is a standing journal and the cleared state lives on the standing journal lines. Migration `0076` adds the partner/clearing index the open-item selection walks. **131 migrations standing.**
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -642,6 +649,7 @@ The clearing screen stands at `/finance/vendor-clearing`: selection (supplier, c
 | 2.247 | 2026-10-18 | **SCR-063 payment run closed (B-413, §26.429).** Service tests and browser target T934 (neighbour T935) green on the production build; full suite 1277/159, 130 migrations, seed 97/66/70/79. Deferrals named: customer items, partial payments, cash-discount taking, payment media and bank statement reconciliation, cross-company central payment. | Agent |
 | 2.248 | 2026-10-18 | **SCR-064 vendor clearing contracted (R-112, B-414, §26.430).** F-44 under house names: open-item grid over uncleared supplier lines, clearing/posting/document dates kept distinct, exact-zero balance in one currency, clearing in place under a clearing journal; reset and partial clearing deferred, `FIN.AP.CLEAR` created this round. | Agent |
 | 2.249 | 2026-10-18 | **SCR-064 vendor clearing stage 1 (B-415, §26.431).** The inert clearing screen stands at `/finance/vendor-clearing` — selection with the three distinct dates, the empty open-item grid, posting disabled, cleared history. Typecheck and production build clean. | Agent |
+| 2.250 | 2026-10-18 | **SCR-064 vendor clearing stage 2 (B-416, §26.432).** No new tables — clearing reuses the standing journal and clearing columns; migration `0076` adds the partner/clearing index. 131 migrations standing. | Agent |
 
 ---
 
