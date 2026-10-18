@@ -29,7 +29,7 @@ export default async function ClearingResetPage({
 }) {
   const session = await requireSession(ROUTE);
   const sp = await searchParams;
-  const grant = session.capabilities.includes(CLEARING_RESET_CAPABILITY);
+  const grant = session.user.capabilities.includes(CLEARING_RESET_CAPABILITY);
 
   const selected = selectSchema.safeParse({
     companyCode: sp.companyCode, clearingDocument: sp.clearingDocument, fiscalYear: sp.fiscalYear,
@@ -56,7 +56,7 @@ export default async function ClearingResetPage({
     if (!parsed.success) return;
     try {
       const r = await resetClearing({
-        client: s.client, changedBy: s.userName, ...parsed.data,
+        client: s.user.client, changedBy: s.user.username, ...parsed.data,
       });
       redirect(`${ROUTE}?companyCode=${encodeURIComponent(r.companyCode)}&clearingDocument=${encodeURIComponent(r.clearingDocument)}&fiscalYear=${r.fiscalYear}&reset=${encodeURIComponent(r.resetNumber)}`);
     } catch (e) {
