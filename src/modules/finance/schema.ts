@@ -307,6 +307,8 @@ export const outgoingPayment = pgTable('outgoing_payment', {
   valueDate: date('value_date', { mode: 'string' }),
   bankGlAccount: varchar('bank_gl_account', { length: 10 }).notNull(),
   amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  discountAmount: numeric('discount_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  onAccountAmount: numeric('on_account_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   currency: char('currency', { length: 3 }).notNull(),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),

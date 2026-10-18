@@ -1315,6 +1315,12 @@ Stage 1 of R-128. The outgoing-payment screen gains the completion shape of its 
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-516 / §26.532 / §30 row 2.350. **Cost (B-254, measured):** contract published this turn; stage 1 completed 16:52 UTC.
 
+### 26.533 B-517 — SCR-080 stage 2: completion totals on the payment record
+
+Stage 2 of R-128. `outgoing_payment` gains `discount_amount` and `on_account_amount` (`drizzle/0090_outgoing_payment_completion.sql`); the database stands at 153 migrations, both columns verified by information-schema read-back. No allocation table (declined in R-128) and no check relaxation is needed — the standing record check holds only the amount above zero. The completion service follows in stage 3.
+
+Verification: migration applied, columns verified, typecheck clean. Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-517 / §26.533 / §30 row 2.351. **Cost (B-254, measured):** stage 1 published 16:52 UTC; stage 2 completed this turn.
+
 ---
 ---
 
@@ -1511,3 +1517,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.348 | 2026-10-18 | **SCR-079 closed (B-514, §26.530).** Payment completion accepted: 1339 tests, T917 browser green, 152 migrations, seed 112/67/86/94. The F-28 deferred outcomes (discount, residual/partial, on-account, tolerated differences) now stand implemented; F-53 payable completion is next. | Agent |
 | 2.349 | 2026-10-18 | **SCR-080 contract R-128 written (B-515, §26.531).** F-53 completion mirrors R-127 on the vendor side: per-item applied/discount judged by invoice terms and the default tolerance group, full/residual/partial outcomes, on-account and tolerated differences; the allocation table declined, journal lines carry outcomes. Stage 1 follows. | Agent |
 | 2.350 | 2026-10-18 | **SCR-080 stage 1 published (B-516, §26.532).** Outgoing-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
+| 2.351 | 2026-10-18 | **SCR-080 stage 2 published (B-517, §26.533).** `outgoing_payment` gains the discount and on-account totals; 153 migrations. The completion service follows in stage 3. | Agent |
