@@ -272,6 +272,22 @@ The capability `PROC.PO.CREATE` already stood from the platform seed; stage 4 ad
 
 ---
 
+### 26.394 B-378 — SCR-056 / ME21N closed and accepted: purchase orders stand
+
+**What shipped across the five stages.** The purchase order stands at the package's architecture under house names: a true header (supplier judged through its purchasing-organization data, organization, group, company, currency from the supplier or company — never hard-coded), items with the baseline net value whose semantics are stated in the contract, schedule lines reconciling exactly to the order quantity, and cost-centre assignments judged as the requisition judged them. Requisition conversion is real: the ordered total across standing orders is judged against the requisitioned quantity, and R-103's deferred conversion record is discharged. Neither period gate is consulted on save, as the package demands; the deletion flag warns and never blocks; keys never rename; every act writes one change document. One stage-5 correction, recorded: the readable PURCHORD display (`POF-0000001`) is eleven characters, so migration `0068` widens the order-number columns to twenty — the drawn display stands unaltered.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/purchase-order.test.ts`: supplier judging and schedule reconciliation, conversion 6-then-5-refused-then-4 against a requisition of 10, stable item numbers under change). Browser target `purchase-orders` (T941) **green journeys** against the production build: the supplier fixture with purchasing data, the empty overview, `POF-0000001` created through the header and item grid, the database remembering the order, its schedule line and its change document. Neighbouring targets `purchase-requisitions` (T942) and `material-period-control` (T943) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1253 tests across 152 files**; **116 migrations** standing; seed **93/64/64/66** read back.
+
+**Cost.** Measured: 06:48 in to 06:57 — **9 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**Deferred and named, per the owner's full-parity rule.** The release strategy configuration and the release act that moves the header status — now due, and recorded as the next round before goods receipt; pricing conditions and the pricing engine; asset/project/order assignment categories; subcontracting, consignment, third-party and service item categories; purchase-order document-type maintenance; source lists, info records and contracts; confirmations; supplier output/EDI; budget availability checks; submission idempotency; and change restrictions that bite only once goods receipts and invoices exist to restrict them.
+
+**What stands after this.** Requisitions convert into orders against every master they name. **SCR-057** is the release round — the release-strategy configuration (`CFG.PROC.RELEASE.DEFINE`, still pageless from the platform seed) with the release act for requisitions and orders — after which **SCR-058 / MIGO** brings goods receipt against these orders, judged against the OMSY control and OB52, discharging the MM06 enforcement obligation.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -311,6 +327,7 @@ The capability `PROC.PO.CREATE` already stood from the platform seed; stage 4 ad
 | 2.202 | 2026-10-18 | **SCR-056 / ME21N stage 2 (B-375, §26.391).** Migrations `0067` + `9046` applied (115 standing): `purchase_order` header, items, schedule lines and assignments behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.203 | 2026-10-18 | **SCR-056 / ME21N stage 3 (B-376, §26.392).** The purchase order service and live screen: supplier and organizational judging, schedule reconciliation, baseline net value, requisition conversion with ordered-quantity judging, one change document per act, period gates never consulted. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.204 | 2026-10-18 | **SCR-056 / ME21N stage 4 (B-377, §26.393).** The purchase order term seeded with ME21N/ME22N/ME23N as search aliases on the standing capability; seed reads back 93/64/64/66. | Agent |
+| 2.205 | 2026-10-18 | **SCR-056 / ME21N CLOSED and accepted (B-378, §26.394).** Stage 5 ships 3 service tests, corrective migration `0068` (order-number width), and the T941 browser target `purchase-orders` (green — POF-0000001 through the header and item grid). Neighbouring `purchase-requisitions` and `material-period-control` targets, typecheck, `lint:ip` and the production build clean; suite 1253 across 152 files, 116 migrations, seed 93/64/64/66. Deferred and named in the entry, release strategy next. Cost measured at 9 minutes. | Agent |
 
 ---
 
