@@ -624,6 +624,15 @@ Stage 4 creates the capability `FIN.AP.BALANCE` (display) and seats its term *Ve
 
 ---
 
+### 26.441 B-425 — SCR-065 vendor balances closed (R-113)
+
+Stage 5 accepts the round. The service tests prove the matrix derives from the posted ledger: October carries credit turnover 800 against debit 500 and closes at −300 across three items, the following year opens at −300, document-currency display agrees, an unconvertible display currency refuses by name, and an unextended supplier refuses. Browser target **T932** drives the journey on the production build — order, receipt, two invoices, a manual payment, balances closing at −300.00, period 10 drilling to its three line items — with the database holding exactly those partner lines; neighbour **T933** stays green. The full suite stands at **1283 tests across 161 files**; typecheck and the production build clean; 132 migrations; seed **99/66/72/81**.
+
+Named deferrals carried forward, by the contract: stored transaction-figure tables with balance carryforward as an update process (period 0); currency conversion into arbitrary display currencies; the vendor ageing analysis (its own roadmap row); special G/L separation in the balances.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -717,6 +726,7 @@ Stage 4 creates the capability `FIN.AP.BALANCE` (display) and seats its term *Ve
 | 2.256 | 2026-10-18 | **SCR-065 vendor balances stage 2 (B-422, §26.438).** No balance table by contract — balances derive from the posted journal; migration `0077` adds the partner/company index. 132 migrations standing. | Agent |
 | 2.257 | 2026-10-18 | **SCR-065 vendor balances stage 3 (B-423, §26.439).** Balances derive at read time from the posted journal — opening/turnover/closing chained, currency judged by name, period drill-down to line items — and the screen is live. Typecheck and production build clean. | Agent |
 | 2.258 | 2026-10-18 | **SCR-065 vendor balances stage 4 (B-424, §26.440).** Capability `FIN.AP.BALANCE` created; the balances term seeded at its route with FK10N a search alias only. Seed reads back 99/66/72/81. | Agent |
+| 2.259 | 2026-10-18 | **SCR-065 vendor balances closed (B-425, §26.441).** Service tests and browser target T932 (neighbour T933) green on the production build; full suite 1283/161, 132 migrations, seed 99/66/72/81. Deferrals named: stored transaction figures with carryforward, currency conversion, ageing analysis, special G/L separation. | Agent |
 
 ---
 
