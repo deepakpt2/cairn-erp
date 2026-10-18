@@ -889,6 +889,13 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 
 ---
 
+### 26.477 B-461 — SCR-071 stage 4: the capability and term stand
+
+`FIN.CLEARING.RESET` enters the capability catalogue (a posting act), and its Term Registry entry carries the title "Reset cleared items", the route `/finance/clearing-reset`, and FBRA as its sole search alias — the product names the act; the alias only finds it. Read-back after seed: 105 capabilities, 66 activities, 78 terms, 87 aliases — one capability, one term and one alias more than stage 4 of SCR-070, idempotent on rerun.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1017,6 +1024,7 @@ Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing docume
 | 2.291 | 2026-10-18 | **SCR-071 reset cleared items contracted (R-119, B-457, §26.473).** FBRA under house names: reset-only (no posting, no period judged), named-document eligibility, advisory lock, mandatory reason, retained `clearing_reset` record; `FIN.CLEARING.RESET` created; reset-and-reverse (FB08) and event-aware ageing history deferred. | Agent |
 | 2.292 | 2026-10-18 | **SCR-071 stage 1 published (B-458, §26.474).** The inert clearing reset screen `/finance/clearing-reset`: selection, empty cleared-items review and reset area rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.293 | 2026-10-18 | **SCR-071 stage 2 published (B-459, §26.475).** The `clearing_reset` record table stands (0081 + 9056, forced tenant RLS, insert/read-only): clearing document, former clearing date, items reopened, mandatory reason, request key. Migrations 139. | Agent |
+| 2.295 | 2026-10-18 | **SCR-071 stage 4 published (B-461, §26.477).** `FIN.CLEARING.RESET` enters the capability catalogue and the term registry (FBRA alias only); read-back 105/66/78/87, idempotent. | Agent |
 | 2.294 | 2026-10-18 | **SCR-071 stage 3 published (B-460, §26.476).** The clearing reset acts: the clearing is displayed first, then — under an advisory lock with in-transaction revalidation — the stamps lift from every item and the retained reset record with its change document is written in the same transaction; the screen executes on explicit confirmation with a mandatory reason. | Agent |
 
 ---
