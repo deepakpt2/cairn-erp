@@ -395,6 +395,22 @@ The configuration activity has stood in the seed since the platform round; stage
 
 ---
 
+### 26.409 B-393 — SCR-059 release strategies closed and accepted: the approval structure stands
+
+**What shipped across the five stages.** The twice-recorded obligation is discharged: `/config/release-strategies` — pageless since the platform seed — now maintains the full release structure under house names. Groups own the codes approvers act under; strategies bind a group to a classification class of the matching type, judge documents through criteria confined to the delivered attribute catalogue with values judged against each characteristic's format and allowed values, and sequence at most eight of their group's codes in priority order. Activation stands only beneath an ACTIVE class, and the determination judge `determineRelease` stands exported and test-proven by priority. By contract, no document's release status moved in this round — that is the next round's whole subject, so nothing merged.
+
+**Acceptance evidence.** Service tests **2/2** (`tests/release-strategy-definition.test.ts`: group/strategy judging including the numeric-value and foreign-code refusals, activation refused beneath an inactive class then admitted, determination at 500 (none), 1500 (HIGH) and 20000 (MEGA by priority)). Browser target `release-strategies` (T938) **green journeys** against the production build: classification fixtures standing, the empty grid, group PO with code MGR and strategy HIGH created through the editors, activation, the database remembering the criterion, the step and the acts. Neighbouring targets `classes` (T939) and `characteristics` (T940) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1264 tests across 155 files**; **121 migrations** standing; seed **96/66/67/71** read back.
+
+**Cost.** Measured: 07:40 in to 07:49 — **9 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**Deferred and named, per the owner's full-parity rule.** Workflow agent assignment and notification (a code is an authority, not a person — who may act under a code binds in the release-acts round through capabilities); release criteria beyond the delivered attribute catalogue; the release simulation/consistency surface beyond the judges themselves; and release at item level for requisitions, whose strategies here judge the whole document.
+
+**What stands after this.** **SCR-060 — the release acts:** determination wired into requisition and order creation and change (documents carrying their strategy and step state), release and cancel-release acts under the sequenced codes on the two document screens, released documents refusing change until release is cancelled, and the order header's `UNRELEASED` status finally moving. Goods receipt follows against released orders.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -452,6 +468,7 @@ The configuration activity has stood in the seed since the platform round; stage
 | 2.220 | 2026-10-18 | **SCR-059 release strategies stage 2 (B-390, §26.406).** Migrations `0071` + `9049` applied (121 standing): groups, codes, strategies, criteria and steps behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.221 | 2026-10-18 | **SCR-059 release strategies stage 3 (B-391, §26.407).** The strategy service, the exported determination judge, and the live screen at the seed's long-standing route: group/code/strategy judging against the classification chain, activation under an ACTIVE class, no document status moved. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.222 | 2026-10-18 | **SCR-059 release strategies stage 4 (B-392, §26.408).** Capability and term seeded for the long-standing activity (OMGSCK a search alias only), the route among the built routes; seed reads back 96/66/67/71. | Agent |
+| 2.223 | 2026-10-18 | **SCR-059 release strategies CLOSED and accepted (B-393, §26.409).** Stage 5 ships 2 service tests and the T938 browser target `release-strategies` (green — group, strategy, activation, the database remembering). Neighbouring `classes` and `characteristics` targets, typecheck, `lint:ip` and the production build clean; suite 1264 across 155 files, 121 migrations, seed 96/66/67/71. The pageless-route obligation is closed. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 
 ---
 
