@@ -6,7 +6,14 @@ import type {
   RequisitionChoices,
   RequisitionDocument,
 } from '@/modules/purchasing/requisitions';
-import { saveRequisitionAction, type RequisitionActionState } from './actions';
+import type { DocumentReleaseState } from '@/modules/purchasing/release';
+import {
+  cancelRequisitionReleaseAction,
+  releaseRequisitionAction,
+  saveRequisitionAction,
+  type ReleaseActionState,
+  type RequisitionActionState,
+} from './actions';
 
 /**
  * Purchase requisitions (SCR-055 / ME51N; inert in stage 1, live since
@@ -84,13 +91,19 @@ function itemFromDocument(item: RequisitionDocument['items'][number]): ItemRow {
 
 const INITIAL: RequisitionActionState = { ok: false };
 
-export default function Requisitions({ documents, choices, selected, canCreate }: {
+export default function Requisitions({ documents, choices, selected, canCreate, releases, selectedRelease, canRelease }: {
   documents: RequisitionDocument[];
   choices: RequisitionChoices;
   selected: RequisitionDocument | null;
   canCreate: boolean;
+  releases: Record<string, DocumentReleaseState>;
+  selectedRelease: DocumentReleaseState | null;
+  canRelease: boolean;
 }) {
   const [state, formAction, pending] = useActionState(saveRequisitionAction, INITIAL);
+  const [releaseState, releaseAction] = useActionState(releaseRequisitionAction, { ok: false } as ReleaseActionState);
+  const [cancelState, cancelAction] = useActionState(cancelRequisitionReleaseAction, { ok: false } as ReleaseActionState);
+  const releaseMessage = cancelState.message ? cancelState : releaseState;
   const [documentType, setDocumentType] = useState(selected?.documentType ?? 'STANDARD');
   const [items, setItems] = useState<ItemRow[]>(
     selected ? selected.items.map(itemFromDocument) : [{ ...EMPTY_ITEM }],
@@ -155,6 +168,7 @@ export default function Requisitions({ documents, choices, selected, canCreate }
                 <th className="px-2 py-2">Date</th>
                 <th className="px-2 py-2">Items</th>
                 <th className="px-2 py-2">Created by</th>
+                <th className="px-2 py-2">Release</th>
               </tr>
             </thead>
             <tbody>
@@ -169,6 +183,13 @@ export default function Requisitions({ documents, choices, selected, canCreate }
                   <td className="px-2 py-2">{doc.requisitionDate}</td>
                   <td className="px-2 py-2">{doc.items.length}</td>
                   <td className="px-2 py-2">{doc.createdBy}</td>
+                  <td className="px-2 py-2">
+                    {releases[doc.requisitionNumber]
+                      ? releases[doc.requisitionNumber].status === 'RELEASED'
+                        ? 'Released'
+                        : `Pending · step ${releases[doc.requisitionNumber].currentStep} of ${releases[doc.requisitionNumber].steps.length}`
+                      : 'Not required'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -176,16 +197,56 @@ export default function Requisitions({ documents, choices, selected, canCreate }
         )}
       </section>
 
-      {selected && (
+      {selected && selectedRelease && (
         <section aria-labelledby="pr-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="pr-release" className="text-sm font-semibold">Release</h2>
-          <p className="mt-2 text-sm text-ink-soft">
-            Release state for requisition {selected.requisitionNumber} stands here from the next build step.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled>Release</button>
-            <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled>Cancel release</button>
-          </div>
+          {selectedRelease.status === 'NOT_REQUIRED' ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              No release strategy claims requisition {selected.requisitionNumber}; it needs no release.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-ink-soft">
+                Strategy {selectedRelease.groupCode} / {selectedRelease.strategyCode}:{' '}
+                {selectedRelease.status === 'RELEASED'
+                  ? 'fully released'
+                  : `released through step ${selectedRelease.currentStep} of ${selectedRelease.steps.length}`}
+                {' '}({selectedRelease.steps.map((code, i) => `${i + 1}. ${code}`).join(' · ')}).
+              </p>
+              {releaseMessage.message && (
+                <p role="status" className={`mt-2 text-sm ${releaseMessage.ok ? 'text-ink' : 'text-red-700'}`}>
+                  {releaseMessage.message}
+                  {releaseMessage.remedy ? ` ${releaseMessage.remedy}` : ''}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                {selectedRelease.status === 'PENDING' && (
+                  <form action={releaseAction}>
+                    <input type="hidden" name="requisitionNumber" value={selected.requisitionNumber} />
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Release code</span>
+                      <select name="releaseCode" className="input w-48">
+                        {selectedRelease.steps.map((code) => (
+                          <option key={code} value={code}>{code}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="submit" className="btn btn-primary mt-2 min-h-11 sm:min-h-8" disabled={!canRelease}>
+                      Release step {selectedRelease.currentStep + 1}
+                    </button>
+                  </form>
+                )}
+                {(selectedRelease.currentStep > 0 || selectedRelease.status === 'RELEASED') && (
+                  <form action={cancelAction}>
+                    <input type="hidden" name="requisitionNumber" value={selected.requisitionNumber} />
+                    <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRelease}>
+                      Cancel release
+                    </button>
+                  </form>
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
 

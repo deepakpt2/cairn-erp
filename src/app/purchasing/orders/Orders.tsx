@@ -3,7 +3,13 @@
 import { useActionState, useState } from 'react';
 
 import type { OrderChoices, OrderDocument } from '@/modules/purchasing/orders';
-import { saveOrderAction, type OrderActionState } from './actions';
+import type { DocumentReleaseState } from '@/modules/purchasing/release';
+import {
+  cancelOrderReleaseAction,
+  releaseOrderAction,
+  saveOrderAction,
+  type OrderActionState,
+} from './actions';
 
 /**
  * Purchase orders (SCR-056 / ME21N; inert in stage 1, live since
@@ -88,13 +94,19 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
 
 const INITIAL: OrderActionState = { ok: false };
 
-export default function Orders({ documents, choices, selected, canCreate }: {
+export default function Orders({ documents, choices, selected, canCreate, releases, selectedRelease, canRelease }: {
   documents: OrderDocument[];
   choices: OrderChoices;
   selected: OrderDocument | null;
   canCreate: boolean;
+  releases: Record<string, DocumentReleaseState>;
+  selectedRelease: DocumentReleaseState | null;
+  canRelease: boolean;
 }) {
   const [state, formAction, pending] = useActionState(saveOrderAction, INITIAL);
+  const [releaseState, releaseAction] = useActionState(releaseOrderAction, INITIAL);
+  const [cancelState, cancelAction] = useActionState(cancelOrderReleaseAction, INITIAL);
+  const releaseMessage = cancelState.message ? cancelState : releaseState;
   const [header, setHeader] = useState({
     documentType: selected?.documentType ?? 'STANDARD',
     supplierNumber: selected?.supplierNumber ?? '',
@@ -182,7 +194,13 @@ export default function Orders({ documents, choices, selected, canCreate }: {
                   <td className="px-2 py-2">{doc.documentDate}</td>
                   <td className="px-2 py-2">{doc.currency}</td>
                   <td className="px-2 py-2">{doc.items.length}</td>
-                  <td className="px-2 py-2">{doc.releaseStatus === 'RELEASED' ? 'Released' : 'Not released'}</td>
+                  <td className="px-2 py-2">
+                    {releases[doc.orderNumber]
+                      ? releases[doc.orderNumber].status === 'RELEASED'
+                        ? 'Released'
+                        : `Pending · step ${releases[doc.orderNumber].currentStep} of ${releases[doc.orderNumber].steps.length}`
+                      : 'Not required'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -190,16 +208,56 @@ export default function Orders({ documents, choices, selected, canCreate }: {
         )}
       </section>
 
-      {selected && (
+      {selected && selectedRelease && (
         <section aria-labelledby="po-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="po-release" className="text-sm font-semibold">Release</h2>
-          <p className="mt-2 text-sm text-ink-soft">
-            Release state for purchase order {selected.orderNumber} stands here from the next build step.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled>Release</button>
-            <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled>Cancel release</button>
-          </div>
+          {selectedRelease.status === 'NOT_REQUIRED' ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              No release strategy claims purchase order {selected.orderNumber}; it needs no release.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-ink-soft">
+                Strategy {selectedRelease.groupCode} / {selectedRelease.strategyCode}:{' '}
+                {selectedRelease.status === 'RELEASED'
+                  ? 'fully released'
+                  : `released through step ${selectedRelease.currentStep} of ${selectedRelease.steps.length}`}
+                {' '}({selectedRelease.steps.map((code, i) => `${i + 1}. ${code}`).join(' · ')}).
+              </p>
+              {releaseMessage.message && (
+                <p role="status" className={`mt-2 text-sm ${releaseMessage.ok ? 'text-ink' : 'text-red-700'}`}>
+                  {releaseMessage.message}
+                  {releaseMessage.remedy ? ` ${releaseMessage.remedy}` : ''}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                {selectedRelease.status === 'PENDING' && (
+                  <form action={releaseAction}>
+                    <input type="hidden" name="orderNumberValue" value={selected.orderNumber} />
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Release code</span>
+                      <select name="releaseCode" className="input w-48">
+                        {selectedRelease.steps.map((code) => (
+                          <option key={code} value={code}>{code}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="submit" className="btn btn-primary mt-2 min-h-11 sm:min-h-8" disabled={!canRelease}>
+                      Release step {selectedRelease.currentStep + 1}
+                    </button>
+                  </form>
+                )}
+                {(selectedRelease.currentStep > 0 || selectedRelease.status === 'RELEASED') && (
+                  <form action={cancelAction}>
+                    <input type="hidden" name="orderNumberValue" value={selected.orderNumber} />
+                    <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRelease}>
+                      Cancel release
+                    </button>
+                  </form>
+                )}
+              </div>
+            </>
+          )}
         </section>
       )}
 

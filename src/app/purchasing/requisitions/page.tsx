@@ -8,6 +8,11 @@ import {
   listRequisitions,
   requisitionChoices,
 } from '@/modules/purchasing/requisitions';
+import {
+  RELEASE_CAPABILITIES,
+  getDocumentRelease,
+  listDocumentReleases,
+} from '@/modules/purchasing/release';
 import Requisitions from './Requisitions';
 
 export const dynamic = 'force-dynamic';
@@ -24,8 +29,15 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
-  const [documents, choices] = await Promise.all([listRequisitions(client), requisitionChoices(client)]);
+  const [documents, choices, releases] = await Promise.all([
+    listRequisitions(client),
+    requisitionChoices(client),
+    listDocumentReleases(client, 'PURCHASE_REQUISITION'),
+  ]);
   const selected = params.req ? await getRequisition(client, params.req) : null;
+  const selectedRelease = selected
+    ? await getDocumentRelease(client, 'PURCHASE_REQUISITION', selected.requisitionNumber)
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -45,6 +57,9 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
         choices={choices}
         selected={selected}
         canCreate={can(session, PR_CREATE_CAPABILITY)}
+        releases={Object.fromEntries(releases)}
+        selectedRelease={selectedRelease}
+        canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)}
       />
     </div>
   );

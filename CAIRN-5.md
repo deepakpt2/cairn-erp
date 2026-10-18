@@ -424,6 +424,12 @@ Migration `0072_document_release.sql` with `9050_document_release_policies.sql` 
 
 ---
 
+### 26.412 B-396 — SCR-060 release acts stage 3: release acts in the services, live panels
+
+One service `src/modules/purchasing/release.ts`, one law for both documents: `syncDocumentRelease` runs inside create and change in the same transaction and judges the document's standing attributes through the SCR-059 judge — attributes are honestly shared only: TOTAL_VALUE from standing items; PLANT, PURCHASING_GROUP and COMPANY_CODE only when every standing item agrees (company following the plant); orders add header values and SUPPLIER/PURCHASING_ORG. No claimant deletes the row; a fresh claimant starts PENDING at step zero; a different claimant restarts at step zero. Change to a RELEASED document is refused naming cancel as the remedy, in both document services. `releaseDocument` takes a per-document advisory lock, judges the offered code against the standing next step, advances one step per act — the last releases the document and moves the order header's `release_status` with it — and records every act on the document's own change-document object class. Cancel returns the document to step zero under the same capability (`PROC.PO.RELEASE` standing, `PROC.PR.RELEASE` seated next step). Both screens carry the live panel — state, strategy and step progress judged server-side, code chosen from the strategy's own steps, the standing general message line — and the overview names release standing per document.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |

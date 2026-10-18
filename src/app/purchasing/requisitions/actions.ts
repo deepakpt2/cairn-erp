@@ -9,6 +9,12 @@ import {
   changeRequisition,
   createRequisition,
 } from '@/modules/purchasing/requisitions';
+import {
+  RELEASE_CAPABILITIES,
+  ReleaseError,
+  cancelDocumentRelease,
+  releaseDocument,
+} from '@/modules/purchasing/release';
 import { can } from '@/platform/auth/current';
 
 export interface RequisitionActionState {
@@ -20,6 +26,67 @@ export interface RequisitionActionState {
 }
 
 const ROUTE = '/purchasing/requisitions';
+
+export interface ReleaseActionState {
+  ok: boolean;
+  message?: string;
+  remedy?: string;
+}
+
+export async function releaseRequisitionAction(
+  _previous: ReleaseActionState,
+  form: FormData,
+): Promise<ReleaseActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)) {
+    return { ok: false, message: 'You do not hold the requisition release capability.' };
+  }
+  const number = form.get('requisitionNumber');
+  const code = form.get('releaseCode');
+  try {
+    const state = await releaseDocument({
+      client: session.user.client,
+      changedBy: session.user.username,
+      documentCategory: 'PURCHASE_REQUISITION',
+      documentNumber: typeof number === 'string' ? number : '',
+      releaseCode: typeof code === 'string' ? code : '',
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: true,
+      message: state.status === 'RELEASED'
+        ? `Requisition ${number} is fully released.`
+        : `Requisition ${number} released through step ${state.currentStep} of ${state.steps.length}.`,
+    };
+  } catch (error) {
+    if (error instanceof ReleaseError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
+  }
+}
+
+export async function cancelRequisitionReleaseAction(
+  _previous: ReleaseActionState,
+  form: FormData,
+): Promise<ReleaseActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)) {
+    return { ok: false, message: 'You do not hold the requisition release capability.' };
+  }
+  const number = form.get('requisitionNumber');
+  try {
+    await cancelDocumentRelease({
+      client: session.user.client,
+      changedBy: session.user.username,
+      documentCategory: 'PURCHASE_REQUISITION',
+      documentNumber: typeof number === 'string' ? number : '',
+    });
+    revalidatePath(ROUTE);
+    return { ok: true, message: `Release of requisition ${number} cancelled; it stands at the first step again.` };
+  } catch (error) {
+    if (error instanceof ReleaseError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
+  }
+}
 
 export async function saveRequisitionAction(
   _previous: RequisitionActionState,

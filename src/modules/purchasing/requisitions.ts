@@ -24,6 +24,9 @@ import {
 import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { purchaseRequisitionAssignment, purchaseRequisitionItem } from './schema';
+import {
+  ReleaseError, assertDocumentNotReleased, requisitionAttributes, syncDocumentRelease,
+} from './release';
 
 export const PR_CREATE_CAPABILITY = 'PROC.PR.CREATE';
 export const PR_OBJECT_CLASS = 'purchase_requisition';
@@ -373,6 +376,10 @@ export async function createRequisition(
       changedBy: input.changedBy,
       after: { documentType: type.code, items: input.items.length, requisitionDate },
     });
+    await syncDocumentRelease(
+      tx, input.client, 'PURCHASE_REQUISITION', number,
+      await requisitionAttributes(tx, input.client, number), input.changedBy,
+    );
     return number;
   });
   return { requisitionNumber, warnings };
@@ -392,6 +399,12 @@ export async function changeRequisition(
   await withTenant(input.client, async (tx) => {
     const before = await loadDocument(tx, input.client, raw.requisitionNumber);
     if (!before) throw new PurchaseRequisitionError(`Requisition ${raw.requisitionNumber} does not exist.`);
+    try {
+      await assertDocumentNotReleased(tx, input.client, 'PURCHASE_REQUISITION', raw.requisitionNumber, 'Requisition');
+    } catch (error) {
+      if (error instanceof ReleaseError) throw new PurchaseRequisitionError(error.message, error.remedy);
+      throw error;
+    }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/purchase-requisition/${raw.requisitionNumber}`}, 0))`);
 
     const standingNumbers = new Set(before.items.map((i) => i.itemNumber));
@@ -443,6 +456,10 @@ export async function changeRequisition(
         });
       }
     }
+    await syncDocumentRelease(
+      tx, input.client, 'PURCHASE_REQUISITION', raw.requisitionNumber,
+      await requisitionAttributes(tx, input.client, raw.requisitionNumber), input.changedBy,
+    );
     const after = await loadDocument(tx, input.client, raw.requisitionNumber);
     await recordChange(tx, {
       client: input.client,

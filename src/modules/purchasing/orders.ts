@@ -30,6 +30,9 @@ import {
   purchaseOrder, purchaseOrderAssignment, purchaseOrderItem, purchaseOrderScheduleLine,
   purchaseRequisitionItem,
 } from './schema';
+import {
+  ReleaseError, assertDocumentNotReleased, orderAttributes, syncDocumentRelease,
+} from './release';
 
 export const PO_CREATE_CAPABILITY = 'PROC.PO.CREATE';
 export const PO_OBJECT_CLASS = 'purchase_order';
@@ -518,6 +521,10 @@ export async function createOrder(
       changeType: 'CREATE', changedBy: input.changedBy,
       after: { documentType: type.code, supplier: input.supplierNumber, items: input.items.length, currency },
     });
+    await syncDocumentRelease(
+      tx, input.client, 'PURCHASE_ORDER', number,
+      await orderAttributes(tx, input.client, number), input.changedBy,
+    );
     return number;
   });
   return { orderNumber, warnings };
@@ -537,6 +544,12 @@ export async function changeOrder(
   await withTenant(input.client, async (tx) => {
     const before = await loadDocument(tx, input.client, raw.orderNumber);
     if (!before) throw new PurchaseOrderError(`Purchase order ${raw.orderNumber} does not exist.`);
+    try {
+      await assertDocumentNotReleased(tx, input.client, 'PURCHASE_ORDER', raw.orderNumber, 'Purchase order');
+    } catch (error) {
+      if (error instanceof ReleaseError) throw new PurchaseOrderError(error.message, error.remedy);
+      throw error;
+    }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/purchase-order/${raw.orderNumber}`}, 0))`);
     const { currency } = await judgeHeader(tx, input.client, input);
     await tx.update(purchaseOrder).set({
@@ -557,6 +570,10 @@ export async function changeOrder(
       const judged = await judgeItem(tx, input.client, input, item, before.documentDate, raw.orderNumber, warnings);
       await writeItem(tx, input.client, raw.orderNumber, itemNumber, judged, input.changedBy, isNew, before.documentDate);
     }
+    await syncDocumentRelease(
+      tx, input.client, 'PURCHASE_ORDER', raw.orderNumber,
+      await orderAttributes(tx, input.client, raw.orderNumber), input.changedBy,
+    );
     const after = await loadDocument(tx, input.client, raw.orderNumber);
     await recordChange(tx, {
       client: input.client, objectClass: PO_OBJECT_CLASS, objectKey: raw.orderNumber,
