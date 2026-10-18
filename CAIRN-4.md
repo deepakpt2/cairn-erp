@@ -1639,6 +1639,20 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.364 B-348 — SCR-050 / SNRO closed and accepted: number range objects at full parity
+
+**What shipped across the five stages.** The standing number-range engine completed to the owner's full-parity contract (R-98): every stored object code renamed to its SAP-width name (`RF_BELEG`, `MATERIALNR`, `MATDOC`, `PURCHORD`, `PURCHREQ`, `SALESORD`, `DELIVERY`, `BILLING`, `PRODORDER`, `PRODCONF`, `PAYRUN`, `VENDINV`, `BUSPARTNR`) through intervals, allocations, document types and ~70 code references, with historical change documents keeping the keys they were written under; a tenant `number_range_object` registry carrying description, number length, one-decimal consumption warning, year relevance and subobject hint — maintainable facts with names firmly application-owned. The maintenance the screen refused stands delivered: **external and buffered intervals are creatable** with creation-time immutability, buffered allocation reserving independently committed blocks whose rolled-back numbers stay consumed (gaps accepted at full parity, journal included), and the **guarded NRLEVEL act** setting a counter within its bounds as its own documented act and warning when it would re-issue numbers. The standing engine's strengths were not rebuilt: advisory-lock serialisation, overlap refusal, issued-number protection, blocked-as-disable, the allocation audit.
+
+**Acceptance evidence.** Service tests **5/5** (`tests/number-range-objects.test.ts`: the renamed registry read-back, registry maintenance with unknown-object refusal, external creation with the flag-change refusal and allocation's external rejection, buffered allocation consuming the rolled-back 102 and handing 103 with the counter standing at the block edge, and the NRLEVEL act rewinding with its repetition warning and refusing outside bounds). Browser target `number-range-objects` (T947) **7/7 journeys** against the production build: the registry under SAP-width names, the fact change reading back, the previously refused external interval created through the screen, the guarded counter act, and the database remembering all of it. One target-side finding: a row filter matched the "NEXT" header before the XT row; scoped by exact cell, it passes cleanly. Neighbouring targets `document-types` and `material-types` — the rename's two heaviest consumers — passed afterwards undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled (number-range-objects 1.82 kB); suite **1228 tests across 146 files**; 104 migrations standing; seed 89 capabilities / 61 activities / 58 terms / 54 aliases read back.
+
+**Cost.** Measured: 03:08 in to 04:00 — **52 minutes** across the contract flow and five stages, every stage inside its 39-minute box.
+
+**What stands after this.** The numbering foundation is complete at parity: objects, intervals of every assignment kind, buffering, and the counter act. On it, **SCR-051 / MMNR** builds the material number-range groups and MM01's number drawing — the round this one deliberately enables. The next round opens with the owner's word or package.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1754,6 +1768,7 @@ recorded change, date and reason stated.
 | 2.166 | 2026-10-18 | **SCR-050 / SNRO stage 2 (B-345, §26.361): the registry and the great rename.** Migration 0061 renames every stored object code to its SAP-width name (the row carries the map), creates and seeds `number_range_object` for all clients, and 9041 puts forced RLS on it — 104 migrations. ~70 code references follow; new tenants are seeded from the standard package; the GL reconciliation `MATERIAL` correctly stands apart. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 9 minutes. | Agent |
 | 2.167 | 2026-10-18 | **SCR-050 / SNRO stage 3 (B-346, §26.362): the live screens.** The object registry is maintainable (metadata only; names application-owned); external and buffered intervals are creatable with creation-time immutability, buffered allocation reserving independently committed blocks whose rolled-back numbers stay consumed; and the guarded current-number act sets a counter within its bounds as its own documented act, warning when it would re-issue. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 8 minutes. | Agent |
 | 2.168 | 2026-10-18 | **SCR-050 / SNRO stage 4 (B-347, §26.363): the supporting seeding.** The standing SNRO term (search alias unchanged) now opens onto the objects screen with its description carrying the round's parity, the capability description matches, and `/config/number-range-objects` joins `BUILT_ROUTES`; seed read back at 89/61/58/54. Typecheck and `lint:ip` clean; suite 1222 across 145 files. Cost measured at 2 minutes. | Agent |
+| 2.169 | 2026-10-18 | **SCR-050 / SNRO CLOSED and accepted (B-348, §26.364).** Stage 5 ships 5 service tests and the T947 browser target `number-range-objects` (7/7 journeys against the production build — the registry under SAP-width names, external interval created through the screen, the guarded counter act, the database remembering all of it); one target row-scope fix. Neighbouring `document-types` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1228 across 146 files, 104 migrations, seed 89/61/58/54. Cost measured at 52 minutes overall. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
