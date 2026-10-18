@@ -172,6 +172,12 @@ The OMSY round opens as shape only: `/config/material-period-control` renders th
 
 ---
 
+### 26.381 B-365 — SCR-054 stage 2: the control record table stands
+
+Migration `0065` creates `material_period_control` — `(client, company_code)` primary key with the composite foreign key to the company master, current and previous year/period, the nullable previous-year reference, both backposting indicators, period and year checks, and the four audit columns — and `9044` puts it behind the standing forced tenant RLS. The Drizzle table stands in `src/modules/inventory/schema.ts`. Verified standing on `cairn_b210` with row security enabled and forced; **111 migrations now stand**. No service reads it yet — that is stage 3.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -196,6 +202,7 @@ The OMSY round opens as shape only: `/config/material-period-control` renders th
 | 2.187 | 2026-10-18 | **SCR-053 / MM06 CLOSED and accepted (B-363, §26.379).** Stage 5 ships 3 service tests and the T944 browser target `material-deletion-flag` (7/7 journeys against the production build — client flag set and cancelled, the plant row covered, the plant flag alone, the database remembering); one fix, the confirmation dialog closing on success. Neighbouring `industry-sectors` and `material-number-ranges` targets, typecheck, `lint:ip` and the production build clean; suite 1241 across 149 files, 109 migrations, seed 91/63/61/57. Cost measured at 12 minutes. Deferred and named in the entry: storage-location flags, scheduled flagging, archiving/physical deletion, goods-movement enforcement. | Agent |
 | 2.188 | 2026-10-18 | **SCR-054 / OMSY contracted (R-102).** The owner's corrected OMSY package under house names: one material period control record per company code, initialized once against the fiscal-year variant, advanced only by the guarded shift act, the two backposting indicators kept separate, deletion refused-by-design, and a read service standing for the goods-movement round. | Agent |
 | 2.189 | 2026-10-18 | **SCR-054 stage 1 published (B-364, §26.380).** The inert material period control screen `/config/material-period-control`: company control grid rendered empty, i18n keys added. No reads, no writes. | Agent |
+| 2.190 | 2026-10-18 | **SCR-054 stage 2 published (B-365, §26.381).** Migrations `0065` + `9044` create `material_period_control` (company-keyed, both indicators, forced tenant RLS) and its Drizzle table — 111 migrations. | Agent |
 
 ---
 

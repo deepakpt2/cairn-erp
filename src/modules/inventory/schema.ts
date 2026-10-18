@@ -71,6 +71,29 @@ export const materialGroup = pgTable('material_group', {
 }, (t) => [primaryKey({ columns: [t.client, t.materialGroup] })]);
 
 /**
+ * Material period control (SCR-054 / OMSY; R-102).
+ *
+ * One record per company code: the current and previous material
+ * posting periods, the previous-year reference written at a
+ * year-boundary shift, and the two backposting indicators kept
+ * separate. Initialized once, advanced only by the shift act, never
+ * deleted.
+ */
+export const materialPeriodControl = pgTable('material_period_control', {
+  client: tenant(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currentFiscalYear: integer('current_fiscal_year').notNull(),
+  currentPeriod: integer('current_period').notNull(),
+  previousFiscalYear: integer('previous_fiscal_year').notNull(),
+  previousPeriod: integer('previous_period').notNull(),
+  previousYearRefYear: integer('previous_year_ref_year'),
+  previousYearRefPeriod: integer('previous_year_ref_period'),
+  allowBackposting: boolean('allow_backposting').notNull().default(false),
+  disallowBackpostingAfterChange: boolean('disallow_backposting_after_change').notNull().default(false),
+  ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.companyCode] })]);
+
+/**
  * Material number range groups (SCR-051 / MMNR; R-99).
  *
  * A group is a named pair of MATERIALNR intervals — one internal and one
