@@ -1208,6 +1208,13 @@ The owner's F-53 package stands as SCR-078. The audit settles three things the c
 **Stage order (standing):** inert UI → schema (`outgoing_payment`; RLS policies) → service and live screen → supporting (capability and term) → service tests and browser acceptance. Same-stage bookkeeping: B-501 / §26.517 / §30 row 2.335. **Cost (B-254, measured):** the package arrived 14:35 UTC; the contract stands written the same minute-span, before stage 1.
 
 ---
+### 26.518 B-502 — SCR-078 stage 1: inert Post Outgoing Payment screen
+
+Stage 1 of R-126. `/finance/outgoing-payment` renders the payment's shape — the vendor/company load, the open-item grid section, and the payment block (bank G/L account, amount, currency, reference at the package's 16, document/posting/clearing dates and the optional value date) — under `FIN.AP.PAYMENT.POST` with F-53 as the displayed search alias. Nothing is persisted and every control stands disabled until the service lands; `outgoingPayment.title`/`outgoingPayment.subtitle` join the catalogue.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-502 / §26.518 / §30 row 2.336. **Cost (B-254, measured):** contract R-126 published 14:36 UTC; stage 1 completed 14:37 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1388,3 +1395,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.333 | 2026-10-18 | **SCR-077 stage 4 published (B-499, §26.515).** `CFG.ORG.INDUSTRY.DEFINE` activity/capability and the Maintain Industries term (OB44 alias) seeded (111/67/85/93); the five industries deliver at onboarding. Tests and browser acceptance follow in stage 5. | Agent |
 | 2.334 | 2026-10-18 | **SCR-077 ACCEPTED AND CLOSED (B-500, §26.516).** OB44 Maintain Industries stands: tenant industry master (code ≤4, never renamed) with per-language descriptions (≤20) judged against configured languages, five delivered industries, restricting partner reference, deletion refused by service count and database key alike. T919 green; suite 1331; seed 111/67/85/93; 148 migrations. Next: F-53 (SCR-078) — field package requested. | Agent |
 | 2.335 | 2026-10-18 | **SCR-078 contract R-126 written (B-501, §26.517).** F-53 Post Outgoing Payment: KZ journal crediting the bank and debiting the vendor item by item, items netting (credit memos against the payment), exact allocation judged, standing clearing stamps — no allocation table. Partial/residual/discount/on-account/special G/L deferred, named. Stage 1 follows. | Agent |
+| 2.336 | 2026-10-18 | **SCR-078 stage 1 published (B-502, §26.518).** Inert `/finance/outgoing-payment` screen stands under `FIN.AP.PAYMENT.POST`. Schema follows in stage 2. | Agent |
