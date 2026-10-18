@@ -2013,6 +2013,12 @@ const en: Catalogue = {
     'item reconstructed to its standing on that date and placed by its due ' +
     'date — not yet due standing apart from the overdue buckets. This ' +
     'screen displays; it never posts.',
+  'customerBalances.title': 'Customer Balances',
+  'customerBalances.subtitle':
+    'A customer\u2019s period balances in a company, derived from the posted ' +
+    'ledger as it is read: opening balance, debit and credit turnover and ' +
+    'closing balance for every fiscal period, with the line items behind ' +
+    'any period one choice away. This screen displays; it never posts.',
   'vendorBalances.title': 'Vendor Balances',
   'vendorBalances.subtitle':
     'A supplier\u2019s period balances in a company, derived from the posted ' +

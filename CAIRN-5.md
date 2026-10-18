@@ -783,6 +783,13 @@ The owner's FD10N package is contracted as R-117, mirroring vendor balances on t
 
 ---
 
+### 26.462 B-446 — SCR-069 stage 1: the inert customer balances screen stands
+
+`/finance/customer-balances` renders the selection (customer, company, fiscal year, display currency, period range, special-periods switch), the empty period-balance matrix and the empty line-item drill-down, all disabled. i18n keys `customerBalances.title/subtitle` added. No reads, no writes — the live balance service follows at stage 3.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -897,6 +904,7 @@ The owner's FD10N package is contracted as R-117, mirroring vendor balances on t
 | 2.277 | 2026-10-18 | **SCR-068 incoming payment closed (B-443, §26.459).** Service tests and browser target T929 (neighbour T930) green on the production build; full suite 1293/164, 137 migrations, seed 102/66/75/84. Deferrals named: partial/residual/on-account payments, discounts and write-offs, clearing reset (FBRA) and reversal (FB08), special G/L, FX translation. | Agent |
 | 2.278 | 2026-10-18 | **Standing instruction recorded (B-444, §26.460).** Every completion report now names the next T-code. Next: SCR-069 = FD10N customer balances (`FIN.AR.BALANCE`), then SCR-070 = customer ageing (S_ALR_87012178); awaiting the owner's FD10N field package before any contract or implementation. | Agent |
 | 2.279 | 2026-10-18 | **SCR-069 customer balances contracted (R-117, B-445, §26.461).** FD10N under house names, read-only: balances derived from the posted journal with no balance table, debit-positive opening/turnover/closing chained per period, special periods on request, currency refused by name where conversion would be needed, period drill-down to line items; `FIN.AR.BALANCE` created; stored figures/carryforward, conversion, ageing and special G/L deferred. | Agent |
+| 2.280 | 2026-10-18 | **SCR-069 stage 1 published (B-446, §26.462).** The inert customer balances screen `/finance/customer-balances`: selection, empty period matrix and empty drill-down rendered, i18n keys added. No reads, no writes. | Agent |
 
 ---
 
