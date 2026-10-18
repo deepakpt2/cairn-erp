@@ -990,6 +990,13 @@ Stage 2 of R-121. The verdict, judged against the standing schema rather than th
 Verification: the standing columns, index and tables were read directly from `src/modules/finance/schema.ts`, `src/platform/change/index.ts` and the customer-company schema; local DB stays at **141 migrations**. SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-472 / §26.488 / §30 row 2.306. **Cost (B-254, measured):** stage 1 published 12:45 UTC; the verdict completed 12:53 UTC.
 
 ---
+### 26.489 B-473 — SCR-073 stage 3: clearing service and live screen
+
+Stage 3 of R-121. `src/modules/finance/customer-clearing.ts` stands at vendor-clearing parity: the customer judges extended to the company by name; open items are the customer's uncleared partner lines on POSTED journals beside the cleared items and the open balance; execution refuses by name the unconfirmed act, the empty selection, a non-date, an item of another customer or company, an already-cleared item naming its clearing document, an unposted document, a mixed-currency selection, and a non-zero difference naming the amount — partial and residual clearing standing deferred. Under the advisory lock, one balanced DZ journal posts through the standing engine with an offsetting line per item at its exact standing amount, the ticked lines and the clearing lines stamp in place with the clearing document and clearing date, and one change document records the act carrying the caller's request key, which a retried submission replays to the standing clearing. The screen is live: selection, open-item grid with running assigned/difference, the three distinct dates, explicit confirmation, result message and cleared history. No migration landed, per the stage-2 verdict.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-473 / §26.489 / §30 row 2.307. **Cost (B-254, measured):** stage 2 published 12:53 UTC; stage 3 completed 12:58 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1141,3 +1148,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.304 | 2026-10-18 | **SCR-073 contract recorded (R-121, B-470, §26.486).** F-32 customer clearing mirrors vendor clearing on standing stamps: no clearing tables, one DZ clearing journal, three distinct dates, one currency, zero signed sum, partial/residual and special G/L deferred by name. Awaiting stage 1 (UI). | Agent |
 | 2.305 | 2026-10-18 | **SCR-073 stage 1 published (B-471, §26.487).** `/finance/customer-clearing` stands inert under `FIN.AR.CLEAR`: selection, three distinct dates, explicit confirmation, cleared-history section; refusal names the unconnected service. Schema verdict is stage 2. | Agent |
 | 2.306 | 2026-10-18 | **SCR-073 stage 2 schema verdict (B-472, §26.488).** No new tables, columns or migrations: clearing stamps, the clearing journal's own lines, the change document and SCR-071's reset record already carry the F-32 relationship. DB stays at 141 migrations. Backend is stage 3. | Agent |
+| 2.307 | 2026-10-18 | **SCR-073 stage 3 published (B-473, §26.489).** Customer-clearing service stands at vendor parity with confirmation and request-key replay; the DZ clearing journal stamps items in place; the `/finance/customer-clearing` screen is live. Capability and term land in stage 4. | Agent |
