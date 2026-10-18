@@ -1184,6 +1184,17 @@ Stage 4 of R-125. The configuration activity `CFG.ORG.INDUSTRY.DEFINE` (ENTERPRI
 Verification: typecheck clean; seed idempotent. Acceptance remains stage 5, so SCR-077 is **not yet accepted**. Same-stage bookkeeping: B-499 / §26.515 / §30 row 2.333. **Cost (B-254, measured):** stage 3 published 14:26 UTC; stage 4 completed 14:28 UTC.
 
 ---
+### 26.516 B-500 — SCR-077 accepted and closed
+
+R-125 stands accepted. The industry master stands tenant-scoped beside the business partner it classifies: the code of one to four uppercase letters or digits never renames, descriptions of at most 20 characters stand per configured system language — today English alone, further languages refused by name until the language master grows them — and a new industry requires its default-language description. Five industries (MEC1, CHEM, PHAR, RETL, CONS) stand delivered to every tenant, at onboarding and to standing tenants alike. The partner carries the industry under a composite restricting key, so deletion refuses twice over: the service counts the carrying partners and names the count, and the database key refuses the same act beneath it. Deactivation stands beside deletion; a reason and one change document stand on every write. The master is distinct from, and coexists with, the one-character industry sector materials are created under.
+
+**Inside the round:** the first browser runs completed every journey step yet failed in the runner's sign-out teardown, the still-open delete dialog covering the header — the journey now closes its dialog, and T919 stands green. Deferred as named at contract: the industry picker on the business-partner maintenance screen, descriptions in languages beyond the configured set, and any rename path.
+
+Acceptance evidence: service tests 3/3 (`tests/industry-definition.test.ts`, including the database-level foreign-key refusal); browser target **T919 green** on the production build (delivered industries standing, AGRI created and redescribed, the carried industry refusing deletion, database evidence held); **full suite 1331 tests green**; seed **111/67/85/93** idempotent; **148 migrations**; typecheck and production build clean.
+
+Completion per B-444: the next roadmap item remains **F-53 (manual vendor payment, `FIN.AP.PAYMENT.POST`)**, named at SCR-076's closure and deferred by this round's OB44 package — it would stand as SCR-078, and its field package is requested from the owner; no contract is drafted before it arrives. Same-stage bookkeeping: B-500 / §26.516 / §30 row 2.334. **Cost (B-254, measured):** the round opened 14:21 UTC; SCR-077 closed 14:33 UTC — twelve minutes across five stages, inside the time-box.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1362,3 +1373,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.331 | 2026-10-18 | **SCR-077 stage 2 published (B-497, §26.513).** `industry`/`industry_text` stand with the restricting partner reference; five industries delivered to standing tenants; 148 migrations. Service follows in stage 3. | Agent |
 | 2.332 | 2026-10-18 | **SCR-077 stage 3 published (B-498, §26.514).** Industry service stands (language-judged texts, partner-count deletion guard) and `/config/industries` is live. Activity, capability, term and onboarding delivery follow in stage 4. | Agent |
 | 2.333 | 2026-10-18 | **SCR-077 stage 4 published (B-499, §26.515).** `CFG.ORG.INDUSTRY.DEFINE` activity/capability and the Maintain Industries term (OB44 alias) seeded (111/67/85/93); the five industries deliver at onboarding. Tests and browser acceptance follow in stage 5. | Agent |
+| 2.334 | 2026-10-18 | **SCR-077 ACCEPTED AND CLOSED (B-500, §26.516).** OB44 Maintain Industries stands: tenant industry master (code ≤4, never renamed) with per-language descriptions (≤20) judged against configured languages, five delivered industries, restricting partner reference, deletion refused by service count and database key alike. T919 green; suite 1331; seed 111/67/85/93; 148 migrations. Next: F-53 (SCR-078) — field package requested. | Agent |
