@@ -1361,6 +1361,12 @@ Stage 3 of R-129. `postVendorDownPayment` posts the KA journal — debit the ind
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-524 / §26.540 / §30 row 2.358. **Cost (B-254, measured):** stage 2 published 17:04 UTC; stage 3 completed 17:05 UTC.
 
+### 26.541 B-525 — SCR-081 stage 4: capability and special G/L maintenance
+
+Stage 4 of R-129. The capability `FIN.AP.DOWNPAYMENT.POST` (F-48) and the configuration activity `CFG.FIN.SPECIALGL.DEFINE` (OBXR/OBYR as search aliases) join the seed — 114 capabilities, 68 configuration activities, 88 terms, 97 aliases. The maintenance screen `/config/special-gl` lists the configured indicators and maintains them with a mandatory reason and a change document: the alternative account must stand as a G/L master, and deletion is refused while a posted down payment references the indicator.
+
+Verification: seed applied with the new counts standing; typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-525 / §26.541 / §30 row 2.359. **Cost (B-254, measured):** stage 3 published 17:05 UTC; stage 4 completed 17:07 UTC.
+
 ---
 ---
 
@@ -1565,3 +1571,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.356 | 2026-10-18 | **SCR-081 stage 1 published (B-522, §26.538).** The `/finance/vendor-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.357 | 2026-10-18 | **SCR-081 stage 2 published (B-523, §26.539).** Special G/L configuration and the down-payment record stand; 154 migrations. The posting service follows in stage 3. | Agent |
 | 2.358 | 2026-10-18 | **SCR-081 stage 3 published (B-524, §26.540).** Down-payment service stands: indicator resolution under lock, KA journal on the alternative account, replay by request key; the screen is live. Capability and configuration maintenance follow in stage 4. | Agent |
+| 2.359 | 2026-10-18 | **SCR-081 stage 4 published (B-525, §26.541).** Capability F-48 and the special G/L configuration activity seeded (114/68/88/97); the `/config/special-gl` maintenance screen stands with reasoned changes and deletion guard. Tests and browser acceptance follow in stage 5. | Agent |
