@@ -470,3 +470,52 @@ export const dunningNotice = pgTable('dunning_notice', {
   uniqueIndex('dunning_notice_run_account_uq').on(t.client, t.runDate, t.runId, t.companyCode, t.customer),
   check('dunning_notice_level_ck', sql`${t.dunningLevel} >= 1`),
 ]);
+
+/** Direct vendor invoice header (SCR-075 / R-123). The KR journal is the authoritative posting. */
+export const vendorInvoice = pgTable('vendor_invoice', {
+  client: tenantClient(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  vendorNumber: varchar('vendor_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  reference: varchar('reference', { length: 40 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  grossAmount: numeric('gross_amount', { precision: 23, scale: 4 }).notNull(),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  paymentTerms: varchar('payment_terms', { length: 12 }),
+  baselineDate: date('baseline_date', { mode: 'string' }),
+  dueDate: date('due_date', { mode: 'string' }),
+  headerText: varchar('header_text', { length: 100 }),
+  status: varchar('status', { length: 12 }).notNull().default('POSTED'),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
+  cancelledBy: varchar('cancelled_by', { length: 20 }),
+  cancellationOf: varchar('cancellation_of', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber] }),
+  check('vendor_invoice_status_ck', sql`${t.status} in ('POSTED', 'CANCELLED')`),
+  check('vendor_invoice_gross_ck', sql`${t.grossAmount} > 0`),
+  uniqueIndex('vendor_invoice_request_key_uq').on(t.client, t.requestKey),
+]);
+
+/** Direct vendor invoice line (SCR-075 / R-123): a tax-exclusive net amount and its assignments. */
+export const vendorInvoiceLine = pgTable('vendor_invoice_line', {
+  client: tenantClient(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull(),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  costCenter: varchar('cost_center', { length: 20 }),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  lineText: varchar('line_text', { length: 100 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
+  foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [vendorInvoice.client, vendorInvoice.invoiceNumber] }).onDelete('restrict'),
+  check('vendor_invoice_line_amount_ck', sql`${t.netAmount} > 0`),
+]);

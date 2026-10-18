@@ -1068,6 +1068,13 @@ Stage 1 of R-123. `/finance/vendor-invoice` stands inert: the invoice header (ve
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-484 / §26.500 / §30 row 2.318. **Cost (B-254, measured):** the contract published 13:25 UTC; stage 1 completed 13:25 UTC.
 
 ---
+### 26.501 B-485 — SCR-075 stage 2: vendor invoice schema stands
+
+Stage 2 of R-123. `vendor_invoice` and `vendor_invoice_line` stand in the finance schema at the customer-invoice shape — header with vendor, company, both dates, reference, currency, judged gross and calculated tax, payment terms with their baseline and due dates, status POSTED/CANCELLED, journal link, cancellation links both ways and the caller's request key unique per tenant; lines with account, tax-exclusive net, tax code and its amount, cost centre, profit centre and text. Migrations `0084_vendor_invoice.sql` and `9059_vendor_invoice_policies.sql` apply cleanly behind tenant RLS: the application role inserts and reads, may update only the header's cancellation columns, and never deletes; lines are insert-only. The KR journal remains the authoritative posting — these tables are the invoice's own record.
+
+Verification: the migration runner applied both files and re-reports **145 already applied**; typecheck clean. SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-485 / §26.501 / §30 row 2.319. **Cost (B-254, measured):** stage 1 published 13:26 UTC; stage 2 completed 13:33 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1231,3 +1238,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.316 | 2026-10-18 | **SCR-074 accepted and closed (B-482, §26.498).** F150 dunning stands for customers: run identity, ageing-derived proposal, levels from completed history, named exceptions, duplicate-safe finalization writing notices, no FI posting. Service tests 4/4, browser T923 green, suite 1319/171, seed 108/66/82/90, 143 migrations. Next T-code: **FB60** (SCR-075, `FIN.AP.INVOICE.POST`), awaiting the owner field package. | Agent |
 | 2.317 | 2026-10-18 | **SCR-075 contract recorded (R-123, B-483, §26.499).** FB60 direct vendor invoice mirrors FB70: judged gross, standing tax calculation, KR journal crediting the vendor at gross, VENDINV number, linked cancellation; FB65 deferred by name. Awaiting stage 1 (UI). | Agent |
 | 2.318 | 2026-10-18 | **SCR-075 stage 1 published (B-484, §26.500).** `/finance/vendor-invoice` stands inert under `FIN.AP.INVOICE.POST`: header, dates, reference, judged gross, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
+| 2.319 | 2026-10-18 | **SCR-075 stage 2 published (B-485, §26.501).** `vendor_invoice`/`vendor_invoice_line` stand behind RLS (migrations 0084/9059; DB at 145), cancellation-columns-only updates, lines insert-only. Backend is stage 3. | Agent |
