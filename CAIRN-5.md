@@ -1043,6 +1043,13 @@ Stage 3 of R-122. `src/modules/finance/dunning.ts` stands: run creation refuses 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-074 is **not yet accepted**. Same-stage bookkeeping: B-480 / §26.496 / §30 row 2.314. **Cost (B-254, measured):** stage 2 published 13:13 UTC; stage 3 completed 13:14 UTC.
 
 ---
+### 26.497 B-481 — SCR-074 stage 4: capability and term
+
+Stage 4 of R-122. `FIN.AR.DUNNING.RUN` enters the capability catalogue as a non-posting EXECUTE capability (a dunning run posts no journal), and the Term Registry names **Dunning programme** at `/finance/dunning`, with `F150` standing only as a search alias. No configuration activity is created, and no tenant backfill stands needed.
+
+Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **108/66/82/90** (message catalogue 11), and database read-back shows `FIN.AR.DUNNING.RUN|FIN|EXECUTE|false`, the term, and its F150 alias — the catalogue's insert-only seed left the first-seeded action word standing in the local database, corrected there to the standing EXECUTE vocabulary. Acceptance remains stage 5, so SCR-074 is **not yet accepted**. Same-stage bookkeeping: B-481 / §26.497 / §30 row 2.315. **Cost (B-254, measured):** stage 3 published 13:14 UTC; stage 4 completed 13:15 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1202,3 +1209,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.312 | 2026-10-18 | **SCR-074 stage 1 published (B-478, §26.494).** `/finance/dunning` stands inert under `FIN.AR.DUNNING.RUN`: run parameters, proposal and runs sections; refusal names the unconnected service. Schema is stage 2. | Agent |
 | 2.313 | 2026-10-18 | **SCR-074 stage 2 published (B-479, §26.495).** Five dunning tables stand behind RLS (migrations 0083/9058; DB at 143): run, companies, account results with named exceptions, item proposals, notices. No delete grants. Backend is stage 3. | Agent |
 | 2.314 | 2026-10-18 | **SCR-074 stage 3 published (B-480, §26.496).** Dunning service stands: ageing-derived selection, levels from completed history, named exceptions, exclusion, duplicate-safe finalization writing notices; the `/finance/dunning` screen is live. Capability and term land in stage 4. | Agent |
+| 2.315 | 2026-10-18 | **SCR-074 stage 4 published (B-481, §26.497).** `FIN.AR.DUNNING.RUN` and the `/finance/dunning` term (F150 alias only) stand; seed read-back 108/66/82/90, idempotent. Tests and acceptance remain stage 5. | Agent |
