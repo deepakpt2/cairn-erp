@@ -151,6 +151,20 @@ The term registry gains `INV.MATERIAL.FLAGDELETION` — *Flag material for delet
 
 ---
 
+### 26.379 B-363 — SCR-053 / MM06 closed and accepted: material deletion flags at client and plant scope
+
+**What shipped across the five stages.** The material master gained its deletion flags at the corrected package's parity: `marked_for_deletion` on the material (client level) and on each plant record, set and cancelled as their own confirmed acts on the material screen — mandatory reason, one change document per scope with the flag security-relevant, the stock standing at the scope named before confirming and in the result. The flag behaves as the package rules: a marker, not a posting lock — flagging is refused for nothing, no standing process halts on it, and the one Cairn rule beside it refuses **new plant extensions** under a client flag until the flag is cancelled. The scopes never write each other; a plant row covered by the client flag says so. The MM06 term stands seeded with MM06 as a search alias only.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/material-deletion-flag.test.ts`: the reasoned set/cancel cycle with the security-relevant trail, the extension refused while client-flagged and freed on cancellation, plant flags standing on their own scope and refusing an unextended plant). Browser target `material-deletion-flag` (T944) **7/7 journeys** against the production build: both scopes unflagged, the client flag set through its dialog, the plant row covered, the cancellation, the plant flag standing alone, and the database remembering all three acts. One product-side fix inside the stage: the confirmation dialog now closes on a successful act (it first stayed open and intercepted the next click — the standing lesson re-learned on the new component, and the panel is better for it). Neighbouring targets `industry-sectors` (T945) and `material-number-ranges` (T946) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1241 tests across 149 files**; **109 migrations** standing; seed **91/63/61/57** read back.
+
+**Cost.** Measured: 05:49 in to 06:01 — **12 minutes** across the contract and five stages, every stage inside its 39-minute box.
+
+**Deferred from this round — named, as the owner required.** Four package requirements stand unfilled, each recorded in R-101 and carried to the next round or beyond: **storage-location-level flags** (Cairn holds no material/storage-location records to flag — that level arrives with storage-location material data, not before); **scheduled flagging** with a future effective date (no scheduling or activation process exists to honour it); **archiving and physical deletion** under MM_MATNR/MM70/MM71 (a separate lifecycle process by the package's own §4 — the flag deliberately deletes nothing); and **per-process enforcement** in goods movements and business documents (no movement posting exists yet to check the flag; R-101 records the obligation for the round that builds it).
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -172,6 +186,7 @@ The term registry gains `INV.MATERIAL.FLAGDELETION` — *Flag material for delet
 | 2.184 | 2026-10-18 | **SCR-053 stage 2 published (B-360, §26.376).** Migration `0064` adds the deletion-flag columns to the material and plant tables with their Drizzle columns — 109 migrations. | Agent |
 | 2.185 | 2026-10-18 | **SCR-053 stage 3 published (B-361, §26.377).** The deletion-flag acts live (confirmed, reasoned, security-relevant change documents, stock-at-scope returned), the panel's set/cancel dialogs, and the client-flag refusal of new plant extensions. Typecheck, `lint:ip`, build and the material suites green. | Agent |
 | 2.186 | 2026-10-18 | **SCR-053 stage 4 published (B-362, §26.378).** The `INV.MATERIAL.FLAGDELETION` term seeded (MM06 search alias only) over the material route. Seed reads back 91/63/61/57. | Agent |
+| 2.187 | 2026-10-18 | **SCR-053 / MM06 CLOSED and accepted (B-363, §26.379).** Stage 5 ships 3 service tests and the T944 browser target `material-deletion-flag` (7/7 journeys against the production build — client flag set and cancelled, the plant row covered, the plant flag alone, the database remembering); one fix, the confirmation dialog closing on success. Neighbouring `industry-sectors` and `material-number-ranges` targets, typecheck, `lint:ip` and the production build clean; suite 1241 across 149 files, 109 migrations, seed 91/63/61/57. Cost measured at 12 minutes. Deferred and named in the entry: storage-location flags, scheduled flagging, archiving/physical deletion, goods-movement enforcement. | Agent |
 
 ---
 
