@@ -854,6 +854,13 @@ Seed adds capability `FIN.AR.AGEING` (DISPLAY, non-posting — “Display custom
 
 ---
 
+### 26.472 B-456 — SCR-070 closed: customer ageing accepted
+
+S_ALR_87012178 stands in house dress at `/finance/customer-ageing` under `FIN.AR.AGEING`: standing reconstructs as of the key date from posting and clearing dates, ageing runs on the customer invoice's computed due date (posting date otherwise) into not-yet-due plus three increasing overdue thresholds, amounts aggregate in company currency debit-positive with credits keeping their sign, per-customer bucket rows with company totals and item detail. Service tests prove 850 not yet due at posting, both invoices 35 days overdue at 2026-12-20, the incoming-payment clearing of 2026-12-01 leaving both items standing at 2026-11-30 and only the 300 item at 2026-12-20, and the non-increasing-threshold refusal. Browser target T927 walks the two invoices through the screen to 850.00 open with due-date item detail and database evidence; neighbour T928 (customer balances) stays green. Suite 1299 tests, seed 104/66/77/86, migrations unchanged at 137, typecheck and production build clean. Round measured 09:38–09:50 UTC (12 minutes, contract commit to acceptance). Deferred, named: customer account-group filtering, special G/L inclusion, saved layout variants and sorting-rule selection, partial/residual-aware open-amount reconstruction, and FBL5N-style document display.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -978,6 +985,7 @@ Seed adds capability `FIN.AR.AGEING` (DISPLAY, non-posting — “Display custom
 | 2.287 | 2026-10-18 | **SCR-070 stage 2 verified (B-453, §26.469).** No schema change: as-of ageing reconstructs from the posted journal; the standing company/posting and partner/company indexes cover customer lines identically. Migrations unchanged at 137. | Agent |
 | 2.288 | 2026-10-18 | **SCR-070 stage 3 published (B-454, §26.470).** Customer ageing reads live: as-of key-date reconstruction, invoice due-date ageing, three increasing thresholds or named refusal, signed company-currency buckets per customer with company totals and item detail; screen wired. | Agent |
 | 2.289 | 2026-10-18 | **SCR-070 stage 4 published (B-455, §26.471).** Capability `FIN.AR.AGEING` and the `/finance/customer-ageing` term stand, S_ALR_87012178 a search alias only; seed read-back 104/66/77/86. | Agent |
+| 2.290 | 2026-10-18 | **SCR-070 closed (B-456, §26.472).** Customer ageing (S_ALR_87012178) accepted under `FIN.AR.AGEING`: T927 + neighbour T928 green on the production build, suite 1299 tests, seed 104/66/77/86, 137 migrations, 12 min measured. | Agent |
 
 ---
 
