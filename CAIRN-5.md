@@ -974,7 +974,7 @@ The owner's F-32 package arrives against a roadmap row that already names it (`F
 
 Stage 1 of R-121. `/finance/customer-clearing` stands inert: the selection (customer account, company code), the open-items section carrying the three distinct dates — clearing, posting and document — with explicit confirmation, and the cleared-history section. The capability `FIN.AR.CLEAR` is judged wildcard-aware on the page, but nothing is connected: no database is read, no service is called, and a submitted clearing refuses by name (`The customer clearing service is not yet connected…`) until the service lands in stage 3. The screen text states the contracted shape — one DZ clearing journal, signed sum at zero, partial and residual clearing deferred — so the standing UI and the contract agree before any judge exists.
 
-Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-471 / §26.487 / §30 row 2.305. **Cost (B-254, measured):** the contract published 12:43 UTC; stage 1 completed 12:47 UTC.
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-471 / §26.487 / §30 row 2.305. **Cost (B-254, measured):** the contract published 12:43 UTC; stage 1 completed 12:45 UTC.
 
 ---
 ---
