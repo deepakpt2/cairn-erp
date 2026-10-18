@@ -72,11 +72,12 @@ export async function dunningF150(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Dunning Programme', exact: true }).waitFor();
   const params = page.locator('section[aria-labelledby="dn-parameters"]');
-  await params.locator('input[name="runDate"]').fill('2026-11-20');
-  await params.locator('input[name="runId"]').fill('DUN001');
-  await params.locator('input[name="dunningDate"]').fill('2026-11-20');
-  await params.locator('input[name="postedThrough"]').fill('2026-11-20');
-  await params.locator('input[name="companyCodes"]').fill('1000');
+  const paramForm = params.locator('form').first();
+  await paramForm.locator('input[name="runDate"]').fill('2026-11-20');
+  await paramForm.locator('input[name="runId"]').fill('DUN001');
+  await paramForm.locator('input[name="dunningDate"]').fill('2026-11-20');
+  await paramForm.locator('input[name="postedThrough"]').fill('2026-11-20');
+  await paramForm.locator('input[name="companyCodes"]').fill('1000');
   await params.locator('input[name="confirmed"]').check();
   await params.getByRole('button', { name: 'Execute run', exact: true }).click();
   await page.waitForLoadState('networkidle');
