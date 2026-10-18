@@ -535,6 +535,14 @@ Stage 4 seats the term *Payment run* for the standing capability `FIN.AP.PAYMENT
 
 ---
 
+### 26.429 B-413 — SCR-063 payment run closed (R-111)
+
+Stage 5 accepts the round. The service tests prove the run proposes only what stands due by the next payment date, names its exceptions (method not standing for the supplier), refuses execution with nothing payable, executes one balanced `KZ` journal through the house bank, clears the paid line in place with the payment document, and refuses a second execution, proposal regeneration and cancellation once executed. Browser target **T934** drives the whole journey on the production build — order through the grid, receipt and invoice, run parameters, proposal, execution — and reads the executed run, the payment document and the cleared item back from the database; neighbour **T935** stays green. The full suite stands at **1277 tests across 159 files**; typecheck, `lint:ip` and the production build clean; 130 migrations; seed **97/66/70/79**.
+
+Named deferrals carried forward, by the contract: customer items; partial payments; cash-discount taking (payment terms stand and the due date is shown, discount posting is not taken); payment media and bank statement reconciliation; cross-company central payment beyond the recorded paying company (this round the paying company must equal the run's company).
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -616,6 +624,7 @@ Stage 4 seats the term *Payment run* for the standing capability `FIN.AP.PAYMENT
 | 2.244 | 2026-10-18 | **SCR-063 payment run stage 2 (B-410, §26.426).** Migrations `0075` + `9053` applied (130 standing): the run with its company and method children, proposal items with named exceptions, and insert-only payment documents behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.245 | 2026-10-18 | **SCR-063 payment run stage 3 (B-411, §26.427).** The run service judges parameters, proposes over open supplier items with named exceptions, and executes grouped journals clearing the paid lines in place with payment documents as evidence; executed runs are immutable. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.246 | 2026-10-18 | **SCR-063 payment run stage 4 (B-412, §26.428).** The payment-run term seeded at its route with F110 a search alias only. Seed reads back 97/66/70/79. | Agent |
+| 2.247 | 2026-10-18 | **SCR-063 payment run closed (B-413, §26.429).** Service tests and browser target T934 (neighbour T935) green on the production build; full suite 1277/159, 130 migrations, seed 97/66/70/79. Deferrals named: customer items, partial payments, cash-discount taking, payment media and bank statement reconciliation, cross-company central payment. | Agent |
 
 ---
 

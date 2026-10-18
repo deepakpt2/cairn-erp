@@ -67,6 +67,7 @@ import { releaseStrategiesConfig } from './release-strategies';
 import { releaseActs } from './release-acts';
 import { goodsReceiptMigo } from './goods-receipt';
 import { invoiceVerificationMiro } from './invoice-verification';
+import { paymentRunF110 } from './payment-run';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4907,6 +4908,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'release-acts': releaseActs,
   'goods-receipt': goodsReceiptMigo,
   'invoice-verification': invoiceVerificationMiro,
+  'payment-run': paymentRunF110,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
