@@ -62,6 +62,7 @@ import { materialPeriodControlOmsy } from './material-period-control';
 import { purchaseRequisitionsMe51n } from './purchase-requisitions';
 import { purchaseOrdersMe21n } from './purchase-orders';
 import { characteristicsCt04 } from './characteristics';
+import { classesCl02 } from './classes';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4897,6 +4898,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchase-requisitions': purchaseRequisitionsMe51n,
   'purchase-orders': purchaseOrdersMe21n,
   'characteristics': characteristicsCt04,
+  'classes': classesCl02,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
