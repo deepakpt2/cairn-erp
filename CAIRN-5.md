@@ -166,6 +166,12 @@ The term registry gains `INV.MATERIAL.FLAGDELETION` — *Flag material for delet
 
 ---
 
+### 26.380 B-364 — SCR-054 stage 1: the inert material period control screen
+
+The OMSY round opens as shape only: `/config/material-period-control` renders the company control grid — current and previous periods, both backposting indicators separately, last-changed-by, and the uninitialized state — fed empty under `CFG.INV.MATPERIOD.DEFINE`, with its two i18n keys. The table and acts are the following stages.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -189,6 +195,7 @@ The term registry gains `INV.MATERIAL.FLAGDELETION` — *Flag material for delet
 | 2.186 | 2026-10-18 | **SCR-053 stage 4 published (B-362, §26.378).** The `INV.MATERIAL.FLAGDELETION` term seeded (MM06 search alias only) over the material route. Seed reads back 91/63/61/57. | Agent |
 | 2.187 | 2026-10-18 | **SCR-053 / MM06 CLOSED and accepted (B-363, §26.379).** Stage 5 ships 3 service tests and the T944 browser target `material-deletion-flag` (7/7 journeys against the production build — client flag set and cancelled, the plant row covered, the plant flag alone, the database remembering); one fix, the confirmation dialog closing on success. Neighbouring `industry-sectors` and `material-number-ranges` targets, typecheck, `lint:ip` and the production build clean; suite 1241 across 149 files, 109 migrations, seed 91/63/61/57. Cost measured at 12 minutes. Deferred and named in the entry: storage-location flags, scheduled flagging, archiving/physical deletion, goods-movement enforcement. | Agent |
 | 2.188 | 2026-10-18 | **SCR-054 / OMSY contracted (R-102).** The owner's corrected OMSY package under house names: one material period control record per company code, initialized once against the fiscal-year variant, advanced only by the guarded shift act, the two backposting indicators kept separate, deletion refused-by-design, and a read service standing for the goods-movement round. | Agent |
+| 2.189 | 2026-10-18 | **SCR-054 stage 1 published (B-364, §26.380).** The inert material period control screen `/config/material-period-control`: company control grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 
 ---
 

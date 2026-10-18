@@ -1970,6 +1970,12 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'materialPeriod.title': 'Define Material Period Control',
+  'materialPeriod.subtitle':
+    'One control record per company code: the current material posting year and ' +
+    'period, the previous period, and whether backposting to it is allowed. A record ' +
+    'is initialized once and afterwards advances only through the period shift; ' +
+    'financial posting periods are controlled separately.',
   'industrySector.title': 'Define Industry Sectors',
   'industrySector.subtitle':
     'Industry sectors defined once per tenant: the one-character classification a ' +
