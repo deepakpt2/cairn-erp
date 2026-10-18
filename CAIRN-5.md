@@ -523,6 +523,12 @@ Migrations `0075_payment_run.sql` with `9053_payment_run_policies.sql` — **130
 
 ---
 
+### 26.427 B-411 — SCR-063 payment run stage 3: the run service and the live screen
+
+One service `src/modules/finance/payment-run.ts` runs the cycle: parameters judge their companies (paying company is the company itself this round, named) and their methods standing active for the company country; the proposal gathers open supplier items — partner-carrying, credited, uncleared lines on posted journals — due by the next payment date, with blocked suppliers and unmatched methods standing as named exceptions rather than dropping; execution locks the run, revalidates every item against its standing line, and posts one balanced journal per supplier, currency and house-bank account under the delivered vendor-payment document type, clearing each paid line in place with the payment journal and date, and recording a payment document per item. The FI period judges on the posting date through the posting engine. An executed run refuses re-execution, regeneration and cancellation. The screen carries status, parameters, proposal with exceptions and totals, and execution with its bank choice and the payments evidence.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -602,6 +608,7 @@ Migrations `0075_payment_run.sql` with `9053_payment_run_policies.sql` — **130
 | 2.242 | 2026-10-18 | **SCR-063 payment run contracted (R-111).** F110 under house names: run parameters with company and method children, proposal over open supplier items with named exceptions, execution grouped by supplier and bank with clearing written on the paid lines, the FI period judged on the posting date, executed runs immutable. | Agent |
 | 2.243 | 2026-10-18 | **SCR-063 payment run stage 1 (B-409, §26.425).** The inert run screen stands at `/finance/payment-run`: status, parameters and proposal areas, execution disabled. Typecheck and the production build clean. | Agent |
 | 2.244 | 2026-10-18 | **SCR-063 payment run stage 2 (B-410, §26.426).** Migrations `0075` + `9053` applied (130 standing): the run with its company and method children, proposal items with named exceptions, and insert-only payment documents behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.245 | 2026-10-18 | **SCR-063 payment run stage 3 (B-411, §26.427).** The run service judges parameters, proposes over open supplier items with named exceptions, and executes grouped journals clearing the paid lines in place with payment documents as evidence; executed runs are immutable. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
