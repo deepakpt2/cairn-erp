@@ -78,7 +78,7 @@ export async function vendorInvoiceFb60(ctx: Context) {
 
   const done = lines.getByText(/Invoice posted as document VI-\d+; journal \S+/);
   await done.waitFor();
-  const invoiceNumber = (await done.textContent())?.match(/document (VI\d+)/)?.[1] ?? '';
+  const invoiceNumber = (await done.textContent())?.match(/document (VI-\d+)/)?.[1] ?? '';
   assert.ok(invoiceNumber, 'the invoice number is shown');
   console.log(`  ✓ invoice ${invoiceNumber} posted at the judged gross of 550`);
 
