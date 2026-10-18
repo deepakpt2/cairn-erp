@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { ACTIVITY, listReleaseConfiguration } from '@/modules/foundation/release-strategy-definition';
 import ReleaseStrategies from './ReleaseStrategies';
 
 export const dynamic = 'force-dynamic';
@@ -9,12 +10,13 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/config/release-strategies';
 
 /**
- * Release strategies (SCR-059; inert since stage 1). Groups, codes
- * and strategies judging purchasing documents against the
- * classification chain (SCR-059 stage 3 wires the acts).
+ * Release strategies (SCR-059; inert in stage 1, live since stage 3).
+ * The activity has stood in the seed since the platform round; this
+ * is its page.
  */
 export default async function ReleaseStrategiesPage() {
-  await requireSession(ROUTE);
+  const session = await requireSession(ROUTE);
+  const data = await listReleaseConfiguration(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -29,7 +31,7 @@ export default async function ReleaseStrategiesPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('releaseStrategy.subtitle')}</p>
       </header>
 
-      <ReleaseStrategies />
+      <ReleaseStrategies data={data} canMaintain={can(session, ACTIVITY)} />
     </div>
   );
 }

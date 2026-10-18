@@ -383,6 +383,12 @@ Migration `0071_release_strategy.sql` with `9049_release_strategy_policies.sql` 
 
 ---
 
+### 26.407 B-391 — SCR-059 release strategies stage 3: the service, the judge, and the live screen
+
+`src/modules/foundation/release-strategy-definition.ts` stands behind the screen. Groups are judged with their codes (a code sequenced by a strategy cannot leave its group; a group's category never changes), and strategies against everything beneath them: the class must stand under the type the group's category reads, every criterion must name a characteristic the class gathers, belong to the delivered document-attribute catalogue, and carry values judged against the characteristic's own format and allowed values — BETWEEN only where intervals stand. Activation additionally requires the class ACTIVE. The determination judge `determineRelease` stands exported for SCR-060: among ACTIVE strategies of the category, the lowest priority whose every criterion holds wins, and no match means no release. No document's status moves in this round, by contract. The screen is live with group and strategy editors — class and characteristic pickers fed by the standing classification chain — and reason dialogs for activation, blocking and deletion.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -438,6 +444,7 @@ Migration `0071_release_strategy.sql` with `9049_release_strategy_policies.sql` 
 | 2.218 | 2026-10-18 | **SCR-059 release strategies contracted (R-107).** Groups, codes and strategies judging documents against the CL02 classes through the delivered attribute catalogue, determination as a pure judge, the release acts explicitly the next round so nothing merges. The pageless `CFG.PROC.RELEASE.DEFINE` obligation is taken up. | Agent |
 | 2.219 | 2026-10-18 | **SCR-059 release strategies stage 1 (B-389, §26.405).** The inert screen stands at `/config/release-strategies`: empty grid, strategy editor with criteria and sequenced release codes, save disabled. Typecheck clean. | Agent |
 | 2.220 | 2026-10-18 | **SCR-059 release strategies stage 2 (B-390, §26.406).** Migrations `0071` + `9049` applied (121 standing): groups, codes, strategies, criteria and steps behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.221 | 2026-10-18 | **SCR-059 release strategies stage 3 (B-391, §26.407).** The strategy service, the exported determination judge, and the live screen at the seed's long-standing route: group/code/strategy judging against the classification chain, activation under an ACTIVE class, no document status moved. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
