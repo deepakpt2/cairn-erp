@@ -2019,6 +2019,12 @@ const en: Catalogue = {
     'the bank debits, the customer credits per allocation, and every settled ' +
     'item clears in place under the payment document. The allocation must ' +
     'equal the receipt — a difference is explained, never discarded.',
+  'outgoingPayment.title': 'Post Outgoing Payment',
+  'outgoingPayment.subtitle':
+    'A vendor payment allocated against the open payables it settles: ' +
+    'the vendor debits per allocation, the bank credits, and every settled ' +
+    'item clears in place under the payment document. Credit items count ' +
+    'against the payment; the net allocation must equal it exactly.',
   'vendorCreditMemo.title': 'Enter Vendor Credit Memo',
   'vendorCreditMemo.subtitle':
     'A credit against a vendor: offset lines with their input tax ' +
