@@ -1,25 +1,28 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import {
+  ACTIVITY,
+  listMaterialPeriodControl,
+} from '@/modules/inventory/material-period-control';
 import { t } from '@/platform/i18n';
 import MaterialPeriodControl from './MaterialPeriodControl';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/config/material-period-control';
-const ACTIVITY = 'CFG.INV.MATPERIOD.DEFINE';
 
 /**
  * Material period control (SCR-054 / OMSY; inert since stage 1).
  *
  * The MM period gate per company code: the current and previous
- * material posting periods and their backposting indicators. The table,
- * the initialize/shift acts and the read service land in the following
- * stages.
+ * material posting periods and their backposting indicators, with the
+ * initialize, indicator and shift acts (SCR-054, live since stage 3).
  */
 export default async function MaterialPeriodControlPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
+  const rows = await listMaterialPeriodControl(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -42,7 +45,7 @@ export default async function MaterialPeriodControlPage() {
         </p>
       )}
 
-      <MaterialPeriodControl rows={[]} />
+      <MaterialPeriodControl rows={rows} canMaintain={canMaintain} />
     </div>
   );
 }

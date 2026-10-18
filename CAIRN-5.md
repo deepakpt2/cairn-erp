@@ -178,6 +178,14 @@ Migration `0065` creates `material_period_control` — `(client, company_code)` 
 
 ---
 
+### 26.382 B-366 — SCR-054 stage 3: initialization, indicators and the shift live
+
+The period service stands: `listMaterialPeriodControl` reading every company against its record (uninitialized companies named as such), `initializeMaterialPeriodControl` judging the requested year/period against the company's fiscal-year variant (a company with no variant assigned refused, the assignment named; an established record never reinitialized) and computing the previous period from the variant's regular periods, `setMaterialPeriodIndicators` maintaining the two backposting indicators separately with both security-relevant, and `shiftMaterialPeriod` advancing exactly one period under the row lock — previous taking the old current, the previous-year reference written at a year boundary, and the backposting allowance cleared by the shift itself where disallow-after-change stands. The screen goes live over the three acts, each its own dialog with a mandatory reason and one change document. The posting judge `materialPeriodAllows` stands exported for the goods-movement round: current always open, previous only under the allowance, everything else closed, an uninitialized company opening nothing.
+
+**Gates.** Typecheck and `lint:ip` clean; production build compiled (material-period-control 2.42 kB). The full suite and browser evidence are stage 5's, as staged.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -203,6 +211,7 @@ Migration `0065` creates `material_period_control` — `(client, company_code)` 
 | 2.188 | 2026-10-18 | **SCR-054 / OMSY contracted (R-102).** The owner's corrected OMSY package under house names: one material period control record per company code, initialized once against the fiscal-year variant, advanced only by the guarded shift act, the two backposting indicators kept separate, deletion refused-by-design, and a read service standing for the goods-movement round. | Agent |
 | 2.189 | 2026-10-18 | **SCR-054 stage 1 published (B-364, §26.380).** The inert material period control screen `/config/material-period-control`: company control grid rendered empty, i18n keys added. No reads, no writes. | Agent |
 | 2.190 | 2026-10-18 | **SCR-054 stage 2 published (B-365, §26.381).** Migrations `0065` + `9044` create `material_period_control` (company-keyed, both indicators, forced tenant RLS) and its Drizzle table — 111 migrations. | Agent |
+| 2.191 | 2026-10-18 | **SCR-054 stage 3 published (B-366, §26.382).** The material period service (initialize judged against the variant, separate indicator maintenance, the guarded one-period shift, the exported posting judge) and the live screen. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
