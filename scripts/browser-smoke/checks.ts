@@ -80,6 +80,7 @@ import { documentReversalFb08 } from './document-reversal';
 import { customerClearingF32 } from './customer-clearing';
 import { dunningF150 } from './dunning';
 import { vendorInvoiceFb60 } from './vendor-invoice';
+import { vendorCreditMemoFb65 } from './vendor-credit-memo';
 
 const PASSWORD = 'browser-check-2026';
 const SYNTHETIC_BANK_IDENTIFIER = 'SYNTHETIC-IBAN-4321';
@@ -4958,6 +4959,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'customer-clearing': customerClearingF32,
   'dunning': dunningF150,
   'vendor-invoice': vendorInvoiceFb60,
+  'vendor-credit-memo': vendorCreditMemoFb65,
   'company-code-coa-assignment': companyCodeCoaAssignment,
   'plant-definition': plantDefinition,
   'plant-company-code-assignment': plantCompanyCodeAssignment,
