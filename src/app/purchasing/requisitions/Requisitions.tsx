@@ -176,6 +176,19 @@ export default function Requisitions({ documents, choices, selected, canCreate }
         )}
       </section>
 
+      {selected && (
+        <section aria-labelledby="pr-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="pr-release" className="text-sm font-semibold">Release</h2>
+          <p className="mt-2 text-sm text-ink-soft">
+            Release state for requisition {selected.requisitionNumber} stands here from the next build step.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled>Release</button>
+            <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled>Cancel release</button>
+          </div>
+        </section>
+      )}
+
       <section aria-labelledby="pr-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <h2 id="pr-create" className="text-sm font-semibold">

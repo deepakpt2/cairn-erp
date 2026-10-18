@@ -190,6 +190,19 @@ export default function Orders({ documents, choices, selected, canCreate }: {
         )}
       </section>
 
+      {selected && (
+        <section aria-labelledby="po-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="po-release" className="text-sm font-semibold">Release</h2>
+          <p className="mt-2 text-sm text-ink-soft">
+            Release state for purchase order {selected.orderNumber} stands here from the next build step.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className="btn btn-primary min-h-11 sm:min-h-8" disabled>Release</button>
+            <button type="button" className="btn btn-default min-h-11 sm:min-h-8" disabled>Cancel release</button>
+          </div>
+        </section>
+      )}
+
       <section aria-labelledby="po-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="po-create" className="text-sm font-semibold">
           {selected ? `Purchase order ${selected.orderNumber}` : 'New purchase order'}

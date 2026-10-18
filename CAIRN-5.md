@@ -412,6 +412,12 @@ The configuration activity has stood in the seed since the platform round; stage
 
 ---
 
+### 26.410 B-394 — SCR-060 release acts stage 1: the release panels stand on both documents
+
+Stage 1 ships the release panels on the requisition and order screens: on a standing document, a Release section naming the document, with the release and cancel-release acts shown disabled until stage 3 wires the service. The document screens otherwise stand untouched.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -471,6 +477,7 @@ The configuration activity has stood in the seed since the platform round; stage
 | 2.222 | 2026-10-18 | **SCR-059 release strategies stage 4 (B-392, §26.408).** Capability and term seeded for the long-standing activity (OMGSCK a search alias only), the route among the built routes; seed reads back 96/66/67/71. | Agent |
 | 2.223 | 2026-10-18 | **SCR-059 release strategies CLOSED and accepted (B-393, §26.409).** Stage 5 ships 2 service tests and the T938 browser target `release-strategies` (green — group, strategy, activation, the database remembering). Neighbouring `classes` and `characteristics` targets, typecheck, `lint:ip` and the production build clean; suite 1264 across 155 files, 121 migrations, seed 96/66/67/71. The pageless-route obligation is closed. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.224 | 2026-10-18 | **SCR-060 release acts contracted (R-108).** Determination inside create and change, `document_release` standing state, sequenced release and cancel-release under category capabilities, released documents refusing change, agent assignment deferred and named. | Agent |
+| 2.225 | 2026-10-18 | **SCR-060 release acts stage 1 (B-394, §26.410).** Release panels stand on the requisition and order screens, acts disabled. Typecheck clean. | Agent |
 
 ---
 
