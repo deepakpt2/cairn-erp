@@ -927,7 +927,7 @@ Stage 1 of R-120 in owner stage order (UI first). The screen stands at `/finance
 
 Stage 2 of R-120 (schema work, backend contract not yet). No ORM or migration file lands in this act: the round's tables are the reversal link and the reversal-reason register whose DDL and RLS ride stage 3 with the service, so schema work must be verified below database inspection level. What lands here is the architectural verdict, leaving nothing unspecified between schema and service:
 
-- **No journal-column additions**: `reversal_of`/`reversed_by`/`reversal_reason` already stand on the journal schema (verified pre-contract at SCR-072 recon).
+- **Journal columns stand ready**: `reversal_of`/`reversed_by`/`reversal_reason` already stand on the journal schema (verified 2026-10-18 at schema.ts 142–144), so stage 3 closes only on the new tables, not journal edits.
 - **`accounting_reversal_link`**: identity `(client, original_company_code, original_document_number, original_fiscal_year)` unique, `(client, reversal_company_code, reversal_document_number, reversal_fiscal_year)` unique — one successful reversal ever.
 - **`reversal_reason`** (reversal-reason register): identity `(client, reason_code)`; company scope stored on the record through the `company_code` column in scope, matching the tenant-wide registers created by SCR-069/070's spirit and SAP parity (STGRD values tenant-wide, 2-char code, `varchar(2)`).
 - **RLS via new policy file in stage 3**: tenant isolation on both tables, insert+select only, never update/delete (records are retained evidence).
@@ -1078,4 +1078,5 @@ What does NOT land in this stage (explicitly): no seed rows for reason codes, no
 change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes, the next part
 `CAIRN-6.md` begins and this file states that the set continues there (§0.3 / D-093).*
 
-| 2.300 | 2026-10-18 | **SCR-072 stage 2 (schema verdict): no journal columns added; `accounting_reversal_link` and `reversal_reason` architecture settled (B-466, §26.482).** ORM/migrations land with the service in stage 3; capability/term deferred to stage 4. | Agent |
+| 2.300 | 2026-10-18 | **SCR-072 stage 2 (schema verdict): journal closure columns verified existing; `accounting_reversal_link` and `reversal_reason` architecture settled (B-466, §26.482).** ORM/migrations land with the service in stage 3; capability/term deferred to stage 4. | Agent |
+
