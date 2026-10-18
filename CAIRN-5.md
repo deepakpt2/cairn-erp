@@ -1022,6 +1022,13 @@ The owner's F150 package arrives against the roadmap's last accounts-receivable 
 **Selection is the standing ageing derivation** — POSTED partner lines in the named companies, posted by the cutoff, uncleared as of the dunning date, debit and overdue, due dates read as SCR-070 reads them. **Levels are history, not configuration, this round:** proposed level = the item's last completed level + 1 (first dunning = 1); the procedure master with level bands, grace periods, minimum amounts and charges stands **deferred, named**, as do interest and fee postings — a dunning run posts no journal. Finalization stands separate from proposal, revalidates under lock, is duplicate-safe (a completed run refuses re-finalization), and notices are records, delivery deferred. The capability `FIN.AR.DUNNING.RUN` and the `/finance/dunning` term (F150 alias only) land in the supporting stage. Stage order stands: UI → schema → backend → supporting → tests/acceptance, no stages merged. Same-stage bookkeeping: B-477 / §26.493 / §30 row 2.311. **Cost (B-254, measured):** SCR-073 closed 13:04 UTC; the standing-model audit and this contract completed 13:09 UTC.
 
 ---
+### 26.494 B-478 — SCR-074 stage 1: dunning screen stands, guarded gracefully
+
+Stage 1 of R-122. `/finance/dunning` stands inert: run parameters (run date, identification, dunning date, documents posted up to, company codes, optional customer range), the proposal section stating the contracted shape — ageing-derived selection, levels from completed history, named exceptions, separate finalization, no journal — and the runs section. The capability `FIN.AR.DUNNING.RUN` is judged wildcard-aware; nothing is connected, no database is read, and a submitted run refuses by name (`The dunning service is not yet connected…`) until the service lands.
+
+Verification: typecheck clean (one attempt exhausted the sandbox heap beside the resident server; the capped-heap retry is clean). Acceptance remains the tests stage, so SCR-074 is **not yet accepted**. Same-stage bookkeeping: B-478 / §26.494 / §30 row 2.312. **Cost (B-254, measured):** the contract published 13:09 UTC; stage 1 completed 13:11 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1178,3 +1185,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.309 | 2026-10-18 | **SCR-073 accepted and closed (B-475, §26.491).** F-32 customer clearing stands: open items clear against each other under one DZ journal, three distinct dates, one currency, zero signed sum, request-key replay, FBRA reset untouched. Service tests 2/2, browser T924 green, suite 1314/170, seed 107/66/81/89, 141 migrations. Next T-code: **F150** (SCR-074, `FIN.AR.DUNNING.RUN`), awaiting the owner field package. | Agent |
 | 2.310 | 2026-10-18 | **Standing instruction recorded (B-476, §26.492).** A stage under 15 minutes rolls into the next stage in the same turn; stages remain separate commits, never merged. Applied at once to SCR-073 stages 3–4. | Agent |
 | 2.311 | 2026-10-18 | **SCR-074 contract recorded (R-122, B-477, §26.493).** F150 dunning for customers: run identity, ageing-derived selection, proposal/finalize separation, levels from completed history, notices as records, no FI posting; procedure master, charges and vendor dunning deferred by name. Awaiting stage 1 (UI). | Agent |
+| 2.312 | 2026-10-18 | **SCR-074 stage 1 published (B-478, §26.494).** `/finance/dunning` stands inert under `FIN.AR.DUNNING.RUN`: run parameters, proposal and runs sections; refusal names the unconnected service. Schema is stage 2. | Agent |

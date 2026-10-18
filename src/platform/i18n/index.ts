@@ -2063,6 +2063,13 @@ const en: Catalogue = {
     'No journal posts, no document changes — the reset stands on ' +
     'record with its reason, and the clearing document itself is ' +
     'reversed only by the separate reversal act.',
+  'dunningRun.title': 'Dunning Programme',
+  'dunningRun.subtitle':
+    'Overdue customer items gathered by run: selection proposes the ' +
+    'next dunning level from each item\u2019s completed history, an account ' +
+    'without a dunning procedure stands excluded with its reason, and ' +
+    'finalization writes one notice per account. A dunning run posts ' +
+    'no journal.',
   'customerClearing.title': 'Clear Customer Open Items',
   'customerClearing.subtitle':
     'Clear a customer\u2019s open items against each other: invoices, credit ' +
