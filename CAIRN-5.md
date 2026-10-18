@@ -307,6 +307,12 @@ Migration `0069_characteristic.sql` with `9047_characteristic_policies.sql` — 
 
 ---
 
+### 26.398 B-382 — SCR-057 / CT04 stage 4: activity, capability, term and route seeded
+
+The supporting register stands: `CFG.PROC.CHARACTERISTIC.DEFINE` as capability and configuration activity (prerequisite: purchasing groups; enables classification and release strategies), the term *Define characteristics* with CT04 as its search alias only, and `/config/characteristics` among the workbench's built routes. The seed reads back **94/65/65/67**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -351,6 +357,7 @@ Migration `0069_characteristic.sql` with `9047_characteristic_policies.sql` — 
 | 2.207 | 2026-10-18 | **SCR-057 / CT04 stage 1 (B-379, §26.395).** The inert characteristics screen stands at `/config/characteristics`: empty grid, editor with format/length/assignment fields and the allowed-values list, save disabled. Typecheck clean. | Agent |
 | 2.208 | 2026-10-18 | **SCR-057 / CT04 stage 2 (B-380, §26.396).** Migrations `0069` + `9047` applied (117 standing): `characteristic` and `characteristic_value` behind forced tenant RLS, Drizzle tables in `characteristic-schema.ts`. Typecheck clean. | Agent |
 | 2.209 | 2026-10-18 | **SCR-057 / CT04 stage 3 (B-381, §26.397).** The characteristic service and live screen: naming and format judges, case-policy value uniqueness, DRAFT/ACTIVE/BLOCKED acts, draft-only deletion, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.210 | 2026-10-18 | **SCR-057 / CT04 stage 4 (B-382, §26.398).** Activity, capability and term seeded (CT04 a search alias only), the route among the built routes; seed reads back 94/65/65/67. | Agent |
 
 ---
 
