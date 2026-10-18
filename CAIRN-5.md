@@ -617,6 +617,13 @@ The balance service derives the matrix at read time from the posted journal: ope
 
 ---
 
+### 26.440 B-424 — SCR-065 vendor balances stage 4: the capability and term stand
+
+Stage 4 creates the capability `FIN.AP.BALANCE` (display) and seats its term *Vendor balances* at `/finance/vendor-balances`, with FK10N standing as a search alias only. Seed reads back **99/66/72/81**.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -709,6 +716,7 @@ The balance service derives the matrix at read time from the posted journal: ope
 | 2.255 | 2026-10-18 | **SCR-065 vendor balances stage 1 (B-421, §26.437).** The inert balances screen stands at `/finance/vendor-balances` — selection, the empty period matrix, the drill-down tile. Typecheck and production build clean. | Agent |
 | 2.256 | 2026-10-18 | **SCR-065 vendor balances stage 2 (B-422, §26.438).** No balance table by contract — balances derive from the posted journal; migration `0077` adds the partner/company index. 132 migrations standing. | Agent |
 | 2.257 | 2026-10-18 | **SCR-065 vendor balances stage 3 (B-423, §26.439).** Balances derive at read time from the posted journal — opening/turnover/closing chained, currency judged by name, period drill-down to line items — and the screen is live. Typecheck and production build clean. | Agent |
+| 2.258 | 2026-10-18 | **SCR-065 vendor balances stage 4 (B-424, §26.440).** Capability `FIN.AP.BALANCE` created; the balances term seeded at its route with FK10N a search alias only. Seed reads back 99/66/72/81. | Agent |
 
 ---
 
