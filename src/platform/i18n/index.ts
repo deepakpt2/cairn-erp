@@ -1995,6 +1995,12 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'incomingPayment.title': 'Post Incoming Payment',
+  'incomingPayment.subtitle':
+    'A customer receipt allocated against the open receivables it settles: ' +
+    'the bank debits, the customer credits per allocation, and every settled ' +
+    'item clears in place under the payment document. The allocation must ' +
+    'equal the receipt — a difference is explained, never discarded.',
   'customerInvoice.title': 'Enter Customer Invoice',
   'customerInvoice.subtitle':
     'A direct customer invoice: revenue lines with their output tax, the ' +

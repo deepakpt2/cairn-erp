@@ -731,6 +731,13 @@ The owner's F-28 package is contracted as R-116, mirroring vendor clearing on th
 
 ---
 
+### 26.455 B-439 — SCR-068 incoming payment stage 1: the inert screen stands
+
+The incoming-payment screen stands at `/finance/incoming-payment`: header and bank data (with the posting/document/clearing dates kept distinct and explained), the open-item allocation list with its live difference line, posting disabled, and the payment result tile. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -838,6 +845,7 @@ The owner's F-28 package is contracted as R-116, mirroring vendor clearing on th
 | 2.270 | 2026-10-18 | **SCR-067 customer invoice stage 4 (B-436, §26.452).** Capability `FIN.AR.INVOICE.POST` created; the customer-invoice term seeded at its route with FB70 a search alias only. Seed reads back 101/66/74/83. | Agent |
 | 2.271 | 2026-10-18 | **SCR-067 customer invoice closed (B-437, §26.453).** Service tests and browser target T930 (neighbour T931) green on the production build; full suite 1290/163, 135 migrations, seed 101/66/74/83. Deferrals named: customer credit memos (FB75), incoming payments/clearing (F-28), discount taking, jurisdiction tax, FX translation. | Agent |
 | 2.272 | 2026-10-18 | **SCR-068 incoming payment contracted (R-116, B-438, §26.454).** F-28 under house names: a receipt allocated in full against the customer's open receivables, bank debit under a `DZ` journal, clearing stamped in place, differences never silently resolved; partial/residual/on-account, discounts, reset/reverse and FX deferred. | Agent |
+| 2.273 | 2026-10-18 | **SCR-068 incoming payment stage 1 (B-439, §26.455).** The inert incoming-payment screen stands at `/finance/incoming-payment` — header and bank data, the allocation list, posting disabled, result tile. Typecheck and production build clean. | Agent |
 
 ---
 
