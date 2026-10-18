@@ -1401,6 +1401,12 @@ Stage 3 of R-130. `clearDownPayments` posts the KZ transfer journal — debit th
 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-531 / §26.547 / §30 row 2.365. **Cost (B-254, measured):** stage 2 published 17:27 UTC; stage 3 completed 17:29 UTC.
 
+### 26.548 B-532 — SCR-082 stage 4: the clearing capability
+
+Stage 4 of R-130. The capability `FIN.AP.DOWNPAYMENT.CLEAR` (F-54 as search alias) joins the seed — 115 capabilities, 89 terms, 98 aliases; configuration activities stand unchanged at 68. Nothing else is seeded: the indicator's configuration is the tenant's own from SCR-081, and the clearing derives everything else from standing journals.
+
+Verification: seed applied with the new counts standing; typecheck clean. Acceptance remains stage 5, so SCR-082 is **not yet accepted**. Same-stage bookkeeping: B-532 / §26.548 / §30 row 2.366. **Cost (B-254, measured):** stage 3 published 17:29 UTC; stage 4 completed this turn.
+
 ---
 ---
 
@@ -1612,3 +1618,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.363 | 2026-10-18 | **SCR-082 stage 1 published (B-529, §26.545).** The down-payment clearing screen shell stands with both selection grids; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.364 | 2026-10-18 | **SCR-082 stage 2 published (B-530, §26.546).** The down-payment clearing record stands; 155 migrations. The clearing service follows in stage 3. | Agent |
 | 2.365 | 2026-10-18 | **SCR-082 stage 3 published (B-531, §26.547).** Clearing service stands: KZ transfer posting with equal applied totals, full items stamped, remainders netting open; the screen is live. Capability follows in stage 4. | Agent |
+| 2.366 | 2026-10-18 | **SCR-082 stage 4 published (B-532, §26.548).** Capability F-54 seeded (115 capabilities / 89 terms / 98 aliases). Tests and browser acceptance follow in stage 5. | Agent |
