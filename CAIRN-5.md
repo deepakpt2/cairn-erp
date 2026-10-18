@@ -1128,6 +1128,17 @@ Stage 4 of R-124. The delivered document types gain KG (Vendor credit memo, RF_B
 Verification: typecheck clean; seed idempotent. Acceptance remains stage 5, so SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-493 / §26.509 / §30 row 2.327. **Cost (B-254, measured):** stage 3 published 14:01 UTC; stage 4 completed 14:02 UTC.
 
 ---
+### 26.510 B-494 — SCR-076 accepted and closed
+
+R-124 stands accepted. The vendor credit memo posts on the shared vendor invoice record under its category: the gross credit judged as lines net plus tax with input tax reversing at standing rates, one balanced KG journal debiting the vendor's reconciliation account at the gross with the vendor as partner, the number drawn from the shared VENDINV range. A reference standing POSTED across invoices and memos refuses naming the standing document; a named original must stand POSTED for the same vendor and company, partial credits stand permitted, and cumulative memo gross may never exceed the original's gross, the excess refused with both figures named. Cancellation reuses the invoice's linked mirror and carries the category and credit-of link onto the cancellation row, freeing the cumulative cap. KG stands delivered to package and standing tenants alike; drafts and tax-inclusive entry remain deferred as named.
+
+**Correction inside the round:** the first browser target took fixture key T982, which a standing SCR-016 contract test reserves — the full suite caught it, the target moved to T921, and the suite stands green. Fixture keys are allocated downward from T921 henceforth, checking reservations first.
+
+Acceptance evidence: service tests 3/3 (`tests/vendor-credit-memo.test.ts`); browser target **T921 green** on the production build (VI-0000002 at the judged gross credit of 220, KG journal and 220 vendor debit in the database); **full suite 1327 tests / 173 files green**; seed **110/66/84/92** idempotent; **146 migrations**; typecheck and production build clean.
+
+Completion per B-444: the next roadmap item is **F-53 (manual vendor payment, `FIN.AP.PAYMENT.POST`)**, which would stand as SCR-077 — its field package is requested from the owner; no contract is drafted before it arrives. Same-stage bookkeeping: B-494 / §26.510 / §30 row 2.328. **Cost (B-254, measured):** the round opened 13:53 UTC; SCR-076 closed 14:12 UTC — nineteen minutes across five stages, inside the time-box.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1300,3 +1311,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.325 | 2026-10-18 | **SCR-076 stage 2 published (B-491, §26.507).** `vendor_invoice` gains category and credit-of (migration 0085; DB at 146) behind its standing RLS. Backend is stage 3. | Agent |
 | 2.326 | 2026-10-18 | **SCR-076 stage 3 published (B-492, §26.508).** Credit-memo service stands: KG journal debiting the vendor at the gross credit, judged gross, original link with cumulative cap, shared cancellation; the `/finance/vendor-credit-memo` screen is live. Capability, term and KG land in stage 4. | Agent |
 | 2.327 | 2026-10-18 | **SCR-076 stage 4 published (B-493, §26.509).** KG document type delivered and backfilled to standing tenants; `FIN.AP.CREDITMEMO.POST` and the Enter vendor credit memo term (FB65 alias) seeded (110/84/92). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.328 | 2026-10-18 | **SCR-076 ACCEPTED AND CLOSED (B-494, §26.510).** FB65 vendor credit memo stands on the shared invoice record: judged gross credit, KG journal debiting the vendor, original link with cumulative cap, cross-kind duplicate reference refused, cancellation carrying the link. T921 green; suite 1327/173; seed 110/66/84/92; 146 migrations. Next: F-53 (SCR-077) — field package requested. | Agent |
