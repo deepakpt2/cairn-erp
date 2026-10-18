@@ -142,7 +142,7 @@ export interface ClearingItemRef {
 async function standingClearingForRequestKey(
   tx: Tx, client: string, requestKey: string,
 ): Promise<string | null> {
-  const [row] = await tx.select({ objectKey: changeDocument.objectKey })
+  const [row] = await tx.select({ id: changeDocument.id })
     .from(changeDocument)
     .innerJoin(changeDocumentItem, and(
       eq(changeDocumentItem.client, changeDocument.client),
@@ -155,7 +155,14 @@ async function standingClearingForRequestKey(
       eq(changeDocumentItem.newValue, requestKey),
     ));
   if (!row) return null;
-  return row.objectKey.split('/').pop() ?? null;
+  const [doc] = await tx.select({ newValue: changeDocumentItem.newValue })
+    .from(changeDocumentItem)
+    .where(and(
+      eq(changeDocumentItem.client, client),
+      eq(changeDocumentItem.changeDocumentId, row.id),
+      eq(changeDocumentItem.fieldName, 'clearingDocument'),
+    ));
+  return doc?.newValue ?? null;
 }
 
 export async function clearCustomerItems(input: {
