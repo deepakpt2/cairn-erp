@@ -700,6 +700,13 @@ Migrations `0079` + `9054` create `customer_invoice` and `customer_invoice_line`
 
 ---
 
+### 26.451 B-435 — SCR-067 customer invoice stage 3: the service and live screen
+
+The customer-invoice service judges the customer's standing in the company, calculates output tax per line at the standing rate, refuses an unreconciled gross naming the figures, refuses a standing duplicate reference, posts the balanced `DR` journal (receivable debit with the customer as partner, revenue and tax credited through standing determination), computes the due date from the payment terms, and cancels by linked mirror. The screen is live: header, line grid with tax and the balance shown, the posted document with its cancellation. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -803,6 +810,7 @@ Migrations `0079` + `9054` create `customer_invoice` and `customer_invoice_line`
 | 2.266 | 2026-10-18 | **SCR-067 customer invoice contracted (R-115, B-432, §26.448).** FB70 under house names: customer invoices with judged gross, receivable open item, revenue and tax through standing determination, linked cancellation; `FIN.AR.INVOICE.POST` and CUSTINV created; credit memos, incoming payments, discounts and FX deferred. | Agent |
 | 2.267 | 2026-10-18 | **SCR-067 customer invoice stage 1 (B-433, §26.449).** The inert customer-invoice screen stands at `/finance/customer-invoice` — header, line grid with tax and balance, posting disabled, document tile. Typecheck and production build clean. | Agent |
 | 2.268 | 2026-10-18 | **SCR-067 customer invoice stage 2 (B-434, §26.450).** Migrations `0079` + `9054` create the customer invoice tables behind forced tenant RLS; CUSTINV joins the number catalogue and tenant defaults. 135 migrations standing; typecheck clean. | Agent |
+| 2.269 | 2026-10-18 | **SCR-067 customer invoice stage 3 (B-435, §26.451).** The customer-invoice service (standing judged, tax at standing rates, gross reconciled, duplicates refused, receivable journal, linked cancellation) and the live screen. Typecheck and production build clean. | Agent |
 
 ---
 
