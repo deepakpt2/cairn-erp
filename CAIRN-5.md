@@ -330,6 +330,12 @@ The supporting register stands: `CFG.PROC.CHARACTERISTIC.DEFINE` as capability a
 
 ---
 
+### 26.400 B-384 — SCR-058 / CL02 stage 1: the inert classes screen stands
+
+Stage 1 ships the inert screen at `/config/classes` under the `classificationClass` i18n keys: the class grid standing empty beside the editor — class type from the delivered catalogue, class name, description, and the characteristic assignments at their numbered positions. The save act stands disabled until stage 3 wires the service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -377,6 +383,7 @@ The supporting register stands: `CFG.PROC.CHARACTERISTIC.DEFINE` as capability a
 | 2.210 | 2026-10-18 | **SCR-057 / CT04 stage 4 (B-382, §26.398).** Activity, capability and term seeded (CT04 a search alias only), the route among the built routes; seed reads back 94/65/65/67. | Agent |
 | 2.211 | 2026-10-18 | **SCR-057 / CT04 CLOSED and accepted (B-383, §26.399).** Stage 5 ships 3 service tests and the T940 browser target `characteristics` (green — TOTAL_VALUE drafted and activated through the editor). Neighbouring `purchase-orders` and `purchase-requisitions` targets, typecheck, `lint:ip` and the production build clean; suite 1257 across 153 files, 117 migrations, seed 94/65/65/67. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.212 | 2026-10-18 | **SCR-058 / CL02 contracted (R-106).** Classes for classification under house names: the delivered class-type catalogue (including the purchase requisition and order release types), classes keyed by type and name, characteristic assignments at unique positions, blocked characteristics refused, draft-only deletion, the CT04 usage count made real, language texts deferred under B-223, object classification explicitly not this round. | Agent |
+| 2.213 | 2026-10-18 | **SCR-058 / CL02 stage 1 (B-384, §26.400).** The inert classes screen stands at `/config/classes`: empty grid, editor with the type catalogue and positioned characteristic assignments, save disabled. Typecheck clean. | Agent |
 
 ---
 

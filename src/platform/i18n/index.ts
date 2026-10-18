@@ -1970,6 +1970,12 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'classificationClass.title': 'Define Classes',
+  'classificationClass.subtitle':
+    'Classes group characteristics under a class type — material, batch, or the ' +
+    'purchase requisition and order classes release strategies will judge by. A ' +
+    'class gathers standing characteristics at ordered positions; once it has ' +
+    'lived it blocks rather than deletes.',
   'characteristic.title': 'Define Characteristics',
   'characteristic.subtitle':
     'Characteristics are the tenant vocabulary classification judges by: a named ' +
