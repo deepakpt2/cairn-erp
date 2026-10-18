@@ -1,5 +1,5 @@
 /** Characteristics for classification — SCR-057 / R-105 (CT04). */
-import { pgTable, varchar, integer, boolean, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, integer, smallint, boolean, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure, currency } from '../../platform/tables/reference';
@@ -54,4 +54,60 @@ export const characteristicValue = pgTable('characteristic_value', {
     foreignColumns: [characteristic.client, characteristic.characteristicName],
   }),
   check('characteristic_value_sort_ck', sql`${t.sortOrder} >= 0`),
+]);
+
+/**
+ * Classes — SCR-058 / R-106 (CL02). The class-type catalogue is
+ * delivered configuration; a class is keyed by its immutable type and
+ * name, and assignments hang characteristics beneath it at unique
+ * positions, each characteristic at most once per class.
+ */
+export const classType = pgTable('class_type', {
+  client: tenant(),
+  classType: varchar('class_type', { length: 20 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  objectCategory: varchar('object_category', { length: 20 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.classType] }),
+  check('class_type_category_ck', sql`${t.objectCategory} in ('MATERIAL', 'BATCH', 'EQUIPMENT', 'VARIANT', 'PURCHASING', 'GENERAL')`),
+]);
+
+export const classificationClass = pgTable('classification_class', {
+  client: tenant(),
+  classType: varchar('class_type', { length: 20 }).notNull(),
+  className: varchar('class_name', { length: 18 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  lifecycleStatus: varchar('lifecycle_status', { length: 8 }).notNull().default('DRAFT'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.classType, t.className] }),
+  foreignKey({
+    columns: [t.client, t.classType],
+    foreignColumns: [classType.client, classType.classType],
+  }),
+  check('classification_class_name_ck', sql`${t.className} ~ '^[A-Z0-9_]{1,18}$'`),
+  check('classification_class_lifecycle_ck', sql`${t.lifecycleStatus} in ('DRAFT', 'ACTIVE', 'BLOCKED')`),
+]);
+
+export const classAssignment = pgTable('class_assignment', {
+  client: tenant(),
+  classType: varchar('class_type', { length: 20 }).notNull(),
+  className: varchar('class_name', { length: 18 }).notNull(),
+  position: smallint('position').notNull(),
+  characteristicName: varchar('characteristic_name', { length: 30 }).notNull(),
+  requiredForClassification: boolean('required_for_classification').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.classType, t.className, t.position] }),
+  foreignKey({
+    columns: [t.client, t.classType, t.className],
+    foreignColumns: [classificationClass.client, classificationClass.classType, classificationClass.className],
+  }),
+  foreignKey({
+    columns: [t.client, t.characteristicName],
+    foreignColumns: [characteristic.client, characteristic.characteristicName],
+  }),
+  check('class_assignment_position_ck', sql`${t.position} > 0`),
 ]);

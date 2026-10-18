@@ -336,6 +336,12 @@ Stage 1 ships the inert screen at `/config/classes` under the `classificationCla
 
 ---
 
+### 26.401 B-385 — SCR-058 / CL02 stage 2: the class tables stand
+
+Migration `0070_classification_class.sql` with `9048_classification_class_policies.sql` — **119 migrations standing**. `class_type` is the delivered catalogue (object categories checked in the database), `classification_class` is keyed `(client, class_type, class_name)` with the naming policy and Cairn lifecycle as checks, and `class_assignment` hangs characteristics beneath a class — position the primary ordering, the characteristic unique per class by constraint, the index by characteristic standing for the CT04 usage count. All three tables carry the audit columns behind forced tenant RLS.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -384,6 +390,7 @@ Stage 1 ships the inert screen at `/config/classes` under the `classificationCla
 | 2.211 | 2026-10-18 | **SCR-057 / CT04 CLOSED and accepted (B-383, §26.399).** Stage 5 ships 3 service tests and the T940 browser target `characteristics` (green — TOTAL_VALUE drafted and activated through the editor). Neighbouring `purchase-orders` and `purchase-requisitions` targets, typecheck, `lint:ip` and the production build clean; suite 1257 across 153 files, 117 migrations, seed 94/65/65/67. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.212 | 2026-10-18 | **SCR-058 / CL02 contracted (R-106).** Classes for classification under house names: the delivered class-type catalogue (including the purchase requisition and order release types), classes keyed by type and name, characteristic assignments at unique positions, blocked characteristics refused, draft-only deletion, the CT04 usage count made real, language texts deferred under B-223, object classification explicitly not this round. | Agent |
 | 2.213 | 2026-10-18 | **SCR-058 / CL02 stage 1 (B-384, §26.400).** The inert classes screen stands at `/config/classes`: empty grid, editor with the type catalogue and positioned characteristic assignments, save disabled. Typecheck clean. | Agent |
+| 2.214 | 2026-10-18 | **SCR-058 / CL02 stage 2 (B-385, §26.401).** Migrations `0070` + `9048` applied (119 standing): `class_type`, `classification_class` and `class_assignment` behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 
