@@ -113,6 +113,8 @@ export const material = pgTable('material', {
   weightUnit: varchar('weight_unit', { length: 6 }).references(() => unitOfMeasure.code),
   basicStatus: varchar('basic_status', { length: 16 }).notNull().default('INCOMPLETE'),
   isBlocked: boolean('is_blocked').notNull().default(false),
+  /** Deletion flag at client level (SCR-053 / MM06): a marker, never a lock. */
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   version: integer('version').notNull().default(1),
   lowLevelCode: integer('low_level_code').notNull().default(0), ...auditColumns,
 }, (t) => [
@@ -132,6 +134,8 @@ export const materialPlant = pgTable('material_plant', {
   underdeliveryTolerance: numeric('underdelivery_tolerance', { precision: 5, scale: 2 }).notNull().default('0'),
   manufacturerPartNumber: varchar('manufacturer_part_number', { length: 80 }),
   purchasingStatus: varchar('purchasing_status', { length: 16 }).notNull().default('NOT_CREATED'),
+  /** Deletion flag at plant level (SCR-053 / MM06): a marker, never a lock. */
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   mrpType: varchar('mrp_type', { length: 16 }),
   mrpController: varchar('mrp_controller', { length: 3 }),
   procurementType: varchar('procurement_type', { length: 8 }),
