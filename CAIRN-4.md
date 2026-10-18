@@ -1599,6 +1599,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.360 B-344 — SCR-050 / SNRO stage 1: the inert number-range-objects screen stands
+
+**What shipped.** `/config/number-range-objects` as a server page (`requireSession`, the standing `CFG.PLT.NUMBERRANGE.DEFINE` activity judging its authority) introducing `Maintain Number Range Objects · SNRO`, cross-linked with the live intervals screen, over an inert client screen holding the object grid the live screen will keep — each object's application-owned name, description, number length, year relevance and consumption warning, with buffering's gap consequence stated where the choice will be made. i18n gained `nrObject.title`/`nrObject.subtitle`. Nothing reads or writes; the route joins `BUILT_ROUTES` only when the registry lands and the round's activity can complete from it, per standing practice.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled (number-range-objects route 904 B); suite **1222 tests across 145 files**.
+
+**Cost.** Measured: 03:16 in to 03:19 — **3 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1710,6 +1720,7 @@ recorded change, date and reason stated.
 | 2.162 | 2026-10-18 | **SCR-049 / OMSF stage 4 (B-342, §26.358): the supporting seeding.** The `CFG.INV.MATERIALGROUP.DEFINE` capability and a Term Registry entry carrying **OMSF as a search alias only** are seeded, and `/config/material-groups` joins `BUILT_ROUTES`; seed read back at 89 capabilities / 61 activities / 58 terms / 54 aliases. An environment restore after a snapshot wipe is inside the stage. Typecheck and `lint:ip` clean; suite 1215 across 144 files. Cost measured at 3 minutes. | Agent |
 | 2.163 | 2026-10-18 | **SCR-049 / OMSF CLOSED and accepted (B-343, §26.359).** Stage 5 ships 6 service tests and the T948 browser target `material-groups` (8/8 journeys against the production build — provisioned groups at parity shape with their long texts, creation and the duplicate refusal, the description change, the used-group deletion refusal, deactivation, the database remembering all of it); one target-side name corrected to the very 20-character cap under test, and an environment restore after a snapshot wipe inside the round. Neighbouring `material-types` and `material-basic` targets, typecheck, `lint:ip` and the production build clean; suite 1222 across 145 files, 102 migrations, seed 89/61/58/54. Cost measured at 49 minutes overall. | Agent |
 | 2.164 | 2026-10-18 | **SCR-050 / SNRO package recorded as R-98: number range objects at full SAP parity.** Stored object codes rename to at most 10 characters (`JOURNAL_ENTRY`→`RF_BELEG`, `MATERIAL`→`MATERIALNR`, product stems elsewhere — the row carries the map); a tenant `number_range_object` registry carries description, number length, warning percentage and year relevance while object names stay application-owned; the standing screen gains external and buffered interval maintenance, buffered allocation reserving blocks whose rolled-back numbers stay consumed (gaps accepted, journal included), and the guarded current-number act that may rewind with the repetition warning stated. SCR-051 (MMNR) follows on this foundation. | Agent |
+| 2.165 | 2026-10-18 | **SCR-050 / SNRO stage 1 (B-344, §26.360): the inert number-range-objects screen.** `/config/number-range-objects` stands introduced (`CFG.PLT.NUMBERRANGE.DEFINE · SNRO`), cross-linked with the live intervals screen, its object grid and buffering's consequences stated in help text. Typecheck, `lint:ip`, production build (route 904 B) clean; suite 1222 across 145 files. Cost measured at 3 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any

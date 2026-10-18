@@ -1934,6 +1934,12 @@ const en: Catalogue = {
   'costHierarchy.title': 'Define Cost Centre Hierarchy',
   'actType.title': 'Define Activity Types',
   'actRate.title': 'Plan Activity Prices',
+  'nrObject.title': 'Maintain Number Range Objects',
+  'nrObject.subtitle':
+    'The number range objects the applications number from: each object with its ' +
+    'description, number length, year relevance and consumption warning, and the ' +
+    'intervals standing under it. Object names belong to the application; their ' +
+    'facts and intervals are maintained here.',
   'materialGroup.title': 'Define Material Groups',
   'materialGroup.subtitle':
     'Material groups defined once per tenant: the classification materials carry for ' +
