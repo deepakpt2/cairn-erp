@@ -1995,6 +1995,12 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'vendorAgeing.title': 'Vendor Ageing',
+  'vendorAgeing.subtitle':
+    'What a company owes its suppliers, aged as of a key date: every open ' +
+    'item reconstructed to its standing on that date and placed by its due ' +
+    'date — not yet due standing apart from the overdue buckets. This ' +
+    'screen displays; it never posts.',
   'vendorBalances.title': 'Vendor Balances',
   'vendorBalances.subtitle':
     'A supplier\u2019s period balances in a company, derived from the posted ' +

@@ -641,6 +641,13 @@ The owner's ageing package is contracted as R-114. Read-only: standing reconstru
 
 ---
 
+### 26.443 B-427 — SCR-066 vendor ageing stage 1: the inert screen stands
+
+The ageing screen stands at `/finance/vendor-ageing`: selection (company, supplier range, key date, three thresholds — with the as-of reconstruction stated), and the empty ageing grid. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -736,6 +743,7 @@ The owner's ageing package is contracted as R-114. Read-only: standing reconstru
 | 2.258 | 2026-10-18 | **SCR-065 vendor balances stage 4 (B-424, §26.440).** Capability `FIN.AP.BALANCE` created; the balances term seeded at its route with FK10N a search alias only. Seed reads back 99/66/72/81. | Agent |
 | 2.259 | 2026-10-18 | **SCR-065 vendor balances closed (B-425, §26.441).** Service tests and browser target T932 (neighbour T933) green on the production build; full suite 1283/161, 132 migrations, seed 99/66/72/81. Deferrals named: stored transaction figures with carryforward, currency conversion, ageing analysis, special G/L separation. | Agent |
 | 2.260 | 2026-10-18 | **SCR-066 vendor ageing contracted (R-114, B-426, §26.442).** S_ALR_87012085 under house names, read-only: standing reconstructed as of the key date, due-date ageing buckets per supplier, drill-down to the balances items; `FIN.AP.AGEING` created; alternative bases/sorts, document currency and special G/L deferred. | Agent |
+| 2.261 | 2026-10-18 | **SCR-066 vendor ageing stage 1 (B-427, §26.443).** The inert ageing screen stands at `/finance/vendor-ageing` — selection and the empty ageing grid. Typecheck and production build clean. | Agent |
 
 ---
 
