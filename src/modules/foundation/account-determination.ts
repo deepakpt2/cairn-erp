@@ -47,6 +47,7 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'GR_IR_CLEARING', referenceAlias: 'WRX', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'OFFSETTING_INVENTORY', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: true },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
 ];
 
 export function postingEvent(event: string): PostingEvent | undefined {

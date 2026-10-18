@@ -490,6 +490,12 @@ Migrations `0074_supplier_invoice.sql` with `9052_supplier_invoice_policies.sql`
 
 ---
 
+### 26.422 B-406 — SCR-062 invoice verification stage 3: the verification service and the live screen
+
+One service `src/modules/purchasing/invoice-verification.ts` verifies and posts: invoiceable quantity is received-minus-invoiced, both from posted history; the gross amount judges against items' tax-exclusive net plus the tax their standing country tax codes calculate at their rates; price variance against the order price posts to the price-difference event by valuation class rather than refusing; the supplier judges standing with company data — its reconciliation account carries the credit with the partner on the line, its payment terms compute the baseline and due date. Duplicates (supplier, reference, company standing posted) refuse, naming the standing document; the request key returns the standing document on a retry. The journal posts through the standing engine under the delivered vendor-invoice document type, GR/IR clearing at the expected amount per item, and the TAX event joins the account-determination catalogue this round. Cancellation mirrors the journal through the engine into a linked cancellation document judging its own posting date, the original marked CANCELLED. The screen loads an order's invoiceable items with expected amounts, shows the balance live before posting, and displays and cancels standing invoices.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -563,6 +569,7 @@ Migrations `0074_supplier_invoice.sql` with `9052_supplier_invoice_policies.sql`
 | 2.236 | 2026-10-18 | **SCR-062 invoice verification contracted (R-110).** MIRO under house names: PO-based supplier invoices with judged gross reconciliation, tax at standing rates, variances to the price-difference event, invoiceable quantity from posted GR and invoice history, duplicates refused, cancellation as a linked mirror document, one balanced journal through the standing engine. | Agent |
 | 2.237 | 2026-10-18 | **SCR-062 invoice verification stage 1 (B-404, §26.420).** The inert verification screen stands at `/purchasing/invoice-verification`: header with category, order, supplier reference, gross amount and both dates; the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 | 2.238 | 2026-10-18 | **SCR-062 invoice verification stage 2 (B-405, §26.421).** Migrations `0074` + `9052` applied (128 standing): supplier invoices and items insert-only behind forced tenant RLS, the duplicate index and the unique request key standing. Typecheck clean. | Agent |
+| 2.239 | 2026-10-18 | **SCR-062 invoice verification stage 3 (B-406, §26.422).** The verification service judges invoiceable quantity from posted history, reconciles the gross against net plus standing-rate tax, posts variance to the price-difference event and the balanced journal through the standing engine, refuses duplicates and returns the standing document on a retry; cancellation stands as a linked mirror. The TAX determination event joins the catalogue; the screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 
