@@ -389,6 +389,12 @@ Migration `0071_release_strategy.sql` with `9049_release_strategy_policies.sql` 
 
 ---
 
+### 26.408 B-392 — SCR-059 release strategies stage 4: capability, term and route seeded
+
+The configuration activity has stood in the seed since the platform round; stage 4 completes its register: the `CFG.PROC.RELEASE.DEFINE` capability, the term *Define release strategies* (OMGSCK — the reference consistency check — as its search alias only), and `/config/release-strategies` among the workbench's built routes, closing the pageless-route obligation recorded since the pre-ME51N audit. The seed reads back **96/66/67/71**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -445,6 +451,7 @@ Migration `0071_release_strategy.sql` with `9049_release_strategy_policies.sql` 
 | 2.219 | 2026-10-18 | **SCR-059 release strategies stage 1 (B-389, §26.405).** The inert screen stands at `/config/release-strategies`: empty grid, strategy editor with criteria and sequenced release codes, save disabled. Typecheck clean. | Agent |
 | 2.220 | 2026-10-18 | **SCR-059 release strategies stage 2 (B-390, §26.406).** Migrations `0071` + `9049` applied (121 standing): groups, codes, strategies, criteria and steps behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.221 | 2026-10-18 | **SCR-059 release strategies stage 3 (B-391, §26.407).** The strategy service, the exported determination judge, and the live screen at the seed's long-standing route: group/code/strategy judging against the classification chain, activation under an ACTIVE class, no document status moved. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.222 | 2026-10-18 | **SCR-059 release strategies stage 4 (B-392, §26.408).** Capability and term seeded for the long-standing activity (OMGSCK a search alias only), the route among the built routes; seed reads back 96/66/67/71. | Agent |
 
 ---
 
