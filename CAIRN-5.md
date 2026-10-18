@@ -1236,6 +1236,17 @@ Stage 4 of R-126. The capability `FIN.AP.PAYMENT.POST` (FIN, POST, posting) and 
 Verification: seed idempotent; the typecheck stands clean from stage 3 and the seed changes no types. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-505 / §26.521 / §30 row 2.339. **Cost (B-254, measured):** stage 3 published 14:49 UTC; stage 4 completed the same minute-span.
 
 ---
+### 26.522 B-506 — SCR-078 accepted and closed
+
+R-126 stands accepted. The outgoing payment posts at `/finance/outgoing-payment` on the standing clearing model: the vendor's uncleared reconciliation lines stand listed, credit lines at their amount and debit lines — the vendor side of credit memos — against the payment, so a selection nets; one currency throughout; the net allocation judged equal to the payment exactly, any difference named in figures. Under the vendor's advisory lock one balanced KZ journal credits the bank at the payment and settles the vendor item by item, every selected line and the payment's own vendor lines clearing in place under the payment document at the clearing date, the payment recorded once on `outgoing_payment` with its optional value date held unjudged. F-44's bank-less clearing under the same KZ type stands untouched beside it, FBRA reset and FB08 reversal stand generically over the payment as over every clearing document, and nothing clears twice — a cleared line refuses selection and the lock serialises. Deferred as named at contract: partial payments, residual items, cash discount taken, on-account payments, special G/L selection and down payments, bank value-date rules, and cheque or advice printing.
+
+**Inside the round:** one test correction — the fixture bank account 113100 does not stand in the delivered chart, so acceptance pays from the standing 101000; and one bookkeeping write lost to a sandbox hiccup, detected by grep and republished as its own commit rather than trusted. Neither touched the service.
+
+Acceptance evidence: service tests 2/2 (`tests/outgoing-payment.test.ts`, including the netting refusal at 110.00); browser target **T918 green** on the production build (payable 550 and credit item 110 netting a 440 payment, items cleared on 2026-11-21 in the database); **full suite 1334 tests green**; seed **112/67/86/94** idempotent; **150 migrations**; typecheck and production build clean.
+
+Completion per B-444: the accounts-payable and accounts-receivable chains now stand complete on the roadmap, and the next unbuilt roadmap item is **FF.5 (bank statement import, `FIN.BANK.STATEMENT.IMPORT`)**, which would stand as SCR-079 — its field package is requested from the owner; no contract is drafted before it arrives. Same-stage bookkeeping: B-506 / §26.522 / §30 row 2.340. **Cost (B-254, measured):** the round opened 14:35 UTC; SCR-078 closed 14:54 UTC — nineteen minutes across five stages, inside the time-box.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1420,3 +1431,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.337 | 2026-10-18 | **SCR-078 stage 2 published (B-503, §26.519).** `outgoing_payment` stands (incoming-payment widths plus value date); 150 migrations. Service follows in stage 3. | Agent |
 | 2.338 | 2026-10-18 | **SCR-078 stage 3 published (B-504, §26.520).** Outgoing payment service stands: netting allocation judged exactly, KZ journal crediting the bank, clearing stamped in place; `/finance/outgoing-payment` is live. Capability and term follow in stage 4. | Agent |
 | 2.339 | 2026-10-18 | **SCR-078 stage 4 published (B-505, §26.521).** `FIN.AP.PAYMENT.POST` and the Post Outgoing Payment term (F-53 alias) seeded (112/67/86/94). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.340 | 2026-10-18 | **SCR-078 ACCEPTED AND CLOSED (B-506, §26.522).** F-53 Post Outgoing Payment stands: netting allocation judged exactly (credit memos against the payment), KZ journal crediting the bank, clearing stamped in place on the standing model. T918 green; suite 1334; seed 112/67/86/94; 150 migrations. Next: FF.5 (SCR-079) — field package requested. | Agent |
