@@ -207,3 +207,60 @@ export const documentRelease = pgTable('document_release', {
   check('document_release_status_ck', sql`${t.status} in ('PENDING', 'RELEASED')`),
   check('document_release_step_ck', sql`${t.currentStep} >= 0`),
 ]);
+
+/**
+ * Invoice verification (SCR-062 / R-110). A posted supplier invoice
+ * is immutable; cancellation is a linked mirror document. Amounts
+ * are tax-exclusive at item level; the header gross is judged.
+ */
+export const supplierInvoice = pgTable('supplier_invoice', {
+  client: tenant(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  category: varchar('category', { length: 20 }).notNull().default('INVOICE'),
+  supplierNumber: varchar('supplier_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }).notNull(),
+  invoiceDate: date('invoice_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  supplierReference: varchar('supplier_reference', { length: 16 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  grossAmount: numeric('gross_amount', { precision: 23, scale: 4 }).notNull(),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  paymentTerms: varchar('payment_terms', { length: 12 }),
+  baselineDate: date('baseline_date', { mode: 'string' }),
+  dueDate: date('due_date', { mode: 'string' }),
+  headerText: varchar('header_text', { length: 100 }),
+  status: varchar('status', { length: 12 }).notNull().default('POSTED'),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
+  cancelledBy: varchar('cancelled_by', { length: 20 }),
+  cancellationOf: varchar('cancellation_of', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber] }),
+  check('supplier_invoice_category_ck', sql`${t.category} in ('INVOICE', 'CREDIT_MEMO', 'SUBSEQUENT_DEBIT', 'SUBSEQUENT_CREDIT')`),
+  check('supplier_invoice_status_ck', sql`${t.status} in ('POSTED', 'CANCELLED')`),
+]);
+
+export const supplierInvoiceItem = pgTable('supplier_invoice_item', {
+  client: tenant(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }).notNull(),
+  purchaseOrderItem: integer('purchase_order_item').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }),
+  plant: varchar('plant', { length: 10 }),
+  quantity: numeric('quantity', { precision: 23, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull(),
+  expectedAmount: numeric('expected_amount', { precision: 23, scale: 4 }).notNull(),
+  varianceAmount: numeric('variance_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
+  foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [supplierInvoice.client, supplierInvoice.invoiceNumber] }).onDelete('restrict'),
+  check('supplier_invoice_item_qty_ck', sql`${t.quantity} > 0`),
+]);

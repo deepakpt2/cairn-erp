@@ -484,6 +484,12 @@ Stage 1 ships the invoice-verification screen at `/purchasing/invoice-verificati
 
 ---
 
+### 26.421 B-405 — SCR-062 invoice verification stage 2: the invoice tables stand
+
+Migrations `0074_supplier_invoice.sql` with `9052_supplier_invoice_policies.sql` — **128 migrations standing**. `supplier_invoice` stands insert-only for the application role — the header may only ever update its cancellation columns; its items likewise insert-only — behind forced tenant RLS. The category stands as business words; the supplier reference indexes for the duplicate judge; the caller's request key stands unique per tenant for idempotent submission.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -556,6 +562,7 @@ Stage 1 ships the invoice-verification screen at `/purchasing/invoice-verificati
 | 2.235 | 2026-10-18 | **SCR-061 goods receipt CLOSED and accepted (B-403, §26.419).** Stage 5 ships 2 service tests and the T936 browser target `goods-receipt` (green — posting, balanced journal, reversal, stock whole). Neighbouring `purchase-orders` and `release-acts` targets clean; suite 1271 across 157 files, 126 migrations, seed 97/66/68/76. Goods issue, transfer, batches and account-assigned receipts deferred and named. Cost measured at 15 minutes. | Agent |
 | 2.236 | 2026-10-18 | **SCR-062 invoice verification contracted (R-110).** MIRO under house names: PO-based supplier invoices with judged gross reconciliation, tax at standing rates, variances to the price-difference event, invoiceable quantity from posted GR and invoice history, duplicates refused, cancellation as a linked mirror document, one balanced journal through the standing engine. | Agent |
 | 2.237 | 2026-10-18 | **SCR-062 invoice verification stage 1 (B-404, §26.420).** The inert verification screen stands at `/purchasing/invoice-verification`: header with category, order, supplier reference, gross amount and both dates; the item area empty and post disabled. Typecheck and the production build clean. | Agent |
+| 2.238 | 2026-10-18 | **SCR-062 invoice verification stage 2 (B-405, §26.421).** Migrations `0074` + `9052` applied (128 standing): supplier invoices and items insert-only behind forced tenant RLS, the duplicate index and the unique request key standing. Typecheck clean. | Agent |
 
 ---
 
