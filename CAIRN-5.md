@@ -804,6 +804,13 @@ Balances derive at read time from the posted journal, so no `customer_period_bal
 
 ---
 
+### 26.465 B-449 — SCR-069 stage 4: FIN.AR.BALANCE capability and the FD10N term stand
+
+Seed adds capability `FIN.AR.BALANCE` (DISPLAY, non-posting — “Display customer period balances derived from the posted ledger”) and its Term Registry row at `/finance/customer-balances` with FD10N standing only as a search alias. Seed read-back 103/66/76/85.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -921,6 +928,7 @@ Balances derive at read time from the posted journal, so no `customer_period_bal
 | 2.280 | 2026-10-18 | **SCR-069 stage 1 published (B-446, §26.462).** The inert customer balances screen `/finance/customer-balances`: selection, empty period matrix and empty drill-down rendered, i18n keys added. No reads, no writes. | Agent |
 | 2.281 | 2026-10-18 | **SCR-069 stage 2 verified (B-447, §26.463).** No schema change: balances derive from the posted journal with no balance table; the standing partner/company index from SCR-065 covers customer lines identically. Migrations unchanged at 137. | Agent |
 | 2.282 | 2026-10-18 | **SCR-069 stage 3 published (B-448, §26.464).** Customer balances read live: standing-extension check, variant-bound periods, debit-positive opening/turnover/chained closing derived from posted customer lines, special periods on request, single-currency display or named refusal, period drill-down to line items; screen wired. | Agent |
+| 2.283 | 2026-10-18 | **SCR-069 stage 4 published (B-449, §26.465).** Capability `FIN.AR.BALANCE` and the `/finance/customer-balances` term stand, FD10N a search alias only; seed read-back 103/66/76/85. | Agent |
 
 ---
 
