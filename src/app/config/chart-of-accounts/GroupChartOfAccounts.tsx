@@ -220,7 +220,7 @@ export function GroupChartOfAccountsList({
         <p role="status" className="px-4 py-8 text-center text-sm text-ink-soft">{t('chartOfAccounts.groupEmpty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[760px]">
+          <table className="grid-table min-w-[47.5rem]">
             <thead>
               <tr>
                 <th>{t('chartOfAccounts.groupCode')}</th>

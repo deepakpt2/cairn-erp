@@ -213,7 +213,7 @@ export function Banks({
           </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[720px]">
+          <table className="grid-table min-w-[45rem]">
             <thead>
               <tr>
                 <th>{t('bank.country')}</th>

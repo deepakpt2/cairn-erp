@@ -196,7 +196,7 @@ export default function MaterialPeriodControl({
               Initialization happens once. Afterwards the period advances only
               through the shift; it is never edited or reinitialized here.
             </p>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="mp-year" className="text-sm font-medium">
                   Fiscal year<RequiredMark />

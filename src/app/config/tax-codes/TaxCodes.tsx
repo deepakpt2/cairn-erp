@@ -285,7 +285,7 @@ export function TaxCodes({
           </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[820px]">
+          <table className="grid-table min-w-[51.25rem]">
             <thead>
               <tr>
                 <th>{t('taxCode.country')}</th>

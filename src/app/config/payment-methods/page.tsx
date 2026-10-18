@@ -46,7 +46,7 @@ export default async function PaymentMethodsPage({ searchParams }: {
     : [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
         <span className="code text-ink-faint">{PAYMENT_METHOD_ACTIVITY}</span>
         <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">

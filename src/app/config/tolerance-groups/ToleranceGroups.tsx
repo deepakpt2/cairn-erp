@@ -232,7 +232,7 @@ export function ToleranceGroups({
           <h2 id="tol-group-grid-title" className="panel-title">{t('tolGroup.gridTitle')}</h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[900px]">
+          <table className="grid-table min-w-[56.25rem]">
             <thead>
               <tr>
                 <th>{t('tolGroup.companyCode')}</th>

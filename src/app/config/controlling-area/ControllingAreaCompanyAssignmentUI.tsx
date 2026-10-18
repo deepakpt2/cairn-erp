@@ -228,7 +228,7 @@ export function ControllingAreaCompanyAssignmentUI({
             </div>
 
             <div className="hidden overflow-x-auto sm:block">
-              <table className="min-w-[920px] w-full border-collapse text-sm" aria-label={t('controllingArea.assignmentListTitle')}>
+              <table className="min-w-[57.5rem] w-full border-collapse text-sm" aria-label={t('controllingArea.assignmentListTitle')}>
                 <thead className="bg-[#eef1f4] text-[#33414c]">
                   <tr className="border-y border-[#c4ccd2]">
                     <th className="w-36 border-r border-[#cbd1d6] px-3 py-2 text-left">{t('controllingArea.code')}</th>

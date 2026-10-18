@@ -58,20 +58,22 @@ export default {
         ],
       },
       fontSize: {
-        // Compact by default — §19.2
-        '2xs': ['10.5px', { lineHeight: '14px' }],
-        xs: ['11.5px', { lineHeight: '16px' }],
-        sm: ['12.5px', { lineHeight: '18px' }],
-        base: ['13.5px', { lineHeight: '20px' }],
-        lg: ['15px', { lineHeight: '22px' }],
-        xl: ['18px', { lineHeight: '24px' }],
-        '2xl': ['22px', { lineHeight: '28px' }],
+        // Compact by default — §19.2. In rem (px equivalents at a 16px
+        // root) so type scales with the reader's font-size setting
+        // instead of standing fixed.
+        '2xs': ['0.65625rem', { lineHeight: '0.875rem' }],
+        xs: ['0.71875rem', { lineHeight: '1rem' }],
+        sm: ['0.78125rem', { lineHeight: '1.125rem' }],
+        base: ['0.84375rem', { lineHeight: '1.25rem' }],
+        lg: ['0.9375rem', { lineHeight: '1.375rem' }],
+        xl: ['1.125rem', { lineHeight: '1.5rem' }],
+        '2xl': ['1.375rem', { lineHeight: '1.75rem' }],
       },
       borderRadius: {
         // Sharp edges — flat, not pill-shaped.
         none: '0',
-        sm: '1px',
-        DEFAULT: '2px',
+        sm: '0.0625rem',
+        DEFAULT: '0.125rem',
       },
     },
   },

@@ -423,7 +423,7 @@ function AccountsPanel({
   return (
     <div className="space-y-4 p-4">
       <div className="overflow-x-auto">
-        <table className="grid-table min-w-[720px]">
+        <table className="grid-table min-w-[45rem]">
           <thead>
             <tr>
               <th>{t('houseBank.accountId')}</th>
@@ -599,7 +599,7 @@ export function HouseBanks({
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[820px]">
+          <table className="grid-table min-w-[51.25rem]">
             <thead>
               <tr>
                 <th>{t('houseBank.key')}</th>

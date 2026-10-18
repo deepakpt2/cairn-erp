@@ -14,7 +14,7 @@ export default async function PurchasingGroupsPage() {
   const canMaintain = can(session, PURCHASING_GROUP_DEFINE);
 
   return (
-    <main className="mx-auto max-w-[1600px] p-4 sm:p-6">
+    <main className="mx-auto max-w-[100rem] p-4 sm:p-6">
       <p className="sr-only">
         {t('purchasingGroup.accessibleContext')}
       </p>

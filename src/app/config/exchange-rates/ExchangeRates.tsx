@@ -148,7 +148,7 @@ function CreatePanel({
             </label>
             <input id="ex-rate-rate" name="rate" inputMode="decimal" className="field-input code" placeholder="1.00000000" required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="ex-rate-ratio-from" className="field-label">{t('exRate.ratioFrom')}</label>
               <input id="ex-rate-ratio-from" name="ratioFrom" type="number" min={1} step={1} defaultValue={1} className="field-input code" />
@@ -337,7 +337,7 @@ export function ExchangeRates({
           </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[720px]">
+          <table className="grid-table min-w-[45rem]">
             <thead>
               <tr>
                 <th>{t('exRate.rateType')}</th>

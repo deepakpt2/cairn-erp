@@ -34,7 +34,7 @@ export default async function IncomingPaymentPage({ searchParams }: {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
         <span className="code text-ink-faint">FIN.AR.PAYMENT.ENTER · F-28</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">

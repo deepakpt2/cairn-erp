@@ -302,17 +302,17 @@ export function PurchasingGroupsGrid({
           {t('purchasingGroup.tableHeading')}
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-[1200px] w-full border-collapse text-sm" aria-label={t('purchasingGroup.tableHeading')}>
+          <table className="min-w-[75rem] w-full border-collapse text-sm" aria-label={t('purchasingGroup.tableHeading')}>
             <thead className="bg-[#eef1f4] text-[#33414c]">
               <tr className="border-y border-[#c4ccd2]">
                 <th className="w-9 px-1 py-2" aria-label={t('purchasingGroup.select')} />
-                <th className="w-[52px] min-w-[52px] border-r border-[#cbd1d6] px-1 py-2 text-left"><span className="block w-[32px] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
-                <th className="w-[168px] min-w-[168px] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.description')}</th>
-                <th className="w-[177px] min-w-[177px] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
-                <th className="w-[195px] min-w-[195px] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.faxNumber')}</th>
-                <th className="w-[205px] min-w-[205px] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telephone')}</th>
-                <th className="w-[148px] min-w-[148px] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.extension')}</th>
-                <th className="min-w-[220px] px-2 py-2 text-left">{t('purchasingGroup.emailAddress')}</th>
+                <th className="w-[3.25rem] min-w-[3.25rem] border-r border-[#cbd1d6] px-1 py-2 text-left"><span className="block w-[2rem] truncate" title={t('purchasingGroup.code')}>{t('purchasingGroup.code')}</span></th>
+                <th className="w-[10.5rem] min-w-[10.5rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.description')}</th>
+                <th className="w-[11.0625rem] min-w-[11.0625rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telNoPurchGroup')}</th>
+                <th className="w-[12.1875rem] min-w-[12.1875rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.faxNumber')}</th>
+                <th className="w-[12.8125rem] min-w-[12.8125rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.telephone')}</th>
+                <th className="w-[9.25rem] min-w-[9.25rem] border-r border-[#cbd1d6] px-2 py-2 text-left">{t('purchasingGroup.extension')}</th>
+                <th className="min-w-[13.75rem] px-2 py-2 text-left">{t('purchasingGroup.emailAddress')}</th>
               </tr>
             </thead>
             <tbody>

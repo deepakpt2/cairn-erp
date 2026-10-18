@@ -333,7 +333,7 @@ export function AccountDetermination({
           <p className="p-4 text-sm text-ink-soft">{t('acctDet.noChartEvent')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="grid-table min-w-[760px]">
+            <table className="grid-table min-w-[47.5rem]">
               <thead>
                 <tr>
                   <th>{t('acctDet.chart')}</th>

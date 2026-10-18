@@ -165,4 +165,32 @@
   .code {
     @apply font-mono text-xs tracking-tight;
   }
+
+  /* ---- Responsive behaviour -------------------------------------------- */
+
+  /* Below the md breakpoint the dense grids stop demanding their
+     desktop minimum width: cells wrap instead of forcing a long
+     sideways scroll, and padding tightens. Wide screens keep the
+     scrollable minimum width, where sideways panning is cheap. */
+  @media (max-width: 47.99rem) {
+    .grid-table {
+      font-size: 0.78125rem;
+    }
+
+    .grid-table thead th,
+    .grid-table tbody td {
+      padding-inline: 0.375rem;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
+@layer utilities {
+  /* The tables' desktop minimum widths are utilities; relaxing them
+     on small screens has to speak from the same layer to win. */
+  @media (max-width: 47.99rem) {
+    .grid-table {
+      min-width: 0;
+    }
+  }
 }

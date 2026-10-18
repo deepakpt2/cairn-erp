@@ -292,7 +292,7 @@ export function FiscalYearVariantList({
         <p role="status" className="px-4 py-8 text-center text-sm text-ink-soft">{t('fiscalYearVariant.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[980px]">
+          <table className="grid-table min-w-[61.25rem]">
             <thead>
               <tr>
                 <th>{t('fiscalYearVariant.key')}</th>
@@ -556,7 +556,7 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
   // The grid is rendered inside the form that submits it when the list is editable, and
   // outside any form when it is read-only, so it is built once and placed by the branch.
   const grid = (
-        <table className="grid-table min-w-[620px]">
+        <table className="grid-table min-w-[38.75rem]">
           <thead>
             <tr>
               <th>{t('fiscalYearVariant.period')}</th>

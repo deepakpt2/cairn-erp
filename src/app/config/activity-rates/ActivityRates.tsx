@@ -253,7 +253,7 @@ export default function ActivityRates({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="grid-table min-w-[900px]">
+            <table className="grid-table min-w-[56.25rem]">
               <thead>
                 <tr>
                   <th>Period</th>

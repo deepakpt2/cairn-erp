@@ -182,7 +182,7 @@ export function PostingPeriodVariantAssignments({
         </h2>
       </div>
       <div className="overflow-x-auto">
-        <table className="grid-table min-w-[640px]">
+        <table className="grid-table min-w-[40rem]">
           <thead>
             <tr>
               <th>{t('ppvAssign.companyCode')}</th>

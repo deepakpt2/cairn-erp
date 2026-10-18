@@ -1373,6 +1373,12 @@ Stage 5 of R-129 closes the round. The service tests (`tests/vendor-down-payment
 
 **Acceptance.** The full suite stands green at 1348 tests; the production build carries target `vendor-down-payment` (T915) green — the maintenance screen showing indicator A → 230000, the payment posting through the form, the KA journal evidenced in the database. The seed stands at 114 capabilities / 68 configuration activities / 88 terms / 97 aliases, twice idempotent; the database stands at 154 migrations. Typecheck clean. **SCR-081 is accepted and closed.** Deferred by name: down-payment requests (F-47), down-payment clearing (F-54 — the next round), the customer mirror (F-29/F-39), withholding tax, foreign-currency differences and drafts. Same-stage bookkeeping: B-526 / §26.542 / §30 row 2.360. **Cost (B-254, measured):** stage 4 published 17:07 UTC; stage 5 completed 17:12 UTC.
 
+### 26.543 B-527 — Responsive pass over the standing screens
+
+At the owner's direction (a side task between rounds, no SCR), the styling now reacts instead of standing fixed. The type scale in `tailwind.config.ts` moves from literal pixels to the identical rem values, so typography follows the reader's font-size setting; border radii follow. Every fixed-pixel arbitrary width across the screens (`min-w-[900px]` tables, rails, panels) converts to its rem equivalent (900px → 56.25rem and so on), so widths scale with type rather than standing absolute. The shared page shell on 55 screens gains responsive padding (`p-3 sm:p-4 lg:p-6` in place of a flat `p-6`), the two last unresponsive two-column grids stack on small screens, and below the md breakpoint the dense `.grid-table` grids relax their desktop minimum width and wrap their cells instead of forcing a long sideways scroll (spoken from the utilities layer, where the minimum widths live). Desktop rendering is pixel-identical at the default root size.
+
+Verification: typecheck and production build clean; the full suite stands green at 1348 tests; browser target `cost-centers` green on the rebuilt app, with mobile (390px) and desktop (1440px) screenshots of a form screen and a configuration screen reviewed — forms stack, nothing overflows, the desktop look is unchanged. Same-stage bookkeeping: B-527 / §26.543 / §30 row 2.361.
+
 ---
 ---
 
@@ -1579,3 +1585,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.358 | 2026-10-18 | **SCR-081 stage 3 published (B-524, §26.540).** Down-payment service stands: indicator resolution under lock, KA journal on the alternative account, replay by request key; the screen is live. Capability and configuration maintenance follow in stage 4. | Agent |
 | 2.359 | 2026-10-18 | **SCR-081 stage 4 published (B-525, §26.541).** Capability F-48 and the special G/L configuration activity seeded (114/68/88/97); the `/config/special-gl` maintenance screen stands with reasoned changes and deletion guard. Tests and browser acceptance follow in stage 5. | Agent |
 | 2.360 | 2026-10-18 | **SCR-081 closed (B-526, §26.542).** Vendor down payment accepted: 1348 tests, T915 browser green, 154 migrations, seed 114/68/88/97. Special G/L configuration stands; F-54 down-payment clearing is next. | Agent |
+| 2.361 | 2026-10-18 | **Responsive styling pass (B-527, §26.543).** Type and fixed widths move from px to rem, page shells gain responsive padding, dense grids wrap below the md breakpoint. Suite 1348 green; desktop rendering unchanged. | Agent |

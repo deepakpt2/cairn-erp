@@ -21,7 +21,7 @@ export default async function PartnerBankProfilesPage() {
 
   const rows = await listPartnerBankProfileActivationRows();
   return (
-    <main className="mx-auto max-w-6xl space-y-4 p-6">
+    <main className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
         <span className="code text-ink-faint">{PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY}</span>
         <div className="flex flex-wrap items-center justify-between gap-3">

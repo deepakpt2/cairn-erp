@@ -386,7 +386,7 @@ export default function ProfitCenters({
           <p className="p-4 text-sm text-ink-soft">No profit centres are defined for this controlling area yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="grid-table min-w-[900px]">
+            <table className="grid-table min-w-[56.25rem]">
               <thead>
                 <tr>
                   <th>Profit centre</th>

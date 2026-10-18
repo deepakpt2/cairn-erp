@@ -338,7 +338,7 @@ export default function Orders({ documents, choices, selected, canCreate, releas
           </div>
 
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
+            <table className="w-full min-w-[68.75rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left">
                   <th className="px-2 py-2">Item</th>

@@ -375,7 +375,7 @@ function PlacementPanel({
       </form>
       {view.placements.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[640px]">
+          <table className="grid-table min-w-[40rem]">
             <thead>
               <tr>
                 <th>Node</th>
@@ -483,7 +483,7 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
       </div>
       {group.leaves.length > 0 ? (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[640px]">
+          <table className="grid-table min-w-[40rem]">
             <thead>
               <tr>
                 <th>Sign</th>
@@ -665,7 +665,7 @@ export default function CostCenterHierarchy({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="grid-table min-w-[760px]">
+            <table className="grid-table min-w-[47.5rem]">
               <thead>
                 <tr>
                   <th>Node</th>
@@ -720,7 +720,7 @@ export default function CostCenterHierarchy({
               <h2 id="hierarchy-place-title" className="panel-title">Period placement</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="grid-table min-w-[640px]">
+              <table className="grid-table min-w-[40rem]">
                 <thead>
                   <tr>
                     <th>Node</th>

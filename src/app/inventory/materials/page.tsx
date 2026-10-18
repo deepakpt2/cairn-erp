@@ -51,7 +51,7 @@ export default async function MaterialsPage({ searchParams }: {
     ...(valuationReadable ? await changeHistory(tx, client, 'material_valuation', `${detail.base.materialNumber}/${plant}`) : []),
   ]) : [];
 
-  return <div className="mx-auto max-w-6xl space-y-4 p-6">
+  return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
     <header className="border-b border-line pb-4"><span className="code text-ink-faint">INV.MATERIAL.MAINTAIN</span>
       <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3"><h1 className="text-xl font-semibold tracking-tight">{t(creating ? 'material.create' : 'material.title')}</h1>
         <div className="flex gap-2"><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link><Link href="/inventory/materials" className="btn btn-default">{t('material.list')}</Link>{can(session, MATERIAL_VIEW_CAPABILITY.BASIC) && !creating && <Link href="/inventory/materials?new=1" className="btn btn-primary">{t('material.create')}</Link>}</div>

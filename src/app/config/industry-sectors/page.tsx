@@ -22,7 +22,7 @@ export default async function IndustrySectorsPage() {
   const sectors = await listIndustrySectors(session.user.client);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
         <span className="code text-ink-faint">{ACTIVITY} · OMS3</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">

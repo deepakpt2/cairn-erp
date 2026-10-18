@@ -410,7 +410,7 @@ export default function CostCenters({
           <p className="p-4 text-sm text-ink-soft">No cost centres are defined for this controlling area yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="grid-table min-w-[900px]">
+            <table className="grid-table min-w-[56.25rem]">
               <thead>
                 <tr>
                   <th>Cost centre</th>

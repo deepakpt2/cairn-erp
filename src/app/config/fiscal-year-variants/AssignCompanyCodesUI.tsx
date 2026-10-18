@@ -90,7 +90,7 @@ export function AssignCompanyCodesUI({
         <p role="status" className="px-4 py-8 text-center text-sm text-ink-soft">{t('fyvAssignment.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[900px]">
+          <table className="grid-table min-w-[56.25rem]">
             <thead>
               <tr>
                 <th>{t('fyvAssignment.companyCode')}</th>

@@ -27,7 +27,7 @@ export function ChartOfAccountsList({
         <p role="status" className="px-4 py-8 text-center text-sm text-ink-soft">{t('chartOfAccounts.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="grid-table min-w-[980px]">
+          <table className="grid-table min-w-[61.25rem]">
             <thead>
               <tr>
                 <th>{t('chartOfAccounts.code')}</th>
