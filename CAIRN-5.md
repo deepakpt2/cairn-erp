@@ -502,6 +502,14 @@ Stage 4 seats the term *Enter incoming invoice* for the standing capability `PRO
 
 ---
 
+### 26.424 B-408 — SCR-062 invoice verification CLOSED and accepted
+
+Stage 5 ships 2 service tests and the T935 browser target `invoice-verification` (green — an order created, its receipt posted, the invoice verified with tax and the balance reconciling on screen, cancellation restoring the quantity, and the database remembering). The neighbouring `goods-receipt` target stands undisturbed; typecheck, `lint:ip` and the production build are clean; the suite stands at **1274 tests across 158 files**, **128 migrations**, seed **97/66/69/78**. Procure-to-pay now runs requisition → order → release → goods receipt → **invoice verification**, with GR/IR cleared at the expected amount, variances carried to the price-difference account, and the payable standing on the supplier's reconciliation account with the partner on the line.
+
+Deferred and named: credit memos and subsequent debit/credit postings (their categories stand in the schema awaiting their rounds); non-PO and G/L-account invoice items; planned and unplanned delivery costs; parked and draft invoices; the variance-block release workflow (variances post visibly this round, they do not block); invoice-to-receipt allocation beneath the item; and payment execution against the standing payables — the payment run is the next finance round. Workflow agent assignment remains deferred as recorded at SCR-060. Cost measured at 10 minutes (05:58–06:08 UTC).
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -577,6 +585,7 @@ Stage 4 seats the term *Enter incoming invoice* for the standing capability `PRO
 | 2.238 | 2026-10-18 | **SCR-062 invoice verification stage 2 (B-405, §26.421).** Migrations `0074` + `9052` applied (128 standing): supplier invoices and items insert-only behind forced tenant RLS, the duplicate index and the unique request key standing. Typecheck clean. | Agent |
 | 2.239 | 2026-10-18 | **SCR-062 invoice verification stage 3 (B-406, §26.422).** The verification service judges invoiceable quantity from posted history, reconciles the gross against net plus standing-rate tax, posts variance to the price-difference event and the balanced journal through the standing engine, refuses duplicates and returns the standing document on a retry; cancellation stands as a linked mirror. The TAX determination event joins the catalogue; the screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.240 | 2026-10-18 | **SCR-062 invoice verification stage 4 (B-407, §26.423).** The incoming-invoice term seeded at its route with MIRO and MR8M search aliases only. Seed reads back 97/66/69/78. | Agent |
+| 2.241 | 2026-10-18 | **SCR-062 invoice verification CLOSED and accepted (B-408, §26.424).** Stage 5 ships 2 service tests and the T935 browser target `invoice-verification` (green — balance, tax, posting, cancellation, database evidence). Neighbouring `goods-receipt` target clean; suite 1274 across 158 files, 128 migrations, seed 97/66/69/78. Credit memos, delivery costs and parked invoices deferred and named. Cost measured at 10 minutes. | Agent |
 
 ---
 
