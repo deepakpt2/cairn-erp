@@ -17,7 +17,7 @@ import {
 import { t } from '@/platform/i18n';
 
 const ROUTE = '/config/company-codes/assign-chart-of-accounts';
-export const COMPANY_CODE_ASSIGN_COA = 'CFG.ORG.COMPANYCODE.ASSIGN_COA';
+const COMPANY_CODE_ASSIGN_COA = 'CFG.ORG.COMPANYCODE.ASSIGN_COA';
 
 export interface CoaAssignmentActionState {
   ok: boolean;
