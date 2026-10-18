@@ -826,6 +826,13 @@ The owner's S_ALR_87012178 package is contracted as R-118, mirroring vendor agei
 
 ---
 
+### 26.468 B-452 — SCR-070 stage 1: the inert customer ageing screen stands
+
+`/finance/customer-ageing` renders the selection (company, customer range, key date, three bucket thresholds), the empty ageing matrix and the empty item detail, all disabled. i18n keys `customerAgeing.title/subtitle` added. No reads, no writes — the as-of reconstruction follows at stage 3.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -946,6 +953,7 @@ The owner's S_ALR_87012178 package is contracted as R-118, mirroring vendor agei
 | 2.283 | 2026-10-18 | **SCR-069 stage 4 published (B-449, §26.465).** Capability `FIN.AR.BALANCE` and the `/finance/customer-balances` term stand, FD10N a search alias only; seed read-back 103/66/76/85. | Agent |
 | 2.284 | 2026-10-18 | **SCR-069 closed (B-450, §26.466).** Customer balances (FD10N) accepted under `FIN.AR.BALANCE`: T928 + neighbour T929 green on the production build, suite 1296/165, seed 103/66/76/85, 137 migrations, 21 min measured. Next: SCR-070 customer ageing (S_ALR_87012178). | Agent |
 | 2.285 | 2026-10-18 | **SCR-070 customer ageing contracted (R-118, B-451, §26.467).** S_ALR_87012178 under house names, read-only: as-of key-date reconstruction from posting/clearing dates, due-date ageing at three increasing thresholds, company-currency signed amounts, per-customer buckets with item detail; `FIN.AR.AGEING` created; account groups, special G/L, layouts and partial-clearing reconstruction deferred. | Agent |
+| 2.286 | 2026-10-18 | **SCR-070 stage 1 published (B-452, §26.468).** The inert customer ageing screen `/finance/customer-ageing`: selection, empty ageing matrix and empty item detail rendered, i18n keys added. No reads, no writes. | Agent |
 
 ---
 

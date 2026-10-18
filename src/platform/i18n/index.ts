@@ -2007,6 +2007,12 @@ const en: Catalogue = {
     'customer debited at the gross on its reconciliation account as an open ' +
     'receivable, the due date computed from the payment terms. A posted ' +
     'invoice is corrected by credit memo or reversal, never deleted.',
+  'customerAgeing.title': 'Customer Ageing',
+  'customerAgeing.subtitle':
+    'What customers owe a company, aged as of a key date: every open ' +
+    'item reconstructed to its standing on that date and placed by its due ' +
+    'date — not yet due standing apart from the overdue buckets. This ' +
+    'screen displays; it never posts.',
   'vendorAgeing.title': 'Vendor Ageing',
   'vendorAgeing.subtitle':
     'What a company owes its suppliers, aged as of a key date: every open ' +
