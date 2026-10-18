@@ -208,6 +208,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'industry-sectors') return '/config/industry-sectors';
   if (target.id === 'material-deletion-flag') return '/inventory/materials';
   if (target.id === 'material-period-control') return '/config/material-period-control';
+  if (target.id === 'purchase-requisitions') return '/purchasing/requisitions';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';
   if (target.id === 'storage-locations') return '/config/storage-locations';
