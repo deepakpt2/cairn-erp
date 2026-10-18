@@ -565,6 +565,13 @@ Clearing needs no tables of its own: the clearing document is a standing journal
 
 ---
 
+### 26.433 B-417 — SCR-064 vendor clearing stage 3: the service and live screen
+
+The clearing service judges the supplier's standing in the company, lists open and cleared partner lines, and clears a selection atomically: advisory lock, every item revalidated open and the supplier's, one currency, signed sum exactly zero (the refusal names the difference), one balanced `KZ` clearing journal through the posting engine — the FI period judging on the posting date — the originals and the clearing lines themselves stamped with the clearing document and the stated clearing date. The screen is live: selection, the grid with live assigned/difference, the three dates, and the cleared history. Typecheck and the production build clean; `lint:ip` stands at its pre-existing baseline with no new occurrences.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -650,6 +657,7 @@ Clearing needs no tables of its own: the clearing document is a standing journal
 | 2.248 | 2026-10-18 | **SCR-064 vendor clearing contracted (R-112, B-414, §26.430).** F-44 under house names: open-item grid over uncleared supplier lines, clearing/posting/document dates kept distinct, exact-zero balance in one currency, clearing in place under a clearing journal; reset and partial clearing deferred, `FIN.AP.CLEAR` created this round. | Agent |
 | 2.249 | 2026-10-18 | **SCR-064 vendor clearing stage 1 (B-415, §26.431).** The inert clearing screen stands at `/finance/vendor-clearing` — selection with the three distinct dates, the empty open-item grid, posting disabled, cleared history. Typecheck and production build clean. | Agent |
 | 2.250 | 2026-10-18 | **SCR-064 vendor clearing stage 2 (B-416, §26.432).** No new tables — clearing reuses the standing journal and clearing columns; migration `0076` adds the partner/clearing index. 131 migrations standing. | Agent |
+| 2.251 | 2026-10-18 | **SCR-064 vendor clearing stage 3 (B-417, §26.433).** The clearing service (standing judged, items revalidated under lock, one currency, exact-zero balance, clearing journal through the posting engine, clearing stamped in place) and the live screen. Typecheck and production build clean. | Agent |
 
 ---
 
