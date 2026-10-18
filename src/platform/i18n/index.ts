@@ -2019,6 +2019,12 @@ const en: Catalogue = {
     'the bank debits, the customer credits per allocation, and every settled ' +
     'item clears in place under the payment document. The allocation must ' +
     'equal the receipt — a difference is explained, never discarded.',
+  'vendorInvoice.title': 'Enter Vendor Invoice',
+  'vendorInvoice.subtitle':
+    'A direct vendor invoice: expense lines with their input tax, the ' +
+    'vendor credited at the gross on its reconciliation account as an ' +
+    'open payable, the due date computed from the payment terms. A ' +
+    'posted invoice is corrected by credit memo or reversal, never deleted.',
   'customerInvoice.title': 'Enter Customer Invoice',
   'customerInvoice.subtitle':
     'A direct customer invoice: revenue lines with their output tax, the ' +
