@@ -1355,6 +1355,12 @@ Stage 2 of R-129. `special_gl_config` stands keyed (client, company code, accoun
 
 Verification: migration applied, tables verified, typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-523 / §26.539 / §30 row 2.357. **Cost (B-254, measured):** stage 1 published 17:03 UTC; stage 2 completed this turn.
 
+### 26.540 B-524 — SCR-081 stage 3: posting service and wired screen
+
+Stage 3 of R-129. `postVendorDownPayment` posts the KA journal — debit the indicator's alternative reconciliation account (vendor partner, line text naming the down payment), credit the bank — and remembers the payment with the account it resolved. The indicator resolves company-scope first, then the tenant-wide default, re-read under the payment's advisory lock; an unconfigured indicator, an unextended or blocked vendor, an over-long reference and a malformed indicator are each refused by name. Replay by request key behaves as the standing payments, and `getVendorDownPayments` lists the advances still standing open for the clearing round to come. The screen is live and posts.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-081 is **not yet accepted**. Same-stage bookkeeping: B-524 / §26.540 / §30 row 2.358. **Cost (B-254, measured):** stage 2 published 17:04 UTC; stage 3 completed 17:05 UTC.
+
 ---
 ---
 
@@ -1558,3 +1564,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.355 | 2026-10-18 | **SCR-081 contract R-129 written (B-521, §26.537).** F-48 vendor down payment: special G/L configuration resolves the alternative reconciliation account, a KA journal stands the advance open outside ordinary payables; the clearing-link table declined (F-54 next), F-47 requests deferred. Stage 1 follows. | Agent |
 | 2.356 | 2026-10-18 | **SCR-081 stage 1 published (B-522, §26.538).** The `/finance/vendor-down-payment` screen shell stands with the special G/L indicator field; posting disabled until the service (stage 3). Schema follows in stage 2. | Agent |
 | 2.357 | 2026-10-18 | **SCR-081 stage 2 published (B-523, §26.539).** Special G/L configuration and the down-payment record stand; 154 migrations. The posting service follows in stage 3. | Agent |
+| 2.358 | 2026-10-18 | **SCR-081 stage 3 published (B-524, §26.540).** Down-payment service stands: indicator resolution under lock, KA journal on the alternative account, replay by request key; the screen is live. Capability and configuration maintenance follow in stage 4. | Agent |
