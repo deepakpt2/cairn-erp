@@ -1254,6 +1254,11 @@ The owner asked whether FF.5 (bank statement import) can wait, whether the app n
 `FIN.BANK.STATEMENT.IMPORT` (FF.5) therefore stands **deferred by owner decision**, to be taken up when bank reconciliation is wanted rather than by roadmap order. The next round stands open for the owner's choice of T-code package (the deferred payment outcomes — partial payments, residuals, cash discount — and the asset chain AS01/AFAB are the standing candidates by roadmap position). Same-item bookkeeping: B-507 / §26.523 / §30 row 2.341. **Cost (B-254, measured):** the question arrived after SCR-078 closed 14:54 UTC; this note stands written 14:56 UTC.
 
 ---
+### 26.524 B-508 — Standing instruction: the functions & roadmap file updates on every event
+
+The owner directed that `FUNCTIONS-AND-ROADMAP.md` (workspace root, first issued this day from the delivered catalogue and the frozen §10 roadmap) **be updated on each completion or deferred decision**: an SCR acceptance moves its items to Implemented, a deferral moves its items to Deferred with the decision's reference, in the same turn as the event, and the file's "As of" line names the latest event reflected. The rule is recorded in the file itself as well, so the obligation survives any reader. It joins the standing reporting rules beside B-444 (completion reports name the next T-code). Same-item bookkeeping: B-508 / §26.524 / §30 row 2.342. **Cost (B-254, measured):** the instruction arrived 14:59 UTC; it stands recorded the same minute-span.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1440,3 +1445,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.339 | 2026-10-18 | **SCR-078 stage 4 published (B-505, §26.521).** `FIN.AP.PAYMENT.POST` and the Post Outgoing Payment term (F-53 alias) seeded (112/67/86/94). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.340 | 2026-10-18 | **SCR-078 ACCEPTED AND CLOSED (B-506, §26.522).** F-53 Post Outgoing Payment stands: netting allocation judged exactly (credit memos against the payment), KZ journal crediting the bank, clearing stamped in place on the standing model. T918 green; suite 1334; seed 112/67/86/94; 150 migrations. Next: FF.5 (SCR-079) — field package requested. | Agent |
 | 2.341 | 2026-10-18 | **Owner decision recorded (B-507, §26.523).** FF.5 bank statement import deferred: not needed to run the app, bank entries stand manual via the journal and the payment acts; FEBAN/F.13 defer with it. Next round awaits the owner's T-code package. | Agent |
+| 2.342 | 2026-10-18 | **Standing instruction recorded (B-508, §26.524).** `FUNCTIONS-AND-ROADMAP.md` updates on each completion or deferred decision, same turn, its As-of line naming the latest event. | Agent |
