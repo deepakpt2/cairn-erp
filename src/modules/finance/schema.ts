@@ -199,3 +199,97 @@ export const journalEntryLine = pgTable(
     index('jel_clearing_idx').on(t.client, t.clearingDocument),
   ],
 );
+
+/**
+ * Payment run (SCR-063 / R-111). Parameters with company and method
+ * children, the proposal with its named exceptions, and payment
+ * documents as the execution's retained evidence.
+ */
+const tenantClient = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
+
+export const paymentRun = pgTable('payment_run', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  documentCutoffDate: date('document_cutoff_date', { mode: 'string' }).notNull(),
+  nextPaymentDate: date('next_payment_date', { mode: 'string' }).notNull(),
+  supplierFrom: varchar('supplier_from', { length: 20 }),
+  supplierTo: varchar('supplier_to', { length: 20 }),
+  status: varchar('status', { length: 12 }).notNull().default('PARAMETERS'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId] }),
+  check('payment_run_status_ck', sql`${t.status} in ('PARAMETERS', 'PROPOSAL', 'EXECUTED', 'CANCELLED')`),
+]);
+
+export const paymentRunCompany = pgTable('payment_run_company', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  payingCompanyCode: varchar('paying_company_code', { length: 10 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('cascade'),
+]);
+
+export const paymentRunMethod = pgTable('payment_run_method', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  paymentMethod: varchar('payment_method', { length: 2 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.paymentMethod] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('cascade'),
+]);
+
+export const paymentProposalItem = pgTable('payment_proposal_item', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  payingCompanyCode: varchar('paying_company_code', { length: 10 }).notNull(),
+  accountType: char('account_type', { length: 1 }).notNull().default('K'),
+  accountId: varchar('account_id', { length: 20 }).notNull(),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  journalFiscalYear: integer('journal_fiscal_year').notNull(),
+  journalLineNumber: integer('journal_line_number').notNull(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  dueDate: date('due_date', { mode: 'string' }),
+  paymentMethod: varchar('payment_method', { length: 2 }),
+  exceptionCode: varchar('exception_code', { length: 40 }),
+  exceptionText: varchar('exception_text', { length: 200 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.itemNumber] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('cascade'),
+  check('payment_proposal_account_type_ck', sql`${t.accountType} in ('K', 'D')`),
+]);
+
+export const paymentDocument = pgTable('payment_document', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 5 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  payingCompanyCode: varchar('paying_company_code', { length: 10 }).notNull(),
+  accountId: varchar('account_id', { length: 20 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  journalFiscalYear: integer('journal_fiscal_year').notNull(),
+  journalLineNumber: integer('journal_line_number').notNull(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }),
+  houseBankKey: varchar('house_bank_key', { length: 5 }).notNull(),
+  bankAccountId: varchar('bank_account_id', { length: 5 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.itemNumber] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('restrict'),
+]);

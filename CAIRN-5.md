@@ -517,6 +517,12 @@ Stage 1 ships the payment-run screen at `/finance/payment-run`: status, the para
 
 ---
 
+### 26.426 B-410 — SCR-063 payment run stage 2: the run tables stand
+
+Migrations `0075_payment_run.sql` with `9053_payment_run_policies.sql` — **130 migrations standing**. The run stands keyed by its date and five-character identification with company and method child rows; the proposal holds payable items and named exceptions; payment documents stand insert-only as the execution's retained evidence — all behind forced tenant RLS.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -595,6 +601,7 @@ Stage 1 ships the payment-run screen at `/finance/payment-run`: status, the para
 | 2.241 | 2026-10-18 | **SCR-062 invoice verification CLOSED and accepted (B-408, §26.424).** Stage 5 ships 2 service tests and the T935 browser target `invoice-verification` (green — balance, tax, posting, cancellation, database evidence). Neighbouring `goods-receipt` target clean; suite 1274 across 158 files, 128 migrations, seed 97/66/69/78. Credit memos, delivery costs and parked invoices deferred and named. Cost measured at 10 minutes. | Agent |
 | 2.242 | 2026-10-18 | **SCR-063 payment run contracted (R-111).** F110 under house names: run parameters with company and method children, proposal over open supplier items with named exceptions, execution grouped by supplier and bank with clearing written on the paid lines, the FI period judged on the posting date, executed runs immutable. | Agent |
 | 2.243 | 2026-10-18 | **SCR-063 payment run stage 1 (B-409, §26.425).** The inert run screen stands at `/finance/payment-run`: status, parameters and proposal areas, execution disabled. Typecheck and the production build clean. | Agent |
+| 2.244 | 2026-10-18 | **SCR-063 payment run stage 2 (B-410, §26.426).** Migrations `0075` + `9053` applied (130 standing): the run with its company and method children, proposal items with named exceptions, and insert-only payment documents behind forced tenant RLS. Typecheck clean. | Agent |
 
 ---
 
