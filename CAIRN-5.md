@@ -463,6 +463,12 @@ One service `src/modules/inventory/goods-receipt.ts` posts the movement: the mov
 
 ---
 
+### 26.418 B-402 — SCR-061 goods receipt stage 4: the posting term stands
+
+Stage 4 seats the term half of the contract: `INV.GR.POST` (capability standing since the platform seed) gains its term *Post goods receipt* at `/inventory/goods-receipt`, with MIGO standing as a search alias only — the SAP transaction name never a stored code. Seed reads back **97/66/68/76**.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -531,6 +537,7 @@ One service `src/modules/inventory/goods-receipt.ts` posts the movement: the mov
 | 2.231 | 2026-10-18 | **SCR-061 goods receipt stage 1 (B-399, §26.415).** The inert movement screen stands at `/inventory/goods-receipt`: action and reference selectors, the resolved movement shown, dates and header text, the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 | 2.232 | 2026-10-18 | **SCR-061 goods receipt stage 2 (B-400, §26.416).** Migrations `0073` + `9051` applied (126 standing): the movement-type catalogue, insert-only material documents and lines, and stock balances behind forced tenant RLS. Typecheck clean. | Agent |
 | 2.233 | 2026-10-18 | **SCR-061 goods receipt stage 3 (B-401, §26.417).** The posting service resolves the movement from action and reference, judges release, open quantity against tolerance, deletion flags and both period gates, and posts document, stock, valuation and balanced journal in one transaction with request-key idempotency; reversal stands as a new document. The screen is live. Typecheck, `lint:ip` and the production build clean. | Agent |
+| 2.234 | 2026-10-18 | **SCR-061 goods receipt stage 4 (B-402, §26.418).** The goods-receipt term seeded at its route with MIGO a search alias only. Seed reads back 97/66/68/76. | Agent |
 
 ---
 
