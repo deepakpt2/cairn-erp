@@ -36,6 +36,7 @@ export const TARGETS = [
   { id: 'profit-center-hierarchy', client: 'T950', label: 'SCR-047a KCH1/KCH5N standard hierarchy and alternative groups, exclusive period placement, ranged leaves, unassign' },
   { id: 'material-types', client: 'T949', label: 'SCR-048 OMS2 material types, range-judged creation, per-plant updating guard, used-type deletion refusal, deactivation' },
   { id: 'material-groups', client: 'T948', label: 'SCR-049 OMSF material groups, duplicate refusal, description change, used-group deletion refusal, deactivation' },
+  { id: 'number-range-objects', client: 'T947', label: 'SCR-050 SNRO object registry, external interval creation, guarded current-number act' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
