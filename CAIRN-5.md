@@ -1086,7 +1086,7 @@ Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not y
 
 Stage 4 of R-123. `FIN.AP.INVOICE.POST` enters the capability catalogue as a posting-relevant POST capability, and the Term Registry names **Enter vendor invoice** at `/finance/vendor-invoice`, with `FB60` standing only as a search alias. No configuration activity is created, and no tenant backfill stands needed — KR and VENDINV already stand delivered.
 
-Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **109/66/83/91** (message catalogue 11), and database read-back shows `FIN.AP.INVOICE.POST|POST|true`, the term, and its FB60 alias. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-487 / §26.503 / §30 row 2.321. **Cost (B-254, measured):** stage 3 published 13:34 UTC; stage 4 completed 13:35 UTC.
+Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **109/66/83/91** (message catalogue 11), and database read-back shows `FIN.AP.INVOICE.POST|POST|true`, the term, and its FB60 alias. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-487 / §26.503 / §30 row 2.321. **Cost (B-254, measured):** stage 3 published 13:34 UTC; stage 4 completed 13:34 UTC.
 
 ---
 ---
