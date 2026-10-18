@@ -314,3 +314,20 @@ export const incomingPayment = pgTable('incoming_payment', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.paymentNumber] }),
 ]);
+
+/** Clearing reset record (SCR-071 / R-119). Retained evidence of a reset: never edited or deleted. */
+export const clearingReset = pgTable('clearing_reset', {
+  client: tenantClient(),
+  resetNumber: varchar('reset_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  clearingDocument: varchar('clearing_document', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  clearingDate: date('clearing_date', { mode: 'string' }).notNull(),
+  itemsReset: integer('items_reset').notNull(),
+  itemRefs: text('item_refs').notNull(),
+  reason: varchar('reason', { length: 500 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.resetNumber] }),
+]);

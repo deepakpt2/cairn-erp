@@ -876,6 +876,13 @@ The owner's FBRA package is contracted as R-119: reset-only this round — the c
 
 ---
 
+### 26.475 B-459 — SCR-071 stage 2: the clearing_reset record stands
+
+Migration `0081_clearing_reset.sql` creates `clearing_reset` — clearing document, company, fiscal year, the former clearing date, the items reopened, the mandatory reason and the caller's request key (unique per tenant where present) — with the Drizzle table standing beside it, and `9056_clearing_reset_policies.sql` forces tenant RLS with insert/read-only grants to the app role: retained evidence, never edited or deleted. Migration count 139.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1003,6 +1010,7 @@ The owner's FBRA package is contracted as R-119: reset-only this round — the c
 | 2.290 | 2026-10-18 | **SCR-070 closed (B-456, §26.472).** Customer ageing (S_ALR_87012178) accepted under `FIN.AR.AGEING`: T927 + neighbour T928 green on the production build, suite 1299 tests, seed 104/66/77/86, 137 migrations, 12 min measured. | Agent |
 | 2.291 | 2026-10-18 | **SCR-071 reset cleared items contracted (R-119, B-457, §26.473).** FBRA under house names: reset-only (no posting, no period judged), named-document eligibility, advisory lock, mandatory reason, retained `clearing_reset` record; `FIN.CLEARING.RESET` created; reset-and-reverse (FB08) and event-aware ageing history deferred. | Agent |
 | 2.292 | 2026-10-18 | **SCR-071 stage 1 published (B-458, §26.474).** The inert clearing reset screen `/finance/clearing-reset`: selection, empty cleared-items review and reset area rendered, i18n keys added. No reads, no writes. | Agent |
+| 2.293 | 2026-10-18 | **SCR-071 stage 2 published (B-459, §26.475).** The `clearing_reset` record table stands (0081 + 9056, forced tenant RLS, insert/read-only): clearing document, former clearing date, items reopened, mandatory reason, request key. Migrations 139. | Agent |
 
 ---
 
