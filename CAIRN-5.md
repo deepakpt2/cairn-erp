@@ -1229,6 +1229,13 @@ Stage 3 of R-126. `src/modules/finance/outgoing-payment.ts` mirrors incoming pay
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-504 / §26.520 / §30 row 2.338. **Cost (B-254, measured):** stage 2 published 14:49 UTC; stage 3 completed the same minute.
 
 ---
+### 26.521 B-505 — SCR-078 stage 4: capability and term
+
+Stage 4 of R-126. The capability `FIN.AP.PAYMENT.POST` (FIN, POST, posting) and the term **Post Outgoing Payment** (F-53 as a search alias only) join the seed — the lightest stage 4 of the AP chain, KZ having stood delivered since vendor clearing. The seed now reads back **112 capabilities / 67 config activities / 86 terms / 94 aliases** across two runs.
+
+Verification: seed idempotent; the typecheck stands clean from stage 3 and the seed changes no types. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-505 / §26.521 / §30 row 2.339. **Cost (B-254, measured):** stage 3 published 14:49 UTC; stage 4 completed the same minute-span.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1412,3 +1419,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.336 | 2026-10-18 | **SCR-078 stage 1 published (B-502, §26.518).** Inert `/finance/outgoing-payment` screen stands under `FIN.AP.PAYMENT.POST`. Schema follows in stage 2. | Agent |
 | 2.337 | 2026-10-18 | **SCR-078 stage 2 published (B-503, §26.519).** `outgoing_payment` stands (incoming-payment widths plus value date); 150 migrations. Service follows in stage 3. | Agent |
 | 2.338 | 2026-10-18 | **SCR-078 stage 3 published (B-504, §26.520).** Outgoing payment service stands: netting allocation judged exactly, KZ journal crediting the bank, clearing stamped in place; `/finance/outgoing-payment` is live. Capability and term follow in stage 4. | Agent |
+| 2.339 | 2026-10-18 | **SCR-078 stage 4 published (B-505, §26.521).** `FIN.AP.PAYMENT.POST` and the Post Outgoing Payment term (F-53 alias) seeded (112/67/86/94). Tests and browser acceptance follow in stage 5. | Agent |
