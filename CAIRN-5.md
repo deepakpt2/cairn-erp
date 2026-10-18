@@ -1075,6 +1075,13 @@ Stage 2 of R-123. `vendor_invoice` and `vendor_invoice_line` stand in the financ
 Verification: the migration runner applied both files and re-reports **145 already applied**; typecheck clean. SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-485 / §26.501 / §30 row 2.319. **Cost (B-254, measured):** stage 1 published 13:26 UTC; stage 2 completed 13:33 UTC.
 
 ---
+### 26.502 B-486 — SCR-075 stage 3: vendor invoice service and live screen
+
+Stage 3 of R-123. `src/modules/finance/vendor-invoice.ts` stands at customer-invoice parity on the payable side: the vendor judges extended, unblocked and carrying a reconciliation account, each failure named; every line stands above zero with its tax calculated at the standing country rate; a named cost centre or profit centre must stand; **the gross is judged** — net plus tax must equal it, the difference named; a reference standing POSTED for the vendor refuses naming the standing invoice. One balanced KR journal posts in the invoice's own transaction — expense lines debited at net, the tax account debited per code through the TAX determination, the reconciliation account credited at the gross with the vendor as partner — the number drawn from VENDINV, payment terms computing the due date, and a retried request key returning the standing invoice. Cancellation posts the linked mirror through the standing reversal engine and marks both sides. The screen is live with the line grid, its balance line, standing-invoice load and cancellation.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-486 / §26.502 / §30 row 2.320. **Cost (B-254, measured):** stage 2 published 13:33 UTC; stage 3 completed 13:34 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1239,3 +1246,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.317 | 2026-10-18 | **SCR-075 contract recorded (R-123, B-483, §26.499).** FB60 direct vendor invoice mirrors FB70: judged gross, standing tax calculation, KR journal crediting the vendor at gross, VENDINV number, linked cancellation; FB65 deferred by name. Awaiting stage 1 (UI). | Agent |
 | 2.318 | 2026-10-18 | **SCR-075 stage 1 published (B-484, §26.500).** `/finance/vendor-invoice` stands inert under `FIN.AP.INVOICE.POST`: header, dates, reference, judged gross, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
 | 2.319 | 2026-10-18 | **SCR-075 stage 2 published (B-485, §26.501).** `vendor_invoice`/`vendor_invoice_line` stand behind RLS (migrations 0084/9059; DB at 145), cancellation-columns-only updates, lines insert-only. Backend is stage 3. | Agent |
+| 2.320 | 2026-10-18 | **SCR-075 stage 3 published (B-486, §26.502).** Vendor-invoice service stands at FB70 parity: judged gross, standing tax, KR journal crediting the vendor at gross, VENDINV number, linked cancellation; the `/finance/vendor-invoice` screen is live. Capability and term land in stage 4. | Agent |
