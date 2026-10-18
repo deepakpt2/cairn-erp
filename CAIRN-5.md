@@ -1001,7 +1001,7 @@ Verification: typecheck clean. Acceptance remains stage 5, so SCR-073 is **not y
 
 Stage 4 of R-121. `FIN.AR.CLEAR` enters the capability catalogue as a posting-relevant POST capability, and the Term Registry names **Clear customer open items** at `/finance/customer-clearing`, with `F-32` standing only as a search alias. No configuration activity is created: this is a finance transaction, following the transaction-screen precedent, and no reversal reasons or tenant backfill stand needed — DZ is already delivered.
 
-Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **107/66/81/89** (message catalogue 11), and database read-back shows `FIN.AR.CLEAR|FIN|POST|true`, the term, and its F-32 alias. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-474 / §26.490 / §30 row 2.308. **Cost (B-254, measured):** stage 3 published 12:58 UTC; stage 4 completed 13:01 UTC.
+Verification: typecheck clean; two consecutive seed runs read back capability/config-activity/term-registry/term-alias **107/66/81/89** (message catalogue 11), and database read-back shows `FIN.AR.CLEAR|FIN|POST|true`, the term, and its F-32 alias. Acceptance remains stage 5, so SCR-073 is **not yet accepted**. Same-stage bookkeeping: B-474 / §26.490 / §30 row 2.308. **Cost (B-254, measured):** stage 3 published 12:58 UTC; stage 4 completed 12:59 UTC.
 
 ---
 ---
