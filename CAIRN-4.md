@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-16 (v2.62) · **Part 4 of 4 — this is the live part**
+**Created:** 2026-10-16 (v2.62) · **Part 4 of 5 — FROZEN at v2.170 (2026-10-18); the set continues in [CAIRN-5.md](CAIRN-5.md)**
 **Continues:** [CAIRN.md](CAIRN.md) (§0–§26.35) · [CAIRN-2.md](CAIRN-2.md) (§26.36–§30 through v1.69) · [CAIRN-3.md](CAIRN-3.md) (§0.3, §1.4 R-24–R-72, §2.1 D-093–D-139, §26.167–§26.259, §30 v1.70–v2.61)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -1778,6 +1778,7 @@ ent |
 | 2.79 | 2026-10-17 | **SCR-033 / OBBP contract confirmed and stage 1 (the screen) published (B-261, §26.277; R-83).** The owner's package was checked against the product: the activity row, nullable column, foreign key and Company Codes display already exist, the builder is the only write, and OBBO's deletion remedy points at a reassignment no screen could perform — the gap this SCR closes. The owner settled the package's two hedges: a variant may be cleared only while the Company Code has no journal entries, and a reason is mandatory on every write. Stage 1 delivers `/config/posting-period-variants/assign-company-codes` in the OB37 shape — grid, Assign dialog on top, variants offered as code and description, the clearing rule stated against the row's posted count — with its read side in a new module and the form inert, saying so, until the stage-3 service arrives. Typecheck, build (route 1.72 kB) and `lint:ip` clean; suite 1012 across 129 files. Cost measured at 4 minutes. | Agent |
 ---
 
-*End of this part for now. This part is the live canonical log: it is updated in the same turn as any
-change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes, the next part
-`CAIRN-5.md` begins and this file states that the set continues there (§0.3 / D-093).*
+*This part is frozen. It passed the 360,000-byte rotation trigger at v2.169, so the set continues in
+[`CAIRN-5.md`](CAIRN-5.md), which is the live canonical log from 2026-10-18 onward and carries §1.4
+R-99+, §26.365+ and §30 v2.170+ (§0.3 / D-093). Edits here are limited to pointer and continuation
+lines and to corrections that cannot be deferred.*
