@@ -293,3 +293,24 @@ export const paymentDocument = pgTable('payment_document', {
   primaryKey({ columns: [t.client, t.runDate, t.runId, t.itemNumber] }),
   foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [paymentRun.client, paymentRun.runDate, paymentRun.runId] }).onDelete('restrict'),
 ]);
+
+export const incomingPayment = pgTable('incoming_payment', {
+  client: tenantClient(),
+  paymentNumber: varchar('payment_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  customerNumber: varchar('customer_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  clearingDate: date('clearing_date', { mode: 'string' }).notNull(),
+  bankGlAccount: varchar('bank_gl_account', { length: 10 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  itemsCleared: integer('items_cleared').notNull(),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.paymentNumber] }),
+]);

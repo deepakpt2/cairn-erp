@@ -738,6 +738,13 @@ The incoming-payment screen stands at `/finance/incoming-payment`: header and ba
 
 ---
 
+### 26.456 B-440 — SCR-068 incoming payment stage 2: the payment record stands
+
+Migrations `0080` + `9055` create `incoming_payment` behind forced tenant RLS (insert/read only, as retained evidence) — the payment's own record with the caller's request key unique per tenant; the allocations themselves live on the cleared journal lines, as on the vendor side. **137 migrations standing.** (The sandbox restarted mid-stage and was restored by the standing restore script before the migrations applied; no work was lost.)
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -846,6 +853,7 @@ The incoming-payment screen stands at `/finance/incoming-payment`: header and ba
 | 2.271 | 2026-10-18 | **SCR-067 customer invoice closed (B-437, §26.453).** Service tests and browser target T930 (neighbour T931) green on the production build; full suite 1290/163, 135 migrations, seed 101/66/74/83. Deferrals named: customer credit memos (FB75), incoming payments/clearing (F-28), discount taking, jurisdiction tax, FX translation. | Agent |
 | 2.272 | 2026-10-18 | **SCR-068 incoming payment contracted (R-116, B-438, §26.454).** F-28 under house names: a receipt allocated in full against the customer's open receivables, bank debit under a `DZ` journal, clearing stamped in place, differences never silently resolved; partial/residual/on-account, discounts, reset/reverse and FX deferred. | Agent |
 | 2.273 | 2026-10-18 | **SCR-068 incoming payment stage 1 (B-439, §26.455).** The inert incoming-payment screen stands at `/finance/incoming-payment` — header and bank data, the allocation list, posting disabled, result tile. Typecheck and production build clean. | Agent |
+| 2.274 | 2026-10-18 | **SCR-068 incoming payment stage 2 (B-440, §26.456).** Migrations `0080` + `9055` create the incoming-payment record behind forced tenant RLS with the request key unique per tenant. 137 migrations standing; typecheck clean. | Agent |
 
 ---
 
