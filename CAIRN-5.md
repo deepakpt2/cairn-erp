@@ -1215,6 +1215,13 @@ Stage 1 of R-126. `/finance/outgoing-payment` renders the payment's shape — th
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-502 / §26.518 / §30 row 2.336. **Cost (B-254, measured):** contract R-126 published 14:36 UTC; stage 1 completed 14:37 UTC.
 
 ---
+### 26.519 B-503 — SCR-078 stage 2: outgoing payment record
+
+Stage 2 of R-126. `outgoing_payment` stands in the finance schema mirroring `incoming_payment` width for width — payment number and fiscal year, vendor and company, document/posting/clearing dates, bank G/L account, amount and currency, reference at 16, journal link, items cleared and the request key — with the vendor in the customer's place and an optional value date added, recorded now and judged by bank rules in a later round. Migration `0087_outgoing_payment.sql` (the amount judged positive at the database) and `9061_outgoing_payment_policies.sql` carry it; the database now stands at **150 migrations**. Allocations stand as clearing stamps on the journal lines, so no further table lands.
+
+Verification: migrations applied and idempotent on rerun; typecheck clean (after stopping the resident server — the typecheck was twice OOM-killed beside it, the standing 2 GB lesson). Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-503 / §26.519 / §30 row 2.337. **Cost (B-254, measured):** stage 1 completed 14:37 UTC; stage 2 completed 14:49 UTC, most of it the two killed typechecks.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1396,3 +1403,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.334 | 2026-10-18 | **SCR-077 ACCEPTED AND CLOSED (B-500, §26.516).** OB44 Maintain Industries stands: tenant industry master (code ≤4, never renamed) with per-language descriptions (≤20) judged against configured languages, five delivered industries, restricting partner reference, deletion refused by service count and database key alike. T919 green; suite 1331; seed 111/67/85/93; 148 migrations. Next: F-53 (SCR-078) — field package requested. | Agent |
 | 2.335 | 2026-10-18 | **SCR-078 contract R-126 written (B-501, §26.517).** F-53 Post Outgoing Payment: KZ journal crediting the bank and debiting the vendor item by item, items netting (credit memos against the payment), exact allocation judged, standing clearing stamps — no allocation table. Partial/residual/discount/on-account/special G/L deferred, named. Stage 1 follows. | Agent |
 | 2.336 | 2026-10-18 | **SCR-078 stage 1 published (B-502, §26.518).** Inert `/finance/outgoing-payment` screen stands under `FIN.AP.PAYMENT.POST`. Schema follows in stage 2. | Agent |
+| 2.337 | 2026-10-18 | **SCR-078 stage 2 published (B-503, §26.519).** `outgoing_payment` stands (incoming-payment widths plus value date); 150 migrations. Service follows in stage 3. | Agent |
