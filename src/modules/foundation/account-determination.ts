@@ -48,6 +48,8 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'OFFSETTING_INVENTORY', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: true },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
+  { event: 'CASH_DISCOUNT', referenceAlias: 'SKTO', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
+  { event: 'PAYMENT_DIFFERENCE', referenceAlias: 'DIF', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: true },
 ];
 
 export function postingEvent(event: string): PostingEvent | undefined {

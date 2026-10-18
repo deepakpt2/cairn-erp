@@ -1293,6 +1293,13 @@ Stage 3 of R-127. `postIncomingPayment` now completes: per item, applied and dis
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-512 / §26.528 / §30 row 2.346. **Cost (B-254, measured):** stage 2 published 16:30 UTC; stage 3 completed 16:31 UTC.
 
 ---
+### 26.529 B-513 — SCR-079 stage 4: the discount and difference determination events
+
+Stage 4 of R-127. The OBYC posting-event catalogue gains `CASH_DISCOUNT` (SKTO as search alias, profit-and-loss kind, no valuation class or modifier) and `PAYMENT_DIFFERENCE` (DIF as search alias, profit-and-loss kind, REVENUE/EXPENSE carried on the general modifier) — so tenants maintain the cash-discount and payment-difference accounts on the standing account-determination screen, and the service's determination judging validates against real, maintainable events. Nothing is seeded per tenant: as with TAX, a tenant that takes discounts maintains the determination first, and the payment refuses by name until it stands. No capability, activity or term changes — F-28's already stand — so the seed counts are untouched this stage.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-513 / §26.529 / §30 row 2.347. **Cost (B-254, measured):** stage 3 published 16:31 UTC; stage 4 completed the same minute.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1484,3 +1491,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.344 | 2026-10-18 | **SCR-079 stage 1 published (B-510, §26.526).** Incoming-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
 | 2.345 | 2026-10-18 | **SCR-079 stage 2 published (B-511, §26.527).** `incoming_payment` gains the discount and on-account totals; 151 migrations. The completion service follows in stage 3. | Agent |
 | 2.346 | 2026-10-18 | **SCR-079 stage 3 published (B-512, §26.528).** Completion service stands: terms-tier discount and tolerance judging, full/residual/partial outcomes, on-account and tolerated differences; the screen is live and submitting outcomes. Determination events follow in stage 4. | Agent |
+| 2.347 | 2026-10-18 | **SCR-079 stage 4 published (B-513, §26.529).** `CASH_DISCOUNT` (SKTO) and `PAYMENT_DIFFERENCE` (DIF) join the OBYC event catalogue for tenant maintenance. Tests and browser acceptance follow in stage 5. | Agent |
