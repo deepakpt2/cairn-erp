@@ -790,6 +790,13 @@ The owner's FD10N package is contracted as R-117, mirroring vendor balances on t
 
 ---
 
+### 26.463 B-447 — SCR-069 stage 2: no schema change stands needed
+
+Balances derive at read time from the posted journal, so no `customer_period_balance` table stands to drift from the ledger — the SCR-065 precedent holds on the receivable side. The derivation walks a partner's lines inside one company; the standing index `jel_partner_company_idx (client, business_partner, company_code)` (0077, SCR-065 stage 2) covers customer partner lines identically, verified standing in the database. Migration count unchanged at 137.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -905,6 +912,7 @@ The owner's FD10N package is contracted as R-117, mirroring vendor balances on t
 | 2.278 | 2026-10-18 | **Standing instruction recorded (B-444, §26.460).** Every completion report now names the next T-code. Next: SCR-069 = FD10N customer balances (`FIN.AR.BALANCE`), then SCR-070 = customer ageing (S_ALR_87012178); awaiting the owner's FD10N field package before any contract or implementation. | Agent |
 | 2.279 | 2026-10-18 | **SCR-069 customer balances contracted (R-117, B-445, §26.461).** FD10N under house names, read-only: balances derived from the posted journal with no balance table, debit-positive opening/turnover/closing chained per period, special periods on request, currency refused by name where conversion would be needed, period drill-down to line items; `FIN.AR.BALANCE` created; stored figures/carryforward, conversion, ageing and special G/L deferred. | Agent |
 | 2.280 | 2026-10-18 | **SCR-069 stage 1 published (B-446, §26.462).** The inert customer balances screen `/finance/customer-balances`: selection, empty period matrix and empty drill-down rendered, i18n keys added. No reads, no writes. | Agent |
+| 2.281 | 2026-10-18 | **SCR-069 stage 2 verified (B-447, §26.463).** No schema change: balances derive from the posted journal with no balance table; the standing partner/company index from SCR-065 covers customer lines identically. Migrations unchanged at 137. | Agent |
 
 ---
 
