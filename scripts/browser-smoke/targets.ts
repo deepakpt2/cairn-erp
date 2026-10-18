@@ -50,6 +50,7 @@ export const TARGETS = [
   { id: 'goods-receipt', client: 'T936', label: 'SCR-061 goods receipt against a purchase order, journal, reversal' },
   { id: 'invoice-verification', client: 'T935', label: 'SCR-062 invoice verification: balance, tax, posting, cancellation' },
   { id: 'payment-run', client: 'T934', label: 'SCR-063 payment run: parameters, proposal, execution, clearing' },
+  { id: 'vendor-clearing', client: 'T933', label: 'SCR-064 vendor clearing: open items, zero balance, three dates' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },

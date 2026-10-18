@@ -579,6 +579,15 @@ Stage 4 creates the capability `FIN.AP.CLEAR` and seats its term *Clear vendor o
 
 ---
 
+### 26.435 B-419 — SCR-064 vendor clearing closed (R-112)
+
+Stage 5 accepts the round. The service tests prove the grid lists the supplier's invoice and payment standing open at zero together, refuse a selection that does not balance (the difference named), refuse a supplier not extended to the company, clear at zero under three distinct dates — clearing date 2026-11-20 stamped on all four lines (two originals, the clearing journal's own two), document date 2026-11-19 recorded on the clearing journal — and refuse a second clearing of the same items. Browser target **T933** drives the whole journey on the production build and reads the cleared items, the clearing document and its dates back from the database; neighbour **T934** stays green. The full suite stands at **1280 tests across 160 files**; typecheck and the production build clean, `lint:ip` at its pre-existing baseline; 131 migrations; seed **98/66/71/80**.
+
+Named deferrals carried forward, by the contract: resetting clearing (the FBRA equivalent) and reversing a clearing document, as two distinct later acts; partial and residual clearing; special G/L items (no special G/L indicator stands on the journal lines); exchange differences and tolerances; a manual vendor payment screen (F-53, its own roadmap row).
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -666,6 +675,7 @@ Stage 4 creates the capability `FIN.AP.CLEAR` and seats its term *Clear vendor o
 | 2.250 | 2026-10-18 | **SCR-064 vendor clearing stage 2 (B-416, §26.432).** No new tables — clearing reuses the standing journal and clearing columns; migration `0076` adds the partner/clearing index. 131 migrations standing. | Agent |
 | 2.251 | 2026-10-18 | **SCR-064 vendor clearing stage 3 (B-417, §26.433).** The clearing service (standing judged, items revalidated under lock, one currency, exact-zero balance, clearing journal through the posting engine, clearing stamped in place) and the live screen. Typecheck and production build clean. | Agent |
 | 2.252 | 2026-10-18 | **SCR-064 vendor clearing stage 4 (B-418, §26.434).** Capability `FIN.AP.CLEAR` created; the clearing term seeded at its route with F-44 a search alias only. Seed reads back 98/66/71/80. | Agent |
+| 2.253 | 2026-10-18 | **SCR-064 vendor clearing closed (B-419, §26.435).** Service tests and browser target T933 (neighbour T934) green on the production build; full suite 1280/160, 131 migrations, seed 98/66/71/80. Deferrals named: reset/reverse clearing, partial and residual clearing, special G/L items, exchange differences, manual vendor payment screen (F-53). | Agent |
 
 ---
 
