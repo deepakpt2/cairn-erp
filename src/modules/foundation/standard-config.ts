@@ -214,6 +214,7 @@ const DOCUMENT_TYPES: Array<{
 }> = [
   { code: 'SA', name: 'General journal entry', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
   { code: 'KR', name: 'Vendor invoice', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SK', requiresReference: true },
+  { code: 'KG', name: 'Vendor credit memo', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SK', requiresReference: true },
   { code: 'KZ', name: 'Vendor payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SK' },
   { code: 'DR', name: 'Customer invoice', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD', requiresReference: true },
   { code: 'DZ', name: 'Customer payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },

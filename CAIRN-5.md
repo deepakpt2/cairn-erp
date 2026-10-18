@@ -1121,6 +1121,13 @@ Stage 3 of R-124. `src/modules/finance/vendor-credit-memo.ts` stands beside the 
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-492 / §26.508 / §30 row 2.326. **Cost (B-254, measured):** stage 2 published 14:00 UTC; stage 3 completed 14:01 UTC.
 
 ---
+### 26.509 B-493 — SCR-076 stage 4: KG document type, capability and term
+
+Stage 4 of R-124. The delivered document types gain KG (Vendor credit memo, RF_BELEG/GENERAL, account types SK, reference required) and the seed backfills a KG row for every standing tenant, so existing tenants judge credit memos without re-onboarding; the capability `FIN.AP.CREDITMEMO.POST` and the term Enter vendor credit memo (FB65 as a search alias only) join the catalogue. The seed now reads back **110 capabilities / 84 terms / 92 aliases** across two runs, and the KG row stands verified on the standing tenant.
+
+Verification: typecheck clean; seed idempotent. Acceptance remains stage 5, so SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-493 / §26.509 / §30 row 2.327. **Cost (B-254, measured):** stage 3 published 14:01 UTC; stage 4 completed 14:02 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1292,3 +1299,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.324 | 2026-10-18 | **SCR-076 stage 1 published (B-490, §26.506).** `/finance/vendor-credit-memo` stands inert under `FIN.AP.CREDITMEMO.POST`: header, dates, reference, judged gross credit, optional original link, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
 | 2.325 | 2026-10-18 | **SCR-076 stage 2 published (B-491, §26.507).** `vendor_invoice` gains category and credit-of (migration 0085; DB at 146) behind its standing RLS. Backend is stage 3. | Agent |
 | 2.326 | 2026-10-18 | **SCR-076 stage 3 published (B-492, §26.508).** Credit-memo service stands: KG journal debiting the vendor at the gross credit, judged gross, original link with cumulative cap, shared cancellation; the `/finance/vendor-credit-memo` screen is live. Capability, term and KG land in stage 4. | Agent |
+| 2.327 | 2026-10-18 | **SCR-076 stage 4 published (B-493, §26.509).** KG document type delivered and backfilled to standing tenants; `FIN.AP.CREDITMEMO.POST` and the Enter vendor credit memo term (FB65 alias) seeded (110/84/92). Tests and browser acceptance follow in stage 5. | Agent |
