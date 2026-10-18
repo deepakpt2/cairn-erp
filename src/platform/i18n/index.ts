@@ -1954,6 +1954,12 @@ const en: Catalogue = {
     'description, number length, year relevance and consumption warning, and the ' +
     'intervals standing under it. Object names belong to the application; their ' +
     'facts and intervals are maintained here.',
+  'materialRange.title': 'Define Material Number Ranges',
+  'materialRange.subtitle':
+    'Number range groups for material numbers: each group names one internal and one ' +
+    'external interval of the MATERIALNR object, and material types are assigned to a ' +
+    'group by their two range keys. Intervals themselves stand on the number range ' +
+    'screens; a group in use by a material type is never deleted under it.',
   'materialGroup.title': 'Define Material Groups',
   'materialGroup.subtitle':
     'Material groups defined once per tenant: the classification materials carry for ' +

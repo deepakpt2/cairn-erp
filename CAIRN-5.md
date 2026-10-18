@@ -41,11 +41,18 @@ measured on disk in the same turn any canonical file is edited.
 
 ---
 
+### 26.365 B-349 — SCR-051 stage 1: the inert material number range screen
+
+The MMNR round opens with the screen's shape and nothing behind it: `/config/material-number-ranges` renders the group–interval matrix (each group with its internal and external interval keys, bounds, current numbers, a non-consuming next-number preview, and its assigned material types) over an ungrouped-intervals table, fed empty until the service lands. Two i18n keys (`materialRange.title`, `materialRange.subtitle`) carry the wording. The activity code `CFG.INV.MATERIALRANGE.DEFINE` is named here ahead of its seeding in stage 4. Nothing reads or writes; stage 2 brings the group table.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
 |---|---|---|---|
 | 2.170 | 2026-10-18 | **CAIRN-5 opens; SCR-051 / MMNR contracted (R-99).** `CAIRN-4.md` passed the 360,000-byte rotation trigger (407,238 bytes) and is frozen to pointer edits; this part continues §1.4 from R-99, §26 from 26.365 and this log from 2.170 (§0.3 / D-093). The owner's MMNR package is recorded as R-99: no new interval or assignment tables (the standing `number_range` and SCR-048 type keys already hold them, per the package's own constraint), a group table keyed by its internal+external range-key pair with a 20-character text, the MMNR group–interval matrix screen, group display and picking on the material-types screen, and MM01 drawing internal numbers and judging supplied numbers against the external interval. | Agent |
+| 2.171 | 2026-10-18 | **SCR-051 stage 1 published (B-349, §26.365).** The inert MMNR screen `/config/material-number-ranges`: group–interval matrix and ungrouped-intervals table rendered empty, i18n keys added. No reads, no writes. | Agent |
 
 ---
 
