@@ -76,7 +76,7 @@ export async function vendorInvoiceFb60(ctx: Context) {
   await lines.getByRole('button', { name: 'Post invoice', exact: true }).click();
   await page.waitForLoadState('networkidle');
 
-  const done = lines.getByText(/Invoice posted as document VI\d+; journal \S+/);
+  const done = lines.getByText(/Invoice posted as document VI-\d+; journal \S+/);
   await done.waitFor();
   const invoiceNumber = (await done.textContent())?.match(/document (VI\d+)/)?.[1] ?? '';
   assert.ok(invoiceNumber, 'the invoice number is shown');
