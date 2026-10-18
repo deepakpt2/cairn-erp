@@ -903,6 +903,13 @@ FBRA stands in house dress at `/finance/clearing-reset` under `FIN.CLEARING.RESE
 
 ---
 
+### 26.479 B-463 — CoA assignment stands on its own screen (owner-reported discoverability fix)
+
+The owner reported that chart-of-accounts assignment to a Company Code had no findable screen: the SCR-013 act lived only as a per-row control inside the Company Codes table — invisible once a chart stood assigned, gated silently by its capability, and absent from the Term Registry, so neither navigation nor search could reach it, unlike its OB37/OBBP siblings. The owner chose the dedicated-screen remedy. `/config/company-codes/assign-chart-of-accounts` now stands in the house shape: every Company Code named with the chart it holds, only active unblocked charts offered, the assignment's own capability only (the SCR-013 separation from Company Code definition is preserved), a mandatory reason that stands on the change document the service already writes, and the standing semantics unchanged — initial assignment only, a different chart refused by name, repeating the standing chart no change. The Company Codes header links to it, the config activity and a new Term Registry entry (no SAP alias claimed) point at it, and launchpad search finds it by title. The per-row control remains for the row at hand. Seed read-back 105/66/79/87 (one term more, idempotent). The screen contract test and the re-pinned capability contract stand guard; browser target T985 now also drives the dedicated screen — standing assignment shown to a read-only viewer, replacement refused by name, repeat accepted as no change — with its capability-separation and forged-field assertions intact. One flake stands noted, not chased: a single T985 run tripped the standing React #418 teardown assertion and passed clean on rerun. Suite 1306 tests (168 files), typecheck and production build clean. Measured 11:23–11:37 UTC (14 minutes, report to acceptance). This changes no contract: R-119's successor stands as named at B-462.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1034,6 +1041,7 @@ FBRA stands in house dress at `/finance/clearing-reset` under `FIN.CLEARING.RESE
 | 2.295 | 2026-10-18 | **SCR-071 stage 4 published (B-461, §26.477).** `FIN.CLEARING.RESET` enters the capability catalogue and the term registry (FBRA alias only); read-back 105/66/78/87, idempotent. | Agent |
 | 2.294 | 2026-10-18 | **SCR-071 stage 3 published (B-460, §26.476).** The clearing reset acts: the clearing is displayed first, then — under an advisory lock with in-transaction revalidation — the stamps lift from every item and the retained reset record with its change document is written in the same transaction; the screen executes on explicit confirmation with a mandatory reason. | Agent |
 | 2.296 | 2026-10-18 | **SCR-071 closed (B-462, §26.478).** Reset cleared items (FBRA) accepted under `FIN.CLEARING.RESET`: T926 + neighbours T927/T929 green on the production build, suite 1302 tests, harness 399, seed 105/66/78/87, 139 migrations. The wildcard capability-check defect found in acceptance stands fixed. Next T-code: **FB08** (reset-and-reverse), awaiting the owner's field package. | Agent |
+| 2.297 | 2026-10-18 | **CoA assignment dedicated screen (B-463, §26.479).** Owner-reported: assignment had no findable screen. `/config/company-codes/assign-chart-of-accounts` now stands (own capability, mandatory reason, initial-assignment only), linked from Company Codes, named in the Term Registry (105/66/79/87); T985 drives it green; suite 1306. | Agent |
 
 ---
 
