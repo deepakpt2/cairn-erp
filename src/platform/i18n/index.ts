@@ -1970,6 +1970,12 @@ const en: Catalogue = {
     'external interval of the MATERIALNR object, and material types are assigned to a ' +
     'group by their two range keys. Intervals themselves stand on the number range ' +
     'screens; a group in use by a material type is never deleted under it.',
+  'releaseStrategy.title': 'Define Release Strategies',
+  'releaseStrategy.subtitle':
+    'Release groups own the codes approvers act under; a strategy binds a group to ' +
+    'a classification class and judges a requisition or an order against its ' +
+    'criteria — total value, plant, organization — in priority order. A document ' +
+    'matching no strategy needs no release. The release acts themselves follow.',
   'classificationClass.title': 'Define Classes',
   'classificationClass.subtitle':
     'Classes group characteristics under a class type — material, batch, or the ' +

@@ -371,6 +371,12 @@ The supporting register stands: `CFG.PROC.CLASS.DEFINE` as capability and config
 
 ---
 
+### 26.405 B-389 — SCR-059 release strategies stage 1: the inert screen stands
+
+Stage 1 ships the inert screen at `/config/release-strategies` under the `releaseStrategy` i18n keys — the route the platform seed has named since before this chain began, its page finally standing: the groups-and-strategies grid empty beside the strategy editor (category, group, strategy, class, criteria against the document attributes, and the release codes in sequence). The save act stands disabled until stage 3 wires the service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -424,6 +430,7 @@ The supporting register stands: `CFG.PROC.CLASS.DEFINE` as capability and config
 | 2.216 | 2026-10-18 | **SCR-058 / CL02 stage 4 (B-387, §26.403).** Activity, capability and term seeded (CL01/CL02/CL03 search aliases only), the route among the built routes; seed reads back 95/66/66/70. | Agent |
 | 2.217 | 2026-10-18 | **SCR-058 / CL02 CLOSED and accepted (B-388, §26.404).** Stage 5 ships 3 service tests and the T939 browser target `classes` (green — PO_RELEASE with TOTAL_VALUE, drafted and activated). Neighbouring `characteristics` and `purchase-orders` targets, typecheck, `lint:ip` and the production build clean; suite 1261 across 154 files, 119 migrations, seed 95/66/66/70. The CT04 usage count is real. Deferred and named in the entry. Cost measured at 9 minutes. | Agent |
 | 2.218 | 2026-10-18 | **SCR-059 release strategies contracted (R-107).** Groups, codes and strategies judging documents against the CL02 classes through the delivered attribute catalogue, determination as a pure judge, the release acts explicitly the next round so nothing merges. The pageless `CFG.PROC.RELEASE.DEFINE` obligation is taken up. | Agent |
+| 2.219 | 2026-10-18 | **SCR-059 release strategies stage 1 (B-389, §26.405).** The inert screen stands at `/config/release-strategies`: empty grid, strategy editor with criteria and sequenced release codes, save disabled. Typecheck clean. | Agent |
 
 ---
 
