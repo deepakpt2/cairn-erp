@@ -745,6 +745,13 @@ Migrations `0080` + `9055` create `incoming_payment` behind forced tenant RLS (i
 
 ---
 
+### 26.457 B-441 — SCR-068 incoming payment stage 3: the service and live screen
+
+The incoming-payment service judges the customer's standing, lists the open debit receivables with their invoice due dates, and posts atomically under lock: items revalidated, one currency, allocation exactly equalling the receipt (the refusal names allocated, receipt and difference), a `DZ` journal debiting the bank and crediting the reconciliation account per allocation, the settled items and the payment's own lines cleared in place under the stated clearing date, and the payment recorded with its request key so a retry returns the standing payment. The screen is live: header and bank data, the item list with live allocation difference, and the result. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -854,6 +861,7 @@ Migrations `0080` + `9055` create `incoming_payment` behind forced tenant RLS (i
 | 2.272 | 2026-10-18 | **SCR-068 incoming payment contracted (R-116, B-438, §26.454).** F-28 under house names: a receipt allocated in full against the customer's open receivables, bank debit under a `DZ` journal, clearing stamped in place, differences never silently resolved; partial/residual/on-account, discounts, reset/reverse and FX deferred. | Agent |
 | 2.273 | 2026-10-18 | **SCR-068 incoming payment stage 1 (B-439, §26.455).** The inert incoming-payment screen stands at `/finance/incoming-payment` — header and bank data, the allocation list, posting disabled, result tile. Typecheck and production build clean. | Agent |
 | 2.274 | 2026-10-18 | **SCR-068 incoming payment stage 2 (B-440, §26.456).** Migrations `0080` + `9055` create the incoming-payment record behind forced tenant RLS with the request key unique per tenant. 137 migrations standing; typecheck clean. | Agent |
+| 2.275 | 2026-10-18 | **SCR-068 incoming payment stage 3 (B-441, §26.457).** The incoming-payment service (receivables with due dates, exact-allocation rule naming the difference, `DZ` journal, clearing in place, request-key replay) and the live screen. Typecheck and production build clean. | Agent |
 
 ---
 
