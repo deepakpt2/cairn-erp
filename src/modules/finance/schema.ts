@@ -367,3 +367,106 @@ export const clearingReset = pgTable('clearing_reset', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.resetNumber] }),
 ]);
+
+/** Dunning run (SCR-074 / R-122). Parameters of one dunning execution; identity is run date + identification. */
+export const dunningRun = pgTable('dunning_run', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 6 }).notNull(),
+  dunningDate: date('dunning_date', { mode: 'string' }).notNull(),
+  postedThroughDate: date('posted_through_date', { mode: 'string' }).notNull(),
+  accountType: varchar('account_type', { length: 8 }).notNull().default('CUSTOMER'),
+  status: varchar('status', { length: 12 }).notNull().default('PARAMETERS'),
+  customerFrom: varchar('customer_from', { length: 40 }),
+  customerTo: varchar('customer_to', { length: 40 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId] }),
+  check('dunning_run_id_ck', sql`length(${t.runId}) between 1 and 6`),
+  check('dunning_run_type_ck', sql`${t.accountType} = 'CUSTOMER'`),
+  check('dunning_run_status_ck', sql`${t.status} in ('PARAMETERS', 'PROPOSED', 'COMPLETED', 'CANCELLED')`),
+  check('dunning_run_cutoff_ck', sql`${t.postedThroughDate} <= ${t.dunningDate}`),
+]);
+
+/** Company codes a dunning run processes (SCR-074 / R-122). */
+export const dunningRunCompany = pgTable('dunning_run_company', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 6 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode] }),
+  foreignKey({ columns: [t.client, t.runDate, t.runId], foreignColumns: [dunningRun.client, dunningRun.runDate, dunningRun.runId] }).onDelete('cascade'),
+]);
+
+/** Account-level dunning result (SCR-074 / R-122): a proposed level, or a named exception. */
+export const dunningRunAccount = pgTable('dunning_run_account', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 6 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  proposedLevel: integer('proposed_level'),
+  currency: char('currency', { length: 3 }),
+  totalOverdue: numeric('total_overdue', { precision: 23, scale: 4 }).notNull().default('0'),
+  status: varchar('status', { length: 12 }).notNull().default('PROPOSED'),
+  exceptionReason: varchar('exception_reason', { length: 500 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer] }),
+  foreignKey({
+    columns: [t.client, t.runDate, t.runId, t.companyCode],
+    foreignColumns: [dunningRunCompany.client, dunningRunCompany.runDate, dunningRunCompany.runId, dunningRunCompany.companyCode],
+  }).onDelete('cascade'),
+  check('dunning_run_account_status_ck', sql`${t.status} in ('PROPOSED', 'EXCLUDED', 'COMPLETED')`),
+  check('dunning_run_account_level_ck', sql`${t.proposedLevel} is null or ${t.proposedLevel} >= 1`),
+]);
+
+/** Item-level dunning proposal (SCR-074 / R-122): one overdue item at its proposed level. */
+export const dunningRunItem = pgTable('dunning_run_item', {
+  client: tenantClient(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 6 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  lineNumber: integer('line_number').notNull(),
+  dueDate: date('due_date', { mode: 'string' }).notNull(),
+  daysOverdue: integer('days_overdue').notNull(),
+  overdueAmount: numeric('overdue_amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  proposedLevel: integer('proposed_level').notNull(),
+  status: varchar('status', { length: 12 }).notNull().default('PROPOSED'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer, t.documentNumber, t.fiscalYear, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.runDate, t.runId, t.companyCode, t.customer],
+    foreignColumns: [dunningRunAccount.client, dunningRunAccount.runDate, dunningRunAccount.runId, dunningRunAccount.companyCode, dunningRunAccount.customer],
+  }).onDelete('cascade'),
+  check('dunning_run_item_status_ck', sql`${t.status} in ('PROPOSED', 'EXCLUDED', 'COMPLETED')`),
+  check('dunning_run_item_amount_ck', sql`${t.overdueAmount} > 0`),
+  check('dunning_run_item_level_ck', sql`${t.proposedLevel} >= 1`),
+  index('dunning_run_item_source_idx').on(t.client, t.documentNumber, t.fiscalYear, t.lineNumber),
+]);
+
+/** Dunning notice (SCR-074 / R-122): one per account at finalization; a record, never a posting. */
+export const dunningNotice = pgTable('dunning_notice', {
+  client: tenantClient(),
+  noticeNumber: varchar('notice_number', { length: 80 }).notNull(),
+  runDate: date('run_date', { mode: 'string' }).notNull(),
+  runId: varchar('run_id', { length: 6 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  dunningLevel: integer('dunning_level').notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  noticeDate: date('notice_date', { mode: 'string' }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.noticeNumber] }),
+  uniqueIndex('dunning_notice_run_account_uq').on(t.client, t.runDate, t.runId, t.companyCode, t.customer),
+  check('dunning_notice_level_ck', sql`${t.dunningLevel} >= 1`),
+]);

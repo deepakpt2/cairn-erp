@@ -1029,6 +1029,13 @@ Stage 1 of R-122. `/finance/dunning` stands inert: run parameters (run date, ide
 Verification: typecheck clean (one attempt exhausted the sandbox heap beside the resident server; the capped-heap retry is clean). Acceptance remains the tests stage, so SCR-074 is **not yet accepted**. Same-stage bookkeeping: B-478 / §26.494 / §30 row 2.312. **Cost (B-254, measured):** the contract published 13:09 UTC; stage 1 completed 13:11 UTC.
 
 ---
+### 26.495 B-479 — SCR-074 stage 2: dunning schema stands
+
+Stage 2 of R-122. The five contracted tables stand behind tenant RLS: `dunning_run` (identity run date + identification, the cutoff judged against the dunning date, customers-only and status checks), `dunning_run_company`, `dunning_run_account` (a proposed level or a named exception, never both silent), `dunning_run_item` (each overdue item at its proposed level, source-indexed) and `dunning_notice` (one per account per run, unique). Migrations `0083_dunning.sql` and `9058_dunning_policies.sql` apply cleanly; the application role may insert and update the run registers but never delete, and notices are insert-only. House widths throughout — company `varchar 10`, partner `varchar 40`, journal identity as it stands; no SAP-width tenant identity.
+
+Verification: migration runner applied the two files and re-reports **143 already applied**; database read-back lists all five tables; typecheck clean. SCR-074 is **not yet accepted**. Same-stage bookkeeping: B-479 / §26.495 / §30 row 2.313. **Cost (B-254, measured):** stage 1 published 13:11 UTC; stage 2 completed 13:13 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1186,3 +1193,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.310 | 2026-10-18 | **Standing instruction recorded (B-476, §26.492).** A stage under 15 minutes rolls into the next stage in the same turn; stages remain separate commits, never merged. Applied at once to SCR-073 stages 3–4. | Agent |
 | 2.311 | 2026-10-18 | **SCR-074 contract recorded (R-122, B-477, §26.493).** F150 dunning for customers: run identity, ageing-derived selection, proposal/finalize separation, levels from completed history, notices as records, no FI posting; procedure master, charges and vendor dunning deferred by name. Awaiting stage 1 (UI). | Agent |
 | 2.312 | 2026-10-18 | **SCR-074 stage 1 published (B-478, §26.494).** `/finance/dunning` stands inert under `FIN.AR.DUNNING.RUN`: run parameters, proposal and runs sections; refusal names the unconnected service. Schema is stage 2. | Agent |
+| 2.313 | 2026-10-18 | **SCR-074 stage 2 published (B-479, §26.495).** Five dunning tables stand behind RLS (migrations 0083/9058; DB at 143): run, companies, account results with named exceptions, item proposals, notices. No delete grants. Backend is stage 3. | Agent |
