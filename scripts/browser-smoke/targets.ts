@@ -62,7 +62,7 @@ export const TARGETS = [
   { id: 'customer-clearing', client: 'T924', label: 'SCR-073 customer clearing: open items grid, DZ clearing, items stamped' },
   { id: 'dunning', client: 'T923', label: 'SCR-074 dunning: run proposes overdue account, finalize, notice stands' },
   { id: 'vendor-invoice', client: 'T922', label: 'SCR-075 vendor invoice: judged gross, KR journal, payable stands' },
-  { id: 'vendor-credit-memo', client: 'T982', label: 'SCR-076 vendor credit memo: judged gross credit, KG journal, vendor debited' },
+  { id: 'vendor-credit-memo', client: 'T921', label: 'SCR-076 vendor credit memo: judged gross credit, KG journal, vendor debited' },
   { id: 'company-code-coa-assignment', client: 'T985', label: 'SCR-013 Company Code CoA assignment capability separation and active tenant-local choices' },
   { id: 'plant-definition', client: 'T984', label: 'SCR-014 Plant create/change, definition-only authority and read-only access' },
   { id: 'plant-company-code-assignment', client: 'T983', label: 'SCR-015 initial Plant Company Code assignment, separate capability, eligible choices and one-way lifecycle' },
