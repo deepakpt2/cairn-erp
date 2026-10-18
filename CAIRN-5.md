@@ -610,6 +610,13 @@ Balances derive from the journal at read time, so no summary table stands to dri
 
 ---
 
+### 26.439 B-423 — SCR-065 vendor balances stage 3: the derivation and live screen
+
+The balance service derives the matrix at read time from the posted journal: opening as the signed sum of all earlier years, debit and credit turnover per period, closing chained period by period; display in company currency from local amounts, or in the currency the items stand in from document amounts, any other currency refused by name. Choosing a period drills to its line items with clearing standing shown. The screen is live on the same derivation. Typecheck and the production build clean.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -701,6 +708,7 @@ Balances derive from the journal at read time, so no summary table stands to dri
 | 2.254 | 2026-10-18 | **SCR-065 vendor balances contracted (R-113, B-420, §26.436).** FK10N under house names, read-only: period balances derived from the posted journal (no balance table), opening/turnover/closing chained, document-currency display, drill-down to line items; `FIN.AP.BALANCE` created; stored figures/carryforward and conversion deferred. | Agent |
 | 2.255 | 2026-10-18 | **SCR-065 vendor balances stage 1 (B-421, §26.437).** The inert balances screen stands at `/finance/vendor-balances` — selection, the empty period matrix, the drill-down tile. Typecheck and production build clean. | Agent |
 | 2.256 | 2026-10-18 | **SCR-065 vendor balances stage 2 (B-422, §26.438).** No balance table by contract — balances derive from the posted journal; migration `0077` adds the partner/company index. 132 migrations standing. | Agent |
+| 2.257 | 2026-10-18 | **SCR-065 vendor balances stage 3 (B-423, §26.439).** Balances derive at read time from the posted journal — opening/turnover/closing chained, currency judged by name, period drill-down to line items — and the screen is live. Typecheck and production build clean. | Agent |
 
 ---
 
