@@ -102,6 +102,7 @@ export default async function WorkbenchPage({
     '/config/purchasing-orgs/assign-company',
     '/config/purchasing-groups',
     '/config/number-ranges',
+    '/config/number-range-objects',
     '/registry',
     '/finance/journal',
     '/finance/journal/new',

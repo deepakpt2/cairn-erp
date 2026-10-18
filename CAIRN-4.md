@@ -1629,6 +1629,16 @@ SCR-041's fourth fork deferred the cost centre's hierarchy area (KHM) to SCR-042
 
 ---
 
+### 26.363 B-347 — SCR-050 / SNRO stage 4: the supporting seeding — the SNRO alias opens onto objects
+
+**What shipped.** The standing `CFG.PLT.NUMBERRANGE.DEFINE` Term Registry entry now opens onto `/config/number-range-objects` — as SNRO opens onto the object list in the reference — its description rewritten to carry the round's whole parity (registry facts and application-owned names, issued-bound protection, external and buffered intervals with the gap behaviour stated, the guarded current-number act), the **SNRO alias unchanged and search-only**. The capability's description grew to match, and `/config/number-range-objects` joins `BUILT_ROUTES`. `npm run seed` applied and read back: **89 capabilities / 61 activities / 58 terms / 54 aliases** (no roster growth — this round completes a standing activity rather than adding one).
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; suite **1222 tests across 145 files**.
+
+**Cost.** Measured: 03:47 in to 03:49 — **2 minutes**.
+
+---
+
 ## §30 · Change log (continued)
 
 Continues the change log of `CAIRN-3.md` §30 from version 2.61. Same rules: append only, one row per
@@ -1743,6 +1753,7 @@ recorded change, date and reason stated.
 | 2.165 | 2026-10-18 | **SCR-050 / SNRO stage 1 (B-344, §26.360): the inert number-range-objects screen.** `/config/number-range-objects` stands introduced (`CFG.PLT.NUMBERRANGE.DEFINE · SNRO`), cross-linked with the live intervals screen, its object grid and buffering's consequences stated in help text. Typecheck, `lint:ip`, production build (route 904 B) clean; suite 1222 across 145 files. Cost measured at 3 minutes. | Agent |
 | 2.166 | 2026-10-18 | **SCR-050 / SNRO stage 2 (B-345, §26.361): the registry and the great rename.** Migration 0061 renames every stored object code to its SAP-width name (the row carries the map), creates and seeds `number_range_object` for all clients, and 9041 puts forced RLS on it — 104 migrations. ~70 code references follow; new tenants are seeded from the standard package; the GL reconciliation `MATERIAL` correctly stands apart. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 9 minutes. | Agent |
 | 2.167 | 2026-10-18 | **SCR-050 / SNRO stage 3 (B-346, §26.362): the live screens.** The object registry is maintainable (metadata only; names application-owned); external and buffered intervals are creatable with creation-time immutability, buffered allocation reserving independently committed blocks whose rolled-back numbers stay consumed; and the guarded current-number act sets a counter within its bounds as its own documented act, warning when it would re-issue. Typecheck, `lint:ip`, build clean; suite 1222 across 145 files. Cost measured at 8 minutes. | Agent |
+| 2.168 | 2026-10-18 | **SCR-050 / SNRO stage 4 (B-347, §26.363): the supporting seeding.** The standing SNRO term (search alias unchanged) now opens onto the objects screen with its description carrying the round's parity, the capability description matches, and `/config/number-range-objects` joins `BUILT_ROUTES`; seed read back at 89/61/58/54. Typecheck and `lint:ip` clean; suite 1222 across 145 files. Cost measured at 2 minutes. | Agent |
 ---
 
 *End of this part for now. This part is the live canonical log: it is updated in the same turn as any
