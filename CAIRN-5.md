@@ -1139,6 +1139,23 @@ Acceptance evidence: service tests 3/3 (`tests/vendor-credit-memo.test.ts`); bro
 Completion per B-444: the next roadmap item is **F-53 (manual vendor payment, `FIN.AP.PAYMENT.POST`)**, which would stand as SCR-077 — its field package is requested from the owner; no contract is drafted before it arrives. Same-stage bookkeeping: B-494 / §26.510 / §30 row 2.328. **Cost (B-254, measured):** the round opened 13:53 UTC; SCR-076 closed 14:12 UTC — nineteen minutes across five stages, inside the time-box.
 
 ---
+### 26.511 B-495 — SCR-077 contract R-125: Maintain Industries (OB44)
+
+The owner's OB44 package stands as SCR-077, superseding the F-53 package request at §26.510 (F-53 remains the next finance item after this round). The audit settles the distinction the round turns on: SCR-052 delivered `industry_sector` — the one-character classification a *material* is created under (OMS3) — while OB44 industries classify *business partners* (the reference's BRSCH, four characters, descriptions by language in T016T). No industry master stands, and `business_partner` carries no industry reference; both are built here. SAP vocabulary (OB44/BRSCH/BRTXT/SPRAS/T016/T016T) stands as search aliases only, never in codes or the database.
+
+**Identity.** Activity and capability `CFG.ORG.INDUSTRY.DEFINE` (area ENTERPRISE_STRUCTURE, module ORG, CONFIGURE), screen `/config/industries`, term **Maintain Industries** with OB44 as its search alias. The master is tenant-scoped in the standing shape of its sibling masters.
+
+**The master.** `industry` holds the code alone — at most four uppercase letters or digits (`^[A-Z0-9]{1,4}$`, the package's width) — with the standing active flag and audit columns; `industry_text` holds one description per language (at most 20 characters, the package's width), keyed by tenant, industry and language, its industry reference restricting. Languages judge against the configured system languages — today English alone stands configured, so a text in any other language is refused naming it; further languages arrive with the language master, not with this round. Five industries stand delivered to every tenant (MEC1 Mechanical Eng., CHEM Chemical, PHAR Pharmaceutical, RETL Retail, CONS Construction, each with its English description), and the seed backfills any standing tenant that lacks them.
+
+**The reference.** `business_partner` gains a nullable `industry` held by a composite foreign key to the tenant's industry, restricting on delete — so the database itself refuses what the service refuses.
+
+**The acts, at `/config/industries`.** The grid shows code, the description in the standing language, partner count and active standing, with search. Create requires a code not already standing (a duplicate is refused naming it) and a description in the default language; a blank or over-long description, an invalid code and an unsupported language each refuse by name. Change maintains descriptions language by language; the code itself never changes — no rename stands. Deactivation and reactivation stand beside deletion, as with every standing master. Deletion is hard and refused while business partners carry the industry, the count named; an unreferenced industry deletes with its texts in one act. A reason stands mandatory on every write, one change document per write under object class `industry`, maintenance restricted to the configuration capability.
+
+**Deferred, named:** the industry picker on the business-partner maintenance screen (the column, key and deletion guard stand here; partner screens read it next round), any rename-by-migration path, and descriptions in languages beyond the configured set.
+
+**Stage order (standing):** inert UI → schema (`industry`, `industry_text`, the partner reference; RLS policies) → service and live screen → supporting (activity, capability, term, delivered industries with standing-tenant backfill) → service tests and browser acceptance. Same-stage bookkeeping: B-495 / §26.511 / §30 row 2.329. **Cost (B-254, measured):** the package arrived 14:21 UTC; the contract stands written the same minute-span, before stage 1.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1312,3 +1329,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.326 | 2026-10-18 | **SCR-076 stage 3 published (B-492, §26.508).** Credit-memo service stands: KG journal debiting the vendor at the gross credit, judged gross, original link with cumulative cap, shared cancellation; the `/finance/vendor-credit-memo` screen is live. Capability, term and KG land in stage 4. | Agent |
 | 2.327 | 2026-10-18 | **SCR-076 stage 4 published (B-493, §26.509).** KG document type delivered and backfilled to standing tenants; `FIN.AP.CREDITMEMO.POST` and the Enter vendor credit memo term (FB65 alias) seeded (110/84/92). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.328 | 2026-10-18 | **SCR-076 ACCEPTED AND CLOSED (B-494, §26.510).** FB65 vendor credit memo stands on the shared invoice record: judged gross credit, KG journal debiting the vendor, original link with cumulative cap, cross-kind duplicate reference refused, cancellation carrying the link. T921 green; suite 1327/173; seed 110/66/84/92; 146 migrations. Next: F-53 (SCR-077) — field package requested. | Agent |
+| 2.329 | 2026-10-18 | **SCR-077 contract R-125 written (B-495, §26.511).** OB44 Maintain Industries: tenant industry master (code ≤4) with per-language descriptions (≤20) judged against configured languages, five delivered industries, a restricting partner reference, delete refused while partners carry the code. Partner-screen picker deferred, named. Stage 1 follows. | Agent |
