@@ -103,7 +103,7 @@ describe('SCR-078 outgoing payment (F-53)', () => {
     const payableOnly = view.openItems.filter((i) => i.signed > 0);
     await expect(postOutgoingPayment(payment({
       items: refs({ ...view, openItems: payableOnly }),
-    }))).rejects.toThrow('leaves a difference of 110.00 USD');
+    }))).rejects.toThrow('leaves an unassigned difference of -110.00 USD beyond the tolerance');
     await expect(postOutgoingPayment(payment({ vendorNumber: 'V99999', items: refs(view) })))
       .rejects.toThrow('does not stand extended');
   });

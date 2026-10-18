@@ -1333,6 +1333,12 @@ Stage 4 of R-128. `CASH_DISCOUNT` joins `PAYMENT_DIFFERENCE` in carrying a gener
 
 Verification: typecheck clean; the SCR-079 incoming completion tests stand green through the fallback (6 passed). Acceptance remains stage 5, so SCR-080 is **not yet accepted**. Same-stage bookkeeping: B-519 / §26.535 / §30 row 2.353. **Cost (B-254, measured):** stage 3 published 16:54 UTC; stage 4 completed the same minute.
 
+### 26.536 B-520 — SCR-080 stage 5: acceptance and closure
+
+Stage 5 of R-128 closes the round. The completion tests (`tests/outgoing-payment-completion.test.ts`, 4 cases) stand green: the terms suggestion of 2 percent on the 550 (11.00), refusal of a 20.00 discount naming the eligible 11.00, the discount received posted credit on the REV determination account with the item cleared at its full 550 and the record remembering 11.00; a residual of 100 standing open after 200 against the 300; a partial of 40 leaving the original 100 standing beside the payment's own 40 debit line (net 60 owed, nothing cleared); 45 on account with 5 unassigned within tolerance posted as an expense difference; and an on-account-only payment posting with no items. The legacy SCR-078 test's refusal expectation moved to the new wording. One defect of expression was repaired en route: a placeholder call slipped into the journal line construction during stage 3 and was replaced with the real line builder before any test ran against it — recorded plainly.
+
+**Acceptance.** The full suite stands green at 1344 tests; the production build carries target `outgoing-payment-completion` (T916) green — the payable under 2-percent-10-days terms, 539 paid with the 11.00 discount taken, the item cleared at 550 and the discount standing in the database. The seed stands at 112 capabilities / 67 configuration activities / 86 terms / 94 aliases, twice idempotent; the database stands at 153 migrations. Typecheck clean. **SCR-080 is accepted and closed.** Deferred by name: special G/L indicators and down payments (both subledgers), withholding tax, bank charges, foreign-currency differences, payment drafts, residual due-date recalculation, and user-to-tolerance-group assignment. Same-stage bookkeeping: B-520 / §26.536 / §30 row 2.354. **Cost (B-254, measured):** stage 4 published 16:55 UTC; stage 5 completed 17:00 UTC.
+
 ---
 ---
 
@@ -1532,3 +1538,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.351 | 2026-10-18 | **SCR-080 stage 2 published (B-517, §26.533).** `outgoing_payment` gains the discount and on-account totals; 153 migrations. The completion service follows in stage 3. | Agent |
 | 2.352 | 2026-10-18 | **SCR-080 stage 3 published (B-518, §26.534).** Completion service stands: terms-tier discount and tolerance judging, full/residual/partial outcomes, on-account and tolerated differences; the screen is live and submitting outcomes. Determination modifiers follow in stage 4. | Agent |
 | 2.353 | 2026-10-18 | **SCR-080 stage 4 published (B-519, §26.535).** `CASH_DISCOUNT` gains EXP/REV general modifiers (granted/received); both payment lookups fall back to the unmodified row. Tests and browser acceptance follow in stage 5. | Agent |
+| 2.354 | 2026-10-18 | **SCR-080 closed (B-520, §26.536).** Outgoing payment completion accepted: 1344 tests, T916 browser green, 153 migrations, seed 112/67/86/94. Both payment completions (F-28, F-53) now stand implemented. | Agent |
