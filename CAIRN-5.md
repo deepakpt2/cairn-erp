@@ -260,6 +260,12 @@ Migration `0067_purchase_order.sql` with `9046_purchase_order_policies.sql` — 
 
 ---
 
+### 26.392 B-376 — SCR-056 / ME21N stage 3: the purchase order service and live screen
+
+`src/modules/purchasing/orders.ts` stands behind the screen. The header judges the supplier through its purchasing-organization data (a partner without supplier data for the organization is refused with the remedy named; a blocked supplier refused), the organization, group and company, and takes its currency from the supplier's order currency, else the company's — never a hard-coded default. Items judge as the requisition judged them, plus the organizational rule (the item plant must belong to the header company), the tax code in the company country, schedule lines reconciling exactly to the order quantity, and the baseline net value `quantity × net price ÷ price unit`. A requisition reference converts: the ordered total across standing orders is judged, the refusal naming how much of the requisition already stands ordered. Changes keep item numbers stable and re-judge conversion excluding the order itself; create and change each write one change document under `purchase_order`. Neither period gate is consulted on save, per contract. The screen is live in the stage-1 shape, with pickers for organizations, groups, companies, plants and storage locations, supplier suggestions from the standing purchasing data, multi-line schedules and assignment rows, and the deletion-mark column in change mode.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -297,6 +303,7 @@ Migration `0067_purchase_order.sql` with `9046_purchase_order_policies.sql` — 
 | 2.200 | 2026-10-18 | **SCR-056 / ME21N contracted (R-104).** Header/item/schedule-line/assignment purchase orders at SAP parity under house names: PURCHORD draw, supplier and organizational judging, requisition conversion with ordered-quantity judging, the baseline net-value semantics stated, period gates explicitly never consulted on save, release strategy recorded as due before goods receipt. | Agent |
 | 2.201 | 2026-10-18 | **SCR-056 / ME21N stage 1 (B-374, §26.390).** The inert purchase order screen stands at `/purchasing/orders`: overview, header, item grid with computed net value, schedule-line and assignment panels, save disabled. Typecheck clean. | Agent |
 | 2.202 | 2026-10-18 | **SCR-056 / ME21N stage 2 (B-375, §26.391).** Migrations `0067` + `9046` applied (115 standing): `purchase_order` header, items, schedule lines and assignments behind forced tenant RLS. Typecheck clean. | Agent |
+| 2.203 | 2026-10-18 | **SCR-056 / ME21N stage 3 (B-376, §26.392).** The purchase order service and live screen: supplier and organizational judging, schedule reconciliation, baseline net value, requisition conversion with ordered-quantity judging, one change document per act, period gates never consulted. Typecheck, `lint:ip` and the production build clean. | Agent |
 
 ---
 

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
-import { requireSession } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { PO_CREATE_CAPABILITY, getOrder, listOrders, orderChoices } from '@/modules/purchasing/orders';
 import Orders from './Orders';
 
 export const dynamic = 'force-dynamic';
@@ -9,13 +10,17 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/purchasing/orders';
 
 /**
- * Purchase orders (SCR-056 / ME21N; inert since stage 1).
- *
- * Header, item, schedule-line and assignment documents converting
- * requisitions (SCR-056 stage 3 wires the acts).
+ * Purchase orders (SCR-056 / ME21N create, ME22N change, ME23N
+ * display; inert in stage 1, live since stage 3).
  */
-export default async function PurchaseOrdersPage() {
-  await requireSession(ROUTE);
+export default async function PurchaseOrdersPage({ searchParams }: {
+  searchParams: Promise<{ order?: string }>;
+}) {
+  const session = await requireSession(ROUTE);
+  const params = await searchParams;
+  const client = session.user.client;
+  const [documents, choices] = await Promise.all([listOrders(client), orderChoices(client)]);
+  const selected = params.order ? await getOrder(client, params.order) : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-6">
@@ -30,7 +35,12 @@ export default async function PurchaseOrdersPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseOrder.subtitle')}</p>
       </header>
 
-      <Orders />
+      <Orders
+        documents={documents}
+        choices={choices}
+        selected={selected}
+        canCreate={can(session, PO_CREATE_CAPABILITY)}
+      />
     </div>
   );
 }
