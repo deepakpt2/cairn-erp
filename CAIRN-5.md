@@ -1065,7 +1065,7 @@ The owner's FB60 package arrives against the roadmap row `FIN.AP.INVOICE.POST`. 
 
 Stage 1 of R-123. `/finance/vendor-invoice` stands inert: the invoice header (vendor, company code), the invoice section carrying invoice and posting dates, the required reference, currency, the judged gross amount and explicit confirmation, and the standing-invoices section. The capability `FIN.AP.INVOICE.POST` is judged wildcard-aware; nothing is connected, no database is read, and a submitted invoice refuses by name (`The vendor invoice service is not yet connected…`) until the service lands in stage 3. The screen text states the contracted shape — tax-exclusive lines, judged gross, one KR journal, no editing of posted invoices — so the standing UI and the contract agree before any judge exists.
 
-Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-484 / §26.500 / §30 row 2.318. **Cost (B-254, measured):** the contract published 13:25 UTC; stage 1 completed 13:27 UTC.
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-075 is **not yet accepted**. Same-stage bookkeeping: B-484 / §26.500 / §30 row 2.318. **Cost (B-254, measured):** the contract published 13:25 UTC; stage 1 completed 13:25 UTC.
 
 ---
 ---
