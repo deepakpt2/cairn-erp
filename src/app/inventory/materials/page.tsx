@@ -7,6 +7,7 @@ import { MATERIAL_VIEWS, MATERIAL_VIEW_CAPABILITY } from '@/modules/inventory/co
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { MaterialForm } from './MaterialForm';
+import DeletionFlags from './DeletionFlags';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +61,7 @@ export default async function MaterialsPage({ searchParams }: {
     {source && <p className="border border-accent-line bg-accent-soft p-3 text-sm">{t('material.copyNote', { number: source.base.materialNumber })}</p>}
     {detail && <>
       <section className="panel grid gap-3 p-3 sm:grid-cols-4"><Summary label={t('material.number')} value={detail.base.materialNumber} /><Summary label={t('material.description')} value={detail.base.description || '—'} /><Summary label={t('material.type')} value={`${detail.base.materialType} / ${detail.base.baseUnit ?? '—'}`} /><Summary label={t('material.status')} value={t(`material.state.${detail.base.isBlocked ? 'BLOCKED' : detail.base.basicStatus}`)} /></section>
+      <DeletionFlags clientFlagged={false} clientStock={detail.valuations.reduce((sum, v) => sum + Number(v.totalStockQuantity), 0).toString()} plants={detail.plants.map((p) => ({ plant: p.plant, flagged: false, stock: detail.valuations.find((v) => v.valuationArea === p.plant)?.totalStockQuantity ?? '0' }))} />
       <div className="flex flex-wrap items-end justify-between gap-3"><form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('plant.code')}</span><select name="plant" defaultValue={plant} className="field-input code">{choices.plants.map((p) => <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>)}</select></label><button className="btn btn-default">{t('material.choosePlant')}</button></form><Link href={`${url(view)}&history=1`} className="text-sm text-accent underline">{t('material.history')}</Link></div>
       <nav aria-label={t('material.views')} className="flex flex-wrap gap-1 border-b border-line pb-3">{MATERIAL_VIEWS.map((v) => <Link key={v} href={url(v)} className={`border px-3 py-2 text-sm ${v === view ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}>{t(`material.view.${v}`)}<span className="ms-2 text-2xs">{t(`material.state.${statuses[v]}`)}</span></Link>)}{['PRODUCTION', 'SALES', 'SALES_GENERAL', 'STORAGE', 'FORECASTING', 'QUALITY', 'WAREHOUSE'].map((v) => <span key={v} aria-disabled="true" className="border border-dashed border-line px-3 py-2 text-sm text-ink-faint">{t(`material.view.${v}`)} · {t('material.pending')}</span>)}</nav>
     </>}

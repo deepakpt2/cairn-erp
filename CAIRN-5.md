@@ -125,6 +125,12 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 
 ---
 
+### 26.375 B-359 — SCR-053 stage 1: the deletion-flag panel stands inert
+
+The MM06 round opens on the material screen: a deletion-flag panel under the material summary showing the flag status at the client level and at each plant the material is extended to, with the stock standing at each scope and the contract's plain-English note — a marker, not a lock, deleting nothing. It renders standing data only (nothing flagged, the columns do not exist yet); the acts arrive with the service in stage 3. Six i18n keys carry the wording.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -142,6 +148,7 @@ The sector master gains its service in the standing shape (`industry-sector-defi
 | 2.180 | 2026-10-18 | **SCR-052 stage 4 published (B-357, §26.373).** `CFG.INV.INDUSTRYSECTOR.DEFINE` seeded as capability, configuration activity and term (OMS3 search alias only); the route joins `BUILT_ROUTES`. Seed reads back 91/63/60/56. | Agent |
 | 2.181 | 2026-10-18 | **SCR-052 / MM01 CLOSED and accepted (B-358, §26.374).** Stage 5 ships 3 service tests and the T945 browser target `industry-sectors` (7/7 journeys against the production build — delivered sectors standing, define/rename through the screen, MM01 creating under the picked sector, the carrying sector refusing deletion, the database remembering); one standing security fixture gained its sector. Neighbouring `material-number-ranges` and `material-types` targets, typecheck, `lint:ip` and the production build clean; suite 1237 across 148 files, 108 migrations, seed 91/63/60/56. Cost measured at 21 minutes overall. | Agent |
 | 2.182 | 2026-10-18 | **SCR-053 / MM06 contracted (R-101).** The owner's corrected MM06 package: client- and plant-level deletion flags on the standing material tables as confirmed, reasoned, reversible acts — a marker with stock warnings, never a blanket lock, refusing only new plant extensions under a client flag. Storage-location flags, scheduled flagging, archiving/physical deletion, and goods-movement enforcement are recorded as deferred in R-101 for the end-of-round report. | Agent |
+| 2.183 | 2026-10-18 | **SCR-053 stage 1 published (B-359, §26.375).** The inert deletion-flag panel on the material screen: client and plant scopes with their standing stock, rendered unflagged until the service lands. No writes. | Agent |
 
 ---
 
