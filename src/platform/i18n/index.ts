@@ -1995,6 +1995,13 @@ const en: Catalogue = {
     'delivered where and by when. An item may convert a requisition item, ' +
     'never beyond its quantity. Saving an order posts nothing — goods ' +
     'receipt and invoice verification carry the period gates.',
+  'invoiceVerification.title': 'Enter Incoming Invoice',
+  'invoiceVerification.subtitle':
+    'Invoice verification matches a supplier invoice against the purchase ' +
+    'order and its goods receipts: quantities already received and not yet ' +
+    'invoiced, amounts at the order price, tax at the standing rates. Posting ' +
+    'clears GR/IR and stands the payable in one balanced journal. A posted ' +
+    'invoice is never edited — it is cancelled by a mirror document.',
   'goodsReceipt.title': 'Post Goods Receipt',
   'goodsReceipt.subtitle':
     'A goods receipt moves stock in against a reference — a purchase order ' +

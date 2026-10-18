@@ -478,6 +478,12 @@ Deferred and named: goods issue and transfer movements (their movement types joi
 
 ---
 
+### 26.420 B-404 — SCR-062 invoice verification stage 1: the verification screen stands
+
+Stage 1 ships the invoice-verification screen at `/purchasing/invoice-verification`: the invoice header — category as business words, the order reference, the supplier's own reference, the gross amount as a judged figure, invoice and posting dates kept distinct — above an empty item area whose post act stands disabled until stage 3 wires the verification service.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -549,6 +555,7 @@ Deferred and named: goods issue and transfer movements (their movement types joi
 | 2.234 | 2026-10-18 | **SCR-061 goods receipt stage 4 (B-402, §26.418).** The goods-receipt term seeded at its route with MIGO a search alias only. Seed reads back 97/66/68/76. | Agent |
 | 2.235 | 2026-10-18 | **SCR-061 goods receipt CLOSED and accepted (B-403, §26.419).** Stage 5 ships 2 service tests and the T936 browser target `goods-receipt` (green — posting, balanced journal, reversal, stock whole). Neighbouring `purchase-orders` and `release-acts` targets clean; suite 1271 across 157 files, 126 migrations, seed 97/66/68/76. Goods issue, transfer, batches and account-assigned receipts deferred and named. Cost measured at 15 minutes. | Agent |
 | 2.236 | 2026-10-18 | **SCR-062 invoice verification contracted (R-110).** MIRO under house names: PO-based supplier invoices with judged gross reconciliation, tax at standing rates, variances to the price-difference event, invoiceable quantity from posted GR and invoice history, duplicates refused, cancellation as a linked mirror document, one balanced journal through the standing engine. | Agent |
+| 2.237 | 2026-10-18 | **SCR-062 invoice verification stage 1 (B-404, §26.420).** The inert verification screen stands at `/purchasing/invoice-verification`: header with category, order, supplier reference, gross amount and both dates; the item area empty and post disabled. Typecheck and the production build clean. | Agent |
 
 ---
 
