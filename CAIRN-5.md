@@ -1279,6 +1279,13 @@ Stage 1 of R-127. The incoming-payment screen gains the completion shape: per it
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-510 / §26.526 / §30 row 2.344. **Cost (B-254, measured):** contract R-127 published 16:27 UTC; stage 1 completed the same minute-span.
 
 ---
+### 26.527 B-511 — SCR-079 stage 2: completion totals on the payment record
+
+Stage 2 of R-127. `incoming_payment` gains `discount_amount` and `on_account_amount` (exact decimals, defaulting to zero) — the two totals a completed receipt must remember — by migration `0088_incoming_payment_completion.sql`; the outcomes themselves stand on the payment's journal lines, so no allocation table lands and no policy migration is needed on an existing table. The database now stands at **151 migrations**, both columns verified standing.
+
+Verification: migrations applied and idempotent on rerun; typecheck clean. Acceptance remains stage 5, so SCR-079 is **not yet accepted**. Same-stage bookkeeping: B-511 / §26.527 / §30 row 2.345. **Cost (B-254, measured):** stage 1 published 16:28 UTC; stage 2 completed 16:30 UTC, the environment restore inside it notwithstanding.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1468,3 +1475,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.342 | 2026-10-18 | **Standing instruction recorded (B-508, §26.524).** `FUNCTIONS-AND-ROADMAP.md` updates on each completion or deferred decision, same turn, its As-of line naming the latest event. | Agent |
 | 2.343 | 2026-10-18 | **SCR-079 contract R-127 written (B-509, §26.525).** F-28 completion: per-item applied/discount with terms-tier suggestion judged against the tolerance default, full/residual/partial outcomes, on-account amounts and tolerated differences posted — the allocation table declined, journal lines carry outcomes. F-53 completion follows named. Stage 1 follows. | Agent |
 | 2.344 | 2026-10-18 | **SCR-079 stage 1 published (B-510, §26.526).** Incoming-payment screen reworked with Applied/Discount/Outcome per item and the on-account amount; posting disabled until the completion service (stage 3). Schema follows in stage 2. | Agent |
+| 2.345 | 2026-10-18 | **SCR-079 stage 2 published (B-511, §26.527).** `incoming_payment` gains the discount and on-account totals; 151 migrations. The completion service follows in stage 3. | Agent |

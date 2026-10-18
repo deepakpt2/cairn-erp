@@ -328,6 +328,9 @@ export const incomingPayment = pgTable('incoming_payment', {
   clearingDate: date('clearing_date', { mode: 'string' }).notNull(),
   bankGlAccount: varchar('bank_gl_account', { length: 10 }).notNull(),
   amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  /** Completion totals (SCR-079 / R-127): discount taken and the on-account remainder of this receipt. */
+  discountAmount: numeric('discount_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  onAccountAmount: numeric('on_account_amount', { precision: 23, scale: 4 }).notNull().default('0'),
   currency: char('currency', { length: 3 }).notNull(),
   reference: varchar('reference', { length: 16 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
