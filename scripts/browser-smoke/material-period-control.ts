@@ -38,7 +38,7 @@ export async function materialPeriodControlOmsy(ctx: Context) {
   await page.getByRole('heading', { level: 1, name: 'Define Material Period Control', exact: true }).waitFor();
   const section = page.locator('section[aria-labelledby="material-period-grid"]');
   const row = section.locator('tr').filter({
-    has: page.getByRole('cell', { name: '1000', exact: true }),
+    has: page.getByRole('cell', { name: /^1000/ }),
   });
   await row.getByText('Not initialized', { exact: true }).waitFor();
   console.log('  ✓ the company stands uninitialized');
