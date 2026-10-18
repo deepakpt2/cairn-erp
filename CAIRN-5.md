@@ -1107,6 +1107,13 @@ Stage 1 of R-124. `/finance/vendor-credit-memo` stands inert: the credit memo he
 Verification: typecheck clean. Acceptance remains stage 5, so SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-490 / §26.506 / §30 row 2.324. **Cost (B-254, measured):** the contract published 13:53 UTC; stage 1 completed 13:54 UTC.
 
 ---
+### 26.507 B-491 — SCR-076 stage 2: vendor invoice extended for credit memos
+
+Stage 2 of R-124. `vendor_invoice` gains `category` (`INVOICE` / `CREDIT_MEMO`, defaulting to INVOICE so every standing invoice keeps its meaning) and the optional `credit_of` link to the original invoice a memo stands against. One migration (`0085_vendor_credit_memo.sql`) under the table's standing RLS — no new table, no new policies, no SAP-width identity, exactly as contracted. The KG journal will be the authoritative posting; this header is the memo's own record beside it.
+
+Verification: the migration applied cleanly and the runner re-reports **146 already applied**; typecheck clean. SCR-076 is **not yet accepted**. Same-stage bookkeeping: B-491 / §26.507 / §30 row 2.325. **Cost (B-254, measured):** stage 1 published 13:54 UTC; stage 2 completed 14:00 UTC.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1276,3 +1283,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.322 | 2026-10-18 | **SCR-075 accepted and closed (B-488, §26.504).** FB60 direct vendor invoice stands: judged gross, standing tax, KR journal crediting the vendor at gross, VENDINV number, linked cancellation. Service tests 3/3, browser T922 green, suite 1323/172, seed 109/66/83/91, 145 migrations. Next T-code: **FB65** (SCR-076, `FIN.AP.CREDITMEMO.POST`), awaiting the owner field package. | Agent |
 | 2.323 | 2026-10-18 | **SCR-076 contract recorded (R-124, B-489, §26.505).** FB65 vendor credit memo extends the vendor invoice: category + optional credit-of link on `vendor_invoice`, KG journal debiting the vendor at the gross credit, judged gross, partial credits capped at the original. Awaiting stage 1 (UI). | Agent |
 | 2.324 | 2026-10-18 | **SCR-076 stage 1 published (B-490, §26.506).** `/finance/vendor-credit-memo` stands inert under `FIN.AP.CREDITMEMO.POST`: header, dates, reference, judged gross credit, optional original link, confirmation; refusal names the unconnected service. Schema is stage 2. | Agent |
+| 2.325 | 2026-10-18 | **SCR-076 stage 2 published (B-491, §26.507).** `vendor_invoice` gains category and credit-of (migration 0085; DB at 146) behind its standing RLS. Backend is stage 3. | Agent |

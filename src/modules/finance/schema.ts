@@ -476,6 +476,8 @@ export const vendorInvoice = pgTable('vendor_invoice', {
   client: tenantClient(),
   invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
   fiscalYear: integer('fiscal_year').notNull(),
+  category: varchar('category', { length: 12 }).notNull().default('INVOICE'),
+  creditOf: varchar('credit_of', { length: 20 }),
   vendorNumber: varchar('vendor_number', { length: 40 }).notNull(),
   companyCode: varchar('company_code', { length: 10 }).notNull(),
   documentDate: date('document_date', { mode: 'string' }).notNull(),
@@ -496,6 +498,7 @@ export const vendorInvoice = pgTable('vendor_invoice', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.invoiceNumber] }),
+  check('vendor_invoice_category_ck', sql`${t.category} in ('INVOICE', 'CREDIT_MEMO')`),
   check('vendor_invoice_status_ck', sql`${t.status} in ('POSTED', 'CANCELLED')`),
   check('vendor_invoice_gross_ck', sql`${t.grossAmount} > 0`),
   uniqueIndex('vendor_invoice_request_key_uq').on(t.client, t.requestKey),
