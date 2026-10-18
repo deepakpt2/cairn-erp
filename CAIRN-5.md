@@ -918,6 +918,13 @@ The owner's FB08 package is contracted as R-120, adapted to what already stands:
 
 ---
 
+### 26.481 B-465 — SCR-072 stage 1: the reversal screen stands, guarded gracefully
+
+Stage 1 of R-120 in owner stage order (UI first). The screen stands at `/finance/document-reversal`: the selection (company code, document number, fiscal year), the original journal's display with header and lines standing, the reversal inputs the contract asks for (reason, and the document and posting dates standing independent), and an explicit confirmation. Until the schema and service stages land, a stub answers by name that the reversal service is not yet connected and no connection is attempted — a graceful guard in the standing house style, judged by no gate. New users see the screen guarded; it has no capability, term, or registry entry yet, so search does not name it until stage 4. Same-stage bookkeeping: B-465 / §26.481 / §30 row 2.299. **No gate passes — the next stage is the schema work (B-466) and only the final stage registers a browser target. **Cost (B-254, measured):** the contract work ran 12:12–12:13 UTC under contract commit `1f32ad5`; this screen stage ran 12:13–12:14 UTC (same living session, same checkout), tsc clean at 12:14 UTC.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1051,6 +1058,7 @@ The owner's FB08 package is contracted as R-120, adapted to what already stands:
 | 2.296 | 2026-10-18 | **SCR-071 closed (B-462, §26.478).** Reset cleared items (FBRA) accepted under `FIN.CLEARING.RESET`: T926 + neighbours T927/T929 green on the production build, suite 1302 tests, harness 399, seed 105/66/78/87, 139 migrations. The wildcard capability-check defect found in acceptance stands fixed. Next T-code: **FB08** (reset-and-reverse), awaiting the owner's field package. | Agent |
 | 2.297 | 2026-10-18 | **CoA assignment dedicated screen (B-463, §26.479).** Owner-reported: assignment had no findable screen. `/config/company-codes/assign-chart-of-accounts` now stands (own capability, mandatory reason, initial-assignment only), linked from Company Codes, named in the Term Registry (105/66/79/87); T985 drives it green; suite 1306. | Agent |
 | 2.298 | 2026-10-18 | **SCR-072 reverse accounting document contracted (R-120, B-464, §26.480).** FB08 under house names on the standing reversal engine: any POSTED journal, cleared items refused naming FBRA (SAP parity), reversal-of-reversal deferred, tenant-configured `reversal_reason` codes, reversal document type AB, `accounting_reversal_link` both-ways unique; `FIN.DOCUMENT.REVERSE` created. | Agent |
+| 2.299 | 2026-10-18 | **SCR-072 stage 1: reversal screen standing, guarded gracefully (B-465, §26.481).** `/finance/document-reversal` renders the selection (company, document number, fiscal year), the original journal's summary with lines, the reason and the two dates; a stub reports the reversal service as not yet connected. tsc clean; **not yet accepted**. | Agent |
 
 ---
 

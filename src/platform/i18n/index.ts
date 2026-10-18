@@ -2050,6 +2050,13 @@ const en: Catalogue = {
     'closing balance for every fiscal period, with the line items behind ' +
     'any period one choice away. This screen displays; it never posts.',
   'clearingReset.title': 'Reset Cleared Items',
+  'documentReversal.title': 'Reverse Accounting Document',
+  'documentReversal.subtitle':
+    'A posted journal mirrored back: every line returns with debit and ' +
+    'credit swapped, the original stands marked reversed, and the pair ' +
+    'stands linked with its reason. The reversal posts its own type AB ' +
+    'document; a document whose items stand cleared is refused until ' +
+    'the clearing is reset. A posted document itself never changes.',
   'clearingReset.subtitle':
     'A clearing undone: the clearing stamp lifts from every item the ' +
     'named clearing document cleared, and the items stand open again. ' +
