@@ -2,23 +2,35 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import {
+  OUTGOING_PAYMENT_CAPABILITY, OutgoingPaymentError, getPayables,
+  type OutgoingPaymentView,
+} from '@/modules/finance/outgoing-payment';
+import OutgoingPayment from './OutgoingPayment';
 
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/finance/outgoing-payment';
-const CAPABILITY = 'FIN.AP.PAYMENT.POST';
 
 /**
- * Outgoing payment entry and allocation (SCR-078 / F-53 as a search
- * alias only; inert since stage 1).
- *
- * A vendor payment allocated against the open payables it settles.
- * The service lands in a later stage; until it stands, the screen
- * renders its shape and posts nothing.
+ * Outgoing payment entry and allocation (SCR-078 / F-53 as a search alias only).
  */
-export default async function OutgoingPaymentPage() {
+export default async function OutgoingPaymentPage({ searchParams }: {
+  searchParams: Promise<{ vendor?: string; companyCode?: string }>;
+}) {
   const session = await requireSession(ROUTE);
-  const canEnter = can(session, CAPABILITY);
+  const params = await searchParams;
+  const client = session.user.client;
+  let view: OutgoingPaymentView | null = null;
+  let loadError: string | null = null;
+  if (params.vendor && params.companyCode) {
+    try {
+      view = await getPayables(client, params.vendor.toUpperCase(), params.companyCode);
+    } catch (error) {
+      if (error instanceof OutgoingPaymentError) loadError = error.remedy ? `${error.message} ${error.remedy}` : error.message;
+      else throw error;
+    }
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -34,70 +46,12 @@ export default async function OutgoingPaymentPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('outgoingPayment.subtitle')}</p>
       </header>
 
-      {!canEnter && (
-        <p role="status" className="text-sm text-ink-soft">
-          {t('auth.readOnly', { authority: CAPABILITY })}
-        </p>
-      )}
-
-      <section aria-labelledby="op-load" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="op-load" className="text-sm font-semibold">Vendor and company</h2>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <input name="vendor" disabled placeholder="V10000" className="input w-40" />
-          <input name="companyCode" disabled placeholder="1000" className="input w-28" />
-          <button type="button" disabled className="btn btn-default min-h-11 sm:min-h-8">
-            Load open items
-          </button>
-        </div>
-      </section>
-
-      <section aria-labelledby="op-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="op-items" className="text-sm font-semibold">Open items</h2>
-        <p role="status" className="mt-2 text-sm text-ink-soft">
-          The outgoing payment service is not yet connected; this screen stands inert until the service lands.
-        </p>
-      </section>
-
-      <section aria-labelledby="op-payment" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="op-payment" className="text-sm font-semibold">Payment</h2>
-        <div className="mt-2 grid gap-2 sm:grid-cols-4">
-          <label className="text-xs text-ink-soft">
-            Bank G/L account
-            <input name="bankGlAccount" disabled placeholder="113100" className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Payment amount
-            <input name="amount" disabled placeholder="5250.00" className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Currency
-            <input name="currency" disabled placeholder="USD" className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Reference (cheque / transfer)
-            <input name="reference" disabled placeholder="CHQ-998877" maxLength={16} className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Document date
-            <input name="documentDate" disabled type="date" defaultValue={today} className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Posting date
-            <input name="postingDate" disabled type="date" defaultValue={today} className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Clearing date
-            <input name="clearingDate" disabled type="date" defaultValue={today} className="input mt-1 w-full" />
-          </label>
-          <label className="text-xs text-ink-soft">
-            Value date (optional)
-            <input name="valueDate" disabled type="date" className="input mt-1 w-full" />
-          </label>
-        </div>
-        <button type="button" disabled className="btn btn-primary mt-3 min-h-11 sm:min-h-8">
-          Post payment
-        </button>
-      </section>
+      <OutgoingPayment
+        view={view}
+        loadError={loadError}
+        canEnter={can(session, OUTGOING_PAYMENT_CAPABILITY)}
+        today={today}
+      />
     </div>
   );
 }

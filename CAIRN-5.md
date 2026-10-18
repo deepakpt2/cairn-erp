@@ -1222,6 +1222,13 @@ Stage 2 of R-126. `outgoing_payment` stands in the finance schema mirroring `inc
 Verification: migrations applied and idempotent on rerun; typecheck clean (after stopping the resident server — the typecheck was twice OOM-killed beside it, the standing 2 GB lesson). Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-503 / §26.519 / §30 row 2.337. **Cost (B-254, measured):** stage 1 completed 14:37 UTC; stage 2 completed 14:49 UTC, most of it the two killed typechecks.
 
 ---
+### 26.520 B-504 — SCR-078 stage 3: outgoing payment service and live screen
+
+Stage 3 of R-126. `src/modules/finance/outgoing-payment.ts` mirrors incoming payment act for act with the vendor in the customer's place: the vendor judges extended, unblocked and reconciliation-accounted; the open items are the vendor's uncleared reconciliation lines beneath POSTED journals, credit lines taken at their amount and debit lines — the vendor side of credit memos — taken against the payment, so a selection nets; one currency throughout; the net allocation must equal the payment exactly, the difference named in figures. Under the vendor's advisory lock the act writes one balanced KZ journal (the reconciliation account debited or credited item by item with the vendor as partner, the bank credited at the payment), stamps every selected line and the payment's own vendor lines cleared under the payment document at the clearing date, and records the payment once on `outgoing_payment` — a request key replaying to it. `/finance/outgoing-payment` is live on the mirrored screen, the optional value date recorded unjudged as contracted.
+
+Verification: typecheck clean. Acceptance remains stage 5, so SCR-078 is **not yet accepted**. Same-stage bookkeeping: B-504 / §26.520 / §30 row 2.338. **Cost (B-254, measured):** stage 2 published 14:49 UTC; stage 3 completed the same minute.
+
+---
 ---
 
 ## §30 · Change log (continued)
@@ -1404,3 +1411,4 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.335 | 2026-10-18 | **SCR-078 contract R-126 written (B-501, §26.517).** F-53 Post Outgoing Payment: KZ journal crediting the bank and debiting the vendor item by item, items netting (credit memos against the payment), exact allocation judged, standing clearing stamps — no allocation table. Partial/residual/discount/on-account/special G/L deferred, named. Stage 1 follows. | Agent |
 | 2.336 | 2026-10-18 | **SCR-078 stage 1 published (B-502, §26.518).** Inert `/finance/outgoing-payment` screen stands under `FIN.AP.PAYMENT.POST`. Schema follows in stage 2. | Agent |
 | 2.337 | 2026-10-18 | **SCR-078 stage 2 published (B-503, §26.519).** `outgoing_payment` stands (incoming-payment widths plus value date); 150 migrations. Service follows in stage 3. | Agent |
+| 2.338 | 2026-10-18 | **SCR-078 stage 3 published (B-504, §26.520).** Outgoing payment service stands: netting allocation judged exactly, KZ journal crediting the bank, clearing stamped in place; `/finance/outgoing-payment` is live. Capability and term follow in stage 4. | Agent |
