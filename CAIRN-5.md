@@ -662,6 +662,13 @@ The ageing service reconstructs standing as of the key date — posted by then, 
 
 ---
 
+### 26.446 B-430 — SCR-066 vendor ageing stage 4: the capability and term stand
+
+Stage 4 creates the capability `FIN.AP.AGEING` (display) and seats its term *Vendor ageing* at `/finance/vendor-ageing`, with S_ALR_87012085 standing as a search alias only. Seed reads back **100/66/73/82**.
+
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -760,6 +767,7 @@ The ageing service reconstructs standing as of the key date — posted by then, 
 | 2.261 | 2026-10-18 | **SCR-066 vendor ageing stage 1 (B-427, §26.443).** The inert ageing screen stands at `/finance/vendor-ageing` — selection and the empty ageing grid. Typecheck and production build clean. | Agent |
 | 2.262 | 2026-10-18 | **SCR-066 vendor ageing stage 2 (B-428, §26.444).** No ageing table by contract — standing reconstructs from the journal; migration `0078` adds the company/posting-date header index. 133 migrations standing. | Agent |
 | 2.263 | 2026-10-18 | **SCR-066 vendor ageing stage 3 (B-429, §26.445).** Standing reconstructs as of the key date and ages on the due-date rule into per-supplier buckets with a company total; the screen is live with item detail and the balances drill-down. Typecheck and production build clean. | Agent |
+| 2.264 | 2026-10-18 | **SCR-066 vendor ageing stage 4 (B-430, §26.446).** Capability `FIN.AP.AGEING` created; the ageing term seeded at its route with S_ALR_87012085 a search alias only. Seed reads back 100/66/73/82. | Agent |
 
 ---
 
