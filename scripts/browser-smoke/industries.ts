@@ -81,6 +81,7 @@ export async function industriesOb44(ctx: Context) {
   await page.locator('#dlg-industry-delete-reason').fill(REASON);
   await page.getByRole('button', { name: 'Delete', exact: true }).last().click();
   await page.getByText(/cannot be deleted: 1 business partner carries it/).waitFor();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   console.log('  ✓ the carried industry refuses deletion');
 
   // ── 4. The database remembers it all ─────────────────────────────────────
