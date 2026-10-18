@@ -231,6 +231,22 @@ The supporting register stands: capability `PROC.PR.CREATE` and the term *Create
 
 ---
 
+### 26.389 B-373 — SCR-055 / ME51N closed and accepted: purchase requisitions stand
+
+**What shipped across the five stages.** The first purchasing document stands: item-level requisitions with no header record, numbers drawn from the PURCHREQ range through the standing engine, each item judged against the standing masters — plant and company, storage location, purchasing group, material and plant extension, unit, delivery date, the estimated price with its unit and currency — and cost-centre assignments judged valid-on-date, unlocked, P&L in the company chart, percentages totalling a hundred. Saving posts nothing, so neither the FI periods nor the OMSY material control is ever consulted here, exactly as the package's §4 demands; a flagged-for-deletion material warns and never blocks. Changes keep item numbers stable, deletion is an item mark, and every act writes one change document. ME51N, ME52N and ME53N live as search aliases on the one term.
+
+**Acceptance evidence.** Service tests **3/3** (`tests/purchase-requisition.test.ts`: the range draw and master refusals, assignment judging at a hundred percent, stable item numbers under change with the deletion mark). One fixture lesson, recorded: test tenants carry no operational ranges, so the fixture defines PURCHREQ through the same `defineRange` provisioning uses, and the cost centre stands under the tenant's standing controlling area (A000), discovered rather than assumed. Browser target `purchase-requisitions` (T942) **green journeys** against the production build: the empty overview, `PR-0000001` created through the item grid, the document in the overview, the database remembering. Neighbouring targets `material-period-control` (T943) and `material-deletion-flag` (T944) passed undisturbed.
+
+**Gates.** `npm run typecheck` and `lint:ip` clean; production build compiled; suite **1249 tests across 151 files**; **113 migrations** standing; seed **93/64/63/63** read back.
+
+**Cost.** Measured: 06:30 in to 06:41 — **11 minutes** across the audit, contract and five stages, every stage inside its 39-minute box.
+
+**Deferred and named, per the owner's full-parity rule.** Release workflow (with the unbuilt release-strategy configuration, an obligation of the PO round at the latest), conversion links and ordered quantities (the PO round's), document-type maintenance, source of supply, MRP-created requisitions, quantity/amount distribution, order-unit conversion, submission idempotency, and the asset/project/order assignment categories whose masters do not exist yet.
+
+**What stands after this.** Requisitions can be created and changed against every master they name. **SCR-056 / ME21N** (purchase orders) is next on the schedule: the conversion of requisition items into orders, the release act the seeded `PROC.PO.RELEASE` capability already names, and the first document the period gates will eventually bind through goods receipt.
+
+---
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -264,6 +280,7 @@ The supporting register stands: capability `PROC.PR.CREATE` and the term *Create
 | 2.196 | 2026-10-18 | **SCR-055 / ME51N stage 2 (B-370, §26.386).** Migrations `0066` + `9045` applied (113 standing): item-level `purchase_requisition_item` and `purchase_requisition_assignment` behind forced tenant RLS, Drizzle tables in the new `src/modules/purchasing` module. Typecheck clean. | Agent |
 | 2.197 | 2026-10-18 | **SCR-055 / ME51N stage 3 (B-371, §26.387).** The requisition service and live screen: PURCHREQ draw, master judging, cost-centre assignment at a hundred percent, deletion flags warning only, period gates never consulted, one change document per act. Typecheck, `lint:ip` and the production build clean. | Agent |
 | 2.198 | 2026-10-18 | **SCR-055 / ME51N stage 4 (B-372, §26.388).** Capability `PROC.PR.CREATE` and the requisition term seeded with ME51N/ME52N/ME53N as search aliases; seed reads back 93/64/63/63. | Agent |
+| 2.199 | 2026-10-18 | **SCR-055 / ME51N CLOSED and accepted (B-373, §26.389).** Stage 5 ships 3 service tests and the T942 browser target `purchase-requisitions` (green — PR-0000001 through the item grid, the database remembering). Neighbouring `material-period-control` and `material-deletion-flag` targets, typecheck, `lint:ip` and the production build clean; suite 1249 across 151 files, 113 migrations, seed 93/64/63/63. Deferred and named in the entry. Cost measured at 11 minutes. | Agent |
 
 ---
 
