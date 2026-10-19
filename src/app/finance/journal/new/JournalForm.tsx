@@ -84,7 +84,7 @@ export function JournalForm({ companies, types, accounts }: {
     let scaled: bigint;
     try { scaled = toScaled(line.amount); } catch { return t('journal.errorAmountFormat'); }
     if (scaled <= 0n) return t('journal.errorAmountPositive');
-    const fraction = line.amount.split('.')[1] ?? '';
+    const fraction = (line.amount.split('.')[1] ?? '').replace(/0+$/, '');
     if (fraction.length > decimals) return t('journal.errorAmountPrecision', { decimals });
     if (account?.requiresCostObject && !line.costCenter && !line.profitCenter) {
       return t('journal.errorCostObjectRequired');

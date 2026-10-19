@@ -190,8 +190,9 @@ export async function postGlDocument(input: GlDocumentInput): Promise<PostedJour
           'Enter a positive amount and set the line to debit or credit.',
         );
       }
-      const fraction = String(line.amount).split('.')[1] ?? '';
-      if (fraction.length > decimals) {
+      // Precision is judged on value, not spelling: 50.0000 is a
+      // two-decimal amount written at canonical scale, 100.234 is not.
+      if (scaled % (10n ** BigInt(4 - decimals)) !== 0n) {
         throw new GlDocumentError(
           `Line ${i + 1}: amount ${line.amount} exceeds the ${decimals} decimal places of ${company.currency}.`,
           'Correct the amount to the currency precision.',
