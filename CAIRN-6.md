@@ -730,6 +730,10 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
 Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
+## §26.703 — SCR-106 stage 1: statement vocabulary and report shell
+
+**B-687.** The statement vocabulary stands in `src/modules/finance/trial-balance.ts` (selection, node/account rows, result with warnings and unassigned accounts under the FIN.RPT.TRIALBALANCE capability) and `/finance/trial-balance` renders the selection panel and the hierarchical statement grid with account drill-down links to the standing FS10N-equivalent balances. Nothing computes yet. Same-stage bookkeeping: B-687 / §26.703 / §30 row 2.521.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -881,3 +885,4 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.518 | 2026-10-19 | **SCR-105 stage 5 published (B-684, §26.700).** Four release service tests pass (determinations, override discipline, reject/recheck/reblock, bulk outcomes); browser target T891 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.519 | 2026-10-19 | **SCR-105 CLOSED (B-685, §26.701).** FIN.CREDIT.RELEASE accepted: determinations as the single credit status, re-evaluating releases, separate override privilege (suite 1462/1462; browser T891). Next SCR: FIN.RPT.TRIALBALANCE (F.01); its package is awaited. | Agent |
 | 2.520 | 2026-10-19 | **SCR-106 contract approved (B-686, §26.702, R-154).** FIN.RPT.TRIALBALANCE: the FSV configuration canon arrives with the read-only F.01 statement — dynamic hierarchy, canonical balance semantics, comparatives, explicit unassigned-account warnings. Stage 1 (vocabulary + report shell) follows. | Owner + Agent |
+| 2.521 | 2026-10-19 | **SCR-106 stage 1 published (B-687, §26.703).** Statement vocabulary and the F.01 report shell stand. The FSV schema follows in stage 2. | Agent |
