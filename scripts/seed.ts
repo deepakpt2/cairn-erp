@@ -180,6 +180,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.CREDIT.MONITOR', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display the credit exposure overview per customer and credit control area' },
   { code: 'FIN.CREDIT.RELEASE', module: 'FIN', action: 'POST', posting: true, description: 'Release, reject and reblock credit-blocked sales documents' },
   { code: 'FIN.CREDIT.OVERRIDE', module: 'FIN', action: 'POST', posting: true, description: 'Override a still-failing credit check on release, with justification' },
+  { code: 'FIN.RPT.TRIALBALANCE', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display the trial balance / F.01 financial statement' },
   { code: 'FIN.ASSET.CHANGE', module: 'FIN', action: 'CHANGE', posting: false, description: 'Change fixed asset master records' },
   { code: 'FIN.JOURNAL.REVERSE', module: 'FIN', action: 'REVERSE', posting: true, description: 'Reverse an accounting document' },
   { code: 'FIN.JOURNAL.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display an accounting document' },
@@ -371,6 +372,7 @@ const REGISTRY: Array<{
   { ourCode: 'FIN.ASSET.ACQUIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Acquire asset against offsetting account', route: '/finance/assets/acquire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABZON'], description: 'Post an asset acquisition to the asset class reconciliation account against an entered offsetting G/L account, without a vendor. Guided: entry, validation, simulation, confirmation. The engine document is the financial authority and a value transaction rides it; reversal is asset-aware so the value record cannot be orphaned. First acquisition capitalizes at the asset value date.' },
   { ourCode: 'FIN.ASSET.RETIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Retire asset by scrapping', route: '/finance/assets/retire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABAVN'], description: 'Retire an asset by scrapping without proceeds: complete or partial (percentage of, or an acquisition-value amount against, the remaining retireable value). The retired acquisition value is credited to the class reconciliation account, accumulated depreciation reversed for its proportional share, and the remaining book value written off to the class loss account, in one engine document riding a retirement value record. Complete retirement retires the asset; reversal is asset-aware and restores eligibility.' },
   { ourCode: 'FIN.ASSET.DEPRECIATE', termType: 'TRANSACTION', module: 'FIN', title: 'Depreciation run', route: '/finance/assets/depreciate', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['AFAB'], description: 'Calculate and post planned depreciation per asset and depreciation area for a company, fiscal year and period: test runs log without touching a balance; live runs post one balanced engine document (depreciation expense against accumulated depreciation) and record posted depreciation per asset and period, which repeat runs adjust and retirement reversals read. Planned, repeat and restart run types; unplanned depreciation awaits its extraordinary-transaction round.' },
+  { ourCode: 'FIN.RPT.TRIALBALANCE', termType: 'TRANSACTION', module: 'FIN', title: 'Trial balance / financial statement', route: '/finance/trial-balance', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['F.01'], description: 'Read-only F.01 statement over the configured financial statement version, whose hierarchy, account ranges and presentation signs resolve dynamically — nothing statutory is hardcoded. Balances derive from the posted journal in one snapshot: opening from every earlier year, debit and credit turnover from the selected period range (special periods only when included), balance at the cutoff as opening plus turnover through it, comparative figures by the identical rules with explicit zero-denominator variance handling. Accounts with balances but no FSV assignment are named in warnings and listed, never silently dropped; overlapping assignments count once and warn. Output currency converts through the standing ratio-aware rates, flagging a missing rate instead of converting wrongly.' },
   { ourCode: 'FIN.CREDIT.RELEASE', termType: 'TRANSACTION', module: 'FIN', title: 'Release credit-blocked documents', route: '/finance/credit-release', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['VKM3'], description: 'The credit determination queue for blocked sales documents: each determination is the single authoritative credit status for its document, recorded from the credit-check evaluation with its reason and check-time figures, and superseded — never edited — by every recheck, release, rejection and reblock in an append-only event trail. Release re-evaluates against the current standing and only releases on a passing fresh check; a still-failing document requires the separate override privilege with mandatory justification and approval reference, and is never silently bypassed. Rejecting a release request leaves the document blocked and untouched; reblocking always runs a fresh determination first. A release creates no delivery, invoice or accounting entry.' },
   { ourCode: 'FIN.CREDIT.MONITOR', termType: 'TRANSACTION', module: 'FIN', title: 'Credit exposure monitor', route: '/finance/credit-monitor', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['F.31'], description: 'Read-only credit overview per customer and credit control area, computed at execution time in one consistent snapshot: configured limit, open receivables exposure, available credit (negative when exceeded), utilization with zero and missing limits explicit, risk, holds and expired limits. Customers carrying exposure without a credit record are flagged, never hidden; order, delivery and billing components show as unavailable until the sales canon stands, never as silent zeros. Filters judge areas, companies, customer ranges, risk and representative groups; a reporting currency converts through the standing ratio-aware exchange rates, flagging rows whose rate is missing. Nothing here changes master data, posts, blocks or unblocks.' },
   { ourCode: 'FIN.CREDIT.MAINTAIN', termType: 'TRANSACTION', module: 'FIN', title: 'Customer credit management', route: '/finance/credit', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FD32'], description: 'Credit management per customer and credit control area on the canonical partner and area masters: limit in the area currency at its precision, risk category, representative group, customer credit group, limit validity and manual holds behind configured block reasons — every reference judged against standing configuration, every save stating its reason and landing one append-only audit row per changed field, protected by an optimistic-locking version. Exposure derives at read time from open receivables across the companies of the area, so available credit and utilization are always current, and the credit-check evaluation never bypasses: a missing record, a hold, an expired or zero limit, or an exceeded limit blocks, and the area warning threshold warns.' },
@@ -670,6 +672,46 @@ async function main() {
           ('03', 'Legal or insolvency')
         ) as v(reason_code, name)
       on conflict (client, reason_code) do nothing
+    `);
+
+    console.log('Seeding the standard financial statement version…');
+    await client.unsafe(`
+      insert into financial_statement_version (client, version, name, chart_of_accounts, created_by)
+      select c.client, 'INT', 'International financial statement', 'CA01', 'SEED'
+        from client c
+       where exists (select 1 from chart_of_accounts coa where coa.client = c.client and coa.chart_of_accounts = 'CA01')
+      on conflict (client, version) do nothing
+    `);
+    await client.unsafe(`
+      insert into financial_statement_node (client, version, node, description, parent_node, sequence, created_by)
+      select c.client, 'INT', v.node, v.description, v.parent_node, v.sequence, 'SEED'
+        from client c
+        cross join (values
+          ('BS', 'Balance sheet', null, 10),
+          ('ASSETS', 'Assets', 'BS', 10),
+          ('LIAEQ', 'Liabilities and equity', 'BS', 20),
+          ('LIABILITIES', 'Liabilities', 'LIAEQ', 10),
+          ('EQUITY', 'Equity', 'LIAEQ', 20),
+          ('PL', 'Profit and loss', null, 20),
+          ('REVENUE', 'Revenue', 'PL', 10),
+          ('EXPENSES', 'Expenses', 'PL', 20)
+        ) as v(node, description, parent_node, sequence)
+       where exists (select 1 from chart_of_accounts coa where coa.client = c.client and coa.chart_of_accounts = 'CA01')
+      on conflict (client, version, node) do nothing
+    `);
+    await client.unsafe(`
+      insert into financial_statement_assignment (client, version, node, account_from, account_to, presentation_sign, created_by)
+      select c.client, 'INT', v.node, v.account_from, v.account_to, v.presentation_sign, 'SEED'
+        from client c
+        cross join (values
+          ('ASSETS', '100000', '199999', 'NORMAL'),
+          ('LIABILITIES', '200000', '279999', 'INVERTED'),
+          ('EQUITY', '280000', '299999', 'INVERTED'),
+          ('REVENUE', '300000', '399999', 'INVERTED'),
+          ('EXPENSES', '400000', '599999', 'NORMAL')
+        ) as v(node, account_from, account_to, presentation_sign)
+       where exists (select 1 from chart_of_accounts coa where coa.client = c.client and coa.chart_of_accounts = 'CA01')
+      on conflict (client, version, node, account_from, account_to) do nothing
     `);
 
     console.log('Seeding the standard month-end close template…');

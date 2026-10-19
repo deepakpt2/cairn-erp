@@ -742,6 +742,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-689.** `calculateTrialBalance` validates company, chart and FSV compatibility, then aggregates the journal once per account — opening from earlier years, range debit/credit turnover, turnover through the cutoff, comparative equivalents — before mapping into the dynamically resolved FSV hierarchy. Assignments count an account once (first node in statement order) with duplicate warnings; presentation signs apply per assignment; balances at cutoff are opening plus turnover through the cutoff, never double-counted; unassigned accounts with balances surface in warnings and their own list; zero comparatives yield null variance percentages; output currency converts through ratio-aware rates with a missing-rate warning. The report page is wired with company/version selects and account drill-downs. Same-stage bookkeeping: B-689 / §26.705 / §30 row 2.523.
 
+## §26.706 — SCR-106 stage 4: capability, F.01 alias, standard FSV, navigation
+
+**B-690.** Seed grows by the FIN.RPT.TRIALBALANCE capability (140 total), the statement term carrying the F.01 alias (113 terms), and a delivered standard FSV (INT: balance sheet with assets/liabilities/equity, profit and loss with revenue/expenses, presentation signs set) for every tenant standing on the standard chart. The journal list gains the trial-balance entry. Seeded twice, idempotent. Same-stage bookkeeping: B-690 / §26.706 / §30 row 2.524.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -896,3 +900,4 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.521 | 2026-10-19 | **SCR-106 stage 1 published (B-687, §26.703).** Statement vocabulary and the F.01 report shell stand. The FSV schema follows in stage 2. | Agent |
 | 2.522 | 2026-10-19 | **SCR-106 stage 2 published (B-688, §26.704).** Migration 0115 (178 total) stands: FSV version/nodes/assignments and the journal aggregation index. The statement service follows in stage 3. | Agent |
 | 2.523 | 2026-10-19 | **SCR-106 stage 3 published (B-689, §26.705).** The F.01 statement calculates in one snapshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |

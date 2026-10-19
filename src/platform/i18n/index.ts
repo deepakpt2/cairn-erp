@@ -2423,6 +2423,7 @@ const en: Catalogue = {
   'journal.closeCockpit': 'Close cockpit…',
   'journal.carryforward': 'Carryforward…',
   'journal.credit': 'Credit management…',
+  'journal.trialBalance': 'Trial balance…',
   'trial.title': 'Trial Balance / Financial Statement',
   'trial.intro': 'The F.01 statement over the configured financial statement version: opening from every earlier year, turnover from the selected periods, balance at the cutoff — with comparatives and variances. Accounts without an FSV assignment are named below, never dropped.',
   'trial.selectionTitle': 'Statement selection',
