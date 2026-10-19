@@ -666,6 +666,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 **B-673.** The monitor vocabulary joins `credit.ts` (filter, row — with the SD components explicitly nullable-unavailable — and result shapes) and `/finance/credit-monitor` renders the filter panel and the exposure grid with breach highlighting and FD32 drill-down links. Nothing computes yet. Same-stage bookkeeping: B-673 / §26.689 / §30 row 2.507.
 
+## §26.690 — SCR-104 stage 2: monitor indexes (migration 0113)
+
+**B-674.** Migration `0113_credit_monitor_indexes.sql` (176 total, applied) adds exactly the two access paths R-152 permits: `(client, credit_control_area, customer)` on the credit record — the package's composite, which did not stand equivalently against the (customer, area) key — and `(client, business_partner, clearing_document)` on journal lines for the open-item aggregation. No tables, no persisted exposure. Drizzle schemas declare both indexes. Same-stage bookkeeping: B-674 / §26.690 / §30 row 2.508.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -804,3 +808,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.505 | 2026-10-19 | **SCR-103 CLOSED (B-671, §26.687).** FIN.CREDIT.MAINTAIN accepted: judged audited credit records, derived exposure, never-bypass checks (suite 1453/1453; browser T893). Next SCR: FIN.CREDIT.MONITOR (F.31); its package is awaited. | Agent |
 | 2.506 | 2026-10-19 | **SCR-104 contract approved (B-672, §26.688, R-152).** FIN.CREDIT.MONITOR: read-only exposure overview over SCR-103 records and open AR, index-only migration, snapshot-consistent, unavailable SD components shown explicitly. Stage 1 (vocabulary + monitor shell) follows. | Owner + Agent |
 | 2.507 | 2026-10-19 | **SCR-104 stage 1 published (B-673, §26.689).** Monitor vocabulary and the overview shell stand. The index migration follows in stage 2. | Agent |
+| 2.508 | 2026-10-19 | **SCR-104 stage 2 published (B-674, §26.690).** Migration 0113 (176 total) stands: credit-area and open-item indexes only. The monitor service follows in stage 3. | Agent |

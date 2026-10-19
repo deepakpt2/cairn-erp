@@ -206,6 +206,7 @@ export const journalEntryLine = pgTable(
     index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber),
     index('jel_costcenter_idx').on(t.client, t.costCenter),
     index('jel_clearing_idx').on(t.client, t.clearingDocument),
+    index('journal_entry_line_partner_open_idx').on(t.client, t.businessPartner, t.clearingDocument),
     index('journal_entry_line_tax_report_idx').on(t.client, t.taxCode, t.taxReturnRunId),
   ],
 );
@@ -1744,6 +1745,7 @@ export const customerCredit = pgTable('customer_credit', {
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 }, (t) => [
   primaryKey({ columns: [t.client, t.customer, t.creditControlArea] }),
+  index('customer_credit_area_idx').on(t.client, t.creditControlArea, t.customer),
   foreignKey({
     columns: [t.client, t.customer],
     foreignColumns: [businessPartner.client, businessPartner.partnerNumber],
