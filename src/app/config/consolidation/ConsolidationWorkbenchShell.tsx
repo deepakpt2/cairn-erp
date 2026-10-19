@@ -5,7 +5,7 @@ import { useActionState } from 'react';
 import {
   CONSOLIDATION_FOLDERS, METHOD_KINDS, TASK_TYPES,
   type ConsolidationArea, type ConsolidationFolder, type ConsolidationWorkbenchView,
-} from '@/modules/finance/consolidation-workbench';
+} from '@/modules/finance/consolidation-vocabulary';
 import {
   activateAreaAction, assignUnitAction, saveAreaAction, saveBasisAction,
   saveGroupAccountAction, saveGroupAction, saveMappingAction, saveMethodAction,
