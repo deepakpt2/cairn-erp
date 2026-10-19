@@ -15,8 +15,17 @@
  * DOCKER (the normal path, after `docker compose up -d` has completed
  * and the migrate service has finished on the fresh database):
  *
+ *   git pull   # walkthrough-seed.ts must stand next to docker-compose.yml
  *   docker compose run --rm migrate npx tsx walkthrough-seed.ts
  *   docker compose run --rm migrate npx tsx walkthrough-seed.ts --client=W100
+ *
+ * If the run answers "Cannot find module '/app/walkthrough-seed.ts'",
+ * the host file or the operations image predates this seed: confirm
+ * `ls walkthrough-seed.ts` succeeds beside docker-compose.yml, then
+ * bake the current tree into the image and run again:
+ *
+ *   docker compose build migrate
+ *   docker compose run --rm migrate npx tsx walkthrough-seed.ts
  *
  * Do NOT run it in the `app` container (runtime-only image, no source or
  * tsx) and do NOT source .env.local inside a container — Compose already
