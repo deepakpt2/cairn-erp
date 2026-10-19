@@ -708,6 +708,10 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
 **B-682.** `checkSalesDocumentCredit` records determinations from the SCR-103 evaluation (BLOCKED on any block reason, PASSED otherwise, check-time figures captured, CHECK event written); the queue lists current determinations per document with live exposure joined from the monitor. Release re-evaluates and only releases on a passing fresh check — a still-failing document needs the separate override privilege with mandatory justification and approval reference; reject records the decision and leaves the document untouched; reblock always runs a fresh determination first; concurrent changes report actual results instead of overwriting; bulk release processes documents independently with per-document outcomes. The queue UI is wired (filters, bulk selection, per-row recheck/release/reject/reblock). Same-stage bookkeeping: B-682 / §26.698 / §30 row 2.516.
 
+## §26.699 — SCR-105 stage 4: capabilities, VKM3 alias, navigation
+
+**B-683.** Seed grows by the FIN.CREDIT.RELEASE and FIN.CREDIT.OVERRIDE capabilities (139 total — the override deliberately separate from release) and the release-queue term carrying the VKM3 alias (112 terms); the monitor links to the release queue. Seeded twice, idempotent. Same-stage bookkeeping: B-683 / §26.699 / §30 row 2.517.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -855,3 +859,4 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 | 2.514 | 2026-10-19 | **SCR-105 stage 1 published (B-680, §26.696).** Release-queue vocabulary and the determination queue shell stand. Schema follows in stage 2. | Agent |
 | 2.515 | 2026-10-19 | **SCR-105 stage 2 published (B-681, §26.697).** Migration 0114 (177 total) stands: determinations with supersedes chains and the append-only release event trail. The release service follows in stage 3. | Agent |
 | 2.516 | 2026-10-19 | **SCR-105 stage 3 published (B-682, §26.698).** Determinations, re-evaluating releases with a separate override privilege, rejects and reblocks stand; the queue is wired. Supporting seed follows in stage 4. | Agent |
+| 2.517 | 2026-10-19 | **SCR-105 stage 4 published (B-683, §26.699).** FIN.CREDIT.RELEASE and FIN.CREDIT.OVERRIDE capabilities (139) and the VKM3 alias term seed; release navigation stands. Acceptance follows in stage 5. | Agent |

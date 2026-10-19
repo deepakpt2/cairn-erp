@@ -47,6 +47,10 @@ export default async function Page({ searchParams }: {
         <Link href="/finance/credit" className="mt-1 inline-block text-sm text-accent hover:underline">
           {t('monitor.openCredit')}
         </Link>
+        {' · '}
+        <Link href="/finance/credit-release" className="mt-1 inline-block text-sm text-accent hover:underline">
+          {t('monitor.openRelease')}
+        </Link>
       </header>
       <CreditMonitorShell canUse={canUse} result={result} error={error} filter={filter} />
     </main>
