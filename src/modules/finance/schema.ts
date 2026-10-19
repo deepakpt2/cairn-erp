@@ -152,6 +152,7 @@ export const journalEntry = pgTable(
     // The primary key IS the document identity — no separate unique index needed.
     primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear] }),
     index('journal_entry_company_date_idx').on(t.client, t.companyCode, t.postingDate),
+    index('journal_entry_company_posting_idx').on(t.client, t.companyCode, t.postingDate, t.documentNumber),
     index('journal_entry_origin_idx').on(t.client, t.originClass, t.originKey),
   ],
 );
@@ -195,6 +196,7 @@ export const journalEntryLine = pgTable(
   (t) => [
     primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear, t.lineNumber] }),
     index('jel_account_idx').on(t.client, t.glAccount, t.fiscalYear),
+    index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber),
     index('jel_costcenter_idx').on(t.client, t.costCenter),
     index('jel_clearing_idx').on(t.client, t.clearingDocument),
   ],

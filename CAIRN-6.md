@@ -153,6 +153,10 @@ The owner supplied the FAGLL03 field package (2026-10-19); SAP codes stand as se
 
 **B-565.** Stage 1 of R-136. The `/finance/journal/items` screen stands as a shell: the selection (account range, company codes, fiscal year, posting-date boundaries, document, type, assignments, reference, hit cap and the All/Open/Cleared radio with its open-item note) and the results grid rendered empty with its no-match and truncation wordings in place. No query stands behind it yet; the Execute button judges only the capability. A stub module carries `FIN.JOURNAL.LIST` and the report vocabulary. Same-stage bookkeeping: B-565 / §26.581 / §30 row 2.399.
 
+## §26.582 — SCR-088 stage 2: reporting indexes
+
+**B-566.** Stage 2 of R-136. The journal header gains (client, company, posting date, document) and the journal line gains (client, company, account, year, document, line) — declared in the Drizzle definitions and applied by migration `0098_journal_item_report_indexes.sql` (**161 migrations**). Nothing else changes: the report will read the canonical tables exactly as they stand. Typecheck clean. Same-stage bookkeeping: B-566 / §26.582 / §30 row 2.400.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -183,3 +187,4 @@ The owner supplied the FAGLL03 field package (2026-10-19); SAP codes stand as se
 | 2.397 | 2026-10-19 | **SCR-087 CLOSED (B-563, §26.579).** FV50 accepted at full parity: staged parked documents under PARKDOC numbers, judged save-as-complete, atomic posting through the engine with the posted reference retained, reasoned logical deletion. Targeted 3/3, suite 1372 green, browser T909 green, seed 120/94/103, 160 migrations. | Agent |
 | 2.398 | 2026-10-19 | **SCR-088 / FAGLL03 contracted (R-136, B-564, §26.580).** A read-only line-item report over the canonical journal: session-bound tenant, reporting indexes only, server-capped hits with a truncation signal, open/cleared judged from the clearing document on open-item-managed accounts only; ledger, assignment and special-G/L filters declined by name as unstored. | Agent |
 | 2.399 | 2026-10-19 | **SCR-088 stage 1 published (B-565, §26.581).** The inert FAGLL03 selection screen and empty grid; i18n keys added. No query stands yet. | Agent |
+| 2.400 | 2026-10-19 | **SCR-088 stage 2 published (B-566, §26.582).** Reporting indexes stand on the canonical journal (migration 0098, 161 migrations); no table created. The query follows in stage 3. | Agent |
