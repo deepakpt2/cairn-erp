@@ -119,17 +119,21 @@ async function calculateItems(
       eq(assetDepreciation.client, client), eq(assetDepreciation.companyCode, input.companyCode),
       eq(assetDepreciation.assetNumber, asset.assetNumber), eq(assetDepreciation.subNumber, asset.subNumber),
     )).orderBy(asc(assetDepreciation.areaCode));
+    // Values count from their asset value date: an acquisition
+    // effective after the period end does not depreciate in it.
     const acq = await tx.select({ amount: assetTransaction.amount, currency: assetTransaction.currency })
       .from(assetTransaction).where(and(
         eq(assetTransaction.client, client), eq(assetTransaction.companyCode, input.companyCode),
         eq(assetTransaction.assetNumber, asset.assetNumber), eq(assetTransaction.subNumber, asset.subNumber),
         eq(assetTransaction.status, 'ACTIVE'),
+        sql`${assetTransaction.assetValueDate} <= ${periodEnd}`,
       ));
     const ret = await tx.select({ value: assetRetirement.retiredAcquisitionValue })
       .from(assetRetirement).where(and(
         eq(assetRetirement.client, client), eq(assetRetirement.companyCode, input.companyCode),
         eq(assetRetirement.assetNumber, asset.assetNumber), eq(assetRetirement.subNumber, asset.subNumber),
         eq(assetRetirement.status, 'ACTIVE'),
+        sql`${assetRetirement.assetValueDate} <= ${periodEnd}`,
       ));
     const base = round2(
       acq.reduce((s, r) => s + Number(r.amount), 0) - ret.reduce((s, r) => s + Number(r.value), 0),
