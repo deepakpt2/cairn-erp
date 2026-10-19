@@ -189,6 +189,8 @@ export const journalEntryLine = pgTable(
     taxCode: varchar('tax_code', { length: 4 }),
     /** Line assignment (SCR-096): matching and reporting reference, at most 18 characters. */
     assignment: varchar('assignment', { length: 18 }),
+    /** Tax return stamp (SCR-097): the update run that reported this tax line, if any. */
+    taxReturnRunId: varchar('tax_return_run_id', { length: 24 }),
     lineText: text('line_text'),
     /** Clearing state for open item management. */
     clearingDocument: varchar('clearing_document', { length: 40 }),
@@ -203,6 +205,7 @@ export const journalEntryLine = pgTable(
     index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber),
     index('jel_costcenter_idx').on(t.client, t.costCenter),
     index('jel_clearing_idx').on(t.client, t.clearingDocument),
+    index('journal_entry_line_tax_report_idx').on(t.client, t.taxCode, t.taxReturnRunId),
   ],
 );
 
@@ -220,6 +223,37 @@ export const journalPostingRequest = pgTable('journal_posting_request', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.client, t.requestKey] }),
+]);
+
+/**
+ * Tax return execution log (SCR-097 / R-145): one row per advance
+ * return execution, test runs included — the audit trail. Update
+ * runs additionally stamp the journal lines they report.
+ */
+export const taxReturnRun = pgTable('tax_return_run', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taxGroup: varchar('tax_group', { length: 10 }),
+  postingDateFrom: date('posting_date_from', { mode: 'string' }).notNull(),
+  postingDateTo: date('posting_date_to', { mode: 'string' }).notNull(),
+  taxReturnCountry: char('tax_return_country', { length: 2 }).notNull(),
+  isTestRun: boolean('is_test_run').notNull().default(true),
+  doNotUpdateDocuments: boolean('do_not_update_documents').notNull().default(false),
+  isCorrectedReturn: boolean('is_corrected_return').notNull().default(false),
+  electronicReturn: boolean('electronic_return').notNull().default(false),
+  clearingAccount: varchar('clearing_account', { length: 10 }),
+  totalTaxBase: numeric('total_tax_base', { precision: 23, scale: 4 }).notNull().default('0'),
+  totalInputTax: numeric('total_input_tax', { precision: 23, scale: 4 }).notNull().default('0'),
+  totalOutputTax: numeric('total_output_tax', { precision: 23, scale: 4 }).notNull().default('0'),
+  netTax: numeric('net_tax', { precision: 23, scale: 4 }).notNull().default('0'),
+  currency: char('currency', { length: 3 }).notNull(),
+  transferDocumentNumber: varchar('transfer_document_number', { length: 40 }),
+  linesReported: integer('lines_reported').notNull().default(0),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  index('tax_return_run_company_idx').on(t.client, t.companyCode, t.postingDateFrom),
 ]);
 
 /**

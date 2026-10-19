@@ -430,6 +430,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-621.** Stage 1 of R-145: the FIN.TAX.REPORT vocabulary (selection, line and result types), the `/finance/tax/report` selection screen with test-run defaulting on and mode options explicit, and the result grid shape (code, account key, rate, derived base, input/output tax, net) — execution lands in stage 3. One clarification to R-145 point (3): the execution log records **every** execution including test runs, as the package's audit-trail requirement demands; test runs still stamp nothing, transfer nothing and lock nothing. Same-stage bookkeeping: B-621 / §26.637 / §30 row 2.455.
 
+## §26.638 — SCR-097 stage 2: run log, reported stamp, extraction index
+
+**B-622.** Stage 2 of R-145, migration `0105_tax_return_run.sql` (168 migrations): the `tax_return_run` execution log (every execution, test runs included), the `tax_return_run_id` stamp on the canonical journal line, and the tax-code extraction index. House names throughout — client, never tenant_id; no BSET/T001 vocabulary in the schema. Same-stage bookkeeping: B-622 / §26.638 / §30 row 2.456.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -516,3 +520,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.453 | 2026-10-19 | **SCR-096 CLOSED (B-619, §26.635).** FB50 G/L document entry accepted: judged posting, canonical assignment, duplicate-safe resubmission, browser T900 green, suite 1422. Next in order: SCR-097 (FIN.TAX.REPORT), then FIN.FX.VALUATE — packages awaited. | Agent |
 | 2.454 | 2026-10-19 | **SCR-097 contract published (B-620, §26.636, R-145).** S_ALR_87012357 advance tax return: extraction from canonical tax-coded journal lines, derived base labelled as such, test/update isolation with line stamping, optional clearing transfer. UI stage follows. | Agent |
 | 2.455 | 2026-10-19 | **SCR-097 stage 1 published (B-621, §26.637).** Tax return vocabulary and selection shell stand; execution-log clarification recorded (test runs logged, never stamping). Schema follows in stage 2. | Agent |
+| 2.456 | 2026-10-19 | **SCR-097 stage 2 published (B-622, §26.638).** Tax return run log and line stamp stand (migration 0105, 168 total). Extraction and update service follows in stage 3. | Agent |
