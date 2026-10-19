@@ -978,6 +978,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-748.** `tests/gl-clearing.test.ts` (4 green) proves the open-item-management refusal, the open-item listing at zero standing balance, the unbalanced-selection and unconfigured-document-type refusals, the clearing journal posting with source and clearing lines stamped, request-key replay without a second clearing, and the already-cleared refusal naming the clearing document; browser target T882 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-748 / §26.764 / §30 row 2.582.
 
+## §26.765 — SCR-114 closed: clear G/L account accepted
+
+**B-749.** SCR-114 / FIN.GL.CLEAR is closed. The full suite stands at 1521/1521, the production build is green, and browser target T882 passed (two balancing items cleared, source and clearing lines stamped in the database). Manual G/L clearing judges the account extended and open-item managed segment-first, locks and revalidates every item at posting, posts a real offsetting clearing document through the standing posting engine under an operator-selected configured document type, stamps lines atomically, replays on request key, and audits through change documents; reset rides the standing FBRA workflow. Catalogue: 146 capabilities / 119 terms / 138 aliases; FUNCTIONS-AND-ROADMAP carries FIN.GL.CLEAR as Implemented (SCR-114, B-749), alias F-03. Deferred by name: tolerance-based difference posting, partial/residual and multi-currency clearing. Next in the frozen order: FIN.RPT.SUBLEDGER.TIE (the F.03 Reconciliation report), then FIN.CONSOLIDATE / FIN.CONSOLIDATE.STMT; FIN.RPT.CASHFLOW follows under its own later package (B-721), intercompany last (B-663), and the SCR-112 exclusion-leaf resolver repair stands as a named follow-up. Same-stage bookkeeping: B-749 / §26.765 / §30 row 2.583.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
