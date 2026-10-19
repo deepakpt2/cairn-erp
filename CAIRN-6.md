@@ -806,6 +806,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-705.** Four service tests cover the suite (balance derivation with split balances and reconciling group subtotals; judged ledger/range/company; assignment with disjoint pagination and totals; canonical open/cleared judging with combined period + date filters) — 7 green with the stage-2 index contract. Browser target T888 (gl-reporting) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-705 / §26.721 / §30 row 2.539.
 
+## §26.722 — SCR-108 CLOSED: G/L reporting suite accepted
+
+**B-706.** The S_ALR_87012271/72/73 suite is accepted as enhancements to the standing reports (owner ruling, R-156): a range balance report with account-group subtotals and split debit/credit balances beside the FS10N account view, and line items with the assignment column, true pagination and CSV export over the canonical clearing judgement. Production build green; browser target T888 passed (derived closing over the range, group subtotals, paginated items carrying the assignment, re-runs persisted nothing); full suite 1483/1483. No new migration (178 stands), no new capability — the suite rides FIN.GL.BALANCE and FIN.JOURNAL.LIST. Deferred by name: output layout/variant persistence, multi-ledger reporting, and FIN.RPT.CASHFLOW itself, which remains Roadmap awaiting its own package. FUNCTIONS-AND-ROADMAP updated same turn (suite aliases on the two standing rows; 141 capabilities / 114 business terms). Next SCR: FIN.RPT.CASHFLOW (the cash-flow statement) — package awaited; the SCR after: FIN.RPT.PROFITLOSS. Same-stage bookkeeping: B-706 / §26.722 / §30 row 2.540.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -976,6 +980,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.537 | 2026-10-19 | **SCR-108 stage 3 published (B-703, §26.719).** The range balance report calculates with group subtotals; line items paginate and carry assignment; both reports export CSV. Aliases follow in stage 4. | Agent |
 | 2.538 | 2026-10-19 | **SCR-108 stage 4 published (B-704, §26.720).** S_ALR_87012271/72/73 seeded as search aliases on the standing balance/line-item terms. Acceptance follows in stage 5. | Agent |
 | 2.539 | 2026-10-19 | **SCR-108 stage 5 published (B-705, §26.721).** Suite service tests pass; browser target T888 registered. Production build and browser acceptance follow before closure. | Agent |
+| 2.540 | 2026-10-19 | **SCR-108 CLOSED (B-706, §26.722).** G/L reporting suite accepted over the standing FS10N/FAGLL03 reports (suite 1483/1483; browser T888). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
