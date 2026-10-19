@@ -2492,6 +2492,7 @@ const en: Catalogue = {
   'credit.save': 'Save credit data',
   'credit.saving': 'Saving…',
   'credit.openBalances': 'Customer balances…',
+  'credit.openMonitor': 'Exposure monitor…',
   'carry.title': 'G/L Balance Carryforward',
   'carry.intro': 'Carry a closed year into the next: balance-sheet openings derive from the posted journal and are recorded per account, profit-and-loss accounts close through a transfer document to retained earnings. Test-run first; repeat runs post only the delta. The prior year is never closed or locked here.',
   'carry.selectionTitle': 'Carryforward selection',

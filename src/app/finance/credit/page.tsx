@@ -44,6 +44,10 @@ export default async function Page({ searchParams }: {
         <Link href="/finance/customer-balances" className="mt-1 inline-block text-sm text-accent hover:underline">
           {t('credit.openBalances')}
         </Link>
+        {' · '}
+        <Link href="/finance/credit-monitor" className="mt-1 inline-block text-sm text-accent hover:underline">
+          {t('credit.openMonitor')}
+        </Link>
       </header>
       <CreditShell canUse={canUse} config={config} credit={credit} audit={audit} selected={selected} />
     </main>

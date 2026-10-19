@@ -674,6 +674,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 **B-675.** `listCreditMonitor` computes the overview in one tenant transaction: every filter judged against standing configuration, exposure aggregated per customer and area before the record join (no row multiplication), exposure-only customers surfaced with a NO_CREDIT_RECORD flag rather than hidden, utilization and availability derived with zero/missing limits explicit, the exceeded/blocked filters applied after computation, sorting by utilization, and optional reporting-currency conversion through the standing ratio-aware rates — a missing rate flags the row instead of converting wrongly. The overview page is wired (GET filters, error surface, FD32 drill-downs, breach and expired highlighting). Same-stage bookkeeping: B-675 / §26.691 / §30 row 2.509.
 
+## §26.692 — SCR-104 stage 4: capability, F.31 alias, navigation
+
+**B-676.** Seed grows by the FIN.CREDIT.MONITOR capability (137 total, display-only) and the exposure-monitor term carrying the F.31 alias (111 terms); the credit sheet links to the monitor. Seeded twice, idempotent. Same-stage bookkeeping: B-676 / §26.692 / §30 row 2.510.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -814,3 +818,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.507 | 2026-10-19 | **SCR-104 stage 1 published (B-673, §26.689).** Monitor vocabulary and the overview shell stand. The index migration follows in stage 2. | Agent |
 | 2.508 | 2026-10-19 | **SCR-104 stage 2 published (B-674, §26.690).** Migration 0113 (176 total) stands: credit-area and open-item indexes only. The monitor service follows in stage 3. | Agent |
 | 2.509 | 2026-10-19 | **SCR-104 stage 3 published (B-675, §26.691).** The monitor computes snapshot-consistent exposure over records and open AR with judged filters and flagged conversion; the overview is wired. Supporting seed follows in stage 4. | Agent |
+| 2.510 | 2026-10-19 | **SCR-104 stage 4 published (B-676, §26.692).** FIN.CREDIT.MONITOR capability (137) and the F.31 alias term seed; monitor navigation stands. Acceptance follows in stage 5. | Agent |
