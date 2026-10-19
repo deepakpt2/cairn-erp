@@ -458,6 +458,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-628.** Stage 1 of R-146: the FIN.FX.VALUATE vocabulary (selection, item and result types with per-item status and error), the `/finance/fx/valuation` selection screen with test-run defaulting on, open-item/balance switches, reversal-date field and the protocol grid shape with CSV export entry. Execution lands in stage 3. Same-stage bookkeeping: B-628 / §26.644 / §30 row 2.462.
 
+## §26.645 — SCR-098 stage 2: valuation run and item protocol
+
+**B-629.** Stage 2 of R-146, migration `0106_fx_valuation_run.sql` (169 migrations): `fx_valuation_run` (one row per execution, request-key unique, status TEST/COMPLETED/REVERSED, gain/loss totals and generated-document references) and `fx_valuation_item` (per-item source reference, foreign and carrying amounts, the exact valuation rate used, required amount, signed adjustment, gain/loss classification, status and error). Canonical documents, rates and balances are reused untouched. Same-stage bookkeeping: B-629 / §26.645 / §30 row 2.463.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -551,3 +555,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.460 | 2026-10-19 | **SCR-097 CLOSED (B-626, §26.642).** S_ALR_87012357 advance tax return accepted: posted-fact extraction, derived base, stamping lifecycle, clearing transfer, browser T899 green, suite 1427. Next in order: SCR-098 (FIN.FX.VALUATE / FAGL_FC_VAL), then FIN.GRIR.RECLASS — packages awaited. | Agent |
 | 2.461 | 2026-10-19 | **SCR-098 contract published (B-627, §26.643, R-146).** FAGL_FC_VAL valuation: canonical foreign-currency items, standing-rate methods with named missing-rate refusal, signed gain/loss rule via FXGAIN/FXLOSS determination, atomic live posting with reversal. UI stage follows. | Agent |
 | 2.462 | 2026-10-19 | **SCR-098 stage 1 published (B-628, §26.644).** FX valuation vocabulary and selection shell stand. Run/item schema follows in stage 2. | Agent |
+| 2.463 | 2026-10-19 | **SCR-098 stage 2 published (B-629, §26.645).** Valuation run/item protocol stands (migration 0106, 169 total). Valuation service follows in stage 3. | Agent |

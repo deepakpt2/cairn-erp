@@ -258,6 +258,73 @@ export const taxReturnRun = pgTable('tax_return_run', {
 ]);
 
 /**
+ * FX valuation run and item protocol (SCR-098 / R-146): the audit
+ * record of every valuation execution with the exact rates used.
+ */
+export const fxValuationRun = pgTable('fx_valuation_run', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  valuationArea: varchar('valuation_area', { length: 6 }).notNull(),
+  valuationKeyDate: date('valuation_key_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  reversalDate: date('reversal_date', { mode: 'string' }),
+  valuationMethod: varchar('valuation_method', { length: 12 }).notNull(),
+  documentType: varchar('document_type', { length: 12 }).notNull(),
+  isTestRun: boolean('is_test_run').notNull().default(true),
+  includeOpenItems: boolean('include_open_items').notNull().default(true),
+  includeBalances: boolean('include_balances').notNull().default(true),
+  status: varchar('status', { length: 12 }).notNull().default('TEST'),
+  totalGainAmount: numeric('total_gain_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  totalLossAmount: numeric('total_loss_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  postingDocumentNumber: varchar('posting_document_number', { length: 40 }),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  uniqueIndex('fx_valuation_run_request_uq').on(t.client, t.requestKey),
+  check('fx_valuation_run_status_ck', sql`${t.status} in ('TEST', 'COMPLETED', 'REVERSED')`),
+]);
+
+export const fxValuationItem = pgTable('fx_valuation_item', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  valuationArea: varchar('valuation_area', { length: 6 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  sourceKind: varchar('source_kind', { length: 12 }).notNull(),
+  accountNumber: varchar('account_number', { length: 10 }).notNull(),
+  sourceDocument: varchar('source_document', { length: 40 }),
+  sourceLine: integer('source_line'),
+  currency: char('currency', { length: 3 }).notNull(),
+  foreignAmount: numeric('foreign_amount', { precision: 23, scale: 4 }).notNull(),
+  carryingAmount: numeric('carrying_amount', { precision: 23, scale: 4 }).notNull(),
+  valuationRate: numeric('valuation_rate', { precision: 18, scale: 8 }),
+  rateType: varchar('rate_type', { length: 12 }).notNull(),
+  requiredAmount: numeric('required_amount', { precision: 23, scale: 4 }),
+  adjustmentAmount: numeric('adjustment_amount', { precision: 23, scale: 4 }),
+  classification: varchar('classification', { length: 8 }),
+  postingDocument: varchar('posting_document', { length: 40 }),
+  status: varchar('status', { length: 12 }).notNull(),
+  error: text('error'),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [fxValuationRun.client, fxValuationRun.runId],
+  }).onDelete('cascade'),
+  index('fx_valuation_item_source_idx').on(t.client, t.companyCode, t.valuationArea, t.sourceDocument, t.sourceLine, t.status),
+  check('fx_valuation_item_kind_ck', sql`${t.sourceKind} in ('OPEN_ITEM', 'BALANCE')`),
+  check('fx_valuation_item_class_ck', sql`${t.classification} is null or ${t.classification} in ('GAIN', 'LOSS', 'NONE')`),
+  check('fx_valuation_item_status_ck', sql`${t.status} in ('CALCULATED', 'POSTED', 'SKIPPED', 'ERROR')`),
+]);
+
+/**
  * Payment run (SCR-063 / R-111). Parameters with company and method
  * children, the proposal with its named exceptions, and payment
  * documents as the execution's retained evidence.
