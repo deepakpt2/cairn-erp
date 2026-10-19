@@ -57,6 +57,7 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
         <h2 id="dp-entry" className="text-sm font-semibold">Run parameters</h2>
         <form className="mt-3">
           <input type="hidden" name="runType" value={runType} />
+          <input type="hidden" name="intent" value={testRun ? 'test' : 'live'} />
           {state.message && (
             <p role="status" className={`mb-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
               {state.message}{state.remedy ? ` ${state.remedy}` : ''}
@@ -105,11 +106,11 @@ export default function DepreciateForm({ canRun, today, runs, selectedRunId, sel
             </label>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="submit" name="intent" value="test" formAction={execute}
-              className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRun || executing}>
+            <button type="submit" formAction={execute}
+              className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRun || executing || !testRun}>
               Execute test run
             </button>
-            <button type="submit" name="intent" value="live" formAction={execute}
+            <button type="submit" formAction={execute}
               className="btn btn-primary min-h-11 sm:min-h-8"
               disabled={!canRun || executing || testRun || !confirmed}>
               Execute live run
