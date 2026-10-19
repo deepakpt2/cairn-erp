@@ -2023,6 +2023,8 @@ const en: Catalogue = {
   'vendorDownPayment.title': 'Post Vendor Down Payment',
   'customerDownPayment.title': 'Post Customer Down Payment',
   'customerDownPayment.subtitle': 'Receive an advance from a customer against a special G/L indicator; the advance stands open outside ordinary receivables until cleared against invoices.',
+  'customerDownPaymentRequest.title': 'Post Customer Down Payment Request',
+  'customerDownPaymentRequest.subtitle': 'Ask a customer for an advance as a noted item: no receivable, no receipt, no account movement — the request stands open until an actual down payment (F-29) fulfills it.',
   'customerDownPaymentClearing.title': 'Clear Customer Down Payment',
   'customerDownPaymentClearing.subtitle': 'Apply standing customer down payments to open invoices: a transfer posting moves the advance onto the ordinary receivable account, remainders standing open by the partial model.',
   'vendorDownPaymentClearing.title': 'Clear Vendor Down Payment',

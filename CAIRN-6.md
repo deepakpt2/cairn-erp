@@ -61,6 +61,10 @@ The owner supplied the F-37 field package (2026-10-19); SAP codes stand as searc
 
 **Deferred by name:** the vendor twin (F-47), request closure and reversal workflows (and fulfillment resolution on reversal), drafts, foreign-currency fulfillment, credit-exposure inclusion of open requests, duplicate-reference rules beyond the standing reference width, and request reporting beyond the screen's open-request list. Stage order: 1 the `/finance/customer-down-payment-request` screen → 2 schema (request + fulfillment tables, special G/L target column, migration) → 3 services (request lifecycle, F-29 fulfillment, noted-indicator guard) and screen wiring → 4 supporting (capability, term, number-range object, special G/L maintenance) → 5 tests and browser acceptance. Same-stage bookkeeping: B-546 / §26.562 / §30 row 2.380.
 
+## §26.563 — SCR-085 stage 1: the down-payment request screen
+
+**B-547.** Stage 1 of R-133. The `/finance/customer-down-payment-request` screen stands as a shell: the request form (company, customer, document/posting/due dates, amount, currency, request indicator, document type, reference) with the noted-item explanation, and the open-requests grid — requested, fulfilled, remaining, target indicator, status — rendered empty. Posting stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.AR.DOWNPAYMENT.REQUEST` and the request vocabulary. Same-stage bookkeeping: B-547 / §26.563 / §30 row 2.381.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -72,3 +76,4 @@ The owner supplied the F-37 field package (2026-10-19); SAP codes stand as searc
 | 2.378 | 2026-10-19 | **SCR-084 stage 4 published (B-544, §26.560).** Capability F-39 seeded (117 capabilities / 91 terms / 100 aliases). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.379 | 2026-10-19 | **SCR-084 stage 5 published — CLOSED (B-545, §26.561).** Tests 3/3, full suite 1360 green, browser T912 green; customer down-payment clearing stands accepted and the customer advance chain (F-29 → F-39) is complete. Next: T-code F-37 customer down payment request. | Agent |
 | 2.380 | 2026-10-19 | **SCR-085 / F-37 contracted (R-133, B-546, §26.562).** Down-payment requests are noted items: no journal, a drawn CUSTDPREQ number, period and document type judged against configuration; special G/L rows gain a target indicator (F→A as tenant configuration); fulfillment is an explicit allocation from F-29 judged under the payment lock, fulfilled amounts derived from ACTIVE links. Closure/reversal workflows, F-47, FX fulfillment and drafts deferred by name. | Agent |
+| 2.381 | 2026-10-19 | **SCR-085 stage 1 published (B-547, §26.563).** The inert F-37 request screen: request form and open-requests grid rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
