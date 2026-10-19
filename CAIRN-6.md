@@ -470,6 +470,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-631.** Seed grows by one capability (FIN.FX.VALUATE, 131 total) and by the FAGL_FC_VAL alias term; the journal list gains the FX valuation entry. Seeded twice, idempotent. Same-stage bookkeeping: B-631 / §26.647 / §30 row 2.465.
 
+## §26.648 — SCR-098 stage 5: service tests and browser target
+
+**B-632.** Four service tests cover the valuation: test-mode calculation with the receivable's gain and the liability's loss classified under the one signed rule while posting nothing; a live run posting and reversing on the named date, freeing its items for a rerun, and a third valuation refused per item with no document; a missing GBP rate named as an item error blocking the live post; and method/scope/fiscal-year refusals. Browser target T898 (fx-valuation) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-632 / §26.648 / §30 row 2.466.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -566,3 +570,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.463 | 2026-10-19 | **SCR-098 stage 2 published (B-629, §26.645).** Valuation run/item protocol stands (migration 0106, 169 total). Valuation service follows in stage 3. | Agent |
 | 2.464 | 2026-10-19 | **SCR-098 stage 3 published (B-630, §26.646).** FX valuation service stands: key-date rates with named missing-rate errors, signed gain/loss posting, duplicate guard, reversal, CSV protocol. Supporting seed follows in stage 4. | Agent |
 | 2.465 | 2026-10-19 | **SCR-098 stage 4 published (B-631, §26.647).** FIN.FX.VALUATE capability (131) and the FAGL_FC_VAL alias seed; the journal list exposes the valuation. Acceptance follows in stage 5. | Agent |
+| 2.466 | 2026-10-19 | **SCR-098 stage 5 published (B-632, §26.648).** Four FX valuation service tests pass (signed gain/loss, reversal-and-rerun, missing-rate block); browser target T898 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

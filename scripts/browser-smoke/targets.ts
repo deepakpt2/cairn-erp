@@ -75,6 +75,7 @@ export const TARGETS = [
   { id: 'asset-history', client: 'T901', label: 'SCR-095 S_ALR_87011990 asset history sheet: reconciled read-only report' },
   { id: 'gl-document', client: 'T900', label: 'SCR-096 FB50 G/L document entry: judged posting, assignment, duplicate-safe resubmission' },
   { id: 'tax-report', client: 'T899', label: 'SCR-097 S_ALR_87012357 advance tax return: test-mode extraction by tax code' },
+  { id: 'fx-valuation', client: 'T898', label: 'SCR-098 FAGL_FC_VAL foreign currency valuation: test-mode gain protocol' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
