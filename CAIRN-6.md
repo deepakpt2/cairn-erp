@@ -462,6 +462,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-629.** Stage 2 of R-146, migration `0106_fx_valuation_run.sql` (169 migrations): `fx_valuation_run` (one row per execution, request-key unique, status TEST/COMPLETED/REVERSED, gain/loss totals and generated-document references) and `fx_valuation_item` (per-item source reference, foreign and carrying amounts, the exact valuation rate used, required amount, signed adjustment, gain/loss classification, status and error). Canonical documents, rates and balances are reused untouched. Same-stage bookkeeping: B-629 / §26.645 / §30 row 2.463.
 
+## §26.646 — SCR-098 stage 3: valuation service, posting and protocol export
+
+**B-630.** Stage 3 of R-146. `executeFxValuation` judges the selection (configured rate type as method, fiscal year agreeing with the posting date), selects canonical foreign-currency items — uncleared open items on open-item-managed accounts, remaining balance-sheet accounts grouped per account and currency, reversed and reversal documents excluded — values each at the latest standing rate on or before the key date with ratios applied (a missing rate is an item error and blocks a live post, never a substituted rate), and applies the one signed adjustment rule through FXGAIN/FXLOSS account determination (catalogue events added this stage). Test runs persist only the protocol; live runs post one balanced document atomically, refuse already-valued items by name, reverse on the named date through the canonical workflow, and replay by request key. The protocol exports as CSV from the persisted run. Same-stage bookkeeping: B-630 / §26.646 / §30 row 2.464.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -556,3 +560,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.461 | 2026-10-19 | **SCR-098 contract published (B-627, §26.643, R-146).** FAGL_FC_VAL valuation: canonical foreign-currency items, standing-rate methods with named missing-rate refusal, signed gain/loss rule via FXGAIN/FXLOSS determination, atomic live posting with reversal. UI stage follows. | Agent |
 | 2.462 | 2026-10-19 | **SCR-098 stage 1 published (B-628, §26.644).** FX valuation vocabulary and selection shell stand. Run/item schema follows in stage 2. | Agent |
 | 2.463 | 2026-10-19 | **SCR-098 stage 2 published (B-629, §26.645).** Valuation run/item protocol stands (migration 0106, 169 total). Valuation service follows in stage 3. | Agent |
+| 2.464 | 2026-10-19 | **SCR-098 stage 3 published (B-630, §26.646).** FX valuation service stands: key-date rates with named missing-rate errors, signed gain/loss posting, duplicate guard, reversal, CSV protocol. Supporting seed follows in stage 4. | Agent |

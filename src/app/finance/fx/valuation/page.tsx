@@ -2,7 +2,10 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { FX_VALUATION_CAPABILITY, type FxValuationResult } from '@/modules/finance/fx-valuation';
+import {
+  FX_VALUATION_CAPABILITY, FxValuationError, executeFxValuation,
+  type FxRateType, type FxValuationResult,
+} from '@/modules/finance/fx-valuation';
 import ValuationForm from './ValuationForm';
 
 export const dynamic = 'force-dynamic';
@@ -33,8 +36,33 @@ export default async function FxValuationPage({ searchParams }: {
     documentType: get('documentType'),
     reversalDate: get('reversalDate'),
   };
-  const result: FxValuationResult | null = null;
+  let result: FxValuationResult | null = null;
+  let error: string | null = null;
   const requestKey = get('requestKey') || `fx-${Date.now().toString(36)}`;
+  if (can(session, FX_VALUATION_CAPABILITY) && executed && defaults.companyCode && defaults.valuationKeyDate && defaults.postingDate && defaults.fiscalYear && defaults.documentType) {
+    try {
+      result = await executeFxValuation({
+        client: session.user.client, changedBy: session.user.username,
+        selection: {
+          companyCode: defaults.companyCode,
+          valuationArea: defaults.valuationArea,
+          valuationKeyDate: defaults.valuationKeyDate,
+          postingDate: defaults.postingDate,
+          fiscalYear: Number(defaults.fiscalYear),
+          valuationMethod: defaults.valuationMethod as FxRateType,
+          includeOpenItems: defaults.includeOpenItems,
+          includeBalances: defaults.includeBalances,
+          testRun: defaults.testRun,
+          documentType: defaults.documentType,
+          reversalDate: defaults.reversalDate || undefined,
+          requestKey,
+        },
+      });
+    } catch (e) {
+      if (e instanceof FxValuationError) error = e.message;
+      else throw e;
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -46,6 +74,9 @@ export default async function FxValuationPage({ searchParams }: {
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('fxValuation.subtitle')}</p>
       </header>
+      {error && (
+        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+      )}
       <ValuationForm
         canExecute={can(session, FX_VALUATION_CAPABILITY)}
         defaults={defaults}
