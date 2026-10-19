@@ -241,6 +241,10 @@ The owner supplied the AS01/AS02 implementation package (2026-10-19); SAP codes 
 
 **Deferred by name:** acquisition, transfer, retirement and depreciation posting; depreciation recalculation on parameter change beyond prospective effect (no depreciation engine stands yet); asset-class reclassification workflow; asset transactions/balances/history-sheet; configuration screens for classes, areas and keys (the tables and delivered defaults stand; maintenance screens follow with the asset-accounting configuration round); physical deletion and archiving. Stage order: 1 the tabbed `/finance/assets` screens (create, list, change) → 2 schema (asset configuration, master, assignments, depreciation parameters; migration) + delivered standard defaults → 3 service (create incl. batch and sub-numbers, change, deactivation) and screen wiring → 4 supporting (capabilities, terms, ASSETNR range) → 5 tests and browser acceptance. Same-stage bookkeeping: B-582 / §26.598 / §30 row 2.416.
 
+## §26.599 — SCR-091 stage 1: the asset screens
+
+**B-583.** Stage 1 of R-139. The tabbed AS01 creation screen (General, Time-dependent assignments, Depreciation areas) stands at `/finance/assets/new` with the complete field matrix — company, class, similar-asset count, external number and sub-number, descriptions at contract widths, inventory and serial, quantity/unit, capitalization, the interval-worded assignment tab and dynamic depreciation-area rows — and the AS02 list/change entry at `/finance/assets`, both inert. A stub module carries `FIN.ASSET.CREATE` / `FIN.ASSET.CHANGE` and the asset vocabulary. Same-stage bookkeeping: B-583 / §26.599 / §30 row 2.417.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -288,3 +292,4 @@ The owner supplied the AS01/AS02 implementation package (2026-10-19); SAP codes 
 | 2.414 | 2026-10-19 | **SCR-090 stage 4 published (B-580, §26.596).** Capability FIN.DOC.FLOW seeded (123 capabilities / 97 terms / 105 aliases). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.415 | 2026-10-19 | **SCR-090 CLOSED (B-581, §26.597).** FB03 display accepted at review parity: composite-key retrieval, per-currency totals, reversal/origin/clearing flow with change history, parked answered as parked. Targeted 3/3, suite 1384 green, browser T906 green, seed 123/97/105, 161 migrations. | Agent |
 | 2.416 | 2026-10-19 | **SCR-091 / AS01-AS02 contracted (R-139, B-582, §26.598).** Asset foundation laid on canonical pieces: tenant asset-class/area/key configuration with delivered defaults, composite-keyed master, interval assignments with preserved history, per-area depreciation parameters, per-company ASSETNR numbering, atomic similar-asset batches, version-checked change with immutable identity and class. Acquisition, depreciation and retirement follow as their own rounds. | Agent |
+| 2.417 | 2026-10-19 | **SCR-091 stage 1 published (B-583, §26.599).** The inert tabbed AS01 form and AS02 list shell; i18n keys added. No reads or writes stand yet. | Agent |

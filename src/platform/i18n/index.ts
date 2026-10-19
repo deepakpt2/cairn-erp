@@ -2380,6 +2380,10 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'assetCreate.title': 'Create Asset',
+  'assetCreate.subtitle': 'Asset master data only: creating an asset posts no acquisition, starts no depreciation, and moves no account.',
+  'assetChange.title': 'Change Asset',
+  'assetChange.subtitle': 'Change master data under version control: identity and class never move, assignments keep their history, and depreciation changes apply prospectively.',
   'documentDisplay.title': 'Display Accounting Document',
   'documentDisplay.subtitle': 'One posted document by its complete key — header, every line and assignment, totals per currency, its reversal and clearing flow, and the change history retained for it. Read-only, whatever period it stands in.',
   'glBalance.title': 'G/L Account Balances',
