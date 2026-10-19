@@ -64,6 +64,14 @@ export default function ItemsForm({ result, error, canList }: {
               <span className={labelCls}>Maximum hits</span>
               <input name="maxHits" className={inputCls} placeholder="5000" />
             </label>
+            <label className="block">
+              <span className={labelCls}>Page</span>
+              <input name="page" type="number" min={1} className={inputCls} placeholder="1" />
+            </label>
+            <label className="block">
+              <span className={labelCls}>Page size</span>
+              <input name="pageSize" type="number" min={1} className={inputCls} placeholder="100" />
+            </label>
           </div>
           <fieldset className="mt-3">
             <legend className="text-xs font-medium uppercase tracking-wide text-ink-faint">Line item status</legend>
@@ -101,6 +109,13 @@ export default function ItemsForm({ result, error, canList }: {
                 The result exceeds the {result.cap} hit limit and stands truncated — narrow the selection.
               </p>
             )}
+            <p className="mt-2 text-sm text-ink-soft">
+              Page {result.page} · showing {result.rows.length} of {result.total} line items · page size {result.pageSize}.
+              {' '}
+              <a className="text-accent hover:underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(result.rows))}`} download="line-items.csv">
+                Export CSV
+              </a>
+            </p>
             <div className="mt-2 overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead>
@@ -112,7 +127,7 @@ export default function ItemsForm({ result, error, canList }: {
                     <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
                     <th className="px-2 py-2">Cost centre</th><th className="px-2 py-2">Profit centre</th>
                     <th className="px-2 py-2">Status</th><th className="px-2 py-2">Clearing</th>
-                    <th className="px-2 py-2">Text</th>
+                    <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Text</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -137,6 +152,7 @@ export default function ItemsForm({ result, error, canList }: {
                       <td className="px-2 py-2">{row.profitCenter ?? '—'}</td>
                       <td className="px-2 py-2">{row.itemStatus ?? '—'}</td>
                       <td className="px-2 py-2">{row.clearingDocument ?? '—'}</td>
+                      <td className="px-2 py-2">{row.assignment ?? '—'}</td>
                       <td className="px-2 py-2">{row.lineText ?? '—'}</td>
                     </tr>
                   ))}
@@ -179,4 +195,14 @@ export default function ItemsForm({ result, error, canList }: {
       </section>
     </>
   );
+}
+
+function toCsv(rows: JournalItemsResult['rows']): string {
+  const head = 'Company,Document,Fiscal Year,Line,Posting Date,Document Date,Type,Account,D/C,Amount,Currency,Local Amount,Local Currency,Assignment,Reference,Clearing,Status';
+  const lines = rows.map((r) => [
+    r.companyCode, r.documentNumber, r.fiscalYear, r.lineNumber, r.postingDate, r.documentDate,
+    r.documentType, r.glAccount, r.debitCredit, r.amountDocument, r.currency, r.amountLocal,
+    r.localCurrency, r.assignment ?? '', r.reference ?? '', r.clearingDocument ?? '', r.itemStatus ?? '',
+  ].join(','));
+  return [head, ...lines].join('\n');
 }

@@ -40,6 +40,8 @@ export default async function JournalItemsPage({ searchParams }: {
         costCenter: params.costCenter || undefined,
         reference: params.reference || undefined,
         maxHits: params.maxHits ? Number(params.maxHits) : undefined,
+        page: params.page ? Number(params.page) : undefined,
+        pageSize: params.pageSize ? Number(params.pageSize) : undefined,
       });
     } catch (caught) {
       error = caught instanceof JournalItemsError

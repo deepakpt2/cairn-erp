@@ -218,3 +218,135 @@ export interface GlBalanceReportView {
   warnings: string[];
   calculatedAt: string;
 }
+
+import { sql } from 'drizzle-orm';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
+
+export async function getGlBalanceReport(
+  client: string, selection: GlBalanceReportSelection,
+): Promise<GlBalanceReportView> {
+  const companyCodes = [...new Set(selection.companyCodes.map((c) => c.trim()).filter(Boolean))];
+  if (companyCodes.length === 0) {
+    throw new GlBalanceError('Enter at least one company code.', 'Name the company codes whose balances to read.');
+  }
+  const accountFrom = (selection.accountFrom ?? '').trim();
+  const accountTo = (selection.accountTo ?? '').trim() || accountFrom;
+  if (!accountFrom) throw new GlBalanceError('Enter the G/L account to start from.');
+  if (accountFrom > accountTo) throw new GlBalanceError('The account range is inverted.', 'Account from must not exceed account to.');
+  if (selection.ledger !== '0L') {
+    throw new GlBalanceError(`Ledger ${selection.ledger || '(blank)'} is not configured.`, 'Configured ledgers: 0L.');
+  }
+  if (!Number.isInteger(selection.fiscalYear) || selection.fiscalYear < 1900 || selection.fiscalYear > 2199) {
+    throw new GlBalanceError('A valid fiscal year is required.');
+  }
+  if (selection.periodFrom < 1 || selection.periodTo > 16 || selection.periodFrom > selection.periodTo) {
+    throw new GlBalanceError('The period range is invalid.', 'Period from must not exceed period to; periods run 1–16.');
+  }
+  const calculatedAt = new Date().toISOString();
+  const warnings: string[] = [];
+  const effectiveTo = selection.includeSpecialPeriods ? selection.periodTo : Math.min(selection.periodTo, 12);
+  if (!selection.includeSpecialPeriods && selection.periodTo > 12) {
+    warnings.push(`Period ${selection.periodTo} is a special period; special periods are excluded unless explicitly included. Figures run to period 12.`);
+  }
+
+  return withTenant(client, async (tx) => {
+    const charts = new Map<string, string>();
+    const currencies = new Map<string, string>();
+    for (const companyCode of companyCodes) {
+      const company = await getCompanyCode(tx, client, companyCode);
+      if (!company) {
+        throw new GlBalanceError(`Company code ${companyCode} is not configured in this tenant.`, 'Correct the company selection.');
+      }
+      charts.set(companyCode, company.chartOfAccounts ?? '');
+      currencies.set(companyCode, company.currency);
+    }
+
+    const figureRows = await tx.execute(sql`
+      select l.company_code, l.gl_account as account,
+        coalesce(sum(case when e.fiscal_year < ${selection.fiscalYear} and l.debit_credit = 'S' then l.amount_local
+                          when e.fiscal_year < ${selection.fiscalYear} then -l.amount_local end), 0)::text as opening,
+        coalesce(sum(case when e.fiscal_year = ${selection.fiscalYear} and e.posting_period between ${selection.periodFrom} and ${effectiveTo} and l.debit_credit = 'S' then l.amount_local else 0 end), 0)::text as debit_range,
+        coalesce(sum(case when e.fiscal_year = ${selection.fiscalYear} and e.posting_period between ${selection.periodFrom} and ${effectiveTo} and l.debit_credit = 'H' then l.amount_local else 0 end), 0)::text as credit_range,
+        coalesce(sum(case when e.fiscal_year = ${selection.fiscalYear} and e.posting_period <= ${effectiveTo} and l.debit_credit = 'S' then l.amount_local else 0 end), 0)::text as debit_to,
+        coalesce(sum(case when e.fiscal_year = ${selection.fiscalYear} and e.posting_period <= ${effectiveTo} and l.debit_credit = 'H' then l.amount_local else 0 end), 0)::text as credit_to
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+      where l.client = ${client}
+        and l.company_code in (${sql.join(companyCodes.map((c) => sql`${c}`), sql`, `)})
+        and l.gl_account between ${accountFrom} and ${accountTo}
+        and e.status = 'POSTED'
+      group by l.company_code, l.gl_account
+      order by l.company_code, l.gl_account
+    `) as unknown as Array<Record<string, string>>;
+
+    const masterRows = await tx.execute(sql`
+      select account_number, name, account_group, chart_of_accounts from gl_account
+      where client = ${client} and account_number between ${accountFrom} and ${accountTo}
+      order by account_number
+    `) as unknown as Array<{ account_number: string; name: string; account_group: string; chart_of_accounts: string }>;
+    const masterByChart = new Map<string, typeof masterRows>();
+    for (const row of masterRows) {
+      masterByChart.set(row.chart_of_accounts, [...(masterByChart.get(row.chart_of_accounts) ?? []), row]);
+    }
+
+    const rows: GlBalanceReportRow[] = [];
+    const seen = new Set<string>();
+    const toRow = (companyCode: string, account: string, name: string, group: string,
+      opening: bigint, debitRange: bigint, creditRange: bigint, debitTo: bigint, creditTo: bigint): GlBalanceReportRow => {
+      const closing = opening + debitTo - creditTo;
+      return {
+        companyCode, glAccount: account, accountName: name, accountGroup: group,
+        currency: currencies.get(companyCode) ?? '',
+        openingBalance: Number(fromScaled(opening)),
+        debitTurnover: Number(fromScaled(debitRange)),
+        creditTurnover: Number(fromScaled(creditRange)),
+        netChange: Number(fromScaled(debitRange - creditRange)),
+        closingBalance: Number(fromScaled(closing)),
+        debitBalance: closing > 0n ? Number(fromScaled(closing)) : 0,
+        creditBalance: closing < 0n ? Number(fromScaled(-closing)) : 0,
+      };
+    };
+    for (const figure of figureRows) {
+      const chart = charts.get(figure.company_code) ?? '';
+      const master = (masterByChart.get(chart) ?? []).find((m) => m.account_number === figure.account);
+      if (!master) warnings.push(`Account ${figure.account} carries postings in company ${figure.company_code} but does not stand in chart ${chart}.`);
+      seen.add(`${figure.company_code}|${figure.account}`);
+      rows.push(toRow(figure.company_code, figure.account, master?.name ?? '', master?.account_group ?? '',
+        toScaled(figure.opening ?? '0'), toScaled(figure.debit_range ?? '0'), toScaled(figure.credit_range ?? '0'),
+        toScaled(figure.debit_to ?? '0'), toScaled(figure.credit_to ?? '0')));
+    }
+    // Selected accounts without postings stand as zero rows.
+    for (const companyCode of companyCodes) {
+      for (const master of masterByChart.get(charts.get(companyCode) ?? '') ?? []) {
+        if (seen.has(`${companyCode}|${master.account_number}`)) continue;
+        rows.push(toRow(companyCode, master.account_number, master.name, master.account_group, 0n, 0n, 0n, 0n, 0n));
+      }
+    }
+    rows.sort((a, b) => a.companyCode.localeCompare(b.companyCode) || a.glAccount.localeCompare(b.glAccount));
+
+    const subtotalMap = new Map<string, GlBalanceGroupSubtotal>();
+    for (const row of rows) {
+      const key = `${row.accountGroup}|${row.currency}`;
+      const subtotal = subtotalMap.get(key) ?? {
+        accountGroup: row.accountGroup, currency: row.currency, accountCount: 0,
+        debitTurnover: 0, creditTurnover: 0, netChange: 0, closingBalance: 0, debitBalance: 0, creditBalance: 0,
+      };
+      subtotal.accountCount += 1;
+      subtotal.debitTurnover = round2(subtotal.debitTurnover + row.debitTurnover);
+      subtotal.creditTurnover = round2(subtotal.creditTurnover + row.creditTurnover);
+      subtotal.netChange = round2(subtotal.netChange + row.netChange);
+      subtotal.closingBalance = round2(subtotal.closingBalance + row.closingBalance);
+      subtotal.debitBalance = round2(subtotal.debitBalance + row.debitBalance);
+      subtotal.creditBalance = round2(subtotal.creditBalance + row.creditBalance);
+      subtotalMap.set(key, subtotal);
+    }
+
+    return {
+      ledger: selection.ledger, fiscalYear: selection.fiscalYear,
+      periodFrom: selection.periodFrom, periodTo: effectiveTo,
+      rows, subtotals: [...subtotalMap.values()].sort((a, b) => a.accountGroup.localeCompare(b.accountGroup)),
+      warnings, calculatedAt,
+    };
+  });
+}

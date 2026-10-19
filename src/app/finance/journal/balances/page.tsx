@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
-  GL_BALANCE_CAPABILITY, GlBalanceError, getGlBalances,
+  GL_BALANCE_CAPABILITY, GlBalanceError, getGlBalanceReport, getGlBalances,
   type GlBalanceView,
 } from '@/modules/finance/gl-balances';
 import BalancesForm from './BalancesForm';
@@ -52,7 +52,17 @@ export default async function GlBalancesPage({ searchParams }: {
     includeSpecialPeriods: params.reportSpecialPeriods === '1',
     ledger: '0L',
   };
-  const report: GlBalanceReportView | null = null;
+  let report: GlBalanceReportView | null = null;
+  let reportError: string | null = null;
+  if (params.report && canDisplay) {
+    try {
+      report = await getGlBalanceReport(session.user.client, reportSelection);
+    } catch (caught) {
+      reportError = caught instanceof GlBalanceError
+        ? `${caught.message}${caught.remedy ? ` ${caught.remedy}` : ''}`
+        : 'The balance report could not be calculated.';
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -71,6 +81,7 @@ export default async function GlBalancesPage({ searchParams }: {
       <BalanceReportForm
         selection={reportSelection}
         report={report}
+        reportError={reportError}
         canDisplay={canDisplay}
       />
     </div>

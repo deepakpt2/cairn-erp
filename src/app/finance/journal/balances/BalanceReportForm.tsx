@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import type { GlBalanceReportSelection, GlBalanceReportView } from '@/modules/finance/gl-balances';
 
 const inputCls = 'input w-full';
@@ -8,9 +10,10 @@ const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-in
  * by range, opening / range turnover / closing per account with
  * account-group subtotals. The derivation lands in stage 3.
  */
-export default function BalanceReportForm({ selection, report, canDisplay }: {
+export default function BalanceReportForm({ selection, report, reportError, canDisplay }: {
   selection: GlBalanceReportSelection;
   report: GlBalanceReportView | null;
+  reportError: string | null;
   canDisplay: boolean;
 }) {
   return (
@@ -57,8 +60,93 @@ export default function BalanceReportForm({ selection, report, canDisplay }: {
         </button>
       </form>
 
-      {report ? (
-        <p className="mt-2 text-sm text-ink-soft">The report is calculated in stage 3.</p>
+      {reportError ? (
+        <p role="alert" className="mt-2 text-sm text-red-700">{reportError}</p>
+      ) : report ? (
+        <>
+          <p className="mt-2 text-sm text-ink-soft">
+            Ledger {report.ledger} · Fiscal year {report.fiscalYear} · Periods {report.periodFrom}–{report.periodTo} ·
+            calculated {report.calculatedAt.slice(0, 19).replace('T', ' ')}.{' '}
+            <a className="text-accent hover:underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(report))}`} download="balance-report.csv">
+              Export CSV
+            </a>
+          </p>
+          {report.warnings.map((warning) => (
+            <p key={warning} className="mt-2 border border-amber-300 bg-amber-50 p-2 text-sm">{warning}</p>
+          ))}
+          <div className="mt-2 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                  <th className="px-2 py-2">Company</th><th className="px-2 py-2">Ledger</th>
+                  <th className="px-2 py-2">G/L Account</th><th className="px-2 py-2">Account Group</th>
+                  <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Opening Balance</th>
+                  <th className="px-2 py-2">Period Debit</th><th className="px-2 py-2">Period Credit</th>
+                  <th className="px-2 py-2">Net Change</th><th className="px-2 py-2">Closing Balance</th>
+                  <th className="px-2 py-2">Debit Balance</th><th className="px-2 py-2">Credit Balance</th>
+                  <th className="px-2 py-2">Drill</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((row) => (
+                  <tr key={`${row.companyCode}-${row.glAccount}`} className="border-t border-line">
+                    <td className="px-2 py-2">{row.companyCode}</td>
+                    <td className="px-2 py-2">{report.ledger}</td>
+                    <td className="px-2 py-2">{row.glAccount} — {row.accountName}</td>
+                    <td className="px-2 py-2">{row.accountGroup}</td>
+                    <td className="px-2 py-2">{row.currency}</td>
+                    <td className="px-2 py-2">{row.openingBalance.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.debitTurnover.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.creditTurnover.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.netChange.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.closingBalance.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.debitBalance.toFixed(2)}</td>
+                    <td className="px-2 py-2">{row.creditBalance.toFixed(2)}</td>
+                    <td className="px-2 py-2">
+                      <Link className="text-accent hover:underline"
+                        href={`/finance/journal/items?accountFrom=${row.glAccount}&companyCodes=${row.companyCode}&fiscalYear=${report.fiscalYear}`}>
+                        Line items
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {report.subtotals.length > 0 && (
+            <div className="mt-3">
+              <h3 className="text-sm font-semibold">Account group subtotals</h3>
+              <div className="mt-1 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                      <th className="px-2 py-2">Account Group</th><th className="px-2 py-2">Currency</th>
+                      <th className="px-2 py-2">Accounts</th><th className="px-2 py-2">Period Debit</th>
+                      <th className="px-2 py-2">Period Credit</th><th className="px-2 py-2">Net Change</th>
+                      <th className="px-2 py-2">Closing Balance</th><th className="px-2 py-2">Debit Balance</th>
+                      <th className="px-2 py-2">Credit Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.subtotals.map((subtotal) => (
+                      <tr key={`${subtotal.accountGroup}-${subtotal.currency}`} className="border-t border-line">
+                        <td className="px-2 py-2">{subtotal.accountGroup}</td>
+                        <td className="px-2 py-2">{subtotal.currency}</td>
+                        <td className="px-2 py-2">{subtotal.accountCount}</td>
+                        <td className="px-2 py-2">{subtotal.debitTurnover.toFixed(2)}</td>
+                        <td className="px-2 py-2">{subtotal.creditTurnover.toFixed(2)}</td>
+                        <td className="px-2 py-2">{subtotal.netChange.toFixed(2)}</td>
+                        <td className="px-2 py-2">{subtotal.closingBalance.toFixed(2)}</td>
+                        <td className="px-2 py-2">{subtotal.debitBalance.toFixed(2)}</td>
+                        <td className="px-2 py-2">{subtotal.creditBalance.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -82,4 +170,14 @@ export default function BalanceReportForm({ selection, report, canDisplay }: {
       )}
     </section>
   );
+}
+
+function toCsv(report: GlBalanceReportView): string {
+  const head = 'Company,Ledger,G/L Account,Account Name,Account Group,Currency,Opening Balance,Period Debit,Period Credit,Net Change,Closing Balance,Debit Balance,Credit Balance';
+  const lines = report.rows.map((r) => [
+    r.companyCode, report.ledger, r.glAccount, r.accountName, r.accountGroup, r.currency,
+    r.openingBalance, r.debitTurnover, r.creditTurnover, r.netChange, r.closingBalance,
+    r.debitBalance, r.creditBalance,
+  ].join(','));
+  return [head, ...lines].join('\n');
 }

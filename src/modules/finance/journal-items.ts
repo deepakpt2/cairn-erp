@@ -40,6 +40,9 @@ export interface JournalItemFilters {
   documentNumber?: string;
   documentType?: string;
   status: LineItemStatusFilter;
+  /** 1-based page and page size (SCR-108); defaults keep the legacy cap behavior. */
+  page?: number;
+  pageSize?: number;
   profitCenter?: string;
   costCenter?: string;
   reference?: string;
@@ -67,6 +70,7 @@ export interface JournalItemRow {
   lineText: string | null;
   businessPartner: string | null;
   reference: string | null;
+  assignment: string | null;
   clearingDocument: string | null;
   clearingDate: string | null;
   /** OPEN | CLEARED on open-item-managed accounts; null otherwise. */
@@ -89,6 +93,9 @@ export interface JournalItemsResult {
   subtotals: JournalItemSubtotal[];
   truncated: boolean;
   cap: number;
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 import { sql } from 'drizzle-orm';
@@ -121,6 +128,7 @@ interface RawRow {
   line_text: string | null;
   business_partner: string | null;
   reference: string | null;
+  assignment: string | null;
   clearing_document: string | null;
   clearing_date: string | null;
   is_open_item_managed: boolean;
@@ -168,24 +176,10 @@ export async function getJournalItems(
       : filters.status === 'CLEARED'
         ? sql`and g.is_open_item_managed and l.clearing_document is not null`
         : sql``;
-    const rows = await tx.execute(sql`
-      select
-        l.company_code, l.document_number, l.fiscal_year, l.line_number,
-        h.posting_date::text as posting_date, h.document_date::text as document_date,
-        h.document_type, h.status as document_status,
-        l.gl_account, l.debit_credit,
-        l.amount_document::text as amount_document, l.currency,
-        l.amount_local::text as amount_local, h.local_currency,
-        l.cost_center, l.profit_center, l.tax_code, l.line_text,
-        l.business_partner, h.reference,
-        l.clearing_document, l.clearing_date::text as clearing_date,
-        coalesce(g.is_open_item_managed, false) as is_open_item_managed
-      from journal_entry_line l
-      join journal_entry h
-        on h.client = l.client and h.document_number = l.document_number and h.fiscal_year = l.fiscal_year
-      left join gl_account g
-        on g.client = l.client and g.account_number = l.gl_account
-      where l.client = ${client}
+    const pageSize = Math.max(1, Math.min(filters.pageSize ?? cap, cap));
+    const page = Math.max(1, filters.page ?? 1);
+    const offset = (page - 1) * pageSize;
+    const conditions = sql`
         and l.gl_account between ${accountFrom} and ${accountTo}
         and l.company_code in (${sql.join(filters.companyCodes.map((c) => sql`${c}`), sql`, `)})
         ${filters.fiscalYear ? sql`and l.fiscal_year = ${filters.fiscalYear}` : sql``}
@@ -199,13 +193,37 @@ export async function getJournalItems(
         ${filters.costCenter ? sql`and l.cost_center = ${filters.costCenter}` : sql``}
         ${filters.profitCenter ? sql`and l.profit_center = ${filters.profitCenter}` : sql``}
         ${filters.reference ? sql`and h.reference ilike ${`%${filters.reference}%`}` : sql``}
-        ${statusClause}
+        ${statusClause}`;
+    const fromClause = sql`
+      from journal_entry_line l
+      join journal_entry h
+        on h.client = l.client and h.document_number = l.document_number and h.fiscal_year = l.fiscal_year
+      left join gl_account g
+        on g.client = l.client and g.account_number = l.gl_account
+      where l.client = ${client} ${conditions}`;
+    const countRows = await tx.execute(sql`
+      select count(*)::int as total ${fromClause}
+    `) as unknown as Array<{ total: number }>;
+    const total = countRows[0]?.total ?? 0;
+    const rows = await tx.execute(sql`
+      select
+        l.company_code, l.document_number, l.fiscal_year, l.line_number,
+        h.posting_date::text as posting_date, h.document_date::text as document_date,
+        h.document_type, h.status as document_status,
+        l.gl_account, l.debit_credit,
+        l.amount_document::text as amount_document, l.currency,
+        l.amount_local::text as amount_local, h.local_currency,
+        l.cost_center, l.profit_center, l.tax_code, l.line_text,
+        l.business_partner, h.reference, l.assignment,
+        l.clearing_document, l.clearing_date::text as clearing_date,
+        coalesce(g.is_open_item_managed, false) as is_open_item_managed
+      ${fromClause}
       order by h.posting_date, l.document_number, l.line_number
-      limit ${cap + 1}
+      limit ${pageSize} offset ${offset}
     `) as unknown as RawRow[];
 
-    const truncated = rows.length > cap;
-    const kept = truncated ? rows.slice(0, cap) : rows;
+    const kept = rows;
+    const truncated = total > offset + kept.length;
     const view: JournalItemRow[] = kept.map((r) => ({
       companyCode: r.company_code, documentNumber: r.document_number,
       fiscalYear: Number(r.fiscal_year), lineNumber: Number(r.line_number),
@@ -216,7 +234,7 @@ export async function getJournalItems(
       amountLocal: Number(r.amount_local), localCurrency: r.local_currency,
       costCenter: r.cost_center, profitCenter: r.profit_center,
       taxCode: r.tax_code, lineText: r.line_text,
-      businessPartner: r.business_partner, reference: r.reference,
+      businessPartner: r.business_partner, reference: r.reference, assignment: r.assignment,
       clearingDocument: r.clearing_document, clearingDate: r.clearing_date,
       itemStatus: !r.is_open_item_managed ? null : r.clearing_document ? 'CLEARED' : 'OPEN',
     }));
@@ -238,7 +256,7 @@ export async function getJournalItems(
       }
       groups.set(key, group);
     }
-    return { rows: view, subtotals: [...groups.values()], truncated, cap };
+    return { rows: view, subtotals: [...groups.values()], truncated, cap, total, page, pageSize };
   });
 }
 
