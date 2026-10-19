@@ -494,6 +494,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-637.** Stage 3 of R-147. `executeGrIrAnalysis` judges the selection (valid key date and range; accrual creation requires its posting date, document type and account), then computes the signed canonical history per purchase order item — material-document quantities by movement direction with reversed sources excluded, supplier-invoice quantities and values signed by category with cancelled invoices and their mirrors excluded — and classifies on quantity and value together. A live accrual posts the open value per eligible item against the GR/IR clearing account from determination, atomically with the protocol, refuses items already accrued for the fiscal year unless that run stands reversed, and reverses on the named date through the canonical workflow; a request key replays the original run. The protocol exports as CSV from the persisted run. Same-stage bookkeeping: B-637 / §26.653 / §30 row 2.471.
 
+## §26.654 — SCR-099 stage 4: capability, F.19 alias, navigation
+
+**B-638.** Seed grows by one capability (FIN.GRIR.RECLASS, 132 total) and by the F.19 alias term; the journal list gains the GR/IR analysis entry. Seeded twice, idempotent. Same-stage bookkeeping: B-638 / §26.654 / §30 row 2.472.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -596,3 +600,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.469 | 2026-10-19 | **SCR-099 stage 1 published (B-635, §26.651).** GR/IR vocabulary and selection shell stand. Run/item schema follows in stage 2. | Agent |
 | 2.470 | 2026-10-19 | **SCR-099 stage 2 published (B-636, §26.652).** GR/IR run/item protocol stands (migration 0107, 170 total). Analysis and accrual service follows in stage 3. | Agent |
 | 2.471 | 2026-10-19 | **SCR-099 stage 3 published (B-637, §26.653).** GR/IR analysis stands: signed PO history, five-way classification, separate atomic accrual with duplicate refusal, CSV protocol. Supporting seed follows in stage 4. | Agent |
+| 2.472 | 2026-10-19 | **SCR-099 stage 4 published (B-638, §26.654).** FIN.GRIR.RECLASS capability (132) and the F.19 alias seed; the journal list exposes the analysis. Acceptance follows in stage 5. | Agent |

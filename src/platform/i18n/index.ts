@@ -2418,6 +2418,7 @@ const en: Catalogue = {
   'journal.unbalanced': 'Document does not balance. Difference {difference}.',
   'journal.taxReport': 'Tax return…',
   'journal.fxValuation': 'FX valuation…',
+  'journal.grir': 'GR/IR analysis…',
   'grir.title': 'GR/IR Clearing Account Analysis',
   'grir.subtitle': 'Goods received against invoiced, per purchase order item, as of the key date. Analysis never posts; accrual creation is a separate, explicit step whose document reverses on the named date.',
   'grir.companyCode': 'Company Code',
