@@ -389,6 +389,76 @@ export const customerDownPayment = pgTable('customer_down_payment', {
   primaryKey({ columns: [t.client, t.paymentNumber] }),
 ]);
 
+/**
+ * Customer down payment clearing (SCR-084): the header of one DZ
+ * transfer clearing; the journal lines stand the balance truth and
+ * the item rows below remember the pairwise allocations.
+ */
+export const customerDownPaymentClearing = pgTable('customer_down_payment_clearing', {
+  client: tenantClient(),
+  clearingNumber: varchar('clearing_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  customerNumber: varchar('customer_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  specialGlIndicator: varchar('special_gl_indicator', { length: 1 }).notNull(),
+  alternativeReconciliationAccount: varchar('alternative_reconciliation_account', { length: 10 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  clearingDate: date('clearing_date', { mode: 'string' }).notNull(),
+  /** Summary of the allocation rows; reconciled to them at posting. */
+  totalApplied: numeric('total_applied', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.clearingNumber] }),
+  check('customer_dp_clearing_amount_ck', sql`${t.totalApplied} > 0`),
+]);
+
+/**
+ * One pairwise allocation of a clearing (SCR-084): a down-payment
+ * journal line applied to an invoice journal line. Composite foreign
+ * keys guarantee both source lines exist in this tenant; their roles
+ * (customer, indicator, eligibility) are judged by the service.
+ */
+export const customerDownPaymentClearingItem = pgTable('customer_down_payment_clearing_item', {
+  client: tenantClient(),
+  clearingNumber: varchar('clearing_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  mappingNumber: integer('mapping_number').notNull(),
+  downPaymentDocumentNumber: varchar('down_payment_document_number', { length: 40 }).notNull(),
+  downPaymentFiscalYear: integer('down_payment_fiscal_year').notNull(),
+  downPaymentLineNumber: integer('down_payment_line_number').notNull(),
+  invoiceDocumentNumber: varchar('invoice_document_number', { length: 40 }).notNull(),
+  invoiceFiscalYear: integer('invoice_fiscal_year').notNull(),
+  invoiceLineNumber: integer('invoice_line_number').notNull(),
+  allocationCurrency: char('allocation_currency', { length: 3 }).notNull(),
+  allocatedAmount: numeric('allocated_amount', { precision: 23, scale: 4 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.clearingNumber, t.fiscalYear, t.mappingNumber] }),
+  foreignKey({
+    columns: [t.client, t.clearingNumber],
+    foreignColumns: [customerDownPaymentClearing.client, customerDownPaymentClearing.clearingNumber],
+    name: 'customer_dp_clearing_item_header_fk',
+  }),
+  foreignKey({
+    columns: [t.client, t.downPaymentDocumentNumber, t.downPaymentFiscalYear, t.downPaymentLineNumber],
+    foreignColumns: [journalEntryLine.client, journalEntryLine.documentNumber, journalEntryLine.fiscalYear, journalEntryLine.lineNumber],
+    name: 'customer_dp_clearing_item_dp_fk',
+  }),
+  foreignKey({
+    columns: [t.client, t.invoiceDocumentNumber, t.invoiceFiscalYear, t.invoiceLineNumber],
+    foreignColumns: [journalEntryLine.client, journalEntryLine.documentNumber, journalEntryLine.fiscalYear, journalEntryLine.lineNumber],
+    name: 'customer_dp_clearing_item_invoice_fk',
+  }),
+  check('customer_dp_clearing_item_amount_ck', sql`${t.allocatedAmount} > 0`),
+  index('cdpci_down_payment_idx').on(t.client, t.downPaymentDocumentNumber, t.downPaymentFiscalYear),
+  index('cdpci_invoice_idx').on(t.client, t.invoiceDocumentNumber, t.invoiceFiscalYear),
+]);
+
 export const incomingPayment = pgTable('incoming_payment', {  client: tenantClient(),
   paymentNumber: varchar('payment_number', { length: 20 }).notNull(),
   fiscalYear: integer('fiscal_year').notNull(),
