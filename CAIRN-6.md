@@ -191,6 +191,10 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 
 **B-573.** Stage 3 of R-137. `getGlBalances` judges the company configured, the account standing and — where the company names its chart — standing in that chart, then derives in one pass over the account's POSTED lines: opening as the signed sum of every earlier year, turnover by stored posting period, net change and cumulative closing chained, special periods appended only when included and configured on the company's variant. The currency view mirrors SCR-069: company currency shows local amounts, a single carried document currency shows document amounts, anything else is refused by name rather than converted. As a supporting change under this contract, the FAGLL03 report now accepts a posting-period filter, so each period's drill lands on exactly its lines, specials included. The screen executes over GET parameters and states errors with their remedies. Typecheck clean. Same-stage bookkeeping: B-573 / §26.589 / §30 row 2.407.
 
+## §26.590 — SCR-089 stage 4: balance capability
+
+**B-574.** Stage 4 of R-137. The capability `FIN.GL.BALANCE` (FS10N as search alias) joins the seed with its full-parity term — **122 capabilities / 68 config activities / 96 terms / 105 aliases**. Typecheck clean. Same-stage bookkeeping: B-574 / §26.590 / §30 row 2.408.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -229,3 +233,4 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 | 2.405 | 2026-10-19 | **SCR-089 stage 1 published (B-571, §26.587).** The inert FS10N selection screen and annual grid; i18n keys added. No derivation stands yet. | Agent |
 | 2.406 | 2026-10-19 | **SCR-089 stage 2 recorded (B-572, §26.588).** Index review: the SCR-088 line index serves the derivation; no migration. Service follows in stage 3. | Agent |
 | 2.407 | 2026-10-19 | **SCR-089 stage 3 published (B-573, §26.589).** Balance derivation stands on the SCR-069 precedent, chart and currency judged by name; FAGLL03 gained the posting-period filter its drill needed. Seed follows in stage 4. | Agent |
+| 2.408 | 2026-10-19 | **SCR-089 stage 4 published (B-574, §26.590).** Capability FS10N seeded (122 capabilities / 96 terms / 105 aliases). Tests and browser acceptance follow in stage 5. | Agent |
