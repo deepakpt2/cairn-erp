@@ -283,6 +283,10 @@ The owner supplied the ABZON implementation package (2026-10-19); SAP codes stan
 
 **B-591.** Stage 3 of R-140. Simulate and post share one judge: company configured, asset standing and active, class determination present, transaction type an active acquisition, document type configured (the standard package now delivers AA for asset acquisition), offsetting account standing, reconciliation-free and distinct from the asset account, and the asset value date carried distinctly from the posting date. Posting runs under the asset's advisory and row locks with request-key replay first, posts debit-asset/credit-offsetting through the engine, records the value transaction in the same commit, capitalizes at the value date on first acquisition and fills unstated depreciation starts. The dedicated reversal reverses the journal and flips the value record in one transaction, and the standing FB08-equivalent now refuses acquisition documents towards it, so asset values cannot be orphaned. The guided screen is live: simulate (side-effect-free), post, and the asset-aware reversal section. Typecheck clean. Same-stage bookkeeping: B-591 / §26.607 / §30 row 2.425.
 
+## §26.608 — SCR-092 stage 4: capability, ABZON alias, navigation
+
+**B-592.** Seed grows by one capability (FIN.ASSET.ACQUIRE, 126 total) and by the ABZON alias term for the acquisition screen — closing the alias recheck deferred from SCR-091 (F-90): the class-2000 reconciliation default now lands through the finalized recon defaults of stage 2 (152000 for class 2000, 150000 for 1000). The asset list gains the acquire entry. Same-stage bookkeeping: B-592 / §26.608 / §30 row 2.426.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -339,3 +343,4 @@ The owner supplied the ABZON implementation package (2026-10-19); SAP codes stan
 | 2.423 | 2026-10-19 | **SCR-092 stage 1 published (B-589, §26.605).** The inert ABZON entry and simulation-preview screen; i18n keys added. No validation or posting stands yet. | Agent |
 | 2.424 | 2026-10-19 | **SCR-092 stage 2 published (B-590, §26.606).** Class account determination, transaction types and the asset value record stand (migration 0100, 163 migrations) with delivered defaults. Service follows in stage 3. | Agent |
 | 2.425 | 2026-10-19 | **SCR-092 stage 3 published (B-591, §26.607).** Acquisition service stands: shared simulate/post judges, atomic engine posting with the value record, capitalization on first acquisition, asset-aware reversal with the FB08 path guarded; screens live. Supporting seed follows in stage 4. | Agent |
+| 2.426 | 2026-10-19 | **SCR-092 stage 4 published (B-592, §26.608).** FIN.ASSET.ACQUIRE capability (126) and the ABZON alias seed; the asset list exposes acquisition. Acceptance follows in stage 5. | Agent |
