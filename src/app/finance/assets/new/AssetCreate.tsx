@@ -1,6 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
+
+import type { AssetActionState } from './actions';
+import { createAction } from './actions';
+
+const INITIAL: AssetActionState = { ok: false, message: '' };
 
 interface AreaRow { areaCode: string; depreciationKey: string; usefulLifeYears: string; usefulLifePeriods: string; depreciationStartDate: string }
 
@@ -8,6 +13,7 @@ const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
 export default function AssetCreate({ canCreate, today }: { canCreate: boolean; today: string }) {
+  const [state, create, creating] = useActionState(createAction, INITIAL);
   const [tab, setTab] = useState<'general' | 'assignments' | 'depreciation'>('general');
   const [areas, setAreas] = useState<AreaRow[]>([
     { areaCode: '01', depreciationKey: '', usefulLifeYears: '', usefulLifePeriods: '0', depreciationStartDate: '' },
@@ -32,7 +38,12 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
         {tabBtn('depreciation', 'Depreciation areas')}
       </div>
 
-      <form className="mt-4">
+      {state.message && (
+        <p role="status" className={`mt-3 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+          {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+        </p>
+      )}
+      <form action={create} className="mt-4">
         <input type="hidden" name="areas" value={JSON.stringify(areas)} />
         {tab === 'general' && (
           <div role="tabpanel" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -116,7 +127,7 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
 
         <div className="mt-4">
           <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-            disabled title="Asset creation stands disabled until the asset service lands.">
+            disabled={!canCreate || creating}>
             Create asset
           </button>
           {!canCreate && (

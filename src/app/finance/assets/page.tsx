@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { ASSET_CHANGE_CAPABILITY, type AssetView } from '@/modules/finance/asset-master';
+import { ASSET_CHANGE_CAPABILITY, listAssets } from '@/modules/finance/asset-master';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,12 +10,11 @@ const ROUTE = '/finance/assets';
 
 /**
  * Asset master list and change entry (SCR-091 / AS02 as a search
- * alias only). Stage 1 shell: retrieval lands in stage 3 of R-139.
+ * alias only).
  */
 export default async function AssetsPage() {
   const session = await requireSession(ROUTE);
-  const assets: AssetView[] = [];
-  void session;
+  const assets = await listAssets(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -46,7 +45,7 @@ export default async function AssetsPage() {
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
                   <th className="px-2 py-2">Asset</th><th className="px-2 py-2">Company</th>
                   <th className="px-2 py-2">Class</th><th className="px-2 py-2">Description</th>
-                  <th className="px-2 py-2">Capitalized</th><th className="px-2 py-2">Status</th>
+                  <th className="px-2 py-2">Capitalized</th><th className="px-2 py-2">Status</th><th className="px-2 py-2">Change</th>
                 </tr>
               </thead>
               <tbody>
@@ -58,6 +57,12 @@ export default async function AssetsPage() {
                     <td className="px-2 py-2">{asset.description1}</td>
                     <td className="px-2 py-2">{asset.capitalizationDate ?? '—'}</td>
                     <td className="px-2 py-2">{asset.status}</td>
+                    <td className="px-2 py-2">
+                      <Link className="text-accent hover:underline"
+                        href={`/finance/assets/change?company=${asset.companyCode}&asset=${encodeURIComponent(asset.assetNumber)}&sub=${asset.subNumber}`}>
+                        Change
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
