@@ -2,7 +2,10 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY } from '@/modules/finance/customer-down-payment-request';
+import {
+  CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY,
+  getCustomerDownPaymentRequests,
+} from '@/modules/finance/customer-down-payment-request';
 import CustomerDownPaymentRequest from './CustomerDownPaymentRequest';
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +14,11 @@ const ROUTE = '/finance/customer-down-payment-request';
 
 /**
  * Customer down payment request (SCR-085 / F-37 as a search alias only).
- * Stage 1 shell: the request service lands in stage 3 of R-133.
  */
 export default async function CustomerDownPaymentRequestPage() {
   const session = await requireSession(ROUTE);
+  const requests = (await getCustomerDownPaymentRequests(session.user.client))
+    .filter((r) => r.status === 'OPEN' || r.status === 'PARTIAL');
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -31,7 +35,7 @@ export default async function CustomerDownPaymentRequestPage() {
       </header>
 
       <CustomerDownPaymentRequest
-        requests={[]}
+        requests={requests}
         canEnter={can(session, CUSTOMER_DOWN_PAYMENT_REQUEST_CAPABILITY)}
         today={today}
       />

@@ -21,6 +21,9 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { customerDownPayment, journalEntryLine } from './schema';
+import {
+  CustomerDownPaymentRequestError, applyRequestFulfillment, downPaymentCreditLine,
+} from './customer-down-payment-request';
 import { resolveSpecialGlAccount } from './vendor-down-payment';
 
 export const CUSTOMER_DOWN_PAYMENT_CAPABILITY = 'FIN.AR.DOWNPAYMENT.POST';
@@ -90,6 +93,8 @@ export async function postCustomerDownPayment(input: {
   bankGlAccount: string; amount: number; currency: string;
   specialGlIndicator: string;
   reference?: string; valueDate?: string; text?: string; requestKey: string;
+  /** Optional fulfillment of standing down-payment requests (F-37). */
+  requestAllocations?: Array<{ requestNumber: string; amount?: number }>;
 }): Promise<PostedCustomerDownPayment> {
   if (!(input.amount > 0)) throw new CustomerDownPaymentError('The down payment amount must stand above zero.');
   for (const [label, value] of [['Document date', input.documentDate], ['Posting date', input.postingDate]] as const) {
@@ -160,6 +165,35 @@ export async function postCustomerDownPayment(input: {
       journalDocumentNumber: journal.documentNumber,
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
+    // Fulfillment of standing requests (F-37): explicit links from
+    // this receipt line to the requests it fulfills, judged here
+    // under the payment lock so no request can be over-fulfilled.
+    if (input.requestAllocations && input.requestAllocations.length > 0) {
+      const creditLine = await downPaymentCreditLine(
+        tx, input.client, journal.documentNumber, alternativeAccount, input.customerNumber,
+      ).catch((error: unknown) => {
+        if (error instanceof CustomerDownPaymentRequestError) throw new CustomerDownPaymentError(error.message, error.remedy);
+        throw error;
+      });
+      let unallocated = round4(input.amount);
+      for (const allocation of input.requestAllocations) {
+        const applied = await applyRequestFulfillment(tx, {
+          client: input.client, changedBy: input.changedBy,
+          requestNumber: allocation.requestNumber,
+          customerNumber: input.customerNumber, companyCode: input.companyCode,
+          indicator: input.specialGlIndicator,
+          currency: input.currency.toUpperCase(),
+          actualDocumentNumber: journal.documentNumber,
+          actualFiscalYear: creditLine.fiscalYear, actualLineNumber: creditLine.lineNumber,
+          amount: allocation.amount, receiptUnallocated: unallocated,
+        }).catch((error: unknown) => {
+          if (error instanceof CustomerDownPaymentRequestError) throw new CustomerDownPaymentError(error.message, error.remedy);
+          throw error;
+        });
+        unallocated = round4(unallocated - applied.fulfilledAmount);
+      }
+    }
+
     await recordChange(tx, {
       client: input.client, objectClass: PAYMENT_CLASS,
       objectKey: `${input.companyCode}/${input.customerNumber}/${paymentNumber}`,

@@ -44,6 +44,10 @@ export async function postDownPaymentAction(
       valueDate: text(form, 'valueDate') || undefined,
       text: text(form, 'text') || undefined,
       requestKey: text(form, 'requestKey') || crypto.randomUUID(),
+      requestAllocations: text(form, 'fulfillRequest') ? [{
+        requestNumber: text(form, 'fulfillRequest'),
+        amount: text(form, 'fulfillAmount') ? Number(text(form, 'fulfillAmount')) : undefined,
+      }] : undefined,
     });
     revalidatePath(ROUTE);
     return {

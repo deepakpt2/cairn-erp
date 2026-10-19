@@ -71,6 +71,12 @@ export async function resolveSpecialGlAccount(
       'Maintain the special G/L configuration for the indicator, then post again.',
     );
   }
+  if (row.targetSpecialGlIndicator) {
+    throw new VendorDownPaymentError(
+      `Special G/L indicator ${indicator} is a down-payment request indicator; it names no account to post to.`,
+      `Post the actual down payment against its target indicator ${row.targetSpecialGlIndicator}.`,
+    );
+  }
   return row.alternativeReconciliationAccount;
 }
 
