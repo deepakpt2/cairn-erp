@@ -1367,6 +1367,12 @@ export const specialGlConfig = pgTable(
     accountType: varchar('account_type', { length: 2 }).notNull(),
     indicator: varchar('indicator', { length: 1 }).notNull(),
     alternativeReconciliationAccount: varchar('alternative_reconciliation_account', { length: 10 }).notNull(),
+    /**
+     * Down-payment requests (SCR-085): a row naming the actual
+     * indicator a request expects at fulfillment is itself a noted
+     * (request) indicator; null marks an actual indicator.
+     */
+    targetSpecialGlIndicator: varchar('target_special_gl_indicator', { length: 1 }),
     description: varchar('description', { length: 60 }).notNull().default(''),
     ...auditColumns,
   },
