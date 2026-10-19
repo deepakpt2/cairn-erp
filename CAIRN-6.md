@@ -225,7 +225,7 @@ The owner supplied the FB03 architectural review (2026-10-19); SAP codes stand a
 
 ## §26.596 — SCR-090 stage 4: document flow capability
 
-**B-580.** Stage 4 of R-138. The capability `FIN.DOC.FLOW` joins the seed with its full-parity term — **123 capabilities / 68 config activities / 97 terms / 106 aliases**. Typecheck clean. Same-stage bookkeeping: B-580 / §26.596 / §30 row 2.414.
+**B-580.** Stage 4 of R-138. The capability `FIN.DOC.FLOW` joins the seed with its full-parity term — **123 capabilities / 68 config activities / 97 terms / 105 aliases**. Typecheck clean. Same-stage bookkeeping: B-580 / §26.596 / §30 row 2.414.
 
 ## §30 · Change log (continued)
 
