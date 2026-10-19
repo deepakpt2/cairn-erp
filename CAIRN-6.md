@@ -628,6 +628,10 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 
 **B-665.** The credit vocabulary stands in `src/modules/finance/credit.ts` (decisions, never-bypass block reasons, record/exposure/check/audit views) and `/finance/credit` renders the credit sheet: customer + area selection, the overview stats (limit, exposure, available, utilization, open receivables, risk, validity, hold) and the change-history table. Nothing saves yet. Same-stage bookkeeping: B-665 / §26.681 / §30 row 2.499.
 
+## §26.682 — SCR-103 stage 2: credit tables (migration 0111)
+
+**B-666.** Migration `0111_customer_credit.sql` (174 total, applied) creates the four judged vocabularies (risk category CHAR(3), representative group CHAR(3), customer credit group CHAR(4), block reason CHAR(2)), the `customer_credit` record keyed (tenant, customer, credit control area) with non-negative limit, hold-requires-reason, and optimistic-locking version, and the append-only `credit_change_audit` (one row per changed field, previous/new values, actor, reason). Tenant-safe composite foreign keys bind partner, area and every vocabulary. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-666 / §26.682 / §30 row 2.500.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -758,3 +762,4 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 | 2.497 | 2026-10-19 | **Intercompany deferred to last (B-663, §26.679).** FIN.IC.POST and FIN.IC.CLEAR (with Intercompany config) marked Deferred after a clean dependency check. Next SCR: FIN.CREDIT.MAINTAIN (FD32); its package is awaited. | Owner + Agent |
 | 2.498 | 2026-10-19 | **SCR-103 contract approved (B-664, §26.680, R-151).** FIN.CREDIT.MAINTAIN: per-customer/area credit records with append-only field audit, derived FI-AR exposure, and an explicit never-bypass credit-check evaluation. Stage 1 (vocabulary + credit sheet shell) follows. | Owner + Agent |
 | 2.499 | 2026-10-19 | **SCR-103 stage 1 published (B-665, §26.681).** Credit vocabulary and the credit-sheet shell stand. Schema follows in stage 2. | Agent |
+| 2.500 | 2026-10-19 | **SCR-103 stage 2 published (B-666, §26.682).** Migration 0111 (174 total) stands: credit vocabularies, the versioned credit record, and the append-only change audit. The credit service follows in stage 3. | Agent |

@@ -24,7 +24,8 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
-import { chartOfAccounts } from '../foundation/schema';
+import { chartOfAccounts, creditControlArea } from '../foundation/schema';
+import { businessPartner } from '../foundation/business-partner-schema';
 import { glAccountGroup } from './gl-account-group-schema';
 
 /** Chart-of-accounts level account definition, plus the company-code segment (§8.2). */
@@ -1681,4 +1682,108 @@ export const vendorInvoiceLine = pgTable('vendor_invoice_line', {
   primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
   foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [vendorInvoice.client, vendorInvoice.invoiceNumber] }).onDelete('restrict'),
   check('vendor_invoice_line_amount_ck', sql`${t.netAmount} > 0`),
+]);
+
+/**
+ * Customer credit management (SCR-103 / R-151): judged credit
+ * vocabularies, the per-customer/area credit record with
+ * optimistic-locking version, and the append-only change audit.
+ */
+export const creditRiskCategory = pgTable('credit_risk_category', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  riskCategory: varchar('risk_category', { length: 3 }).notNull(),
+  name: varchar('name', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.client, t.riskCategory] })]);
+
+export const creditRepresentativeGroup = pgTable('credit_representative_group', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  groupCode: varchar('group_code', { length: 3 }).notNull(),
+  name: varchar('name', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.client, t.groupCode] })]);
+
+export const customerCreditGroup = pgTable('customer_credit_group', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  groupCode: varchar('group_code', { length: 4 }).notNull(),
+  name: varchar('name', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.client, t.groupCode] })]);
+
+export const creditBlockReason = pgTable('credit_block_reason', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  reasonCode: varchar('reason_code', { length: 2 }).notNull(),
+  name: varchar('name', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.client, t.reasonCode] })]);
+
+export const customerCredit = pgTable('customer_credit', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  creditControlArea: varchar('credit_control_area', { length: 4 }).notNull(),
+  creditLimit: numeric('credit_limit', { precision: 23, scale: 4 }).notNull(),
+  creditCurrency: char('credit_currency', { length: 3 }).notNull(),
+  riskCategory: varchar('risk_category', { length: 3 }).notNull(),
+  creditRepresentativeGroup: varchar('credit_representative_group', { length: 3 }),
+  creditLimitValidTo: date('credit_limit_valid_to', { mode: 'string' }),
+  customerCreditGroup: varchar('customer_credit_group', { length: 4 }),
+  isBlocked: boolean('is_blocked').notNull().default(false),
+  blockReason: varchar('block_reason', { length: 2 }),
+  version: integer('version').notNull().default(1),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.customer, t.creditControlArea] }),
+  foreignKey({
+    columns: [t.client, t.customer],
+    foreignColumns: [businessPartner.client, businessPartner.partnerNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.creditControlArea],
+    foreignColumns: [creditControlArea.client, creditControlArea.creditControlArea],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.riskCategory],
+    foreignColumns: [creditRiskCategory.client, creditRiskCategory.riskCategory],
+  }),
+  foreignKey({
+    columns: [t.client, t.creditRepresentativeGroup],
+    foreignColumns: [creditRepresentativeGroup.client, creditRepresentativeGroup.groupCode],
+  }),
+  foreignKey({
+    columns: [t.client, t.customerCreditGroup],
+    foreignColumns: [customerCreditGroup.client, customerCreditGroup.groupCode],
+  }),
+  check('customer_credit_limit_ck', sql`${t.creditLimit} >= 0`),
+  check('customer_credit_block_ck', sql`(${t.isBlocked} and ${t.blockReason} is not null) or not ${t.isBlocked}`),
+]);
+
+export const creditChangeAudit = pgTable('credit_change_audit', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  auditId: varchar('audit_id', { length: 24 }).notNull(),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  creditControlArea: varchar('credit_control_area', { length: 4 }).notNull(),
+  field: varchar('field', { length: 40 }).notNull(),
+  previousValue: varchar('previous_value', { length: 120 }),
+  newValue: varchar('new_value', { length: 120 }),
+  changedBy: varchar('changed_by', { length: 60 }).notNull(),
+  changeReason: varchar('change_reason', { length: 240 }).notNull(),
+  changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.auditId] }),
+  foreignKey({
+    columns: [t.client, t.customer, t.creditControlArea],
+    foreignColumns: [customerCredit.client, customerCredit.customer, customerCredit.creditControlArea],
+  }).onDelete('cascade'),
+  index('credit_change_audit_record_idx').on(t.client, t.customer, t.creditControlArea, t.changedAt),
 ]);
