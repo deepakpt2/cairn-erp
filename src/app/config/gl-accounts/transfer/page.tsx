@@ -4,7 +4,10 @@ import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import { listCompanyCodes } from '@/modules/foundation/services';
 import { listChartOfAccounts } from '@/modules/foundation/chart-of-accounts-maintenance';
-import { GL_ACCOUNT_TRANSFER_CAPABILITY, type GlAccountTransferSelection } from '@/modules/finance/gl-account-transfer';
+import {
+  GL_ACCOUNT_TRANSFER_CAPABILITY, GlAccountTransferError, transferGlAccounts,
+  type GlAccountTransferResult, type GlAccountTransferSelection,
+} from '@/modules/finance/gl-account-transfer';
 import TransferShell from './TransferShell';
 
 export const metadata: Metadata = { title: 'Transfer G/L Account Master Data' };
@@ -36,6 +39,20 @@ export default async function Page({ searchParams }: {
     overwriteExisting: first(params.overwriteExisting) === '1',
   };
 
+  let result: GlAccountTransferResult | null = null;
+  let error: string | null = null;
+  if (canUse && params.targetCompanyCode) {
+    try {
+      result = await transferGlAccounts({
+        client: session.user.client, actor: session.user.userId, selection,
+      });
+    } catch (caught) {
+      error = caught instanceof GlAccountTransferError
+        ? `${caught.message}${caught.remedy ? ` ${caught.remedy}` : ''}`
+        : 'The transfer could not be executed.';
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
       <header>
@@ -48,8 +65,9 @@ export default async function Page({ searchParams }: {
         <Link href="/config/gl-accounts" className="mt-1 inline-block text-sm text-accent hover:underline">
           G/L account master…
         </Link>
+        {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
       </header>
-      <TransferShell canUse={canUse} companies={companies} charts={charts} selection={selection} result={null} />
+      <TransferShell canUse={canUse} companies={companies} charts={charts} selection={selection} result={result} />
     </main>
   );
 }

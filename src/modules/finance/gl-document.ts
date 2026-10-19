@@ -23,7 +23,7 @@ import {
   hasCompanyCodeAssignments, missingCompanyCodeAssignments, describeMissingCompanyCodeAssignments,
 } from '../foundation/company-code-assignments';
 import { costCenter, documentType, profitCenter } from '../foundation/schema';
-import { glAccount, journalEntry, journalEntryLine, journalPostingRequest } from './schema';
+import { glAccount, glAccountCompany, journalEntry, journalEntryLine, journalPostingRequest } from './schema';
 
 export const GL_DOCUMENT_CAPABILITY = 'FIN.JOURNAL.POST';
 
@@ -213,6 +213,14 @@ export async function postGlDocument(input: GlDocumentInput): Promise<PostedJour
       }
       if (account.isBlockedPosting) {
         throw new GlDocumentError(`Line ${i + 1}: G/L account ${line.glAccount} is blocked for posting.`);
+      }
+      const [segment] = await tx.select().from(glAccountCompany).where(and(
+        eq(glAccountCompany.client, input.client),
+        eq(glAccountCompany.companyCode, input.companyCode),
+        eq(glAccountCompany.glAccount, line.glAccount),
+      ));
+      if (segment?.isBlockedPosting) {
+        throw new GlDocumentError(`Line ${i + 1}: G/L account ${line.glAccount} is blocked for posting in company ${input.companyCode}.`);
       }
       if (account.requiresCostObject && !line.costCenter && !line.profitCenter) {
         throw new GlDocumentError(

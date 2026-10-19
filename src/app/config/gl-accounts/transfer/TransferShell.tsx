@@ -66,6 +66,14 @@ export default function TransferShell({ canUse, companies, charts, selection, re
         </button>
       </form>
 
+      {result && (
+        <p className="text-sm text-ink-soft">
+          Run {result.runId} · {result.testRun ? 'TEST RUN — nothing copied' : 'LIVE RUN'} · {result.status} ·
+          {' '}{result.created} created · {result.updated} updated · {result.skipped} skipped · {result.errors} errors ·
+          {' '}by {result.executedBy} at {result.executedAt.slice(0, 19).replace('T', ' ')}
+        </p>
+      )}
+
       <section className="panel overflow-x-auto" aria-label="Transfer protocol">
         <table className="grid-table min-w-[48rem]">
           <thead>

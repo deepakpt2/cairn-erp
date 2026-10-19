@@ -172,9 +172,9 @@ export async function getJournalItems(
     }
 
     const statusClause = filters.status === 'OPEN'
-      ? sql`and g.is_open_item_managed and l.clearing_document is null`
+      ? sql`and coalesce(seg.is_open_item_managed, g.is_open_item_managed, false) and l.clearing_document is null`
       : filters.status === 'CLEARED'
-        ? sql`and g.is_open_item_managed and l.clearing_document is not null`
+        ? sql`and coalesce(seg.is_open_item_managed, g.is_open_item_managed, false) and l.clearing_document is not null`
         : sql``;
     const pageSize = Math.max(1, Math.min(filters.pageSize ?? cap, cap));
     const page = Math.max(1, filters.page ?? 1);
@@ -200,6 +200,8 @@ export async function getJournalItems(
         on h.client = l.client and h.document_number = l.document_number and h.fiscal_year = l.fiscal_year
       left join gl_account g
         on g.client = l.client and g.account_number = l.gl_account
+      left join gl_account_company seg
+        on seg.client = l.client and seg.company_code = l.company_code and seg.gl_account = l.gl_account
       where l.client = ${client} ${conditions}`;
     const countRows = await tx.execute(sql`
       select count(*)::int as total ${fromClause}
@@ -216,7 +218,7 @@ export async function getJournalItems(
         l.cost_center, l.profit_center, l.tax_code, l.line_text,
         l.business_partner, h.reference, l.assignment,
         l.clearing_document, l.clearing_date::text as clearing_date,
-        coalesce(g.is_open_item_managed, false) as is_open_item_managed
+        coalesce(seg.is_open_item_managed, g.is_open_item_managed, false) as is_open_item_managed
       ${fromClause}
       order by h.posting_date, l.document_number, l.line_number
       limit ${pageSize} offset ${offset}
