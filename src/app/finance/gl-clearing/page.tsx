@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
-import { GL_CLEARING_CAPABILITY, type GlClearingView } from '@/modules/finance/gl-clearing';
+import {
+  GL_CLEARING_CAPABILITY, GlClearingError, getGlClearing, type GlClearingView,
+} from '@/modules/finance/gl-clearing';
 import GlClearing from './GlClearing';
 
 export const dynamic = 'force-dynamic';
@@ -11,9 +13,29 @@ const ROUTE = '/finance/gl-clearing';
 /**
  * Clear G/L account (SCR-114 / F-03 as a search alias only).
  */
-export default async function GlClearingPage() {
+export default async function GlClearingPage({ searchParams }: {
+  searchParams: Promise<{ companyCode?: string; glAccount?: string; documentNumber?: string; assignment?: string; reference?: string }>;
+}) {
   const session = await requireSession(ROUTE);
-  const view: GlClearingView | null = null;
+  const params = await searchParams;
+  const client = session.user.client;
+  let view: GlClearingView | null = null;
+  let loadError: string | null = null;
+  if (params.companyCode && params.glAccount) {
+    try {
+      view = await getGlClearing({
+        client, companyCode: params.companyCode, glAccount: params.glAccount.toUpperCase(),
+        filters: {
+          documentNumber: params.documentNumber || undefined,
+          assignment: params.assignment || undefined,
+          reference: params.reference || undefined,
+        },
+      });
+    } catch (error) {
+      if (error instanceof GlClearingError) loadError = error.remedy ? `${error.message} ${error.remedy}` : error.message;
+      else throw error;
+    }
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -33,7 +55,7 @@ export default async function GlClearingPage() {
 
       <GlClearing
         view={view}
-        loadError={null}
+        loadError={loadError}
         canClear={can(session, GL_CLEARING_CAPABILITY)}
         today={today}
       />

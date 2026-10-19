@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 
 import type { GlClearingView } from '@/modules/finance/gl-clearing';
+import { clearAction, type GlClearingActionState } from './actions';
+
+const INITIAL: GlClearingActionState = { ok: false, message: '' };
 
 const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
   `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
@@ -17,6 +20,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   canClear: boolean;
   today: string;
 }) {
+  const [state, action, clearing] = useActionState(clearAction, INITIAL);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clearingDate, setClearingDate] = useState(today);
   const [postingDate, setPostingDate] = useState(today);
@@ -33,6 +37,9 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   const currencies = [...new Set(chosen.map((i) => i.currency))];
   const assigned = chosen.reduce((s, i) => s + i.signed, 0);
   const difference = Math.round(assigned * 10000) / 10000;
+  const requestKey = view
+    ? `gl-${view.companyCode}-${view.glAccount}-${chosen.map(itemKey).join(',')}-${clearingDate}-${postingDate}-${documentDate}`
+    : '';
 
   return (
     <>
@@ -62,6 +69,11 @@ export default function GlClearing({ view, loadError, canClear, today }: {
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Load open items</button>
         </form>
         {loadError && <p role="status" className="mt-2 text-sm text-red-700">{loadError}</p>}
+        {state.message && (
+          <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+            {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+          </p>
+        )}
         {view && (
           <p className="mt-2 text-sm">
             Account <strong>{view.glAccount}</strong> in company <strong>{view.companyCode}</strong>:
@@ -76,7 +88,10 @@ export default function GlClearing({ view, loadError, canClear, today }: {
           {items.length === 0 ? (
             <p className="mt-2 text-sm text-ink-soft">No open items stand for this account and company.</p>
           ) : (
-            <form method="post">
+            <form action={action}>
+              <input type="hidden" name="companyCode" value={view.companyCode} />
+              <input type="hidden" name="glAccount" value={view.glAccount} />
+              <input type="hidden" name="requestKey" value={requestKey} />
               <div className="mt-3 overflow-x-auto">
                 <table className="min-w-full text-left text-sm">
                   <thead>
@@ -139,7 +154,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                 </label>
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled={!canClear || chosen.length === 0 || difference !== 0}
+                  disabled={!canClear || clearing || chosen.length === 0 || difference !== 0}
                 >
                   Post clearing
                 </button>
