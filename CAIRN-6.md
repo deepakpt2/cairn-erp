@@ -1006,6 +1006,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-755.** `tests/subledger-tie-out.test.ts` (4 green) proves the named exception where partnerless lines stand on a reconciliation account (7,500 against 7,000, difference 500), the TIED verdict for an account moving only through its subledger, partner rows, the misassignment warning for a partner posting away from its segment account, the non-leading-ledger refusal, and read-only behaviour; browser target T881 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-755 / §26.771 / §30 row 2.589.
 
+## §26.772 — SCR-115 closed: subledger tie-out accepted
+
+**B-756.** SCR-115 / FIN.RPT.SUBLEDGER.TIE is closed. The full suite stands at 1529/1529, the production build is green, and browser target T881 passed (the account stands as a named exception: 7,500.00 against 7,000.00; the report persisted nothing). Per company, fiscal year and cumulative periods, every CUSTOMERS/VENDORS reconciliation account compares its account total against its partner-carrying total, differences named TIED or EXCEPTION at zero tolerance, partner rows under each account, partnerless direct postings as the exception detail, and misassigned partners named. Acceptance found one genuine gap — `GlDocumentLineInput` did not carry `businessPartner` although the posting engine stamps it — completed under B-755 before the build passed. Catalogue: 147 capabilities / 120 terms / 140 aliases; FUNCTIONS-AND-ROADMAP flips FIN.RPT.SUBLEDGER.TIE to Implemented (SCR-115, B-756), alias FAGLB03 (F.03 also on the term). Deferred by name: ASSETS and MATERIAL reconciliation types, period-movement comparison, multi-ledger. Next in the frozen order: FIN.CONSOLIDATE, then FIN.CONSOLIDATE.STMT; FIN.RPT.CASHFLOW follows under its own later package (B-721), intercompany last (B-663), and the SCR-112 exclusion-leaf resolver repair stands as a named follow-up. Same-stage bookkeeping: B-756 / §26.772 / §30 row 2.590.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
