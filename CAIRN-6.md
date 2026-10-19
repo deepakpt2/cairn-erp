@@ -486,6 +486,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-635.** Stage 1 of R-147: the FIN.GRIR.RECLASS vocabulary (selection, item with classification vocabulary, result), the `/finance/grir-reclass` selection screen keeping analysis and accrual creation visibly separate with test mode defaulted, and the protocol grid shape with CSV export entry. Execution lands in stage 3. Same-stage bookkeeping: B-635 / §26.651 / §30 row 2.469.
 
+## §26.652 — SCR-099 stage 2: GR/IR run and item protocol
+
+**B-636.** Stage 2 of R-147, migration `0107_grir_reclass_run.sql` (170 migrations): `grir_reclass_run` (request-key unique, status TEST/COMPLETED/REVERSED, accrual total and generated-document references) and `grir_reclass_item` (PO/vendor/material/plant references, ordered/received/invoiced/open quantities and values, classification, accrual reference, status and error). Purchase orders, material documents, supplier invoices and accounting documents are reused untouched. Same-stage bookkeeping: B-636 / §26.652 / §30 row 2.470.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -586,3 +590,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.467 | 2026-10-19 | **SCR-098 CLOSED (B-633, §26.649).** FAGL_FC_VAL FX valuation accepted: key-date rates, signed gain/loss, duplicate guard, reversal-and-rerun, browser T898 green, suite 1432. Next in order: SCR-099 (FIN.GRIR.RECLASS / F.19), then FIN.ACCRUAL.POST — packages awaited. | Agent |
 | 2.468 | 2026-10-19 | **SCR-099 contract published (B-634, §26.650, R-147).** F.19 GR/IR analysis: signed canonical PO history, value-and-quantity classification, separate accrual posting against WRX determination with duplicate refusal. UI stage follows. | Agent |
 | 2.469 | 2026-10-19 | **SCR-099 stage 1 published (B-635, §26.651).** GR/IR vocabulary and selection shell stand. Run/item schema follows in stage 2. | Agent |
+| 2.470 | 2026-10-19 | **SCR-099 stage 2 published (B-636, §26.652).** GR/IR run/item protocol stands (migration 0107, 170 total). Analysis and accrual service follows in stage 3. | Agent |

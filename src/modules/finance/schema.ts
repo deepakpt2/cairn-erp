@@ -325,6 +325,68 @@ export const fxValuationItem = pgTable('fx_valuation_item', {
 ]);
 
 /**
+ * GR/IR reclassification run and item protocol (SCR-099 / R-147).
+ */
+export const grirReclassRun = pgTable('grir_reclass_run', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  keyDate: date('key_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }),
+  reversalDate: date('reversal_date', { mode: 'string' }),
+  isTestRun: boolean('is_test_run').notNull().default(true),
+  createAccruals: boolean('create_accruals').notNull().default(false),
+  status: varchar('status', { length: 12 }).notNull().default('TEST'),
+  totalAccrualAmount: numeric('total_accrual_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  accrualDocumentNumber: varchar('accrual_document_number', { length: 40 }),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  uniqueIndex('grir_reclass_run_request_uq').on(t.client, t.requestKey),
+  check('grir_reclass_run_status_ck', sql`${t.status} in ('TEST', 'COMPLETED', 'REVERSED')`),
+]);
+
+export const grirReclassItem = pgTable('grir_reclass_item', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  itemNumber: integer('item_number').notNull(),
+  purchaseOrder: varchar('purchase_order', { length: 20 }).notNull(),
+  purchaseOrderItem: integer('purchase_order_item').notNull(),
+  vendor: varchar('vendor', { length: 40 }).notNull(),
+  material: varchar('material', { length: 40 }),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  orderedQuantity: numeric('ordered_quantity', { precision: 13, scale: 3 }).notNull(),
+  receivedQuantity: numeric('received_quantity', { precision: 13, scale: 3 }).notNull(),
+  invoicedQuantity: numeric('invoiced_quantity', { precision: 13, scale: 3 }).notNull(),
+  openQuantity: numeric('open_quantity', { precision: 13, scale: 3 }).notNull(),
+  receivedValue: numeric('received_value', { precision: 23, scale: 4 }).notNull(),
+  invoicedValue: numeric('invoiced_value', { precision: 23, scale: 4 }).notNull(),
+  openValue: numeric('open_value', { precision: 23, scale: 4 }).notNull(),
+  classification: varchar('classification', { length: 28 }).notNull(),
+  accrualAmount: numeric('accrual_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  accrualDocument: varchar('accrual_document', { length: 40 }),
+  status: varchar('status', { length: 12 }).notNull(),
+  error: text('error'),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [grirReclassRun.client, grirReclassRun.runId],
+  }).onDelete('cascade'),
+  index('grir_reclass_item_po_idx').on(t.client, t.companyCode, t.purchaseOrder, t.purchaseOrderItem, t.status),
+  check('grir_reclass_item_class_ck', sql`${t.classification} in ('RECONCILED', 'GOODS_RECEIVED_NOT_INVOICED', 'INVOICED_NOT_RECEIVED', 'QUANTITY_DIFFERENCE', 'VALUE_DIFFERENCE')`),
+  check('grir_reclass_item_status_ck', sql`${t.status} in ('ANALYZED', 'ACCRUED', 'SKIPPED', 'ERROR')`),
+]);
+
+/**
  * Payment run (SCR-063 / R-111). Parameters with company and method
  * children, the proposal with its named exceptions, and payment
  * documents as the execution's retained evidence.
