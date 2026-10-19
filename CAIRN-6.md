@@ -382,6 +382,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-609.** Stage 3 of R-143. `getAssetHistorySheet` judges the selection server-side (company range against the tenant, area configured, reporting date inside the selected fiscal year per company calendar), then aggregates in three set-based queries: ACTIVE acquisitions and retirements bucketed by asset value date against the fiscal-year window, and posted depreciation for the selected area bucketed by fiscal year and period end — REVERSED records never count, test runs never reach the posting record, and beginning balances stand net of earlier retirements. Rows reconcile by construction (beginning + acquisitions − retirements = ending; NBV = ending acquisition − ending depreciation), subtotals stand per class and currency, grand totals per currency, and the page paginates at 100 (cap 500). The sheet runs from a judged GET so it is bookmarkable; the CSV export re-runs the identical selection and streams every row. Drill-down opens the asset display per row. Nothing is written. Same-stage bookkeeping: B-609 / §26.625 / §30 row 2.443.
 
+## §26.626 — SCR-095 stage 4: capability, S_ALR alias, navigation
+
+**B-610.** Seed grows by one capability (FIN.ASSET.REPORT, 129 total) and by the S_ALR_87011990 alias term for the history sheet; the asset list gains the history entry. Seeded twice, idempotent. Same-stage bookkeeping: B-610 / §26.626 / §30 row 2.444.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -456,3 +460,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.441 | 2026-10-19 | **SCR-095 stage 1 published (B-607, §26.623).** Asset history sheet shell stands at `/finance/assets/history` with the selection matrix; module vocabulary committed, service deferred to stage 3. | Agent |
 | 2.442 | 2026-10-19 | **SCR-095 stage 2 published (B-608, §26.624).** Report indexes stand (migration 0103, 166 total); no new tables behind the read-only sheet. Aggregation service follows in stage 3. | Agent |
 | 2.443 | 2026-10-19 | **SCR-095 stage 3 published (B-609, §26.625).** History aggregation stands: value-date windows over ACTIVE records, posted-only area depreciation, per-currency reconciliation and totals, judged GET sheet with CSV export. Supporting seed follows in stage 4. | Agent |
+| 2.444 | 2026-10-19 | **SCR-095 stage 4 published (B-610, §26.626).** FIN.ASSET.REPORT capability (129) and the S_ALR_87011990 alias seed; the asset list exposes the history sheet. Acceptance follows in stage 5. | Agent |

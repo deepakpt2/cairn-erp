@@ -23,6 +23,9 @@ export default async function AssetsPage() {
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('assetChange.title')}</h1>
           <span className="flex gap-2">
+            <Link href="/finance/assets/history" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('assetList.history')}
+            </Link>
             <Link href="/finance/assets/depreciate" className="btn btn-default min-h-11 sm:min-h-8">
               {t('assetList.depreciate')}
             </Link>
