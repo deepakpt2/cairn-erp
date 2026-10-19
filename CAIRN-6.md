@@ -119,6 +119,10 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 
 **Deferred by name:** approval and rejection workflow (COMPLETED stands ready without it; REJECTED is reserved in the status constraint), workflow routing by amount or type, foreign-currency conversion and parallel currencies, parked-document reports beyond the screen's list, and reversal of the posted document beyond the standing FB08-equivalent reversal. Stage order: 1 the `/finance/journal/park` screen → 2 schema (staging tables, migration) → 3 service (lifecycle + atomic posting) and screen wiring → 4 supporting (capability, term, number-range object) → 5 tests and browser acceptance. Same-stage bookkeeping: B-558 / §26.574 / §30 row 2.392.
 
+## §26.575 — SCR-087 stage 1: the park-a-journal screen
+
+**B-559.** Stage 1 of R-135. The `/finance/journal/park` screen stands as a shell: the parking form (header data and the line grid with cost/profit centre, tax code, assignment and line text, debits, credits and difference totalled live with the unbalanced-parking note) and the parked-documents list with status and posted-as reference, rendered empty. Parking stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.JOURNAL.PARK` and the parked-document vocabulary. Same-stage bookkeeping: B-559 / §26.575 / §30 row 2.393.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -142,3 +146,4 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 | 2.390 | 2026-10-19 | **SCR-086 stage 4 published (B-556, §26.572).** Capability F-47 seeded (119 capabilities / 93 terms / 102 aliases); VENDDPREQ joins the number-range catalogue and tenant defaults. Tests and browser acceptance follow in stage 5. | Agent |
 | 2.391 | 2026-10-19 | **SCR-086 stage 5 published — CLOSED (B-557, §26.573).** Tests 3/3, full suite 1368 green, browser T910 green; vendor down-payment requests stand accepted and both advance chains (F-47 → F-48 → F-54, F-37 → F-29 → F-39) are complete. Next: T-code FV50 park a journal entry (FBRA first named in error; it stands implemented). | Agent |
 | 2.392 | 2026-10-19 | **SCR-087 / FV50 contracted (R-135, B-558, §26.574).** Parked journals live in staging tables with a drawn PARKDOC number, version-checked edits, a judged save-as-complete gate and atomic posting through the engine, the parked record retained with its posted reference; approval workflow, FX and parallel currencies deferred by name. Standing instruction recorded: completion reports name the next two T-codes in order. | Agent |
+| 2.393 | 2026-10-19 | **SCR-087 stage 1 published (B-559, §26.575).** The inert FV50 parking screen: header and line grid with live totals, parked list rendered empty, parking disabled; i18n keys added. No reads, no writes. | Agent |

@@ -2380,6 +2380,8 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'parkedJournal.title': 'Park a Journal Entry',
+  'parkedJournal.subtitle': 'Store a preliminary G/L document without posting it: a parked document may stand incomplete, and only a judged save-as-complete or posting ever touches the accounts.',
   'journal.postTitle': 'Post a journal entry',
   'journal.postSubtitle':
     'Debits must equal credits. The fiscal year and period are derived from the posting date ' +
