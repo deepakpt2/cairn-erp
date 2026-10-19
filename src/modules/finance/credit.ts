@@ -426,3 +426,161 @@ export interface CreditMonitorResult {
   calculatedAt: string;
   reportingCurrency: string | null;
 }
+
+const PAGE_CAP = 200;
+const RATE_TYPES = ['AVERAGE', 'BUYING', 'SELLING'] as const;
+
+export async function listCreditMonitor(client: string, filter: CreditMonitorFilter): Promise<CreditMonitorResult> {
+  const calculatedAt = new Date().toISOString();
+  return withTenant(client, async (tx) => {
+    // Judge every supplied filter value against standing configuration.
+    const areaRows = await tx.execute(sql`
+      select credit_control_area, currency from credit_control_area where client = ${client} and is_active = true
+    `);
+    const areas = areaRows as unknown as Array<{ credit_control_area: string; currency: string }>;
+    const areaCurrency = new Map(areas.map((a) => [a.credit_control_area, a.currency]));
+    for (const [value, label] of [[filter.areaFrom, 'area from'], [filter.areaTo, 'area to']] as const) {
+      if (value && !areaCurrency.has(value)) fail(`Credit control area ${value} (${label}) does not stand configured.`);
+    }
+    if (filter.riskCategory) {
+      await assertConfig(tx, client, 'credit_risk_category', 'risk_category', filter.riskCategory, 'Risk category');
+    }
+    if (filter.representativeGroup) {
+      await assertConfig(tx, client, 'credit_representative_group', 'group_code', filter.representativeGroup, 'Representative group');
+    }
+    if (filter.companyCode) {
+      const company = await tx.execute(sql`
+        select 1 as ok from company_code where client = ${client} and company_code = ${filter.companyCode}
+      `);
+      if ((company as unknown as unknown[]).length === 0) fail(`Company code ${filter.companyCode} does not stand.`);
+    }
+    if (filter.reportingCurrency) {
+      const currency = await tx.execute(sql`select 1 as ok from currency where code = ${filter.reportingCurrency} and is_active = true`);
+      if ((currency as unknown as unknown[]).length === 0) fail(`Reporting currency ${filter.reportingCurrency} does not stand.`);
+    }
+    const rateType = filter.rateType && (RATE_TYPES as readonly string[]).includes(filter.rateType) ? filter.rateType : 'AVERAGE';
+
+    const inAreaRange = (area: string) =>
+      (!filter.areaFrom || area >= filter.areaFrom) && (!filter.areaTo || area <= filter.areaTo);
+    const inCustomerRange = (customer: string) =>
+      (!filter.customerFrom || customer >= filter.customerFrom) && (!filter.customerTo || customer <= filter.customerTo);
+
+    // Credit records in scope.
+    const recordRows = await tx.execute(sql`
+      select c.*, p.name as customer_name from customer_credit c
+      join business_partner p on p.client = c.client and p.partner_number = c.customer
+      where c.client = ${client}
+        ${filter.areaFrom ? sql`and c.credit_control_area >= ${filter.areaFrom}` : sql``}
+        ${filter.areaTo ? sql`and c.credit_control_area <= ${filter.areaTo}` : sql``}
+        ${filter.customerFrom ? sql`and c.customer >= ${filter.customerFrom}` : sql``}
+        ${filter.customerTo ? sql`and c.customer <= ${filter.customerTo}` : sql``}
+        ${filter.riskCategory ? sql`and c.risk_category = ${filter.riskCategory}` : sql``}
+        ${filter.representativeGroup ? sql`and c.credit_representative_group = ${filter.representativeGroup}` : sql``}
+    `);
+
+    // Open AR exposure aggregated per customer and area before any join.
+    const exposureRows = await tx.execute(sql`
+      select l.business_partner as customer, c.credit_control_area as area,
+             string_agg(distinct e.company_code, ',' order by e.company_code) as companies,
+             coalesce(sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end), 0)::text as exposure
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+      join company_code c
+        on c.client = e.client and c.company_code = e.company_code and c.credit_control_area is not null
+      where l.client = ${client} and l.business_partner is not null
+        and e.status = 'POSTED' and l.clearing_document is null
+        ${filter.companyCode ? sql`and e.company_code = ${filter.companyCode}` : sql``}
+        ${filter.customerFrom ? sql`and l.business_partner >= ${filter.customerFrom}` : sql``}
+        ${filter.customerTo ? sql`and l.business_partner <= ${filter.customerTo}` : sql``}
+      group by l.business_partner, c.credit_control_area
+    `);
+    const exposureByKey = new Map<string, { exposure: bigint; companies: string[] }>();
+    for (const row of exposureRows as unknown as Array<{ customer: string; area: string; companies: string; exposure: string }>) {
+      if (!inAreaRange(row.area)) continue;
+      exposureByKey.set(`${row.customer}|${row.area}`, {
+        exposure: toScaled(row.exposure ?? '0'),
+        companies: row.companies ? row.companies.split(',') : [],
+      });
+    }
+
+    interface RowDraft extends CreditMonitorRow { exposureScaled: bigint; limitScaled: bigint | null }
+    const drafts: RowDraft[] = [];
+    const seen = new Set<string>();
+    for (const record of recordRows as unknown as Array<Record<string, unknown>>) {
+      const customer = String(record.customer);
+      const area = String(record.credit_control_area);
+      const key = `${customer}|${area}`;
+      seen.add(key);
+      const exposure = exposureByKey.get(key)?.exposure ?? 0n;
+      const limit = toScaled(String(record.credit_limit));
+      drafts.push({
+        customer, customerName: String(record.customer_name), creditControlArea: area,
+        companyCodes: exposureByKey.get(key)?.companies ?? [],
+        creditLimit: Number(fromScaled(limit)), creditCurrency: String(record.credit_currency),
+        arExposure: Number(fromScaled(exposure)), orderExposure: null, deliveryExposure: null, billingExposure: null,
+        totalExposure: Number(fromScaled(exposure)),
+        availableCredit: Number(fromScaled(limit - exposure)),
+        utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
+        riskCategory: String(record.risk_category),
+        isBlocked: Boolean(record.is_on_hold), blockReason: (record.block_reason as string) ?? null,
+        noCreditRecord: false,
+        limitExpired: Boolean(record.credit_limit_valid_to && String(record.credit_limit_valid_to) < todayUtc()),
+        conversionMissing: false,
+        lastUpdated: record.updated_at ? new Date(record.updated_at as string).toISOString() : null,
+        exposureScaled: exposure, limitScaled: limit,
+      });
+    }
+    // Customers carrying exposure without any credit record: never hidden.
+    for (const [key, value] of exposureByKey) {
+      if (seen.has(key)) continue;
+      const [customer, area] = key.split('|');
+      if (!inCustomerRange(customer)) continue;
+      if (filter.riskCategory || filter.representativeGroup) continue;
+      const nameRows = await tx.execute(sql`
+        select name from business_partner where client = ${client} and partner_number = ${customer}
+      `);
+      drafts.push({
+        customer, customerName: String((nameRows as unknown as Array<{ name: string }>)[0]?.name ?? customer),
+        creditControlArea: area, companyCodes: value.companies,
+        creditLimit: null, creditCurrency: areaCurrency.get(area) ?? '',
+        arExposure: Number(fromScaled(value.exposure)), orderExposure: null, deliveryExposure: null, billingExposure: null,
+        totalExposure: Number(fromScaled(value.exposure)), availableCredit: null, utilizationPercent: null,
+        riskCategory: null, isBlocked: false, blockReason: null,
+        noCreditRecord: true, limitExpired: false, conversionMissing: false, lastUpdated: null,
+        exposureScaled: value.exposure, limitScaled: null,
+      });
+    }
+
+    // Optional reporting-currency conversion with the standing rates.
+    if (filter.reportingCurrency) {
+      for (const draft of drafts) {
+        if (draft.creditCurrency === filter.reportingCurrency) continue;
+        const rateRows = await tx.execute(sql`
+          select rate::text as rate, ratio_from, ratio_to from exchange_rate
+          where rate_type = ${rateType} and from_currency = ${draft.creditCurrency}
+            and to_currency = ${filter.reportingCurrency} and valid_from <= ${todayUtc()}
+          order by valid_from desc limit 1
+        `);
+        const rate = (rateRows as unknown as Array<{ rate: string; ratio_from: number; ratio_to: number }>)[0];
+        if (!rate) { draft.conversionMissing = true; continue; }
+        const factor = Number(rate.rate) * Number(rate.ratio_to) / Number(rate.ratio_from);
+        draft.arExposure = draft.arExposure * factor;
+        draft.totalExposure = draft.totalExposure * factor;
+        if (draft.creditLimit !== null) draft.creditLimit = draft.creditLimit * factor;
+        if (draft.availableCredit !== null) draft.availableCredit = draft.availableCredit * factor;
+        draft.creditCurrency = filter.reportingCurrency;
+      }
+    }
+
+    const filtered = drafts.filter((draft) => {
+      if (filter.blockedOnly && !draft.isBlocked) return false;
+      if (filter.limitExceededOnly && !(draft.limitScaled !== null && draft.exposureScaled > draft.limitScaled)) return false;
+      return true;
+    });
+    filtered.sort((a, b) => (b.utilizationPercent ?? -1) - (a.utilizationPercent ?? -1));
+    const totalCustomers = filtered.length;
+    const rows = filtered.slice(0, PAGE_CAP).map(({ exposureScaled: _e, limitScaled: _l, ...row }) => row);
+    return { rows, totalCustomers, calculatedAt, reportingCurrency: filter.reportingCurrency ?? null };
+  });
+}

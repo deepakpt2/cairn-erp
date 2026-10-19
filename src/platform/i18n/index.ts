@@ -2454,6 +2454,8 @@ const en: Catalogue = {
   'monitor.noRecord': 'No credit record',
   'monitor.blocked': 'Blocked',
   'monitor.empty': 'No customers match the filters.',
+  'monitor.expired': 'Limit expired',
+  'monitor.openCredit': 'Credit management…',
   'credit.title': 'Customer Credit Management',
   'credit.intro': 'Credit limit, risk and holds per customer and credit control area. Exposure derives from open receivables across the area’s companies; every change is audited field by field with its reason.',
   'credit.selectionTitle': 'Customer and credit control area',

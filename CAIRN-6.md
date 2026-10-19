@@ -670,6 +670,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 **B-674.** Migration `0113_credit_monitor_indexes.sql` (176 total, applied) adds exactly the two access paths R-152 permits: `(client, credit_control_area, customer)` on the credit record — the package's composite, which did not stand equivalently against the (customer, area) key — and `(client, business_partner, clearing_document)` on journal lines for the open-item aggregation. No tables, no persisted exposure. Drizzle schemas declare both indexes. Same-stage bookkeeping: B-674 / §26.690 / §30 row 2.508.
 
+## §26.691 — SCR-104 stage 3: monitor service and wired overview
+
+**B-675.** `listCreditMonitor` computes the overview in one tenant transaction: every filter judged against standing configuration, exposure aggregated per customer and area before the record join (no row multiplication), exposure-only customers surfaced with a NO_CREDIT_RECORD flag rather than hidden, utilization and availability derived with zero/missing limits explicit, the exceeded/blocked filters applied after computation, sorting by utilization, and optional reporting-currency conversion through the standing ratio-aware rates — a missing rate flags the row instead of converting wrongly. The overview page is wired (GET filters, error surface, FD32 drill-downs, breach and expired highlighting). Same-stage bookkeeping: B-675 / §26.691 / §30 row 2.509.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -809,3 +813,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.506 | 2026-10-19 | **SCR-104 contract approved (B-672, §26.688, R-152).** FIN.CREDIT.MONITOR: read-only exposure overview over SCR-103 records and open AR, index-only migration, snapshot-consistent, unavailable SD components shown explicitly. Stage 1 (vocabulary + monitor shell) follows. | Owner + Agent |
 | 2.507 | 2026-10-19 | **SCR-104 stage 1 published (B-673, §26.689).** Monitor vocabulary and the overview shell stand. The index migration follows in stage 2. | Agent |
 | 2.508 | 2026-10-19 | **SCR-104 stage 2 published (B-674, §26.690).** Migration 0113 (176 total) stands: credit-area and open-item indexes only. The monitor service follows in stage 3. | Agent |
+| 2.509 | 2026-10-19 | **SCR-104 stage 3 published (B-675, §26.691).** The monitor computes snapshot-consistent exposure over records and open AR with judged filters and flagged conversion; the overview is wired. Supporting seed follows in stage 4. | Agent |

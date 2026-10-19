@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
-import type { CreditMonitorResult } from '@/modules/finance/credit';
+import type { CreditMonitorFilter, CreditMonitorResult } from '@/modules/finance/credit';
 
 /**
  * Credit exposure monitor (SCR-104 / F.31): read-only overview
@@ -10,9 +10,11 @@ import type { CreditMonitorResult } from '@/modules/finance/credit';
  * and billing components show as unavailable until the SD canon
  * stands; they are never silently zero.
  */
-export default function CreditMonitorShell({ canUse, result }: {
+export default function CreditMonitorShell({ canUse, result, error, filter }: {
   canUse: boolean;
   result: CreditMonitorResult | null;
+  error?: string | null;
+  filter?: CreditMonitorFilter;
 }) {
   if (!canUse) {
     return (
@@ -23,25 +25,33 @@ export default function CreditMonitorShell({ canUse, result }: {
   }
   return (
     <div className="space-y-4">
-      <form className="panel space-y-3 p-4" aria-label={t('monitor.filtersTitle')}>
+      {error && (
+        <div className="border border-signal-error/30 bg-signal-error-soft p-3">
+          <p className="text-sm font-semibold text-signal-error">{error}</p>
+        </div>
+      )}
+      <form method="get" className="panel space-y-3 p-4" aria-label={t('monitor.filtersTitle')}>
         <div className="flex flex-wrap gap-3">
           <Field label={t('monitor.areaFrom')}>
-            <input name="areaFrom" maxLength={4} className="field-input code w-28" />
+            <input name="areaFrom" defaultValue={filter?.areaFrom ?? ''} maxLength={4} className="field-input code w-28" />
           </Field>
           <Field label={t('monitor.areaTo')}>
-            <input name="areaTo" maxLength={4} className="field-input code w-28" />
+            <input name="areaTo" defaultValue={filter?.areaTo ?? ''} maxLength={4} className="field-input code w-28" />
           </Field>
           <Field label={t('monitor.company')}>
-            <input name="companyCode" className="field-input code w-32" />
+            <input name="companyCode" defaultValue={filter?.companyCode ?? ''} className="field-input code w-32" />
           </Field>
           <Field label={t('monitor.customerFrom')}>
-            <input name="customerFrom" className="field-input code w-36" />
+            <input name="customerFrom" defaultValue={filter?.customerFrom ?? ''} className="field-input code w-36" />
           </Field>
           <Field label={t('monitor.customerTo')}>
-            <input name="customerTo" className="field-input code w-36" />
+            <input name="customerTo" defaultValue={filter?.customerTo ?? ''} className="field-input code w-36" />
+          </Field>
+          <Field label={t('monitor.risk')}>
+            <input name="riskCategory" maxLength={3} defaultValue={filter?.riskCategory ?? ''} className="field-input code w-28" />
           </Field>
           <Field label={t('monitor.reportingCurrency')}>
-            <input name="reportingCurrency" maxLength={5} className="field-input code w-28" placeholder="USD" />
+            <input name="reportingCurrency" defaultValue={filter?.reportingCurrency ?? ''} maxLength={5} className="field-input code w-28" placeholder="USD" />
           </Field>
           <Field label={t('monitor.flags')}>
             <span className="flex gap-3 pt-2 text-sm text-ink-soft">
@@ -54,7 +64,7 @@ export default function CreditMonitorShell({ canUse, result }: {
             </span>
           </Field>
         </div>
-        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled>
+        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
           {t('monitor.run')}
         </button>
       </form>
@@ -101,7 +111,7 @@ export default function CreditMonitorShell({ canUse, result }: {
                 <td className="tabular text-end">{row.availableCredit === null ? '—' : row.availableCredit.toFixed(2)}</td>
                 <td className="tabular text-end">{row.utilizationPercent === null ? '—' : `${row.utilizationPercent.toFixed(1)}%`}</td>
                 <td className="code">{row.riskCategory ?? '—'}</td>
-                <td>{row.isBlocked ? (row.blockReason ?? t('monitor.blocked')) : '—'}</td>
+                <td>{row.isBlocked ? (row.blockReason ?? t('monitor.blocked')) : '—'}{row.limitExpired ? <span className="block text-2xs text-signal-error">{t('monitor.expired')}</span> : null}</td>
               </tr>
             ))}
             {(!result || result.rows.length === 0) && (
