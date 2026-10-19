@@ -438,6 +438,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-623.** Stage 3 of R-145. `executeTaxReport` judges the selection (valid window, active company, return country equal to the company country whose codes govern, one currency across a group), extracts the canonical tax record — journal lines carrying a tax code, debit as input tax and credit as output tax, reversed documents netting through their mirrors — and derives the base from the standing rate, labelled derived. Every execution writes its run-log row; an update run stamps the reported lines (a corrected return re-includes them), and with a clearing account named it posts the net transfer through the canonical engine on the window's end date, atomically with the stamps. The report screen executes from its judged GET selection. Same-stage bookkeeping: B-623 / §26.639 / §30 row 2.457.
 
+## §26.640 — SCR-097 stage 4: capability, S_ALR alias, navigation
+
+**B-624.** Seed grows by one capability (FIN.TAX.REPORT, 130 total) and by the S_ALR_87012357 alias term; the journal list gains the tax-return entry. Seeded twice, idempotent. Same-stage bookkeeping: B-624 / §26.640 / §30 row 2.458.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -526,3 +530,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.455 | 2026-10-19 | **SCR-097 stage 1 published (B-621, §26.637).** Tax return vocabulary and selection shell stand; execution-log clarification recorded (test runs logged, never stamping). Schema follows in stage 2. | Agent |
 | 2.456 | 2026-10-19 | **SCR-097 stage 2 published (B-622, §26.638).** Tax return run log and line stamp stand (migration 0105, 168 total). Extraction and update service follows in stage 3. | Agent |
 | 2.457 | 2026-10-19 | **SCR-097 stage 3 published (B-623, §26.639).** Tax extraction stands: posted tax lines by code, derived base, update stamping with corrected-return re-inclusion, atomic clearing transfer. Supporting seed follows in stage 4. | Agent |
+| 2.458 | 2026-10-19 | **SCR-097 stage 4 published (B-624, §26.640).** FIN.TAX.REPORT capability (130) and the S_ALR_87012357 alias seed; the journal list exposes the tax return. Acceptance follows in stage 5. | Agent |

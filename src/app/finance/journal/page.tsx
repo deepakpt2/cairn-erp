@@ -89,6 +89,11 @@ export default async function JournalPage({
         <span className="code text-ink-faint">FIN.JOURNAL.DISPLAY</span>
         <h1 className="mt-0.5 text-xl font-semibold tracking-tight">{t('journal.title')}</h1>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journal.subtitle')}</p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <Link href="/finance/tax/report" className="btn btn-default min-h-11 sm:min-h-8">
+            {t('journal.taxReport')}
+          </Link>
+        </div>
       </header>
 
       {detail && (

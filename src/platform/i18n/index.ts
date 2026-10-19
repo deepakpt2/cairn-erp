@@ -2416,6 +2416,7 @@ const en: Catalogue = {
   'journal.addLine': 'Add line',
   'journal.balanced': 'Document balances. Ready to post.',
   'journal.unbalanced': 'Document does not balance. Difference {difference}.',
+  'journal.taxReport': 'Tax return…',
   'taxReport.title': 'Advance Return for Tax on Sales/Purchases',
   'taxReport.subtitle': 'Tax on sales and purchases for a posting-date window, extracted from the posted tax lines by tax code. Test runs change nothing; an update run records the return, stamps the reported lines, and may post the clearing transfer.',
   'taxReport.companyCode': 'Company Code',
