@@ -378,6 +378,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-608.** Stage 2 of R-143 creates no table — the contract forbids a balance store behind a read-only sheet. Migration `0103_asset_history_indexes.sql` (166 migrations) adds only the composites the date-bounded aggregation is not already served by: `(client, company_code, asset_value_date)` on both transaction families and `(client, company_code, fiscal_year, posting_period)` on the depreciation posting record; the per-asset indexes of SCR-092/093/094 already cover the drill paths. Same-stage bookkeeping: B-608 / §26.624 / §30 row 2.442.
 
+## §26.625 — SCR-095 stage 3: aggregation service, sheet and CSV export
+
+**B-609.** Stage 3 of R-143. `getAssetHistorySheet` judges the selection server-side (company range against the tenant, area configured, reporting date inside the selected fiscal year per company calendar), then aggregates in three set-based queries: ACTIVE acquisitions and retirements bucketed by asset value date against the fiscal-year window, and posted depreciation for the selected area bucketed by fiscal year and period end — REVERSED records never count, test runs never reach the posting record, and beginning balances stand net of earlier retirements. Rows reconcile by construction (beginning + acquisitions − retirements = ending; NBV = ending acquisition − ending depreciation), subtotals stand per class and currency, grand totals per currency, and the page paginates at 100 (cap 500). The sheet runs from a judged GET so it is bookmarkable; the CSV export re-runs the identical selection and streams every row. Drill-down opens the asset display per row. Nothing is written. Same-stage bookkeeping: B-609 / §26.625 / §30 row 2.443.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -451,3 +455,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.440 | 2026-10-19 | **SCR-095 contract published (B-606, §26.622, R-143).** Asset history sheet as a read-only aggregation over the standing value records: value-date windows, posted-only depreciation by area, per-currency class subtotals, judged ranges, CSV export. Implementation follows in stage order. | Agent |
 | 2.441 | 2026-10-19 | **SCR-095 stage 1 published (B-607, §26.623).** Asset history sheet shell stands at `/finance/assets/history` with the selection matrix; module vocabulary committed, service deferred to stage 3. | Agent |
 | 2.442 | 2026-10-19 | **SCR-095 stage 2 published (B-608, §26.624).** Report indexes stand (migration 0103, 166 total); no new tables behind the read-only sheet. Aggregation service follows in stage 3. | Agent |
+| 2.443 | 2026-10-19 | **SCR-095 stage 3 published (B-609, §26.625).** History aggregation stands: value-date windows over ACTIVE records, posted-only area depreciation, per-currency reconciliation and totals, judged GET sheet with CSV export. Supporting seed follows in stage 4. | Agent |
