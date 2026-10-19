@@ -750,6 +750,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-691.** Four service tests cover the statement: canonical derivation (prior-year opening, range turnover, cutoff balance, inverted presentation, comparatives and variance with hierarchy rollup, balanced total turnover); unassigned accounts named with their balances; special periods excluded by default with a warning and included on request; version judging and graceful missing comparatives. Browser target T890 (trial-balance) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-691 / §26.707 / §30 row 2.525.
 
+## §26.708 — SCR-106 CLOSED: F.01 trial balance accepted
+
+**B-692.** FIN.RPT.TRIALBALANCE is accepted. Production build green; browser target T890 passed (Assets node carries the derived cutoff balance, account drill row shows its balance in company currency, re-running the statement persisted nothing); full suite 1467/1467 (203 files). The read-only statement derives opening, range turnover and cutoff balance from the posted journal in one snapshot over the configured financial statement version (standard INT seeded), with comparatives, ratio-aware currency conversion, and unassigned accounts named never dropped. Deferred by name (R-154): FSV maintenance screen, display variants/saved layouts. FUNCTIONS-AND-ROADMAP flipped same turn (trial balance Implemented; 140 capabilities / 113 business terms). Next SCR: FIN.RPT.BALANCESHEET (balance sheet with comparatives); its package is awaited. The SCR after: FIN.RPT.CASHFLOW. Same-stage bookkeeping: B-692 / §26.708 / §30 row 2.526.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -904,5 +908,9 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.521 | 2026-10-19 | **SCR-106 stage 1 published (B-687, §26.703).** Statement vocabulary and the F.01 report shell stand. The FSV schema follows in stage 2. | Agent |
 | 2.522 | 2026-10-19 | **SCR-106 stage 2 published (B-688, §26.704).** Migration 0115 (178 total) stands: FSV version/nodes/assignments and the journal aggregation index. The statement service follows in stage 3. | Agent |
 | 2.523 | 2026-10-19 | **SCR-106 stage 3 published (B-689, §26.705).** The F.01 statement calculates in one snapshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.526 | 2026-10-19 | **SCR-106 CLOSED (B-692, §26.708).** FIN.RPT.TRIALBALANCE accepted: read-only F.01 statement derived from the posted journal over the configured FSV (suite 1467/1467; browser T890). Next SCR: FIN.RPT.BALANCESHEET (balance sheet with comparatives); its package is awaited. The SCR after: FIN.RPT.CASHFLOW. | Agent |
+shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
