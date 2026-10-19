@@ -161,6 +161,10 @@ The owner supplied the FAGLL03 field package (2026-10-19); SAP codes stand as se
 
 **B-567.** Stage 3 of R-136. `getJournalItems` reads the canonical journal in one parameterised query over the full composite join: account range with the from-account judged standing, every named company code judged configured, fiscal-year, posting- and document-date, document, type, assignment and reference filters composed independently, and open/cleared judged from the line's clearing document on open-item-managed accounts only — other accounts' lines carry no status and fall away under Open or Cleared. Results stand in stable posting-date, document, line order under the server-enforced 5,000 cap with the limit-plus-one truncation signal; subtotals group by company, account and currency over the displayed lines, local amounts kept apart by company currency. The screen executes over GET parameters, states errors with their remedies, distinguishes no-match from truncation, and drills each document into the standing FB03-equivalent display. Typecheck clean. Same-stage bookkeeping: B-567 / §26.583 / §30 row 2.401.
 
+## §26.584 — SCR-088 stage 4: line-item report capability
+
+**B-568.** Stage 4 of R-136. The capability `FIN.JOURNAL.LIST` (FAGLL03 as search alias) joins the seed with its full-parity term — **121 capabilities / 68 config activities / 95 terms / 104 aliases**. Typecheck clean. Same-stage bookkeeping: B-568 / §26.584 / §30 row 2.402.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -193,3 +197,4 @@ The owner supplied the FAGLL03 field package (2026-10-19); SAP codes stand as se
 | 2.399 | 2026-10-19 | **SCR-088 stage 1 published (B-565, §26.581).** The inert FAGLL03 selection screen and empty grid; i18n keys added. No query stands yet. | Agent |
 | 2.400 | 2026-10-19 | **SCR-088 stage 2 published (B-566, §26.582).** Reporting indexes stand on the canonical journal (migration 0098, 161 migrations); no table created. The query follows in stage 3. | Agent |
 | 2.401 | 2026-10-19 | **SCR-088 stage 3 published (B-567, §26.583).** The line-item query stands over the canonical journal with judged selection, clearing-based status on open-item accounts, capped truncated results and per-currency subtotals; the screen is live with FB03 drill-through. Seed follows in stage 4. | Agent |
+| 2.402 | 2026-10-19 | **SCR-088 stage 4 published (B-568, §26.584).** Capability FAGLL03 seeded (121 capabilities / 95 terms / 104 aliases). Tests and browser acceptance follow in stage 5. | Agent |
