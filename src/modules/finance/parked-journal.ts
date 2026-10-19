@@ -379,7 +379,7 @@ export async function postParkedJournal(input: {
         glAccount: l.glAccount, debitCredit: l.debitCredit,
         amount: l.amount.toFixed(2),
         costCenter: l.costCenter ?? undefined, profitCenter: l.profitCenter ?? undefined,
-        taxCode: l.taxCode ?? undefined, lineText: l.lineText ?? undefined,
+        taxCode: l.taxCode ?? undefined, assignment: l.assignment ?? undefined, lineText: l.lineText ?? undefined,
       })),
       origin: { documentClass: PARKED_CLASS, documentKey: input.parkedNumber },
       postedBy: input.changedBy,

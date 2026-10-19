@@ -60,6 +60,8 @@ export interface PostingLineInput {
   material?: string;
   plant?: string;
   taxCode?: string;
+  /** Line assignment (SCR-096): matching and reporting reference. */
+  assignment?: string;
   lineText?: string;
 }
 
@@ -212,6 +214,7 @@ export async function postJournalEntry(
         material: line.material,
         plant: line.plant,
         taxCode: line.taxCode,
+        assignment: line.assignment,
         lineText: line.lineText,
       };
     }),
@@ -399,6 +402,7 @@ export async function reverseJournalEntry(
         material: line.material ?? undefined,
         plant: line.plant ?? undefined,
         taxCode: line.taxCode ?? undefined,
+        assignment: line.assignment ?? undefined,
         lineText: line.lineText ?? undefined,
       })),
   });
