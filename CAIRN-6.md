@@ -514,6 +514,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-642.** Stage 1 of R-148: the FIN.ACCRUAL.POST vocabulary (line input and document view types), the `/finance/accruals` entry shell carrying the required reversal date and reason beside the FB50-shaped header, and the F.81 due-list shape. The judged posting action and reversal execution land in stage 3. Same-stage bookkeeping: B-642 / §26.658 / §30 row 2.476.
 
+## §26.659 — SCR-100 stage 2: accrual metadata table
+
+**B-643.** Stage 2 of R-148, migration `0108_accrual_document.sql` (171 migrations): one `accrual_document` metadata table keyed by the canonical document identity with a tenant-safe composite foreign key to the journal header, reversal date/reason/status, reversal document reference and execution user/timestamp — the reversal-consistency check makes a REVERSED status without its document impossible. No accrual header or line tables duplicate the ledger. Same-stage bookkeeping: B-643 / §26.659 / §30 row 2.477.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -621,3 +625,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.474 | 2026-10-19 | **SCR-099 CLOSED (B-640, §26.656).** F.19 GR/IR analysis accepted: signed PO history, five-way classification, separate atomic accrual, browser T897 green, suite 1436. Next in order: SCR-100 (FIN.ACCRUAL.POST / FBS1), then FIN.CLOSE.COCKPIT — packages awaited. | Agent |
 | 2.475 | 2026-10-19 | **SCR-100 contract published (B-641, §26.657, R-148).** FBS1 accrual entry on the judged G/L posting with atomic reversal metadata, F.81 due-reversal processing reconciling through the canonical link. UI stage follows. | Agent |
 | 2.476 | 2026-10-19 | **SCR-100 stage 1 published (B-642, §26.658).** Accrual vocabulary and entry/due shell stand. Metadata schema follows in stage 2. | Agent |
+| 2.477 | 2026-10-19 | **SCR-100 stage 2 published (B-643, §26.659).** Accrual metadata table stands (migration 0108, 171 total). Posting hook, entry action and F.81 service follow in stage 3. | Agent |

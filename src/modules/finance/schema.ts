@@ -387,6 +387,36 @@ export const grirReclassItem = pgTable('grir_reclass_item', {
 ]);
 
 /**
+ * Accrual/deferral metadata (SCR-100 / R-148): the reversal data
+ * of a canonical journal document, keyed by its identity. The
+ * ledger itself stays in journal_entry / journal_entry_line.
+ */
+export const accrualDocument = pgTable('accrual_document', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  reversalDate: date('reversal_date', { mode: 'string' }).notNull(),
+  reversalReason: varchar('reversal_reason', { length: 2 }).notNull(),
+  reversalStatus: varchar('reversal_status', { length: 12 }).notNull().default('PENDING'),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }),
+  reversalFiscalYear: integer('reversal_fiscal_year'),
+  reversedAt: timestamp('reversed_at', { withTimezone: true }),
+  reversedBy: varchar('reversed_by', { length: 60 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.documentNumber, t.fiscalYear] }),
+  foreignKey({
+    columns: [t.client, t.documentNumber, t.fiscalYear],
+    foreignColumns: [journalEntry.client, journalEntry.documentNumber, journalEntry.fiscalYear],
+  }).onDelete('cascade'),
+  index('accrual_document_due_idx').on(t.client, t.companyCode, t.reversalStatus, t.reversalDate),
+  check('accrual_document_status_ck', sql`${t.reversalStatus} in ('PENDING', 'REVERSED')`),
+  check('accrual_document_reversed_ck', sql`(${t.reversalStatus} = 'REVERSED') = (${t.reversalDocumentNumber} is not null and ${t.reversedAt} is not null and ${t.reversedBy} is not null)`),
+]);
+
+/**
  * Payment run (SCR-063 / R-111). Parameters with company and method
  * children, the proposal with its named exceptions, and payment
  * documents as the execution's retained evidence.
