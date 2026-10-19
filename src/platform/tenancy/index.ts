@@ -119,6 +119,7 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'CUSTINV', subObject: '*', prefix: 'CI', length: 7 },
   { objectCode: 'CUSTDPREQ', subObject: '*', prefix: 'CR', length: 7 },
   { objectCode: 'VENDDPREQ', subObject: '*', prefix: 'VR', length: 7 },
+  { objectCode: 'PARKDOC', subObject: '*', prefix: 'PK', length: 7 },
 ];
 
 export interface CreateTenantInput {

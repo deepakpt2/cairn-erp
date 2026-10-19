@@ -131,6 +131,10 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 
 **B-561.** Stage 3 of R-135. The service carries the whole lifecycle: park (supplied accounts judged standing, amounts positive, document type configured, PARKDOC number drawn, replay by request key), version-checked edit (a stale version refused by name; any edit returns the document to PARKED), save-as-complete (the completeness gate — type, accounts, supplied cost/profit centres and tax codes standing, debits equal credits), atomic posting (completeness re-judged, then the posting engine posts under the header's row lock and the parked record stamps its canonical reference; posting a POSTED document returns it unchanged), and logical deletion with a mandatory reason. The screen is live through four server actions: park/edit with the serialised line grid, and per-row save-as-complete, post and delete in the parked list; posting additionally takes the standing journal-posting capability at the action, apart from parking. Typecheck clean. Same-stage bookkeeping: B-561 / §26.577 / §30 row 2.395.
 
+## §26.578 — SCR-087 stage 4: parking capability and number-range object
+
+**B-562.** Stage 4 of R-135. The capability `FIN.JOURNAL.PARK` (FV50 as search alias) joins the seed with its full-parity term — **120 capabilities / 68 config activities / 94 terms / 103 aliases**. `PARKDOC` joins the number-range object catalogue, the object roster and the tenant builder's default ranges (prefix PK), so new tenants draw parked numbers from birth and standing tenants define the interval in number-range maintenance. Typecheck clean. Same-stage bookkeeping: B-562 / §26.578 / §30 row 2.396.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -157,3 +161,4 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 | 2.393 | 2026-10-19 | **SCR-087 stage 1 published (B-559, §26.575).** The inert FV50 parking screen: header and line grid with live totals, parked list rendered empty, parking disabled; i18n keys added. No reads, no writes. | Agent |
 | 2.394 | 2026-10-19 | **SCR-087 stage 2 published (B-560, §26.576).** Parked-journal staging tables stand (migration 0097, 160 migrations) with version, status and posted-reference checks; no journal table touched. | Agent |
 | 2.395 | 2026-10-19 | **SCR-087 stage 3 published (B-561, §26.577).** Parked-journal service stands: version-checked edits, judged save-as-complete, atomic posting through the engine with the posted reference retained; the screen is live. Supporting seed follows in stage 4. | Agent |
+| 2.396 | 2026-10-19 | **SCR-087 stage 4 published (B-562, §26.578).** Capability FV50 seeded (120 capabilities / 94 terms / 103 aliases); PARKDOC joins the number-range catalogue and tenant defaults. Tests and browser acceptance follow in stage 5. | Agent |
