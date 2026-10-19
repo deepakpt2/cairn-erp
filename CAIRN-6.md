@@ -337,6 +337,10 @@ R-142 decisions:
 
 Deferred by name: unplanned/extraordinary depreciation transactions, area-specific posting rules and parallel ledgers (every configured area calculates and posts today; the delivered package carries exactly one area), depreciation re-calculation after retroactive value changes beyond the repeat adjustment, mass simulation lists beyond the run log, background job scheduling (the run executes in the request, its log is the record). Stage order UI → DB/schema → backend → supporting → tests/acceptance. Same-stage bookkeeping: B-600 / §26.616 / §30 row 2.434.
 
+## §26.617 — SCR-094 stage 1: depreciation run screens and vocabulary
+
+**B-601.** Stage 1 of R-142: `asset-depreciation.ts` carries the vocabulary (capability `FIN.ASSET.DEPRECIATE`, run types 1–4, run/item statuses, run input and result shapes), and `/finance/assets/depreciate` stands as an inert shell with the run field matrix — company, year, period, run type, test flag, document type, posting date, restart and unplanned references — and the execution-log section. Buttons stay disabled until the service lands in stage 3. Same-stage bookkeeping: B-601 / §26.617 / §30 row 2.435.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -402,3 +406,4 @@ Deferred by name: unplanned/extraordinary depreciation transactions, area-specif
 | 2.432 | 2026-10-19 | **SCR-093 stage 4 published (B-598, §26.614).** FIN.ASSET.RETIRE capability (127) and the ABAVN alias seed; the asset list exposes retirement. Acceptance follows in stage 5. | Agent |
 | 2.433 | 2026-10-19 | **SCR-093 closed (B-599, §26.615).** ABAVN retirement by scrapping accepted under R-141: derived values, unambiguous percent/amount basis, engine-only write-off with retirement value records, RETIRED completion, asset-aware reversal with FB08 guarded. Suite 1404 green, browser T903 green, seed 127 capabilities / 101 terms / 109 aliases, DB 164 migrations. Next: FIN.ASSET.DEPRECIATE (AFAB), then FIN.ASSET.REPORT (S_ALR_87011990). | Agent |
 | 2.434 | 2026-10-19 | **SCR-094 contract published (B-600, §26.616, R-142).** AFAB depreciation run: run header/items as the execution log, `asset_depreciation_posting` as the posted-value record feeding SCR-093 reversals, per-area calculation from standing configuration, planned/repeat/restart types, class expense determination. Implementation follows in stage order. | Agent |
+| 2.435 | 2026-10-19 | **SCR-094 stage 1 published (B-601, §26.617).** AFAB depreciation run shell stands at `/finance/assets/depreciate` with the run-type matrix and execution log; module vocabulary committed, service deferred to stage 3. | Agent |

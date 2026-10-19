@@ -2382,6 +2382,8 @@ const en: Catalogue = {
   'journal.details': 'Document detail',
   'assetList.retire': 'Retire…',
   'assetList.acquire': 'Acquire…',
+  'assetDepreciate.title': 'Depreciation Run',
+  'assetDepreciate.subtitle': 'Calculate and post planned depreciation for a company and period: test-run the calculation first, then post one balanced document through the accounting engine.',
   'assetRetire.title': 'Asset Retirement',
   'assetRetire.subtitle': 'Retire an asset by scrapping, without proceeds: simulate the determined write-off first, then post it through the accounting engine in one balanced document.',
   'assetAcquire.title': 'Asset Acquisition',
