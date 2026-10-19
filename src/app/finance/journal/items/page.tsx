@@ -30,6 +30,7 @@ export default async function JournalItemsPage({ searchParams }: {
         accountTo: params.accountTo || undefined,
         companyCodes: (params.companyCodes ?? '').split(',').map((c) => c.trim()).filter(Boolean),
         fiscalYear: params.fiscalYear ? Number(params.fiscalYear) : undefined,
+        postingPeriod: params.postingPeriod ? Number(params.postingPeriod) : undefined,
         postingDateFrom: params.postingDateFrom || undefined,
         postingDateTo: params.postingDateTo || undefined,
         documentNumber: params.documentNumber || undefined,

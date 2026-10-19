@@ -187,6 +187,10 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 
 **B-572.** Stage 2 of R-137. The derivation reads lines by (client, company, account) across years and joins headers by their primary key; the SCR-088 line index `jel_company_account_idx` on (client, company_code, gl_account, fiscal_year, document_number, line_number) serves both the prior-year opening sum and the selected year's per-period turnover without a further index. No migration stands in this stage — recorded as a reviewed decision rather than passed over silently. Same-stage bookkeeping: B-572 / §26.588 / §30 row 2.406.
 
+## §26.589 — SCR-089 stage 3: balance derivation, period filter, wired screen
+
+**B-573.** Stage 3 of R-137. `getGlBalances` judges the company configured, the account standing and — where the company names its chart — standing in that chart, then derives in one pass over the account's POSTED lines: opening as the signed sum of every earlier year, turnover by stored posting period, net change and cumulative closing chained, special periods appended only when included and configured on the company's variant. The currency view mirrors SCR-069: company currency shows local amounts, a single carried document currency shows document amounts, anything else is refused by name rather than converted. As a supporting change under this contract, the FAGLL03 report now accepts a posting-period filter, so each period's drill lands on exactly its lines, specials included. The screen executes over GET parameters and states errors with their remedies. Typecheck clean. Same-stage bookkeeping: B-573 / §26.589 / §30 row 2.407.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -224,3 +228,4 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 | 2.404 | 2026-10-19 | **SCR-089 / FS10N contracted (R-137, B-570, §26.586).** Account balances derive at read time on the SCR-069 precedent — opening from every earlier year, turnover by stored period, closing chained, specials separate, currencies never mixed; the maintained projection declined by name as a standing design. Drill lands on FAGLL03 by period. | Agent |
 | 2.405 | 2026-10-19 | **SCR-089 stage 1 published (B-571, §26.587).** The inert FS10N selection screen and annual grid; i18n keys added. No derivation stands yet. | Agent |
 | 2.406 | 2026-10-19 | **SCR-089 stage 2 recorded (B-572, §26.588).** Index review: the SCR-088 line index serves the derivation; no migration. Service follows in stage 3. | Agent |
+| 2.407 | 2026-10-19 | **SCR-089 stage 3 published (B-573, §26.589).** Balance derivation stands on the SCR-069 precedent, chart and currency judged by name; FAGLL03 gained the posting-period filter its drill needed. Seed follows in stage 4. | Agent |

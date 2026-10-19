@@ -32,6 +32,7 @@ export interface JournalItemFilters {
   accountTo?: string;
   companyCodes: string[];
   fiscalYear?: number;
+  postingPeriod?: number;
   postingDateFrom?: string;
   postingDateTo?: string;
   documentDateFrom?: string;
@@ -188,6 +189,7 @@ export async function getJournalItems(
         and l.gl_account between ${accountFrom} and ${accountTo}
         and l.company_code in (${sql.join(filters.companyCodes.map((c) => sql`${c}`), sql`, `)})
         ${filters.fiscalYear ? sql`and l.fiscal_year = ${filters.fiscalYear}` : sql``}
+        ${filters.postingPeriod ? sql`and h.posting_period = ${filters.postingPeriod}` : sql``}
         ${filters.postingDateFrom ? sql`and h.posting_date >= ${filters.postingDateFrom}` : sql``}
         ${filters.postingDateTo ? sql`and h.posting_date <= ${filters.postingDateTo}` : sql``}
         ${filters.documentDateFrom ? sql`and h.document_date >= ${filters.documentDateFrom}` : sql``}
