@@ -67,6 +67,7 @@ export const TARGETS = [
   { id: 'parked-journal', client: 'T909', label: 'SCR-087 FV50 park a journal: staged, judged complete, posted through the engine' },
   { id: 'journal-items', client: 'T908', label: 'SCR-088 FAGLL03 line items: read-only report, cleared judged, drill-through' },
   { id: 'gl-balances', client: 'T907', label: 'SCR-089 FS10N account balances: chained periods, specials apart, drill by period' },
+  { id: 'document-display', client: 'T906', label: 'SCR-090 FB03 document display: composite key, reversal flow, change history' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
