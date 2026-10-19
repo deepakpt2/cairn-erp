@@ -586,6 +586,10 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 
 Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
+## §26.673 — SCR-102 stage 1: carryforward vocabulary, run sheet, retained-earnings event
+
+**B-657.** The carryforward vocabulary stands in `src/modules/finance/carryforward.ts` (ledger vocabulary `0L`, run/result statuses, selection and view shapes), `/finance/carryforward` renders the run sheet (selection, latest run, run history, result protocol) with nothing executing yet, and the account-determination catalogue gains the `RETAINED_EARNINGS` posting event (balance-sheet kind) that stage 3 resolves per chart. Same-stage bookkeeping: B-657 / §26.673 / §30 row 2.491.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -707,3 +711,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.488 | 2026-10-19 | **SCR-101 stage 5 published (B-654, §26.670).** Four cockpit service tests pass (gating, gates, scheduled settlement, reasoned overrides); browser target T895 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.489 | 2026-10-19 | **SCR-101 CLOSED (B-655, §26.671).** FIN.CLOSE.COCKPIT accepted: gated task-list closing cycles over registered handlers (suite 1445/1445; browser T895). Next SCR: FIN.CLOSE.CARRYFORWARD (FAGLGVTR); its package is awaited. | Agent |
 | 2.490 | 2026-10-19 | **SCR-102 contract approved (B-656, §26.672, R-150).** FIN.CLOSE.CARRYFORWARD: derived openings recorded per account, P&L closed by a judged transfer document to determined retained earnings, delta-only repeat runs, test-first. Stage 1 (vocabulary + run sheet shell) follows. | Owner + Agent |
+| 2.491 | 2026-10-19 | **SCR-102 stage 1 published (B-657, §26.673).** Carryforward vocabulary, the run-sheet shell and the RETAINED_EARNINGS determination event stand. Schema follows in stage 2. | Agent |

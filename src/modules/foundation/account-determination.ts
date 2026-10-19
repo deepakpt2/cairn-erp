@@ -49,6 +49,7 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'FXGAIN', referenceAlias: 'FXGAIN', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
+  { event: 'RETAINED_EARNINGS', referenceAlias: 'RETAINED_EARNINGS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'FXLOSS', referenceAlias: 'FXLOSS', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'CASH_DISCOUNT', referenceAlias: 'SKTO', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: true },
   { event: 'PAYMENT_DIFFERENCE', referenceAlias: 'DIF', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: true },
