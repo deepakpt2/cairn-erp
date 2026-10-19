@@ -501,7 +501,7 @@ export async function getDepreciationRunItems(client: string, runId: string) {
       previouslyPostedAmount: Number(r.previouslyPostedAmount),
       adjustmentAmount: Number(r.adjustmentAmount),
       currency: r.currency, expenseAccount: r.expenseAccount, accumAccount: r.accumAccount,
-      costCenter: r.costCenter, status: r.itemStatus as DepreciationItemStatus,
+      costCenter: r.costCenter, profitCenter: r.profitCenter, status: r.itemStatus as DepreciationItemStatus,
       documentNumber: r.documentNumber, message: r.message,
     }));
   });
