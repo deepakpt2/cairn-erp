@@ -934,6 +934,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-737.** `src/modules/foundation/profit-center-report.ts` carries the KE5Z vocabulary: selection (controlling area, profit centre range/group, fiscal year, periods, ledger default `0L`, account and document ranges, maximum hits default 5000 capped at 50000), the line shape (document/line/dates/type, profit centre, account, signed document and local amounts, assignment, reference, text, originating objects, origin class/key), totals by profit centre/account/currency, and an always-indicated truncation flag. The `/controlling/profit-center-report` page and shell render the full §1 selection over the inert line grid; execution arrives in stage 3. `tsc` green. Index check follows in stage 2. Same-stage bookkeeping: B-737 / §26.753 / §30 row 2.571.
 
+## §26.754 — SCR-113 stage 2: profit-centre journal index
+
+**B-738.** The index check found the account, cost-centre and header paths standing but no profit-centre path: migration 0118 (181 total) adds `jel_profitcenter_idx` on `(client, profit_center, fiscal_year, company_code)` over `journal_entry_line`, mirrored in the Drizzle schema — tenant first, aligned to the KE5Z query, declaring no new tables. `tests/profit-center-report-index-contract.test.ts` (3 green) pins the alignment and the vocabulary's single-ledger and no-partner-column settlements; `tsc` green. The line-item service follows in stage 3. Same-stage bookkeeping: B-738 / §26.754 / §30 row 2.572.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1136,6 +1140,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.569 | 2026-10-19 | **SCR-112 CLOSED (B-735, §26.751).** Full suite 1505/1505, production build green, browser T884 passed. FIN.RPT.COSTCENTER.ACTUAL is Implemented; next is SCR-113 / FIN.RPT.PROFITCENTER. | Agent |
 | 2.570 | 2026-10-19 | **SCR-113 contracted (B-736, R-161, §26.752).** KE5Z profit centre actual line items over the journal: ledger `0L` only named, partner profit centre, account groups and KE5Y deferred by name. Stage 1 vocabulary/shell follows. | Agent |
 | 2.571 | 2026-10-19 | **SCR-113 stage 1 published (B-737, §26.753).** KE5Z vocabulary and the profit centre line-item shell stand over the inert grid. Index check follows in stage 2. | Agent |
+| 2.572 | 2026-10-19 | **SCR-113 stage 2 published (B-738, §26.754).** Migration 0118 (181 total): `jel_profitcenter_idx` stands; the index contract pins the profit-centre path. The line-item service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
