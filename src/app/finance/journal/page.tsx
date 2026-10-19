@@ -102,6 +102,9 @@ export default async function JournalPage({
           <Link href="/finance/accruals" className="btn btn-default min-h-11 sm:min-h-8">
             {t('journal.accruals')}
           </Link>
+          <Link href="/finance/close-cockpit" className="btn btn-default min-h-11 sm:min-h-8">
+            {t('journal.closeCockpit')}
+          </Link>
         </div>
       </header>
 

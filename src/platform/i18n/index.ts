@@ -2420,6 +2420,7 @@ const en: Catalogue = {
   'journal.fxValuation': 'FX valuation…',
   'journal.grir': 'GR/IR analysis…',
   'journal.accruals': 'Accruals…',
+  'journal.closeCockpit': 'Close cockpit…',
   'close.title': 'Period-End Close Cockpit',
   'close.intro': 'Closing cycles as task lists: templates become period task instances, executed through registered handlers with dependency, evidence and sign-off gates. Completing a list never closes or locks the period.',
   'close.cycleTitle': 'Closing cycle',

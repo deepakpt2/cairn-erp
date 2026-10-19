@@ -562,6 +562,10 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 
 **B-652.** `close-cockpit.ts` now carries the full lifecycle: template save with handler whitelisting and circular-dependency refusal; task-list instantiation copying definitions and edges; release validating handlers and acyclicity; execution behind predecessor gating and an atomic RUNNING claim (attempt counted, exactly-once), running the closed handler registry — period status report, due accrual reversals (SCR-100), FX valuation (SCR-098), manual confirmation — into the append-only execution log; completion gated on evidence/sign-off (BLOCKED until satisfied, completed by the gate actions); BACKGROUND executions recorded SCHEDULED and settled only by the scheduled runner, never pre-marked complete; reasoned overrides and reopens preserving history; finalization refused while any task stands open, and explicitly period-neutral. The workspace is wired end to end (create, release, execute/schedule, evidence, sign-off, override, reopen, finalize, execution log and event trail views). Same-stage bookkeeping: B-652 / §26.668 / §30 row 2.486.
 
+## §26.669 — SCR-101 stage 4: capability, CLOCO aliases, standard template, navigation
+
+**B-653.** Seed grows by the FIN.CLOSE.COCKPIT capability (134 total), the close-cockpit term carrying the CLOCO/CLOCOC/FCLOCO/FCLOCOC aliases (108 terms), and a delivered MONTH_END template for every tenant (period status → accrual reversals + FX valuation → signed-off review, critical path marked). The journal list gains the cockpit entry. Seeded twice, idempotent. Same-stage bookkeeping: B-653 / §26.669 / §30 row 2.487.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -679,3 +683,4 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 | 2.484 | 2026-10-19 | **SCR-101 stage 1 published (B-650, §26.666).** Close-cockpit vocabulary, closed handler registry and the cycle/task workspace shell stand. Schema follows in stage 2. | Agent |
 | 2.485 | 2026-10-19 | **SCR-101 stage 2 published (B-651, §26.667).** Migration 0109 (172 total) stands: templates, lists, instances, dependencies, execution log and event trail, all cycle-scoped. The lifecycle service follows in stage 3. | Agent |
 | 2.486 | 2026-10-19 | **SCR-101 stage 3 published (B-652, §26.668).** The cockpit lifecycle stands: gated exactly-once execution through registered handlers, append-only logs, period-neutral finalization; the workspace is wired. Supporting seed follows in stage 4. | Agent |
+| 2.487 | 2026-10-19 | **SCR-101 stage 4 published (B-653, §26.669).** FIN.CLOSE.COCKPIT capability (134), CLOCO-family aliases and the MONTH_END template seed; cockpit navigation stands. Acceptance follows in stage 5. | Agent |

@@ -174,6 +174,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.FX.VALUATE', module: 'FIN', action: 'POST', posting: true, description: 'Run foreign currency valuation for open items and balances' },
   { code: 'FIN.GRIR.RECLASS', module: 'FIN', action: 'POST', posting: true, description: 'Analyze the GR/IR clearing account and post reclassification accruals' },
   { code: 'FIN.ACCRUAL.POST', module: 'FIN', action: 'POST', posting: true, description: 'Enter accrual/deferral documents and execute their due reversals' },
+  { code: 'FIN.CLOSE.COCKPIT', module: 'FIN', action: 'POST', posting: true, description: 'Run period-end closing cycles as gated task lists' },
   { code: 'FIN.ASSET.CHANGE', module: 'FIN', action: 'CHANGE', posting: false, description: 'Change fixed asset master records' },
   { code: 'FIN.JOURNAL.REVERSE', module: 'FIN', action: 'REVERSE', posting: true, description: 'Reverse an accounting document' },
   { code: 'FIN.JOURNAL.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display an accounting document' },
@@ -365,6 +366,7 @@ const REGISTRY: Array<{
   { ourCode: 'FIN.ASSET.ACQUIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Acquire asset against offsetting account', route: '/finance/assets/acquire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABZON'], description: 'Post an asset acquisition to the asset class reconciliation account against an entered offsetting G/L account, without a vendor. Guided: entry, validation, simulation, confirmation. The engine document is the financial authority and a value transaction rides it; reversal is asset-aware so the value record cannot be orphaned. First acquisition capitalizes at the asset value date.' },
   { ourCode: 'FIN.ASSET.RETIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Retire asset by scrapping', route: '/finance/assets/retire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABAVN'], description: 'Retire an asset by scrapping without proceeds: complete or partial (percentage of, or an acquisition-value amount against, the remaining retireable value). The retired acquisition value is credited to the class reconciliation account, accumulated depreciation reversed for its proportional share, and the remaining book value written off to the class loss account, in one engine document riding a retirement value record. Complete retirement retires the asset; reversal is asset-aware and restores eligibility.' },
   { ourCode: 'FIN.ASSET.DEPRECIATE', termType: 'TRANSACTION', module: 'FIN', title: 'Depreciation run', route: '/finance/assets/depreciate', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['AFAB'], description: 'Calculate and post planned depreciation per asset and depreciation area for a company, fiscal year and period: test runs log without touching a balance; live runs post one balanced engine document (depreciation expense against accumulated depreciation) and record posted depreciation per asset and period, which repeat runs adjust and retirement reversals read. Planned, repeat and restart run types; unplanned depreciation awaits its extraordinary-transaction round.' },
+  { ourCode: 'FIN.CLOSE.COCKPIT', termType: 'TRANSACTION', module: 'FIN', title: 'Period-end close cockpit', route: '/finance/close-cockpit', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CLOCO', 'CLOCOC', 'FCLOCO', 'FCLOCOC'], description: 'Period-end closing cycles as task lists: reusable templates become period-specific task instances over a company, fiscal year and posting period, with dependency edges (circles refused), owners, critical-path flags and due dates. Tasks execute only through the registered handler catalogue — period status report, due accrual reversals, foreign-currency valuation, manual confirmation — behind predecessor gating and an atomic execution claim, so one instance never runs twice at once; background executions stand scheduled until the scheduled runner settles them. A task completes only when its handler succeeds and required evidence and sign-off stand; failures keep their logs and retry; overrides and reopens require reasons and preserve history in the append-only event trail. Finalizing a list is refused while any task stands open — and never closes or locks the financial period.' },
   { ourCode: 'FIN.ACCRUAL.POST', termType: 'TRANSACTION', module: 'FIN', title: 'Accrual/deferral documents', route: '/finance/accruals', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FBS1', 'F.81'], description: 'Enter an accrual or deferral document on the judged G/L entry: reversal date and a standing reversal reason are required at entry and are stored as metadata on the canonical document in the same transaction. When the reversal date falls due, the reversal processing lists the document and posts its mirror through the canonical document-reversal workflow — exactly one reversal ever, reconciled from the standing link on any retry. Posted documents are immutable; drafts park through the parked-journal workflow.' },
   { ourCode: 'FIN.GRIR.RECLASS', termType: 'TRANSACTION', module: 'FIN', title: 'GR/IR clearing account analysis', route: '/finance/grir-reclass', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['F.19'], description: 'GR/IR clearing account analysis per purchase order item as of a key date: goods-receipt history signed by movement direction and valued at the order price, invoice history signed by category with cancellations excluded, and the open quantity and value classified as reconciled, goods received not invoiced, invoiced not received, quantity difference or value difference. Analysis never posts; a live run with accrual creation posts the open value per item against the GR/IR clearing account from account determination, once per item and fiscal year, with an optional reversal on the named date, and the protocol persists for export.' },
   { ourCode: 'FIN.FX.VALUATE', termType: 'TRANSACTION', module: 'FIN', title: 'Foreign currency valuation', route: '/finance/fx/valuation', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FAGL_FC_VAL'], description: 'Foreign currency valuation at a key date: foreign-currency open items and balance-sheet balances are revalued at the latest standing rate of the chosen rate type (a missing rate is a named error, never a substituted rate), adjustments are classified gain or loss under one signed rule and resolved through FX gain/loss account determination, and a live run posts one balanced document through the posting engine with the full protocol persisted, duplicates refused per item, area and key date, and an optional reversal on the named date. Test runs persist only the protocol.' },
@@ -634,6 +636,33 @@ async function main() {
       select c.client, 'KG', 'Vendor credit memo', 'RF_BELEG', 'GENERAL', 'SK', true, 'SEED'
       from client c
       on conflict (client, document_type) do nothing
+    `);
+
+    console.log('Seeding the standard month-end close template…');
+    await client.unsafe(`
+      insert into closing_task_template
+        (client, template_code, task_id, task_name, sequence, handler_code, critical_path, requires_evidence, requires_signoff, created_by)
+      select c.client, 'MONTH_END', v.task_id, v.task_name, v.sequence, v.handler_code, v.critical_path, false, v.requires_signoff, 'SEED'
+        from client c
+        cross join (values
+          ('T10', 'Check period status', 10, 'PERIOD_STATUS', false, false),
+          ('T20', 'Reverse due accruals', 20, 'ACCRUAL_REVERSALS', true, false),
+          ('T30', 'Foreign-currency valuation', 30, 'FX_VALUATION', true, false),
+          ('T40', 'Review and sign off the close', 40, 'MANUAL_CONFIRMATION', true, true)
+        ) as v(task_id, task_name, sequence, handler_code, critical_path, requires_signoff)
+      on conflict (client, template_code, task_id) do nothing
+    `);
+    await client.unsafe(`
+      insert into closing_task_template_dependency (client, template_code, task_id, predecessor_task_id)
+      select c.client, 'MONTH_END', v.task_id, v.predecessor_task_id
+        from client c
+        cross join (values
+          ('T20', 'T10'),
+          ('T30', 'T10'),
+          ('T40', 'T20'),
+          ('T40', 'T30')
+        ) as v(task_id, predecessor_task_id)
+      on conflict (client, template_code, task_id, predecessor_task_id) do nothing
     `);
 
     console.log('Seeding message catalogue…');
