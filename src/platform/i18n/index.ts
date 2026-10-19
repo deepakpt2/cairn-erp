@@ -2380,6 +2380,8 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'documentDisplay.title': 'Display Accounting Document',
+  'documentDisplay.subtitle': 'One posted document by its complete key — header, every line and assignment, totals per currency, its reversal and clearing flow, and the change history retained for it. Read-only, whatever period it stands in.',
   'glBalance.title': 'G/L Account Balances',
   'glBalance.subtitle': 'Opening, turnover and closing per period, derived from the posted journal at read time — nothing stands between the figures and the documents behind them.',
   'journalItems.title': 'G/L Line Item Report',
