@@ -790,6 +790,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-701.** The balance-report vocabulary stands in `gl-balances.ts` (range selection, per-account rows with the split debit/credit balance columns, account-group subtotals) beside the standing single-account view, and the balances screen gains the inert range-report form and §2 grid skeleton; `journal-items.ts` gains the pagination vocabulary (page sizes 50/100/250). Calculations follow in stage 3. Same-stage bookkeeping: B-701 / §26.717 / §30 row 2.535.
 
+## §26.718 — SCR-108 stage 2: index duty verified, no new migration
+
+**B-702.** Package §4 resolves to verification again: the balance path is served by `jel_company_account_idx (client, company_code, gl_account, fiscal_year, …)` (migration 0098), line items by `journal_entry_company_date_idx` plus the clearing indexes `jel_clearing_idx` / `journal_entry_line_partner_open_idx` — all Drizzle-mirrored, no duplicate index and no new table, so the count stays 178. `tests/gl-reporting-index-contract.test.ts` (3 green) pins the alignment. The services follow in stage 3. Same-stage bookkeeping: B-702 / §26.718 / §30 row 2.536.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -956,6 +960,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.533 | 2026-10-19 | **SCR-107 CLOSED (B-699, §26.715).** FIN.RPT.BALANCESHEET accepted: three calculation types over the SCR-106 FSV canon with comparatives and presentation-only folding (suite 1475/1475; browser T889). Next SCR: FIN.RPT.CASHFLOW (S_ALR_87012271/72/73); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 | 2.534 | 2026-10-19 | **SCR-108 contract approved (B-700, §26.716, R-156).** G/L reporting suite booked as enhancements to the standing FS10N/FAGLL03 reports (owner ruling): range balance report with account-group subtotals, line-item assignment/pagination/export; FIN.RPT.CASHFLOW stays Roadmap. Stage 1 (vocabulary + report shells) follows. | Owner + Agent |
 | 2.535 | 2026-10-19 | **SCR-108 stage 1 published (B-701, §26.717).** Balance-report vocabulary and the range-report shell stand on the balances screen; line-item pagination vocabulary stands. Index verification follows in stage 2. | Agent |
+| 2.536 | 2026-10-19 | **SCR-108 stage 2 published (B-702, §26.718).** Index duty verified (0098 + header/clearing indexes); no new migration (178 stands), contract test pins the paths. The services follow in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
