@@ -187,6 +187,8 @@ export const journalEntryLine = pgTable(
     material: varchar('material', { length: 40 }),
     plant: varchar('plant', { length: 10 }),
     taxCode: varchar('tax_code', { length: 4 }),
+    /** Line assignment (SCR-096): matching and reporting reference, at most 18 characters. */
+    assignment: varchar('assignment', { length: 18 }),
     lineText: text('line_text'),
     /** Clearing state for open item management. */
     clearingDocument: varchar('clearing_document', { length: 40 }),
@@ -195,12 +197,30 @@ export const journalEntryLine = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear, t.lineNumber] }),
+    check('journal_entry_line_dc_ck', sql`${t.debitCredit} in ('S', 'H')`),
+    check('journal_entry_line_amount_ck', sql`${t.amountDocument} > 0 and ${t.amountLocal} > 0`),
     index('jel_account_idx').on(t.client, t.glAccount, t.fiscalYear),
     index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber),
     index('jel_costcenter_idx').on(t.client, t.costCenter),
     index('jel_clearing_idx').on(t.client, t.clearingDocument),
   ],
 );
+
+/**
+ * Direct-posting request registry (SCR-096 / R-144): one row per
+ * accepted FB50 submission key, naming the document it produced.
+ * Idempotency bookkeeping only — never a document store.
+ */
+export const journalPostingRequest = pgTable('journal_posting_request', {
+  client: tenantClient(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  actor: varchar('actor', { length: 60 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.requestKey] }),
+]);
 
 /**
  * Payment run (SCR-063 / R-111). Parameters with company and method

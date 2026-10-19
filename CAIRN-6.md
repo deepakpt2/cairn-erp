@@ -402,6 +402,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-614.** Stage 1 of R-144. The standing journal-entry screen now carries the supplied FB50 shape: Document Date beside Posting Date, configured document types with no assumed default, company currency with its precision shown, Reference and Header Text at package widths, and a line grid with Profit Center and Assignment, insert/copy/delete per line, account value help, field-level errors, live totals, posting disabled until valid and balanced, and a confirmation summary naming company, type, total and date before the post dispatches. A hidden request key travels with the form for the stage-3 idempotency judgment, drafts link to the standing parked-journal screen, and a successful post links into document display. Same-stage bookkeeping: B-614 / §26.630 / §30 row 2.448.
 
+## §26.631 — SCR-096 stage 2: canonical assignment, line constraints, request registry
+
+**B-615.** Stage 2 of R-144, migration `0104_gl_document_entry.sql` (167 migrations). The canonical journal line gains `assignment varchar(18)` — the field the parked line already retained and posting used to drop — plus database checks pinning the debit/credit indicator to S/H and both amounts above zero. A small `journal_posting_request` registry (client + request key → produced document) stands as idempotency bookkeeping only; it is not a document table, and no parallel gl_document header or line tables are created, per the package's reuse instruction. Same-stage bookkeeping: B-615 / §26.631 / §30 row 2.449.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -481,3 +485,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.446 | 2026-10-19 | **SCR-095 CLOSED (B-612, §26.628).** S_ALR_87011990 asset history sheet accepted: reconciled read-only history, posted-only depreciation, CSV export, drill-down, browser T901 green, suite 1418. Next in order: SCR-096 (FIN.TAX.POST / FB50), then FIN.TAX.REPORT — packages awaited. | Agent |
 | 2.447 | 2026-10-19 | **SCR-096 contract published (B-613, §26.629, R-144).** FB50 parity rework of the standing FIN.JOURNAL.POST screen: full header, profit centre and assignment lines, judged posting with request-key idempotency, canonical assignment persistence. UI stage follows. | Agent |
 | 2.448 | 2026-10-19 | **SCR-096 stage 1 published (B-614, §26.630).** FB50 screen carries the full header, profit-centre/assignment grid with insert/copy/delete, field errors, live totals and confirmation. Canonical assignment and judged posting follow. | Agent |
+| 2.449 | 2026-10-19 | **SCR-096 stage 2 published (B-615, §26.631).** Migration 0104: canonical line assignment, S/H and positive-amount checks, posting-request registry (167 migrations). Judged posting service follows in stage 3. | Agent |
