@@ -49,6 +49,10 @@ The owner supplied the F-39 field package (2026-10-19); SAP codes stand as searc
 
 **B-544.** Stage 4 of R-132. The capability `FIN.AR.DOWNPAYMENT.CLEAR` (F-39 as search alias) joins the seed with its full-parity term — **117 capabilities / 68 config activities / 91 terms / 100 aliases**. The special G/L maintenance already carries the AR account type, so the indicator's configuration remains the tenant's own. Registry check reads the new term back. Same-stage bookkeeping: B-544 / §26.560 / §30 row 2.378.
 
+## §26.561 — SCR-084 acceptance and closure
+
+**B-545 — SCR-084 CLOSED with browser acceptance.** Targeted suite 3/3 (refusal paths by role and currency, the pairwise DZ transfer with its mapping rows read back, the full-consumption stamp), **full suite 1360 green** (1356 + 3 SCR-084 + 1 fixture); browser **T912 green** against the production build (DB cairn_b210:5432): an 8,000 advance and a 1,200 invoice stood open, 1,000 was allocated through the allocation builder, and the database remembered journal 1000/2026/3 debiting the alternative account 230000, crediting the ordinary receivable account 110000, with its mapping row for 1000.0000. Seed twice idempotent at 117 capabilities / 91 terms; the database stands at 157 migrations. The customer advance chain (F-29 → F-39) stands complete, as the vendor chain (F-48 → F-54) before it. Deferred by name from R-132: F-37 down-payment requests, foreign-currency conversion and differences, discount/difference postings, tax adjustment, drafts, server-side simulation, and clearing reset beyond the standing machinery. **Next: T-code F-37 — customer down payment request** (the noted-item request that precedes an F-29 receipt; its vendor twin F-47 remains queued with it); the owner's package is requested.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -58,3 +62,4 @@ The owner supplied the F-39 field package (2026-10-19); SAP codes stand as searc
 | 2.376 | 2026-10-19 | **SCR-084 stage 2 published (B-542, §26.558).** Clearing header + allocation-mapping tables stand (migration 0094, 157 migrations): composite foreign keys link every allocation to its down-payment and invoice journal lines; journal lines remain the balance authority. | Agent |
 | 2.377 | 2026-10-19 | **SCR-084 stage 3 published (B-543, §26.559).** Customer down-payment clearing service stands: pairwise allocations judged under lock, DZ transfer journal, mapping rows reconciled to the cleared total; the screen is live. Capability follows in stage 4. | Agent |
 | 2.378 | 2026-10-19 | **SCR-084 stage 4 published (B-544, §26.560).** Capability F-39 seeded (117 capabilities / 91 terms / 100 aliases). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.379 | 2026-10-19 | **SCR-084 stage 5 published — CLOSED (B-545, §26.561).** Tests 3/3, full suite 1360 green, browser T912 green; customer down-payment clearing stands accepted and the customer advance chain (F-29 → F-39) is complete. Next: T-code F-37 customer down payment request. | Agent |
