@@ -61,6 +61,8 @@ export async function carryforward(ctx: Context) {
   `));
   assert.equal(Number((revenueBefore as unknown as Array<{ bal: string }>)[0]?.bal), -5000);
 
+  // React resets uncontrolled inputs after an action; refill.
+  await page.locator('input[name="targetFiscalYear"]').fill('2027');
   await page.locator('select[name="testRun"]').selectOption('false');
   await page.getByRole('button', { name: 'Execute carryforward', exact: true }).click();
   await page.getByText(/Carryforward \S+ completed: .* P&L transfer/).waitFor();
