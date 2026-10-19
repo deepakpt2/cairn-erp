@@ -606,6 +606,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-661.** Three service tests cover the carryforward: unconfigured-ledger refusal; the full delta lifecycle — test run posting nothing with openings recorded, update run closing P&L into retained earnings inside the source year, a zero-delta repeat posting nothing, and a late prior-year adjustment carried by a delta-only transfer; and the missing retained-earnings determination surfacing as protocol exceptions on a FAILED run. Two fixes landed in the stage: the retained-earnings account earns a result row even with no prior balance, and a test-side journal-count expectation was corrected. Browser target T894 (carryforward) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-661 / §26.677 / §30 row 2.495.
 
+## §26.678 — SCR-102 closed: G/L balance carryforward (F.16/FAGLGVTR) accepted
+
+**B-662.** R-150 stands implemented and accepted. **Suites:** full vitest 199 files, **1449/1449** (was 1445/1445; +3 carryforward service tests, +1 revised browser-target registry). **Browser:** target carryforward (**T894**) passed against the production build — test run posting nothing with openings recorded, update run closing the P&L balance into retained earnings, both runs preserved. **Clock:** the round opened 10:51 and closed 11:02 (11 min). The self-correcting delta design proved itself in tests: update closes P&L inside the source year, a zero-delta repeat posts nothing, a late prior-year adjustment carries through a delta-only transfer, and the missing retained-earnings determination fails the run with named exceptions. Deferred by R-150 itself: non-leading ledgers, subledger (AR/AP/AA) carryforward, document-currency openings beyond the local-currency record. Same-stage bookkeeping: B-662 / §26.678 / §30 row 2.496.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -732,3 +736,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.493 | 2026-10-19 | **SCR-102 stage 3 published (B-659, §26.675).** The carryforward executes: derived openings recorded, P&L closed by judged transfer documents, delta-only reruns, concurrency-guarded update runs. Supporting seed follows in stage 4. | Agent |
 | 2.494 | 2026-10-19 | **SCR-102 stage 4 published (B-660, §26.676).** FIN.CLOSE.CARRYFORWARD capability (135) and the F.16/FAGLGVTR alias term seed; carryforward navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.495 | 2026-10-19 | **SCR-102 stage 5 published (B-661, §26.677).** Three carryforward service tests pass (test/update/delta lifecycle, determination exceptions); browser target T894 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.496 | 2026-10-19 | **SCR-102 CLOSED (B-662, §26.678).** FIN.CLOSE.CARRYFORWARD accepted: derived openings, judged P&L closing transfers, delta-only repeats (suite 1449/1449; browser T894). Next SCR: FIN.IC.POST; its package is awaited. | Agent |
