@@ -41,6 +41,9 @@ export type ConsolidationExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 export const ERROR_POLICIES = ['STOP_ON_ERROR', 'CONTINUE_ON_ERROR'] as const;
 export type ConsolidationErrorPolicy = (typeof ERROR_POLICIES)[number];
 
+export const WARNING_POLICIES = ['BLOCK_ON_WARNING', 'ALLOW_WARNINGS'] as const;
+export type ConsolidationWarningPolicy = (typeof WARNING_POLICIES)[number];
+
 /**
  * Processing adapters that stand in this round. The monitor
  * orchestrates; it does not invent consolidation calculations.
@@ -61,6 +64,7 @@ export interface ConsolidationMonitorSelection {
   /** Optional consolidation unit inside the selected group. */
   unit: string;
   mode: ConsolidationExecutionMode;
+  warningPolicy: ConsolidationWarningPolicy;
 }
 
 export interface ConsolidationMonitorOptions {
