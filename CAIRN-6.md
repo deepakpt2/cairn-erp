@@ -1114,6 +1114,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-782, recorded 2026-10-19.** Stage 4 of SCR-119 stands: the seed carries capability `FIN.RPT.CASHFLOW` (FIN / DISPLAY / posting false) and the term `FIN.RPT.CASHFLOW` ("Cash flow statement", route `/finance/cash-flow`, TIER_1_BUILT). The aliases S_ALR_87012271, S_ALR_87012272 and S_ALR_87012273 stood parked on FIN.GL.BALANCE and FIN.JOURNAL.LIST; on the SCR-111 single-owner precedent they are ceded to the cash-flow term (seed deletes them from the former terms before insert, and the registry entries no longer list them), so the alias count stands unchanged while ownership moves. Seeded twice, idempotent: catalogue **151 capabilities / 124 terms / 143 aliases**; migrations 183. Acceptance follows in stage 5. Same-stage bookkeeping: B-782 / §26.798 / §30 row 2.616.
 
+## §26.799 — SCR-119 stage 5: service tests and browser target
+
+**B-783, recorded 2026-10-19.** Stage 5 of SCR-119 stands: `tests/cash-flow.test.ts` carries six service tests over a tenant whose standing chart already classifies some accounts (the fixture sets every used account's reconciliation type explicitly, so the derived classes are exactly the configured ones): refusals for an undefined variant period, a bankless company named, and a non-leading ledger; the INDIRECT derivation (net income 3700, depreciation add-back 500, working-capital effects, section nets 1700 / −3000 / 10000, opening 2000 → closing 10100, reconciliation difference −600 explained by the one unclassified account); the DIRECT derivation from offsetting lines reaching the same section nets; and multi-currency per-company columns with no combined total, persisting nothing (12/12 with the stage-2 contract). Browser target **T877** (`cash-flow`, SCR-119 local loopback guard) stands registered in targets, checks and database guards (169/169 with the target contracts). Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-783 / §26.799 / §30 row 2.617.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |

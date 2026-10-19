@@ -290,7 +290,7 @@ async function deriveCompany(
 
   if (selection.method === 'INDIRECT') {
     for (const row of balances.filter((r) => klassOf(r.account) === 'UNCLASSIFIED' && toScaled(r.movement) !== 0n)) {
-      unclassified.push({ account: row.account, amount: row.movement, lines: row.lines });
+      unclassified.push({ account: row.account, amount: fromScaled(toScaled(row.movement)), lines: row.lines });
     }
   }
   unclassified.sort((a, b) => a.account.localeCompare(b.account));

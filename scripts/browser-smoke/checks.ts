@@ -113,6 +113,7 @@ import { glClearing } from './gl-clearing';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
+import { cashFlow } from './cash-flow';
 import { subledgerTieOut } from './subledger-tie-out';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
@@ -5034,6 +5035,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,
+  'cash-flow': cashFlow,
   'subledger-tie-out': subledgerTieOut,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,

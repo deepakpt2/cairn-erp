@@ -106,6 +106,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'consolidation-workbench': { database: 'cairn_b210', port: '5432', batch: 'SCR-116 local loopback' },
   'consolidation-monitor': { database: 'cairn_b210', port: '5432', batch: 'SCR-117 local loopback' },
   'consolidated-statements': { database: 'cairn_b210', port: '5432', batch: 'SCR-118 local loopback' },
+  'cash-flow': { database: 'cairn_b210', port: '5432', batch: 'SCR-119 local loopback' },
   'subledger-tie-out': { database: 'cairn_b210', port: '5432', batch: 'SCR-115 local loopback' },
   'customer-down-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-083 local loopback' },
   'customer-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-069 local loopback' },

@@ -95,6 +95,7 @@ export const TARGETS = [
   { id: 'consolidation-workbench', client: 'T880', label: 'SCR-116 UCWB consolidation workbench' },
   { id: 'consolidation-monitor', client: 'T879', label: 'SCR-117 CX20 consolidation monitor' },
   { id: 'consolidated-statements', client: 'T878', label: 'SCR-118 consolidated statements' },
+  { id: 'cash-flow', client: 'T877', label: 'SCR-119 cash flow statement' },
   { id: 'subledger-tie-out', client: 'T881', label: 'SCR-115 subledger tie-out reconciliation report' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
