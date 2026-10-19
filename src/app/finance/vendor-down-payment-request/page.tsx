@@ -2,7 +2,10 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY } from '@/modules/finance/vendor-down-payment-request';
+import {
+  VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY,
+  getVendorDownPaymentRequests,
+} from '@/modules/finance/vendor-down-payment-request';
 import VendorDownPaymentRequest from './VendorDownPaymentRequest';
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +14,11 @@ const ROUTE = '/finance/vendor-down-payment-request';
 
 /**
  * Vendor down payment request (SCR-086 / F-47 as a search alias only).
- * Stage 1 shell: the request service lands in stage 3 of R-134.
  */
 export default async function VendorDownPaymentRequestPage() {
   const session = await requireSession(ROUTE);
+  const requests = (await getVendorDownPaymentRequests(session.user.client))
+    .filter((r) => r.status === 'OPEN' || r.status === 'PARTIAL');
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -31,7 +35,7 @@ export default async function VendorDownPaymentRequestPage() {
       </header>
 
       <VendorDownPaymentRequest
-        requests={[]}
+        requests={requests}
         canEnter={can(session, VENDOR_DOWN_PAYMENT_REQUEST_CAPABILITY)}
         today={today}
       />

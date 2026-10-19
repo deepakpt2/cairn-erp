@@ -22,6 +22,9 @@ import { postJournalEntry, PostingError } from '../../platform/posting';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { specialGlConfig } from '../foundation/schema';
 import { journalEntryLine, vendorDownPayment } from './schema';
+import {
+  VendorDownPaymentRequestError, applyVendorRequestFulfillment, downPaymentDebitLine,
+} from './vendor-down-payment-request';
 
 export const VENDOR_DOWN_PAYMENT_CAPABILITY = 'FIN.AP.DOWNPAYMENT.POST';
 const JOURNAL_DOCUMENT_TYPE = 'KA';
@@ -104,6 +107,8 @@ export async function postVendorDownPayment(input: {
   bankGlAccount: string; amount: number; currency: string;
   specialGlIndicator: string;
   reference?: string; valueDate?: string; text?: string; requestKey: string;
+  /** Optional fulfillment of standing down-payment requests (F-47). */
+  requestAllocations?: Array<{ requestNumber: string; amount?: number }>;
 }): Promise<PostedDownPayment> {
   if (!(input.amount > 0)) throw new VendorDownPaymentError('The down payment amount must stand above zero.');
   for (const [label, value] of [['Document date', input.documentDate], ['Posting date', input.postingDate]] as const) {
@@ -174,6 +179,35 @@ export async function postVendorDownPayment(input: {
       journalDocumentNumber: journal.documentNumber,
       requestKey: input.requestKey, createdBy: input.changedBy,
     });
+    // Fulfillment of standing requests (F-47): explicit links from
+    // this payment line to the requests it fulfills, judged here
+    // under the payment lock so no request can be over-fulfilled.
+    if (input.requestAllocations && input.requestAllocations.length > 0) {
+      const debitLine = await downPaymentDebitLine(
+        tx, input.client, journal.documentNumber, alternativeAccount, input.vendorNumber,
+      ).catch((error: unknown) => {
+        if (error instanceof VendorDownPaymentRequestError) throw new VendorDownPaymentError(error.message, error.remedy);
+        throw error;
+      });
+      let unallocated = round4(input.amount);
+      for (const allocation of input.requestAllocations) {
+        const applied = await applyVendorRequestFulfillment(tx, {
+          client: input.client, changedBy: input.changedBy,
+          requestNumber: allocation.requestNumber,
+          vendorNumber: input.vendorNumber, companyCode: input.companyCode,
+          indicator: input.specialGlIndicator,
+          currency: input.currency.toUpperCase(),
+          actualDocumentNumber: journal.documentNumber,
+          actualFiscalYear: debitLine.fiscalYear, actualLineNumber: debitLine.lineNumber,
+          amount: allocation.amount, paymentUnallocated: unallocated,
+        }).catch((error: unknown) => {
+          if (error instanceof VendorDownPaymentRequestError) throw new VendorDownPaymentError(error.message, error.remedy);
+          throw error;
+        });
+        unallocated = round4(unallocated - applied.fulfilledAmount);
+      }
+    }
+
     await recordChange(tx, {
       client: input.client, objectClass: PAYMENT_CLASS,
       objectKey: `${input.companyCode}/${input.vendorNumber}/${paymentNumber}`,

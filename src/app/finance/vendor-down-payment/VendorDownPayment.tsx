@@ -69,6 +69,14 @@ export default function VendorDownPayment({ canEnter, today }: {
               <input type="date" name="valueDate" className="input w-full" />
             </label>
             <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Down payment request (optional)</span>
+              <input name="fulfillRequest" className="input w-full" placeholder="Request number" />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Fulfill amount (optional)</span>
+              <input name="fulfillAmount" className="input w-full" placeholder="Blank = lesser of payment and remainder" />
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Text</span>
               <input name="text" className="input w-full" placeholder="Advance payment" />
             </label>

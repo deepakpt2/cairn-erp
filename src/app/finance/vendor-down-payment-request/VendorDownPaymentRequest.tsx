@@ -1,17 +1,33 @@
 'use client';
 
+import { useActionState } from 'react';
+
 import type { VendorDownPaymentRequestView } from '@/modules/finance/vendor-down-payment-request';
+import { postVendorRequestAction, type VendorRequestActionState } from './actions';
+
+const INITIAL: VendorRequestActionState = { ok: false, message: '' };
+
+function Message({ state }: { state: VendorRequestActionState }) {
+  if (!state.message) return null;
+  return (
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+      {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+    </p>
+  );
+}
 
 export default function VendorDownPaymentRequest({ requests, canEnter, today }: {
   requests: VendorDownPaymentRequestView[];
   canEnter: boolean;
   today: string;
 }) {
+  const [state, action, posting] = useActionState(postVendorRequestAction, INITIAL);
+
   return (
     <>
       <section aria-labelledby="vdpr-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="vdpr-header" className="text-sm font-semibold">Request details</h2>
-        <form>
+        <form action={action}>
           <input type="hidden" name="requestKey" value="" />
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
@@ -63,7 +79,7 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-              disabled title="Posting stands disabled until the request service lands."
+              disabled={!canEnter || posting}
             >
               Post request
             </button>
@@ -73,6 +89,7 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
 
       <section aria-labelledby="vdpr-open" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="vdpr-open" className="text-sm font-semibold">Open requests</h2>
+        <Message state={state} />
         {requests.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No down-payment requests stand open.</p>
         ) : (
