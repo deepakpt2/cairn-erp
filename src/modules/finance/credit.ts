@@ -375,3 +375,54 @@ export async function evaluateCreditCheck(input: {
     return { decision: 'OK' as const, reason: 'WITHIN_LIMIT', ...base };
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Credit exposure monitor (SCR-104 / FIN.CREDIT.MONITOR, F.31)        */
+/* ------------------------------------------------------------------ */
+
+export const CREDIT_MONITOR_CAPABILITY = 'FIN.CREDIT.MONITOR';
+
+export interface CreditMonitorFilter {
+  areaFrom?: string;
+  areaTo?: string;
+  companyCode?: string;
+  customerFrom?: string;
+  customerTo?: string;
+  riskCategory?: string;
+  representativeGroup?: string;
+  limitExceededOnly?: boolean;
+  blockedOnly?: boolean;
+  reportingCurrency?: string;
+  rateType?: string;
+}
+
+export interface CreditMonitorRow {
+  customer: string;
+  customerName: string;
+  creditControlArea: string;
+  companyCodes: string[];
+  creditLimit: number | null;
+  creditCurrency: string;
+  arExposure: number;
+  /** SD components have no canon yet: null = unavailable, never a silent zero. */
+  orderExposure: number | null;
+  deliveryExposure: number | null;
+  billingExposure: number | null;
+  totalExposure: number;
+  availableCredit: number | null;
+  utilizationPercent: number | null;
+  riskCategory: string | null;
+  isBlocked: boolean;
+  blockReason: string | null;
+  noCreditRecord: boolean;
+  limitExpired: boolean;
+  conversionMissing: boolean;
+  lastUpdated: string | null;
+}
+
+export interface CreditMonitorResult {
+  rows: CreditMonitorRow[];
+  totalCustomers: number;
+  calculatedAt: string;
+  reportingCurrency: string | null;
+}

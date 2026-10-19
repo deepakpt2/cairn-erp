@@ -662,6 +662,10 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 
 Deferred by name: order/delivery/billing exposure components (await the SD canon), export beyond the standing report patterns, persisted exposure snapshots. Capability `FIN.CREDIT.MONITOR`. Same-stage bookkeeping: B-672 / §26.688 / §30 row 2.506.
 
+## §26.689 — SCR-104 stage 1: monitor vocabulary and overview shell
+
+**B-673.** The monitor vocabulary joins `credit.ts` (filter, row — with the SD components explicitly nullable-unavailable — and result shapes) and `/finance/credit-monitor` renders the filter panel and the exposure grid with breach highlighting and FD32 drill-down links. Nothing computes yet. Same-stage bookkeeping: B-673 / §26.689 / §30 row 2.507.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -799,3 +803,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.504 | 2026-10-19 | **SCR-103 fix published (B-670, §26.686).** Migration 0112 renames the credit hold flag to is_on_hold, satisfying the FS00 schema-contract guard; credit tests stand green. Browser re-acceptance and closure follow. | Agent |
 | 2.505 | 2026-10-19 | **SCR-103 CLOSED (B-671, §26.687).** FIN.CREDIT.MAINTAIN accepted: judged audited credit records, derived exposure, never-bypass checks (suite 1453/1453; browser T893). Next SCR: FIN.CREDIT.MONITOR (F.31); its package is awaited. | Agent |
 | 2.506 | 2026-10-19 | **SCR-104 contract approved (B-672, §26.688, R-152).** FIN.CREDIT.MONITOR: read-only exposure overview over SCR-103 records and open AR, index-only migration, snapshot-consistent, unavailable SD components shown explicitly. Stage 1 (vocabulary + monitor shell) follows. | Owner + Agent |
+| 2.507 | 2026-10-19 | **SCR-104 stage 1 published (B-673, §26.689).** Monitor vocabulary and the overview shell stand. The index migration follows in stage 2. | Agent |
