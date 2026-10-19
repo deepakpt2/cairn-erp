@@ -65,6 +65,7 @@ export const TARGETS = [
   { id: 'customer-down-payment-request', client: 'T911', label: 'SCR-085 F-37 customer down-payment request: noted item, F-29 fulfillment link' },
   { id: 'vendor-down-payment-request', client: 'T910', label: 'SCR-086 F-47 vendor down-payment request: noted item, F-48 fulfillment link' },
   { id: 'parked-journal', client: 'T909', label: 'SCR-087 FV50 park a journal: staged, judged complete, posted through the engine' },
+  { id: 'journal-items', client: 'T908', label: 'SCR-088 FAGLL03 line items: read-only report, cleared judged, drill-through' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },

@@ -161,9 +161,6 @@ export async function getJournalItems(
     if (!standing.has(accountFrom)) {
       throw new JournalItemsError(`G/L account ${accountFrom} does not stand in this tenant.`, 'Correct the account selection.');
     }
-    if (filters.accountTo && !standing.has(accountTo)) {
-      throw new JournalItemsError(`G/L account ${accountTo} does not stand in this tenant.`, 'Correct the account selection.');
-    }
 
     const statusClause = filters.status === 'OPEN'
       ? sql`and g.is_open_item_managed and l.clearing_document is null`
