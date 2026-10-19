@@ -2,7 +2,12 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { CUSTOMER_DOWN_PAYMENT_CLEARING_CAPABILITY } from '@/modules/finance/customer-down-payment-clearing';
+import {
+  CUSTOMER_DOWN_PAYMENT_CLEARING_CAPABILITY,
+  CustomerDownPaymentClearingError,
+  getCustomerDownPaymentClearing,
+  type CustomerDownPaymentClearingView,
+} from '@/modules/finance/customer-down-payment-clearing';
 import CustomerDownPaymentClearing from './CustomerDownPaymentClearing';
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +16,26 @@ const ROUTE = '/finance/customer-down-payment-clearing';
 
 /**
  * Customer down payment clearing (SCR-084 / F-39 as a search alias only).
- * Stage 1 shell: the open-item service lands in stage 3 of R-132.
  */
-export default async function CustomerDownPaymentClearingPage() {
+export default async function CustomerDownPaymentClearingPage({ searchParams }: {
+  searchParams: Promise<{ customer?: string; companyCode?: string; indicator?: string }>;
+}) {
   const session = await requireSession(ROUTE);
+  const params = await searchParams;
+  const client = session.user.client;
+  let view: CustomerDownPaymentClearingView | null = null;
+  let loadError: string | null = null;
+  if (params.customer && params.companyCode && params.indicator) {
+    try {
+      view = await getCustomerDownPaymentClearing(
+        client, params.customer.toUpperCase(), params.companyCode, params.indicator.toUpperCase(),
+      );
+    } catch (error) {
+      if (error instanceof CustomerDownPaymentClearingError) {
+        loadError = error.remedy ? `${error.message} ${error.remedy}` : error.message;
+      } else throw error;
+    }
+  }
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -31,8 +52,8 @@ export default async function CustomerDownPaymentClearingPage() {
       </header>
 
       <CustomerDownPaymentClearing
-        view={null}
-        loadError={null}
+        view={view}
+        loadError={loadError}
         canEnter={can(session, CUSTOMER_DOWN_PAYMENT_CLEARING_CAPABILITY)}
         today={today}
       />

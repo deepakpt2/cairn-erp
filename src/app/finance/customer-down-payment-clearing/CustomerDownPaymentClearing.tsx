@@ -1,8 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 
 import type { CustomerDownPaymentClearingView } from '@/modules/finance/customer-down-payment-clearing';
+import { postCustomerClearingAction, type CustomerClearingActionState } from './actions';
+
+const INITIAL: CustomerClearingActionState = { ok: false, message: '' };
+
+function Message({ state }: { state: CustomerClearingActionState }) {
+  if (!state.message) return null;
+  return (
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+      {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+    </p>
+  );
+}
 
 const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
   `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
@@ -19,6 +31,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
   canEnter: boolean;
   today: string;
 }) {
+  const [state, action, posting] = useActionState(postCustomerClearingAction, INITIAL);
   const [rows, setRows] = useState<AllocationRow[]>([]);
 
   const downPayments = view?.downPayments ?? [];
@@ -75,7 +88,8 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
       {view && (
         <section aria-labelledby="cdpc-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="cdpc-items" className="text-sm font-semibold">Allocation</h2>
-          <form>
+          <form action={action}>
+            <input type="hidden" name="allocations" value={JSON.stringify(rows)} />
             <input type="hidden" name="customer" value={view.customer} />
             <input type="hidden" name="companyCode" value={view.companyCode} />
             <input type="hidden" name="indicator" value={view.indicator} />
@@ -241,7 +255,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                disabled title="Posting stands disabled until the clearing service lands."
+                disabled={!canEnter || posting || !ready}
               >
                 Post clearing
               </button>
@@ -252,6 +266,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
 
       <section aria-labelledby="cdpc-result" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="cdpc-result" className="text-sm font-semibold">Clearing</h2>
+        <Message state={state} />
         <p className="mt-2 text-sm text-ink-soft">
           A posted clearing is history: never edited, never deleted. Resetting a clearing stands in the
           standing clearing-reset processing.
