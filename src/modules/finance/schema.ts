@@ -607,6 +607,8 @@ export const assetClass = pgTable('asset_class', {
   numbering: varchar('numbering', { length: 8 }).notNull().default('INTERNAL'),
   quantityManaged: boolean('quantity_managed').notNull().default(false),
   defaultDepreciationKey: varchar('default_depreciation_key', { length: 4 }),
+  /** Account determination: the acquisition reconciliation account this class debits (SCR-092). */
+  reconAccount: varchar('recon_account', { length: 10 }),
   defaultUsefulLifeYears: integer('default_useful_life_years'),
   defaultUsefulLifePeriods: integer('default_useful_life_periods'),
   isActive: boolean('is_active').notNull().default(true),
@@ -712,6 +714,60 @@ export const assetDepreciation = pgTable('asset_depreciation', {
   check('asset_depreciation_years_ck', sql`${t.usefulLifeYears} >= 0`),
   check('asset_depreciation_periods_ck', sql`${t.usefulLifePeriods} between 0 and 11`),
   check('asset_depreciation_life_ck', sql`${t.usefulLifeYears} * 12 + ${t.usefulLifePeriods} > 0`),
+]);
+
+/** Asset transaction types — tenant configuration (SCR-092). */
+export const assetTransactionType = pgTable('asset_transaction_type', {
+  client: tenantClient(),
+  typeCode: varchar('type_code', { length: 4 }).notNull(),
+  name: varchar('name', { length: 60 }).notNull(),
+  /** ACQUISITION today; further kinds arrive with their rounds. */
+  kind: varchar('kind', { length: 16 }).notNull().default('ACQUISITION'),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.typeCode] }),
+  check('asset_transaction_type_kind_ck', sql`${t.kind} in ('ACQUISITION')`),
+]);
+
+/**
+ * Asset transaction — the value record of one asset posting
+ * (SCR-092). Not a second ledger: the journal stays the financial
+ * authority, and asset values derive from ACTIVE rows here.
+ */
+export const assetTransaction = pgTable('asset_transaction', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  transactionType: varchar('transaction_type', { length: 4 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  assetValueDate: date('asset_value_date', { mode: 'string' }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  offsetAccount: varchar('offset_account', { length: 10 }).notNull(),
+  reference: varchar('reference', { length: 60 }),
+  lineText: varchar('line_text', { length: 50 }),
+  /** ACTIVE | REVERSED */
+  status: varchar('status', { length: 12 }).notNull().default('ACTIVE'),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber, t.documentNumber, t.fiscalYear] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_transaction_asset_fk',
+  }),
+  check('asset_transaction_status_ck', sql`${t.status} in ('ACTIVE', 'REVERSED')`),
+  check('asset_transaction_amount_ck', sql`${t.amount} > 0`),
+  uniqueIndex('asset_transaction_request_uk').on(t.client, t.requestKey)
+    .where(sql`${t.requestKey} is not null`),
+  index('asset_transaction_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
 ]);
 
 export const parkedJournalHeader = pgTable('parked_journal_header', {

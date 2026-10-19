@@ -275,6 +275,10 @@ The owner supplied the ABZON implementation package (2026-10-19); SAP codes stan
 
 **B-589.** Stage 1 of R-140. The guided `/finance/assets/acquire` screen stands as a shell: the full field matrix (company, asset and sub-number, the three distinct dates, document type, currency, amount, offsetting account, transaction type, reference and text) and the simulation preview section, rendered empty with its asset/offsetting debit-credit table in place. Both Simulate and Post stand disabled until the service lands; a stub module carries `FIN.ASSET.ACQUIRE` and the acquisition vocabulary. Same-stage bookkeeping: B-589 / §26.605 / §30 row 2.423.
 
+## §26.606 — SCR-092 stage 2: acquisition schema and configuration
+
+**B-590.** Stage 2 of R-140. Migration `0100_asset_acquisition.sql` (**163 migrations**) adds the asset class's reconciliation-account determination, `asset_transaction_type` as tenant configuration (acquisition kind only, widening with its rounds), and `asset_transaction` — the value record under its complete asset-and-document key, a composite foreign key to the asset, positive amounts under check, the request key under a partial unique index. The standard package wires machinery to 150000 and vehicles to 152000 and delivers the ACQ transaction type; buildings deliberately carry no determination until configured, so the refusal path stands exercised by default data. Typecheck clean. Same-stage bookkeeping: B-590 / §26.606 / §30 row 2.424.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -329,3 +333,4 @@ The owner supplied the ABZON implementation package (2026-10-19); SAP codes stan
 | 2.421 | 2026-10-19 | **SCR-091 CLOSED (B-587, §26.603).** AS01/AS02 accepted: asset foundation laid, judged numbering and batching, version-checked change with interval history, prospective depreciation, reasoned deactivation, zero postings. Targeted 4/4, suite 1389 green, browser T905 green, seed 125/99/107, 162 migrations. | Agent |
 | 2.422 | 2026-10-19 | **SCR-092 / ABZON contracted (R-140, B-588, §26.604).** Vendor-less acquisition through the canonical engine: class account determination and transaction types as configuration, an asset value record that is not a second ledger, simulation without side effects, request-key idempotency, and an asset-aware reversal the FB08 path refuses to bypass. | Agent |
 | 2.423 | 2026-10-19 | **SCR-092 stage 1 published (B-589, §26.605).** The inert ABZON entry and simulation-preview screen; i18n keys added. No validation or posting stands yet. | Agent |
+| 2.424 | 2026-10-19 | **SCR-092 stage 2 published (B-590, §26.606).** Class account determination, transaction types and the asset value record stand (migration 0100, 163 migrations) with delivered defaults. Service follows in stage 3. | Agent |
