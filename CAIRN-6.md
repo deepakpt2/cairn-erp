@@ -854,6 +854,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-717.** `transferGlAccounts` stands: companies and chart judged, every in-range account judged before any write, segments created/updated/skipped per the test-run and overwrite policy in one transaction with the run protocol (test runs persist protocol only), and invalid source values (a malformed segment currency) report ERROR instead of being substituted. The segment now governs where it stands: line-item open/cleared judgement coalesces segment-over-chart, posting refuses on a segment posting block naming the company, and the account display lists segments read-only beside the chart record. The transfer screen executes on submit (test run by default). Capability and alias follow in stage 4. Same-stage bookkeeping: B-717 / §26.733 / §30 row 2.551.
 
+## §26.734 — SCR-110 stage 4: transfer capability and FS15 alias
+
+**B-718.** Seed grows by the `CFG.FIN.GLACCOUNT.TRANSFER` config activity and capability (142 total), and the transfer term carrying the FS15 search alias (115 terms / 133 aliases), routed at `/config/gl-accounts/transfer`; administrators hold it through the wildcard. Seeded twice, idempotent. Tests and browser acceptance follow in stage 5. Same-stage bookkeeping: B-718 / §26.734 / §30 row 2.552.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1036,6 +1040,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.549 | 2026-10-19 | **SCR-110 stage 1 published (B-715, §26.731).** Transfer vocabulary and the FS15 shell stand. The segment schema follows in stage 2. | Agent |
 | 2.550 | 2026-10-19 | **SCR-110 stage 2 published (B-716, §26.732).** Migration 0116 (179 total): the company-code segment stands backfilled, run/result audit tables stand. The transfer service follows in stage 3. | Agent |
 | 2.551 | 2026-10-19 | **SCR-110 stage 3 published (B-717, §26.733).** The transfer executes with protocol; segment-first wiring stands for open-item judgement and posting blocks. Capability and alias follow in stage 4. | Agent |
+| 2.552 | 2026-10-19 | **SCR-110 stage 4 published (B-718, §26.734).** CFG.FIN.GLACCOUNT.TRANSFER capability and the FS15 alias term stand (142/115/133). Acceptance follows in stage 5. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
