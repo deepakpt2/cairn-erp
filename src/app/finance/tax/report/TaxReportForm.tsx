@@ -39,6 +39,7 @@ export default function TaxReportForm({ canReport, defaults, result }: {
   return (
     <div className="space-y-4">
       <form method="get" className="panel space-y-3 p-4">
+        <input type="hidden" name="run" value="1" />
         <div className="flex flex-wrap gap-3">
           <Field label={t('taxReport.companyCode')}>
             <input name="companyCode" defaultValue={defaults.companyCode} className="field-input code w-28" required placeholder="1000" />
