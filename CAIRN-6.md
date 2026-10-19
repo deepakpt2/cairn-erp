@@ -1034,6 +1034,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-762.** `tests/consolidation-workbench.test.ts` (3 green) proves dimension/reason/reference refusals, acyclic groups, overlap-refused assignments, mapping and task configuration, activation refused while incomplete then ACTIVE, and that configuration posts nothing; browser target T880 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-762 / §26.778 / §30 row 2.596.
 
+## §26.779 — SCR-116 closure: consolidation workbench accepted
+
+**B-763, recorded 2026-10-19.** SCR-116 / FIN.RPT.CONSOLIDATE (UCWB, R-164) is accepted and closed: full suite **1536/1536**, production build green, **browser target T880 PASSED**. Consolidation configuration now stands as normalized, versioned configuration: data basis bound to the JOURNAL provider, areas with cons chart and fiscal-year variant, units bound to company codes, acyclic groups, overlap-refused unit assignments, group accounts and source mappings, configuration-only methods, versions, task hierarchies, and the activation gate — every write with a mandatory reason and one change document, and configuration never posts. A stage-5 build failure (client shell importing service vocabulary through the database client) was corrected by splitting `consolidation-vocabulary.ts` from the service module, committed separately under B-762 before acceptance ran. Catalogue 148 capabilities / 121 terms / 141 aliases; migrations 182. Deferred by name: transports, the UCMON-equivalent monitor (FIN.CONSOLIDATE), BW providers, FIN.RPT.CONSOLIDATE.STMT. Next: FIN.CONSOLIDATE (UCMON / CX20, consolidation monitor and execution) — awaiting its field package; the workbench stands ready to be executed by it. Second-next: consolidated statements FIN.RPT.CONSOLIDATE.STMT (CX20). Same-stage bookkeeping: B-763 / §26.779 / §30 row 2.597.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1261,6 +1265,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.594 | 2026-10-19 | **SCR-116 stage 3 published (B-760, §26.776).** The configuration service judges dimensions, parents, overlaps, mappings and task references, with mandatory-reason change audit and the activation gate; folder maintenance posts live. Supporting seed follows in stage 4. | Agent |
 | 2.595 | 2026-10-19 | **SCR-116 stage 4 published (B-761, §26.777).** FIN.RPT.CONSOLIDATE capability and UCWB alias stand (148/121/141). Acceptance follows in stage 5. | Agent |
 | 2.596 | 2026-10-19 | **SCR-116 stage 5 published (B-762, §26.778).** Three workbench service tests pass and browser target T880 stands registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.597 | 2026-10-19 | **SCR-116 CLOSED (B-763, §26.779).** FIN.RPT.CONSOLIDATE (UCWB) accepted: 1536/1536 suite, build green, browser T880 PASSED. Catalogue 148/121/141; migrations 182. Next: FIN.CONSOLIDATE (UCMON / CX20) awaiting its field package; second-next FIN.RPT.CONSOLIDATE.STMT (CX20). | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
