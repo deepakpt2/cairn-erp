@@ -4,7 +4,8 @@ import { t } from '@/platform/i18n';
 import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
 import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-assignments';
-import { listStatementVersions } from '@/modules/finance/trial-balance';
+import { TrialBalanceError, listStatementVersions } from '@/modules/finance/trial-balance';
+import { calculateBalanceSheet, type BalanceSheetResult } from '@/modules/finance/balance-sheet';
 import {
   BALANCE_SHEET_CAPABILITY, BALANCE_CALCULATION_TYPES, DEFAULT_BALANCE_CALCULATION_TYPE,
   DEFAULT_SUMMARY_LEVEL, type BalanceSheetSelection,
@@ -43,6 +44,16 @@ export default async function Page({ searchParams }: {
     summaryLevel: Number(params.summaryLevel ?? DEFAULT_SUMMARY_LEVEL),
   };
 
+  let result: BalanceSheetResult | null = null;
+  let error: string | null = null;
+  if (canUse && params.companyCode) {
+    try {
+      result = await calculateBalanceSheet({ client: session.user.client, selection });
+    } catch (caught) {
+      error = caught instanceof TrialBalanceError ? caught.message : 'The statement could not be calculated.';
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
       <header>
@@ -52,8 +63,9 @@ export default async function Page({ searchParams }: {
         <Link href="/finance/trial-balance" className="mt-1 inline-block text-sm text-accent hover:underline">
           {t('bs.openTrialBalance')}
         </Link>
+        {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
       </header>
-      <BalanceSheetShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={null} />
+      <BalanceSheetShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </main>
   );
 }
