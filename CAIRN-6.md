@@ -89,6 +89,10 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 
 **Deferred by name:** request closure and reversal workflows with their fulfillment resolution, payment approval workflows, the purchase-order reference (absent from the package's field matrix, as in R-129), foreign-currency fulfillment, drafts, duplicate-reference rules beyond the standing width, and request reporting beyond the screen's open-request list. Stage order: 1 the `/finance/vendor-down-payment-request` screen → 2 schema (vendor request + fulfillment tables, migration) → 3 services (request lifecycle, F-48 fulfillment) and screen wiring → 4 supporting (capability, term, number-range object) → 5 tests and browser acceptance. Same-stage bookkeeping: B-552 / §26.568 / §30 row 2.386.
 
+## §26.569 — SCR-086 stage 1: the vendor down-payment request screen
+
+**B-553.** Stage 1 of R-134. The `/finance/vendor-down-payment-request` screen stands as a shell mirroring its customer twin: the request form (company, vendor, document/posting/due dates, amount, currency, request indicator, document type KA by default, reference) with the noted-item explanation, and the open-requests grid rendered empty. Posting stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.AP.DOWNPAYMENT.REQUEST` and the request vocabulary. Same-stage bookkeeping: B-553 / §26.569 / §30 row 2.387.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -106,3 +110,4 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 | 2.384 | 2026-10-19 | **SCR-085 stage 4 published (B-550, §26.566).** Capability F-37 seeded (118 capabilities / 92 terms / 101 aliases); CUSTDPREQ joins the number-range catalogue and tenant defaults; special G/L maintenance carries the request target. Tests and browser acceptance follow in stage 5. | Agent |
 | 2.385 | 2026-10-19 | **SCR-085 stage 5 published — CLOSED (B-551, §26.567).** Tests 3/3, full suite 1364 green, browser T911 green; customer down-payment requests stand accepted as noted items fulfilled by F-29. Next: T-code F-47 vendor down payment request. | Agent |
 | 2.386 | 2026-10-19 | **SCR-086 / F-47 contracted (R-134, B-552, §26.568).** Vendor down-payment requests mirror R-133 as noted items: drawn VENDDPREQ number, judged period and KA document type, AP request indicators with targets, fulfillment by explicit F-48 allocation under the payment lock; the payment block refuses disbursement (F-48), not the request. Closure/reversal, approvals, PO reference, FX and drafts deferred by name. | Agent |
+| 2.387 | 2026-10-19 | **SCR-086 stage 1 published (B-553, §26.569).** The inert F-47 request screen: request form and open-requests grid rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
