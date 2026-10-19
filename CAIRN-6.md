@@ -678,6 +678,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 **B-676.** Seed grows by the FIN.CREDIT.MONITOR capability (137 total, display-only) and the exposure-monitor term carrying the F.31 alias (111 terms); the credit sheet links to the monitor. Seeded twice, idempotent. Same-stage bookkeeping: B-676 / §26.692 / §30 row 2.510.
 
+## §26.693 — SCR-104 stage 5: service tests and browser target
+
+**B-677.** Three service tests cover the monitor: one-snapshot computation (utilization, negative availability, no-record flagging, SD components null-unavailable, sorting); the exceeded/blocked/risk filters with every filter value judged; and reporting-currency conversion with the missing-rate flag (the fixture's delivered USD→EUR rate is cleared first so the missing path is genuinely under test). Browser target T892 (credit-monitor) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-677 / §26.693 / §30 row 2.511.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -819,3 +823,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.508 | 2026-10-19 | **SCR-104 stage 2 published (B-674, §26.690).** Migration 0113 (176 total) stands: credit-area and open-item indexes only. The monitor service follows in stage 3. | Agent |
 | 2.509 | 2026-10-19 | **SCR-104 stage 3 published (B-675, §26.691).** The monitor computes snapshot-consistent exposure over records and open AR with judged filters and flagged conversion; the overview is wired. Supporting seed follows in stage 4. | Agent |
 | 2.510 | 2026-10-19 | **SCR-104 stage 4 published (B-676, §26.692).** FIN.CREDIT.MONITOR capability (137) and the F.31 alias term seed; monitor navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.511 | 2026-10-19 | **SCR-104 stage 5 published (B-677, §26.693).** Three monitor service tests pass (snapshot computation, judged filters, flagged conversion); browser target T892 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

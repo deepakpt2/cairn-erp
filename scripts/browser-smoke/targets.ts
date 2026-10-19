@@ -81,6 +81,7 @@ export const TARGETS = [
   { id: 'close-cockpit', client: 'T895', label: 'SCR-101 CLOCO close cockpit cycle execution' },
   { id: 'carryforward', client: 'T894', label: 'SCR-102 F.16 balance carryforward test and update runs' },
   { id: 'credit', client: 'T893', label: 'SCR-103 FD32 customer credit management and audit' },
+  { id: 'credit-monitor', client: 'T892', label: 'SCR-104 F.31 credit exposure monitor overview' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
