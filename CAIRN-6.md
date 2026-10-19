@@ -522,6 +522,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-644.** Stage 3 of R-148. The G/L document service gains an in-transaction posting hook, and `postAccrualDocument` writes the accrual metadata (standing active reversal reason judged, reversal date on or after the posting date) through it, so document and metadata commit or roll back together. `listDueAccruals` selects PENDING accruals whose date has arrived on still-posted journals; `executeAccrualReversal` posts the mirror through the canonical document-reversal workflow and marks the metadata, reconciling from the standing link on any retry. The entry screen carries the full grid with live totals, and each due row executes its reversal in place. Same-stage bookkeeping: B-644 / §26.660 / §30 row 2.478.
 
+## §26.661 — SCR-100 stage 4: capability, FBS1/F.81 aliases, navigation
+
+**B-645.** Seed grows by one capability (FIN.ACCRUAL.POST, 133 total) and by the accrual term carrying both the FBS1 and F.81 search aliases; the journal list gains the accruals entry. Seeded twice, idempotent. Same-stage bookkeeping: B-645 / §26.661 / §30 row 2.479.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -631,3 +635,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.476 | 2026-10-19 | **SCR-100 stage 1 published (B-642, §26.658).** Accrual vocabulary and entry/due shell stand. Metadata schema follows in stage 2. | Agent |
 | 2.477 | 2026-10-19 | **SCR-100 stage 2 published (B-643, §26.659).** Accrual metadata table stands (migration 0108, 171 total). Posting hook, entry action and F.81 service follow in stage 3. | Agent |
 | 2.478 | 2026-10-19 | **SCR-100 stage 3 published (B-644, §26.660).** Accrual posting stands atomic with its metadata; the F.81 due list executes reversals through the canonical workflow with link reconciliation. Supporting seed follows in stage 4. | Agent |
+| 2.479 | 2026-10-19 | **SCR-100 stage 4 published (B-645, §26.661).** FIN.ACCRUAL.POST capability (133) and the FBS1/F.81 alias term seed; the journal list exposes accruals. Acceptance follows in stage 5. | Agent |

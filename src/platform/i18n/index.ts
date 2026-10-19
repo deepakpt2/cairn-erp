@@ -2419,6 +2419,7 @@ const en: Catalogue = {
   'journal.taxReport': 'Tax return…',
   'journal.fxValuation': 'FX valuation…',
   'journal.grir': 'GR/IR analysis…',
+  'journal.accruals': 'Accruals…',
   'accrual.title': 'Accrual/Deferral Documents',
   'accrual.subtitle': 'Enter an accrual or deferral document with its reversal date and reason; when the date falls due, the reversal processing posts the mirror through the canonical reversal workflow. Posted documents are immutable.',
   'accrual.entryTitle': 'Accrual document entry',

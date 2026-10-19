@@ -99,6 +99,9 @@ export default async function JournalPage({
           <Link href="/finance/grir-reclass" className="btn btn-default min-h-11 sm:min-h-8">
             {t('journal.grir')}
           </Link>
+          <Link href="/finance/accruals" className="btn btn-default min-h-11 sm:min-h-8">
+            {t('journal.accruals')}
+          </Link>
         </div>
       </header>
 
