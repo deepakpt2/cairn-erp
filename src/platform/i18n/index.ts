@@ -2380,6 +2380,8 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'glBalance.title': 'G/L Account Balances',
+  'glBalance.subtitle': 'Opening, turnover and closing per period, derived from the posted journal at read time — nothing stands between the figures and the documents behind them.',
   'journalItems.title': 'G/L Line Item Report',
   'journalItems.subtitle': 'Read the posted lines straight from the journal: a strictly read-only report that moves nothing, with open and cleared judged only where an account manages open items.',
   'parkedJournal.title': 'Park a Journal Entry',

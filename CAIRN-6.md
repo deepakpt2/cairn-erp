@@ -179,6 +179,10 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 
 **Deferred by name:** the maintained balance projection and reconciliation job, multi-ledger balances, a document-currency balance view spanning mixed currencies, opening-balance/carryforward detail, and export. Stage order: 1 the `/finance/journal/balances` screen → 2 derivation service's schema needs (none new — the SCR-088 indexes serve) recorded as an index review → 3 service, the line-item period filter, and screen wiring → 4 supporting (capability, term) → 5 tests and browser acceptance. Same-stage bookkeeping: B-570 / §26.586 / §30 row 2.404.
 
+## §26.587 — SCR-089 stage 1: the account balances screen
+
+**B-571.** Stage 1 of R-137. The `/finance/journal/balances` screen stands as a shell: the selection (account, company, fiscal year, currency, the special-periods inclusion) and the annual grid — opening, debit and credit turnover, net change, closing, item count and the line-item drill per period — rendered empty. No derivation stands behind it yet. A stub module carries `FIN.GL.BALANCE` and the balance vocabulary. Same-stage bookkeeping: B-571 / §26.587 / §30 row 2.405.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -214,3 +218,4 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 | 2.402 | 2026-10-19 | **SCR-088 stage 4 published (B-568, §26.584).** Capability FAGLL03 seeded (121 capabilities / 95 terms / 104 aliases). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.403 | 2026-10-19 | **SCR-088 CLOSED (B-569, §26.585).** FAGLL03 accepted at full parity: read-only canonical-journal report, clearing-judged status, capped truncated results, FB03 drill-through, journal untouched. Targeted 3/3, suite 1376 green, browser T908 green, seed 121/95/104, 161 migrations. | Agent |
 | 2.404 | 2026-10-19 | **SCR-089 / FS10N contracted (R-137, B-570, §26.586).** Account balances derive at read time on the SCR-069 precedent — opening from every earlier year, turnover by stored period, closing chained, specials separate, currencies never mixed; the maintained projection declined by name as a standing design. Drill lands on FAGLL03 by period. | Agent |
+| 2.405 | 2026-10-19 | **SCR-089 stage 1 published (B-571, §26.587).** The inert FS10N selection screen and annual grid; i18n keys added. No derivation stands yet. | Agent |
