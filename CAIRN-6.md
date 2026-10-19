@@ -882,6 +882,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-724.** Package §3 resolves to verification, as SCR-107: the P&L statement reuses the SCR-106 journal snapshot and FSV tables, whose aligned indexes stand in migrations 0098/0115; the index contract now also asserts the derivation classifies accounts from the master (`is_balance_sheet`) and persists nothing. No new table, no new migration (179 stands). (The stage-2 test rode in the stage-1 commit — recorded here as its own stage entry; the stages are not merged again.) The service follows in stage 3. Same-stage bookkeeping: B-724 / §26.740 / §30 row 2.558.
 
+## §26.741 — SCR-111 stage 3: P&L service over the combined statement
+
+**B-725.** `calculateProfitLoss` stands: one COMBINED snapshot whose account rows now carry the master account class and both cumulative figures, then balance-sheet accounts are removed and every surviving node's totals are re-rolled from its kept accounts — a node survives only when its subtree holds a P&L account, so no balance-sheet figure leaks into a P&L total. Range movement and year-to-date movement stand side by side with independent comparatives; unassigned P&L accounts are named. The `/finance/profit-loss` report renders the grid with CSV export and both drill-downs. Capability and alias follow in stage 4. Same-stage bookkeeping: B-725 / §26.741 / §30 row 2.559.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1071,6 +1075,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.556 | 2026-10-19 | **SCR-111 contract approved (B-722, §26.738, R-159).** FIN.RPT.PROFITLOSS: P&L-only statement over the SCR-107 canon with range vs year-to-date movements and independent comparatives; S_PL0_86000028 ceded to the P&L term. Stage 1 (vocabulary + shell) follows. | Owner + Agent |
 | 2.557 | 2026-10-19 | **SCR-111 stage 1 published (B-723, §26.739).** P&L vocabulary and the profit-loss shell stand. Index verification follows in stage 2. | Agent |
 | 2.558 | 2026-10-19 | **SCR-111 stage 2 published (B-724, §26.740).** Index/snapshot verification extended to the P&L statement; no new migration (179 stands). The service follows in stage 3. | Agent |
+| 2.559 | 2026-10-19 | **SCR-111 stage 3 published (B-725, §26.741).** The P&L-only statement calculates (filtered, re-rolled, range + year-to-date); the report is wired. Supporting seed follows in stage 4. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

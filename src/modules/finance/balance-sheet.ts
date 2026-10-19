@@ -36,6 +36,11 @@ export interface BalanceSheetSelection extends TrialBalanceSelection {
 
 export interface BalanceSheetAccountRow extends StatementAccountRow {
   openingBalance: number;
+  /** Master-data account class; the P&L statement filters on it. */
+  isBalanceSheet: boolean;
+  /** Cumulative movement through the cutoff (periods 1..cutoff), presented. */
+  yearToDateMovement: number;
+  comparativeYearToDate: number | null;
 }
 
 export interface BalanceSheetNodeRow extends Omit<StatementNodeRow, 'accounts'> {
@@ -260,6 +265,9 @@ export async function calculateBalanceSheet(input: {
         creditTurnover: Number(fromScaled(figure.creditRange)),
         balance: signed(Number(fromScaled(closingOf(figure)))),
         comparativeBalance: compYear ? signed(Number(fromScaled(comparativeOf(figure)))) : null,
+        isBalanceSheet: isBalanceSheet(figure.account),
+        yearToDateMovement: signed(Number(fromScaled(figure.debitTo - figure.creditTo))),
+        comparativeYearToDate: compYear ? signed(Number(fromScaled(figure.compDebitTo - figure.compCreditTo))) : null,
       };
       if (!assignment) {
         if (figure.opening !== 0n || figure.debitRange !== 0n || figure.creditRange !== 0n) unassigned.push(row);
@@ -344,6 +352,8 @@ export async function calculateBalanceSheet(input: {
         const scale = (v: number) => v * factor;
         const scaleRow = (r: BalanceSheetAccountRow) => {
           r.openingBalance = scale(r.openingBalance);
+          r.yearToDateMovement = scale(r.yearToDateMovement);
+          if (r.comparativeYearToDate !== null) r.comparativeYearToDate = scale(r.comparativeYearToDate);
           r.balance = scale(r.balance);
           r.debitTurnover = scale(r.debitTurnover);
           r.creditTurnover = scale(r.creditTurnover);

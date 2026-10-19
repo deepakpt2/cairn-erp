@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { MAX_SUMMARY_LEVEL, MIN_SUMMARY_LEVEL, type BalanceSheetSelection } from '@/modules/finance/balance-sheet';
 import type { ProfitLossResult } from '@/modules/finance/profit-loss';
@@ -73,6 +74,31 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
         </button>
       </form>
 
+      {result && (
+        <>
+          <p className="text-sm text-ink-soft">
+            {t('pl.calculatedAt', {
+              when: result.calculatedAt.slice(0, 19).replace('T', ' '),
+              company: result.companyCode, version: result.statementVersion,
+              year: result.fiscalYear, from: result.periodFrom, to: result.periodTo,
+              level: result.summaryLevel, ledger: result.ledger, currency: result.currency,
+            })}
+            {' · '}
+            <a className="text-accent hover:underline" href={`data:text/csv;charset=utf-8,${encodeURIComponent(toCsv(result))}`} download="profit-loss.csv">
+              {t('pl.exportCsv')}
+            </a>
+          </p>
+          {result.warnings.map((warning) => (
+            <p key={warning} className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-ink">{warning}</p>
+          ))}
+          {result.currentYearResult !== null && (
+            <p className="panel p-3 text-sm">
+              {t('pl.currentYearResult')}: <span className="tabular font-semibold">{result.currentYearResult.toFixed(2)} {result.currency}</span>
+            </p>
+          )}
+        </>
+      )}
+
       <section className="panel overflow-x-auto" aria-label={t('pl.gridTitle')}>
         <table className="grid-table min-w-[64rem]">
           <thead>
@@ -87,14 +113,92 @@ export default function ProfitLossShell({ canUse, companies, versions, selection
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={7} className="text-ink-soft">{result ? '' : t('pl.empty')}</td>
-            </tr>
+            {result ? (
+              result.nodes.map((node) => (
+                <NodeRows key={node.node} node={node} currency={result.currency} company={result.companyCode} year={result.fiscalYear} />
+              ))
+            ) : (
+              <tr>
+                <td colSpan={7} className="text-ink-soft">{t('pl.empty')}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </section>
+
+      {result && result.unassigned.length > 0 && (
+        <section className="panel" aria-label={t('pl.unassignedTitle')}>
+          <div className="panel-header"><h2 className="panel-title">{t('pl.unassignedTitle')}</h2></div>
+          <table className="grid-table">
+            <tbody>
+              {result.unassigned.map((account) => (
+                <tr key={account.accountNumber}>
+                  <td className="code">{account.accountNumber} — {account.accountName}</td>
+                  <td className="tabular text-end">{account.periodMovement.toFixed(2)} {result.currency}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </div>
   );
+}
+
+function NodeRows({ node, currency, company, year }: {
+  node: ProfitLossResult['nodes'][number];
+  currency: string;
+  company: string;
+  year: number;
+}) {
+  return (
+    <>
+      <tr className={node.depth === 0 ? 'bg-sunken font-semibold' : 'font-medium'}>
+        <td style={{ paddingLeft: `${0.75 + node.depth * 1.25}rem` }}>{node.description} <span className="code text-ink-faint">({node.node})</span></td>
+        <td className="tabular text-end">{node.periodMovement.toFixed(2)}</td>
+        <td className="tabular text-end">{node.yearToDateMovement.toFixed(2)}</td>
+        <td className="tabular text-end">{node.comparativeMovement === null ? '—' : node.comparativeMovement.toFixed(2)}</td>
+        <td className="tabular text-end">{node.variance === null ? '—' : node.variance.toFixed(2)}</td>
+        <td className="tabular text-end">{node.variancePercent === null ? '—' : `${node.variancePercent.toFixed(1)}%`}</td>
+        <td className="code">{currency}</td>
+      </tr>
+      {node.accounts.map((account) => (
+        <tr key={`${node.node}-${account.accountNumber}`} className="text-ink-soft">
+          <td style={{ paddingLeft: `${0.75 + (node.depth + 1) * 1.25}rem` }}>
+            <Link
+              href={`/finance/journal/balances?company=${encodeURIComponent(company)}&account=${encodeURIComponent(account.accountNumber)}&fiscalYear=${year}`}
+              className="text-accent hover:underline"
+            >
+              {account.accountNumber} — {account.accountName}
+            </Link>
+            {' · '}
+            <Link
+              href={`/finance/journal/items?accountFrom=${encodeURIComponent(account.accountNumber)}&accountTo=${encodeURIComponent(account.accountNumber)}&companyCodes=${encodeURIComponent(company)}&fiscalYear=${year}`}
+              className="text-accent hover:underline"
+            >
+              {t('pl.lineItems')}
+            </Link>
+          </td>
+          <td className="tabular text-end">{account.periodMovement.toFixed(2)}</td>
+          <td className="tabular text-end">{account.yearToDateMovement.toFixed(2)}</td>
+          <td className="tabular text-end">{account.comparativeMovement === null ? '—' : account.comparativeMovement.toFixed(2)}</td>
+          <td colSpan={3} />
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function toCsv(result: ProfitLossResult): string {
+  const head = 'Node/Account,Period Movement,Year-to-Date Movement,Comparative Movement,Variance,Variance %';
+  const lines = [head];
+  for (const node of result.nodes) {
+    lines.push([`${node.node} ${node.description}`, node.periodMovement, node.yearToDateMovement, node.comparativeMovement ?? '', node.variance ?? '', node.variancePercent ?? ''].join(','));
+    for (const account of node.accounts) {
+      lines.push([`${account.accountNumber} ${account.accountName}`, account.periodMovement, account.yearToDateMovement, account.comparativeMovement ?? '', '', ''].join(','));
+    }
+  }
+  return lines.join('\n');
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

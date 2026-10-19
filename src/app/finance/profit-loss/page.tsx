@@ -8,7 +8,10 @@ import { listStatementVersions } from '@/modules/finance/trial-balance';
 import {
   DEFAULT_SUMMARY_LEVEL, type BalanceSheetSelection,
 } from '@/modules/finance/balance-sheet';
-import { PROFIT_LOSS_CAPABILITY, type ProfitLossResult } from '@/modules/finance/profit-loss';
+import {
+  PROFIT_LOSS_CAPABILITY, calculateProfitLoss, type ProfitLossResult,
+} from '@/modules/finance/profit-loss';
+import { TrialBalanceError } from '@/modules/finance/trial-balance';
 import ProfitLossShell from './ProfitLossShell';
 
 export const metadata: Metadata = { title: 'Profit and Loss Statement' };
@@ -39,7 +42,15 @@ export default async function Page({ searchParams }: {
     calculationType: 'COMBINED',
     summaryLevel: Number(params.summaryLevel ?? DEFAULT_SUMMARY_LEVEL),
   };
-  const result: ProfitLossResult | null = null;
+  let result: ProfitLossResult | null = null;
+  let error: string | null = null;
+  if (canUse && params.companyCode) {
+    try {
+      result = await calculateProfitLoss({ client: session.user.client, selection });
+    } catch (caught) {
+      error = caught instanceof TrialBalanceError ? caught.message : 'The statement could not be calculated.';
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 sm:px-6">
@@ -50,6 +61,7 @@ export default async function Page({ searchParams }: {
         <Link href="/finance/balance-sheet" className="mt-1 inline-block text-sm text-accent hover:underline">
           {t('pl.openBalanceSheet')}
         </Link>
+        {error && <p className="mt-2 text-sm font-semibold text-signal-error">{error}</p>}
       </header>
       <ProfitLossShell canUse={canUse} companies={companies} versions={versions} selection={selection} result={result} />
     </main>
