@@ -39,6 +39,7 @@ import {
   lockCompanyCodeOxxAssignments,
 } from './controlling-area-company-compatibility';
 import {
+  accountDetermination,
   chartOfAccounts,
   companyCode,
   fiscalYearVariant,
@@ -291,6 +292,14 @@ export interface GlAccountInput {
   isOpenItemManaged: boolean;
   /** Reconciliation account; null when the account reconciles nothing. */
   reconciliationType?: ReconciliationType | null;
+  /**
+   * Retained earnings indicator (SCR-121 / OB53): P&L accounts name
+   * the determination their balance closes to at carryforward.
+   * Screen saves (CREATE/CHANGE) must name one whose determination
+   * stands; provisioning upserts (mode omitted) leave it to the
+   * stored value and the standard package.
+   */
+  retainedEarningsIndicator?: string | null;
   requiresCostObject: boolean;
   isTaxRelevant: boolean;
   /** Optional group-side account for consolidation roll-up. */
@@ -488,6 +497,40 @@ export async function upsertGlAccount(input: GlAccountInput) {
     const glAccountType = suppressed('glAccountType')
       ? (stored?.glAccountType as GlAccountType | undefined) ?? deriveGlAccountType(accountType)
       : input.glAccountType ?? deriveGlAccountType(accountType);
+
+    // Retained earnings indicator (SCR-121 / OB53). Only P&L accounts carry one,
+    // and a screen save (CREATE/CHANGE) is the forcing point the definition
+    // contract names: the account may not be saved until its indicator's
+    // retained earnings determination stands. Provisioning upserts (mode
+    // omitted) keep the stored value — the standard package seeds indicator
+    // and determination together, so a fresh tenant passes from day one.
+    let retainedEarningsIndicator: string | null = null;
+    if (glAccountType === 'PL_STATEMENT') {
+      const indicator = (input.retainedEarningsIndicator ?? stored?.retainedEarningsIndicator ?? '')
+        .trim().toUpperCase();
+      if (input.mode === 'CREATE' || input.mode === 'CHANGE') {
+        if (!/^[A-Z0-9]$/.test(indicator)) {
+          throw new ConfigError(
+            `G/L Account ${accountNumber} is a P&L account and must carry a one-character retained earnings indicator.`,
+            'Enter the indicator (X is the standing convention), then save.',
+          );
+        }
+        const [determination] = await tx.select().from(accountDetermination).where(and(
+          eq(accountDetermination.client, client),
+          eq(accountDetermination.chartOfAccounts, coa),
+          eq(accountDetermination.event, 'RETAINED_EARNINGS'),
+          eq(accountDetermination.valuationClass, ''),
+          eq(accountDetermination.generalModifier, indicator),
+        ));
+        if (!determination) {
+          throw new ConfigError(
+            `No retained earnings account stands defined (OB53) for indicator ${indicator} in Chart of Accounts ${coa}.`,
+            'Define the retained earnings account for this indicator first (OB53 — Retained Earnings Account definition), then save the account.',
+          );
+        }
+      }
+      retainedEarningsIndicator = /^[A-Z0-9]$/.test(indicator) ? indicator : null;
+    }
     const values = {
       client,
       chartOfAccounts: coa,
@@ -510,6 +553,7 @@ export async function upsertGlAccount(input: GlAccountInput) {
       reconciliationType: suppressed('reconciliationType')
         ? (stored?.reconciliationType as ReconciliationType | null | undefined) ?? null
         : input.reconciliationType ?? null,
+      retainedEarningsIndicator,
       requiresCostObject: suppressed('requiresCostObject')
         ? (stored?.requiresCostObject ?? false)
         : input.requiresCostObject,

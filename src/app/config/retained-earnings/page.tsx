@@ -5,6 +5,7 @@ import { listCompanyCodes } from '@/modules/foundation/services';
 import {
   RETAINED_EARNINGS_ACTIVITY,
 } from '@/modules/foundation/retained-earnings-vocabulary';
+import { listRetainedEarnings } from '@/modules/foundation/retained-earnings';
 import { RetainedEarnings } from './RetainedEarnings';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ const ROUTE = '/config/retained-earnings';
  */
 export default async function RetainedEarningsPage() {
   const session = await requireSession(ROUTE);
+  const rows = await listRetainedEarnings(session.user.client);
   const companies = await listCompanyCodes(session.user.client);
   const charts = [...new Map(
     companies.filter((c) => c.chartOfAccounts)
@@ -37,7 +39,7 @@ export default async function RetainedEarningsPage() {
         </p>
       </header>
 
-      <RetainedEarnings rows={[]} charts={charts} canMaintain={can(session, RETAINED_EARNINGS_ACTIVITY)} />
+      <RetainedEarnings rows={rows} charts={charts} canMaintain={can(session, RETAINED_EARNINGS_ACTIVITY)} />
     </div>
   );
 }

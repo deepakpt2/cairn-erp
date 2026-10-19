@@ -119,6 +119,7 @@ export async function saveGlAccountAction(
       glAccountType: (read('glAccountType').toUpperCase() || undefined) as GlAccountType | undefined,
       isOpenItemManaged: form.get('isOpenItemManaged') === 'on',
       reconciliationType: (reconciliation.toUpperCase() || null) as ReconciliationType | null,
+      retainedEarningsIndicator: read('retainedEarningsIndicator').toUpperCase() || null,
       requiresCostObject: form.get('requiresCostObject') === 'on',
       isTaxRelevant: form.get('isTaxRelevant') === 'on',
       groupAccountNumber: read('groupAccountNumber') || null,

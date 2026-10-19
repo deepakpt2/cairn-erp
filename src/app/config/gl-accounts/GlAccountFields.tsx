@@ -32,6 +32,7 @@ export interface GlAccountValues {
   glAccountType: GlAccountType;
   isOpenItemManaged: boolean;
   reconciliationType: ReconciliationType | '';
+  retainedEarningsIndicator: string;
   requiresCostObject: boolean;
   isTaxRelevant: boolean;
   groupAccountNumber: string;
@@ -49,6 +50,7 @@ const EMPTY_ACCOUNT: GlAccountValues = {
   glAccountType: 'BALANCE_SHEET',
   isOpenItemManaged: false,
   reconciliationType: '',
+  retainedEarningsIndicator: 'X',
   requiresCostObject: false,
   isTaxRelevant: false,
   groupAccountNumber: '',
@@ -331,6 +333,29 @@ export function GlAccountFields({
             <p className="mt-1 text-xs text-ink-faint">{t('glAccount.balanceSheetDerived')}</p>
           </div>
         </div>
+
+        {values.glAccountType === 'PL_STATEMENT' && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0">
+              <label htmlFor="gl-master-retained-indicator" className="field-label">
+                {t('glAccount.retainedEarningsIndicator')}
+                <span className="ms-1 text-signal-error" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="gl-master-retained-indicator"
+                name="retainedEarningsIndicator"
+                type="text"
+                maxLength={1}
+                required
+                readOnly={readOnly}
+                value={values.retainedEarningsIndicator}
+                onChange={(event) => set('retainedEarningsIndicator', event.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 1))}
+                className="field-input code mt-1 min-h-11 w-full sm:min-h-9"
+              />
+              <p className="mt-1 text-xs text-ink-faint">{t('glAccount.retainedEarningsIndicatorRule')}</p>
+            </div>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2">
           {shows('languageKey') && (

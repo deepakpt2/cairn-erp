@@ -1288,6 +1288,9 @@ const en: Catalogue = {
   'glAccount.glAccountTypePl': 'P&L Statement',
   'glAccount.balanceSheet': 'Balance Sheet Account',
   'glAccount.balanceSheetDerived': 'Derived from the G/L Account Type; never stored independently.',
+  'glAccount.retainedEarningsIndicator': 'Retained Earnings Indicator',
+  'glAccount.retainedEarningsIndicatorRule':
+    'The one-character indicator (X is the standing convention) whose retained earnings account this P&L balance closes to at carryforward. Saving refuses until the indicator stands defined in the Retained Earnings Account definition (OB53).',
   'glAccount.openItem': 'Open Item Management',
   'glAccount.openItemRule': 'Required for clearing accounts such as bank, receivables and payables.',
   'glAccount.reconciliation': 'Reconciliation Account',

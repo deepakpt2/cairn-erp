@@ -1,9 +1,23 @@
 'use client';
 
+import { useActionState } from 'react';
+
 import {
   STANDARD_RETAINED_EARNINGS_INDICATOR,
   type RetainedEarningsChartOption, type RetainedEarningsRow,
 } from '@/modules/foundation/retained-earnings-vocabulary';
+import { deleteAction, maintainAction, type RetainedEarningsActionState } from './actions';
+
+const INITIAL: RetainedEarningsActionState = { ok: false, message: '' };
+
+function Message({ state }: { state: RetainedEarningsActionState }) {
+  if (!state.message) return null;
+  return (
+    <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+      {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+    </p>
+  );
+}
 
 /**
  * Retained earnings definition shell (SCR-121 stage 1): the
@@ -15,6 +29,9 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
   charts: RetainedEarningsChartOption[];
   canMaintain: boolean;
 }) {
+  const [maintainState, maintain, maintaining] = useActionState(maintainAction, INITIAL);
+  const [deleteState, remove, deleting] = useActionState(deleteAction, INITIAL);
+
   return (
     <>
       <section aria-labelledby="re-list" className="rounded-card border border-line bg-surface p-4 shadow-card">
@@ -53,7 +70,7 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
         <>
           <section aria-labelledby="re-maintain" className="rounded-card border border-line bg-surface p-4 shadow-card">
             <h2 id="re-maintain" className="text-sm font-semibold">Maintain an indicator</h2>
-            <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <form action={maintain} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Chart of Accounts</span>
                 <select name="chartOfAccounts" className="field-input" required defaultValue={charts[0]?.chartOfAccounts ?? ''}>
@@ -77,14 +94,15 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
                 <input name="reason" className="field-input" required />
               </label>
               <div className="sm:col-span-2 lg:col-span-3">
-                <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled>Save determination</button>
+                <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={maintaining}>Save determination</button>
               </div>
+              <Message state={maintainState} />
             </form>
           </section>
 
           <section aria-labelledby="re-delete" className="rounded-card border border-line bg-surface p-4 shadow-card">
             <h2 id="re-delete" className="text-sm font-semibold">Delete an indicator</h2>
-            <form className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <form action={remove} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Chart of Accounts</span>
                 <input name="chartOfAccounts" className="field-input code" maxLength={4} required />
@@ -98,8 +116,9 @@ export function RetainedEarnings({ rows, charts, canMaintain }: {
                 <input name="reason" className="field-input" required />
               </label>
               <div className="sm:col-span-2 lg:col-span-3">
-                <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled>Delete determination</button>
+                <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={deleting}>Delete determination</button>
               </div>
+              <Message state={deleteState} />
             </form>
             <p className="mt-2 text-sm text-ink-soft">
               Deletion refuses while a P&amp;L account of the chart carries the indicator.

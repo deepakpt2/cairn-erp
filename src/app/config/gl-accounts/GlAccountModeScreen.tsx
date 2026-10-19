@@ -216,6 +216,7 @@ export async function GlAccountModeScreen({
         glAccountType: existing.glAccountType as GlAccountType,
         isOpenItemManaged: existing.isOpenItemManaged,
         reconciliationType: toContractReconciliation(existing.reconciliationType),
+        retainedEarningsIndicator: existing.retainedEarningsIndicator ?? 'X',
         requiresCostObject: existing.requiresCostObject,
         isTaxRelevant: existing.isTaxRelevant,
         groupAccountNumber: existing.groupAccountNumber ?? '',

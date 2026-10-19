@@ -92,6 +92,7 @@ function fail(message: string, remedy?: string): never {
 
 interface BalanceRow {
   account: string; profitCenter: string; balance: bigint; category: string | null;
+  indicator: string;
 }
 
 async function companyBalances(client: string, companyCode: string, chart: string, sourceYear: number): Promise<BalanceRow[]> {
@@ -99,7 +100,8 @@ async function companyBalances(client: string, companyCode: string, chart: strin
     const rows = await tx.execute(sql`
       select l.gl_account as account, coalesce(l.profit_center, '') as profit_center,
              sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end)::text as balance,
-             a.gl_account_type as category
+             a.gl_account_type as category,
+             coalesce(a.retained_earnings_indicator, '') as indicator
       from journal_entry_line l
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
@@ -107,26 +109,36 @@ async function companyBalances(client: string, companyCode: string, chart: strin
         on a.client = l.client and a.chart_of_accounts = ${chart} and a.account_number = l.gl_account
       where l.client = ${client} and e.company_code = ${companyCode}
         and e.fiscal_year <= ${sourceYear} and e.status = 'POSTED'
-      group by l.gl_account, coalesce(l.profit_center, ''), a.gl_account_type
+      group by l.gl_account, coalesce(l.profit_center, ''), a.gl_account_type, coalesce(a.retained_earnings_indicator, '')
       order by l.gl_account, profit_center
     `);
-    return (rows as unknown as Array<{ account: string; profit_center: string; balance: string; category: string | null }>).map((r) => ({
+    return (rows as unknown as Array<{ account: string; profit_center: string; balance: string; category: string | null; indicator: string }>).map((r) => ({
       account: r.account, profitCenter: r.profit_center,
       balance: toScaled(r.balance ?? '0'), category: r.category,
+      indicator: r.indicator ?? '',
     }));
   });
 }
 
-async function retainedEarningsAccount(client: string, chart: string): Promise<string | null> {
+/**
+ * Retained earnings determinations of one chart (SCR-121 / OB53):
+ * indicator → retained earnings account. The indicator stands in the
+ * determination's general-modifier slot; the valuation class stays blank.
+ */
+async function retainedEarningsDeterminations(client: string, chart: string): Promise<Map<string, string>> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(accountDetermination).where(and(
       eq(accountDetermination.client, client),
       eq(accountDetermination.chartOfAccounts, chart),
       eq(accountDetermination.event, 'RETAINED_EARNINGS'),
       eq(accountDetermination.valuationClass, ''),
-      eq(accountDetermination.generalModifier, ''),
     ));
-    return rows[0]?.glAccount ?? null;
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      const indicator = (row.generalModifier ?? '').trim().toUpperCase();
+      if (indicator) map.set(indicator, row.glAccount);
+    }
+    return map;
   });
 }
 
@@ -179,23 +191,40 @@ export async function executeCarryforward(input: {
       const chart = company.chartOfAccounts ?? '';
       const currency = company.currency ?? 'USD';
       const balances = await companyBalances(client, companyCode, chart, sourceYear);
-      const retained = await retainedEarningsAccount(client, chart);
+      const determinations = await retainedEarningsDeterminations(client, chart);
       const byAccount = new Map<string, BalanceRow[]>();
       for (const row of balances) byAccount.set(row.account, [...(byAccount.get(row.account) ?? []), row]);
 
-      // The retained earnings account earns its opening from the
-      // transfer even when nothing stood on it before.
-      if (retained && !balances.some((r) => r.account === retained)) {
-        balances.push({ account: retained, profitCenter: '', balance: 0n, category: 'BALANCE_SHEET' });
+      const plRows0 = balances.filter((r) => r.category === 'PL_STATEMENT');
+      // Each retained earnings account earns its opening from the transfer
+      // even when nothing stood on it before.
+      if (plRows0.length > 0) {
+        for (const retainedAccount of new Set(determinations.values())) {
+          if (!balances.some((r) => r.account === retainedAccount)) {
+            balances.push({ account: retainedAccount, profitCenter: '', balance: 0n, category: 'BALANCE_SHEET', indicator: '' });
+          }
+        }
       }
       const plRows = balances.filter((r) => r.category === 'PL_STATEMENT');
       const plNet = plRows.reduce((sum, r) => sum + r.balance, 0n);
+      // SCR-121: P&L accounts close per indicator (OB53). A nonzero balance
+      // whose indicator lacks a determination refuses, naming the accounts.
+      const retainedFor = (row: BalanceRow): string | null =>
+        row.indicator ? (determinations.get(row.indicator) ?? null) : null;
+      const missing = plRows.filter((r) => r.balance !== 0n && !retainedFor(r));
+      const plNetByRetained = new Map<string, bigint>();
+      for (const row of plRows) {
+        if (row.balance === 0n) continue;
+        const retainedAccount = retainedFor(row);
+        if (retainedAccount) plNetByRetained.set(retainedAccount, (plNetByRetained.get(retainedAccount) ?? 0n) + row.balance);
+      }
       let transferDocument: string | null = null;
 
       if (!s.testRun && plRows.length > 0 && plNet !== 0n || (!s.testRun && plRows.some((r) => r.balance !== 0n))) {
-        if (!retained) {
-          fail(`Retained earnings determination (RETAINED_EARNINGS) does not stand in chart ${chart}.`,
-            'Configure the retained earnings account determination, then rerun — reruns post only the delta.');
+        if (missing.length > 0) {
+          const names = missing.map((r) => `${r.account}${r.indicator ? ` (indicator ${r.indicator})` : ' (no indicator)'}`);
+          fail(`No retained earnings account stands defined for P&L account(s) ${names.slice(0, 10).join(', ')}${names.length > 10 ? ` and ${names.length - 10} more` : ''}.`,
+            'Define the retained earnings account for each indicator used by these accounts (OB53 — Retained Earnings Account definition), set the indicator on the accounts without one, then rerun — reruns post only the delta.');
         }
         const lines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; profitCenter?: string; lineText: string }> = [];
         for (const row of plRows) {
@@ -208,11 +237,12 @@ export async function executeCarryforward(input: {
             lineText: `Carryforward ${sourceYear}→${s.targetFiscalYear}`,
           });
         }
-        if (plNet !== 0n) {
+        for (const [retainedAccount, net] of plNetByRetained) {
+          if (net === 0n) continue;
           lines.push({
-            glAccount: retained,
-            debitCredit: plNet > 0n ? 'S' : 'H',
-            amount: fromScaled(plNet > 0n ? plNet : -plNet),
+            glAccount: retainedAccount,
+            debitCredit: net > 0n ? 'S' : 'H',
+            amount: fromScaled(net > 0n ? net : -net),
             lineText: `P&L closing ${sourceYear}`,
           });
         }
@@ -242,13 +272,13 @@ export async function executeCarryforward(input: {
           continue;
         }
         if (!isPl) {
-          const isRetained = retained !== null && row.account === retained;
+          const isRetained = plNetByRetained.has(row.account);
           results.push({
             companyCode, accountNumber: row.account, accountCategory: 'BALANCE_SHEET',
             profitCenter: row.profitCenter || null, currency,
             sourceClosingBalance: Number(fromScaled(row.balance)),
-            targetOpeningBalance: Number(fromScaled(row.balance + (isRetained ? plNet : 0n))),
-            retainedEarningsAccount: isRetained ? retained : null,
+            targetOpeningBalance: Number(fromScaled(row.balance + (plNetByRetained.get(row.account) ?? 0n))),
+            retainedEarningsAccount: isRetained ? row.account : null,
             transferDocumentNumber: isRetained ? transferDocument : null,
             status: 'CARRIED',
             detail: isRetained
@@ -256,22 +286,28 @@ export async function executeCarryforward(input: {
               : null,
           });
         } else {
+          const retainedAccount = retainedFor(row);
           results.push({
             companyCode, accountNumber: row.account, accountCategory: 'PL_STATEMENT',
             profitCenter: row.profitCenter || null, currency,
             sourceClosingBalance: Number(fromScaled(row.balance)), targetOpeningBalance: 0,
-            retainedEarningsAccount: retained, transferDocumentNumber: transferDocument,
+            retainedEarningsAccount: retainedAccount, transferDocumentNumber: transferDocument,
             status: s.testRun ? 'CARRIED' : 'TRANSFERRED',
             detail: s.testRun
-              ? `Test run: an update run would close this balance to retained earnings${retained ? ` ${retained}` : ' (determination missing)'}.`
-              : (retained ? null : 'Retained earnings determination missing.'),
+              ? `Test run: an update run would close this balance to retained earnings${retainedAccount ? ` ${retainedAccount}` : ' (determination missing)'}.`
+              : (retainedAccount ? null : 'Retained earnings determination missing.'),
           });
         }
       }
-      if (!retained && plRows.length > 0) {
-        for (const row of plRows) {
-          const existing = results.find((r) => r.companyCode === companyCode && r.accountNumber === row.account && (r.profitCenter ?? '') === row.profitCenter);
-          if (existing) { existing.status = 'EXCEPTION'; existing.detail = `Retained earnings determination (RETAINED_EARNINGS) does not stand in chart ${chart}.`; }
+      // A nonzero P&L balance whose indicator lacks a determination (OB53)
+      // is an exception in a test run; an update run already refused above.
+      for (const row of missing) {
+        const existing = results.find((r) => r.companyCode === companyCode && r.accountNumber === row.account && (r.profitCenter ?? '') === row.profitCenter);
+        if (existing) {
+          existing.status = 'EXCEPTION';
+          existing.detail = row.indicator
+            ? `No retained earnings account stands defined for indicator ${row.indicator} in chart ${chart} (OB53).`
+            : `Account ${row.account} carries no retained earnings indicator (OB53).`;
         }
       }
     } catch (error) {

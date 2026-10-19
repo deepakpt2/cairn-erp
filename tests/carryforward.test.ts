@@ -54,8 +54,13 @@ beforeAll(async () => {
   await withTenant(client, async (tx) => {
     await tx.execute(sql`
       insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
-      values (${client}, 'CA01', 'RETAINED_EARNINGS', '', '', '290000', ${ACTOR})
+      values (${client}, 'CA01', 'RETAINED_EARNINGS', '', 'X', '290000', ${ACTOR})
       on conflict do nothing
+    `);
+    // SCR-121 (OB53): P&L accounts close per indicator; X is the standing one.
+    await tx.execute(sql`
+      update gl_account set retained_earnings_indicator = 'X'
+      where client = ${client} and chart_of_accounts = 'CA01' and gl_account_type = 'PL_STATEMENT'
     `);
   });
   await post('5000', '101000', '300000', 'cf-seed-1'); // cash Dr / revenue Cr
@@ -124,10 +129,13 @@ describe('SCR-102 G/L balance carryforward F.16 (R-150)', () => {
         where client = ${client} and chart_of_accounts = 'CA01' and event = 'RETAINED_EARNINGS'
       `);
     });
+    // A fresh nonzero P&L balance is what an update run would have to close;
+    // with no determination standing (SCR-121/OB53) the test run flags it.
+    await post('100', '400000', '101000', 'cf-missing-1', '2026-11-30');
     const run = await executeCarryforward({ client, changedBy: ACTOR, selection: selection(true) });
     expect(run.status).toBe('FAILED');
     expect(run.errors).toBeGreaterThan(0);
     const results = await listCarryforwardResults(client, run.runId);
-    expect(results.some((r) => r.status === 'EXCEPTION' && (r.detail ?? '').includes('RETAINED_EARNINGS'))).toBe(true);
+    expect(results.some((r) => r.status === 'EXCEPTION' && (r.detail ?? '').includes('OB53'))).toBe(true);
   });
 });

@@ -45,6 +45,7 @@ import {
   type AccountGroupFieldStatusInput,
   type AccountGroupMaintenanceInput,
 } from '@/modules/finance/gl-account-group-maintenance';
+import { maintainRetainedEarnings } from '@/modules/foundation/retained-earnings';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const TEST_ACTOR = 'SCR028_STAGE3';
@@ -112,6 +113,7 @@ function accountInput(
     isOpenItemManaged: false,
     requiresCostObject: false,
     isTaxRelevant: false,
+    retainedEarningsIndicator: 'X',
     ...overrides,
   };
 }
@@ -217,6 +219,33 @@ beforeAll(async () => {
   // The first group is created through the service under test, so every later test writes
   // against a row that arrived the way a consultant's row arrives.
   await saveAccountGroup(groupInput('GENA'));
+  // SCR-121 (OB53): screen-mode P&L saves refuse until the indicator's retained
+  // earnings determination stands, so the fixture defines X in both charts it
+  // saves P&L accounts into before any account test runs.
+  // Inside GENA's standing range and below the narrowing test's floor of
+  // 1400, so the group-range refusal still names only account 1500; the two
+  // GENA membership counts below include this account.
+  await upsertGlAccount(accountInput('1200', {
+    accountType: 'EQUITY',
+    glAccountType: 'BALANCE_SHEET',
+    mode: 'CREATE',
+  }));
+  await maintainRetainedEarnings({
+    client: fixture().client,
+    changedBy: TEST_ACTOR,
+    chartOfAccounts: CHART,
+    indicator: 'X',
+    glAccount: '1200',
+    reason: 'SCR-121 fixture: retained earnings definition',
+  });
+  await maintainRetainedEarnings({
+    client: fixture().client,
+    changedBy: TEST_ACTOR,
+    chartOfAccounts: STANDARD_CHART,
+    indicator: 'X',
+    glAccount: '290000',
+    reason: 'SCR-121 fixture: retained earnings definition',
+  });
 });
 
 afterAll(async () => {
@@ -372,7 +401,7 @@ describe('Account Group registry', () => {
     expect(rows.find((row) => row.accountGroup === 'GENA')).toMatchObject({
       fromAccountNumber: '1000',
       toAccountNumber: '1999',
-      accountCount: 1,
+      accountCount: 2,
     });
   });
 });
@@ -464,7 +493,7 @@ describe('Account Group lifecycle', () => {
     const rows = await listAccountGroups(fixture().client, { chartOfAccounts: CHART });
     expect(rows.find((row) => row.accountGroup === 'GENA')).toMatchObject({
       isActive: false,
-      accountCount: 1,
+      accountCount: 2,
     });
     expect(await storedAccount(CHART, '1500')).toMatchObject({ accountGroup: 'GENA' });
 
