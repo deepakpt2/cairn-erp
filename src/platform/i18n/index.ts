@@ -2422,6 +2422,7 @@ const en: Catalogue = {
   'journal.accruals': 'Accruals…',
   'journal.closeCockpit': 'Close cockpit…',
   'journal.carryforward': 'Carryforward…',
+  'journal.credit': 'Credit management…',
   'credit.title': 'Customer Credit Management',
   'credit.intro': 'Credit limit, risk and holds per customer and credit control area. Exposure derives from open receivables across the area’s companies; every change is audited field by field with its reason.',
   'credit.selectionTitle': 'Customer and credit control area',

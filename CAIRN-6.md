@@ -636,6 +636,10 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 
 **B-667.** `credit.ts` now carries the record lifecycle: configuration judged on every save (area active with its currency and precision, risk category, representative group, credit group, and a mandatory active block reason behind any hold), a stated change reason on every save, optimistic-locking version refusal, and one append-only audit row per changed field written in the same transaction. Exposure derives from open FI-AR items across the area's companies; `evaluateCreditCheck` implements the never-bypass ladder (no record, hold, expired, zero, exceeded → BLOCK; warning threshold → WARN). The credit sheet is wired end to end (load, overview, edit with hold/reason, history). Same-stage bookkeeping: B-667 / §26.683 / §30 row 2.501.
 
+## §26.684 — SCR-103 stage 4: capability, FD32 alias, credit vocabularies, navigation
+
+**B-668.** Seed grows by the FIN.CREDIT.MAINTAIN capability (136 total), the credit-management term carrying the FD32 alias (110 terms), and delivered credit vocabularies for every tenant (risk categories A/B/C, representative group 001, block reasons 01–03). The journal list gains the credit entry. Seeded twice, idempotent. Same-stage bookkeeping: B-668 / §26.684 / §30 row 2.502.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -768,3 +772,4 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 | 2.499 | 2026-10-19 | **SCR-103 stage 1 published (B-665, §26.681).** Credit vocabulary and the credit-sheet shell stand. Schema follows in stage 2. | Agent |
 | 2.500 | 2026-10-19 | **SCR-103 stage 2 published (B-666, §26.682).** Migration 0111 (174 total) stands: credit vocabularies, the versioned credit record, and the append-only change audit. The credit service follows in stage 3. | Agent |
 | 2.501 | 2026-10-19 | **SCR-103 stage 3 published (B-667, §26.683).** The credit service stands: judged saves with field audit and version locking, derived exposure, never-bypass checks; the sheet is wired. Supporting seed follows in stage 4. | Agent |
+| 2.502 | 2026-10-19 | **SCR-103 stage 4 published (B-668, §26.684).** FIN.CREDIT.MAINTAIN capability (136), the FD32 alias term and tenant credit vocabularies seed; credit navigation stands. Acceptance follows in stage 5. | Agent |

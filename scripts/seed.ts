@@ -176,6 +176,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.ACCRUAL.POST', module: 'FIN', action: 'POST', posting: true, description: 'Enter accrual/deferral documents and execute their due reversals' },
   { code: 'FIN.CLOSE.COCKPIT', module: 'FIN', action: 'POST', posting: true, description: 'Run period-end closing cycles as gated task lists' },
   { code: 'FIN.CLOSE.CARRYFORWARD', module: 'FIN', action: 'POST', posting: true, description: 'Carry G/L balances forward into the target fiscal year' },
+  { code: 'FIN.CREDIT.MAINTAIN', module: 'FIN', action: 'POST', posting: true, description: 'Maintain customer credit limits, risk and holds per credit control area' },
   { code: 'FIN.ASSET.CHANGE', module: 'FIN', action: 'CHANGE', posting: false, description: 'Change fixed asset master records' },
   { code: 'FIN.JOURNAL.REVERSE', module: 'FIN', action: 'REVERSE', posting: true, description: 'Reverse an accounting document' },
   { code: 'FIN.JOURNAL.DISPLAY', module: 'FIN', action: 'DISPLAY', posting: false, description: 'Display an accounting document' },
@@ -367,6 +368,7 @@ const REGISTRY: Array<{
   { ourCode: 'FIN.ASSET.ACQUIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Acquire asset against offsetting account', route: '/finance/assets/acquire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABZON'], description: 'Post an asset acquisition to the asset class reconciliation account against an entered offsetting G/L account, without a vendor. Guided: entry, validation, simulation, confirmation. The engine document is the financial authority and a value transaction rides it; reversal is asset-aware so the value record cannot be orphaned. First acquisition capitalizes at the asset value date.' },
   { ourCode: 'FIN.ASSET.RETIRE', termType: 'TRANSACTION', module: 'FIN', title: 'Retire asset by scrapping', route: '/finance/assets/retire', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['ABAVN'], description: 'Retire an asset by scrapping without proceeds: complete or partial (percentage of, or an acquisition-value amount against, the remaining retireable value). The retired acquisition value is credited to the class reconciliation account, accumulated depreciation reversed for its proportional share, and the remaining book value written off to the class loss account, in one engine document riding a retirement value record. Complete retirement retires the asset; reversal is asset-aware and restores eligibility.' },
   { ourCode: 'FIN.ASSET.DEPRECIATE', termType: 'TRANSACTION', module: 'FIN', title: 'Depreciation run', route: '/finance/assets/depreciate', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['AFAB'], description: 'Calculate and post planned depreciation per asset and depreciation area for a company, fiscal year and period: test runs log without touching a balance; live runs post one balanced engine document (depreciation expense against accumulated depreciation) and record posted depreciation per asset and period, which repeat runs adjust and retirement reversals read. Planned, repeat and restart run types; unplanned depreciation awaits its extraordinary-transaction round.' },
+  { ourCode: 'FIN.CREDIT.MAINTAIN', termType: 'TRANSACTION', module: 'FIN', title: 'Customer credit management', route: '/finance/credit', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FD32'], description: 'Credit management per customer and credit control area on the canonical partner and area masters: limit in the area currency at its precision, risk category, representative group, customer credit group, limit validity and manual holds behind configured block reasons — every reference judged against standing configuration, every save stating its reason and landing one append-only audit row per changed field, protected by an optimistic-locking version. Exposure derives at read time from open receivables across the companies of the area, so available credit and utilization are always current, and the credit-check evaluation never bypasses: a missing record, a hold, an expired or zero limit, or an exceeded limit blocks, and the area warning threshold warns.' },
   { ourCode: 'FIN.CLOSE.CARRYFORWARD', termType: 'TRANSACTION', module: 'FIN', title: 'G/L balance carryforward', route: '/finance/carryforward', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['F.16', 'FAGLGVTR'], description: 'Balance carryforward from a source year into the target year for the leading ledger and selected company codes, test-run by default. Balance-sheet openings derive from the posted journal — no duplicate balance table — and are recorded per account, currency and profit centre; profit-and-loss accounts close through a real judged transfer document at the source year-end against the retained earnings account from account determination, never by deleting history. Repeat runs recompute the still-untransferred balance and post only the delta, so late prior-year adjustments flow through safely; a concurrent update run over the same scope is refused while test runs never block. The run protocol preserves every execution with its parameters, totals, exceptions and transfer documents — and never closes the prior year or locks a period.' },
   { ourCode: 'FIN.CLOSE.COCKPIT', termType: 'TRANSACTION', module: 'FIN', title: 'Period-end close cockpit', route: '/finance/close-cockpit', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CLOCO', 'CLOCOC', 'FCLOCO', 'FCLOCOC'], description: 'Period-end closing cycles as task lists: reusable templates become period-specific task instances over a company, fiscal year and posting period, with dependency edges (circles refused), owners, critical-path flags and due dates. Tasks execute only through the registered handler catalogue — period status report, due accrual reversals, foreign-currency valuation, manual confirmation — behind predecessor gating and an atomic execution claim, so one instance never runs twice at once; background executions stand scheduled until the scheduled runner settles them. A task completes only when its handler succeeds and required evidence and sign-off stand; failures keep their logs and retry; overrides and reopens require reasons and preserve history in the append-only event trail. Finalizing a list is refused while any task stands open — and never closes or locks the financial period.' },
   { ourCode: 'FIN.ACCRUAL.POST', termType: 'TRANSACTION', module: 'FIN', title: 'Accrual/deferral documents', route: '/finance/accruals', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['FBS1', 'F.81'], description: 'Enter an accrual or deferral document on the judged G/L entry: reversal date and a standing reversal reason are required at entry and are stored as metadata on the canonical document in the same transaction. When the reversal date falls due, the reversal processing lists the document and posts its mirror through the canonical document-reversal workflow — exactly one reversal ever, reconciled from the standing link on any retry. Posted documents are immutable; drafts park through the parked-journal workflow.' },
@@ -638,6 +640,31 @@ async function main() {
       select c.client, 'KG', 'Vendor credit memo', 'RF_BELEG', 'GENERAL', 'SK', true, 'SEED'
       from client c
       on conflict (client, document_type) do nothing
+    `);
+
+    console.log('Seeding credit vocabularies…');
+    await client.unsafe(`
+      insert into credit_risk_category (client, risk_category, name, created_by)
+      select c.client, v.risk_category, v.name, 'SEED'
+        from client c
+        cross join (values ('A', 'Low risk'), ('B', 'Medium risk'), ('C', 'High risk')) as v(risk_category, name)
+      on conflict (client, risk_category) do nothing
+    `);
+    await client.unsafe(`
+      insert into credit_representative_group (client, group_code, name, created_by)
+      select c.client, '001', 'Credit representatives', 'SEED' from client c
+      on conflict (client, group_code) do nothing
+    `);
+    await client.unsafe(`
+      insert into credit_block_reason (client, reason_code, name, created_by)
+      select c.client, v.reason_code, v.name, 'SEED'
+        from client c
+        cross join (values
+          ('01', 'Manual credit hold'),
+          ('02', 'Payment behaviour'),
+          ('03', 'Legal or insolvency')
+        ) as v(reason_code, name)
+      on conflict (client, reason_code) do nothing
     `);
 
     console.log('Seeding the standard month-end close template…');
