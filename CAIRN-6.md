@@ -271,4 +271,4 @@ The owner supplied the FB03 architectural review (2026-10-19); SAP codes stand a
 | 2.411 | 2026-10-19 | **SCR-090 stage 1 published (B-577, §26.593).** The inert FB03 display screen: composite-key lookup, full document sections rendered empty; i18n keys added. No retrieval stands yet. | Agent |
 | 2.412 | 2026-10-19 | **SCR-090 stage 2 recorded (B-578, §26.594).** Key verification: the journal primary keys already are the prescribed composite lookup; no redundant index, no migration. Retrieval follows in stage 3. | Agent |
 | 2.413 | 2026-10-19 | **SCR-090 stage 3 published (B-579, §26.595).** Composite-key retrieval with flow and change history stands behind the display; FAGLL03 drill repointed. Seed follows in stage 4. | Agent |
-| 2.414 | 2026-10-19 | **SCR-090 stage 4 published (B-580, §26.596).** Capability FIN.DOC.FLOW seeded (123 capabilities / 97 terms / 106 aliases). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.414 | 2026-10-19 | **SCR-090 stage 4 published (B-580, §26.596).** Capability FIN.DOC.FLOW seeded (123 capabilities / 97 terms / 105 aliases). Tests and browser acceptance follow in stage 5. | Agent |
