@@ -33,6 +33,7 @@ export function SpecialGl({ rows, canMaintain }: { rows: SpecialGlRow[]; canMain
                 <tr className="text-xs uppercase tracking-wide text-ink-faint">
                   <th className="px-2 py-2">Company scope</th><th className="px-2 py-2">Account type</th>
                   <th className="px-2 py-2">Indicator</th><th className="px-2 py-2">Alternative account</th>
+                  <th className="px-2 py-2">Request target</th>
                   <th className="px-2 py-2">Description</th>
                 </tr>
               </thead>
@@ -43,6 +44,7 @@ export function SpecialGl({ rows, canMaintain }: { rows: SpecialGlRow[]; canMain
                     <td className="px-2 py-2">{row.accountType === 'AP' ? 'Vendor (AP)' : 'Customer (AR)'}</td>
                     <td className="px-2 py-2">{row.indicator}</td>
                     <td className="px-2 py-2">{row.alternativeReconciliationAccount}</td>
+                    <td className="px-2 py-2">{row.targetSpecialGlIndicator ?? '—'}</td>
                     <td className="px-2 py-2">{row.description}</td>
                   </tr>
                 ))}
@@ -75,6 +77,10 @@ export function SpecialGl({ rows, canMaintain }: { rows: SpecialGlRow[]; canMain
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Alternative reconciliation account</span>
                 <input name="alternativeAccount" className="input w-full" placeholder="201000" required />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Request target (blank = actual)</span>
+                <input name="targetIndicator" className="input w-full" placeholder="A" maxLength={1} />
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Description</span>

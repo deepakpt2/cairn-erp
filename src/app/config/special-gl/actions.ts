@@ -43,11 +43,17 @@ export async function maintainAction(
       accountType: text(form, 'accountType').toUpperCase(),
       indicator: text(form, 'indicator').toUpperCase(),
       alternativeReconciliationAccount: text(form, 'alternativeAccount'),
+      targetSpecialGlIndicator: text(form, 'targetIndicator').toUpperCase(),
       description: text(form, 'description') || undefined,
       reason: text(form, 'reason') || undefined,
     });
     revalidatePath(ROUTE);
-    return { ok: true, message: `Indicator ${row.indicator} (${row.accountType}) now resolves to ${row.alternativeReconciliationAccount}.` };
+    return {
+      ok: true,
+      message: row.targetSpecialGlIndicator
+        ? `Indicator ${row.indicator} (${row.accountType}) is a request indicator expecting ${row.targetSpecialGlIndicator} at fulfillment.`
+        : `Indicator ${row.indicator} (${row.accountType}) now resolves to ${row.alternativeReconciliationAccount}.`,
+    };
   } catch (error) {
     return wrap(error);
   }

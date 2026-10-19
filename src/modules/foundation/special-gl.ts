@@ -37,6 +37,8 @@ export interface SpecialGlRow {
   accountType: string;
   indicator: string;
   alternativeReconciliationAccount: string;
+  /** Set on a down-payment request (noted) indicator: the actual indicator it expects at fulfillment. */
+  targetSpecialGlIndicator: string | null;
   description: string;
 }
 
@@ -48,6 +50,7 @@ export async function listSpecialGlConfigs(client: string): Promise<SpecialGlRow
     return rows.map((r) => ({
       companyCode: r.companyCode, accountType: r.accountType, indicator: r.indicator,
       alternativeReconciliationAccount: r.alternativeReconciliationAccount,
+      targetSpecialGlIndicator: r.targetSpecialGlIndicator,
       description: r.description,
     }));
   });
@@ -75,6 +78,8 @@ export async function maintainSpecialGlConfig(input: {
   client: string; changedBy: string;
   companyCode: string; accountType: string; indicator: string;
   alternativeReconciliationAccount: string; description?: string;
+  /** Down-payment requests: naming a target makes this a noted request indicator; '' clears it. */
+  targetSpecialGlIndicator?: string;
   reason?: string;
 }): Promise<SpecialGlRow> {
   const reason = judgeReason(input.reason);
@@ -83,6 +88,14 @@ export async function maintainSpecialGlConfig(input: {
   }
   if (!/^[A-Za-z0-9]$/.test(input.indicator)) {
     throw new SpecialGlError('The special G/L indicator is a single character.');
+  }
+  if (input.targetSpecialGlIndicator) {
+    if (!/^[A-Za-z0-9]$/.test(input.targetSpecialGlIndicator)) {
+      throw new SpecialGlError('The target special G/L indicator is a single character.');
+    }
+    if (input.targetSpecialGlIndicator.toUpperCase() === input.indicator.toUpperCase()) {
+      throw new SpecialGlError('A request indicator cannot target itself.');
+    }
   }
   return withTenant(input.client, async (tx) => {
     await judgeAccount(tx, input.client, input.alternativeReconciliationAccount);
@@ -96,15 +109,20 @@ export async function maintainSpecialGlConfig(input: {
       eq(specialGlConfig.accountType, key.accountType),
       eq(specialGlConfig.indicator, key.indicator),
     ));
+    const targetSpecialGlIndicator = input.targetSpecialGlIndicator === undefined
+      ? (existing?.targetSpecialGlIndicator ?? null)
+      : (input.targetSpecialGlIndicator ? input.targetSpecialGlIndicator.toUpperCase() : null);
     const values = {
       ...key,
       alternativeReconciliationAccount: input.alternativeReconciliationAccount,
+      targetSpecialGlIndicator,
       description: input.description ?? '',
       createdBy: input.changedBy,
     };
     if (existing) {
       await tx.update(specialGlConfig).set({
         alternativeReconciliationAccount: values.alternativeReconciliationAccount,
+        targetSpecialGlIndicator: values.targetSpecialGlIndicator,
         description: values.description,
         changedBy: input.changedBy, changedAt: new Date(),
       }).where(and(
@@ -121,9 +139,12 @@ export async function maintainSpecialGlConfig(input: {
       objectKey: `${key.companyCode || '*'}/${key.accountType}/${key.indicator}`,
       changeType: existing ? 'CHANGE' : 'CREATE', reason,
       changedBy: input.changedBy, transactionCode: SPECIAL_GL_ACTIVITY,
-      after: { alternativeReconciliationAccount: values.alternativeReconciliationAccount },
+      after: {
+        alternativeReconciliationAccount: values.alternativeReconciliationAccount,
+        targetSpecialGlIndicator: values.targetSpecialGlIndicator,
+      },
     });
-    return { ...key, alternativeReconciliationAccount: values.alternativeReconciliationAccount, description: values.description };
+    return { ...key, alternativeReconciliationAccount: values.alternativeReconciliationAccount, targetSpecialGlIndicator: values.targetSpecialGlIndicator, description: values.description };
   });
 }
 
