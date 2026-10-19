@@ -2,7 +2,9 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { PARKED_JOURNAL_CAPABILITY } from '@/modules/finance/parked-journal';
+import {
+  PARKED_JOURNAL_CAPABILITY, getParkedJournal, listParkedJournals,
+} from '@/modules/finance/parked-journal';
 import ParkedJournal from './ParkedJournal';
 
 export const dynamic = 'force-dynamic';
@@ -11,10 +13,14 @@ const ROUTE = '/finance/journal/park';
 
 /**
  * Park a journal entry (SCR-087 / FV50 as a search alias only).
- * Stage 1 shell: the parked-document service lands in stage 3 of R-135.
  */
-export default async function ParkedJournalPage() {
+export default async function ParkedJournalPage({ searchParams }: {
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const session = await requireSession(ROUTE);
+  const params = await searchParams;
+  const parked = await listParkedJournals(session.user.client);
+  const editing = params.edit ? await getParkedJournal(session.user.client, params.edit) : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -31,7 +37,9 @@ export default async function ParkedJournalPage() {
       </header>
 
       <ParkedJournal
-        parked={[]}
+        key={editing?.parkedNumber ?? 'new'}
+        parked={parked}
+        editing={editing && (editing.status === 'PARKED' || editing.status === 'COMPLETED') ? editing : null}
         canPark={can(session, PARKED_JOURNAL_CAPABILITY)}
         today={today}
       />
