@@ -774,6 +774,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-697.** Seed grows by the FIN.RPT.BALANCESHEET capability (141 total), the statement term carrying the S_ALR_87012284, S_PL0_86000028 and FC10 search aliases (114 terms / 129 aliases), and the journal list gains the balance-sheet entry beside the trial balance. Seeded twice, idempotent. Tests and browser acceptance follow in stage 5. Same-stage bookkeeping: B-697 / §26.713 / §30 row 2.531.
 
+## §26.714 — SCR-107 stage 5: service tests and browser target
+
+**B-698.** Four service tests cover the statement (accumulated opening/closing with comparatives; movement strictly in range; combined closing/movement split with the 3500 current-year result; summary-level folding that merges accounts upward without moving a figure, plus judged calculation type, summary level and comparison range) — 7 green with the stage-2 index contract. Browser target T889 (balance-sheet) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-698 / §26.714 / §30 row 2.532.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -936,6 +940,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.529 | 2026-10-19 | **SCR-107 stage 2 published (B-695, §26.711).** Index duty verified: the aligned header/line indexes stand (0115/0098); no new migration (178 stands), contract test pins the alignment. The calculation service follows in stage 3. | Agent |
 | 2.530 | 2026-10-19 | **SCR-107 stage 3 published (B-696, §26.712).** The three calculation types calculate over one journal snapshot; opening column, summary folding and CSV export stand; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.531 | 2026-10-19 | **SCR-107 stage 4 published (B-697, §26.713).** FIN.RPT.BALANCESHEET capability (141), the S_ALR_87012284 alias term and statement navigation stand. Acceptance follows in stage 5. | Agent |
+| 2.532 | 2026-10-19 | **SCR-107 stage 5 published (B-698, §26.714).** Service tests pass for all three calculation types, folding and judging; browser target T889 registered. Production build and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
