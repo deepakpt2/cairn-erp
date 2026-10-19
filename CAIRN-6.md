@@ -550,6 +550,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 Deferred by name: binary evidence attachments, deadline calendars/escalations, cross-cycle task copying UI beyond template instantiation, background job infrastructure beyond the in-workspace scheduled runner. Same-stage bookkeeping: B-649 / §26.665 / §30 row 2.483.
 
+## §26.666 — SCR-101 stage 1: close-cockpit vocabulary and workspace shell
+
+**B-650.** The cockpit vocabulary stands in `src/modules/finance/close-cockpit.ts`: list and task lifecycles, execution modes and statuses, and the closed handler registry (`PERIOD_STATUS`, `ACCRUAL_REVERSALS`, `FX_VALUATION`, `MANUAL_CONFIRMATION`) with reporting/posting/manual kinds. `/finance/close-cockpit` renders the cycle selector (task list, company, year, period, mode, status and owner filters), the cycle table with progress, and the hierarchical task table with critical-path markers; nothing posts yet. Same-stage bookkeeping: B-650 / §26.666 / §30 row 2.484.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -664,3 +668,4 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 | 2.481 | 2026-10-19 | **SCR-100 CLOSED (B-647, §26.663).** FIN.ACCRUAL.POST accepted: atomic reversal metadata, F.81 due reversal exactly once (suite 1440/1440; browser T896). Next SCR: FIN.CLOSE.COCKPIT; its package is awaited. | Agent |
 | 2.482 | 2026-10-19 | **FX valuation re-run correction published (B-648, §26.664).** The duplicate guard excludes reversed runs, so a reversed valuation can be re-run; suite stood 1440/1440 over the change. | Agent |
 | 2.483 | 2026-10-19 | **SCR-101 contract approved (B-649, §26.665, R-149).** FIN.CLOSE.COCKPIT: template/instance closing cycles, registered handlers only, gated exactly-once execution, append-only execution and event trails; list completion never locks the period. Stage 1 (vocabulary + workspace shell) follows. | Owner + Agent |
+| 2.484 | 2026-10-19 | **SCR-101 stage 1 published (B-650, §26.666).** Close-cockpit vocabulary, closed handler registry and the cycle/task workspace shell stand. Schema follows in stage 2. | Agent |
