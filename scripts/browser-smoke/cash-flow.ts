@@ -114,7 +114,7 @@ export async function cashFlow(ctx: Context) {
 
   await page.goto(`${base}${ROUTE}?companies=1000&fiscalYear=2026&periodFrom=1&periodTo=12&method=INDIRECT&comparative=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  await page.getByRole('heading', { name: 'Cash Flow Statement' }).waitFor();
+  await page.getByRole('heading', { name: 'Cash Flow Statement', exact: true }).waitFor();
   await page.locator('tr', { hasText: 'Net income for the period' }).first().getByText('3,700.00').first().waitFor();
   await page.locator('tr', { hasText: 'Add back: depreciation' }).first().getByText('500.00').first().waitFor();
   await page.locator('tr', { hasText: 'Net cash from operating activities' }).first().getByText('1,700.00').first().waitFor();
