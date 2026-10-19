@@ -994,6 +994,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-752.** The check found the canon complete: reconciliation types stand on the chart account with the CUSTOMERS/VENDORS/ASSETS/MATERIAL vocabulary, `jel_account_idx` serves the account total and the partner index path the subledger total — so SCR-115 adds no migration (181 stand) and no tie-out tables; both totals derive from the one journal at read time. `tests/subledger-tie-schema-contract.test.ts` (3 green) pins the canon. The tie-out service follows in stage 3. Same-stage bookkeeping: B-752 / §26.768 / §30 row 2.586.
 
+## §26.769 — SCR-115 stage 3: subledger tie-out service
+
+**B-753.** `calculateSubledgerTie` (appended to the stage-1 vocabulary module) refuses any ledger but `0L` by name, resolves the company and its chart, takes every CUSTOMERS/VENDORS reconciliation account, and compares — cumulatively through period-to over POSTED lines — the account total against the partner-carrying subledger total, naming each account TIED or EXCEPTION with the difference never netted away. Partner rows break the subledger total down by partner; partnerless lines stand as counted exception detail with a warning; partners posting away from their segment-assigned reconciliation account are named. The page executes live and renders `reportError`; account rows drill to the journal line-item report. `tsc` green. Supporting seed follows in stage 4. Same-stage bookkeeping: B-753 / §26.769 / §30 row 2.587.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1211,6 +1215,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.584 | 2026-10-19 | **SCR-115 contracted (B-750, R-163, §26.766).** G/L to subledger tie-out per owner research (FS10N balances vs FBL1N/FBL5N subledger totals): reconciliation accounts CUSTOMERS/VENDORS, partnerless lines as exception detail, aliases FAGLB03 + F.03. Stage 1 vocabulary/shell follows. | Agent |
 | 2.585 | 2026-10-19 | **SCR-115 stage 1 published (B-751, §26.767).** Tie-out vocabulary and the subledger tie-out shell stand over the inert grid. Index check follows in stage 2. | Agent |
 | 2.586 | 2026-10-19 | **SCR-115 stage 2 published (B-752, §26.768).** Index check: tie-out canon complete, no migration (181 stand); the schema contract pins reconciliation types and both journal paths. The tie-out service follows in stage 3. | Agent |
+| 2.587 | 2026-10-19 | **SCR-115 stage 3 published (B-753, §26.769).** The tie-out service compares account totals against partner-carrying totals with TIED/EXCEPTION naming, partner rows and misassignment warnings; the page executes live. Supporting seed follows in stage 4. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

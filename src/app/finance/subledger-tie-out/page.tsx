@@ -1,7 +1,8 @@
 import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
 import {
-  SUBLEDGER_TIE_CAPABILITY, TIE_LEDGER, type SubledgerTieSelection,
+  SUBLEDGER_TIE_CAPABILITY, TIE_LEDGER, calculateSubledgerTie, SubledgerTieError,
+  type SubledgerTieResult, type SubledgerTieSelection,
 } from '@/modules/finance/subledger-tie-out';
 import SubledgerTieShell from './SubledgerTieShell';
 
@@ -28,12 +29,25 @@ export default async function SubledgerTiePage({
     accountTo: get('accountTo'),
   };
 
+  let result: SubledgerTieResult | null = null;
+  let reportError: string | null = null;
+  if (can(session, `${SUBLEDGER_TIE_CAPABILITY}.read`)) {
+    try {
+      result = await calculateSubledgerTie({ client: session.user.client, selection: initialSelection });
+    } catch (error) {
+      reportError = error instanceof SubledgerTieError
+        ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)
+        : 'The tie-out could not be calculated.';
+    }
+  }
+
   return (
     <SubledgerTieShell
       canUse={can(session, `${SUBLEDGER_TIE_CAPABILITY}.read`)}
       companies={companies}
       selection={initialSelection}
-      result={null}
+      result={result}
+      reportError={reportError}
     />
   );
 }

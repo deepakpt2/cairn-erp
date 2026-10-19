@@ -68,3 +68,155 @@ export interface SubledgerTieResult {
   warnings: string[];
   calculatedAt: string;
 }
+
+import { sql } from 'drizzle-orm';
+import { withTenant } from '@/platform/db/client';
+import { fromScaled, toScaled } from '@/platform/posting/decimal';
+
+export class SubledgerTieError extends Error {
+  remedy?: string;
+
+  constructor(message: string, remedy?: string) {
+    super(message);
+    this.name = 'SubledgerTieError';
+    this.remedy = remedy;
+  }
+}
+
+function fail(message: string, remedy?: string): never {
+  throw new SubledgerTieError(message, remedy);
+}
+
+const signed = (debitCredit: string, amount: string) =>
+  Number(fromScaled(toScaled(amount))) * (debitCredit === 'S' ? 1 : -1);
+
+export async function calculateSubledgerTie(input: {
+  client: string; selection: SubledgerTieSelection;
+}): Promise<SubledgerTieResult> {
+  const { client } = input;
+  const s = { ...input.selection, ledger: (input.selection.ledger || TIE_LEDGER).toUpperCase() };
+  if (s.ledger !== TIE_LEDGER) {
+    fail(`Ledger ${s.ledger} is not configured.`, `Only the leading ledger ${TIE_LEDGER} stands in this canon; other ledgers are not carried.`);
+  }
+  if (!Number.isInteger(s.fiscalYear) || s.fiscalYear < 1900 || s.fiscalYear > 2199) fail('A valid fiscal year is required.');
+  if (s.periodTo < 1 || s.periodTo > 16) fail('Period to must stand between 1 and 16.');
+  if (s.accountFrom && s.accountTo && s.accountFrom > s.accountTo) fail('The account range is inverted.');
+  const calculatedAt = new Date().toISOString();
+
+  return withTenant(client, async (tx) => {
+    const companyRows = await tx.execute(sql`
+      select company_code, currency, chart_of_accounts from company_code
+      where client = ${client} and company_code = ${s.companyCode}
+    `) as unknown as Array<{ company_code: string; currency: string; chart_of_accounts: string }>;
+    const company = companyRows[0];
+    if (!company) fail(`Company code ${s.companyCode} does not stand.`);
+
+    const accountRows = await tx.execute(sql`
+      select account_number, reconciliation_type from gl_account
+      where client = ${client} and chart_of_accounts = ${company.chart_of_accounts}
+        and reconciliation_type in ('CUSTOMERS', 'VENDORS')
+        ${s.accountFrom ? sql`and account_number between ${s.accountFrom} and ${s.accountTo || s.accountFrom}` : sql``}
+      order by account_number
+    `) as unknown as Array<{ account_number: string; reconciliation_type: string }>;
+    if (accountRows.length === 0) {
+      fail('No reconciliation accounts stand in the company chart for customers or vendors.', 'Configure reconciliation accounts (FS00), then execute the tie-out.');
+    }
+    const accounts = accountRows.map((a) => a.account_number);
+    const accountList = sql.join(accounts.map((a) => sql`${a}`), sql`, `);
+
+    const totalRows = await tx.execute(sql`
+      select l.gl_account,
+        coalesce(sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end), 0)::text as gl_total,
+        coalesce(sum(case when l.business_partner is not null
+                          then case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end end), 0)::text as sub_total,
+        coalesce(sum(case when l.business_partner is null
+                          then case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end end), 0)::text as partnerless_amount,
+        count(*)::int as lines,
+        count(case when l.business_partner is null then 1 end)::int as partnerless_lines
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+      where l.client = ${client} and l.company_code = ${s.companyCode}
+        and l.fiscal_year = ${s.fiscalYear} and e.posting_period <= ${s.periodTo}
+        and e.status = 'POSTED' and l.gl_account in (${accountList})
+      group by l.gl_account
+    `) as unknown as Array<{
+      gl_account: string; gl_total: string; sub_total: string;
+      partnerless_amount: string; lines: number; partnerless_lines: number;
+    }>;
+    const totalsOf = new Map(totalRows.map((r) => [r.gl_account, r]));
+
+    const partnerRows = await tx.execute(sql`
+      select l.gl_account, l.business_partner,
+        sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end)::text as total,
+        count(*)::int as lines
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+      where l.client = ${client} and l.company_code = ${s.companyCode}
+        and l.fiscal_year = ${s.fiscalYear} and e.posting_period <= ${s.periodTo}
+        and e.status = 'POSTED' and l.gl_account in (${accountList})
+        and l.business_partner is not null
+      group by l.gl_account, l.business_partner
+      order by l.gl_account, l.business_partner
+    `) as unknown as Array<{ gl_account: string; business_partner: string; total: string; lines: number }>;
+
+    // Partners posting away from their assigned reconciliation account.
+    const segmentRows = await tx.execute(sql`
+      select partner_number, reconciliation_account from customer_company_code
+      where client = ${client} and company_code = ${s.companyCode} and reconciliation_account is not null
+      union
+      select partner_number, reconciliation_account from supplier_company_code
+      where client = ${client} and company_code = ${s.companyCode} and reconciliation_account is not null
+    `) as unknown as Array<{ partner_number: string; reconciliation_account: string }>;
+    const assignedOf = new Map(segmentRows.map((r) => [r.partner_number, r.reconciliation_account]));
+    const warnings: string[] = [];
+    const misassigned = new Set<string>();
+    for (const p of partnerRows) {
+      const assigned = assignedOf.get(p.business_partner);
+      if (assigned && assigned !== p.gl_account) {
+        misassigned.add(`${p.business_partner} posts on ${p.gl_account} but its company segment assigns ${assigned}`);
+      }
+    }
+    for (const m of [...misassigned].sort()) warnings.push(`Partner ${m}.`);
+
+    const rows: SubledgerTieRow[] = [];
+    let partnerlessLines = 0;
+    let partnerlessAmount = 0;
+    for (const account of accountRows) {
+      const t = totalsOf.get(account.account_number);
+      const glTotal = t ? Number(fromScaled(toScaled(t.gl_total))) : 0;
+      const subledgerTotal = t ? Number(fromScaled(toScaled(t.sub_total))) : 0;
+      const difference = glTotal - subledgerTotal;
+      partnerlessLines += t?.partnerless_lines ?? 0;
+      partnerlessAmount += t ? Number(fromScaled(toScaled(t.partnerless_amount))) : 0;
+      rows.push({
+        kind: 'ACCOUNT', key: account.account_number,
+        companyCode: s.companyCode, accountNumber: account.account_number,
+        reconciliationType: account.reconciliation_type,
+        glTotal, subledgerTotal, difference,
+        status: difference === 0 ? 'TIED' : 'EXCEPTION',
+        lineCount: t?.lines ?? 0,
+      });
+      for (const p of partnerRows.filter((r) => r.gl_account === account.account_number)) {
+        rows.push({
+          kind: 'PARTNER', key: `${account.account_number}|${p.business_partner}`,
+          companyCode: s.companyCode, accountNumber: account.account_number,
+          reconciliationType: account.reconciliation_type,
+          businessPartner: p.business_partner,
+          glTotal: 0, subledgerTotal: Number(fromScaled(toScaled(p.total))),
+          difference: null, status: null, lineCount: p.lines,
+        });
+      }
+    }
+    if (partnerlessLines > 0) {
+      warnings.push(`${partnerlessLines} partnerless line(s) totalling ${partnerlessAmount.toFixed(2)} ${company.currency} stand on reconciliation accounts; a reconciliation account should only move through its subledger.`);
+    }
+
+    return {
+      companyCode: s.companyCode, currency: company.currency,
+      fiscalYear: s.fiscalYear, periodTo: s.periodTo, ledger: TIE_LEDGER,
+      rows, partnerlessLines, partnerlessAmount, warnings, calculatedAt,
+    };
+  });
+}
