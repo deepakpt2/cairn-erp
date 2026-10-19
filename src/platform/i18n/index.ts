@@ -2380,6 +2380,8 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'assetAcquire.title': 'Asset Acquisition',
+  'assetAcquire.subtitle': 'Acquire an asset against an offsetting account, without a vendor: simulate the determined posting first, then post it through the accounting engine in one balanced document.',
   'assetCreate.title': 'Create Asset',
   'assetCreate.subtitle': 'Asset master data only: creating an asset posts no acquisition, starts no depreciation, and moves no account.',
   'assetChange.title': 'Change Asset',
