@@ -2,7 +2,8 @@ import { can, requireSession } from '@/platform/auth/current';
 import { listControllingAreas } from '@/modules/foundation/controlling-area-maintenance';
 import {
   DEFAULT_MAX_HITS, LEADING_LEDGER, PROFIT_CENTER_REPORT_CAPABILITY,
-  type ProfitCenterReportSelection,
+  listProfitCenterLines, ProfitCenterReportError,
+  type ProfitCenterReportResult, type ProfitCenterReportSelection,
 } from '@/modules/foundation/profit-center-report';
 import ProfitCenterReportShell from './ProfitCenterReportShell';
 
@@ -34,12 +35,25 @@ export default async function ProfitCenterReportPage({
     maxHits: Number(get('maxHits', String(DEFAULT_MAX_HITS))) || DEFAULT_MAX_HITS,
   };
 
+  let result: ProfitCenterReportResult | null = null;
+  let reportError: string | null = null;
+  if (can(session, `${PROFIT_CENTER_REPORT_CAPABILITY}.read`)) {
+    try {
+      result = await listProfitCenterLines({ client: session.user.client, selection: initialSelection });
+    } catch (error) {
+      reportError = error instanceof ProfitCenterReportError
+        ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)
+        : 'The report could not be calculated.';
+    }
+  }
+
   return (
     <ProfitCenterReportShell
       canUse={can(session, `${PROFIT_CENTER_REPORT_CAPABILITY}.read`)}
       areas={controllingAreas}
       selection={initialSelection}
-      result={null}
+      result={result}
+      reportError={reportError}
     />
   );
 }

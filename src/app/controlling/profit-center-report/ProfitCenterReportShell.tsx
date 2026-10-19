@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { ProfitCenterReportResult, ProfitCenterReportSelection } from '@/modules/foundation/profit-center-report';
 
 /**
@@ -114,7 +115,7 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
             ) : (result?.lines ?? []).map((line) => (
               <tr key={`${line.documentNumber}|${line.fiscalYear}|${line.lineNumber}`}>
                 <td>{line.companyCode}</td>
-                <td className="code">{line.displayNumber || line.documentNumber}</td>
+                <td className="code"><Link href={`/finance/journal?document=${encodeURIComponent(line.documentNumber)}`}>{line.displayNumber || line.documentNumber}</Link></td>
                 <td>{line.lineNumber}</td>
                 <td>{line.postingDate}</td>
                 <td>{line.documentDate}</td>
