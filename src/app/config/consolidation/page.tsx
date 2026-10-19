@@ -1,6 +1,7 @@
 import { can, requireSession } from '@/platform/auth/current';
 import {
   CONSOLIDATION_CAPABILITY, CONSOLIDATION_FOLDERS,
+  getConsolidationWorkbench, listConsolidationAreas,
   type ConsolidationFolder,
 } from '@/modules/finance/consolidation-workbench';
 import ConsolidationWorkbenchShell from './ConsolidationWorkbenchShell';
@@ -23,6 +24,10 @@ export default async function ConsolidationWorkbenchPage({
     ? (folderRaw as ConsolidationFolder)
     : 'DATA_BASIS';
 
+  const areas = await listConsolidationAreas(session.user.client);
+  const areaKey = get('area').toUpperCase() || areas[0]?.area || '';
+  const view = areaKey ? await getConsolidationWorkbench(session.user.client, areaKey) : null;
+
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
@@ -34,10 +39,11 @@ export default async function ConsolidationWorkbenchPage({
       </header>
       <ConsolidationWorkbenchShell
         canUse={can(session, `${CONSOLIDATION_CAPABILITY}.read`) || can(session, CONSOLIDATION_CAPABILITY)}
-        areas={[]}
-        area={get('area').toUpperCase()}
+        canConfigure={can(session, CONSOLIDATION_CAPABILITY)}
+        areas={areas}
+        area={areaKey}
         folder={folder}
-        view={null}
+        view={view}
       />
     </div>
   );
