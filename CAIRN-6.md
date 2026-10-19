@@ -316,6 +316,10 @@ Deferred by name: retirement with proceeds or a customer (ABAVN revenue variants
 
 **B-597.** Stage 3 of R-141. Simulate and post share one judge: company configured, asset standing and ACTIVE (RETIRED and deactivated refused by name), full class determination (recon, accumulated depreciation, loss — each named when missing), transaction type an active retirement-without-proceeds, document type configured, and values derived from ACTIVE records with the currency judged against the standing acquisition currency. The basis is unambiguous: PERCENT of the remaining retireable acquisition value, AMOUNT as an acquisition-value amount bounded by the remainder, COMPLETE as the remainder; accumulated depreciation reverses proportionally (zero until the depreciation run stands, stated openly in the preview) and the loss is the difference. Posting runs under the asset's advisory and row locks with request-key replay first, posts credit-asset / debit-depreciation / debit-loss through the engine, records the retirement value record in the same commit, and completes the asset to RETIRED at the value date when its value is fully retired. The asset-aware reversal restores ACTIVE; the FB08-equivalent now refuses retirement documents too. The guided screen is live with an asset selection carrying derived book values, controlled entry fields (the React form-action reset lesson of SCR-092), and the complete-retirement warning. Same-stage bookkeeping: B-597 / §26.613 / §30 row 2.431.
 
+## §26.614 — SCR-093 stage 4: capability, ABAVN alias, navigation
+
+**B-598.** Seed grows by one capability (FIN.ASSET.RETIRE, 127 total) and by the ABAVN alias term for the retirement screen; the asset list gains the retire entry. Seeded twice, idempotent. Same-stage bookkeeping: B-598 / §26.614 / §30 row 2.432.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -378,3 +382,4 @@ Deferred by name: retirement with proceeds or a customer (ABAVN revenue variants
 | 2.429 | 2026-10-19 | **SCR-093 stage 1 published (B-595, §26.611).** ABAVN retirement shell stands at `/finance/assets/retire` with the scope matrix and the complete-retirement warning; module vocabulary committed, service deferred to stage 3. | Agent |
 | 2.430 | 2026-10-19 | **SCR-093 stage 2 published (B-596, §26.612).** Retirement determination columns, RETIRED lifecycle state, RETIREMENT transaction kind and the `asset_retirement` value record stand (migration 0101, 164 total); standard determination wired. Service follows in stage 3. | Agent |
 | 2.431 | 2026-10-19 | **SCR-093 stage 3 published (B-597, §26.613).** Retirement service stands: shared simulate/post judges over derived values, atomic engine write-off with the retirement record and RETIRED completion, asset-aware reversal with FB08 guarded; screens live. Supporting seed follows in stage 4. | Agent |
+| 2.432 | 2026-10-19 | **SCR-093 stage 4 published (B-598, §26.614).** FIN.ASSET.RETIRE capability (127) and the ABAVN alias seed; the asset list exposes retirement. Acceptance follows in stage 5. | Agent |

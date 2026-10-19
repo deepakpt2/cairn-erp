@@ -2380,6 +2380,7 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'assetList.retire': 'Retire…',
   'assetList.acquire': 'Acquire…',
   'assetRetire.title': 'Asset Retirement',
   'assetRetire.subtitle': 'Retire an asset by scrapping, without proceeds: simulate the determined write-off first, then post it through the accounting engine in one balanced document.',
