@@ -349,6 +349,10 @@ Deferred by name: unplanned/extraordinary depreciation transactions, area-specif
 
 **B-603.** Stage 3 of R-142. One calculation serves test and live runs: per asset × area, the depreciable base derives from ACTIVE acquisitions less ACTIVE retirements, straight-line charges base/life-months, declining balance charges book value × 2/life-months, capped at the remaining book value, with start dates, elapsed life, already-posted periods and retired/deactivated assets standing as named item outcomes. A live run refuses whole on any failed determination (nothing posts partially; the FAILED header is recorded after rollback so a restart can reference it), serializes per company/period, posts one grouped engine document (debit class expense at the asset's current cost centre, credit class accumulated depreciation), and upserts the posted-depreciation records the repeat run adjusts against — and SCR-093's retirement now reads that same record for its proportional depreciation reversal, closing the dependency recorded at B-599. Run types: planned/repeat/restart execute; unplanned is refused by name toward its extraordinary-transaction round. The screen is live with controlled fields, explicit live confirmation, the execution log, recent runs and document drill-through. Same-stage bookkeeping: B-603 / §26.619 / §30 row 2.437.
 
+## §26.620 — SCR-094 stage 4: capability, AFAB alias, navigation
+
+**B-604.** Seed grows by one capability (FIN.ASSET.DEPRECIATE, 128 total) and by the AFAB alias term for the depreciation run screen; the asset list gains the depreciation-run entry. Seeded twice, idempotent. Same-stage bookkeeping: B-604 / §26.620 / §30 row 2.438.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -417,3 +421,4 @@ Deferred by name: unplanned/extraordinary depreciation transactions, area-specif
 | 2.435 | 2026-10-19 | **SCR-094 stage 1 published (B-601, §26.617).** AFAB depreciation run shell stands at `/finance/assets/depreciate` with the run-type matrix and execution log; module vocabulary committed, service deferred to stage 3. | Agent |
 | 2.436 | 2026-10-19 | **SCR-094 stage 2 published (B-602, §26.618).** Run header/items, the posted-depreciation value record and class expense determination stand (migration 0102, 165 total). The run service follows in stage 3. | Agent |
 | 2.437 | 2026-10-19 | **SCR-094 stage 3 published (B-603, §26.619).** Depreciation run service stands: shared test/live calculation, whole-run refusal on failed determination, grouped engine posting, posted-value records feeding repeat adjustments and SCR-093 reversals; screens live with run log. Supporting seed follows in stage 4. | Agent |
+| 2.438 | 2026-10-19 | **SCR-094 stage 4 published (B-604, §26.620).** FIN.ASSET.DEPRECIATE capability (128) and the AFAB alias seed; the asset list exposes the depreciation run. Acceptance follows in stage 5. | Agent |
