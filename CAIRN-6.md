@@ -682,6 +682,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 **B-677.** Three service tests cover the monitor: one-snapshot computation (utilization, negative availability, no-record flagging, SD components null-unavailable, sorting); the exceeded/blocked/risk filters with every filter value judged; and reporting-currency conversion with the missing-rate flag (the fixture's delivered USD→EUR rate is cleared first so the missing path is genuinely under test). Browser target T892 (credit-monitor) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-677 / §26.693 / §30 row 2.511.
 
+## §26.694 — SCR-104 closed: credit exposure monitor (F.31) accepted
+
+**B-678.** R-152 stands implemented and accepted. **Suites:** full vitest 201 files, **1457/1457** (was 1453/1453; +3 monitor service tests, +1 revised browser-target registry). **Browser:** target credit-monitor (**T892**) passed against the production build — recorded customer at 80% utilization, unrecorded exposure flagged, and the record's version proving the monitor wrote nothing. **Clock:** the round opened 12:18 and closed 12:25 (7 min). The overview computes in one snapshot with aggregated-before-join exposure, judged filters, flagged missing-rate conversion, and the SD components explicitly unavailable until the sales canon stands. Deferred by R-152 itself: order/delivery/billing exposure components, export beyond standing report patterns, persisted exposure snapshots. Same-stage bookkeeping: B-678 / §26.694 / §30 row 2.512.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -824,3 +828,4 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 | 2.509 | 2026-10-19 | **SCR-104 stage 3 published (B-675, §26.691).** The monitor computes snapshot-consistent exposure over records and open AR with judged filters and flagged conversion; the overview is wired. Supporting seed follows in stage 4. | Agent |
 | 2.510 | 2026-10-19 | **SCR-104 stage 4 published (B-676, §26.692).** FIN.CREDIT.MONITOR capability (137) and the F.31 alias term seed; monitor navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.511 | 2026-10-19 | **SCR-104 stage 5 published (B-677, §26.693).** Three monitor service tests pass (snapshot computation, judged filters, flagged conversion); browser target T892 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.512 | 2026-10-19 | **SCR-104 CLOSED (B-678, §26.694).** FIN.CREDIT.MONITOR accepted: read-only snapshot exposure overview with flagged no-record customers (suite 1457/1457; browser T892). Next SCR: FIN.CREDIT.RELEASE (VKM3); its package is awaited. | Agent |
