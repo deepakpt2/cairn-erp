@@ -1086,6 +1086,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-775.** Seed carries the `FIN.RPT.CONSOLIDATE.STMT` capability (FIN / DISPLAY / posting false) and its registry term at `/finance/consolidated-statements`; the term carries no SAP alias (no separate classic statements transaction stands — CX20/UCMON remain solely on FIN.CONSOLIDATE). Seeded twice idempotent — catalogue 150 capabilities / 123 terms / 143 aliases. Acceptance follows in stage 5. Same-stage bookkeeping: B-775 / §26.791 / §30 row 2.609.
 
+## §26.792 — SCR-118 stage 5: service tests and browser target
+
+**B-776.** `tests/consolidated-statements.test.ts` (3 green) proves the undefined-period refusal, FS classification and per-unit aggregation (850 year-to-date, −150 period movement, 500 comparison), the zero balance check with the named unmapped line, income-statement sections, and that the report persists nothing; browser target T878 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-776 / §26.792 / §30 row 2.610.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1326,6 +1330,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.607 | 2026-10-19 | **SCR-118 stage 2 published (B-773, §26.789).** Index check: journal, mapping and CX20 status paths carry the read; no migration (183 stand). The statement service follows in stage 3. | Agent |
 | 2.608 | 2026-10-19 | **SCR-118 stage 3 published (B-774, §26.790).** The statement service classifies FS items, aggregates mapped journal data per unit with period/comparative columns, names unmapped lines and displays CX20 standing; the page executes live. Supporting seed follows in stage 4. | Agent |
 | 2.609 | 2026-10-19 | **SCR-118 stage 4 published (B-775, §26.791).** FIN.RPT.CONSOLIDATE.STMT capability and term stand (150/123/143; no SAP alias). Acceptance follows in stage 5. | Agent |
+| 2.610 | 2026-10-19 | **SCR-118 stage 5 published (B-776, §26.792).** Three statement service tests pass and browser target T878 stands registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
