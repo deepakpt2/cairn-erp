@@ -590,6 +590,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-657.** The carryforward vocabulary stands in `src/modules/finance/carryforward.ts` (ledger vocabulary `0L`, run/result statuses, selection and view shapes), `/finance/carryforward` renders the run sheet (selection, latest run, run history, result protocol) with nothing executing yet, and the account-determination catalogue gains the `RETAINED_EARNINGS` posting event (balance-sheet kind) that stage 3 resolves per chart. Same-stage bookkeeping: B-657 / §26.673 / §30 row 2.491.
 
+## §26.674 — SCR-102 stage 2: carryforward run protocol (migration 0110)
+
+**B-658.** Migration `0110_carryforward.sql` (173 total, applied) creates only the protocol structures R-150 permits: `carryforward_run` (repeat executions keyed by run id, target = source + 1 enforced, test flag, totals, transfer document references, actor and timestamps) and `carryforward_result` (per company/account/category/profit-centre/currency closing and opening balances, retained-earnings account and transfer document where applicable, CARRIED/TRANSFERRED/EXCEPTION status). Openings themselves stay derived from the journal — no balance-summary table. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-658 / §26.674 / §30 row 2.492.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -712,3 +716,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.489 | 2026-10-19 | **SCR-101 CLOSED (B-655, §26.671).** FIN.CLOSE.COCKPIT accepted: gated task-list closing cycles over registered handlers (suite 1445/1445; browser T895). Next SCR: FIN.CLOSE.CARRYFORWARD (FAGLGVTR); its package is awaited. | Agent |
 | 2.490 | 2026-10-19 | **SCR-102 contract approved (B-656, §26.672, R-150).** FIN.CLOSE.CARRYFORWARD: derived openings recorded per account, P&L closed by a judged transfer document to determined retained earnings, delta-only repeat runs, test-first. Stage 1 (vocabulary + run sheet shell) follows. | Owner + Agent |
 | 2.491 | 2026-10-19 | **SCR-102 stage 1 published (B-657, §26.673).** Carryforward vocabulary, the run-sheet shell and the RETAINED_EARNINGS determination event stand. Schema follows in stage 2. | Agent |
+| 2.492 | 2026-10-19 | **SCR-102 stage 2 published (B-658, §26.674).** Migration 0110 (173 total) stands: run header and result protocol, repeatable by construction. The execution service follows in stage 3. | Agent |

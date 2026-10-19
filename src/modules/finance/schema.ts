@@ -603,6 +603,62 @@ export const closingTaskEvent = pgTable('closing_task_event', {
 
 
 /**
+ * Balance carryforward protocol (SCR-102 / R-150): one row per
+ * execution (test runs included, repeats allowed) and the
+ * per-account result protocol. Openings themselves derive from
+ * the posted journal; no balance-summary table exists.
+ */
+export const carryforwardRun = pgTable('carryforward_run', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  ledger: varchar('ledger', { length: 2 }).notNull(),
+  sourceFiscalYear: integer('source_fiscal_year').notNull(),
+  targetFiscalYear: integer('target_fiscal_year').notNull(),
+  companyCodes: varchar('company_codes', { length: 240 }).notNull(),
+  isTestRun: boolean('is_test_run').notNull().default(true),
+  status: varchar('status', { length: 12 }).notNull().default('RUNNING'),
+  accountsProcessed: integer('accounts_processed').notNull().default(0),
+  carriedAmount: numeric('carried_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  plTransferAmount: numeric('pl_transfer_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  errorCount: integer('error_count').notNull().default(0),
+  transferDocuments: varchar('transfer_documents', { length: 480 }),
+  executedBy: varchar('executed_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  index('carryforward_run_scope_idx').on(t.client, t.ledger, t.targetFiscalYear, t.status, t.startedAt),
+  check('carryforward_run_status_ck', sql`${t.status} in ('RUNNING', 'COMPLETED', 'FAILED')`),
+  check('carryforward_run_years_ck', sql`${t.targetFiscalYear} = ${t.sourceFiscalYear} + 1`),
+]);
+
+export const carryforwardResult = pgTable('carryforward_result', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  accountNumber: varchar('account_number', { length: 10 }).notNull(),
+  accountCategory: varchar('account_category', { length: 16 }).notNull(),
+  profitCenter: varchar('profit_center', { length: 20 }).notNull().default(''),
+  currency: char('currency', { length: 3 }).notNull(),
+  sourceClosingBalance: numeric('source_closing_balance', { precision: 23, scale: 4 }).notNull(),
+  targetOpeningBalance: numeric('target_opening_balance', { precision: 23, scale: 4 }).notNull(),
+  retainedEarningsAccount: varchar('retained_earnings_account', { length: 10 }),
+  transferDocumentNumber: varchar('transfer_document_number', { length: 40 }),
+  status: varchar('status', { length: 12 }).notNull(),
+  detail: varchar('detail', { length: 240 }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.companyCode, t.accountNumber, t.profitCenter, t.currency] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [carryforwardRun.client, carryforwardRun.runId],
+  }).onDelete('cascade'),
+  check('carryforward_result_category_ck', sql`${t.accountCategory} in ('BALANCE_SHEET', 'PL_STATEMENT')`),
+  check('carryforward_result_status_ck', sql`${t.status} in ('CARRIED', 'TRANSFERRED', 'EXCEPTION')`),
+]);
+
+
+
+/**
  * Payment run (SCR-063 / R-111). Parameters with company and method
  * children, the proposal with its named exceptions, and payment
  * documents as the execution's retained evidence.
