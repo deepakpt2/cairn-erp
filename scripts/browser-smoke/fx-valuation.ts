@@ -32,7 +32,7 @@ export async function fxValuationRun(ctx: Context) {
     await tx.execute(sql`
       update gl_account set account_type = 'ASSET', gl_account_type = 'BALANCE_SHEET',
         is_balance_sheet = true, is_open_item_managed = true
-      where client = ${client} and account_number = '113000'
+      where client = ${client} and account_number = '101000'
     `);
     await tx.execute(sql`
       insert into exchange_rate (client, rate_type, from_currency, to_currency, valid_from, rate, created_by)
@@ -47,7 +47,7 @@ export async function fxValuationRun(ctx: Context) {
     currency: 'EUR', localCurrency: 'KWD', exchangeRate: '0.27',
     postedBy: 'browser.admin', transactionCode: 'FIN.JOURNAL.POST',
     lines: [
-      { glAccount: '113000', debitCredit: 'S', amount: '1000.00' },
+      { glAccount: '101000', debitCredit: 'S', amount: '1000.00' },
       { glAccount: '400000', debitCredit: 'H', amount: '1000.00' },
     ],
   }));
@@ -61,7 +61,7 @@ export async function fxValuationRun(ctx: Context) {
   await page.goto(`${base}${VALUATION}?run=1&requestKey=browser-fx-1&companyCode=1000&valuationArea=LOCAL&valuationKeyDate=2026-04-30&postingDate=2026-04-30&fiscalYear=2026&valuationMethod=AVERAGE&documentType=SA&openItems=on&balances=on&testRun=on`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Foreign Currency Valuation', exact: true }).waitFor();
-  await page.getByText('113000').first().waitFor();
+  await page.getByText('101000').first().waitFor();
   await page.getByText('GAIN').first().waitFor();
   await page.getByText('300.00').first().waitFor();
   console.log('  ✓ the protocol values the item at 300 (rate 0.30) and classifies the gain');
