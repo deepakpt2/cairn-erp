@@ -1058,6 +1058,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-768.** Seed carries the `FIN.CONSOLIDATE` capability (FIN / EXECUTE / posting false) and its registry term at `/finance/consolidation-monitor` with aliases CX20 and UCMON living on the one term; UCWB remains solely on FIN.RPT.CONSOLIDATE. Seeded twice idempotent — catalogue 149 capabilities / 122 terms / 143 aliases. Acceptance follows in stage 5. Same-stage bookkeeping: B-768 / §26.784 / §30 row 2.602.
 
+## §26.785 — SCR-117 stage 5: service tests and browser target
+
+**B-769.** `tests/consolidation-monitor.test.ts` (4 green) proves the undefined-period refusal, parent-before-child gating in the same execution mode, warning-policy blocking and allowance, test success never satisfying an update prerequisite, task-group stop-on-error, deferred currency-translation blocking, preserved repeated attempts, duplicate-running refusal, cancellation recovery, and that no journal posts; browser target T879 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-769 / §26.785 / §30 row 2.603.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1291,6 +1295,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.600 | 2026-10-19 | **SCR-117 stage 2 published (B-766, §26.782).** Migration 0120 (183 total): immutable execution attempts, append-only logs and separate current task status stand, with a duplicate-running guard. The monitor service follows in stage 3. | Agent |
 | 2.601 | 2026-10-19 | **SCR-117 stage 3 published (B-767, §26.783).** The CX20 service derives UCWB task order, revalidates mode-specific prerequisites, executes standing journal collection/validation adapters, records blocked unsupported engines, and posts live through separate Test/Update authorities. Supporting seed follows in stage 4. | Agent |
 | 2.602 | 2026-10-19 | **SCR-117 stage 4 published (B-768, §26.784).** FIN.CONSOLIDATE capability and CX20/UCMON aliases stand (149/122/143). Acceptance follows in stage 5. | Agent |
+| 2.603 | 2026-10-19 | **SCR-117 stage 5 published (B-769, §26.785).** Four CX20 service tests pass and browser target T879 stands registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
