@@ -386,6 +386,9 @@ export async function postParkedJournal(input: {
       transactionCode: 'FIN.JOURNAL.POST',
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new ParkedJournalError(error.message, error.remedy);
+      if (error instanceof Error && 'remedy' in error) {
+        throw new ParkedJournalError(error.message, (error as { remedy?: string }).remedy);
+      }
       throw error;
     });
     await tx.update(parkedJournalHeader).set({
