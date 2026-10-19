@@ -77,12 +77,65 @@ export default function CostCenterReportShell({ canUse, areas, selection, result
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan={9} className="text-ink-soft">{result ? '' : 'Choose the selection and execute the report.'}</td>
-            </tr>
+            {result === null && !reportError ? (
+              <tr>
+                <td colSpan={9} className="text-ink-soft">Choose the selection and execute the report.</td>
+              </tr>
+            ) : (result?.rows ?? []).map((row) => (
+              <tr key={row.key} className={row.kind === 'GROUP' ? 'font-semibold' : undefined}>
+                <td>
+                  <span style={{ paddingInlineStart: `${row.depth * 1.25}rem` }}>{row.label}</span>
+                </td>
+                <td className="text-end">{row.actual.toFixed(2)}</td>
+                <td className="text-end">{row.plan === null ? '—' : row.plan.toFixed(2)}</td>
+                <td className="text-end">{row.variance === null ? '—' : row.variance.toFixed(2)}</td>
+                <td className="text-end">{row.variancePercent === null ? '—' : `${row.variancePercent.toFixed(1)}%`}</td>
+                <td>{row.status === null ? '—' : row.status === 'ON_PLAN' ? 'On plan' : row.status === 'FAVORABLE' ? 'Favorable' : 'Unfavorable'}</td>
+                <td className="text-end">{row.actualYtd.toFixed(2)}</td>
+                <td className="text-end">{row.planYtd === null ? '—' : row.planYtd.toFixed(2)}</td>
+                <td>{result?.currency ?? ''}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </section>
+
+      {result && result.warnings.length > 0 ? (
+        <section className="panel p-4" aria-label="Report warnings">
+          <ul className="list-disc space-y-1 ps-5 text-sm text-ink-soft">
+            {result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </section>
+      ) : null}
+
+      {result && result.activities.length > 0 ? (
+        <section className="panel overflow-x-auto" aria-label="Planned activity">
+          <table className="grid-table min-w-[40rem]">
+            <thead>
+              <tr>
+                <th>Cost Center</th>
+                <th>Activity</th>
+                <th className="text-end">Planned Quantity</th>
+                <th className="text-end">Fixed Price</th>
+                <th className="text-end">Variable Price</th>
+                <th className="text-end">Per</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.activities.map((activity) => (
+                <tr key={`${activity.costCenter}|${activity.activityType}`}>
+                  <td>{activity.costCenter}</td>
+                  <td>{activity.activityType}</td>
+                  <td className="text-end">{activity.plannedQuantity}</td>
+                  <td className="text-end">{activity.fixedPrice.toFixed(2)}</td>
+                  <td className="text-end">{activity.variablePrice.toFixed(2)}</td>
+                  <td className="text-end">{activity.priceUnit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
     </div>
   );
 }
