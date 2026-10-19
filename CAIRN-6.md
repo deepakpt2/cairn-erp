@@ -101,6 +101,10 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 
 **B-555.** Stage 3 of R-134. `createVendorDownPaymentRequest` judges the vendor's extension (the payment block deliberately not judged — it is a disbursement control), resolves the AP request indicator to its configured target, validates the entered KA document type against the tenant's configured types and the posting period for the vendor account type, draws the VENDDPREQ number, and writes the noted item with no journal. `applyVendorRequestFulfillment` runs inside the F-48 payment's transaction under its lock — request re-read for update, vendor, company, target indicator and currency judged, the allocation defaulting to the lesser of the payment's unallocated part and the remainder — linking the payment's debit line on the alternative account while the status advances. Both screens are live, and the payment form gained its optional request and fulfill-amount fields. Neighbouring down-payment suites (9 tests) stand green. Typecheck clean. Same-stage bookkeeping: B-555 / §26.571 / §30 row 2.389.
 
+## §26.572 — SCR-086 stage 4: vendor request capability and number-range object
+
+**B-556.** Stage 4 of R-134. The capability `FIN.AP.DOWNPAYMENT.REQUEST` (F-47 as search alias) joins the seed with its full-parity term — **119 capabilities / 68 config activities / 93 terms / 102 aliases**. `VENDDPREQ` joins the number-range object catalogue, the object roster and the tenant builder's default ranges (prefix VR), as CUSTDPREQ did for customers; standing tenants define the interval in number-range maintenance. The AP request indicators reuse the SCR-085 special G/L target column, so no further configuration work stands. Typecheck clean. Same-stage bookkeeping: B-556 / §26.572 / §30 row 2.390.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -121,3 +125,4 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 | 2.387 | 2026-10-19 | **SCR-086 stage 1 published (B-553, §26.569).** The inert F-47 request screen: request form and open-requests grid rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
 | 2.388 | 2026-10-19 | **SCR-086 stage 2 published (B-554, §26.570).** Vendor request + fulfillment tables stand (migration 0096, 159 migrations) under composite foreign keys; the AP side reuses the SCR-085 target column. | Agent |
 | 2.389 | 2026-10-19 | **SCR-086 stage 3 published (B-555, §26.571).** Vendor request service stands (noted item, VENDDPREQ number, judged period and KA type; payment block not judged at request), F-48 fulfills requests under its lock, and both screens are live. Supporting seed follows in stage 4. | Agent |
+| 2.390 | 2026-10-19 | **SCR-086 stage 4 published (B-556, §26.572).** Capability F-47 seeded (119 capabilities / 93 terms / 102 aliases); VENDDPREQ joins the number-range catalogue and tenant defaults. Tests and browser acceptance follow in stage 5. | Agent |
