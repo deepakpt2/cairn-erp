@@ -252,13 +252,14 @@ export async function calculateBalanceSheet(input: {
       }
       const assignment = assignmentOf.get(figure.account);
       const sign = assignment?.inverted ? -1 : 1;
+      const signed = (v: number) => (v === 0 ? 0 : v * sign); // never present -0
       const row: BalanceSheetAccountRow = {
         accountNumber: figure.account, accountName: info?.name ?? '',
-        openingBalance: Number(fromScaled(openingOf(figure))) * sign,
+        openingBalance: signed(Number(fromScaled(openingOf(figure)))),
         debitTurnover: Number(fromScaled(figure.debitRange)),
         creditTurnover: Number(fromScaled(figure.creditRange)),
-        balance: Number(fromScaled(closingOf(figure))) * sign,
-        comparativeBalance: compYear ? Number(fromScaled(comparativeOf(figure))) * sign : null,
+        balance: signed(Number(fromScaled(closingOf(figure)))),
+        comparativeBalance: compYear ? signed(Number(fromScaled(comparativeOf(figure)))) : null,
       };
       if (!assignment) {
         if (figure.opening !== 0n || figure.debitRange !== 0n || figure.creditRange !== 0n) unassigned.push(row);
