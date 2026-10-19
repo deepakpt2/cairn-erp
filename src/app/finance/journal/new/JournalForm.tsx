@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useMemo, useState } from 'react';
+import { useActionState, useEffect, useMemo, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { toScaled, fromScaled } from '@/platform/posting/decimal';
 import { postJournalAction, type PostState } from './actions';
@@ -53,6 +53,12 @@ export function JournalForm({ companies, types, accounts }: {
   const [state, action, pending] = useActionState(postJournalAction, INITIAL);
   const [requestKey] = useState(() => `fb50-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`);
   const [confirming, setConfirming] = useState(false);
+  // A completed post closes the confirmation panel; the same form
+  // (and request key) may be reviewed again, and the server will
+  // return the original document rather than posting twice.
+  useEffect(() => {
+    if (state.ok && state.documentNumber) setConfirming(false);
+  }, [state]);
 
   const today = new Date().toISOString().slice(0, 10);
   const [postingDate, setPostingDate] = useState(today);
