@@ -2417,6 +2417,7 @@ const en: Catalogue = {
   'journal.balanced': 'Document balances. Ready to post.',
   'journal.unbalanced': 'Document does not balance. Difference {difference}.',
   'journal.taxReport': 'Tax return…',
+  'journal.fxValuation': 'FX valuation…',
   'fxValuation.title': 'Foreign Currency Valuation',
   'fxValuation.subtitle': 'Revalue foreign-currency open items and balances at the key-date rate. Test runs change nothing; a live run posts one balanced adjustment document through the posting engine and keeps the full protocol.',
   'fxValuation.companyCode': 'Company Code',
