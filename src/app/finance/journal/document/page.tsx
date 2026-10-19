@@ -2,7 +2,10 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { DOCUMENT_FLOW_CAPABILITY } from '@/modules/finance/document-display';
+import {
+  DOCUMENT_FLOW_CAPABILITY, DocumentDisplayError, getJournalDocument,
+  resolveDocumentNumber, type JournalDocumentView,
+} from '@/modules/finance/document-display';
 import DocumentDisplay from './DocumentDisplay';
 
 export const dynamic = 'force-dynamic';
@@ -11,11 +14,43 @@ const ROUTE = '/finance/journal/document';
 
 /**
  * Accounting document display with flow (SCR-090 / FB03 as a
- * search alias only). Stage 1 shell: retrieval lands in stage 3
- * of R-138.
+ * search alias only).
  */
-export default async function JournalDocumentPage() {
+export default async function JournalDocumentPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await requireSession(ROUTE);
+  const params = await searchParams;
+  const canDisplay = can(session, DOCUMENT_FLOW_CAPABILITY);
+  let document: JournalDocumentView | null = null;
+  let parkedNumber: string | null = null;
+  let notFound = false;
+  let error: string | null = null;
+  if (params.document && canDisplay) {
+    try {
+      let company = params.company ?? '';
+      let year = params.year ? Number(params.year) : NaN;
+      if (!params.company || !params.year) {
+        const resolved = await resolveDocumentNumber(session.user.client, params.document);
+        if (resolved) {
+          company = resolved.companyCode;
+          year = resolved.fiscalYear;
+        }
+      }
+      if (company && Number.isInteger(year)) {
+        const lookup = await getJournalDocument(session.user.client, {
+          documentNumber: params.document, companyCode: company, fiscalYear: year,
+        });
+        if (lookup.kind === 'FOUND') document = lookup.document;
+        else if (lookup.kind === 'PARKED') parkedNumber = lookup.parkedNumber;
+        else notFound = true;
+      } else {
+        notFound = true;
+      }
+    } catch (caught) {
+      error = caught instanceof DocumentDisplayError ? caught.message : 'The document could not be read.';
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -30,11 +65,14 @@ export default async function JournalDocumentPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('documentDisplay.subtitle')}</p>
       </header>
 
+      {error && (
+        <p role="alert" className="rounded-card border border-line bg-surface p-4 text-sm text-red-700 shadow-card">{error}</p>
+      )}
       <DocumentDisplay
-        document={null}
-        parkedNumber={null}
-        notFound={false}
-        canDisplay={can(session, DOCUMENT_FLOW_CAPABILITY)}
+        document={document}
+        parkedNumber={parkedNumber}
+        notFound={notFound}
+        canDisplay={canDisplay}
       />
     </div>
   );

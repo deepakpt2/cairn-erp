@@ -121,7 +121,7 @@ export default function ItemsForm({ result, error, canList }: {
                       <td className="px-2 py-2">{row.companyCode}</td>
                       <td className="px-2 py-2">
                         <Link className="text-accent hover:underline"
-                          href={`/finance/journal?document=${encodeURIComponent(row.documentNumber)}&year=${row.fiscalYear}`}>
+                          href={`/finance/journal/document?document=${encodeURIComponent(row.documentNumber)}&company=${row.companyCode}&year=${row.fiscalYear}`}>
                           {row.documentNumber}
                         </Link>
                       </td>

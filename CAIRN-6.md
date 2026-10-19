@@ -219,6 +219,10 @@ The owner supplied the FB03 architectural review (2026-10-19); SAP codes stand a
 
 **B-578.** Stage 2 of R-138. Verified against the live database rather than assumed: `journal_entry` stands primary-keyed on (client, document_number, fiscal_year) and `journal_entry_line` on (client, document_number, fiscal_year, line_number) — precisely the composite lookup and stable line ordering the review prescribes, so the recommended index would duplicate the primary key and is **not** created. Company-code validation rides on the retrieved header, per the contract's recorded key divergence. No migration stands in this stage. Same-stage bookkeeping: B-578 / §26.594 / §30 row 2.412.
 
+## §26.595 — SCR-090 stage 3: document retrieval, flow and wired display
+
+**B-579.** Stage 3 of R-138. `getJournalDocument` retrieves by the complete supplied key — a company mismatch answers not-found-in-scope, disclosing nothing — and composes the whole document: full header with stored rate and origin, lines in stable order with every assignment and clearing state, totals judged independently in document and local currency, flow links walking the reversal chain both ways, the origin (a parked document links back to its parking screen), each line's clearing document, and previous/next navigation within company and year — plus the retained change history for `documentNumber/fiscalYear`. A parked number answers as its own lifecycle with its FV50 link. Bare-number links from older screens resolve uniquely or refuse ambiguity by name, and the FAGLL03 drill now lands on this composite display. Reversal is displayed, never performed here. Typecheck clean. Same-stage bookkeeping: B-579 / §26.595 / §30 row 2.413.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -262,3 +266,4 @@ The owner supplied the FB03 architectural review (2026-10-19); SAP codes stand a
 | 2.410 | 2026-10-19 | **SCR-090 / FB03 flow contracted (R-138, B-576, §26.592).** The standing document display is completed to the review standard: composite-key retrieval with the year never derived, full header and line assignments, per-currency totals, reversal/origin/clearing flow with change history, parked documents answered as their own lifecycle. House key divergence (company as attribute) recorded. | Agent |
 | 2.411 | 2026-10-19 | **SCR-090 stage 1 published (B-577, §26.593).** The inert FB03 display screen: composite-key lookup, full document sections rendered empty; i18n keys added. No retrieval stands yet. | Agent |
 | 2.412 | 2026-10-19 | **SCR-090 stage 2 recorded (B-578, §26.594).** Key verification: the journal primary keys already are the prescribed composite lookup; no redundant index, no migration. Retrieval follows in stage 3. | Agent |
+| 2.413 | 2026-10-19 | **SCR-090 stage 3 published (B-579, §26.595).** Composite-key retrieval with flow and change history stands behind the display; FAGLL03 drill repointed. Seed follows in stage 4. | Agent |
