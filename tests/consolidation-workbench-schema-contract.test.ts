@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('drizzle/0119_consolidation_workbench.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
-const vocabulary = readFileSync('src/modules/finance/consolidation-workbench.ts', 'utf8');
+const vocabulary = readFileSync('src/modules/finance/consolidation-vocabulary.ts', 'utf8');
 
 describe('SCR-116 stage 2: consolidation configuration schema stands aligned', () => {
   it('keys every entity tenant-first with foreign keys into canon', () => {
