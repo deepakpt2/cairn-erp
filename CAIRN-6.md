@@ -846,6 +846,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-715.** The transfer module carries the segment, selection and protocol vocabulary (capability `CFG.FIN.GLACCOUNT.TRANSFER`), and `/config/gl-accounts/transfer` renders the full §1 selection — source/target companies, chart, account range, test-run / with-company-data / overwrite policy with hidden-field checkbox semantics — over an empty protocol grid, inert until stage 3. The segment schema follows in stage 2. Same-stage bookkeeping: B-715 / §26.731 / §30 row 2.549.
 
+## §26.732 — SCR-110 stage 2: company-code segment schema and backfill
+
+**B-716.** Migration 0116 (179 total) stands: `gl_account_company` (unique per tenant/company/account, FKs to the chart account and the company), backfilled for every company standing on each chart inheriting chart-level open-item/sort/block values with the company currency (75 rows in the development tenant), plus `gl_account_transfer_run` / `gl_account_transfer_result` with run-id + per-account keys so accounts re-transfer freely in later runs; status and action checks mirror the protocol vocabulary. Drizzle mirrored. The transfer service follows in stage 3. Same-stage bookkeeping: B-716 / §26.732 / §30 row 2.550.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1026,6 +1030,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.547 | 2026-10-19 | **SCR-109 CLOSED (B-713, §26.729).** G/L reporting suite completion accepted (suite 1489/1489; browser T887). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 | 2.548 | 2026-10-19 | **SCR-110 contract approved (B-714, §26.730, R-158).** FS15 with SAP parity: the company-code G/L segment is built (backfilled, segment-first wiring), then the transfer with test runs and run protocol. Stage 1 (vocabulary + transfer shell) follows. | Owner + Agent |
 | 2.549 | 2026-10-19 | **SCR-110 stage 1 published (B-715, §26.731).** Transfer vocabulary and the FS15 shell stand. The segment schema follows in stage 2. | Agent |
+| 2.550 | 2026-10-19 | **SCR-110 stage 2 published (B-716, §26.732).** Migration 0116 (179 total): the company-code segment stands backfilled, run/result audit tables stand. The transfer service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

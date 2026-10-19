@@ -1918,3 +1918,69 @@ export const financialStatementAssignment = pgTable('financial_statement_assignm
   check('financial_statement_assignment_sign_ck', sql`${t.presentationSign} in ('NORMAL', 'INVERTED')`),
   check('financial_statement_assignment_range_ck', sql`${t.accountFrom} <= ${t.accountTo}`),
 ]);
+
+/**
+ * Company-code segment of the G/L master (SCR-110 / R-158):
+ * account currency, tax category, open-item management, sort
+ * key and posting block per company. Where a row stands it
+ * governs; the chart-level flag remains the fallback.
+ */
+export const glAccountCompany = pgTable('gl_account_company', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  accountCurrency: char('account_currency', { length: 3 }).notNull(),
+  taxCategory: varchar('tax_category', { length: 2 }),
+  isOpenItemManaged: boolean('is_open_item_managed').notNull().default(false),
+  sortKey: varchar('sort_key', { length: 3 }).notNull().default('000'),
+  isBlockedPosting: boolean('is_blocked_posting').notNull().default(false),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.glAccount] }),
+  foreignKey({
+    columns: [t.client, t.chartOfAccounts, t.glAccount],
+    foreignColumns: [glAccount.client, glAccount.chartOfAccounts, glAccount.accountNumber],
+  }).onDelete('cascade'),
+  index('gl_account_company_chart_idx').on(t.client, t.chartOfAccounts, t.glAccount),
+]);
+
+/** FS15 transfer run header (SCR-110): execution metadata. */
+export const glAccountTransferRun = pgTable('gl_account_transfer_run', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  sourceCompanyCode: varchar('source_company_code', { length: 10 }).notNull(),
+  targetCompanyCode: varchar('target_company_code', { length: 10 }).notNull(),
+  chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+  accountFrom: varchar('account_from', { length: 10 }),
+  accountTo: varchar('account_to', { length: 10 }),
+  testRun: boolean('test_run').notNull(),
+  withCompanyData: boolean('with_company_data').notNull(),
+  overwriteExisting: boolean('overwrite_existing').notNull(),
+  status: varchar('status', { length: 20 }).notNull(),
+  executedBy: varchar('executed_by', { length: 60 }).notNull(),
+  executedAt: timestamp('executed_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  check('gl_account_transfer_run_status_ck', sql`${t.status} in ('COMPLETED', 'PARTIALLY_FAILED', 'FAILED')`),
+  check('gl_account_transfer_run_companies_ck', sql`${t.sourceCompanyCode} <> ${t.targetCompanyCode}`),
+]);
+
+/** Per-account protocol of an FS15 run (SCR-110). */
+export const glAccountTransferResult = pgTable('gl_account_transfer_result', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  action: varchar('action', { length: 10 }).notNull(),
+  reason: varchar('reason', { length: 400 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.glAccount] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [glAccountTransferRun.client, glAccountTransferRun.runId],
+  }).onDelete('cascade'),
+  check('gl_account_transfer_result_action_ck', sql`${t.action} in ('CREATED', 'UPDATED', 'SKIPPED', 'ERROR')`),
+]);
