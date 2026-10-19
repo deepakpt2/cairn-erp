@@ -610,6 +610,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-662.** R-150 stands implemented and accepted. **Suites:** full vitest 199 files, **1449/1449** (was 1445/1445; +3 carryforward service tests, +1 revised browser-target registry). **Browser:** target carryforward (**T894**) passed against the production build — test run posting nothing with openings recorded, update run closing the P&L balance into retained earnings, both runs preserved. **Clock:** the round opened 10:51 and closed 11:02 (11 min). The self-correcting delta design proved itself in tests: update closes P&L inside the source year, a zero-delta repeat posts nothing, a late prior-year adjustment carries through a delta-only transfer, and the missing retained-earnings determination fails the run with named exceptions. Deferred by R-150 itself: non-leading ledgers, subledger (AR/AP/AA) carryforward, document-currency openings beyond the local-currency record. Same-stage bookkeeping: B-662 / §26.678 / §30 row 2.496.
 
+## §26.679 — Intercompany items deferred to last (owner decision)
+
+**B-663.** Owner decision (2026-10-19): FIN.IC.POST and FIN.IC.CLEAR are deferred to the end of the roadmap. Dependency check before recording: no built or roadmapped function consumes intercompany postings — subledgers, close, credit and reports stand alone; the only forward reference is consolidation context (D-028), itself unbuilt, and the company-code intercompany clearing account field already standing is dormant configuration, not a dependency. The related "Intercompany config" roadmap row travels with them. FUNCTIONS-AND-ROADMAP.md marks all three Deferred (B-663) in the same turn, per the maintenance rule. The queue therefore continues with FIN.CREDIT.MAINTAIN (FD32), then FIN.CREDIT.MONITOR (F.31). Same-stage bookkeeping: B-663 / §26.679 / §30 row 2.497.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -737,3 +741,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.494 | 2026-10-19 | **SCR-102 stage 4 published (B-660, §26.676).** FIN.CLOSE.CARRYFORWARD capability (135) and the F.16/FAGLGVTR alias term seed; carryforward navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.495 | 2026-10-19 | **SCR-102 stage 5 published (B-661, §26.677).** Three carryforward service tests pass (test/update/delta lifecycle, determination exceptions); browser target T894 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.496 | 2026-10-19 | **SCR-102 CLOSED (B-662, §26.678).** FIN.CLOSE.CARRYFORWARD accepted: derived openings, judged P&L closing transfers, delta-only repeats (suite 1449/1449; browser T894). Next SCR: FIN.IC.POST; its package is awaited. | Agent |
+| 2.497 | 2026-10-19 | **Intercompany deferred to last (B-663, §26.679).** FIN.IC.POST and FIN.IC.CLEAR (with Intercompany config) marked Deferred after a clean dependency check. Next SCR: FIN.CREDIT.MAINTAIN (FD32); its package is awaited. | Owner + Agent |
