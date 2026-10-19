@@ -82,6 +82,7 @@ import { vendorDownPaymentClearingF54 } from './vendor-down-payment-clearing';
 import { customerDownPaymentClearingF39 } from './customer-down-payment-clearing';
 import { customerDownPaymentRequestF37 } from './customer-down-payment-request';
 import { vendorDownPaymentRequestF47 } from './vendor-down-payment-request';
+import { parkedJournalFv50 } from './parked-journal';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4971,6 +4972,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'customer-down-payment-clearing': customerDownPaymentClearingF39,
   'customer-down-payment-request': customerDownPaymentRequestF37,
   'vendor-down-payment-request': vendorDownPaymentRequestF47,
+  'parked-journal': parkedJournalFv50,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,
