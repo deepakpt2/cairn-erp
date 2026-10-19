@@ -946,6 +946,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-740.** Seed carries the `FIN.RPT.PROFITCENTER` capability and its registry term at `/controlling/profit-center-report` with alias KE5Z living on the one term; the journal page links the report (`journal.profitCenterReport`). Seeded twice idempotent — catalogue 145 capabilities / 118 terms / 137 aliases, KE5Z verified solely on FIN.RPT.PROFITCENTER. Acceptance follows in stage 5. Same-stage bookkeeping: B-740 / §26.756 / §30 row 2.574.
 
+## §26.757 — SCR-113 stage 5: service tests and browser target
+
+**B-741.** `tests/profit-center-report.test.ts` (4 green) proves lines listed as recorded with signed amounts and reconciling totals, the hit-limit window with totals complete over the full selection, group resolution with exclusion leaves in display order, named refusals for non-leading ledgers and unknown profit centres, and read-only behaviour; browser target T883 stands registered across targets/checks/database-guards. One settlement sharpened in this stage: profit-centre groups resolve `E` (exclude) leaves in display order per SCR-042 canon — and the same check exposed that the SCR-112 cost-centre resolver treats every leaf as an inclusion, a named follow-up recorded here rather than silently left. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-741 / §26.757 / §30 row 2.575.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1151,6 +1155,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.572 | 2026-10-19 | **SCR-113 stage 2 published (B-738, §26.754).** Migration 0118 (181 total): `jel_profitcenter_idx` stands; the index contract pins the profit-centre path. The line-item service follows in stage 3. | Agent |
 | 2.573 | 2026-10-19 | **SCR-113 stage 3 published (B-739, §26.755).** The line-item service reads posted journal lines as recorded, with server-side hit limits, truncation indication, currency-separated totals and document drill-down; the page executes live. Supporting seed follows in stage 4. | Agent |
 | 2.574 | 2026-10-19 | **SCR-113 stage 4 published (B-740, §26.756).** FIN.RPT.PROFITCENTER capability, KE5Z alias and journal-page navigation stand (145/118/137). Acceptance follows in stage 5. | Agent |
+| 2.575 | 2026-10-19 | **SCR-113 stage 5 published (B-741, §26.757).** Four line-item service tests pass and browser target T883 stands registered; SCR-112 exclusion-leaf resolver gap named as follow-up. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

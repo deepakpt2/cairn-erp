@@ -190,10 +190,15 @@ export async function listProfitCenterLines(input: {
       `) as unknown as Array<{ group_name: string }>;
       if (groupRows.length === 0) fail(`Profit center group ${s.profitCenterGroup} does not stand in controlling area ${s.controllingArea}.`);
       const leafRows = await tx.execute(sql`
-        select val_from, val_to from profit_center_group_leaf
+        select val_sign, val_from, val_to from profit_center_group_leaf
         where client = ${client} and controlling_area = ${s.controllingArea} and group_name = ${s.profitCenterGroup}
-      `) as unknown as Array<{ val_from: string; val_to: string }>;
-      const inGroup = (c: string) => leafRows.some((l) => (l.val_to ? c >= l.val_from && c <= l.val_to : c === l.val_from));
+        order by display_order, val_from
+      `) as unknown as Array<{ val_sign: string; val_from: string; val_to: string }>;
+      // Leaves resolve in display order: I includes, E excludes (SCR-042 canon).
+      const inGroup = (c: string) => leafRows.reduce((member, l) => {
+        const matches = l.val_to ? c >= l.val_from && c <= l.val_to : c === l.val_from;
+        return matches ? l.val_sign !== 'E' : member;
+      }, false);
       selected = selected.filter(inGroup);
     }
     if (selected.length === 0) fail('No profit centers match the selection in the reported fiscal year.', 'Widen the profit center selection.');
