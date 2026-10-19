@@ -45,6 +45,10 @@ The owner supplied the F-39 field package (2026-10-19); SAP codes stand as searc
 
 **B-543.** Stage 3 of R-132. `clearCustomerDownPayments` judges the pairwise allocations under the clearing's advisory lock after the request-key replay check: the customer extended and unblocked, the indicator resolved through AR configuration, every source line re-read and re-judged (role, company, account, side, unstamped, remaining balance), one currency per clearing. It posts the DZ transfer journal — the alternative account debits per down payment applied, the ordinary reconciliation account credits per invoice settled — stamps fully applied items in place with their offsetting lines, writes the clearing header and one mapping row per allocation, and reconciles the header total to the committed rows before the change document. The screen is live through its server action: the allocation builder serialises its rows to the service, and the message names the cleared total and the items cleared in full. Typecheck clean. Same-stage bookkeeping: B-543 / §26.559 / §30 row 2.377.
 
+## §26.560 — SCR-084 stage 4: clearing capability seeded
+
+**B-544.** Stage 4 of R-132. The capability `FIN.AR.DOWNPAYMENT.CLEAR` (F-39 as search alias) joins the seed with its full-parity term — **117 capabilities / 68 config activities / 91 terms / 100 aliases**. The special G/L maintenance already carries the AR account type, so the indicator's configuration remains the tenant's own. Registry check reads the new term back. Same-stage bookkeeping: B-544 / §26.560 / §30 row 2.378.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -53,3 +57,4 @@ The owner supplied the F-39 field package (2026-10-19); SAP codes stand as searc
 | 2.375 | 2026-10-19 | **SCR-084 stage 1 published (B-541, §26.557).** The inert F-39 clearing screen: selection criteria, both open-item grids and the pairwise allocation builder rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
 | 2.376 | 2026-10-19 | **SCR-084 stage 2 published (B-542, §26.558).** Clearing header + allocation-mapping tables stand (migration 0094, 157 migrations): composite foreign keys link every allocation to its down-payment and invoice journal lines; journal lines remain the balance authority. | Agent |
 | 2.377 | 2026-10-19 | **SCR-084 stage 3 published (B-543, §26.559).** Customer down-payment clearing service stands: pairwise allocations judged under lock, DZ transfer journal, mapping rows reconciled to the cleared total; the screen is live. Capability follows in stage 4. | Agent |
+| 2.378 | 2026-10-19 | **SCR-084 stage 4 published (B-544, §26.560).** Capability F-39 seeded (117 capabilities / 91 terms / 100 aliases). Tests and browser acceptance follow in stage 5. | Agent |
