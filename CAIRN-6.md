@@ -648,6 +648,10 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 
 **B-670.** The FS00 schema-contract guard reserves the bare `is_blocked` flag name to the G/L account master vocabulary (split posting/creation flags); the credit record's hold flag therefore takes the domain name `is_on_hold` via migration `0112_credit_hold_column.sql` (175 total, applied), with the Drizzle schema, service SQL and audit field renamed to match. Behaviour is unchanged. Same-stage bookkeeping: B-670 / §26.686 / §30 row 2.504.
 
+## §26.687 — SCR-103 closed: customer credit management (FD32) accepted
+
+**B-671.** R-151 stands implemented and accepted. **Suites:** full vitest 200 files, **1453/1453** (was 1449/1449; +3 credit service tests, +1 revised browser-target registry). **Browser:** target credit (**T893**) passed against the production build (re-run after the B-670 rename) — explicit no-record notice, judged save with stated reason, field audit visible, record standing at version 1. **Clock:** the round opened 11:33 and closed 11:47 (14 min, including the schema-contract rename fix). The never-bypass ladder is proven end to end: missing record, manual hold, expired limit, zero limit and exceeded limit each block with distinct reasons, and the area warning threshold warns. Deferred by R-151 itself: SD order/delivery/billing exposure components (no SD order canon stands), field-level permission granularity beyond the capability, credit-record migration tooling for key changes. Same-stage bookkeeping: B-671 / §26.687 / §30 row 2.505.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -783,3 +787,4 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 | 2.502 | 2026-10-19 | **SCR-103 stage 4 published (B-668, §26.684).** FIN.CREDIT.MAINTAIN capability (136), the FD32 alias term and tenant credit vocabularies seed; credit navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.503 | 2026-10-19 | **SCR-103 stage 5 published (B-669, §26.685).** Three credit service tests pass (check ladder, judged audited saves, version locking); browser target T893 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.504 | 2026-10-19 | **SCR-103 fix published (B-670, §26.686).** Migration 0112 renames the credit hold flag to is_on_hold, satisfying the FS00 schema-contract guard; credit tests stand green. Browser re-acceptance and closure follow. | Agent |
+| 2.505 | 2026-10-19 | **SCR-103 CLOSED (B-671, §26.687).** FIN.CREDIT.MAINTAIN accepted: judged audited credit records, derived exposure, never-bypass checks (suite 1453/1453; browser T893). Next SCR: FIN.CREDIT.MONITOR (F.31); its package is awaited. | Agent |
