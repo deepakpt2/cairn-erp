@@ -862,6 +862,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-719.** Four service tests cover FS15 (test run previews and persists protocol only; live create → skip → overwrite-update; chart-only skipping and judged selections; segment-first posting block and open-item judgement) — green with the registry. Browser target T886 (gl-account-transfer) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-719 / §26.735 / §30 row 2.553.
 
+## §26.736 — SCR-110 CLOSED: FS15 G/L account master transfer accepted
+
+**B-720.** FS15 is accepted with SAP parity: the company-code segment of the G/L master now stands (migration 0116, backfilled from chart values), governs where it stands (open-item judgement and posting blocks read it first, chart flags remain the fallback), and transfers between company codes on a shared chart under test-run/overwrite policy with a persisted per-account protocol — chart-level records never overwritten for a company difference, nothing posted. Production build green; browser target T886 passed (test run previews CREATED copying nothing, live run creates the segment, zero journals); full suite 1494/1494. Deferred by name: a standalone segment editor (segments maintain through FS15, display read-only), chart-level flag retirement, and FIN.RPT.CASHFLOW, still Roadmap awaiting its package. FUNCTIONS-AND-ROADMAP updated same turn (As-of SCR-110; 142 capabilities / 115 business terms). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement) — package awaited; the SCR after: FIN.RPT.PROFITLOSS. Same-stage bookkeeping: B-720 / §26.736 / §30 row 2.554.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1046,6 +1050,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.551 | 2026-10-19 | **SCR-110 stage 3 published (B-717, §26.733).** The transfer executes with protocol; segment-first wiring stands for open-item judgement and posting blocks. Capability and alias follow in stage 4. | Agent |
 | 2.552 | 2026-10-19 | **SCR-110 stage 4 published (B-718, §26.734).** CFG.FIN.GLACCOUNT.TRANSFER capability and the FS15 alias term stand (142/115/133). Acceptance follows in stage 5. | Agent |
 | 2.553 | 2026-10-19 | **SCR-110 stage 5 published (B-719, §26.735).** FS15 tests pass (protocol-only test runs, create/skip/update, segment-first wiring); browser target T886 registered. Production build and browser acceptance follow before closure. | Agent |
+| 2.554 | 2026-10-19 | **SCR-110 CLOSED (B-720, §26.736).** FS15 accepted: company-code segment built and backfilled, transfers with protocol (suite 1494/1494; browser T886). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
