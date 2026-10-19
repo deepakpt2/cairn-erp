@@ -100,6 +100,7 @@ import { closeCockpit } from './close-cockpit';
 import { carryforward } from './carryforward';
 import { customerCredit } from './credit';
 import { creditMonitor } from './credit-monitor';
+import { creditRelease } from './credit-release';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -5007,6 +5008,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'carryforward': carryforward,
   'credit': customerCredit,
   'credit-monitor': creditMonitor,
+  'credit-release': creditRelease,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,

@@ -712,6 +712,10 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
 **B-683.** Seed grows by the FIN.CREDIT.RELEASE and FIN.CREDIT.OVERRIDE capabilities (139 total — the override deliberately separate from release) and the release-queue term carrying the VKM3 alias (112 terms); the monitor links to the release queue. Seeded twice, idempotent. Same-stage bookkeeping: B-683 / §26.699 / §30 row 2.517.
 
+## §26.700 — SCR-105 stage 5: service tests and browser target
+
+**B-684.** Four service tests cover the release lifecycle: determinations recorded from the check with the blocked queue defaulting correctly; release paths (plain refusal, override without privilege, override without justification, justified override with approval reference and event); reasoned reject leaving the document blocked, recheck after a limit raise, and reblock on a fresh determination with history preserved in the determination chain; and bulk release with independent per-document outcomes including stale and unknown documents. Browser target T891 (credit-release) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-684 / §26.700 / §30 row 2.518.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -860,3 +864,4 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 | 2.515 | 2026-10-19 | **SCR-105 stage 2 published (B-681, §26.697).** Migration 0114 (177 total) stands: determinations with supersedes chains and the append-only release event trail. The release service follows in stage 3. | Agent |
 | 2.516 | 2026-10-19 | **SCR-105 stage 3 published (B-682, §26.698).** Determinations, re-evaluating releases with a separate override privilege, rejects and reblocks stand; the queue is wired. Supporting seed follows in stage 4. | Agent |
 | 2.517 | 2026-10-19 | **SCR-105 stage 4 published (B-683, §26.699).** FIN.CREDIT.RELEASE and FIN.CREDIT.OVERRIDE capabilities (139) and the VKM3 alias term seed; release navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.518 | 2026-10-19 | **SCR-105 stage 5 published (B-684, §26.700).** Four release service tests pass (determinations, override discipline, reject/recheck/reblock, bulk outcomes); browser target T891 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
