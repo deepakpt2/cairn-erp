@@ -762,6 +762,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-694.** The balance-sheet module stands with the three balance calculation types (ACCUMULATED default, MOVEMENT, COMBINED), summary-level bounds (1–9, default 1) and the selection/result vocabulary carrying the opening-balance column and the COMBINED current-year result. The `/finance/balance-sheet` shell renders the full §1 selection (company, FSV, reporting and comparison ranges, special periods, output currency, calculation type, summary level, ledger `0L`) and the §2 grid skeleton, inert until the service lands in stage 3; i18n `bs.*` keys added. The aligned index follows in stage 2. Same-stage bookkeeping: B-694 / §26.710 / §30 row 2.528.
 
+## §26.711 — SCR-107 stage 2: index duty verified, no new migration
+
+**B-695.** Package §3 resolves to verification, not new schema: the canonical aggregation already carries the aligned indexes — header `journal_entry_company_year_period_idx (client, company_code, fiscal_year, posting_period)` (migration 0115, Drizzle-mirrored) and line `jel_company_account_idx (client, company_code, gl_account, fiscal_year, …)` plus `jel_account_idx` (migration 0098). The ledger is the configured `0L` vocabulary rather than a stored column (SCR-106), so no 0116 is issued and the count stays 178; `tests/balance-sheet-index-contract.test.ts` (3 green) pins the alignment across migration SQL and the Drizzle mirror so drift fails loudly, and confirms the statement persists no totals. The calculation service follows in stage 3. Same-stage bookkeeping: B-695 / §26.711 / §30 row 2.529.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -921,6 +925,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.526 | 2026-10-19 | **SCR-106 CLOSED (B-692, §26.708).** FIN.RPT.TRIALBALANCE accepted: read-only F.01 statement derived from the posted journal over the configured FSV (suite 1467/1467; browser T890). Next SCR: FIN.RPT.BALANCESHEET (balance sheet with comparatives); its package is awaited. The SCR after: FIN.RPT.CASHFLOW. | Agent |
 | 2.527 | 2026-10-19 | **SCR-107 contract approved (B-693, §26.709, R-155).** FIN.RPT.BALANCESHEET over the SCR-106 FSV canon: three balance calculation types (accumulated / movement / combined with explicit current-year result), summary report level as presentation-only folding, opening-balance column; index duty in stage 2, no new balance tables. Stage 1 (vocabulary + report shell) follows. | Owner + Agent |
 | 2.528 | 2026-10-19 | **SCR-107 stage 1 published (B-694, §26.710).** Balance calculation types, summary-level vocabulary and the S_ALR_87012284 report shell stand. The aligned index follows in stage 2. | Agent |
+| 2.529 | 2026-10-19 | **SCR-107 stage 2 published (B-695, §26.711).** Index duty verified: the aligned header/line indexes stand (0115/0098); no new migration (178 stands), contract test pins the alignment. The calculation service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
