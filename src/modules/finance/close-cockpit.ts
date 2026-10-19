@@ -652,7 +652,7 @@ export async function executeTask(input: {
         (client, execution_id, company_code, task_list_id, fiscal_year, posting_period, task_id, attempt, mode, status, initiated_by, started_at)
       values (${client}, ${executionId}, ${cycle.companyCode}, ${cycle.taskListId}, ${cycle.fiscalYear}, ${cycle.postingPeriod},
               ${taskId}, ${attempt}, ${mode}, ${mode === 'BACKGROUND' ? 'SCHEDULED' : 'RUNNING'}, ${changedBy},
-              ${mode === 'BACKGROUND' ? null : new Date()})
+              ${mode === 'BACKGROUND' ? null : new Date().toISOString()})
     `);
     await recordEvent(tx, client, cycle, taskId, attempt > 1 ? 'RETRIED' : 'EXECUTED', changedBy, undefined,
       `${mode} attempt ${attempt}`);

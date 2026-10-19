@@ -89,6 +89,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'fx-valuation': { database: 'cairn_b210', port: '5432', batch: 'SCR-098 local loopback' },
   'grir-reclass': { database: 'cairn_b210', port: '5432', batch: 'SCR-099 local loopback' },
   'accrual': { database: 'cairn_b210', port: '5432', batch: 'SCR-100 local loopback' },
+  'close-cockpit': { database: 'cairn_b210', port: '5432', batch: 'SCR-101 local loopback' },
   'customer-down-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-083 local loopback' },
   'customer-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-069 local loopback' },
   'customer-ageing': { database: 'cairn_b210', port: '5432', batch: 'SCR-070 local loopback' },

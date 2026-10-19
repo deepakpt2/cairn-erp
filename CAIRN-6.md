@@ -566,6 +566,10 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 
 **B-653.** Seed grows by the FIN.CLOSE.COCKPIT capability (134 total), the close-cockpit term carrying the CLOCO/CLOCOC/FCLOCO/FCLOCOC aliases (108 terms), and a delivered MONTH_END template for every tenant (period status → accrual reversals + FX valuation → signed-off review, critical path marked). The journal list gains the cockpit entry. Seeded twice, idempotent. Same-stage bookkeeping: B-653 / §26.669 / §30 row 2.487.
 
+## §26.670 — SCR-101 stage 5: service tests and browser target
+
+**B-654.** Four service tests cover the cockpit: handler whitelisting and circular-template refusal; predecessor gating, gated completion (evidence then sign-off), finalize-refusal while open and the execution log content; background scheduling that settles only through the runner before a clean finalization; and reasoned override/reopen preserving attempts and the event trail. One fix landed during the stage: the execution-log insert passes an ISO timestamp string (the driver rejects Date objects in raw templates). Browser target T895 (close-cockpit) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-654 / §26.670 / §30 row 2.488.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -684,3 +688,4 @@ Deferred by name: binary evidence attachments, deadline calendars/escalations, c
 | 2.485 | 2026-10-19 | **SCR-101 stage 2 published (B-651, §26.667).** Migration 0109 (172 total) stands: templates, lists, instances, dependencies, execution log and event trail, all cycle-scoped. The lifecycle service follows in stage 3. | Agent |
 | 2.486 | 2026-10-19 | **SCR-101 stage 3 published (B-652, §26.668).** The cockpit lifecycle stands: gated exactly-once execution through registered handlers, append-only logs, period-neutral finalization; the workspace is wired. Supporting seed follows in stage 4. | Agent |
 | 2.487 | 2026-10-19 | **SCR-101 stage 4 published (B-653, §26.669).** FIN.CLOSE.COCKPIT capability (134), CLOCO-family aliases and the MONTH_END template seed; cockpit navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.488 | 2026-10-19 | **SCR-101 stage 5 published (B-654, §26.670).** Four cockpit service tests pass (gating, gates, scheduled settlement, reasoned overrides); browser target T895 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

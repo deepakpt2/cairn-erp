@@ -96,6 +96,7 @@ import { taxReportReturn } from './tax-report';
 import { fxValuationRun } from './fx-valuation';
 import { grIrAnalysis } from './grir-reclass';
 import { accrualDocument } from './accrual';
+import { closeCockpit } from './close-cockpit';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4999,6 +5000,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'fx-valuation': fxValuationRun,
   'grir-reclass': grIrAnalysis,
   'accrual': accrualDocument,
+  'close-cockpit': closeCockpit,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,
