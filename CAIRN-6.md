@@ -1074,6 +1074,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-772.** `consolidated-statements-vocabulary.ts` carries the client-safe FIN.RPT.CONSOLIDATE.STMT vocabulary (global-parameter selection, balance-sheet/income-statement views, FS sections, per-unit row and result shapes), and `/finance/consolidated-statements` renders the selection, the FS-item matrix with section totals, the warnings and balance-check panels, and the CX20 monitor-standing panel over UCWB configuration. Amounts arrive with the service in stage 3. `tsc` green. Index check follows in stage 2. Same-stage bookkeeping: B-772 / §26.788 / §30 row 2.606.
 
+## §26.789 — SCR-118 stage 2: schema and index check
+
+**B-773.** No migration: the statement read aggregates POSTED journal lines on the standing company/fiscal-year/period entry index and the company/account line index, maps source accounts onto FS items through the UCWB mapping and group-account tables of migration 0119, and reads CX20 standing from the status table of migration 0120. `tests/consolidated-statements-schema-contract.test.ts` (3 green) pins those paths and the read-only vocabulary. The statement service follows in stage 3. Same-stage bookkeeping: B-773 / §26.789 / §30 row 2.607.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1311,6 +1315,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.604 | 2026-10-19 | **SCR-117 CLOSED (B-770, §26.786).** FIN.CONSOLIDATE (CX20) accepted: 1544/1544 suite, production build green, browser T879 PASSED. Catalogue 149/122/143; migrations 183. Next: FIN.RPT.CONSOLIDATE.STMT (CX20) awaiting its field package; second-next FIN.RPT.CASHFLOW (S_ALR_87012271, B-721). | Agent |
 | 2.605 | 2026-10-19 | **SCR-118 contracted (B-771, R-166, §26.787).** Consolidated statements (FIN.RPT.CONSOLIDATE.STMT) at owner discretion on SAP global-parameter parity: ACTIVE area/group/version/year/period, FS-item rows from UCWB group accounts classified by mapped source account types, per-unit and group totals through the mappings, unmapped lines named, CX20 standing shown, pre-elimination aggregation named (translation/intercompany engines deferred). No CX20 alias reuse. Stage 1 shell follows. | Agent |
 | 2.606 | 2026-10-19 | **SCR-118 stage 1 published (B-772, §26.788).** FIN.RPT.CONSOLIDATE.STMT vocabulary and the consolidated statements selection/matrix shell stand. Index check follows in stage 2. | Agent |
+| 2.607 | 2026-10-19 | **SCR-118 stage 2 published (B-773, §26.789).** Index check: journal, mapping and CX20 status paths carry the read; no migration (183 stand). The statement service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
