@@ -195,6 +195,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'document-types') return '/config/document-types';
   if (target.id === 'tolerance-groups') return '/config/tolerance-groups';
   if (target.id === 'account-determination') return '/config/account-determination';
+  if (target.id === 'retained-earnings') return '/config/retained-earnings';
   if (target.id === 'cost-centers') return '/config/cost-centers';
   if (target.id === 'cost-center-hierarchy') return '/config/cost-center-hierarchy';
   if (target.id === 'activity-types') return '/config/activity-types';
