@@ -195,6 +195,14 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 
 **B-574.** Stage 4 of R-137. The capability `FIN.GL.BALANCE` (FS10N as search alias) joins the seed with its full-parity term — **122 capabilities / 68 config activities / 96 terms / 105 aliases**. Typecheck clean. Same-stage bookkeeping: B-574 / §26.590 / §30 row 2.408.
 
+## §26.591 — SCR-089 closed: FS10N G/L account balances accepted
+
+**B-575. SCR-089 is CLOSED.** The FS10N package is delivered at full parity under R-137 on the SCR-069 precedent: balances derive at read time from the canonical journal, so no projection stands to drift and reconciliation holds by construction. Opening, turnover and closing stand as distinct chained figures — the opening is every earlier year's signed sum and never period 1 turnover; debit and credit turnover sum by the document's stored posting period; closing chains opening plus cumulative net change. Special periods stand apart, only when included and configured on the company's variant, and drill — like every period — by stored period into the FAGLL03 report, which gained the posting-period filter under this contract. The currency view refuses what it cannot display without conversion; the account is judged standing and, where the company names its chart, standing in that chart; the ledger selection and the maintained-projection design stand declined by name in the contract.
+
+**One gap found and named, not hidden:** the posting engine has no special-period entry path — a December date derives period 12 and the engine demands the specified period equal the derived one — so a document can only stand in period 13 or beyond if a future round teaches the engine to post there. The balances and the drill already read stored special periods correctly, proven against a directly stored period-13 document in both the test suite and the browser; **special-period posting is deferred by name** to its own round, alongside the other R-137 deferrals (the maintained projection, multi-ledger balances, mixed document-currency views, carryforward detail, export).
+
+Acceptance evidence: targeted suite 3/3 (the chain with opening judged against period 1, specials apart with period drill, refused accounts and currencies); full suite **1380 green**; browser **T907 green** against the production build (tenant T907: opening 1,000.00 chained to closing, special 13 separate at 1,350.00, period-3 drill onto its line items, journal untouched). Seed twice idempotent at **122 capabilities / 68 config activities / 96 terms / 105 aliases**; database at **161 migrations** (this round added none, by reviewed decision). Same-stage bookkeeping: B-575 / §26.591 / §30 row 2.409. `FUNCTIONS-AND-ROADMAP.md` moved FS10N to Implemented in the same turn.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -234,3 +242,4 @@ The owner supplied the FS10N field package (2026-10-19); SAP codes stand as sear
 | 2.406 | 2026-10-19 | **SCR-089 stage 2 recorded (B-572, §26.588).** Index review: the SCR-088 line index serves the derivation; no migration. Service follows in stage 3. | Agent |
 | 2.407 | 2026-10-19 | **SCR-089 stage 3 published (B-573, §26.589).** Balance derivation stands on the SCR-069 precedent, chart and currency judged by name; FAGLL03 gained the posting-period filter its drill needed. Seed follows in stage 4. | Agent |
 | 2.408 | 2026-10-19 | **SCR-089 stage 4 published (B-574, §26.590).** Capability FS10N seeded (122 capabilities / 96 terms / 105 aliases). Tests and browser acceptance follow in stage 5. | Agent |
+| 2.409 | 2026-10-19 | **SCR-089 CLOSED (B-575, §26.591).** FS10N accepted: derived chained balances, specials apart and drilled by stored period; special-period posting named as a deferred engine gap. Targeted 3/3, suite 1380 green, browser T907 green, seed 122/96/105, 161 migrations. | Agent |
