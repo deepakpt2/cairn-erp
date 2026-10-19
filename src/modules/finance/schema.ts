@@ -1789,3 +1789,68 @@ export const creditChangeAudit = pgTable('credit_change_audit', {
   }).onDelete('cascade'),
   index('credit_change_audit_record_idx').on(t.client, t.customer, t.creditControlArea, t.changedAt),
 ]);
+
+/**
+ * Credit determinations (SCR-105 / R-153): the single
+ * authoritative credit status per sales document, superseding
+ * rather than editing, with an append-only release event trail.
+ */
+export const creditDetermination = pgTable('credit_determination', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  determinationId: varchar('determination_id', { length: 24 }).notNull(),
+  salesDocument: varchar('sales_document', { length: 20 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }),
+  customer: varchar('customer', { length: 40 }).notNull(),
+  creditControlArea: varchar('credit_control_area', { length: 4 }).notNull(),
+  orderValue: numeric('order_value', { precision: 23, scale: 4 }).notNull(),
+  orderCurrency: char('order_currency', { length: 3 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull(),
+  reason: varchar('reason', { length: 24 }).notNull(),
+  exposureAtCheck: numeric('exposure_at_check', { precision: 23, scale: 4 }).notNull().default('0'),
+  limitAtCheck: numeric('limit_at_check', { precision: 23, scale: 4 }),
+  releasedBy: varchar('released_by', { length: 60 }),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  isOverride: boolean('is_override').notNull().default(false),
+  approvalRef: varchar('approval_ref', { length: 40 }),
+  supersedes: varchar('supersedes', { length: 24 }),
+  version: integer('version').notNull().default(1),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.determinationId] }),
+  foreignKey({
+    columns: [t.client, t.customer],
+    foreignColumns: [businessPartner.client, businessPartner.partnerNumber],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.creditControlArea],
+    foreignColumns: [creditControlArea.client, creditControlArea.creditControlArea],
+  }).onDelete('cascade'),
+  index('credit_determination_scope_idx').on(t.client, t.creditControlArea, t.status, t.documentDate, t.customer),
+  index('credit_determination_document_idx').on(t.client, t.salesDocument, t.createdAt),
+  check('credit_determination_status_ck', sql`${t.status} in ('BLOCKED', 'PASSED', 'RELEASED')`),
+  check('credit_determination_value_ck', sql`${t.orderValue} >= 0`),
+  check('credit_determination_released_ck', sql`(${t.status} = 'RELEASED') = (${t.releasedBy} is not null and ${t.releasedAt} is not null)`),
+]);
+
+export const creditReleaseEvent = pgTable('credit_release_event', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  eventId: varchar('event_id', { length: 24 }).notNull(),
+  determinationId: varchar('determination_id', { length: 24 }).notNull(),
+  salesDocument: varchar('sales_document', { length: 20 }).notNull(),
+  eventType: varchar('event_type', { length: 20 }).notNull(),
+  actor: varchar('actor', { length: 60 }).notNull(),
+  reason: varchar('reason', { length: 240 }),
+  approvalRef: varchar('approval_ref', { length: 40 }),
+  beforeStatus: varchar('before_status', { length: 16 }),
+  afterStatus: varchar('after_status', { length: 16 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventId] }),
+  foreignKey({
+    columns: [t.client, t.determinationId],
+    foreignColumns: [creditDetermination.client, creditDetermination.determinationId],
+  }).onDelete('cascade'),
+  check('credit_release_event_type_ck', sql`${t.eventType} in ('CHECK', 'RELEASE', 'OVERRIDE_RELEASE', 'REJECT', 'REBLOCK')`),
+]);

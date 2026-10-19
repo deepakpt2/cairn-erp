@@ -700,6 +700,10 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
 **B-680.** The release vocabulary joins `credit.ts` (determination statuses, the queue row with at-check and current credit figures, filters, per-document outcomes, and the separate override capability) and `/finance/credit-release` renders the selection panel and determination queue with FD32 drill-downs. Nothing acts yet. Same-stage bookkeeping: B-680 / §26.696 / §30 row 2.514.
 
+## §26.697 — SCR-105 stage 2: credit determination tables (migration 0114)
+
+**B-681.** Migration `0114_credit_determination.sql` (177 total, applied) creates the determination record (document key, date, sales organization, customer, area, order value/currency, BLOCKED/PASSED/RELEASED status with the released-only-with-actor invariant enforced, check-time exposure/limit, release and override fields, supersedes chain, version) and the append-only `credit_release_event` trail, with scope and document indexes. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-681 / §26.697 / §30 row 2.515.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -845,3 +849,4 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 | 2.512 | 2026-10-19 | **SCR-104 CLOSED (B-678, §26.694).** FIN.CREDIT.MONITOR accepted: read-only snapshot exposure overview with flagged no-record customers (suite 1457/1457; browser T892). Next SCR: FIN.CREDIT.RELEASE (VKM3); its package is awaited. | Agent |
 | 2.513 | 2026-10-19 | **SCR-105 contract approved (B-679, §26.695, R-153).** FIN.CREDIT.RELEASE: credit determinations as the single status store (the package's sanctioned fallback until the SD canon lands), re-evaluating releases, override as a separate privilege, append-only history. Stage 1 (vocabulary + release-queue shell) follows. | Owner + Agent |
 | 2.514 | 2026-10-19 | **SCR-105 stage 1 published (B-680, §26.696).** Release-queue vocabulary and the determination queue shell stand. Schema follows in stage 2. | Agent |
+| 2.515 | 2026-10-19 | **SCR-105 stage 2 published (B-681, §26.697).** Migration 0114 (177 total) stands: determinations with supersedes chains and the append-only release event trail. The release service follows in stage 3. | Agent |
