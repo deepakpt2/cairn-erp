@@ -98,6 +98,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'balance-sheet': { database: 'cairn_b210', port: '5432', batch: 'SCR-107 local loopback' },
   'gl-reporting': { database: 'cairn_b210', port: '5432', batch: 'SCR-108 local loopback' },
   'gl-reporting-suite': { database: 'cairn_b210', port: '5432', batch: 'SCR-109 local loopback' },
+  'gl-account-transfer': { database: 'cairn_b210', port: '5432', batch: 'SCR-110 local loopback' },
   'customer-down-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-083 local loopback' },
   'customer-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-069 local loopback' },
   'customer-ageing': { database: 'cairn_b210', port: '5432', batch: 'SCR-070 local loopback' },
