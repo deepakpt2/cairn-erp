@@ -1,10 +1,13 @@
+import Link from 'next/link';
+
 import type { JournalItemsResult } from '@/modules/finance/journal-items';
 
 const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
-export default function ItemsForm({ result, canList }: {
+export default function ItemsForm({ result, error, canList }: {
   result: JournalItemsResult | null;
+  error: string | null;
   canList: boolean;
 }) {
   return (
@@ -85,7 +88,9 @@ export default function ItemsForm({ result, canList }: {
 
       <section aria-labelledby="ji-results" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="ji-results" className="text-sm font-semibold">Line items</h2>
-        {!result ? (
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>
+        ) : !result ? (
           <p className="mt-2 text-sm text-ink-soft">Enter a selection and execute to read the posted lines.</p>
         ) : result.rows.length === 0 ? (
           <p className="mt-2 text-sm text-ink-soft">No line items match this selection.</p>
@@ -114,7 +119,12 @@ export default function ItemsForm({ result, canList }: {
                   {result.rows.map((row) => (
                     <tr key={`${row.documentNumber}-${row.fiscalYear}-${row.lineNumber}`} className="border-t border-line">
                       <td className="px-2 py-2">{row.companyCode}</td>
-                      <td className="px-2 py-2">{row.documentNumber}</td>
+                      <td className="px-2 py-2">
+                        <Link className="text-accent hover:underline"
+                          href={`/finance/journal?document=${encodeURIComponent(row.documentNumber)}&year=${row.fiscalYear}`}>
+                          {row.documentNumber}
+                        </Link>
+                      </td>
                       <td className="px-2 py-2">{row.lineNumber}</td>
                       <td className="px-2 py-2">{row.postingDate}</td>
                       <td className="px-2 py-2">{row.documentType}</td>
@@ -133,6 +143,37 @@ export default function ItemsForm({ result, canList }: {
                 </tbody>
               </table>
             </div>
+            {result.subtotals.length > 0 && (
+              <div className="mt-3">
+                <h3 className="text-sm font-semibold">Subtotals over the displayed lines</h3>
+                <div className="mt-1 overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                        <th className="px-2 py-2">Company</th><th className="px-2 py-2">Account</th>
+                        <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Debits</th>
+                        <th className="px-2 py-2">Credits</th><th className="px-2 py-2">Local currency</th>
+                        <th className="px-2 py-2">Local debits</th><th className="px-2 py-2">Local credits</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.subtotals.map((s) => (
+                        <tr key={`${s.companyCode}-${s.glAccount}-${s.currency}`} className="border-t border-line">
+                          <td className="px-2 py-2">{s.companyCode}</td>
+                          <td className="px-2 py-2">{s.glAccount}</td>
+                          <td className="px-2 py-2">{s.currency}</td>
+                          <td className="px-2 py-2">{s.debitDocument.toFixed(2)}</td>
+                          <td className="px-2 py-2">{s.creditDocument.toFixed(2)}</td>
+                          <td className="px-2 py-2">{s.localCurrency}</td>
+                          <td className="px-2 py-2">{s.debitLocal.toFixed(2)}</td>
+                          <td className="px-2 py-2">{s.creditLocal.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
       </section>
