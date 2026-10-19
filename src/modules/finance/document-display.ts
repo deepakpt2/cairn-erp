@@ -38,6 +38,7 @@ export interface DocumentLineView {
   amountDocument: number;
   currency: string;
   amountLocal: number;
+  assignment: string | null;
   costCenter: string | null;
   profitCenter: string | null;
   internalOrder: string | null;
@@ -145,7 +146,7 @@ export async function getJournalDocument(
       debitCredit: l.debitCredit as 'S' | 'H',
       amountDocument: Number(l.amountDocument), currency: l.currency,
       amountLocal: Number(l.amountLocal),
-      costCenter: l.costCenter, profitCenter: l.profitCenter,
+      assignment: l.assignment, costCenter: l.costCenter, profitCenter: l.profitCenter,
       internalOrder: l.internalOrder, businessPartner: l.businessPartner,
       material: l.material, plant: l.plant, taxCode: l.taxCode,
       lineText: l.lineText, clearingDocument: l.clearingDocument,

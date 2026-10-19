@@ -85,7 +85,7 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
                     <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Document amount</th>
                     <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
                     <th className="px-2 py-2">Partner</th><th className="px-2 py-2">Cost centre</th>
-                    <th className="px-2 py-2">Profit centre</th><th className="px-2 py-2">Tax</th>
+                    <th className="px-2 py-2">Profit centre</th><th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Tax</th>
                     <th className="px-2 py-2">Clearing</th><th className="px-2 py-2">Text</th>
                   </tr>
                 </thead>
@@ -101,6 +101,7 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
                       <td className="px-2 py-2">{line.businessPartner ?? '—'}</td>
                       <td className="px-2 py-2">{line.costCenter ?? '—'}</td>
                       <td className="px-2 py-2">{line.profitCenter ?? '—'}</td>
+                      <td className="px-2 py-2">{line.assignment ?? '—'}</td>
                       <td className="px-2 py-2">{line.taxCode ?? '—'}</td>
                       <td className="px-2 py-2">{line.clearingDocument ?? '—'}</td>
                       <td className="px-2 py-2">{line.lineText ?? '—'}</td>

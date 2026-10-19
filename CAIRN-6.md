@@ -410,6 +410,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-616.** Stage 3 of R-144. `postGlDocument` is the judged front door of the standing posting engine for directly entered G/L documents: inside one transaction it replays a known request key to its original document, validates the company (active, assignments standing), the two-character active document type permitting G/L account types, the company currency and its precision, every account in the company's chart unblocked (required cost object honoured), cost centres valid for company and posting date, profit centres valid for the posting date, positive amounts and balance — then posts through the canonical engine, which revalidates period openness under its locks, and records the request key against the produced document. The engine and the parked-journal posting path now carry the line assignment into the canonical record, and a reversal mirrors it. The entry action derives nothing from browser-supplied tenant fields. Same-stage bookkeeping: B-616 / §26.632 / §30 row 2.450.
 
+## §26.633 — SCR-096 stage 4: catalogue wording and document display
+
+**B-617.** Supporting stage of R-144. The FIN.JOURNAL.POST catalogue description now states the FB50 entry behaviour this round delivers (no new capability, term or alias — the counts stand at 129 / 103 / 111), and document display shows the line assignment beside cost and profit centre so what FB50 captures stays visible on the posted document. Same-stage bookkeeping: B-617 / §26.633 / §30 row 2.451.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -491,3 +495,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.448 | 2026-10-19 | **SCR-096 stage 1 published (B-614, §26.630).** FB50 screen carries the full header, profit-centre/assignment grid with insert/copy/delete, field errors, live totals and confirmation. Canonical assignment and judged posting follow. | Agent |
 | 2.449 | 2026-10-19 | **SCR-096 stage 2 published (B-615, §26.631).** Migration 0104: canonical line assignment, S/H and positive-amount checks, posting-request registry (167 migrations). Judged posting service follows in stage 3. | Agent |
 | 2.450 | 2026-10-19 | **SCR-096 stage 3 published (B-616, §26.632).** Judged FB50 posting stands: full master-data validation in the posting transaction, request-key idempotency, assignment carried through engine, parked posting and reversal. Supporting seed and acceptance follow. | Agent |
+| 2.451 | 2026-10-19 | **SCR-096 stage 4 published (B-617, §26.633).** Catalogue wording states the FB50 behaviour; document display shows the line assignment. Acceptance follows in stage 5. | Agent |
