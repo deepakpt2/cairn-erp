@@ -90,8 +90,8 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError, reverseJournalEntry } from '../../platform/posting';
 import { documentType } from '../foundation/schema';
 import {
-  assetClass, assetRetirement, assetTransaction, assetTransactionType,
-  fixedAsset, glAccount,
+  assetClass, assetDepreciationPosting, assetRetirement, assetTransaction,
+  assetTransactionType, fixedAsset, glAccount,
 } from './schema';
 
 export const ASSET_RETIREMENT_CLASS = 'asset_retirement';
@@ -146,16 +146,22 @@ async function valueSums(tx: Tx, client: string, companyCode: string, assetNumbe
 }
 
 /**
- * Posted accumulated depreciation. Depreciation value records
- * arrive with the depreciation run (FIN.ASSET.DEPRECIATE); until
- * then no depreciation has posted and this stands at zero. The
- * retirement mathematics below is proportional over this figure,
- * so the run plugs in without rework.
+ * Posted accumulated depreciation, read from the depreciation
+ * posting record (SCR-094): the run writes what it posted per
+ * asset, area and period, and the retirement reversal below is
+ * proportional over this figure.
  */
 async function postedAccumulatedDepreciation(
-  _tx: Tx, _client: string, _companyCode: string, _assetNumber: string, _subNumber: string,
+  tx: Tx, client: string, companyCode: string, assetNumber: string, subNumber: string,
 ): Promise<number> {
-  return 0;
+  const rows = await tx.select({ amount: assetDepreciationPosting.postedAmount })
+    .from(assetDepreciationPosting).where(and(
+      eq(assetDepreciationPosting.client, client),
+      eq(assetDepreciationPosting.companyCode, companyCode),
+      eq(assetDepreciationPosting.assetNumber, assetNumber),
+      eq(assetDepreciationPosting.subNumber, subNumber),
+    ));
+  return round2(rows.reduce((s, r) => s + Number(r.amount), 0));
 }
 
 async function judge(
