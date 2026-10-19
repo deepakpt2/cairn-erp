@@ -518,6 +518,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-643.** Stage 2 of R-148, migration `0108_accrual_document.sql` (171 migrations): one `accrual_document` metadata table keyed by the canonical document identity with a tenant-safe composite foreign key to the journal header, reversal date/reason/status, reversal document reference and execution user/timestamp — the reversal-consistency check makes a REVERSED status without its document impossible. No accrual header or line tables duplicate the ledger. Same-stage bookkeeping: B-643 / §26.659 / §30 row 2.477.
 
+## §26.660 — SCR-100 stage 3: judged accrual posting and F.81 reversal service
+
+**B-644.** Stage 3 of R-148. The G/L document service gains an in-transaction posting hook, and `postAccrualDocument` writes the accrual metadata (standing active reversal reason judged, reversal date on or after the posting date) through it, so document and metadata commit or roll back together. `listDueAccruals` selects PENDING accruals whose date has arrived on still-posted journals; `executeAccrualReversal` posts the mirror through the canonical document-reversal workflow and marks the metadata, reconciling from the standing link on any retry. The entry screen carries the full grid with live totals, and each due row executes its reversal in place. Same-stage bookkeeping: B-644 / §26.660 / §30 row 2.478.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -626,3 +630,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.475 | 2026-10-19 | **SCR-100 contract published (B-641, §26.657, R-148).** FBS1 accrual entry on the judged G/L posting with atomic reversal metadata, F.81 due-reversal processing reconciling through the canonical link. UI stage follows. | Agent |
 | 2.476 | 2026-10-19 | **SCR-100 stage 1 published (B-642, §26.658).** Accrual vocabulary and entry/due shell stand. Metadata schema follows in stage 2. | Agent |
 | 2.477 | 2026-10-19 | **SCR-100 stage 2 published (B-643, §26.659).** Accrual metadata table stands (migration 0108, 171 total). Posting hook, entry action and F.81 service follow in stage 3. | Agent |
+| 2.478 | 2026-10-19 | **SCR-100 stage 3 published (B-644, §26.660).** Accrual posting stands atomic with its metadata; the F.81 due list executes reversals through the canonical workflow with link reconciliation. Supporting seed follows in stage 4. | Agent |

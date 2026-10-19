@@ -51,6 +51,8 @@ export interface GlDocumentInput {
   client: string;
   changedBy: string;
   requestKey: string;
+  /** SCR-100 hook: runs inside the posting transaction after the journal writes. */
+  onPosted?: (tx: Tx, posted: PostedJournal) => Promise<void>;
   companyCode: string;
   documentDate: string;
   postingDate: string;
@@ -284,6 +286,7 @@ export async function postGlDocument(input: GlDocumentInput): Promise<PostedJour
       throw error;
     });
 
+    if (input.onPosted) await input.onPosted(tx, posted);
     await tx.insert(journalPostingRequest).values({
       client: input.client, requestKey: input.requestKey, actor: input.changedBy,
       documentNumber: posted.documentNumber, fiscalYear: posted.fiscalYear,
