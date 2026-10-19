@@ -155,6 +155,7 @@ export const journalEntry = pgTable(
     index('journal_entry_company_date_idx').on(t.client, t.companyCode, t.postingDate),
     index('journal_entry_company_posting_idx').on(t.client, t.companyCode, t.postingDate, t.documentNumber),
     index('journal_entry_origin_idx').on(t.client, t.originClass, t.originKey),
+    index('journal_entry_company_year_period_idx').on(t.client, t.companyCode, t.fiscalYear, t.postingPeriod),
   ],
 );
 
@@ -1853,4 +1854,67 @@ export const creditReleaseEvent = pgTable('credit_release_event', {
     foreignColumns: [creditDetermination.client, creditDetermination.determinationId],
   }).onDelete('cascade'),
   check('credit_release_event_type_ck', sql`${t.eventType} in ('CHECK', 'RELEASE', 'OVERRIDE_RELEASE', 'REJECT', 'REBLOCK')`),
+]);
+
+/**
+ * Financial statement versions (SCR-106 / R-154): the version
+ * binds to a chart, nodes form the hierarchy, assignments place
+ * account ranges with a presentation sign. Configuration only —
+ * statements derive and persist nothing.
+ */
+export const financialStatementVersion = pgTable('financial_statement_version', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  version: varchar('version', { length: 10 }).notNull(),
+  name: varchar('name', { length: 80 }).notNull(),
+  chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.version] }),
+  foreignKey({
+    columns: [t.client, t.chartOfAccounts],
+    foreignColumns: [chartOfAccounts.client, chartOfAccounts.chartOfAccounts],
+  }).onDelete('cascade'),
+]);
+
+export const financialStatementNode = pgTable('financial_statement_node', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  version: varchar('version', { length: 10 }).notNull(),
+  node: varchar('node', { length: 20 }).notNull(),
+  description: varchar('description', { length: 120 }).notNull(),
+  parentNode: varchar('parent_node', { length: 20 }),
+  sequence: integer('sequence').notNull().default(0),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.version, t.node] }),
+  foreignKey({
+    columns: [t.client, t.version],
+    foreignColumns: [financialStatementVersion.client, financialStatementVersion.version],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.version, t.parentNode],
+    foreignColumns: [t.client, t.version, t.node],
+  }).onDelete('cascade'),
+  check('financial_statement_node_parent_ck', sql`${t.parentNode} is null or ${t.parentNode} <> ${t.node}`),
+]);
+
+export const financialStatementAssignment = pgTable('financial_statement_assignment', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  version: varchar('version', { length: 10 }).notNull(),
+  node: varchar('node', { length: 20 }).notNull(),
+  accountFrom: varchar('account_from', { length: 10 }).notNull(),
+  accountTo: varchar('account_to', { length: 10 }).notNull(),
+  presentationSign: varchar('presentation_sign', { length: 8 }).notNull().default('NORMAL'),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.version, t.node, t.accountFrom, t.accountTo] }),
+  foreignKey({
+    columns: [t.client, t.version, t.node],
+    foreignColumns: [financialStatementNode.client, financialStatementNode.version, financialStatementNode.node],
+  }).onDelete('cascade'),
+  check('financial_statement_assignment_sign_ck', sql`${t.presentationSign} in ('NORMAL', 'INVERTED')`),
+  check('financial_statement_assignment_range_ck', sql`${t.accountFrom} <= ${t.accountTo}`),
 ]);

@@ -734,6 +734,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-687.** The statement vocabulary stands in `src/modules/finance/trial-balance.ts` (selection, node/account rows, result with warnings and unassigned accounts under the FIN.RPT.TRIALBALANCE capability) and `/finance/trial-balance` renders the selection panel and the hierarchical statement grid with account drill-down links to the standing FS10N-equivalent balances. Nothing computes yet. Same-stage bookkeeping: B-687 / §26.703 / §30 row 2.521.
 
+## §26.704 — SCR-106 stage 2: FSV canon and journal index (migration 0115)
+
+**B-688.** Migration `0115_financial_statement_version.sql` (178 total, applied) creates the financial statement version (bound to a chart), its node hierarchy (self-parenting refused), and account-range assignments with NORMAL/INVERTED presentation signs — configuration only — plus the `(client, company_code, fiscal_year, posting_period)` journal index the aggregation scans by. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-688 / §26.704 / §30 row 2.522.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -886,3 +890,4 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.519 | 2026-10-19 | **SCR-105 CLOSED (B-685, §26.701).** FIN.CREDIT.RELEASE accepted: determinations as the single credit status, re-evaluating releases, separate override privilege (suite 1462/1462; browser T891). Next SCR: FIN.RPT.TRIALBALANCE (F.01); its package is awaited. | Agent |
 | 2.520 | 2026-10-19 | **SCR-106 contract approved (B-686, §26.702, R-154).** FIN.RPT.TRIALBALANCE: the FSV configuration canon arrives with the read-only F.01 statement — dynamic hierarchy, canonical balance semantics, comparatives, explicit unassigned-account warnings. Stage 1 (vocabulary + report shell) follows. | Owner + Agent |
 | 2.521 | 2026-10-19 | **SCR-106 stage 1 published (B-687, §26.703).** Statement vocabulary and the F.01 report shell stand. The FSV schema follows in stage 2. | Agent |
+| 2.522 | 2026-10-19 | **SCR-106 stage 2 published (B-688, §26.704).** Migration 0115 (178 total) stands: FSV version/nodes/assignments and the journal aggregation index. The statement service follows in stage 3. | Agent |
