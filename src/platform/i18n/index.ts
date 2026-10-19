@@ -2421,6 +2421,7 @@ const en: Catalogue = {
   'journal.grir': 'GR/IR analysis…',
   'journal.accruals': 'Accruals…',
   'journal.closeCockpit': 'Close cockpit…',
+  'journal.carryforward': 'Carryforward…',
   'carry.title': 'G/L Balance Carryforward',
   'carry.intro': 'Carry a closed year into the next: balance-sheet openings derive from the posted journal and are recorded per account, profit-and-loss accounts close through a transfer document to retained earnings. Test-run first; repeat runs post only the delta. The prior year is never closed or locked here.',
   'carry.selectionTitle': 'Carryforward selection',

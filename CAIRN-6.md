@@ -598,6 +598,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-659.** `executeCarryforward` validates the ledger vocabulary and target year, stands the run RUNNING (refusing a concurrent update run over the same company/ledger/year while allowing test runs freely), then per company derives cumulative balances from the posted journal, records balance-sheet openings, and — in update mode — posts one judged closing-transfer document per company at the source year-end zeroing each P&L account against the determined retained earnings account. Because the transfer lands inside the source-year totals, reruns post only the remaining delta and late adjustments flow through identically; a missing retained-earnings determination fails the update by name and marks test-run P&L rows EXCEPTION. The run closes with totals and status, every result row persisted. The run sheet is wired (execute with test-first default, latest run, history, result protocol). Same-stage bookkeeping: B-659 / §26.675 / §30 row 2.493.
 
+## §26.676 — SCR-102 stage 4: capability, F.16/FAGLGVTR aliases, navigation
+
+**B-660.** Seed grows by the FIN.CLOSE.CARRYFORWARD capability (135 total) and the carryforward term carrying the F.16 and FAGLGVTR aliases (109 terms); the journal list gains the carryforward entry. Seeded twice, idempotent. Same-stage bookkeeping: B-660 / §26.676 / §30 row 2.494.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -722,3 +726,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.491 | 2026-10-19 | **SCR-102 stage 1 published (B-657, §26.673).** Carryforward vocabulary, the run-sheet shell and the RETAINED_EARNINGS determination event stand. Schema follows in stage 2. | Agent |
 | 2.492 | 2026-10-19 | **SCR-102 stage 2 published (B-658, §26.674).** Migration 0110 (173 total) stands: run header and result protocol, repeatable by construction. The execution service follows in stage 3. | Agent |
 | 2.493 | 2026-10-19 | **SCR-102 stage 3 published (B-659, §26.675).** The carryforward executes: derived openings recorded, P&L closed by judged transfer documents, delta-only reruns, concurrency-guarded update runs. Supporting seed follows in stage 4. | Agent |
+| 2.494 | 2026-10-19 | **SCR-102 stage 4 published (B-660, §26.676).** FIN.CLOSE.CARRYFORWARD capability (135) and the F.16/FAGLGVTR alias term seed; carryforward navigation stands. Acceptance follows in stage 5. | Agent |
