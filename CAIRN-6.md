@@ -834,6 +834,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-712.** Three service tests cover the completion (output-currency conversion at the seeded rate with company-split subtotals all converted; missing rate warns and keeps company currency while bad codes are judged; document date and reference exposed on line items) — 8 green with the extended index contract. Browser target T887 (gl-reporting-suite) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-712 / §26.728 / §30 row 2.546.
 
+## §26.729 — SCR-109 CLOSED: G/L reporting suite completion accepted
+
+**B-713.** The suite completion is accepted: balance-report subtotals split by company, account group and currency; a validated output currency converts through the standing ratio-aware AVERAGE rates with the missing-rate warning; line items show document date and reference; drill-down carries period context and the items view returns to the originating balance report. Production build green; browser target T887 passed (drill lands with the document date standing, the return link rebuilds the selection, nothing persisted beyond the fixture); full suite 1489/1489. No new migration, capability or term — the suite keeps riding FIN.GL.BALANCE and FIN.JOURNAL.LIST with its S_ALR_87012271/72/73 aliases. Deferred by name: layout variant persistence, multi-ledger balances, user-selected sorting/grouping — and FIN.RPT.CASHFLOW, which remains Roadmap awaiting the owner's cash-flow package. FUNCTIONS-AND-ROADMAP updated same turn (As-of SCR-109; counts unchanged). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement) — package awaited; the SCR after: FIN.RPT.PROFITLOSS. Same-stage bookkeeping: B-713 / §26.729 / §30 row 2.547.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1011,6 +1015,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.544 | 2026-10-19 | **SCR-109 stage 3 published (B-710, §26.726).** Output-currency conversion and company-split subtotals stand; drill-down carries period context. Supporting seed follows in stage 4. | Agent |
 | 2.545 | 2026-10-19 | **SCR-109 stage 4 published (B-711, §26.727).** Standing term descriptions describe the delivered suite; catalogue counts unchanged. Acceptance follows in stage 5. | Agent |
 | 2.546 | 2026-10-19 | **SCR-109 stage 5 published (B-712, §26.728).** Completion tests pass (conversion, missing-rate warning, document fields); browser target T887 registered. Production build and browser acceptance follow before closure. | Agent |
+| 2.547 | 2026-10-19 | **SCR-109 CLOSED (B-713, §26.729).** G/L reporting suite completion accepted (suite 1489/1489; browser T887). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
