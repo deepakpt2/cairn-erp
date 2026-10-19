@@ -1018,6 +1018,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-758.** `src/modules/finance/consolidation-workbench.ts` carries the UCWB vocabulary (folders, journal-only provider, method kinds, task types, area/unit/group/assignment/chart/mapping/method/version/task shapes) and `/config/consolidation` renders the area context, the five-folder tree and per-folder grids over the inert vocabulary; maintenance arrives in stage 3. `tsc` green. Schema follows in stage 2. Same-stage bookkeeping: B-758 / §26.774 / §30 row 2.592.
 
+## §26.775 — SCR-116 stage 2: consolidation configuration schema
+
+**B-759.** Migration 0119 (182 total) builds eleven normalized configuration tables — data basis (journal provider only), dimensions, area (FK to basis and fiscal-year variant, DRAFT/ACTIVE), units (FK to company code), groups (self-parent), time-dependent unit assignments with validity checks, group accounts, account mappings, methods, versions, and tasks carrying method/unit/group foreign keys — mirrored in the Drizzle schema; no results, postings or BW names. `tests/consolidation-workbench-schema-contract.test.ts` (3 green) pins the alignment; `tsc` green. The configuration service follows in stage 3. Same-stage bookkeeping: B-759 / §26.775 / §30 row 2.593.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1241,6 +1245,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.590 | 2026-10-19 | **SCR-115 CLOSED (B-756, §26.772).** Full suite 1529/1529, production build green, browser T881 passed. FIN.RPT.SUBLEDGER.TIE is Implemented; next is FIN.CONSOLIDATE. | Agent |
 | 2.591 | 2026-10-19 | **SCR-116 contracted (B-757, R-164, §26.773).** UCWB consolidation workbench as FIN.RPT.CONSOLIDATE: configuration only, journal provider binding, time-dependent unit assignments, dependency-judged task hierarchies, activation gate; execution/UCMON, BW providers and transports deferred by name. Stage 1 workbench shell follows. | Agent |
 | 2.592 | 2026-10-19 | **SCR-116 stage 1 published (B-758, §26.774).** UCWB vocabulary and the consolidation workbench shell stand over the inert folders. Schema follows in stage 2. | Agent |
+| 2.593 | 2026-10-19 | **SCR-116 stage 2 published (B-759, §26.775).** Migration 0119 (182 total): eleven consolidation configuration tables stand; the schema contract pins keys, FKs and validity checks. The configuration service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

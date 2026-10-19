@@ -24,7 +24,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { auditColumns, client } from '../../platform/tables/tenancy';
-import { chartOfAccounts, creditControlArea } from '../foundation/schema';
+import { chartOfAccounts, companyCode as foundationCompanyCode, creditControlArea, fiscalYearVariant } from '../foundation/schema';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { glAccountGroup } from './gl-account-group-schema';
 
@@ -1984,4 +1984,208 @@ export const glAccountTransferResult = pgTable('gl_account_transfer_result', {
     foreignColumns: [glAccountTransferRun.client, glAccountTransferRun.runId],
   }).onDelete('cascade'),
   check('gl_account_transfer_result_action_ck', sql`${t.action} in ('CREATED', 'UPDATED', 'SKIPPED', 'ERROR')`),
+]);
+
+
+const consAudit = {
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+};
+
+/** Consolidation data basis (SCR-116): binds the standing journal provider. */
+export const consolidationDataBasis = pgTable('consolidation_data_basis', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  basis: varchar('basis', { length: 24 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  provider: varchar('provider', { length: 12 }).notNull().default('JOURNAL'),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.basis] }),
+  check('consolidation_data_basis_provider_ck', sql`${t.provider} = 'JOURNAL'`),
+]);
+
+export const consolidationDimension = pgTable('consolidation_dimension', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  basis: varchar('basis', { length: 24 }).notNull(),
+  dimension: varchar('dimension', { length: 24 }).notNull(),
+  sourceField: varchar('source_field', { length: 40 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.basis, t.dimension] }),
+  foreignKey({
+    columns: [t.client, t.basis],
+    foreignColumns: [consolidationDataBasis.client, consolidationDataBasis.basis],
+  }).onDelete('cascade'),
+]);
+
+export const consolidationArea = pgTable('consolidation_area', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  dataBasis: varchar('data_basis', { length: 24 }).notNull(),
+  consChart: varchar('cons_chart', { length: 4 }).notNull(),
+  fiscalYearVariant: varchar('fiscal_year_variant', { length: 2 }).notNull(),
+  status: varchar('status', { length: 8 }).notNull().default('DRAFT'),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area] }),
+  foreignKey({
+    columns: [t.client, t.dataBasis],
+    foreignColumns: [consolidationDataBasis.client, consolidationDataBasis.basis],
+  }),
+  foreignKey({
+    columns: [t.client, t.fiscalYearVariant],
+    foreignColumns: [fiscalYearVariant.client, fiscalYearVariant.variant],
+  }),
+  check('consolidation_area_status_ck', sql`${t.status} in ('DRAFT', 'ACTIVE')`),
+]);
+
+export const consolidationUnit = pgTable('consolidation_unit', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.unit] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.companyCode],
+    foreignColumns: [foundationCompanyCode.client, foundationCompanyCode.companyCode],
+  }),
+]);
+
+export const consolidationGroup = pgTable('consolidation_group', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  groupName: varchar('group_name', { length: 24 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  parentGroup: varchar('parent_group', { length: 24 }),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.groupName] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+]);
+
+export const consolidationUnitAssignment = pgTable('consolidation_unit_assignment', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  groupName: varchar('group_name', { length: 24 }).notNull(),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  validFrom: date('valid_from').notNull(),
+  validTo: date('valid_to').notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.groupName, t.unit, t.validFrom] }),
+  foreignKey({
+    columns: [t.client, t.area, t.groupName],
+    foreignColumns: [consolidationGroup.client, consolidationGroup.area, consolidationGroup.groupName],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.area, t.unit],
+    foreignColumns: [consolidationUnit.client, consolidationUnit.area, consolidationUnit.unit],
+  }).onDelete('cascade'),
+  check('consolidation_unit_assignment_validity_ck', sql`${t.validFrom} <= ${t.validTo}`),
+]);
+
+export const consolidationGroupAccount = pgTable('consolidation_group_account', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  consChart: varchar('cons_chart', { length: 4 }).notNull(),
+  account: varchar('account', { length: 10 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.consChart, t.account] }),
+]);
+
+export const consolidationAccountMapping = pgTable('consolidation_account_mapping', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  consChart: varchar('cons_chart', { length: 4 }).notNull(),
+  sourceChart: varchar('source_chart', { length: 4 }).notNull(),
+  sourceFrom: varchar('source_from', { length: 10 }).notNull(),
+  sourceTo: varchar('source_to', { length: 10 }).notNull(),
+  groupAccount: varchar('group_account', { length: 10 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.consChart, t.sourceChart, t.sourceFrom, t.sourceTo] }),
+  foreignKey({
+    columns: [t.client, t.consChart, t.groupAccount],
+    foreignColumns: [consolidationGroupAccount.client, consolidationGroupAccount.consChart, consolidationGroupAccount.account],
+  }),
+  check('consolidation_account_mapping_range_ck', sql`${t.sourceFrom} <= ${t.sourceTo}`),
+]);
+
+export const consolidationMethod = pgTable('consolidation_method', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  method: varchar('method', { length: 12 }).notNull(),
+  kind: varchar('kind', { length: 24 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.method] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+  check('consolidation_method_kind_ck', sql`${t.kind} in ('CURRENCY_TRANSLATION', 'INTERCOMPANY_ELIMINATION', 'INVESTMENT', 'OTHER')`),
+]);
+
+export const consolidationVersion = pgTable('consolidation_version', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  version: varchar('version', { length: 3 }).notNull(),
+  title: varchar('title', { length: 80 }).notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.version] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+]);
+
+export const consolidationTask = pgTable('consolidation_task', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  version: varchar('version', { length: 3 }).notNull(),
+  task: varchar('task', { length: 16 }).notNull(),
+  parentTask: varchar('parent_task', { length: 16 }),
+  sequence: integer('sequence').notNull().default(10),
+  taskType: varchar('task_type', { length: 24 }).notNull(),
+  method: varchar('method', { length: 12 }),
+  unit: varchar('unit', { length: 10 }),
+  groupName: varchar('group_name', { length: 24 }),
+  validFrom: date('valid_from').notNull(),
+  validTo: date('valid_to').notNull(),
+  ...consAudit,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.version, t.task] }),
+  foreignKey({
+    columns: [t.client, t.area, t.version],
+    foreignColumns: [consolidationVersion.client, consolidationVersion.area, consolidationVersion.version],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.area, t.method],
+    foreignColumns: [consolidationMethod.client, consolidationMethod.area, consolidationMethod.method],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.unit],
+    foreignColumns: [consolidationUnit.client, consolidationUnit.area, consolidationUnit.unit],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.groupName],
+    foreignColumns: [consolidationGroup.client, consolidationGroup.area, consolidationGroup.groupName],
+  }),
+  check('consolidation_task_type_ck', sql`${t.taskType} in ('DATA_COLLECTION', 'CURRENCY_TRANSLATION', 'ELIMINATION', 'INVESTMENT', 'VALIDATION', 'OTHER')`),
+  check('consolidation_task_validity_ck', sql`${t.validFrom} <= ${t.validTo}`),
 ]);
