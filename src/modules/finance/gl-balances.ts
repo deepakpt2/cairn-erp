@@ -170,6 +170,8 @@ export async function getGlBalances(client: string, input: {
  */
 export interface GlBalanceReportSelection {
   companyCodes: string[];
+  /** Optional presentation currency; unset keeps each company currency. */
+  outputCurrency?: string;
   accountFrom: string;
   accountTo: string;
   fiscalYear: number;
@@ -197,6 +199,7 @@ export interface GlBalanceReportRow {
 }
 
 export interface GlBalanceGroupSubtotal {
+  companyCode: string;
   accountGroup: string;
   currency: string;
   accountCount: number;
@@ -216,6 +219,7 @@ export interface GlBalanceReportView {
   rows: GlBalanceReportRow[];
   subtotals: GlBalanceGroupSubtotal[];
   warnings: string[];
+  outputCurrency: string | null;
   calculatedAt: string;
 }
 
@@ -241,6 +245,10 @@ export async function getGlBalanceReport(
   }
   if (selection.periodFrom < 1 || selection.periodTo > 16 || selection.periodFrom > selection.periodTo) {
     throw new GlBalanceError('The period range is invalid.', 'Period from must not exceed period to; periods run 1–16.');
+  }
+  const outputCurrency = (selection.outputCurrency ?? '').toUpperCase();
+  if (outputCurrency && !/^[A-Z]{3}$/.test(outputCurrency)) {
+    throw new GlBalanceError(`Output currency ${selection.outputCurrency} is not a configured currency code.`, 'Use a three-letter currency code.');
   }
   const calculatedAt = new Date().toISOString();
   const warnings: string[] = [];
@@ -325,10 +333,42 @@ export async function getGlBalanceReport(
     }
     rows.sort((a, b) => a.companyCode.localeCompare(b.companyCode) || a.glAccount.localeCompare(b.glAccount));
 
+    // Optional output-currency conversion (ratio-aware AVERAGE
+    // rates); a missing rate warns and keeps the company currency.
+    if (outputCurrency) {
+      const today = calculatedAt.slice(0, 10);
+      const factors = new Map<string, number | null>();
+      for (const from of new Set(rows.map((r) => r.currency))) {
+        if (from === outputCurrency) { factors.set(from, 1); continue; }
+        const rateRows = await tx.execute(sql`
+          select rate::text as rate, ratio_from, ratio_to from exchange_rate
+          where rate_type = 'AVERAGE' and from_currency = ${from}
+            and to_currency = ${outputCurrency} and valid_from <= ${today}
+          order by valid_from desc limit 1
+        `) as unknown as Array<{ rate: string; ratio_from: number; ratio_to: number }>;
+        const rate = rateRows[0];
+        factors.set(from, rate ? Number(rate.rate) * Number(rate.ratio_to) / Number(rate.ratio_from) : null);
+        if (!rate) warnings.push(`No AVERAGE rate from ${from} to ${outputCurrency} stands; those figures remain in ${from}.`);
+      }
+      for (const row of rows) {
+        const factor = factors.get(row.currency);
+        if (factor === null || factor === undefined || factor === 1) continue;
+        row.openingBalance = round2(row.openingBalance * factor);
+        row.debitTurnover = round2(row.debitTurnover * factor);
+        row.creditTurnover = round2(row.creditTurnover * factor);
+        row.netChange = round2(row.netChange * factor);
+        row.closingBalance = round2(row.closingBalance * factor);
+        row.debitBalance = round2(row.debitBalance * factor);
+        row.creditBalance = round2(row.creditBalance * factor);
+        row.currency = outputCurrency;
+      }
+    }
+
     const subtotalMap = new Map<string, GlBalanceGroupSubtotal>();
     for (const row of rows) {
-      const key = `${row.accountGroup}|${row.currency}`;
+      const key = `${row.companyCode}|${row.accountGroup}|${row.currency}`;
       const subtotal = subtotalMap.get(key) ?? {
+        companyCode: row.companyCode,
         accountGroup: row.accountGroup, currency: row.currency, accountCount: 0,
         debitTurnover: 0, creditTurnover: 0, netChange: 0, closingBalance: 0, debitBalance: 0, creditBalance: 0,
       };
@@ -345,8 +385,9 @@ export async function getGlBalanceReport(
     return {
       ledger: selection.ledger, fiscalYear: selection.fiscalYear,
       periodFrom: selection.periodFrom, periodTo: effectiveTo,
-      rows, subtotals: [...subtotalMap.values()].sort((a, b) => a.accountGroup.localeCompare(b.accountGroup)),
-      warnings, calculatedAt,
+      rows, subtotals: [...subtotalMap.values()].sort((a, b) =>
+        a.companyCode.localeCompare(b.companyCode) || a.accountGroup.localeCompare(b.accountGroup)),
+      warnings, outputCurrency: outputCurrency || null, calculatedAt,
     };
   });
 }

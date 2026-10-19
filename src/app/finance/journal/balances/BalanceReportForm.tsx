@@ -52,7 +52,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
           </label>
           <label className="block">
             <span className={labelCls}>Output currency</span>
-            <input name="outputCurrency" className={inputCls} placeholder="Company currency" maxLength={5} />
+            <input name="outputCurrency" className={inputCls} placeholder="Company currency" maxLength={5} defaultValue={selection.outputCurrency ?? ''} />
           </label>
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm">
@@ -108,7 +108,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
                     <td className="px-2 py-2">{row.creditBalance.toFixed(2)}</td>
                     <td className="px-2 py-2">
                       <Link className="text-accent hover:underline"
-                        href={`/finance/journal/items?accountFrom=${row.glAccount}&companyCodes=${row.companyCode}&fiscalYear=${report.fiscalYear}`}>
+                        href={`/finance/journal/items?accountFrom=${row.glAccount}&companyCodes=${row.companyCode}&fiscalYear=${report.fiscalYear}${report.periodFrom === report.periodTo ? `&postingPeriod=${report.periodFrom}` : ''}`}>
                         Line items
                       </Link>
                     </td>
@@ -124,7 +124,7 @@ export default function BalanceReportForm({ selection, report, reportError, canD
                 <table className="min-w-full text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                      <th className="px-2 py-2">Account Group</th><th className="px-2 py-2">Currency</th>
+                      <th className="px-2 py-2">Company</th><th className="px-2 py-2">Account Group</th><th className="px-2 py-2">Currency</th>
                       <th className="px-2 py-2">Accounts</th><th className="px-2 py-2">Period Debit</th>
                       <th className="px-2 py-2">Period Credit</th><th className="px-2 py-2">Net Change</th>
                       <th className="px-2 py-2">Closing Balance</th><th className="px-2 py-2">Debit Balance</th>
@@ -133,7 +133,8 @@ export default function BalanceReportForm({ selection, report, reportError, canD
                   </thead>
                   <tbody>
                     {report.subtotals.map((subtotal) => (
-                      <tr key={`${subtotal.accountGroup}-${subtotal.currency}`} className="border-t border-line">
+                      <tr key={`${subtotal.companyCode}-${subtotal.accountGroup}-${subtotal.currency}`} className="border-t border-line">
+                        <td className="px-2 py-2">{subtotal.companyCode}</td>
                         <td className="px-2 py-2">{subtotal.accountGroup}</td>
                         <td className="px-2 py-2">{subtotal.currency}</td>
                         <td className="px-2 py-2">{subtotal.accountCount}</td>

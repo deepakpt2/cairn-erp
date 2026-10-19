@@ -50,6 +50,7 @@ export default async function GlBalancesPage({ searchParams }: {
     periodFrom: Number(params.periodFrom ?? 1),
     periodTo: Number(params.periodTo ?? 12),
     includeSpecialPeriods: params.reportSpecialPeriods === '1',
+    outputCurrency: params.outputCurrency?.toUpperCase() || undefined,
     ledger: '0L',
   };
   let report: GlBalanceReportView | null = null;
