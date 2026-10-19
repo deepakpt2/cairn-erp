@@ -1,0 +1,40 @@
+# Cairn — Project Log & Technical Specification (continued)
+
+**Product:** Cairn — an enterprise resource planning system
+**Hostname:** cairn.deepakpt.com
+**Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
+**Created:** 2026-10-19 (v2.374) · **Part 6 of 6 — this is the live part**
+**Continues:** [CAIRN.md](CAIRN.md) (§0–§26.35) · [CAIRN-2.md](CAIRN-2.md) (§26.36–§30 through v1.69) · [CAIRN-3.md](CAIRN-3.md) (§0.3, §1.4 R-24–R-72, §2.1 D-093–D-139, §26.167–§26.259, §30 v1.70–v2.61) · [CAIRN-4.md](CAIRN-4.md) (§1.4 R-73–R-98, §26.260–§26.364, §30 v2.62–2.169) · [CAIRN-5.md](CAIRN-5.md) (§26.365–§26.555, §30 v2.170–2.373)
+**Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
+
+---
+
+## §0.3 Document-set size and rotation rule `AGREED · v1.70`
+
+The rule recorded in `CAIRN-3.md` §0.3 (R-24 / D-093) is unchanged and binding: no part may exceed
+400,000 bytes; a live part rotates as soon as it passes 360,000 bytes; the next part continues section
+and version numbering without a gap; both the outgoing and the incoming part carry a continuation
+notice; a rotated part is frozen to pointer edits and corrections that cannot be deferred; size is
+measured on disk in the same turn any canonical file is edited.
+
+**Set status at v2.374 (2026-10-19):** `CAIRN-5.md` passed the rotation trigger at 361,576 bytes and
+is frozen to pointer edits; this part continues §26 from 26.556 and §30 from 2.374. SCR-083 (F-29) is
+the last round closed in part 5; SCR-084 (F-39) opens here.
+
+---
+
+## §26.556 — SCR-084 contract R-132: clear customer down payment (F-39)
+
+The owner supplied the F-39 field package (2026-10-19); SAP codes stand as search aliases only. This round mirrors R-130 (SCR-082) on the customer side and completes the customer advance chain (F-29 → F-39). **The owner's accounting correction is accepted in full:** a clearing is a real transfer posting, never a marking exercise — one journal moves the applied value off the indicator's alternative reconciliation account onto the customer's ordinary reconciliation account, and only then are fully applied items stamped.
+
+**Contract decisions.** (1) *Document type and indicator are configuration, never constants of the business logic:* the clearing journal posts under **DZ** — the delivered customer-payment document type, judged by the posting engine against the tenant's configured document types (the package's AB is declined: in the delivered configuration AB permits G/L accounts only and could not carry customer partner lines); the special G/L indicator resolves through the standing AR special G/L configuration, company scope first, then tenant-wide, and an unconfigured indicator is refused by name — `A` is never hardcoded. (2) *Allocation grid, pairwise:* the clearing's unit is an **allocation** — one down-payment item, one invoice item, one positive amount. One down payment may settle several invoices and one invoice may draw on several down payments; partial clearing is valid and unallocated balances stay open. Each allocation is judged: same tenant, company and customer on both items; the source an eligible open down-payment item of the chosen indicator; the target an eligible open standard receivable; the sum allocated per item never above its remaining balance. The journal aggregates the allocations per item — debit the alternative account per down payment applied (`Applied from …`), credit the ordinary reconciliation account per invoice settled (`Settles …`) — so the document balances by construction and the unassigned difference is zero; there is no difference posting in a clearing. (3) *The allocation-mapping table is **adopted** this round* (a deliberate departure from the R-127–R-131 declines, on the package's explicit requirement): `customer_down_payment_clearing` carries the clearing header in the house payment-record pattern (client scope, journal document number as the clearing number, resolved alternative account, request-key idempotency, audit columns) and `customer_down_payment_clearing_item` carries one row per allocation, linking both source journal lines by (client, document number, fiscal year, line number) under composite foreign keys, with the allocated amount and currency. The **journal lines remain the balance authority** — remaining balances derive from the posted lines (original less offsetting lines naming it), never from the mapping; the header's cleared total is a summary reconciled to the committed allocation rows during posting, and role conditions (customer, indicator, eligibility) are judged in the service because foreign keys cannot express them. (4) *Eligibility and balances:* down-payment items are the open, unstamped credit lines of standing `customer_down_payment` receipts for the chosen indicator on the resolved alternative account; invoice items are the customer's open debit items on the ordinary reconciliation account; reversed and fully cleared items never appear (posted journals only). Remaining amounts are re-read under the clearing's advisory lock (`${client}/custdpclr/${company}/${customer}`) after the request-key replay check, exactly as the standing clearings. (5) *Customer and period judging:* the customer must stand extended to the company and unblocked, with a reconciliation account; the fiscal position derives from the company's fiscal-year variant and the posting date through the standing period machinery; the clearing date stamps fully applied items. (6) *Currency:* one clearing settles one currency — items and the clearing currency must agree, or the clearing is refused naming the currencies.
+
+**Deferred by name:** foreign-currency conversion and exchange-rate differences (mixed-currency clearings are refused, not converted), cash-discount and residual-difference postings, tax adjustment on clearing, down-payment requests (F-37), drafts, a server-side posting simulation (the screen totals the allocation grid client-side), and reset or reversal of a clearing beyond the standing clearing-reset (FIN.CLEARING.RESET) and journal-reversal machinery. Stage order: 1 the `/finance/customer-down-payment-clearing` screen → 2 schema (clearing header + allocation mapping, migration) → 3 service and screen wiring → 4 supporting (capability and term) → 5 tests and browser acceptance. Same-stage bookkeeping: B-540 / §26.556 / §30 row 2.374.
+
+---
+
+## §30 · Change log (continued)
+
+| Ver | Date | Change | By |
+|---|---|---|---|
+| 2.374 | 2026-10-19 | **CAIRN-6 opens; SCR-084 / F-39 contracted (R-132, B-540, §26.556).** `CAIRN-5.md` passed the 360,000-byte rotation trigger (361,576 bytes) and is frozen to pointer edits; this part continues §26 from 26.556 and this log from 2.374 (§0.3 / D-093). F-39 clearing is a real DZ transfer posting (alternative account debits per down payment, ordinary reconciliation credits per invoice), pairwise allocations across multiple items with partial clearing, the allocation-mapping table adopted under composite foreign keys while journal lines stay the balance authority; indicator and document type resolve through configuration. FX conversion, discount/difference postings, drafts, server simulation and clearing reset beyond the standing machinery deferred by name. | Agent |

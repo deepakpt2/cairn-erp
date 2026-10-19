@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-18 (v2.170) · **Part 5 of 5 — this is the live part**
+**Created:** 2026-10-18 (v2.170) · **Part 5 of 6 — FROZEN at v2.373 (2026-10-19); the set continues in [CAIRN-6.md](CAIRN-6.md)**
 **Continues:** [CAIRN.md](CAIRN.md) (§0–§26.35) · [CAIRN-2.md](CAIRN-2.md) (§26.36–§30 through v1.69) · [CAIRN-3.md](CAIRN-3.md) (§0.3, §1.4 R-24–R-72, §2.1 D-093–D-139, §26.167–§26.259, §30 v1.70–v2.61) · [CAIRN-4.md](CAIRN-4.md) (§1.4 R-73–R-98, §26.260–§26.364, §30 v2.62–2.169)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -1664,3 +1664,8 @@ change to code, schema, decision or scope (§0.1). When it passes 360,000 bytes,
 | 2.371 | 2026-10-18 | **SCR-083 stage 3 published (B-537, §26.553).** Customer down-payment service stands: AR indicator resolution under lock, DZ journal on the alternative account, replay by request key; the screen is live. Capability follows in stage 4. | Agent |
 | 2.372 | 2026-10-18 | **SCR-083 stage 4 published (B-538, §26.554).** Capability F-29 seeded (116 capabilities / 90 terms / 99 aliases). Tests and browser acceptance follow in stage 5. | Agent |
 | 2.373 | 2026-10-18 | **SCR-083 stage 5 published — CLOSED (B-539, §26.555).** Tests 3/3, full suite 1356 green, browser T913 green; customer down payments stand accepted. Next: T-code F-39 clear customer down payment. | Agent |
+
+*This part is frozen. It passed the 360,000-byte rotation trigger at v2.373, so the set continues in
+[`CAIRN-6.md`](CAIRN-6.md), which is the live canonical log from 2026-10-19 onward and carries §26.556+
+and §30 v2.374+ (§0.3 / D-093). Edits here are limited to pointer and continuation lines and to
+corrections that cannot be deferred.*
