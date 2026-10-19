@@ -212,7 +212,7 @@ export const journalEntryLine = pgTable(
  * Idempotency bookkeeping only — never a document store.
  */
 export const journalPostingRequest = pgTable('journal_posting_request', {
-  client: tenantClient(),
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
   requestKey: varchar('request_key', { length: 64 }).notNull(),
   actor: varchar('actor', { length: 60 }).notNull(),
   documentNumber: varchar('document_number', { length: 40 }).notNull(),
