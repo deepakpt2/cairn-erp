@@ -50,6 +50,10 @@ export default function BalanceReportForm({ selection, report, reportError, canD
             <span className={labelCls}>Ledger</span>
             <input name="ledger" className={inputCls} defaultValue={selection.ledger} readOnly />
           </label>
+          <label className="block">
+            <span className={labelCls}>Output currency</span>
+            <input name="outputCurrency" className={inputCls} placeholder="Company currency" maxLength={5} />
+          </label>
         </div>
         <label className="mt-3 flex items-center gap-2 text-sm">
           <input type="checkbox" name="reportSpecialPeriods" value="1" defaultChecked={selection.includeSpecialPeriods} />

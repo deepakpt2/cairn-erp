@@ -122,12 +122,14 @@ export default function ItemsForm({ result, error, canList }: {
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
                     <th className="px-2 py-2">Company</th><th className="px-2 py-2">Document</th>
                     <th className="px-2 py-2">Line</th><th className="px-2 py-2">Posting date</th>
+                    <th className="px-2 py-2">Document date</th>
                     <th className="px-2 py-2">Type</th><th className="px-2 py-2">Account</th>
                     <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Amount</th>
                     <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
                     <th className="px-2 py-2">Cost centre</th><th className="px-2 py-2">Profit centre</th>
                     <th className="px-2 py-2">Status</th><th className="px-2 py-2">Clearing</th>
-                    <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Text</th>
+                    <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Reference</th>
+                    <th className="px-2 py-2">Text</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -142,6 +144,7 @@ export default function ItemsForm({ result, error, canList }: {
                       </td>
                       <td className="px-2 py-2">{row.lineNumber}</td>
                       <td className="px-2 py-2">{row.postingDate}</td>
+                      <td className="px-2 py-2">{row.documentDate}</td>
                       <td className="px-2 py-2">{row.documentType}</td>
                       <td className="px-2 py-2">{row.glAccount}</td>
                       <td className="px-2 py-2">{row.debitCredit}</td>
@@ -153,6 +156,7 @@ export default function ItemsForm({ result, error, canList }: {
                       <td className="px-2 py-2">{row.itemStatus ?? '—'}</td>
                       <td className="px-2 py-2">{row.clearingDocument ?? '—'}</td>
                       <td className="px-2 py-2">{row.assignment ?? '—'}</td>
+                      <td className="px-2 py-2">{row.reference ?? '—'}</td>
                       <td className="px-2 py-2">{row.lineText ?? '—'}</td>
                     </tr>
                   ))}

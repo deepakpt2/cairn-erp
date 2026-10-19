@@ -63,6 +63,16 @@ export default async function JournalItemsPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('journalItems.subtitle')}</p>
       </header>
 
+      {params.accountFrom && (
+        <p className="text-sm">
+          <Link
+            className="text-accent hover:underline"
+            href={`/finance/journal/balances?report=1&reportCompanies=${encodeURIComponent(params.companyCodes ?? '')}&accountFrom=${encodeURIComponent(params.accountFrom)}&accountTo=${encodeURIComponent(params.accountTo ?? '')}&reportFiscalYear=${encodeURIComponent(params.fiscalYear ?? '')}`}
+          >
+            ← Balance report
+          </Link>
+        </p>
+      )}
       <ItemsForm result={result} error={error} canList={canList} />
     </div>
   );
