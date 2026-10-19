@@ -50,11 +50,11 @@ export async function closeCockpit(ctx: Context) {
 
   await page.getByRole('button', { name: 'Release task list', exact: true }).click();
   const t10 = page.locator('tr', { hasText: 'Check period status' }).first();
-  await t10.getByText('RELEASED', { exact: true }).waitFor();
+  await t10.locator('td').nth(4).getByText('RELEASED', { exact: true }).waitFor();
   console.log('  ✓ task list released');
 
   await t10.getByRole('button', { name: 'Run', exact: true }).click();
-  await t10.getByText('COMPLETED', { exact: true }).waitFor();
+  await t10.locator('td').nth(4).getByText('COMPLETED', { exact: true }).waitFor();
   console.log('  ✓ first task executed through its handler and completed');
 
   await page.getByText(/Period 2026\/04: no documents/).first().waitFor();
