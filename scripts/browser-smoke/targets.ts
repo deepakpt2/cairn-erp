@@ -70,6 +70,7 @@ export const TARGETS = [
   { id: 'document-display', client: 'T906', label: 'SCR-090 FB03 document display: composite key, reversal flow, change history' },
   { id: 'asset-master', client: 'T905', label: 'SCR-091 AS01/AS02 asset master: tabbed create, versioned change, interval history' },
   { id: 'asset-acquisition', client: 'T904', label: 'SCR-092 ABZON asset acquisition: simulate, engine posting, asset-aware reversal' },
+  { id: 'asset-retirement', client: 'T903', label: 'SCR-093 ABAVN asset retirement: simulate, partial scrapping, asset-aware reversal' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
