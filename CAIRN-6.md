@@ -624,6 +624,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 Deferred by name: SD order/delivery/billing exposure components and their event-driven refresh (no SD canon), field-level permission granularity beyond the FIN.CREDIT.MAINTAIN capability, credit-record migration tooling for key changes. Same-stage bookkeeping: B-664 / §26.680 / §30 row 2.498.
 
+## §26.681 — SCR-103 stage 1: credit vocabulary and credit-sheet shell
+
+**B-665.** The credit vocabulary stands in `src/modules/finance/credit.ts` (decisions, never-bypass block reasons, record/exposure/check/audit views) and `/finance/credit` renders the credit sheet: customer + area selection, the overview stats (limit, exposure, available, utilization, open receivables, risk, validity, hold) and the change-history table. Nothing saves yet. Same-stage bookkeeping: B-665 / §26.681 / §30 row 2.499.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -753,3 +757,4 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 | 2.496 | 2026-10-19 | **SCR-102 CLOSED (B-662, §26.678).** FIN.CLOSE.CARRYFORWARD accepted: derived openings, judged P&L closing transfers, delta-only repeats (suite 1449/1449; browser T894). Next SCR: FIN.IC.POST; its package is awaited. | Agent |
 | 2.497 | 2026-10-19 | **Intercompany deferred to last (B-663, §26.679).** FIN.IC.POST and FIN.IC.CLEAR (with Intercompany config) marked Deferred after a clean dependency check. Next SCR: FIN.CREDIT.MAINTAIN (FD32); its package is awaited. | Owner + Agent |
 | 2.498 | 2026-10-19 | **SCR-103 contract approved (B-664, §26.680, R-151).** FIN.CREDIT.MAINTAIN: per-customer/area credit records with append-only field audit, derived FI-AR exposure, and an explicit never-bypass credit-check evaluation. Stage 1 (vocabulary + credit sheet shell) follows. | Owner + Agent |
+| 2.499 | 2026-10-19 | **SCR-103 stage 1 published (B-665, §26.681).** Credit vocabulary and the credit-sheet shell stand. Schema follows in stage 2. | Agent |
