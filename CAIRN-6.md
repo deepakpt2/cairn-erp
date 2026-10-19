@@ -442,6 +442,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-624.** Seed grows by one capability (FIN.TAX.REPORT, 130 total) and by the S_ALR_87012357 alias term; the journal list gains the tax-return entry. Seeded twice, idempotent. Same-stage bookkeeping: B-624 / §26.640 / §30 row 2.458.
 
+## §26.641 — SCR-097 stage 5: service tests and browser target
+
+**B-625.** Four service tests cover the return: test-mode extraction by code and account key with derived bases and net payable while stamping nothing; update stamping with stamped-line exclusion and corrected re-inclusion; the clearing transfer (TAX determination account against the clearing account for the net) posted atomically, with reversal mirrors netting rather than reclassifying; and country/window refusals. Browser target T899 (tax-report) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-625 / §26.641 / §30 row 2.459.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -531,3 +535,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.456 | 2026-10-19 | **SCR-097 stage 2 published (B-622, §26.638).** Tax return run log and line stamp stand (migration 0105, 168 total). Extraction and update service follows in stage 3. | Agent |
 | 2.457 | 2026-10-19 | **SCR-097 stage 3 published (B-623, §26.639).** Tax extraction stands: posted tax lines by code, derived base, update stamping with corrected-return re-inclusion, atomic clearing transfer. Supporting seed follows in stage 4. | Agent |
 | 2.458 | 2026-10-19 | **SCR-097 stage 4 published (B-624, §26.640).** FIN.TAX.REPORT capability (130) and the S_ALR_87012357 alias seed; the journal list exposes the tax return. Acceptance follows in stage 5. | Agent |
+| 2.459 | 2026-10-19 | **SCR-097 stage 5 published (B-625, §26.641).** Four tax-return service tests pass (extraction, stamping lifecycle, clearing transfer, reversal netting); browser target T899 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

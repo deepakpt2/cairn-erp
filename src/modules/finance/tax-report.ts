@@ -155,9 +155,11 @@ export async function executeTaxReport(input: {
         taxBase: null, inputTax: 0, outputTax: 0, currency: row.currency,
         documentCount: 0, alreadyReported: 0, stamped: 0,
       };
-      const amount = Number(row.amount);
-      if (row.debit_credit === 'S') entry.inputTax = round2(entry.inputTax + amount);
-      else entry.outputTax = round2(entry.outputTax + amount);
+      // Signed per code first: a reversal mirror carries the same
+      // code with the opposite indicator and must net against the
+      // original, never reclassify input tax as output tax.
+      const signed = row.debit_credit === 'S' ? Number(row.amount) : -Number(row.amount);
+      entry.inputTax = round2(entry.inputTax + signed);
       if (row.tax_return_run_id) entry.stamped += 1;
       byKey.set(key, entry);
     }
@@ -168,14 +170,19 @@ export async function executeTaxReport(input: {
       set.add(row.document_number);
       docCounts.set(key, set);
     }
-    const lines: TaxReportLine[] = [...byKey.values()].map(({ stamped, ...entry }) => ({
-      ...entry,
-      documentCount: docCounts.get(`${entry.taxCode}|${entry.currency}`)?.size ?? 0,
-      alreadyReported: stamped,
-      taxBase: entry.ratePercent > 0
-        ? round2(((entry.inputTax + entry.outputTax) / entry.ratePercent) * 100)
-        : null,
-    })).sort((a, b) => a.taxCode.localeCompare(b.taxCode));
+    const lines: TaxReportLine[] = [...byKey.values()].map(({ stamped, ...entry }) => {
+      const signed = entry.inputTax;
+      return {
+        ...entry,
+        inputTax: signed > 0 ? signed : 0,
+        outputTax: signed < 0 ? -signed : 0,
+        documentCount: docCounts.get(`${entry.taxCode}|${entry.currency}`)?.size ?? 0,
+        alreadyReported: stamped,
+        taxBase: entry.ratePercent > 0
+          ? round2((Math.abs(signed) / entry.ratePercent) * 100)
+          : null,
+      };
+    }).sort((a, b) => a.taxCode.localeCompare(b.taxCode));
 
     const warnings: string[] = [];
     for (const line of lines) {

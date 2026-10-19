@@ -250,7 +250,8 @@ export const taxReturnRun = pgTable('tax_return_run', {
   currency: char('currency', { length: 3 }).notNull(),
   transferDocumentNumber: varchar('transfer_document_number', { length: 40 }),
   linesReported: integer('lines_reported').notNull().default(0),
-  ...auditColumns,
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   primaryKey({ columns: [t.client, t.runId] }),
   index('tax_return_run_company_idx').on(t.client, t.companyCode, t.postingDateFrom),

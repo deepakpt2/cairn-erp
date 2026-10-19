@@ -92,6 +92,7 @@ import { assetRetirementAbavn } from './asset-retirement';
 import { assetDepreciationAfab } from './asset-depreciation';
 import { assetHistorySheet } from './asset-history';
 import { glDocumentEntry } from './gl-document';
+import { taxReportReturn } from './tax-report';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4991,6 +4992,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'asset-depreciation': assetDepreciationAfab,
   'asset-history': assetHistorySheet,
   'gl-document': glDocumentEntry,
+  'tax-report': taxReportReturn,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,
