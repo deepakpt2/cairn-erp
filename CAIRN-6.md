@@ -374,6 +374,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-607.** Stage 1 of R-143: `asset-history.ts` carries the vocabulary (capability `FIN.ASSET.REPORT`, selection ranges, sheet row and totals shapes), and `/finance/assets/history` stands as an inert shell with the selection matrix (company/class/asset ranges, fiscal year, depreciation area, reporting date, sort version, layout) and the sheet section. Buttons stay disabled until the service lands in stage 3. Same-stage bookkeeping: B-607 / §26.623 / §30 row 2.441.
 
+## §26.624 — SCR-095 stage 2: report indexes (no new tables)
+
+**B-608.** Stage 2 of R-143 creates no table — the contract forbids a balance store behind a read-only sheet. Migration `0103_asset_history_indexes.sql` (166 migrations) adds only the composites the date-bounded aggregation is not already served by: `(client, company_code, asset_value_date)` on both transaction families and `(client, company_code, fiscal_year, posting_period)` on the depreciation posting record; the per-asset indexes of SCR-092/093/094 already cover the drill paths. Same-stage bookkeeping: B-608 / §26.624 / §30 row 2.442.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -446,3 +450,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.439 | 2026-10-19 | **SCR-094 closed (B-605, §26.621).** AFAB depreciation run accepted under R-142: shared test/live calculation, grouped engine posting, posted-depreciation records feeding repeat adjustments and SCR-093 reversals, restartable failures. Suite 1412 green, browser T902 green, seed 128 capabilities / 102 terms / 110 aliases, DB 165 migrations. Next: FIN.ASSET.REPORT (S_ALR_87011990). | Agent |
 | 2.440 | 2026-10-19 | **SCR-095 contract published (B-606, §26.622, R-143).** Asset history sheet as a read-only aggregation over the standing value records: value-date windows, posted-only depreciation by area, per-currency class subtotals, judged ranges, CSV export. Implementation follows in stage order. | Agent |
 | 2.441 | 2026-10-19 | **SCR-095 stage 1 published (B-607, §26.623).** Asset history sheet shell stands at `/finance/assets/history` with the selection matrix; module vocabulary committed, service deferred to stage 3. | Agent |
+| 2.442 | 2026-10-19 | **SCR-095 stage 2 published (B-608, §26.624).** Report indexes stand (migration 0103, 166 total); no new tables behind the read-only sheet. Aggregation service follows in stage 3. | Agent |

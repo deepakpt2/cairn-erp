@@ -774,6 +774,7 @@ export const assetTransaction = pgTable('asset_transaction', {
   uniqueIndex('asset_transaction_request_uk').on(t.client, t.requestKey)
     .where(sql`${t.requestKey} is not null`),
   index('asset_transaction_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
+  index('asset_transaction_report_idx').on(t.client, t.companyCode, t.assetValueDate),
 ]);
 
 /**
@@ -824,6 +825,7 @@ export const assetRetirement = pgTable('asset_retirement', {
   uniqueIndex('asset_retirement_request_uk').on(t.client, t.requestKey)
     .where(sql`${t.requestKey} is not null`),
   index('asset_retirement_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
+  index('asset_retirement_report_idx').on(t.client, t.companyCode, t.assetValueDate),
 ]);
 
 /**
@@ -932,6 +934,7 @@ export const assetDepreciationPosting = pgTable('asset_depreciation_posting', {
     name: 'asset_depreciation_posting_asset_fk',
   }),
   index('asset_depreciation_posting_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.areaCode),
+  index('asset_depreciation_posting_report_idx').on(t.client, t.companyCode, t.fiscalYear, t.postingPeriod),
 ]);
 
 export const parkedJournalHeader = pgTable('parked_journal_header', {
