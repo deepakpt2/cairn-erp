@@ -89,7 +89,8 @@ export default function CreditReleaseShell({ canUse, canOverride, determinations
         <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">{t('release.display')}</button>
       </form>
 
-      <form action={bulkRelease} className="panel space-y-3 p-4" aria-label={t('release.bulkTitle')}>
+      <div className="panel space-y-3 p-4">
+      <form id="bulk-release" action={bulkRelease} aria-label={t('release.bulkTitle')}>
         <div className="flex flex-wrap items-end gap-3">
           <Field label={t('release.justification')}>
             <input name="justification" maxLength={240} className="field-input w-72" placeholder={t('release.justificationHint')} />
@@ -102,6 +103,7 @@ export default function CreditReleaseShell({ canUse, canOverride, determinations
           </button>
           {!canOverride && <span className="text-2xs text-ink-faint">{t('release.noOverride')}</span>}
         </div>
+      </form>
 
         <div className="overflow-x-auto">
           <table className="grid-table min-w-[76rem]">
@@ -122,7 +124,7 @@ export default function CreditReleaseShell({ canUse, canOverride, determinations
                 <tr key={d.determinationId}>
                   <td>
                     {d.status === 'BLOCKED' && (
-                      <input type="checkbox" name={`doc_${d.salesDocument}`} aria-label={t('release.select')} />
+                      <input type="checkbox" form="bulk-release" name={`doc_${d.salesDocument}`} aria-label={t('release.select')} />
                     )}
                   </td>
                   <td className="code">{d.salesDocument}</td>
@@ -178,7 +180,7 @@ export default function CreditReleaseShell({ canUse, canOverride, determinations
             </tbody>
           </table>
         </div>
-      </form>
+      </div>
     </div>
   );
 }
