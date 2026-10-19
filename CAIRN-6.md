@@ -866,6 +866,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-720.** FS15 is accepted with SAP parity: the company-code segment of the G/L master now stands (migration 0116, backfilled from chart values), governs where it stands (open-item judgement and posting blocks read it first, chart flags remain the fallback), and transfers between company codes on a shared chart under test-run/overwrite policy with a persisted per-account protocol — chart-level records never overwritten for a company difference, nothing posted. Production build green; browser target T886 passed (test run previews CREATED copying nothing, live run creates the segment, zero journals); full suite 1494/1494. Deferred by name: a standalone segment editor (segments maintain through FS15, display read-only), chart-level flag retirement, and FIN.RPT.CASHFLOW, still Roadmap awaiting its package. FUNCTIONS-AND-ROADMAP updated same turn (As-of SCR-110; 142 capabilities / 115 business terms). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement) — package awaited; the SCR after: FIN.RPT.PROFITLOSS. Same-stage bookkeeping: B-720 / §26.736 / §30 row 2.554.
 
+## §26.737 — Roadmap decision: cash-flow statement later, SCR-111 proceeds to profit & loss
+
+**B-721 (owner decision, 2026-10-19).** The owner confirms S_ALR_87012271/72/73 were fully given and are delivered as the G/L reporting suite (SCR-108/109 closed); a distinct cash-flow statement (operating/investing/financing) is still wanted **later**, under its own package when the owner sends it. FIN.RPT.CASHFLOW stays Roadmap; its aliases are settled with that package (the three S_ALR codes remain on the suite terms). SCR-111 proceeds to **FIN.RPT.PROFITLOSS**; its package is awaited. Same-turn bookkeeping: B-721 / §26.737 / §30 row 2.555.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1051,6 +1055,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.552 | 2026-10-19 | **SCR-110 stage 4 published (B-718, §26.734).** CFG.FIN.GLACCOUNT.TRANSFER capability and the FS15 alias term stand (142/115/133). Acceptance follows in stage 5. | Agent |
 | 2.553 | 2026-10-19 | **SCR-110 stage 5 published (B-719, §26.735).** FS15 tests pass (protocol-only test runs, create/skip/update, segment-first wiring); browser target T886 registered. Production build and browser acceptance follow before closure. | Agent |
 | 2.554 | 2026-10-19 | **SCR-110 CLOSED (B-720, §26.736).** FS15 accepted: company-code segment built and backfilled, transfers with protocol (suite 1494/1494; browser T886). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
+| 2.555 | 2026-10-19 | **Roadmap decision (B-721, §26.737).** S_ALR_87012271/72/73 stand delivered as the G/L suite; a distinct cash-flow statement follows later under its own package. SCR-111 proceeds to FIN.RPT.PROFITLOSS; its package is awaited. | Owner + Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
