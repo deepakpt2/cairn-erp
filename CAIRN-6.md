@@ -922,6 +922,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-734.** `tests/cost-center-report.test.ts` (3 green) proves the signed comparison (expense over plan Unfavorable, revenue over plan Favorable), range beside periods 1..cutoff, missing plan null with null variance and status, excluded centres named, the outside-hierarchy group, the activity plan, the unknown-version warning, and read-only behaviour. Browser target T884 stands registered across targets/checks/database-guards. The shell grid rendering gap found against the stage-1 shell was completed under B-732 before acceptance. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-734 / §26.750 / §30 row 2.568.
 
+## §26.751 — SCR-112 closed: cost centre actual/plan report accepted
+
+**B-735.** SCR-112 / FIN.RPT.COSTCENTER.ACTUAL is closed. The full suite stands at 1505/1505, the production build is green, and browser target T884 passed (actual 5,000.00 against plan 4,500.00 judged Unfavorable under the hierarchy group; the report persisted nothing). The cost centre actual/plan/variance report reads journal cost lines against the `cost_center_plan` table with missing plan null — never zero — hierarchy placement judged at fiscal-year end, group resolution through ranged leaves, excluded centres named, and planned activity quantities and prices from standing activity rates. Catalogue: 144 capabilities / 117 terms / 136 aliases; FUNCTIONS-AND-ROADMAP flips FIN.RPT.COSTCENTER.ACTUAL to Implemented (SCR-112, B-735) with headline alias S_ALR_87013611. Deferred by name: secondary cost elements and internal allocations, the plan-entry UI, actual activity quantities, and currency conversion. Next in the frozen order: SCR-113 / FIN.RPT.PROFITCENTER, then FIN.RPT.SUBLEDGER.TIE; FIN.RPT.CASHFLOW follows under its own later package (B-721), and intercompany items remain last (B-663). Same-stage bookkeeping: B-735 / §26.751 / §30 row 2.569.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
