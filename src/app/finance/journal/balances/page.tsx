@@ -7,6 +7,8 @@ import {
   type GlBalanceView,
 } from '@/modules/finance/gl-balances';
 import BalancesForm from './BalancesForm';
+import BalanceReportForm from './BalanceReportForm';
+import type { GlBalanceReportSelection, GlBalanceReportView } from '@/modules/finance/gl-balances';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,6 +42,18 @@ export default async function GlBalancesPage({ searchParams }: {
     }
   }
 
+  const reportSelection: GlBalanceReportSelection = {
+    companyCodes: (params.reportCompanies ?? '').split(',').map((c) => c.trim()).filter(Boolean),
+    accountFrom: params.accountFrom ?? '',
+    accountTo: params.accountTo ?? '',
+    fiscalYear: Number(params.reportFiscalYear ?? new Date().getFullYear()),
+    periodFrom: Number(params.periodFrom ?? 1),
+    periodTo: Number(params.periodTo ?? 12),
+    includeSpecialPeriods: params.reportSpecialPeriods === '1',
+    ledger: '0L',
+  };
+  const report: GlBalanceReportView | null = null;
+
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
@@ -54,6 +68,11 @@ export default async function GlBalancesPage({ searchParams }: {
       </header>
 
       <BalancesForm view={view} error={error} canDisplay={canDisplay} />
+      <BalanceReportForm
+        selection={reportSelection}
+        report={report}
+        canDisplay={canDisplay}
+      />
     </div>
   );
 }

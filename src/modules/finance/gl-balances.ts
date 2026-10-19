@@ -157,3 +157,64 @@ export async function getGlBalances(client: string, input: {
     };
   });
 }
+
+/**
+ * Balance report over ranges (SCR-108 / R-156; S_ALR_87012271
+ * as a search alias only): many accounts and companies at once,
+ * opening from every earlier year, turnover strictly inside the
+ * selected period range, closing as opening plus net change
+ * through the cutoff, separate debit/credit balance columns and
+ * account-group subtotals. Types land in stage 1; the derivation
+ * follows in stage 3 on the same posted-journal canon — no
+ * balance table stands to drift from the ledger.
+ */
+export interface GlBalanceReportSelection {
+  companyCodes: string[];
+  accountFrom: string;
+  accountTo: string;
+  fiscalYear: number;
+  periodFrom: number;
+  periodTo: number;
+  includeSpecialPeriods: boolean;
+  /** Configured ledger vocabulary; only the leading ledger stands. */
+  ledger: string;
+}
+
+export interface GlBalanceReportRow {
+  companyCode: string;
+  glAccount: string;
+  accountName: string;
+  accountGroup: string;
+  currency: string;
+  openingBalance: number;
+  debitTurnover: number;
+  creditTurnover: number;
+  netChange: number;
+  closingBalance: number;
+  /** Closing presented split: the positive side only, else 0. */
+  debitBalance: number;
+  creditBalance: number;
+}
+
+export interface GlBalanceGroupSubtotal {
+  accountGroup: string;
+  currency: string;
+  accountCount: number;
+  debitTurnover: number;
+  creditTurnover: number;
+  netChange: number;
+  closingBalance: number;
+  debitBalance: number;
+  creditBalance: number;
+}
+
+export interface GlBalanceReportView {
+  ledger: string;
+  fiscalYear: number;
+  periodFrom: number;
+  periodTo: number;
+  rows: GlBalanceReportRow[];
+  subtotals: GlBalanceGroupSubtotal[];
+  warnings: string[];
+  calculatedAt: string;
+}

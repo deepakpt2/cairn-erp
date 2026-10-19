@@ -241,3 +241,7 @@ export async function getJournalItems(
     return { rows: view, subtotals: [...groups.values()], truncated, cap };
   });
 }
+
+/** Line-item pagination vocabulary (SCR-108 / R-156). */
+export const JOURNAL_ITEM_PAGE_SIZES = [50, 100, 250] as const;
+export const DEFAULT_ITEMS_PAGE_SIZE = 100;
