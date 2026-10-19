@@ -390,6 +390,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-611.** Five service tests prove the sheet reconciles per asset, class and currency (beginning plus movements equals ending; NBV after depreciation), honours prior-year and mid-year reporting dates, excludes test-run depreciation and reversed retirements, filters and paginates without losing totals, exports CSV, refuses invalid selections, and mutates nothing; browser target T901 is registered and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-611 / §26.627 / §30 row 2.445.
 
+## §26.628 — SCR-095 closure: asset history sheet (R-143 complete)
+
+**B-612.** SCR-095 is closed. The asset history sheet (FIN.ASSET.REPORT, alias S_ALR_87011990) is accepted end to end: beginning balances stand net of earlier retirements, current-year movements and posted-only area depreciation reconcile per asset, class and currency, test runs and reversed records never count, the sheet is read-only and paginated with CSV export and drill-down, and tenant isolation holds. Evidence: bookkeeping §§26.622–26.627 (B-606–B-611), five service tests, full suite 1418, production build green, browser target T901 passing on the production build (acquire 12,000, depreciate 100, sheet shows 11,900 book value, no mutation), seed 129 capabilities / 103 terms / 111 aliases, migrations at 166. Deferred by name under R-143: asset transfers (another round), saved sort versions and layouts, parallel valuation beyond the selected area, pre-recording history by construction. Next named SCRs in order: **SCR-096 (FIN.TAX.POST / FB50)** then FIN.TAX.REPORT; their packages are awaited — no contract is drafted before the owner's fields arrive.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -466,3 +470,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.443 | 2026-10-19 | **SCR-095 stage 3 published (B-609, §26.625).** History aggregation stands: value-date windows over ACTIVE records, posted-only area depreciation, per-currency reconciliation and totals, judged GET sheet with CSV export. Supporting seed follows in stage 4. | Agent |
 | 2.444 | 2026-10-19 | **SCR-095 stage 4 published (B-610, §26.626).** FIN.ASSET.REPORT capability (129) and the S_ALR_87011990 alias seed; the asset list exposes the history sheet. Acceptance follows in stage 5. | Agent |
 | 2.445 | 2026-10-19 | **SCR-095 stage 5 published (B-611, §26.627).** Five asset-history service tests pass (reconciliation, test/reversal exclusion, pagination, CSV, read-only, isolation); browser target T901 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.446 | 2026-10-19 | **SCR-095 CLOSED (B-612, §26.628).** S_ALR_87011990 asset history sheet accepted: reconciled read-only history, posted-only depreciation, CSV export, drill-down, browser T901 green, suite 1418. Next in order: SCR-096 (FIN.TAX.POST / FB50), then FIN.TAX.REPORT — packages awaited. | Agent |
