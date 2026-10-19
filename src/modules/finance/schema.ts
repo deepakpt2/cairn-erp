@@ -417,6 +417,192 @@ export const accrualDocument = pgTable('accrual_document', {
 ]);
 
 /**
+ * Period-end close cockpit (SCR-101 / R-149): reusable task
+ * templates, period-specific task lists and instances, dependency
+ * edges, an append-only execution log and event trail.
+ */
+export const closingTaskTemplate = pgTable('closing_task_template', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  templateCode: varchar('template_code', { length: 30 }).notNull(),
+  taskId: varchar('task_id', { length: 30 }).notNull(),
+  taskName: varchar('task_name', { length: 80 }).notNull(),
+  parentTaskId: varchar('parent_task_id', { length: 30 }),
+  sequence: integer('sequence').notNull().default(0),
+  handlerCode: varchar('handler_code', { length: 40 }).notNull(),
+  owner: varchar('owner', { length: 12 }),
+  criticalPath: boolean('critical_path').notNull().default(false),
+  requiresEvidence: boolean('requires_evidence').notNull().default(false),
+  requiresSignoff: boolean('requires_signoff').notNull().default(false),
+  parameters: text('parameters'),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.templateCode, t.taskId] }),
+  foreignKey({
+    columns: [t.client, t.templateCode, t.parentTaskId],
+    foreignColumns: [t.client, t.templateCode, t.taskId],
+  }).onDelete('cascade'),
+  check('closing_task_template_handler_ck', sql`${t.handlerCode} in ('PERIOD_STATUS', 'ACCRUAL_REVERSALS', 'FX_VALUATION', 'MANUAL_CONFIRMATION')`),
+  check('closing_task_template_parent_ck', sql`${t.parentTaskId} is null or ${t.parentTaskId} <> ${t.taskId}`),
+]);
+
+export const closingTaskTemplateDependency = pgTable('closing_task_template_dependency', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  templateCode: varchar('template_code', { length: 30 }).notNull(),
+  taskId: varchar('task_id', { length: 30 }).notNull(),
+  predecessorTaskId: varchar('predecessor_task_id', { length: 30 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.templateCode, t.taskId, t.predecessorTaskId] }),
+  foreignKey({
+    columns: [t.client, t.templateCode, t.taskId],
+    foreignColumns: [closingTaskTemplate.client, closingTaskTemplate.templateCode, closingTaskTemplate.taskId],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.templateCode, t.predecessorTaskId],
+    foreignColumns: [closingTaskTemplate.client, closingTaskTemplate.templateCode, closingTaskTemplate.taskId],
+  }).onDelete('cascade'),
+  check('closing_task_template_dep_self_ck', sql`${t.taskId} <> ${t.predecessorTaskId}`),
+]);
+
+export const closingTaskList = pgTable('closing_task_list', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taskListId: varchar('task_list_id', { length: 30 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  description: varchar('description', { length: 80 }),
+  status: varchar('status', { length: 12 }).notNull().default('INITIAL'),
+  templateCode: varchar('template_code', { length: 30 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod] }),
+  check('closing_task_list_status_ck', sql`${t.status} in ('INITIAL', 'RELEASED', 'FINALIZED')`),
+  check('closing_task_list_period_ck', sql`${t.postingPeriod} between 1 and 16`),
+]);
+
+export const closingTaskInstance = pgTable('closing_task_instance', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taskListId: varchar('task_list_id', { length: 30 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  taskId: varchar('task_id', { length: 30 }).notNull(),
+  taskName: varchar('task_name', { length: 80 }).notNull(),
+  parentTaskId: varchar('parent_task_id', { length: 30 }),
+  sequence: integer('sequence').notNull().default(0),
+  handlerCode: varchar('handler_code', { length: 40 }).notNull(),
+  owner: varchar('owner', { length: 12 }),
+  status: varchar('status', { length: 12 }).notNull().default('INITIAL'),
+  criticalPath: boolean('critical_path').notNull().default(false),
+  requiresEvidence: boolean('requires_evidence').notNull().default(false),
+  requiresSignoff: boolean('requires_signoff').notNull().default(false),
+  parameters: text('parameters'),
+  evidenceRef: varchar('evidence_ref', { length: 120 }),
+  signedOffBy: varchar('signed_off_by', { length: 60 }),
+  signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
+  dueDate: date('due_date', { mode: 'string' }),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  lastExecutedAt: timestamp('last_executed_at', { withTimezone: true }),
+  lastExecutionId: varchar('last_execution_id', { length: 24 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod],
+    foreignColumns: [closingTaskList.client, closingTaskList.companyCode, closingTaskList.taskListId, closingTaskList.fiscalYear, closingTaskList.postingPeriod],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.parentTaskId],
+    foreignColumns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId],
+  }).onDelete('cascade'),
+  check('closing_task_instance_handler_ck', sql`${t.handlerCode} in ('PERIOD_STATUS', 'ACCRUAL_REVERSALS', 'FX_VALUATION', 'MANUAL_CONFIRMATION')`),
+  check('closing_task_instance_status_ck', sql`${t.status} in ('INITIAL', 'RELEASED', 'RUNNING', 'COMPLETED', 'ERROR', 'BLOCKED')`),
+  check('closing_task_instance_parent_ck', sql`${t.parentTaskId} is null or ${t.parentTaskId} <> ${t.taskId}`),
+]);
+
+export const closingTaskDependency = pgTable('closing_task_dependency', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taskListId: varchar('task_list_id', { length: 30 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  taskId: varchar('task_id', { length: 30 }).notNull(),
+  predecessorTaskId: varchar('predecessor_task_id', { length: 30 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId, t.predecessorTaskId] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId],
+    foreignColumns: [closingTaskInstance.client, closingTaskInstance.companyCode, closingTaskInstance.taskListId, closingTaskInstance.fiscalYear, closingTaskInstance.postingPeriod, closingTaskInstance.taskId],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.predecessorTaskId],
+    foreignColumns: [closingTaskInstance.client, closingTaskInstance.companyCode, closingTaskInstance.taskListId, closingTaskInstance.fiscalYear, closingTaskInstance.postingPeriod, closingTaskInstance.taskId],
+  }).onDelete('cascade'),
+  check('closing_task_dep_self_ck', sql`${t.taskId} <> ${t.predecessorTaskId}`),
+]);
+
+export const closingExecutionLog = pgTable('closing_execution_log', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  executionId: varchar('execution_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taskListId: varchar('task_list_id', { length: 30 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  taskId: varchar('task_id', { length: 30 }).notNull(),
+  attempt: integer('attempt').notNull(),
+  mode: varchar('mode', { length: 12 }).notNull(),
+  status: varchar('status', { length: 12 }).notNull(),
+  initiatedBy: varchar('initiated_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  resultSummary: varchar('result_summary', { length: 240 }),
+  errorDetails: text('error_details'),
+  generatedDocumentNumber: varchar('generated_document_number', { length: 40 }),
+  generatedFiscalYear: integer('generated_fiscal_year'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.executionId] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId],
+    foreignColumns: [closingTaskInstance.client, closingTaskInstance.companyCode, closingTaskInstance.taskListId, closingTaskInstance.fiscalYear, closingTaskInstance.postingPeriod, closingTaskInstance.taskId],
+  }).onDelete('cascade'),
+  index('closing_execution_log_task_idx').on(t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod, t.taskId, t.createdAt),
+  check('closing_execution_log_mode_ck', sql`${t.mode} in ('FOREGROUND', 'BACKGROUND')`),
+  check('closing_execution_log_status_ck', sql`${t.status} in ('SCHEDULED', 'RUNNING', 'SUCCEEDED', 'FAILED')`),
+]);
+
+export const closingTaskEvent = pgTable('closing_task_event', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  eventId: varchar('event_id', { length: 24 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  taskListId: varchar('task_list_id', { length: 30 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  taskId: varchar('task_id', { length: 30 }),
+  eventType: varchar('event_type', { length: 20 }).notNull(),
+  actor: varchar('actor', { length: 60 }).notNull(),
+  reason: varchar('reason', { length: 240 }),
+  detail: varchar('detail', { length: 240 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventId] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.taskListId, t.fiscalYear, t.postingPeriod],
+    foreignColumns: [closingTaskList.client, closingTaskList.companyCode, closingTaskList.taskListId, closingTaskList.fiscalYear, closingTaskList.postingPeriod],
+  }).onDelete('cascade'),
+  check('closing_task_event_type_ck', sql`${t.eventType} in ('CREATED', 'RELEASED', 'EXECUTED', 'RETRIED', 'OVERRIDE', 'SIGNOFF', 'EVIDENCE', 'FINALIZED', 'REOPENED')`),
+]);
+
+
+/**
  * Payment run (SCR-063 / R-111). Parameters with company and method
  * children, the proposal with its named exceptions, and payment
  * documents as the execution's retained evidence.
