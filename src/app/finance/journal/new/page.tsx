@@ -3,6 +3,8 @@ import { requireSession, can } from '@/platform/auth/current';
 import { listNumberRanges } from '@/modules/foundation/number-ranges';
 import { hasCompanyCodeAssignments } from '@/modules/foundation/company-code-assignments';
 import { JournalForm } from './JournalForm';
+import { withTenant } from '@/platform/db/client';
+import { glAccount } from '@/modules/finance/schema';
 import { t } from '@/platform/i18n';
 
 export const dynamic = 'force-dynamic';
@@ -14,6 +16,13 @@ export default async function PostJournalPage() {
   }
   const { companies, types, readiness } = await listNumberRanges(session.user.client);
   const active = companies.filter((company) => company.isActive && hasCompanyCodeAssignments(company));
+  const accounts = await withTenant(session.user.client, async (tx) => tx
+    .select({
+      accountNumber: glAccount.accountNumber, name: glAccount.name,
+      requiresCostObject: glAccount.requiresCostObject, isBlockedPosting: glAccount.isBlockedPosting,
+    })
+    .from(glAccount)
+    .orderBy(glAccount.accountNumber));
   const incomplete = companies.some((company) => company.isActive && !hasCompanyCodeAssignments(company));
   return <>
     {!readiness.ready && <div className="mx-auto mt-5 max-w-5xl border border-signal-warn/30 bg-signal-warn-soft p-3 text-sm text-signal-warn">
@@ -23,7 +32,7 @@ export default async function PostJournalPage() {
       {t('cc.assignmentsPending')} <Link className="underline" href="/config/company-codes">{t('cc.title')}</Link>
     </div>}
     {active.length > 0 ? (
-      <JournalForm companies={active.map(({ companyCode, name, currency }) => ({ companyCode, name, currency }))}
+      <JournalForm accounts={accounts} companies={active.map(({ companyCode, name, currency }) => ({ companyCode, name, currency }))}
         types={types.map(({ documentType, name }) => ({ documentType, name }))} />
     ) : (
       <div className="mx-auto max-w-5xl p-6"><div className="panel p-5 text-sm text-ink-soft">
