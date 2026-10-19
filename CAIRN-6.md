@@ -962,6 +962,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-744.** `src/modules/finance/gl-clearing.ts` carries the F-03 vocabulary (capability FIN.GL.CLEAR, item/view shapes, error class) and `/finance/gl-clearing` renders the selection (company, account, document/assignment/reference filters), the open-item grid with selection controls and running signed difference, the clearing/document/posting date and document-type fields with confirm gate, and cleared history — all over the inert vocabulary; loading and posting arrive in stage 3. `tsc` green. Schema/index check follows in stage 2. Same-stage bookkeeping: B-744 / §26.760 / §30 row 2.578.
 
+## §26.761 — SCR-114 stage 2: clearing schema check, no migration
+
+**B-745.** The check found the canon complete: `clearing_document`/`clearing_date` stand on `journal_entry_line` with `jel_clearing_idx`, open-item management stands on both the chart account and the company segment, and `jel_company_account_idx` serves the open-item read — so SCR-114 adds no migration (181 stand) and no clearing-allocation table; the stamped clearing reference is the relationship, as under AR/AP clearing. `tests/gl-clearing-schema-contract.test.ts` (3 green) pins the canon and the deferred-difference settlement. The clearing service follows in stage 3. Same-stage bookkeeping: B-745 / §26.761 / §30 row 2.579.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1171,6 +1175,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.576 | 2026-10-19 | **SCR-113 CLOSED (B-742, §26.758).** Full suite 1513/1513, production build green, browser T883 passed. FIN.RPT.PROFITCENTER is Implemented; next is FIN.RPT.SUBLEDGER.TIE. | Agent |
 | 2.577 | 2026-10-19 | **SCR-114 contracted (B-743, R-162, §26.759).** Owner package F-03 clear G/L account supersedes the announced tie-out scope: FIN.GL.CLEAR manual clearing over open-item-managed accounts, zero-balance only, tolerance differences deferred by name; FIN.RPT.SUBLEDGER.TIE follows after. Stage 1 UI shell follows. | Agent |
 | 2.578 | 2026-10-19 | **SCR-114 stage 1 published (B-744, §26.760).** FIN.GL.CLEAR vocabulary and the G/L clearing shell stand over the inert grid. Schema/index check follows in stage 2. | Agent |
+| 2.579 | 2026-10-19 | **SCR-114 stage 2 published (B-745, §26.761).** Schema check: clearing canon complete, no migration (181 stand); the schema contract pins lines, flags and index paths. The clearing service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
