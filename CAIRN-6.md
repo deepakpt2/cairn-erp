@@ -93,6 +93,10 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 
 **B-553.** Stage 1 of R-134. The `/finance/vendor-down-payment-request` screen stands as a shell mirroring its customer twin: the request form (company, vendor, document/posting/due dates, amount, currency, request indicator, document type KA by default, reference) with the noted-item explanation, and the open-requests grid rendered empty. Posting stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.AP.DOWNPAYMENT.REQUEST` and the request vocabulary. Same-stage bookkeeping: B-553 / §26.569 / §30 row 2.387.
 
+## §26.570 — SCR-086 stage 2: vendor request and fulfillment schema
+
+**B-554.** Stage 2 of R-134. `vendor_down_payment_request` carries the vendor noted item in the house record pattern (drawn number, derived fiscal year, due date distinct from both document dates, reserved lifecycle statuses under check), and `vendor_dp_request_fulfillment` links each fulfillment to its request and to the actual F-48 journal line under composite foreign keys, its ACTIVE rows the derivation source (migration `0096_vendor_down_payment_request.sql`, applied; **159 migrations**). The special G/L target column from SCR-085 already serves the AP side, so no configuration change is needed. No journal table is touched. Typecheck clean. Same-stage bookkeeping: B-554 / §26.570 / §30 row 2.388.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -111,3 +115,4 @@ The owner supplied the F-47 field package (2026-10-19); SAP codes stand as searc
 | 2.385 | 2026-10-19 | **SCR-085 stage 5 published — CLOSED (B-551, §26.567).** Tests 3/3, full suite 1364 green, browser T911 green; customer down-payment requests stand accepted as noted items fulfilled by F-29. Next: T-code F-47 vendor down payment request. | Agent |
 | 2.386 | 2026-10-19 | **SCR-086 / F-47 contracted (R-134, B-552, §26.568).** Vendor down-payment requests mirror R-133 as noted items: drawn VENDDPREQ number, judged period and KA document type, AP request indicators with targets, fulfillment by explicit F-48 allocation under the payment lock; the payment block refuses disbursement (F-48), not the request. Closure/reversal, approvals, PO reference, FX and drafts deferred by name. | Agent |
 | 2.387 | 2026-10-19 | **SCR-086 stage 1 published (B-553, §26.569).** The inert F-47 request screen: request form and open-requests grid rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
+| 2.388 | 2026-10-19 | **SCR-086 stage 2 published (B-554, §26.570).** Vendor request + fulfillment tables stand (migration 0096, 159 migrations) under composite foreign keys; the AP side reuses the SCR-085 target column. | Agent |

@@ -524,6 +524,72 @@ export const downPaymentRequestFulfillment = pgTable('down_payment_request_fulfi
   index('dprf_actual_idx').on(t.client, t.actualDocumentNumber, t.actualFiscalYear),
 ]);
 
+/**
+ * Vendor down payment request (SCR-086): the vendor twin of the
+ * customer noted item — the record is itself the document, no
+ * journal stands behind it, and no account moves until an actual
+ * payment (F-48) fulfills it.
+ */
+export const vendorDownPaymentRequest = pgTable('vendor_down_payment_request', {
+  client: tenantClient(),
+  requestNumber: varchar('request_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  vendorNumber: varchar('vendor_number', { length: 20 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  specialGlIndicator: varchar('special_gl_indicator', { length: 1 }).notNull(),
+  targetSpecialGlIndicator: varchar('target_special_gl_indicator', { length: 1 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  dueDate: date('due_date', { mode: 'string' }).notNull(),
+  documentType: varchar('document_type', { length: 12 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  requestedAmount: numeric('requested_amount', { precision: 23, scale: 4 }).notNull(),
+  /** OPEN | PARTIAL | FULFILLED advance with fulfillment; CLOSED/REVERSED reserved. */
+  status: varchar('status', { length: 12 }).notNull().default('OPEN'),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.requestNumber] }),
+  check('vendor_dp_request_amount_ck', sql`${t.requestedAmount} > 0`),
+  check('vendor_dp_request_status_ck', sql`${t.status} in ('OPEN', 'PARTIAL', 'FULFILLED', 'CLOSED', 'REVERSED')`),
+  index('vdpr_vendor_idx').on(t.client, t.companyCode, t.vendorNumber, t.dueDate),
+]);
+
+/**
+ * One fulfillment of a vendor request by an actual F-48 payment
+ * line (SCR-086). Fulfilled and remaining amounts derive from the
+ * ACTIVE rows; history is never erased, only reversed by status.
+ */
+export const vendorDpRequestFulfillment = pgTable('vendor_dp_request_fulfillment', {
+  client: tenantClient(),
+  requestNumber: varchar('request_number', { length: 20 }).notNull(),
+  requestFiscalYear: integer('request_fiscal_year').notNull(),
+  fulfillmentNumber: integer('fulfillment_number').notNull(),
+  actualDocumentNumber: varchar('actual_document_number', { length: 40 }).notNull(),
+  actualFiscalYear: integer('actual_fiscal_year').notNull(),
+  actualLineNumber: integer('actual_line_number').notNull(),
+  fulfillmentCurrency: char('fulfillment_currency', { length: 3 }).notNull(),
+  fulfilledAmount: numeric('fulfilled_amount', { precision: 23, scale: 4 }).notNull(),
+  status: varchar('status', { length: 12 }).notNull().default('ACTIVE'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.requestNumber, t.requestFiscalYear, t.fulfillmentNumber] }),
+  foreignKey({
+    columns: [t.client, t.requestNumber],
+    foreignColumns: [vendorDownPaymentRequest.client, vendorDownPaymentRequest.requestNumber],
+    name: 'vendor_dp_fulfillment_request_fk',
+  }),
+  foreignKey({
+    columns: [t.client, t.actualDocumentNumber, t.actualFiscalYear, t.actualLineNumber],
+    foreignColumns: [journalEntryLine.client, journalEntryLine.documentNumber, journalEntryLine.fiscalYear, journalEntryLine.lineNumber],
+    name: 'vendor_dp_fulfillment_actual_fk',
+  }),
+  check('vendor_dp_fulfillment_amount_ck', sql`${t.fulfilledAmount} > 0`),
+  check('vendor_dp_fulfillment_status_ck', sql`${t.status} in ('ACTIVE', 'REVERSED')`),
+  index('vdprf_actual_idx').on(t.client, t.actualDocumentNumber, t.actualFiscalYear),
+]);
+
 export const incomingPayment = pgTable('incoming_payment', {  client: tenantClient(),
   paymentNumber: varchar('payment_number', { length: 20 }).notNull(),
   fiscalYear: integer('fiscal_year').notNull(),
