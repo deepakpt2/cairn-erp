@@ -1501,3 +1501,31 @@ export * from './customer-company-schema';
 export * from './customer-sales-area-schema';
 
 export * from './central-address-schema';
+
+/**
+ * Cost-element plan values (SCR-112 / R-160): planned primary
+ * costs per controlling area, version, year, period, cost
+ * centre and cost element. Actuals never land here — they
+ * derive from the journal at read time.
+ */
+export const costCenterPlan = pgTable('cost_center_plan', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  planVersion: varchar('plan_version', { length: 3 }).notNull().default('000'),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: smallint('period').notNull(),
+  costCenter: varchar('cost_center', { length: 10 }).notNull(),
+  costElement: varchar('cost_element', { length: 10 }).notNull(),
+  plannedAmount: numeric('planned_amount', { precision: 23, scale: 4 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: varchar('updated_by', { length: 60 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.controllingArea, t.planVersion, t.fiscalYear, t.period, t.costCenter, t.costElement] }),
+  foreignKey({
+    columns: [t.client, t.controllingArea],
+    foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+  }).onDelete('cascade'),
+  check('cost_center_plan_period_ck', sql`${t.period} between 1 and 16`),
+]);
