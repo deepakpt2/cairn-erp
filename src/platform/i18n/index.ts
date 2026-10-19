@@ -2383,6 +2383,8 @@ const en: Catalogue = {
   'assetList.depreciate': 'Depreciation run…',
   'assetList.retire': 'Retire…',
   'assetList.acquire': 'Acquire…',
+  'assetHistory.title': 'Asset History Sheet',
+  'assetHistory.subtitle': 'Posted asset values by class and asset for a fiscal year: beginning balances, movements, depreciation and book values, reconciled from the standing value records.',
   'assetDepreciate.title': 'Depreciation Run',
   'assetDepreciate.subtitle': 'Calculate and post planned depreciation for a company and period: test-run the calculation first, then post one balanced document through the accounting engine.',
   'assetRetire.title': 'Asset Retirement',

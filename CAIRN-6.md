@@ -370,6 +370,10 @@ R-143 decisions:
 
 Deferred by name: transfers in/out and other movement classifications (no transfer function stands), saved layouts/sort versions and user variants, additional depreciation areas' parallel valuation (areas beyond the selected one are simply not the sheet's subject), historical reconstruction before the SCR-092 value records (the sheet reports that limitation rather than inventing opening balances), Excel formats beyond CSV. Stage order UI → DB/schema → backend → supporting → tests/acceptance. Same-stage bookkeeping: B-606 / §26.622 / §30 row 2.440.
 
+## §26.623 — SCR-095 stage 1: history sheet screens and vocabulary
+
+**B-607.** Stage 1 of R-143: `asset-history.ts` carries the vocabulary (capability `FIN.ASSET.REPORT`, selection ranges, sheet row and totals shapes), and `/finance/assets/history` stands as an inert shell with the selection matrix (company/class/asset ranges, fiscal year, depreciation area, reporting date, sort version, layout) and the sheet section. Buttons stay disabled until the service lands in stage 3. Same-stage bookkeeping: B-607 / §26.623 / §30 row 2.441.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -441,3 +445,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.438 | 2026-10-19 | **SCR-094 stage 4 published (B-604, §26.620).** FIN.ASSET.DEPRECIATE capability (128) and the AFAB alias seed; the asset list exposes the depreciation run. Acceptance follows in stage 5. | Agent |
 | 2.439 | 2026-10-19 | **SCR-094 closed (B-605, §26.621).** AFAB depreciation run accepted under R-142: shared test/live calculation, grouped engine posting, posted-depreciation records feeding repeat adjustments and SCR-093 reversals, restartable failures. Suite 1412 green, browser T902 green, seed 128 capabilities / 102 terms / 110 aliases, DB 165 migrations. Next: FIN.ASSET.REPORT (S_ALR_87011990). | Agent |
 | 2.440 | 2026-10-19 | **SCR-095 contract published (B-606, §26.622, R-143).** Asset history sheet as a read-only aggregation over the standing value records: value-date windows, posted-only depreciation by area, per-currency class subtotals, judged ranges, CSV export. Implementation follows in stage order. | Agent |
+| 2.441 | 2026-10-19 | **SCR-095 stage 1 published (B-607, §26.623).** Asset history sheet shell stands at `/finance/assets/history` with the selection matrix; module vocabulary committed, service deferred to stage 3. | Agent |
