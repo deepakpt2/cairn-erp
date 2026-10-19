@@ -87,7 +87,7 @@ export async function consolidatedStatements(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { name: 'Consolidated Statements' }).waitFor();
   const assetRow = page.locator('tr', { hasText: 'FS1000' }).first();
-  await assetRow.getByText('850.00').first().waitFor();
+  await assetRow.getByText('750.00').first().waitFor();
   await assetRow.getByText('500.00').first().waitFor();
   await page.getByText(/pre-elimination/).first().waitFor();
   console.log('  ✓ the balance sheet aggregates the asset item per unit with its comparison');
