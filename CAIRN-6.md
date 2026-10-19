@@ -33,8 +33,13 @@ The owner supplied the F-39 field package (2026-10-19); SAP codes stand as searc
 
 ---
 
+## §26.557 — SCR-084 stage 1: the customer down-payment clearing screen
+
+**B-541.** Stage 1 of R-132. The `/finance/customer-down-payment-clearing` screen stands as a shell mirroring its vendor twin, shaped for pairwise allocation: selection criteria (company, customer, configured indicator), the two open-item grids (advances with allocated-here tracking; invoices with due dates), and an allocation builder — one row per application of a down payment to an invoice, with per-item over-allocation judged live in the form. Posting stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.AR.DOWNPAYMENT.CLEAR` and the clearing vocabulary. Same-stage bookkeeping: B-541 / §26.557 / §30 row 2.375.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
 |---|---|---|---|
 | 2.374 | 2026-10-19 | **CAIRN-6 opens; SCR-084 / F-39 contracted (R-132, B-540, §26.556).** `CAIRN-5.md` passed the 360,000-byte rotation trigger (361,576 bytes) and is frozen to pointer edits; this part continues §26 from 26.556 and this log from 2.374 (§0.3 / D-093). F-39 clearing is a real DZ transfer posting (alternative account debits per down payment, ordinary reconciliation credits per invoice), pairwise allocations across multiple items with partial clearing, the allocation-mapping table adopted under composite foreign keys while journal lines stay the balance authority; indicator and document type resolve through configuration. FX conversion, discount/difference postings, drafts, server simulation and clearing reset beyond the standing machinery deferred by name. | Agent |
+| 2.375 | 2026-10-19 | **SCR-084 stage 1 published (B-541, §26.557).** The inert F-39 clearing screen: selection criteria, both open-item grids and the pairwise allocation builder rendered empty, posting disabled; i18n keys added. No reads, no writes. | Agent |
