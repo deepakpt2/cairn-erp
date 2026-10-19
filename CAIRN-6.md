@@ -1026,6 +1026,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-760.** The workbench service lands on the stage-1 module: data bases bind the journal provider with dimensions judged against standing journal characteristics; areas judge basis and fiscal-year variant; units judge the company code; groups and tasks judge parents acyclically; unit assignments refuse overlapping validity per unit; mappings judge source chart, source account and group account; tasks refuse references to unconfigured methods, units or groups; activation refuses incomplete areas naming what is missing. Every write takes a mandatory reason and records one change document; the shell posts each folder's maintenance through server actions and the page loads areas and view live. `tsc` green. Supporting seed follows in stage 4. Same-stage bookkeeping: B-760 / §26.776 / §30 row 2.594.
 
+## §26.777 — SCR-116 stage 4: capability and alias
+
+**B-761.** Seed carries the `FIN.RPT.CONSOLIDATE` capability and its registry term at `/config/consolidation` with alias UCWB living on the one term (discovery rides the registry route, following the config-screen pattern). Seeded twice idempotent — catalogue 148 capabilities / 121 terms / 141 aliases, UCWB verified solely on FIN.RPT.CONSOLIDATE. Acceptance follows in stage 5. Same-stage bookkeeping: B-761 / §26.777 / §30 row 2.595.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1251,6 +1255,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.592 | 2026-10-19 | **SCR-116 stage 1 published (B-758, §26.774).** UCWB vocabulary and the consolidation workbench shell stand over the inert folders. Schema follows in stage 2. | Agent |
 | 2.593 | 2026-10-19 | **SCR-116 stage 2 published (B-759, §26.775).** Migration 0119 (182 total): eleven consolidation configuration tables stand; the schema contract pins keys, FKs and validity checks. The configuration service follows in stage 3. | Agent |
 | 2.594 | 2026-10-19 | **SCR-116 stage 3 published (B-760, §26.776).** The configuration service judges dimensions, parents, overlaps, mappings and task references, with mandatory-reason change audit and the activation gate; folder maintenance posts live. Supporting seed follows in stage 4. | Agent |
+| 2.595 | 2026-10-19 | **SCR-116 stage 4 published (B-761, §26.777).** FIN.RPT.CONSOLIDATE capability and UCWB alias stand (148/121/141). Acceptance follows in stage 5. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
