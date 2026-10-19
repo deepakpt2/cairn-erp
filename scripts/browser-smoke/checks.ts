@@ -104,6 +104,7 @@ import { creditRelease } from './credit-release';
 import { trialBalance } from './trial-balance';
 import { balanceSheet } from './balance-sheet';
 import { glReporting } from './gl-reporting';
+import { glReportingSuite } from './gl-reporting-suite';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -5015,6 +5016,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'trial-balance': trialBalance,
   'balance-sheet': balanceSheet,
   'gl-reporting': glReporting,
+  'gl-reporting-suite': glReportingSuite,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,

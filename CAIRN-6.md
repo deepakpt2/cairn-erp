@@ -830,6 +830,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-711.** The FIN.GL.BALANCE and FIN.JOURNAL.LIST term descriptions now describe the suite as delivered (range report, company-split subtotals, output currency, pagination, assignment, return link); counts unchanged (141 capabilities / 114 terms / 132 aliases; seeded twice, idempotent). Tests and browser acceptance follow in stage 5. Same-stage bookkeeping: B-711 / §26.727 / §30 row 2.545.
 
+## §26.728 — SCR-109 stage 5: completion tests and browser target
+
+**B-712.** Three service tests cover the completion (output-currency conversion at the seeded rate with company-split subtotals all converted; missing rate warns and keeps company currency while bad codes are judged; document date and reference exposed on line items) — 8 green with the extended index contract. Browser target T887 (gl-reporting-suite) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-712 / §26.728 / §30 row 2.546.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1006,6 +1010,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.543 | 2026-10-19 | **SCR-109 stage 2 published (B-709, §26.725).** Summary-canon assertions stand (no totals table; indexed date ordering); no new migration. The services follow in stage 3. | Agent |
 | 2.544 | 2026-10-19 | **SCR-109 stage 3 published (B-710, §26.726).** Output-currency conversion and company-split subtotals stand; drill-down carries period context. Supporting seed follows in stage 4. | Agent |
 | 2.545 | 2026-10-19 | **SCR-109 stage 4 published (B-711, §26.727).** Standing term descriptions describe the delivered suite; catalogue counts unchanged. Acceptance follows in stage 5. | Agent |
+| 2.546 | 2026-10-19 | **SCR-109 stage 5 published (B-712, §26.728).** Completion tests pass (conversion, missing-rate warning, document fields); browser target T887 registered. Production build and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
