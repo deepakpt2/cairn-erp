@@ -894,6 +894,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-727.** Two service tests cover the statement (P&L-only node set with range beside year-to-date movements and independent comparatives; balance-sheet accounts dropped entirely and quiet ranges zeroing without error) — green with the SCR-107 regression suite. Browser target T885 (profit-loss) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-727 / §26.743 / §30 row 2.561.
 
+## §26.744 — SCR-111 CLOSED: profit and loss statement accepted
+
+**B-728.** FIN.RPT.PROFITLOSS is accepted: a P&L-only statement over the SCR-107 combined snapshot — balance-sheet accounts removed, node totals re-rolled from kept accounts, range movement beside year-to-date movement with independent comparatives and the explicit current-year result. Production build green; browser target T885 passed (Revenue movement standing, no balance-sheet node present, explicit result, nothing persisted); full suite 1498/1498. S_PL0_86000028 now belongs to the P&L term (ceded from the balance sheet, which keeps S_ALR_87012284 + FC10). Deferred by name: layout variant persistence, interactive node collapse, sorting; FIN.RPT.CASHFLOW remains for its own later package (B-721). FUNCTIONS-AND-ROADMAP flipped same turn (P&L Implemented; 143 capabilities / 116 business terms). Next SCR: FIN.RPT.COSTCENTER.ACTUAL (cost centre actual vs plan); its package is awaited. The SCR after: FIN.RPT.PROFITCENTER. Same-stage bookkeeping: B-728 / §26.744 / §30 row 2.562.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1086,6 +1090,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.559 | 2026-10-19 | **SCR-111 stage 3 published (B-725, §26.741).** The P&L-only statement calculates (filtered, re-rolled, range + year-to-date); the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.560 | 2026-10-19 | **SCR-111 stage 4 published (B-726, §26.742).** FIN.RPT.PROFITLOSS capability (143), the P&L term with S_PL0_86000028 ceded from the balance-sheet term, statement navigation. Acceptance follows in stage 5. | Agent |
 | 2.561 | 2026-10-19 | **SCR-111 stage 5 published (B-727, §26.743).** P&L tests pass; browser target T885 registered. Production build and browser acceptance follow before closure. | Agent |
+| 2.562 | 2026-10-19 | **SCR-111 CLOSED (B-728, §26.744).** FIN.RPT.PROFITLOSS accepted (suite 1498/1498; browser T885). Next SCR: FIN.RPT.COSTCENTER.ACTUAL (cost centre actual vs plan); its package is awaited. The SCR after: FIN.RPT.PROFITCENTER. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
