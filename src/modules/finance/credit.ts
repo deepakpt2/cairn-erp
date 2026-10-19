@@ -641,3 +641,329 @@ export interface ReleaseOutcome {
   status: DeterminationStatus | null;
   message: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Determinations and release processing                               */
+/* ------------------------------------------------------------------ */
+
+function newDeterminationId(): string {
+  return `CD${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 46656).toString(36).toUpperCase().padStart(3, '0')}`.slice(0, 24);
+}
+
+interface DeterminationRow {
+  determination_id: string; sales_document: string; document_date: string;
+  sales_org: string | null; customer: string; credit_control_area: string;
+  order_value: string; order_currency: string; status: DeterminationStatus; reason: string;
+  exposure_at_check: string; limit_at_check: string | null;
+  released_by: string | null; released_at: Date | string | null;
+  is_override: boolean; approval_ref: string | null; supersedes: string | null;
+  version: number; created_at: Date | string;
+}
+
+async function recordReleaseEvent(tx: Tx, client: string, determinationId: string, salesDocument: string,
+  eventType: string, actor: string, reason?: string, approvalRef?: string,
+  beforeStatus?: string, afterStatus?: string): Promise<void> {
+  await tx.execute(sql`
+    insert into credit_release_event
+      (client, event_id, determination_id, sales_document, event_type, actor, reason, approval_ref, before_status, after_status)
+    values (${client}, ${newDeterminationId()}, ${determinationId}, ${salesDocument}, ${eventType}, ${actor},
+            ${reason ?? null}, ${approvalRef ?? null}, ${beforeStatus ?? null}, ${afterStatus ?? null})
+  `);
+}
+
+async function currentDeterminationIn(tx: Tx, client: string, salesDocument: string): Promise<DeterminationRow | null> {
+  const rows = await tx.execute(sql`
+    select * from credit_determination
+    where client = ${client} and sales_document = ${salesDocument}
+    order by created_at desc, determination_id desc limit 1
+  `);
+  return (rows as unknown as DeterminationRow[])[0] ?? null;
+}
+
+export async function checkSalesDocumentCredit(input: {
+  client: string; changedBy: string; salesDocument: string; documentDate: string;
+  salesOrg?: string; customer: string; creditControlArea: string;
+  orderValue: string; orderCurrency: string;
+}): Promise<CreditDeterminationView> {
+  const document = input.salesDocument.trim();
+  if (!document || document.length > 20) fail('A sales document key of at most 20 characters is required.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.documentDate)) fail('A valid document date is required.');
+  const value = (() => { try { return toScaled(input.orderValue || '0'); } catch { return fail('The order value is not a valid amount.'); } })();
+  if (value < 0n) fail('The order value cannot be negative.');
+
+  const check = await evaluateCreditCheck({
+    client: input.client, customer: input.customer, creditControlArea: input.creditControlArea,
+    amount: input.orderValue,
+  });
+  const status: DeterminationStatus = check.decision === 'BLOCK' ? 'BLOCKED' : 'PASSED';
+  const determinationId = newDeterminationId();
+
+  await withTenant(input.client, async (tx) => {
+    await assertPartner(tx, input.client, input.customer);
+    const previous = await currentDeterminationIn(tx, input.client, document);
+    await tx.execute(sql`
+      insert into credit_determination
+        (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
+         order_value, order_currency, status, reason, exposure_at_check, limit_at_check, supersedes, created_by)
+      values (${input.client}, ${determinationId}, ${document}, ${input.documentDate}, ${input.salesOrg ?? null},
+              ${input.customer}, ${input.creditControlArea}, ${fromScaled(value)}, ${input.orderCurrency},
+              ${status}, ${check.reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${previous?.determination_id ?? null}, ${input.changedBy})
+    `);
+    await recordReleaseEvent(tx, input.client, determinationId, document, 'CHECK', input.changedBy,
+      check.reason, undefined, previous?.status, status);
+  });
+
+  const rows = await listCreditDeterminations(input.client, { documentFrom: document, documentTo: document, blockedOnly: false, includeReleased: true });
+  const view = rows.find((r) => r.determinationId === determinationId) ?? rows[0];
+  if (!view) fail('The determination could not be reloaded.');
+  return view;
+}
+
+export async function listCreditDeterminations(client: string, filter: CreditReleaseFilter): Promise<CreditDeterminationView[]> {
+  // Judge the filters that name configuration.
+  await withTenant(client, async (tx) => {
+    if (filter.areaFrom) await loadArea(tx, client, filter.areaFrom);
+    if (filter.areaTo) await loadArea(tx, client, filter.areaTo);
+    if (filter.representativeGroup) {
+      await assertConfig(tx, client, 'credit_representative_group', 'group_code', filter.representativeGroup, 'Representative group');
+    }
+  });
+  const monitor = await listCreditMonitor(client, {});
+  const liveByKey = new Map(monitor.rows.map((r) => [`${r.customer}|${r.creditControlArea}`, r]));
+
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select d.*, p.name as customer_name from credit_determination d
+      join business_partner p on p.client = d.client and p.partner_number = d.customer
+      where d.client = ${client}
+        and not exists (
+          select 1 from credit_determination newer
+          where newer.client = d.client and newer.sales_document = d.sales_document
+            and (newer.created_at, newer.determination_id) > (d.created_at, d.determination_id)
+        )
+        ${filter.areaFrom ? sql`and d.credit_control_area >= ${filter.areaFrom}` : sql``}
+        ${filter.areaTo ? sql`and d.credit_control_area <= ${filter.areaTo}` : sql``}
+        ${filter.salesOrg ? sql`and d.sales_org = ${filter.salesOrg}` : sql``}
+        ${filter.customerFrom ? sql`and d.customer >= ${filter.customerFrom}` : sql``}
+        ${filter.customerTo ? sql`and d.customer <= ${filter.customerTo}` : sql``}
+        ${filter.documentFrom ? sql`and d.sales_document >= ${filter.documentFrom}` : sql``}
+        ${filter.documentTo ? sql`and d.sales_document <= ${filter.documentTo}` : sql``}
+        ${filter.dateFrom ? sql`and d.document_date >= ${filter.dateFrom}` : sql``}
+        ${filter.dateTo ? sql`and d.document_date <= ${filter.dateTo}` : sql``}
+      order by d.document_date desc, d.sales_document
+      limit 500
+    `);
+    let views = (rows as unknown as Array<Record<string, unknown>>).map((r) => {
+      const live = liveByKey.get(`${String(r.customer)}|${String(r.credit_control_area)}`);
+      const limit = r.limit_at_check !== null && r.limit_at_check !== undefined ? Number(r.limit_at_check) : null;
+      const currentLimit = live?.noCreditRecord ? null : (live?.creditLimit ?? limit);
+      const currentExposure = live?.totalExposure ?? Number(r.exposure_at_check);
+      return {
+        determinationId: String(r.determination_id), salesDocument: String(r.sales_document),
+        documentDate: String(r.document_date), salesOrg: (r.sales_org as string) ?? null,
+        customer: String(r.customer), customerName: String(r.customer_name),
+        creditControlArea: String(r.credit_control_area),
+        orderValue: Number(r.order_value), orderCurrency: String(r.order_currency),
+        status: r.status as DeterminationStatus, reason: String(r.reason),
+        exposureAtCheck: Number(r.exposure_at_check), limitAtCheck: limit,
+        currentExposure, currentLimit,
+        utilizationPercent: currentLimit ? currentExposure / currentLimit * 100 : null,
+        releasedBy: (r.released_by as string) ?? null,
+        releasedAt: r.released_at ? new Date(r.released_at as string).toISOString() : null,
+        override: Boolean(r.is_override), approvalRef: (r.approval_ref as string) ?? null,
+        version: Number(r.version), determinedAt: new Date(r.created_at as string).toISOString(),
+      } satisfies CreditDeterminationView;
+    });
+    if (filter.representativeGroup) {
+      const records = await tx.execute(sql`
+        select customer, credit_control_area from customer_credit
+        where client = ${client} and credit_representative_group = ${filter.representativeGroup}
+      `);
+      const allowed = new Set((records as unknown as Array<{ customer: string; credit_control_area: string }>)
+        .map((r) => `${r.customer}|${r.credit_control_area}`));
+      views = views.filter((v) => allowed.has(`${v.customer}|${v.creditControlArea}`));
+    }
+    // Queue semantics: blocked documents always show; released
+    // only on request; passed only when blocked-only is off.
+    return views.filter((v) => {
+      if (v.status === 'BLOCKED') return true;
+      if (v.status === 'RELEASED') return filter.includeReleased === true;
+      return filter.blockedOnly === false;
+    });
+  });
+}
+
+async function loadCurrentOrFail(client: string, salesDocument: string): Promise<DeterminationRow> {
+  return withTenant(client, async (tx) => {
+    const current = await currentDeterminationIn(tx, client, salesDocument);
+    if (!current) fail(`Sales document ${salesDocument} has no credit determination.`, 'Run a credit check for the document first.');
+    return current;
+  });
+}
+
+export async function recheckDocument(input: {
+  client: string; changedBy: string; salesDocument: string;
+}): Promise<CreditDeterminationView> {
+  const current = await loadCurrentOrFail(input.client, input.salesDocument);
+  return checkSalesDocumentCredit({
+    client: input.client, changedBy: input.changedBy, salesDocument: current.sales_document,
+    documentDate: current.document_date, salesOrg: current.sales_org ?? undefined,
+    customer: current.customer, creditControlArea: current.credit_control_area,
+    orderValue: fromScaled(toScaled(current.order_value)), orderCurrency: current.order_currency,
+  });
+}
+
+export async function releaseDocument(input: {
+  client: string; changedBy: string; salesDocument: string; expectedVersion?: number;
+  override?: { justification: string; approvalRef?: string }; canOverride: boolean;
+}): Promise<ReleaseOutcome> {
+  const { client, changedBy, salesDocument } = input;
+  const current = await loadCurrentOrFail(client, salesDocument);
+  if (current.status !== 'BLOCKED') {
+    return { salesDocument, ok: false, status: current.status, message: `Document stands ${current.status}; only a blocked document can be released.` };
+  }
+  if (input.expectedVersion !== undefined && input.expectedVersion !== current.version) {
+    return { salesDocument, ok: false, status: current.status, message: 'The determination changed concurrently; reload before releasing.' };
+  }
+  const check = await evaluateCreditCheck({
+    client, customer: current.customer, creditControlArea: current.credit_control_area,
+    amount: fromScaled(toScaled(current.order_value)),
+  });
+  const stillBlocked = check.decision === 'BLOCK';
+  if (stillBlocked && !input.override) {
+    return {
+      salesDocument, ok: false, status: 'BLOCKED',
+      message: `The fresh credit check still blocks (${check.reason}). Release needs an authorized override with justification.`,
+    };
+  }
+  if (stillBlocked && !input.canOverride) {
+    return {
+      salesDocument, ok: false, status: 'BLOCKED',
+      message: 'The fresh credit check still blocks and you do not hold the override privilege.',
+    };
+  }
+  if (stillBlocked && !input.override?.justification.trim()) {
+    return { salesDocument, ok: false, status: 'BLOCKED', message: 'An override release requires a justification.' };
+  }
+
+  const determinationId = newDeterminationId();
+  await withTenant(client, async (tx) => {
+    const fresh = await currentDeterminationIn(tx, client, salesDocument);
+    if (!fresh || fresh.determination_id !== current.determination_id) {
+      throw new CreditError('The determination changed concurrently; the release was not applied.');
+    }
+    await tx.execute(sql`
+      insert into credit_determination
+        (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
+         order_value, order_currency, status, reason, exposure_at_check, limit_at_check,
+         released_by, released_at, is_override, approval_ref, supersedes, created_by)
+      values (${client}, ${determinationId}, ${current.sales_document}, ${current.document_date}, ${current.sales_org},
+              ${current.customer}, ${current.credit_control_area}, ${current.order_value}, ${current.order_currency},
+              'RELEASED', ${stillBlocked ? `OVERRIDE_${check.reason}` : 'RELEASED_AFTER_CHECK'},
+              ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${changedBy}, now(), ${stillBlocked}, ${input.override?.approvalRef ?? null},
+              ${current.determination_id}, ${changedBy})
+    `);
+    await recordReleaseEvent(tx, client, determinationId, salesDocument,
+      stillBlocked ? 'OVERRIDE_RELEASE' : 'RELEASE', changedBy,
+      stillBlocked ? input.override?.justification.trim() : `Fresh check: ${check.reason}`,
+      input.override?.approvalRef, 'BLOCKED', 'RELEASED');
+  });
+  return {
+    salesDocument, ok: true, status: 'RELEASED',
+    message: stillBlocked ? 'Released by override; justification and approval recorded.' : 'Released: the fresh credit check passes.',
+  };
+}
+
+export async function releaseDocumentsBulk(input: {
+  client: string; changedBy: string; salesDocuments: string[];
+  overrides?: Record<string, { justification: string; approvalRef?: string }>; canOverride: boolean;
+}): Promise<ReleaseOutcome[]> {
+  const outcomes: ReleaseOutcome[] = [];
+  for (const salesDocument of input.salesDocuments) {
+    try {
+      outcomes.push(await releaseDocument({
+        client: input.client, changedBy: input.changedBy, salesDocument,
+        override: input.overrides?.[salesDocument], canOverride: input.canOverride,
+      }));
+    } catch (error) {
+      outcomes.push({
+        salesDocument, ok: false, status: null,
+        message: error instanceof Error ? error.message : 'Release failed.',
+      });
+    }
+  }
+  return outcomes;
+}
+
+export async function rejectReleaseRequest(input: {
+  client: string; changedBy: string; salesDocument: string; reason: string;
+}): Promise<ReleaseOutcome> {
+  if (!input.reason.trim()) fail('A reason is mandatory to reject a release request.');
+  const current = await loadCurrentOrFail(input.client, input.salesDocument);
+  if (current.status !== 'BLOCKED') {
+    return { salesDocument: input.salesDocument, ok: false, status: current.status, message: `Document stands ${current.status}; there is no open release request to reject.` };
+  }
+  await withTenant(input.client, async (tx) => {
+    await recordReleaseEvent(tx, input.client, current.determination_id, input.salesDocument,
+      'REJECT', input.changedBy, input.reason.trim(), undefined, 'BLOCKED', 'BLOCKED');
+  });
+  return { salesDocument: input.salesDocument, ok: true, status: 'BLOCKED', message: 'Release request rejected; the document remains blocked and untouched.' };
+}
+
+export async function reblockDocument(input: {
+  client: string; changedBy: string; salesDocument: string; reason: string;
+}): Promise<ReleaseOutcome> {
+  const current = await loadCurrentOrFail(input.client, input.salesDocument);
+  if (current.status !== 'RELEASED') {
+    return { salesDocument: input.salesDocument, ok: false, status: current.status, message: `Document stands ${current.status}; only a released document can be reblocked.` };
+  }
+  // A fresh determination always precedes a reblock.
+  const check = await evaluateCreditCheck({
+    client: input.client, customer: current.customer, creditControlArea: current.credit_control_area,
+    amount: fromScaled(toScaled(current.order_value)),
+  });
+  const reason = check.decision === 'BLOCK' ? check.reason : 'MANUAL_REBLOCK';
+  if (check.decision !== 'BLOCK' && !input.reason.trim()) {
+    return { salesDocument: input.salesDocument, ok: false, status: 'RELEASED', message: 'The fresh check passes; reblocking then requires a stated reason.' };
+  }
+  const determinationId = newDeterminationId();
+  await withTenant(input.client, async (tx) => {
+    const fresh = await currentDeterminationIn(tx, input.client, input.salesDocument);
+    if (!fresh || fresh.determination_id !== current.determination_id) {
+      throw new CreditError('The determination changed concurrently; the reblock was not applied.');
+    }
+    await tx.execute(sql`
+      insert into credit_determination
+        (client, determination_id, sales_document, document_date, sales_org, customer, credit_control_area,
+         order_value, order_currency, status, reason, exposure_at_check, limit_at_check, supersedes, created_by)
+      values (${input.client}, ${determinationId}, ${current.sales_document}, ${current.document_date}, ${current.sales_org},
+              ${current.customer}, ${current.credit_control_area}, ${current.order_value}, ${current.order_currency},
+              'BLOCKED', ${reason}, ${check.exposure.toFixed(4)}, ${check.creditLimit?.toFixed(4) ?? null},
+              ${current.determination_id}, ${input.changedBy})
+    `);
+    await recordReleaseEvent(tx, input.client, determinationId, input.salesDocument,
+      'REBLOCK', input.changedBy, input.reason.trim() || `Fresh check: ${check.reason}`, undefined, 'RELEASED', 'BLOCKED');
+  });
+  return { salesDocument: input.salesDocument, ok: true, status: 'BLOCKED', message: `Reblocked after a fresh determination (${reason}).` };
+}
+
+export async function listReleaseEvents(client: string, salesDocument: string): Promise<Array<{
+  eventId: string; eventType: string; actor: string; reason: string | null;
+  beforeStatus: string | null; afterStatus: string | null; createdAt: string;
+}>> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select event_id, event_type, actor, reason, before_status, after_status, created_at
+      from credit_release_event where client = ${client} and sales_document = ${salesDocument}
+      order by created_at desc, event_id desc limit 200
+    `);
+    return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+      eventId: String(r.event_id), eventType: String(r.event_type), actor: String(r.actor),
+      reason: (r.reason as string) ?? null, beforeStatus: (r.before_status as string) ?? null,
+      afterStatus: (r.after_status as string) ?? null,
+      createdAt: new Date(r.created_at as string).toISOString(),
+    }));
+  });
+}

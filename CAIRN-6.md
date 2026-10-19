@@ -704,6 +704,10 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
 **B-681.** Migration `0114_credit_determination.sql` (177 total, applied) creates the determination record (document key, date, sales organization, customer, area, order value/currency, BLOCKED/PASSED/RELEASED status with the released-only-with-actor invariant enforced, check-time exposure/limit, release and override fields, supersedes chain, version) and the append-only `credit_release_event` trail, with scope and document indexes. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-681 / §26.697 / §30 row 2.515.
 
+## §26.698 — SCR-105 stage 3: determination and release service, wired queue
+
+**B-682.** `checkSalesDocumentCredit` records determinations from the SCR-103 evaluation (BLOCKED on any block reason, PASSED otherwise, check-time figures captured, CHECK event written); the queue lists current determinations per document with live exposure joined from the monitor. Release re-evaluates and only releases on a passing fresh check — a still-failing document needs the separate override privilege with mandatory justification and approval reference; reject records the decision and leaves the document untouched; reblock always runs a fresh determination first; concurrent changes report actual results instead of overwriting; bulk release processes documents independently with per-document outcomes. The queue UI is wired (filters, bulk selection, per-row recheck/release/reject/reblock). Same-stage bookkeeping: B-682 / §26.698 / §30 row 2.516.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -850,3 +854,4 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 | 2.513 | 2026-10-19 | **SCR-105 contract approved (B-679, §26.695, R-153).** FIN.CREDIT.RELEASE: credit determinations as the single status store (the package's sanctioned fallback until the SD canon lands), re-evaluating releases, override as a separate privilege, append-only history. Stage 1 (vocabulary + release-queue shell) follows. | Owner + Agent |
 | 2.514 | 2026-10-19 | **SCR-105 stage 1 published (B-680, §26.696).** Release-queue vocabulary and the determination queue shell stand. Schema follows in stage 2. | Agent |
 | 2.515 | 2026-10-19 | **SCR-105 stage 2 published (B-681, §26.697).** Migration 0114 (177 total) stands: determinations with supersedes chains and the append-only release event trail. The release service follows in stage 3. | Agent |
+| 2.516 | 2026-10-19 | **SCR-105 stage 3 published (B-682, §26.698).** Determinations, re-evaluating releases with a separate override privilege, rejects and reblocks stand; the queue is wired. Supporting seed follows in stage 4. | Agent |
