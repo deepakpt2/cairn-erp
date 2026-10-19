@@ -46,7 +46,8 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
       <form action={create} className="mt-4">
         <input type="hidden" name="areas" value={JSON.stringify(areas)} />
         {(
-          <div role="tabpanel" hidden={tab !== 'general'} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div role="tabpanel" hidden={tab !== 'general'}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block"><span className={labelCls}>Company code</span>
               <input name="companyCode" className={inputCls} placeholder="1000" required /></label>
             <label className="block"><span className={labelCls}>Asset class</span>
@@ -71,11 +72,13 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
               <input name="unitOfMeasure" className={inputCls} placeholder="EA" /></label>
             <label className="block"><span className={labelCls}>Capitalization date</span>
               <input type="date" name="capitalizationDate" className={inputCls} /></label>
+            </div>
           </div>
         )}
 
         {(
-          <div role="tabpanel" hidden={tab !== 'assignments'} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div role="tabpanel" hidden={tab !== 'assignments'}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block"><span className={labelCls}>Valid from</span>
               <input type="date" name="validFrom" className={inputCls} defaultValue={today} required /></label>
             <label className="block"><span className={labelCls}>Cost centre</span>
@@ -90,6 +93,7 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
               Assignments stand as intervals [valid from, valid to): a later change closes the
               open interval and appends a new one, so history is never rewritten.
             </p>
+            </div>
           </div>
         )}
 
