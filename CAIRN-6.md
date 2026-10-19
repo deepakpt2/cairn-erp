@@ -644,6 +644,10 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 
 **B-669.** Three service tests cover credit management: the never-bypass ladder (missing record blocks; warning at the area threshold; exceeded, held and expired all block with distinct reasons); judged saves (configuration, negativity, mandatory reason, valid customer) with exposure derived from open receivables, utilization, per-field audit with previous/new values, and stale-version refusal; hold requires an active block reason. One fix landed in the stage: audit amount comparisons in the test are numeric (audit stores scale-4 renderings). Browser target T893 (credit) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-669 / §26.685 / §30 row 2.503.
 
+## §26.686 — SCR-103 stage 5 fix: credit hold column renamed (migration 0112)
+
+**B-670.** The FS00 schema-contract guard reserves the bare `is_blocked` flag name to the G/L account master vocabulary (split posting/creation flags); the credit record's hold flag therefore takes the domain name `is_on_hold` via migration `0112_credit_hold_column.sql` (175 total, applied), with the Drizzle schema, service SQL and audit field renamed to match. Behaviour is unchanged. Same-stage bookkeeping: B-670 / §26.686 / §30 row 2.504.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -778,3 +782,4 @@ Deferred by name: SD order/delivery/billing exposure components and their event-
 | 2.501 | 2026-10-19 | **SCR-103 stage 3 published (B-667, §26.683).** The credit service stands: judged saves with field audit and version locking, derived exposure, never-bypass checks; the sheet is wired. Supporting seed follows in stage 4. | Agent |
 | 2.502 | 2026-10-19 | **SCR-103 stage 4 published (B-668, §26.684).** FIN.CREDIT.MAINTAIN capability (136), the FD32 alias term and tenant credit vocabularies seed; credit navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.503 | 2026-10-19 | **SCR-103 stage 5 published (B-669, §26.685).** Three credit service tests pass (check ladder, judged audited saves, version locking); browser target T893 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.504 | 2026-10-19 | **SCR-103 fix published (B-670, §26.686).** Migration 0112 renames the credit hold flag to is_on_hold, satisfying the FS00 schema-contract guard; credit tests stand green. Browser re-acceptance and closure follow. | Agent |

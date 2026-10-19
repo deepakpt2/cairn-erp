@@ -1735,7 +1735,7 @@ export const customerCredit = pgTable('customer_credit', {
   creditRepresentativeGroup: varchar('credit_representative_group', { length: 3 }),
   creditLimitValidTo: date('credit_limit_valid_to', { mode: 'string' }),
   customerCreditGroup: varchar('customer_credit_group', { length: 4 }),
-  isBlocked: boolean('is_blocked').notNull().default(false),
+  isBlocked: boolean('is_on_hold').notNull().default(false),
   blockReason: varchar('block_reason', { length: 2 }),
   version: integer('version').notNull().default(1),
   createdBy: varchar('created_by', { length: 60 }).notNull(),

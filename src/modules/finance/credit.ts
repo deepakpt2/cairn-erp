@@ -133,7 +133,7 @@ export async function getCreditExposure(client: string, customer: string, area: 
 interface CreditRow {
   credit_limit: string; credit_currency: string; risk_category: string;
   credit_representative_group: string | null; credit_limit_valid_to: string | null;
-  customer_credit_group: string | null; is_blocked: boolean; block_reason: string | null;
+  customer_credit_group: string | null; is_on_hold: boolean; block_reason: string | null;
   version: number; updated_by: string | null; updated_at: Date | string | null;
 }
 
@@ -157,7 +157,7 @@ export async function getCustomerCredit(client: string, customer: string, area: 
       validTo: record.credit_limit_valid_to,
       limitExpired: Boolean(record.credit_limit_valid_to && record.credit_limit_valid_to < todayUtc()),
       customerCreditGroup: record.customer_credit_group,
-      isBlocked: record.is_blocked, blockReason: record.block_reason,
+      isBlocked: record.is_on_hold, blockReason: record.block_reason,
       exposure: Number(fromScaled(exposure)), openReceivables: Number(fromScaled(exposure)),
       availableCredit: Number(fromScaled(available)),
       utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
@@ -261,7 +261,7 @@ export async function saveCustomerCredit(input: {
       credit_representative_group: input.representativeGroup || null,
       credit_limit_valid_to: input.validTo || null,
       customer_credit_group: input.customerCreditGroup || null,
-      is_blocked: input.isBlocked,
+      is_on_hold: input.isBlocked,
       block_reason: input.isBlocked ? (input.blockReason ?? null) : null,
     };
     const audit = async (field: string, previous: string | null, value: string | null) => {
@@ -277,10 +277,10 @@ export async function saveCustomerCredit(input: {
       await tx.execute(sql`
         insert into customer_credit
           (client, customer, credit_control_area, credit_limit, credit_currency, risk_category,
-           credit_representative_group, credit_limit_valid_to, customer_credit_group, is_blocked, block_reason, created_by)
+           credit_representative_group, credit_limit_valid_to, customer_credit_group, is_on_hold, block_reason, created_by)
         values (${client}, ${customer}, ${area}, ${next.credit_limit}, ${next.credit_currency}, ${next.risk_category},
                 ${next.credit_representative_group}, ${next.credit_limit_valid_to}, ${next.customer_credit_group},
-                ${next.is_blocked}, ${next.block_reason}, ${changedBy})
+                ${next.is_on_hold}, ${next.block_reason}, ${changedBy})
       `);
       await audit('credit_limit', null, next.credit_limit);
       await audit('credit_currency', null, next.credit_currency);
@@ -288,7 +288,7 @@ export async function saveCustomerCredit(input: {
       await audit('credit_representative_group', null, next.credit_representative_group);
       await audit('credit_limit_valid_to', null, next.credit_limit_valid_to);
       await audit('customer_credit_group', null, next.customer_credit_group);
-      await audit('is_blocked', null, String(next.is_blocked));
+      await audit('is_on_hold', null, String(next.is_on_hold));
       await audit('block_reason', null, next.block_reason);
     } else {
       const updated = await tx.execute(sql`
@@ -297,7 +297,7 @@ export async function saveCustomerCredit(input: {
           credit_representative_group = ${next.credit_representative_group},
           credit_limit_valid_to = ${next.credit_limit_valid_to},
           customer_credit_group = ${next.customer_credit_group},
-          is_blocked = ${next.is_blocked}, block_reason = ${next.block_reason},
+          is_on_hold = ${next.is_on_hold}, block_reason = ${next.block_reason},
           version = version + 1, updated_by = ${changedBy}, updated_at = now()
         where client = ${client} and customer = ${customer} and credit_control_area = ${area}
           and version = ${existing.version}
@@ -311,7 +311,7 @@ export async function saveCustomerCredit(input: {
       await audit('credit_representative_group', existing.credit_representative_group, next.credit_representative_group);
       await audit('credit_limit_valid_to', existing.credit_limit_valid_to, next.credit_limit_valid_to);
       await audit('customer_credit_group', existing.customer_credit_group, next.customer_credit_group);
-      await audit('is_blocked', String(existing.is_blocked), String(next.is_blocked));
+      await audit('is_on_hold', String(existing.is_on_hold), String(next.is_on_hold));
       await audit('block_reason', existing.block_reason, next.block_reason);
     }
   });
@@ -362,7 +362,7 @@ export async function evaluateCreditCheck(input: {
       availableCredit: Number(fromScaled(available)),
       utilizationPercent: limit === 0n ? null : Number(exposure) / Number(limit) * 100,
     };
-    if (record.is_blocked) return { decision: 'BLOCK' as const, reason: 'MANUAL_HOLD', ...base };
+    if (record.is_on_hold) return { decision: 'BLOCK' as const, reason: 'MANUAL_HOLD', ...base };
     if (record.credit_limit_valid_to && record.credit_limit_valid_to < todayUtc()) {
       return { decision: 'BLOCK' as const, reason: 'LIMIT_EXPIRED', ...base };
     }
