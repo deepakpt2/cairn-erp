@@ -696,6 +696,10 @@ Deferred by name: order/delivery/billing exposure components (await the SD canon
 
 Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 
+## §26.696 — SCR-105 stage 1: release-queue vocabulary and shell
+
+**B-680.** The release vocabulary joins `credit.ts` (determination statuses, the queue row with at-check and current credit figures, filters, per-document outcomes, and the separate override capability) and `/finance/credit-release` renders the selection panel and determination queue with FD32 drill-downs. Nothing acts yet. Same-stage bookkeeping: B-680 / §26.696 / §30 row 2.514.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -840,3 +844,4 @@ Same-stage bookkeeping: B-679 / §26.695 / §30 row 2.513.
 | 2.511 | 2026-10-19 | **SCR-104 stage 5 published (B-677, §26.693).** Three monitor service tests pass (snapshot computation, judged filters, flagged conversion); browser target T892 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.512 | 2026-10-19 | **SCR-104 CLOSED (B-678, §26.694).** FIN.CREDIT.MONITOR accepted: read-only snapshot exposure overview with flagged no-record customers (suite 1457/1457; browser T892). Next SCR: FIN.CREDIT.RELEASE (VKM3); its package is awaited. | Agent |
 | 2.513 | 2026-10-19 | **SCR-105 contract approved (B-679, §26.695, R-153).** FIN.CREDIT.RELEASE: credit determinations as the single status store (the package's sanctioned fallback until the SD canon lands), re-evaluating releases, override as a separate privilege, append-only history. Stage 1 (vocabulary + release-queue shell) follows. | Owner + Agent |
+| 2.514 | 2026-10-19 | **SCR-105 stage 1 published (B-680, §26.696).** Release-queue vocabulary and the determination queue shell stand. Schema follows in stage 2. | Agent |

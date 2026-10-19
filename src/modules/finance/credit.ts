@@ -584,3 +584,60 @@ export async function listCreditMonitor(client: string, filter: CreditMonitorFil
     return { rows, totalCustomers, calculatedAt, reportingCurrency: filter.reportingCurrency ?? null };
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* Credit-blocked document release (SCR-105 / FIN.CREDIT.RELEASE)      */
+/* ------------------------------------------------------------------ */
+
+export const CREDIT_RELEASE_CAPABILITY = 'FIN.CREDIT.RELEASE';
+export const CREDIT_OVERRIDE_CAPABILITY = 'FIN.CREDIT.OVERRIDE';
+
+export const DETERMINATION_STATUSES = ['BLOCKED', 'PASSED', 'RELEASED'] as const;
+export type DeterminationStatus = (typeof DETERMINATION_STATUSES)[number];
+
+export interface CreditDeterminationView {
+  determinationId: string;
+  salesDocument: string;
+  documentDate: string;
+  salesOrg: string | null;
+  customer: string;
+  customerName: string;
+  creditControlArea: string;
+  orderValue: number;
+  orderCurrency: string;
+  status: DeterminationStatus;
+  reason: string;
+  exposureAtCheck: number;
+  limitAtCheck: number | null;
+  currentExposure: number;
+  currentLimit: number | null;
+  utilizationPercent: number | null;
+  releasedBy: string | null;
+  releasedAt: string | null;
+  override: boolean;
+  approvalRef: string | null;
+  version: number;
+  determinedAt: string;
+}
+
+export interface CreditReleaseFilter {
+  areaFrom?: string;
+  areaTo?: string;
+  salesOrg?: string;
+  customerFrom?: string;
+  customerTo?: string;
+  documentFrom?: string;
+  documentTo?: string;
+  representativeGroup?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  blockedOnly?: boolean;
+  includeReleased?: boolean;
+}
+
+export interface ReleaseOutcome {
+  salesDocument: string;
+  ok: boolean;
+  status: DeterminationStatus | null;
+  message: string;
+}
