@@ -17,6 +17,20 @@ const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const balances = readFileSync('src/modules/finance/gl-balances.ts', 'utf8');
 const items = readFileSync('src/modules/finance/journal-items.ts', 'utf8');
 
+describe('SCR-109 stage 2: no balance-summary table; the journal snapshot is the summary', () => {
+  it('neither service reads or writes a summary/totals table', () => {
+    for (const source of [balances, items]) {
+      expect(source).not.toMatch(/balance_summary|summary_table|gl_totals|faglflex/i);
+    }
+    expect(balances).toContain('getGlBalanceReport');
+    expect(balances).toContain('group by l.company_code, l.gl_account');
+  });
+
+  it('line items order by the indexed header posting date path', () => {
+    expect(items).toContain('order by h.posting_date, l.document_number, l.line_number');
+  });
+});
+
 describe('SCR-108 stage 2: canonical reporting indexes stand aligned', () => {
   it('balances: (client, company_code, gl_account, fiscal_year, …) in migration and Drizzle', () => {
     expect(lineMigration).toContain('jel_company_account_idx');

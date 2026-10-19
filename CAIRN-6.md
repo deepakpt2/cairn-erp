@@ -818,6 +818,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-708.** The line-item grid gains the document-date and reference columns (data already carried by the row), the items view offers the balance-report return link rebuilding the originating selection, and the balance-report form takes the output-currency field. Services follow in stage 3. Same-stage bookkeeping: B-708 / §26.724 / §30 row 2.542.
 
+## §26.725 — SCR-109 stage 2: summary-canon verification extended
+
+**B-709.** The SCR-108 index contract grows the SCR-109 assertions: neither reporting service reads or writes a balance-summary/totals table (the grouped journal snapshot is the canonical summary), the balance aggregation groups by company and account, and line items order on the indexed header posting-date path. No schema change; 178 migrations stand. Services follow in stage 3. Same-stage bookkeeping: B-709 / §26.725 / §30 row 2.543.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -991,6 +995,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.540 | 2026-10-19 | **SCR-108 CLOSED (B-706, §26.722).** G/L reporting suite accepted over the standing FS10N/FAGLL03 reports (suite 1483/1483; browser T888). Next SCR: FIN.RPT.CASHFLOW (cash-flow statement); its package is awaited. The SCR after: FIN.RPT.PROFITLOSS. | Agent |
 | 2.541 | 2026-10-19 | **SCR-109 contract approved (B-707, §26.723, R-157).** G/L reporting suite completion: company-split subtotals, validated output currency, document-date/reference columns, period-context drill-down with return link. Stage 1 (UI) follows. | Owner + Agent |
 | 2.542 | 2026-10-19 | **SCR-109 stage 1 published (B-708, §26.724).** Items show document date and reference, the return link stands, the output-currency field stands. Index verification follows in stage 2. | Agent |
+| 2.543 | 2026-10-19 | **SCR-109 stage 2 published (B-709, §26.725).** Summary-canon assertions stand (no totals table; indexed date ordering); no new migration. The services follow in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
