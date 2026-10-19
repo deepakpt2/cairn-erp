@@ -598,6 +598,122 @@ export const vendorDpRequestFulfillment = pgTable('vendor_dp_request_fulfillment
  * after posting the record is retained naming the canonical
  * document. Version-checked edits; deletion is a logical status.
  */
+/** Asset class — tenant configuration governing numbering, quantity and depreciation defaults (SCR-091). */
+export const assetClass = pgTable('asset_class', {
+  client: tenantClient(),
+  assetClass: varchar('asset_class', { length: 8 }).notNull(),
+  name: varchar('name', { length: 60 }).notNull(),
+  /** INTERNAL draws from the ASSETNR range; EXTERNAL validates a supplied number unused. */
+  numbering: varchar('numbering', { length: 8 }).notNull().default('INTERNAL'),
+  quantityManaged: boolean('quantity_managed').notNull().default(false),
+  defaultDepreciationKey: varchar('default_depreciation_key', { length: 4 }),
+  defaultUsefulLifeYears: integer('default_useful_life_years'),
+  defaultUsefulLifePeriods: integer('default_useful_life_periods'),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.assetClass] }),
+  check('asset_class_numbering_ck', sql`${t.numbering} in ('INTERNAL', 'EXTERNAL')`),
+]);
+
+/** Depreciation area — tenant configuration (SCR-091). */
+export const depreciationArea = pgTable('depreciation_area', {
+  client: tenantClient(),
+  areaCode: varchar('area_code', { length: 2 }).notNull(),
+  name: varchar('name', { length: 60 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.areaCode] })]);
+
+/** Depreciation key — tenant configuration (SCR-091). */
+export const depreciationKey = pgTable('depreciation_key', {
+  client: tenantClient(),
+  keyCode: varchar('key_code', { length: 4 }).notNull(),
+  name: varchar('name', { length: 60 }).notNull(),
+  /** STRAIGHT_LINE | DECLINING_BALANCE — method vocabulary of the future depreciation run. */
+  method: varchar('method', { length: 20 }).notNull().default('STRAIGHT_LINE'),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [primaryKey({ columns: [t.client, t.keyCode] })]);
+
+/**
+ * Fixed asset master (SCR-091): identity under the complete key
+ * (tenant, company, main number, sub-number). Master data only —
+ * no values stand here; acquisition and depreciation post later.
+ */
+export const fixedAsset = pgTable('fixed_asset', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  assetClass: varchar('asset_class', { length: 8 }).notNull(),
+  description1: varchar('description_1', { length: 50 }).notNull(),
+  description2: varchar('description_2', { length: 25 }),
+  inventoryNumber: varchar('inventory_number', { length: 30 }),
+  serialNumber: varchar('serial_number', { length: 30 }),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }),
+  unitOfMeasure: varchar('unit_of_measure', { length: 3 }),
+  capitalizationDate: date('capitalization_date', { mode: 'string' }),
+  deactivationDate: date('deactivation_date', { mode: 'string' }),
+  status: varchar('status', { length: 12 }).notNull().default('ACTIVE'),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber] }),
+  check('fixed_asset_status_ck', sql`${t.status} in ('ACTIVE', 'DEACTIVATED')`),
+  check('fixed_asset_version_ck', sql`${t.version} > 0`),
+  uniqueIndex('fixed_asset_inventory_uk').on(t.client, t.companyCode, t.inventoryNumber)
+    .where(sql`${t.inventoryNumber} is not null`),
+  index('fixed_asset_class_idx').on(t.client, t.companyCode, t.assetClass),
+]);
+
+/** Time-dependent asset assignments (SCR-091): [validFrom, validTo) intervals, history never rewritten. */
+export const assetAssignment = pgTable('asset_assignment', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }),
+  costCenter: varchar('cost_center', { length: 20 }),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  plant: varchar('plant', { length: 10 }),
+  location: varchar('location', { length: 20 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber, t.validFrom] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_assignment_asset_fk',
+  }),
+  check('asset_assignment_interval_ck', sql`${t.validTo} is null or ${t.validTo} > ${t.validFrom}`),
+]);
+
+/** Per-area depreciation parameters of one asset (SCR-091). */
+export const assetDepreciation = pgTable('asset_depreciation', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  areaCode: varchar('area_code', { length: 2 }).notNull(),
+  depreciationKey: varchar('depreciation_key', { length: 4 }).notNull(),
+  usefulLifeYears: integer('useful_life_years').notNull(),
+  usefulLifePeriods: integer('useful_life_periods').notNull().default(0),
+  depreciationStartDate: date('depreciation_start_date', { mode: 'string' }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber, t.areaCode] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_depreciation_asset_fk',
+  }),
+  check('asset_depreciation_years_ck', sql`${t.usefulLifeYears} >= 0`),
+  check('asset_depreciation_periods_ck', sql`${t.usefulLifePeriods} between 0 and 11`),
+  check('asset_depreciation_life_ck', sql`${t.usefulLifeYears} * 12 + ${t.usefulLifePeriods} > 0`),
+]);
+
 export const parkedJournalHeader = pgTable('parked_journal_header', {
   client: tenantClient(),
   parkedNumber: varchar('parked_number', { length: 20 }).notNull(),

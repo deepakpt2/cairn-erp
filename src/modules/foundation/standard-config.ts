@@ -44,7 +44,7 @@ import {
   purchasingGroup,
   supplierPartnerFunction,
 } from './schema';
-import { glAccount, reversalReason } from '../finance/schema';
+import { assetClass, depreciationArea, depreciationKey, glAccount, reversalReason } from '../finance/schema';
 import { glAccountGroup } from '../finance/gl-account-group-schema';
 import {
   deriveGlAccountType,
@@ -586,6 +586,28 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
   }
   await applyPaymentTermDefaults(tx, input.client, input.activatedBy);
+
+  // Asset accounting defaults (SCR-091): one book depreciation area,
+  // two depreciation keys, three asset classes — tenant data from
+  // birth, overridable as configuration.
+  for (const row of [
+    { areaCode: '01', name: 'Book depreciation' },
+  ]) {
+    await tx.insert(depreciationArea).values({ client: input.client, ...row, createdBy: input.activatedBy }).onConflictDoNothing();
+  }
+  for (const row of [
+    { keyCode: 'SL01', name: 'Straight-line depreciation', method: 'STRAIGHT_LINE' },
+    { keyCode: 'DB01', name: 'Declining-balance depreciation', method: 'DECLINING_BALANCE' },
+  ]) {
+    await tx.insert(depreciationKey).values({ client: input.client, ...row, createdBy: input.activatedBy }).onConflictDoNothing();
+  }
+  for (const row of [
+    { assetClass: '1000', name: 'Machinery and equipment', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 10, defaultUsefulLifePeriods: 0 },
+    { assetClass: '2000', name: 'Vehicles', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 5, defaultUsefulLifePeriods: 0 },
+    { assetClass: '3000', name: 'Buildings', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 30, defaultUsefulLifePeriods: 0 },
+  ]) {
+    await tx.insert(assetClass).values({ client: input.client, ...row, createdBy: input.activatedBy }).onConflictDoNothing();
+  }
 
   return {
     version: STANDARD_PACKAGE_VERSION,
