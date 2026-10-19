@@ -427,6 +427,12 @@ export async function reverseDocument(input: {
         'Name the company code, document number and fiscal year exactly as they stand on the journal.',
       );
     }
+    if (header.originClass === 'asset_acquisition') {
+      throw new DocumentReversalError(
+        `Document ${input.documentNumber} is an asset acquisition; reversing it here would orphan its asset values.`,
+        'Reverse it from Asset Acquisition, where the asset transaction is reversed with its journal.',
+      );
+    }
     const lines = await loadLines(tx, input.client, input.documentNumber, input.fiscalYear);
     const clearsItemCount = await loadClearsCount(tx, input.client, input.companyCode, input.documentNumber);
     const gate = eligibility(header, lines, clearsItemCount, standing);

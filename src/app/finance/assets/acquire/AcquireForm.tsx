@@ -1,21 +1,39 @@
 'use client';
 
+import { useActionState, useState } from 'react';
+
 import type { AcquisitionPreview } from '@/modules/finance/asset-acquisition';
+import {
+  postAction, reverseAction, simulateAction, type AcquireActionState,
+} from './actions';
+
+const INITIAL: AcquireActionState = { ok: false, message: '' };
 
 const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
-export default function AcquireForm({ preview, canAcquire, today }: {
+export default function AcquireForm({ preview: initialPreview, canAcquire, today }: {
   preview: AcquisitionPreview | null;
   canAcquire: boolean;
   today: string;
 }) {
+  const [simState, simulate, simulating] = useActionState(simulateAction, INITIAL);
+  const [postState, post, posting] = useActionState(postAction, INITIAL);
+  const [reverseState, reverse, reversing] = useActionState(reverseAction, INITIAL);
+  const [requestKey] = useState(() => crypto.randomUUID());
+  const preview = simState.preview ?? initialPreview;
   return (
     <>
       <section aria-labelledby="aq-entry" className="rounded-card border border-line bg-surface p-4 shadow-card">
         <h2 id="aq-entry" className="text-sm font-semibold">Acquisition details</h2>
         <form className="mt-3">
-          <input type="hidden" name="requestKey" value="" />
+          <input type="hidden" name="requestKey" value={requestKey} />
+          {(simState.message || postState.message) && (
+            <p role="status" className={`mb-3 text-sm ${(postState.message ? postState.ok : simState.ok) ? 'text-ink' : 'text-red-700'}`}>
+              {postState.message || simState.message}
+              {postState.remedy ?? simState.remedy ? ` ${postState.remedy ?? simState.remedy}` : ''}
+            </p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block"><span className={labelCls}>Company code</span>
               <input name="companyCode" className={inputCls} placeholder="1000" required /></label>
@@ -45,12 +63,12 @@ export default function AcquireForm({ preview, canAcquire, today }: {
               <input name="text" className={inputCls} maxLength={50} placeholder="CNC machine acquisition" /></label>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8"
-              disabled title="Simulation stands disabled until the acquisition service lands.">
+            <button type="submit" formAction={simulate} className="btn btn-default min-h-11 sm:min-h-8"
+              disabled={!canAcquire || simulating}>
               Simulate
             </button>
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-              disabled title="Posting stands disabled until the acquisition service lands.">
+            <button type="submit" formAction={post} className="btn btn-primary min-h-11 sm:min-h-8"
+              disabled={!canAcquire || posting}>
               Post acquisition
             </button>
           </div>
@@ -95,6 +113,40 @@ export default function AcquireForm({ preview, canAcquire, today }: {
             ))}
           </div>
         )}
+      </section>
+
+      <section aria-labelledby="aq-reverse" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <h2 id="aq-reverse" className="text-sm font-semibold">Reverse an acquisition</h2>
+        {reverseState.message && (
+          <p role="status" className={`mt-2 text-sm ${reverseState.ok ? 'text-ink' : 'text-red-700'}`}>
+            {reverseState.message}{reverseState.remedy ? ` ${reverseState.remedy}` : ''}
+          </p>
+        )}
+        <form action={reverse} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="block"><span className={labelCls}>Company code</span>
+            <input name="companyCode" className={inputCls} placeholder="1000" required /></label>
+          <label className="block"><span className={labelCls}>Asset main number</span>
+            <input name="assetNumber" className={inputCls} required /></label>
+          <label className="block"><span className={labelCls}>Sub-number</span>
+            <input name="subNumber" className={inputCls} defaultValue="0000" /></label>
+          <label className="block"><span className={labelCls}>Acquisition document</span>
+            <input name="documentNumber" className={inputCls} required /></label>
+          <label className="block"><span className={labelCls}>Fiscal year</span>
+            <input name="fiscalYear" className={inputCls} placeholder="2026" required /></label>
+          <label className="block"><span className={labelCls}>Reversal date</span>
+            <input type="date" name="reversalDate" className={inputCls} defaultValue={today} required /></label>
+          <label className="block"><span className={labelCls}>Reason</span>
+            <input name="reason" className={inputCls} placeholder="Wrong amount" /></label>
+          <div className="flex items-end">
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canAcquire || reversing}>
+              Reverse acquisition
+            </button>
+          </div>
+        </form>
+        <p className="mt-2 text-sm text-ink-soft">
+          The reversal is asset-aware: the journal reverses and the value record flips to
+          REVERSED with its link, so the finance reversal screen refuses these documents.
+        </p>
       </section>
     </>
   );

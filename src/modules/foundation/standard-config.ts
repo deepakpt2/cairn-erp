@@ -221,6 +221,7 @@ const DOCUMENT_TYPES: Array<{
   { code: 'DZ', name: 'Customer payment', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
   { code: 'AB', name: 'Accounting document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'S' },
   { code: 'AF', name: 'Depreciation run', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SA' },
+  { code: 'AA', name: 'Asset acquisition', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SA' },
   { code: 'WE', name: 'Goods receipt', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SM' },
   { code: 'WA', name: 'Goods issue', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SM' },
   { code: 'RV', name: 'Billing document', rangeObject: 'RF_BELEG', rangeSub: 'GENERAL', accountTypes: 'SD' },
