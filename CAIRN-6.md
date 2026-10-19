@@ -414,6 +414,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-617.** Supporting stage of R-144. The FIN.JOURNAL.POST catalogue description now states the FB50 entry behaviour this round delivers (no new capability, term or alias — the counts stand at 129 / 103 / 111), and document display shows the line assignment beside cost and profit centre so what FB50 captures stays visible on the posted document. Same-stage bookkeeping: B-617 / §26.633 / §30 row 2.451.
 
+## §26.634 — SCR-096 stage 5: service tests and browser target
+
+**B-618.** Three service tests cover the package scenarios against the judged service: a balanced document posts with cost centre, profit centre and assignment on the canonical lines and a duplicate request key returns the same document with exactly one journal behind it; unbalanced, zero-amount, unknown account, invalid cost/profit centre, foreign currency, over-precision amount, unconfigured type and impossible date are each refused with nothing written; reversal through the canonical workflow mirrors the assignment and the pair nets to zero in the ledger. Browser target T900 (gl-document) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-618 / §26.634 / §30 row 2.452.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -496,3 +500,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.449 | 2026-10-19 | **SCR-096 stage 2 published (B-615, §26.631).** Migration 0104: canonical line assignment, S/H and positive-amount checks, posting-request registry (167 migrations). Judged posting service follows in stage 3. | Agent |
 | 2.450 | 2026-10-19 | **SCR-096 stage 3 published (B-616, §26.632).** Judged FB50 posting stands: full master-data validation in the posting transaction, request-key idempotency, assignment carried through engine, parked posting and reversal. Supporting seed and acceptance follow. | Agent |
 | 2.451 | 2026-10-19 | **SCR-096 stage 4 published (B-617, §26.633).** Catalogue wording states the FB50 behaviour; document display shows the line assignment. Acceptance follows in stage 5. | Agent |
+| 2.452 | 2026-10-19 | **SCR-096 stage 5 published (B-618, §26.634).** Three FB50 service tests pass (balanced posting with assignments, duplicate-safe, refusals atomic, reversal mirrors); browser target T900 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
