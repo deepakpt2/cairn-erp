@@ -32,6 +32,11 @@ import { buildPeriodRows } from '../../platform/periods';
 import { recordChange } from '../../platform/change';
 import { applyPaymentTermDefaults } from './payment-terms';
 import {
+  RETAINED_EARNINGS_EVENT,
+  STANDARD_RETAINED_EARNINGS_INDICATOR,
+} from './retained-earnings-vocabulary';
+import {
+  accountDetermination,
   chartOfAccounts,
   distributionChannel,
   division,
@@ -328,6 +333,11 @@ export async function applyStandardPackage(
         glAccountType,
         isBalanceSheet: deriveIsBalanceSheet(glAccountType),
         isOpenItemManaged: spec.openItem ?? false,
+        // SCR-121 (OB53): every P&L account of the delivered chart closes to
+        // indicator X, whose determination the package seeds below.
+        retainedEarningsIndicator: glAccountType === 'PL_STATEMENT'
+          ? STANDARD_RETAINED_EARNINGS_INDICATOR
+          : null,
         reconciliationType: spec.reconciliation,
         requiresCostObject: spec.requiresCostObject ?? false,
         isTaxRelevant: spec.taxRelevant ?? false,
@@ -336,6 +346,23 @@ export async function applyStandardPackage(
       .onConflictDoNothing();
     accounts++;
   }
+
+  /* ── Retained earnings determination (OB53) ──────────────────────────────── */
+  // Indicator X closes to the delivered retained earnings account, so a fresh
+  // tenant's carryforward passes from day one and every P&L account the
+  // package delivers already carries the indicator FS00 will demand.
+  await tx
+    .insert(accountDetermination)
+    .values({
+      client,
+      chartOfAccounts: coaKey,
+      event: RETAINED_EARNINGS_EVENT,
+      valuationClass: '',
+      generalModifier: STANDARD_RETAINED_EARNINGS_INDICATOR,
+      glAccount: '290000',
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
 
   /* ── Fiscal year variant and its periods ─────────────────────────────────── */
   const fyv = {

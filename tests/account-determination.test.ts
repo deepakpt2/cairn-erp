@@ -201,7 +201,17 @@ async function rowHistory(input = creation()) {
 
 describe('OBYC define account determination', () => {
   it('lists the furniture the judge reads: charts, active classes, accounts', async () => {
-    expect(await listAccountDeterminations(fixture().client)).toEqual([]);
+    // The standard package seeds exactly one determination (SCR-121): retained
+    // earnings indicator X, which this screen and OB53 read from one source.
+    expect(await listAccountDeterminations(fixture().client)).toEqual([
+      expect.objectContaining({
+        chartOfAccounts: 'CA01',
+        event: 'RETAINED_EARNINGS',
+        valuationClass: '',
+        generalModifier: 'X',
+        glAccount: '290000',
+      }),
+    ]);
     expect((await listDeterminationCharts(fixture().client)).map((choice) => choice.chartOfAccounts)).toContain(chart);
     const classes = await listDeterminationValuationClasses(fixture().client);
     expect(classes.map((choice) => choice.valuationClass)).toContain('RAW_INVENTORY');
@@ -294,6 +304,7 @@ describe('OBYC define account determination', () => {
       'GR_IR_CLEARING||',
       'INVENTORY|RAW_INVENTORY|',
       'OFFSETTING_INVENTORY|RAW_INVENTORY|VBR',
+      'RETAINED_EARNINGS||X',
     ]);
   });
 

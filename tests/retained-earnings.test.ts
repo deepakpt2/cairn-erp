@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { closeDb } from '@/platform/db/client';
+import { sql } from 'drizzle-orm';
+
+import { closeDb, withTenant } from '@/platform/db/client';
 import { ConfigError, upsertGlAccount, type GlAccountInput } from '@/modules/foundation/services';
 import {
   RetainedEarningsError,
@@ -93,23 +95,44 @@ describe('SCR-121 retained earnings definition OB53 (R-168)', () => {
   });
 
   it('refuses deletion while a P&L account carries the indicator, then deletes cleanly', async () => {
+    // Stage 4: the package seeds indicator X on every delivered P&L account,
+    // so more than the one test account carries it and X refuses deletion.
+    const carriers = await withTenant(fixture().client, async (tx) => {
+      const rows = await tx.execute(sql`
+        select count(*)::int as n from gl_account
+        where client = ${fixture().client} and chart_of_accounts = 'CA01'
+          and gl_account_type = 'PL_STATEMENT' and retained_earnings_indicator = 'X'
+      `);
+      return Number((rows as unknown as Array<{ n: number }>)[0]?.n ?? 0);
+    });
+    expect(carriers).toBeGreaterThan(1);
     await expect(deleteRetainedEarnings({
       client: fixture().client, changedBy: ACTOR,
       chartOfAccounts: 'CA01', indicator: 'X',
       reason: 'SCR-121 automated stage 3 test',
     })).rejects.toThrow(/cannot be deleted/);
 
-    await maintain({ indicator: 'Y' });
+    // A fresh indicator Z: defined, carried by the one test account, refused,
+    // then released by moving the account back to X and deleted cleanly.
+    await maintain({ indicator: 'Z' });
     await upsertGlAccount(accountInput('391000', {
-      mode: 'CHANGE', name: 'SCR-121 account 391000', retainedEarningsIndicator: 'Y',
+      mode: 'CHANGE', name: 'SCR-121 account 391000', retainedEarningsIndicator: 'Z',
+    }));
+    await expect(deleteRetainedEarnings({
+      client: fixture().client, changedBy: ACTOR,
+      chartOfAccounts: 'CA01', indicator: 'Z',
+      reason: 'SCR-121 automated stage 3 test',
+    })).rejects.toThrow(/cannot be deleted/);
+    await upsertGlAccount(accountInput('391000', {
+      mode: 'CHANGE', name: 'SCR-121 account 391000', retainedEarningsIndicator: 'X',
     }));
     await deleteRetainedEarnings({
       client: fixture().client, changedBy: ACTOR,
-      chartOfAccounts: 'CA01', indicator: 'X',
+      chartOfAccounts: 'CA01', indicator: 'Z',
       reason: 'SCR-121 automated stage 3 test',
     });
     const rows = await listRetainedEarnings(fixture().client);
-    expect(rows.map((r) => r.indicator)).toEqual(['Y']);
+    expect(rows.map((r) => r.indicator)).toEqual(['X']);
     expect(ConfigError).toBeDefined();
   });
 });
