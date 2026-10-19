@@ -2380,6 +2380,8 @@ const en: Catalogue = {
   'journal.emptyHint':
     'Post a journal entry to see the document appear here with its lines and flow.',
   'journal.details': 'Document detail',
+  'journalItems.title': 'G/L Line Item Report',
+  'journalItems.subtitle': 'Read the posted lines straight from the journal: a strictly read-only report that moves nothing, with open and cleared judged only where an account manages open items.',
   'parkedJournal.title': 'Park a Journal Entry',
   'parkedJournal.subtitle': 'Store a preliminary G/L document without posting it: a parked document may stand incomplete, and only a judged save-as-complete or posting ever touches the accounts.',
   'journal.postTitle': 'Post a journal entry',
