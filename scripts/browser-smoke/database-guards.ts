@@ -83,6 +83,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'asset-acquisition': { database: 'cairn_b210', port: '5432', batch: 'SCR-092 local loopback' },
   'asset-retirement': { database: 'cairn_b210', port: '5432', batch: 'SCR-093 local loopback' },
   'asset-depreciation': { database: 'cairn_b210', port: '5432', batch: 'SCR-094 local loopback' },
+  'asset-history': { database: 'cairn_b210', port: '5432', batch: 'SCR-095 local loopback' },
   'customer-down-payment': { database: 'cairn_b210', port: '5432', batch: 'SCR-083 local loopback' },
   'customer-balances': { database: 'cairn_b210', port: '5432', batch: 'SCR-069 local loopback' },
   'customer-ageing': { database: 'cairn_b210', port: '5432', batch: 'SCR-070 local loopback' },
