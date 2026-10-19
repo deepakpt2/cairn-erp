@@ -490,6 +490,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-636.** Stage 2 of R-147, migration `0107_grir_reclass_run.sql` (170 migrations): `grir_reclass_run` (request-key unique, status TEST/COMPLETED/REVERSED, accrual total and generated-document references) and `grir_reclass_item` (PO/vendor/material/plant references, ordered/received/invoiced/open quantities and values, classification, accrual reference, status and error). Purchase orders, material documents, supplier invoices and accounting documents are reused untouched. Same-stage bookkeeping: B-636 / §26.652 / §30 row 2.470.
 
+## §26.653 — SCR-099 stage 3: analysis, accrual posting and protocol export
+
+**B-637.** Stage 3 of R-147. `executeGrIrAnalysis` judges the selection (valid key date and range; accrual creation requires its posting date, document type and account), then computes the signed canonical history per purchase order item — material-document quantities by movement direction with reversed sources excluded, supplier-invoice quantities and values signed by category with cancelled invoices and their mirrors excluded — and classifies on quantity and value together. A live accrual posts the open value per eligible item against the GR/IR clearing account from determination, atomically with the protocol, refuses items already accrued for the fiscal year unless that run stands reversed, and reverses on the named date through the canonical workflow; a request key replays the original run. The protocol exports as CSV from the persisted run. Same-stage bookkeeping: B-637 / §26.653 / §30 row 2.471.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -591,3 +595,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.468 | 2026-10-19 | **SCR-099 contract published (B-634, §26.650, R-147).** F.19 GR/IR analysis: signed canonical PO history, value-and-quantity classification, separate accrual posting against WRX determination with duplicate refusal. UI stage follows. | Agent |
 | 2.469 | 2026-10-19 | **SCR-099 stage 1 published (B-635, §26.651).** GR/IR vocabulary and selection shell stand. Run/item schema follows in stage 2. | Agent |
 | 2.470 | 2026-10-19 | **SCR-099 stage 2 published (B-636, §26.652).** GR/IR run/item protocol stands (migration 0107, 170 total). Analysis and accrual service follows in stage 3. | Agent |
+| 2.471 | 2026-10-19 | **SCR-099 stage 3 published (B-637, §26.653).** GR/IR analysis stands: signed PO history, five-way classification, separate atomic accrual with duplicate refusal, CSV protocol. Supporting seed follows in stage 4. | Agent |

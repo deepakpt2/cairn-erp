@@ -2,7 +2,9 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
-import { GRIR_RECLASS_CAPABILITY, type GrIrResult } from '@/modules/finance/grir-reclass';
+import {
+  GRIR_RECLASS_CAPABILITY, GrIrReclassError, executeGrIrAnalysis, type GrIrResult,
+} from '@/modules/finance/grir-reclass';
 import GrIrForm from './GrIrForm';
 
 export const dynamic = 'force-dynamic';
@@ -35,8 +37,33 @@ export default async function GrIrReclassPage({ searchParams }: {
     accrualDocumentType: get('accrualDocumentType'),
     accrualAccount: get('accrualAccount'),
   };
-  const result: GrIrResult | null = null;
+  let result: GrIrResult | null = null;
+  let error: string | null = null;
   const requestKey = get('requestKey') || `grir-${Date.now().toString(36)}`;
+  if (can(session, GRIR_RECLASS_CAPABILITY) && executed && defaults.companyCode && defaults.keyDate) {
+    try {
+      result = await executeGrIrAnalysis({
+        client: session.user.client, changedBy: session.user.username,
+        selection: {
+          companyCode: defaults.companyCode, keyDate: defaults.keyDate,
+          purchaseOrderFrom: defaults.purchaseOrderFrom || undefined,
+          purchaseOrderTo: defaults.purchaseOrderTo || undefined,
+          postingDateFrom: defaults.postingDateFrom || undefined,
+          postingDateTo: defaults.postingDateTo || undefined,
+          displayVariant: defaults.displayVariant || undefined,
+          testRun: defaults.testRun, createAccruals: defaults.createAccruals,
+          postingDate: defaults.postingDate || undefined,
+          reversalDate: defaults.reversalDate || undefined,
+          accrualDocumentType: defaults.accrualDocumentType || undefined,
+          accrualAccount: defaults.accrualAccount || undefined,
+          requestKey,
+        },
+      });
+    } catch (e) {
+      if (e instanceof GrIrReclassError) error = e.message;
+      else throw e;
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -48,6 +75,9 @@ export default async function GrIrReclassPage({ searchParams }: {
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('grir.subtitle')}</p>
       </header>
+      {error && (
+        <p role="alert" className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</p>
+      )}
       <GrIrForm
         canExecute={can(session, GRIR_RECLASS_CAPABILITY)}
         defaults={defaults}
