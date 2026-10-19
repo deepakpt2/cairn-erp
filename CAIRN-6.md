@@ -526,6 +526,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-645.** Seed grows by one capability (FIN.ACCRUAL.POST, 133 total) and by the accrual term carrying both the FBS1 and F.81 search aliases; the journal list gains the accruals entry. Seeded twice, idempotent. Same-stage bookkeeping: B-645 / §26.661 / §30 row 2.479.
 
+## §26.662 — SCR-100 stage 5: service tests and browser target
+
+**B-646.** Three service tests cover the accrual lifecycle: posting with reversal metadata committed in the same transaction and request-key replay; rollback of the whole document when the reversal reason does not stand (no orphan metadata, no partial journal) and reversal-before-posting refusal; the due list opening exactly at the reversal date and the reversal executing exactly once through the canonical workflow with the original marked reversed. Browser target T896 (accrual) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-646 / §26.662 / §30 row 2.480.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -636,3 +640,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.477 | 2026-10-19 | **SCR-100 stage 2 published (B-643, §26.659).** Accrual metadata table stands (migration 0108, 171 total). Posting hook, entry action and F.81 service follow in stage 3. | Agent |
 | 2.478 | 2026-10-19 | **SCR-100 stage 3 published (B-644, §26.660).** Accrual posting stands atomic with its metadata; the F.81 due list executes reversals through the canonical workflow with link reconciliation. Supporting seed follows in stage 4. | Agent |
 | 2.479 | 2026-10-19 | **SCR-100 stage 4 published (B-645, §26.661).** FIN.ACCRUAL.POST capability (133) and the FBS1/F.81 alias term seed; the journal list exposes accruals. Acceptance follows in stage 5. | Agent |
+| 2.480 | 2026-10-19 | **SCR-100 stage 5 published (B-646, §26.662).** Three accrual service tests pass (atomic metadata, due-date lifecycle, exactly-once reversal); browser target T896 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

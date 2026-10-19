@@ -77,6 +77,7 @@ export const TARGETS = [
   { id: 'tax-report', client: 'T899', label: 'SCR-097 S_ALR_87012357 advance tax return: test-mode extraction by tax code' },
   { id: 'fx-valuation', client: 'T898', label: 'SCR-098 FAGL_FC_VAL foreign currency valuation: test-mode gain protocol' },
   { id: 'grir-reclass', client: 'T897', label: 'SCR-099 F.19 GR/IR analysis: classification without posting' },
+  { id: 'accrual', client: 'T896', label: 'SCR-100 FBS1/F.81 accrual entry and due reversal' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
