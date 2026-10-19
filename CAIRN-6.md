@@ -998,6 +998,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-753.** `calculateSubledgerTie` (appended to the stage-1 vocabulary module) refuses any ledger but `0L` by name, resolves the company and its chart, takes every CUSTOMERS/VENDORS reconciliation account, and compares — cumulatively through period-to over POSTED lines — the account total against the partner-carrying subledger total, naming each account TIED or EXCEPTION with the difference never netted away. Partner rows break the subledger total down by partner; partnerless lines stand as counted exception detail with a warning; partners posting away from their segment-assigned reconciliation account are named. The page executes live and renders `reportError`; account rows drill to the journal line-item report. `tsc` green. Supporting seed follows in stage 4. Same-stage bookkeeping: B-753 / §26.769 / §30 row 2.587.
 
+## §26.770 — SCR-115 stage 4: capability, aliases and navigation
+
+**B-754.** Seed carries the `FIN.RPT.SUBLEDGER.TIE` capability and its registry term at `/finance/subledger-tie-out`, aliases FAGLB03 and F.03 living on the one term while FS10N stays verified on FIN.GL.BALANCE; the journal page links the report (`journal.subledgerTie`). Seeded twice idempotent — catalogue 147 capabilities / 120 terms / 140 aliases. Acceptance follows in stage 5. Same-stage bookkeeping: B-754 / §26.770 / §30 row 2.588.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1216,6 +1220,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.585 | 2026-10-19 | **SCR-115 stage 1 published (B-751, §26.767).** Tie-out vocabulary and the subledger tie-out shell stand over the inert grid. Index check follows in stage 2. | Agent |
 | 2.586 | 2026-10-19 | **SCR-115 stage 2 published (B-752, §26.768).** Index check: tie-out canon complete, no migration (181 stand); the schema contract pins reconciliation types and both journal paths. The tie-out service follows in stage 3. | Agent |
 | 2.587 | 2026-10-19 | **SCR-115 stage 3 published (B-753, §26.769).** The tie-out service compares account totals against partner-carrying totals with TIED/EXCEPTION naming, partner rows and misassignment warnings; the page executes live. Supporting seed follows in stage 4. | Agent |
+| 2.588 | 2026-10-19 | **SCR-115 stage 4 published (B-754, §26.770).** FIN.RPT.SUBLEDGER.TIE capability, FAGLB03 + F.03 aliases and journal-page navigation stand (147/120/140). Acceptance follows in stage 5. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

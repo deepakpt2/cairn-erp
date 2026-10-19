@@ -2428,6 +2428,7 @@ const en: Catalogue = {
   'journal.profitLoss': 'Profit & loss…',
   'journal.costCenterReport': 'Cost center report…',
   'journal.profitCenterReport': 'Profit center report…',
+  'journal.subledgerTie': 'Subledger tie-out…',
   'trial.title': 'Trial Balance / Financial Statement',
   'trial.intro': 'The F.01 statement over the configured financial statement version: opening from every earlier year, turnover from the selected periods, balance at the cutoff — with comparatives and variances. Accounts without an FSV assignment are named below, never dropped.',
   'trial.selectionTitle': 'Statement selection',
