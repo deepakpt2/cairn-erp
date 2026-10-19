@@ -602,6 +602,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-660.** Seed grows by the FIN.CLOSE.CARRYFORWARD capability (135 total) and the carryforward term carrying the F.16 and FAGLGVTR aliases (109 terms); the journal list gains the carryforward entry. Seeded twice, idempotent. Same-stage bookkeeping: B-660 / §26.676 / §30 row 2.494.
 
+## §26.677 — SCR-102 stage 5: service tests and browser target
+
+**B-661.** Three service tests cover the carryforward: unconfigured-ledger refusal; the full delta lifecycle — test run posting nothing with openings recorded, update run closing P&L into retained earnings inside the source year, a zero-delta repeat posting nothing, and a late prior-year adjustment carried by a delta-only transfer; and the missing retained-earnings determination surfacing as protocol exceptions on a FAILED run. Two fixes landed in the stage: the retained-earnings account earns a result row even with no prior balance, and a test-side journal-count expectation was corrected. Browser target T894 (carryforward) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-661 / §26.677 / §30 row 2.495.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -727,3 +731,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.492 | 2026-10-19 | **SCR-102 stage 2 published (B-658, §26.674).** Migration 0110 (173 total) stands: run header and result protocol, repeatable by construction. The execution service follows in stage 3. | Agent |
 | 2.493 | 2026-10-19 | **SCR-102 stage 3 published (B-659, §26.675).** The carryforward executes: derived openings recorded, P&L closed by judged transfer documents, delta-only reruns, concurrency-guarded update runs. Supporting seed follows in stage 4. | Agent |
 | 2.494 | 2026-10-19 | **SCR-102 stage 4 published (B-660, §26.676).** FIN.CLOSE.CARRYFORWARD capability (135) and the F.16/FAGLGVTR alias term seed; carryforward navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.495 | 2026-10-19 | **SCR-102 stage 5 published (B-661, §26.677).** Three carryforward service tests pass (test/update/delta lifecycle, determination exceptions); browser target T894 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

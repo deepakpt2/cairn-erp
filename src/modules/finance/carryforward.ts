@@ -183,6 +183,11 @@ export async function executeCarryforward(input: {
       const byAccount = new Map<string, BalanceRow[]>();
       for (const row of balances) byAccount.set(row.account, [...(byAccount.get(row.account) ?? []), row]);
 
+      // The retained earnings account earns its opening from the
+      // transfer even when nothing stood on it before.
+      if (retained && !balances.some((r) => r.account === retained)) {
+        balances.push({ account: retained, profitCenter: '', balance: 0n, category: 'BALANCE_SHEET' });
+      }
       const plRows = balances.filter((r) => r.category === 'PL_STATEMENT');
       const plNet = plRows.reduce((sum, r) => sum + r.balance, 0n);
       let transferDocument: string | null = null;
