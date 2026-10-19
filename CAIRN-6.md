@@ -746,6 +746,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-690.** Seed grows by the FIN.RPT.TRIALBALANCE capability (140 total), the statement term carrying the F.01 alias (113 terms), and a delivered standard FSV (INT: balance sheet with assets/liabilities/equity, profit and loss with revenue/expenses, presentation signs set) for every tenant standing on the standard chart. The journal list gains the trial-balance entry. Seeded twice, idempotent. Same-stage bookkeeping: B-690 / §26.706 / §30 row 2.524.
 
+## §26.707 — SCR-106 stage 5: service tests and browser target
+
+**B-691.** Four service tests cover the statement: canonical derivation (prior-year opening, range turnover, cutoff balance, inverted presentation, comparatives and variance with hierarchy rollup, balanced total turnover); unassigned accounts named with their balances; special periods excluded by default with a warning and included on request; version judging and graceful missing comparatives. Browser target T890 (trial-balance) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-691 / §26.707 / §30 row 2.525.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -901,3 +905,4 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.522 | 2026-10-19 | **SCR-106 stage 2 published (B-688, §26.704).** Migration 0115 (178 total) stands: FSV version/nodes/assignments and the journal aggregation index. The statement service follows in stage 3. | Agent |
 | 2.523 | 2026-10-19 | **SCR-106 stage 3 published (B-689, §26.705).** The F.01 statement calculates in one snapshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
