@@ -114,6 +114,9 @@ export default async function JournalPage({
           <Link href="/finance/trial-balance" className="btn btn-default min-h-11 sm:min-h-8">
             {t('journal.trialBalance')}
           </Link>
+          <Link href="/finance/balance-sheet" className="btn btn-default min-h-11 sm:min-h-8">
+            {t('journal.balanceSheet')}
+          </Link>
         </div>
       </header>
 

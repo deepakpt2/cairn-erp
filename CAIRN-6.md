@@ -770,6 +770,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-696.** `calculateBalanceSheet` stands: one journal snapshot (opening / range turnover / through-cutoff, current and comparative) mapped through the FSV exactly as SCR-106, then judged per account by the calculation type — ACCUMULATED closing, MOVEMENT range-only with opening excluded, COMBINED splitting on `gl_account.is_balance_sheet` with the net P&L movement carried as the explicit current-year result. The grid gains the opening column; variance % keeps the zero-denominator null rule; comparison ranges validate independently and default to the corresponding periods; summary-level folding merges folded accounts into their displayed ancestor after roll-up, so presentation never changes a figure. The shell renders the full §2 grid with CSV export and drill-down to account balances and journal line items. Interactive node collapse and amount sorting are deferred by name (the FSV sequence is the configured order). Capability and seed follow in stage 4. Same-stage bookkeeping: B-696 / §26.712 / §30 row 2.530.
 
+## §26.713 — SCR-107 stage 4: capability, aliases, navigation
+
+**B-697.** Seed grows by the FIN.RPT.BALANCESHEET capability (141 total), the statement term carrying the S_ALR_87012284, S_PL0_86000028 and FC10 search aliases (114 terms / 129 aliases), and the journal list gains the balance-sheet entry beside the trial balance. Seeded twice, idempotent. Tests and browser acceptance follow in stage 5. Same-stage bookkeeping: B-697 / §26.713 / §30 row 2.531.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -931,6 +935,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.528 | 2026-10-19 | **SCR-107 stage 1 published (B-694, §26.710).** Balance calculation types, summary-level vocabulary and the S_ALR_87012284 report shell stand. The aligned index follows in stage 2. | Agent |
 | 2.529 | 2026-10-19 | **SCR-107 stage 2 published (B-695, §26.711).** Index duty verified: the aligned header/line indexes stand (0115/0098); no new migration (178 stands), contract test pins the alignment. The calculation service follows in stage 3. | Agent |
 | 2.530 | 2026-10-19 | **SCR-107 stage 3 published (B-696, §26.712).** The three calculation types calculate over one journal snapshot; opening column, summary folding and CSV export stand; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.531 | 2026-10-19 | **SCR-107 stage 4 published (B-697, §26.713).** FIN.RPT.BALANCESHEET capability (141), the S_ALR_87012284 alias term and statement navigation stand. Acceptance follows in stage 5. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
