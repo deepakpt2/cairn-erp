@@ -590,6 +590,71 @@ export const vendorDpRequestFulfillment = pgTable('vendor_dp_request_fulfillment
   index('vdprf_actual_idx').on(t.client, t.actualDocumentNumber, t.actualFiscalYear),
 ]);
 
+/**
+ * Parked journal header (SCR-087): a preliminary G/L document in
+ * staging. No journal stands behind it until posting converts it;
+ * after posting the record is retained naming the canonical
+ * document. Version-checked edits; deletion is a logical status.
+ */
+export const parkedJournalHeader = pgTable('parked_journal_header', {
+  client: tenantClient(),
+  parkedNumber: varchar('parked_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  documentType: varchar('document_type', { length: 12 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  headerText: varchar('header_text', { length: 100 }),
+  /** PARKED | COMPLETED | POSTED | DELETED; REJECTED reserved for the approval workflow. */
+  status: varchar('status', { length: 16 }).notNull().default('PARKED'),
+  /** Optimistic-concurrency version; every edit increments it. */
+  version: integer('version').notNull().default(1),
+  /** Reason carried by the standing status (deletion today). */
+  statusReason: text('status_reason'),
+  postedDocumentNumber: varchar('posted_document_number', { length: 40 }),
+  postedFiscalYear: integer('posted_fiscal_year'),
+  postedAt: timestamp('posted_at', { withTimezone: true }),
+  postedByUser: varchar('posted_by_user', { length: 60 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.parkedNumber] }),
+  check('parked_journal_status_ck', sql`${t.status} in ('PARKED', 'COMPLETED', 'POSTED', 'DELETED', 'REJECTED')`),
+  check('parked_journal_version_ck', sql`${t.version} > 0`),
+  check('parked_journal_posted_ref_ck', sql`${t.status} <> 'POSTED' or (${t.postedDocumentNumber} is not null and ${t.postedFiscalYear} is not null and ${t.postedAt} is not null and ${t.postedByUser} is not null)`),
+  index('parked_journal_status_idx').on(t.client, t.companyCode, t.status, t.postingDate),
+]);
+
+/** One staged line of a parked journal (SCR-087). */
+export const parkedJournalLine = pgTable('parked_journal_line', {
+  client: tenantClient(),
+  parkedNumber: varchar('parked_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  lineNumber: integer('line_number').notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  debitCredit: char('debit_credit', { length: 1 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  costCenter: varchar('cost_center', { length: 20 }),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  taxCode: varchar('tax_code', { length: 4 }),
+  /** Retained on the parked record; the house journal line has no assignment column. */
+  assignment: varchar('assignment', { length: 18 }),
+  lineText: varchar('line_text', { length: 100 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.parkedNumber, t.fiscalYear, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.parkedNumber],
+    foreignColumns: [parkedJournalHeader.client, parkedJournalHeader.parkedNumber],
+    name: 'parked_journal_line_header_fk',
+  }),
+  check('parked_journal_line_dc_ck', sql`${t.debitCredit} in ('S', 'H')`),
+  check('parked_journal_line_amount_ck', sql`${t.amount} > 0`),
+  index('parked_journal_line_gl_idx').on(t.client, t.glAccount),
+]);
+
 export const incomingPayment = pgTable('incoming_payment', {  client: tenantClient(),
   paymentNumber: varchar('payment_number', { length: 20 }).notNull(),
   fiscalYear: integer('fiscal_year').notNull(),

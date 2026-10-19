@@ -123,6 +123,10 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 
 **B-559.** Stage 1 of R-135. The `/finance/journal/park` screen stands as a shell: the parking form (header data and the line grid with cost/profit centre, tax code, assignment and line text, debits, credits and difference totalled live with the unbalanced-parking note) and the parked-documents list with status and posted-as reference, rendered empty. Parking stands disabled until the service lands in stage 3; no reads or writes stand yet. A stub module carries the capability `FIN.JOURNAL.PARK` and the parked-document vocabulary. Same-stage bookkeeping: B-559 / §26.575 / §30 row 2.393.
 
+## §26.576 — SCR-087 stage 2: parked journal staging schema
+
+**B-560.** Stage 2 of R-135. `parked_journal_header` carries the preliminary document (drawn number, derived fiscal year, status under check with REJECTED reserved, optimistic version, the posted reference consistent by check once POSTED) and `parked_journal_line` its staged lines under a composite foreign key to the header, positive amounts and S/H sides under check, the assignment retained on the parked record (migration `0097_parked_journal.sql`, applied; **160 migrations**). No journal table is touched and no foreign key points at one — before posting there is nothing to point at. Typecheck clean. Same-stage bookkeeping: B-560 / §26.576 / §30 row 2.394.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -147,3 +151,4 @@ The owner supplied the FV50 field package (2026-10-19); SAP codes stand as searc
 | 2.391 | 2026-10-19 | **SCR-086 stage 5 published — CLOSED (B-557, §26.573).** Tests 3/3, full suite 1368 green, browser T910 green; vendor down-payment requests stand accepted and both advance chains (F-47 → F-48 → F-54, F-37 → F-29 → F-39) are complete. Next: T-code FV50 park a journal entry (FBRA first named in error; it stands implemented). | Agent |
 | 2.392 | 2026-10-19 | **SCR-087 / FV50 contracted (R-135, B-558, §26.574).** Parked journals live in staging tables with a drawn PARKDOC number, version-checked edits, a judged save-as-complete gate and atomic posting through the engine, the parked record retained with its posted reference; approval workflow, FX and parallel currencies deferred by name. Standing instruction recorded: completion reports name the next two T-codes in order. | Agent |
 | 2.393 | 2026-10-19 | **SCR-087 stage 1 published (B-559, §26.575).** The inert FV50 parking screen: header and line grid with live totals, parked list rendered empty, parking disabled; i18n keys added. No reads, no writes. | Agent |
+| 2.394 | 2026-10-19 | **SCR-087 stage 2 published (B-560, §26.576).** Parked-journal staging tables stand (migration 0097, 160 migrations) with version, status and posted-reference checks; no journal table touched. | Agent |
