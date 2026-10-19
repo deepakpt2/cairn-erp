@@ -158,6 +158,8 @@ export async function executeGrIrAnalysis(input: {
           on mt.client = l.client and mt.movement_type = l.movement_type
         where l.client = ${input.client} and h.status = 'POSTED'
           and h.posting_date <= ${s.keyDate}
+          and (${s.postingDateFrom ?? null}::varchar is null or h.posting_date >= ${s.postingDateFrom ?? null})
+          and (${s.postingDateTo ?? null}::varchar is null or h.posting_date <= ${s.postingDateTo ?? null})
           and l.purchase_order_number is not null
         group by l.purchase_order_number, l.purchase_order_item
       ) gr on gr.purchase_order_number = po.order_number and gr.purchase_order_item = poi.item_number
@@ -170,6 +172,8 @@ export async function executeGrIrAnalysis(input: {
           on h.client = i.client and h.invoice_number = i.invoice_number
         where i.client = ${input.client} and h.status = 'POSTED' and h.cancellation_of is null
           and h.posting_date <= ${s.keyDate}
+          and (${s.postingDateFrom ?? null}::varchar is null or h.posting_date >= ${s.postingDateFrom ?? null})
+          and (${s.postingDateTo ?? null}::varchar is null or h.posting_date <= ${s.postingDateTo ?? null})
         group by i.purchase_order_number, i.purchase_order_item
       ) ir on ir.purchase_order_number = po.order_number and ir.purchase_order_item = poi.item_number
       where po.client = ${input.client} and po.company_code = ${s.companyCode}
