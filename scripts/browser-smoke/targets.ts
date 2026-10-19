@@ -72,6 +72,7 @@ export const TARGETS = [
   { id: 'asset-acquisition', client: 'T904', label: 'SCR-092 ABZON asset acquisition: simulate, engine posting, asset-aware reversal' },
   { id: 'asset-retirement', client: 'T903', label: 'SCR-093 ABAVN asset retirement: simulate, partial scrapping, asset-aware reversal' },
   { id: 'asset-depreciation', client: 'T902', label: 'SCR-094 AFAB depreciation run: test run, live posting, posted-value record' },
+  { id: 'asset-history', client: 'T901', label: 'SCR-095 S_ALR_87011990 asset history sheet: reconciled read-only report' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },
