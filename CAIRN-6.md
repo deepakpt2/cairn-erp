@@ -886,6 +886,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-725.** `calculateProfitLoss` stands: one COMBINED snapshot whose account rows now carry the master account class and both cumulative figures, then balance-sheet accounts are removed and every surviving node's totals are re-rolled from its kept accounts — a node survives only when its subtree holds a P&L account, so no balance-sheet figure leaks into a P&L total. Range movement and year-to-date movement stand side by side with independent comparatives; unassigned P&L accounts are named. The `/finance/profit-loss` report renders the grid with CSV export and both drill-downs. Capability and alias follow in stage 4. Same-stage bookkeeping: B-725 / §26.741 / §30 row 2.559.
 
+## §26.742 — SCR-111 stage 4: capability, alias cession, navigation
+
+**B-726.** Seed grows by the FIN.RPT.PROFITLOSS capability (143 total) and the profit-and-loss term (116 terms); **S_PL0_86000028 is ceded from the balance-sheet term to the P&L term** through a repair delete in the OX09 precedent (the balance sheet keeps S_ALR_87012284 + FC10; aliases stay 133), and the journal list gains the profit-and-loss entry. Seeded twice, idempotent; the alias ownership verified in the database. Tests and browser acceptance follow in stage 5. Same-stage bookkeeping: B-726 / §26.742 / §30 row 2.560.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1076,6 +1080,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.557 | 2026-10-19 | **SCR-111 stage 1 published (B-723, §26.739).** P&L vocabulary and the profit-loss shell stand. Index verification follows in stage 2. | Agent |
 | 2.558 | 2026-10-19 | **SCR-111 stage 2 published (B-724, §26.740).** Index/snapshot verification extended to the P&L statement; no new migration (179 stands). The service follows in stage 3. | Agent |
 | 2.559 | 2026-10-19 | **SCR-111 stage 3 published (B-725, §26.741).** The P&L-only statement calculates (filtered, re-rolled, range + year-to-date); the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.560 | 2026-10-19 | **SCR-111 stage 4 published (B-726, §26.742).** FIN.RPT.PROFITLOSS capability (143), the P&L term with S_PL0_86000028 ceded from the balance-sheet term, statement navigation. Acceptance follows in stage 5. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
