@@ -56,7 +56,7 @@ export interface AssetView {
   unitOfMeasure: string | null;
   capitalizationDate: string | null;
   deactivationDate: string | null;
-  status: 'ACTIVE' | 'DEACTIVATED';
+  status: 'ACTIVE' | 'DEACTIVATED' | 'RETIRED';
   version: number;
   assignments: AssetAssignmentView[];
   depreciation: AssetDepreciationView[];

@@ -609,6 +609,10 @@ export const assetClass = pgTable('asset_class', {
   defaultDepreciationKey: varchar('default_depreciation_key', { length: 4 }),
   /** Account determination: the acquisition reconciliation account this class debits (SCR-092). */
   reconAccount: varchar('recon_account', { length: 10 }),
+  /** Account determination: accumulated depreciation this class reverses at retirement (SCR-093). */
+  accumDeprAccount: varchar('accum_depr_account', { length: 10 }),
+  /** Account determination: loss on retirement without proceeds this class debits (SCR-093). */
+  retirementLossAccount: varchar('retirement_loss_account', { length: 10 }),
   defaultUsefulLifeYears: integer('default_useful_life_years'),
   defaultUsefulLifePeriods: integer('default_useful_life_periods'),
   isActive: boolean('is_active').notNull().default(true),
@@ -662,7 +666,7 @@ export const fixedAsset = pgTable('fixed_asset', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber] }),
-  check('fixed_asset_status_ck', sql`${t.status} in ('ACTIVE', 'DEACTIVATED')`),
+  check('fixed_asset_status_ck', sql`${t.status} in ('ACTIVE', 'DEACTIVATED', 'RETIRED')`),
   check('fixed_asset_version_ck', sql`${t.version} > 0`),
   uniqueIndex('fixed_asset_inventory_uk').on(t.client, t.companyCode, t.inventoryNumber)
     .where(sql`${t.inventoryNumber} is not null`),
@@ -727,7 +731,7 @@ export const assetTransactionType = pgTable('asset_transaction_type', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.typeCode] }),
-  check('asset_transaction_type_kind_ck', sql`${t.kind} in ('ACQUISITION')`),
+  check('asset_transaction_type_kind_ck', sql`${t.kind} in ('ACQUISITION', 'RETIREMENT')`),
 ]);
 
 /**
@@ -768,6 +772,56 @@ export const assetTransaction = pgTable('asset_transaction', {
   uniqueIndex('asset_transaction_request_uk').on(t.client, t.requestKey)
     .where(sql`${t.requestKey} is not null`),
   index('asset_transaction_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
+]);
+
+/**
+ * Asset retirement — the value record of one retirement posting
+ * (SCR-093 / R-141). Not a second ledger: the journal stays the
+ * financial authority, and remaining asset values derive from
+ * ACTIVE acquisition rows less ACTIVE retirement rows here.
+ */
+export const assetRetirement = pgTable('asset_retirement', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  transactionType: varchar('transaction_type', { length: 4 }).notNull(),
+  /** COMPLETE | PERCENT | AMOUNT */
+  scope: varchar('scope', { length: 10 }).notNull(),
+  /** PERCENT scope basis: percentage of the remaining retireable acquisition value. */
+  retirementPercent: numeric('retirement_percent', { precision: 7, scale: 4 }),
+  /** AMOUNT scope basis: the requested acquisition value to retire. */
+  retirementAmount: numeric('retirement_amount', { precision: 23, scale: 4 }),
+  retiredAcquisitionValue: numeric('retired_acquisition_value', { precision: 23, scale: 4 }).notNull(),
+  accumDepreciationReversed: numeric('accum_depreciation_reversed', { precision: 23, scale: 4 }).notNull().default('0'),
+  netBookValueLoss: numeric('net_book_value_loss', { precision: 23, scale: 4 }).notNull().default('0'),
+  currency: char('currency', { length: 3 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  assetValueDate: date('asset_value_date', { mode: 'string' }).notNull(),
+  reference: varchar('reference', { length: 60 }),
+  lineText: varchar('line_text', { length: 50 }),
+  /** ACTIVE | REVERSED */
+  status: varchar('status', { length: 12 }).notNull().default('ACTIVE'),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 40 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber, t.documentNumber, t.fiscalYear] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_retirement_asset_fk',
+  }),
+  check('asset_retirement_scope_ck', sql`${t.scope} in ('COMPLETE', 'PERCENT', 'AMOUNT')`),
+  check('asset_retirement_status_ck', sql`${t.status} in ('ACTIVE', 'REVERSED')`),
+  check('asset_retirement_value_ck', sql`${t.retiredAcquisitionValue} > 0`),
+  check('asset_retirement_percent_ck', sql`${t.retirementPercent} is null or (${t.retirementPercent} > 0 and ${t.retirementPercent} <= 100)`),
+  uniqueIndex('asset_retirement_request_uk').on(t.client, t.requestKey)
+    .where(sql`${t.requestKey} is not null`),
+  index('asset_retirement_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
 ]);
 
 export const parkedJournalHeader = pgTable('parked_journal_header', {

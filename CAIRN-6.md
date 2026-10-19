@@ -308,6 +308,10 @@ Deferred by name: retirement with proceeds or a customer (ABAVN revenue variants
 
 **B-595.** Stage 1 of R-141: `asset-retirement.ts` carries the vocabulary (capability `FIN.ASSET.RETIRE`, scopes COMPLETE/PERFENT/AMOUNT, preview/result shapes), and `/finance/assets/retire` stands as an inert guided shell with the field matrix, the percentage/amount conditional fields, and the complete-retirement warning. Buttons stay disabled until the service lands in stage 3. Same-stage bookkeeping: B-595 / §26.611 / §30 row 2.429.
 
+## §26.612 — SCR-093 stage 2: retirement determination, value record, RETIRED state
+
+**B-596.** Stage 2 of R-141. Migration `0101_asset_retirement.sql` (164 migrations): the asset class gains `accum_depr_account` and `retirement_loss_account`; `fixed_asset.status` gains `RETIRED`; transaction-type kinds gain `RETIREMENT`; and `asset_retirement` stands as the retirement value record (scope, basis, retired acquisition, depreciation reversed, loss, three dates, status, reversal link, request key) under composite keys and range checks. The standard package delivers chart account `590000` Loss on asset retirement, wires classes 1000/2000 determination (150100/152000-accum, 590000 loss), and delivers the `RET` retirement type. Same-stage bookkeeping: B-596 / §26.612 / §30 row 2.430.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -368,3 +372,4 @@ Deferred by name: retirement with proceeds or a customer (ABAVN revenue variants
 | 2.427 | 2026-10-19 | **SCR-092 closed (B-593, §26.609).** ABZON vendor-less asset acquisition accepted under R-140: engine-only posting against the class reconciliation account, side-effect-free simulation, idempotent posting, asset-aware reversal with the FB08 path guarded. Suite 1396 green, browser T904 green (T905 re-passed), seed 126 capabilities / 100 terms / 108 aliases, DB 163 migrations. Next: FIN.ASSET.RETIRE (ABAVN), then FIN.ASSET.DEPRECIATE (AFAB). | Agent |
 | 2.428 | 2026-10-19 | **SCR-093 contract published (B-594, §26.610, R-141).** ABAVN retirement by scrapping: per-class accum/loss determination, `asset_retirement` value records, unambiguous percent/amount basis on remaining acquisition value, RETIRED lifecycle state, asset-aware reversal. Implementation follows in stage order. | Agent |
 | 2.429 | 2026-10-19 | **SCR-093 stage 1 published (B-595, §26.611).** ABAVN retirement shell stands at `/finance/assets/retire` with the scope matrix and the complete-retirement warning; module vocabulary committed, service deferred to stage 3. | Agent |
+| 2.430 | 2026-10-19 | **SCR-093 stage 2 published (B-596, §26.612).** Retirement determination columns, RETIRED lifecycle state, RETIREMENT transaction kind and the `asset_retirement` value record stand (migration 0101, 164 total); standard determination wired. Service follows in stage 3. | Agent |
