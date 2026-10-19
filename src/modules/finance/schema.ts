@@ -613,6 +613,8 @@ export const assetClass = pgTable('asset_class', {
   accumDeprAccount: varchar('accum_depr_account', { length: 10 }),
   /** Account determination: loss on retirement without proceeds this class debits (SCR-093). */
   retirementLossAccount: varchar('retirement_loss_account', { length: 10 }),
+  /** Account determination: depreciation expense this class debits in the run (SCR-094). */
+  depreciationExpenseAccount: varchar('depreciation_expense_account', { length: 10 }),
   defaultUsefulLifeYears: integer('default_useful_life_years'),
   defaultUsefulLifePeriods: integer('default_useful_life_periods'),
   isActive: boolean('is_active').notNull().default(true),
@@ -822,6 +824,114 @@ export const assetRetirement = pgTable('asset_retirement', {
   uniqueIndex('asset_retirement_request_uk').on(t.client, t.requestKey)
     .where(sql`${t.requestKey} is not null`),
   index('asset_retirement_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.status),
+]);
+
+/**
+ * Depreciation run header — one execution of the run (SCR-094 /
+ * R-142). The run record is the execution log; the journal stays
+ * the financial authority and `asset_depreciation_posting` holds
+ * what was actually posted per asset, area and period.
+ */
+export const assetDepreciationRun = pgTable('asset_depreciation_run', {
+  client: tenantClient(),
+  runId: varchar('run_id', { length: 36 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  /** 1 Planned · 2 Repeat · 3 Restart · 4 Unplanned */
+  runType: varchar('run_type', { length: 1 }).notNull(),
+  isTestRun: boolean('is_test_run').notNull().default(true),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  documentType: varchar('document_type', { length: 12 }),
+  /** SIMULATED | COMPLETED | COMPLETED_WITH_WARNINGS | FAILED */
+  status: varchar('status', { length: 24 }).notNull(),
+  totalCalculatedAmount: numeric('total_calculated_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  totalPostedAmount: numeric('total_posted_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  currency: char('currency', { length: 3 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }),
+  documentFiscalYear: integer('document_fiscal_year'),
+  restartOfRunId: varchar('restart_of_run_id', { length: 36 }),
+  errorMessage: text('error_message'),
+  executedBy: varchar('executed_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  check('asset_depreciation_run_type_ck', sql`${t.runType} in ('1', '2', '3', '4')`),
+  check('asset_depreciation_run_status_ck', sql`${t.status} in ('SIMULATED', 'COMPLETED', 'COMPLETED_WITH_WARNINGS', 'FAILED')`),
+  check('asset_depreciation_run_period_ck', sql`${t.postingPeriod} between 1 and 16`),
+  index('asset_depreciation_run_company_idx').on(t.client, t.companyCode, t.fiscalYear, t.postingPeriod),
+]);
+
+/** Depreciation run item — one calculated asset × area outcome of a run (SCR-094). */
+export const assetDepreciationRunItem = pgTable('asset_depreciation_run_item', {
+  client: tenantClient(),
+  runId: varchar('run_id', { length: 36 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  areaCode: varchar('area_code', { length: 2 }).notNull(),
+  depreciationKey: varchar('depreciation_key', { length: 4 }).notNull(),
+  calculatedAmount: numeric('calculated_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  previouslyPostedAmount: numeric('previously_posted_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  adjustmentAmount: numeric('adjustment_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  currency: char('currency', { length: 3 }).notNull(),
+  expenseAccount: varchar('expense_account', { length: 10 }),
+  accumAccount: varchar('accum_account', { length: 10 }),
+  costCenter: varchar('cost_center', { length: 20 }),
+  profitCenter: varchar('profit_center', { length: 20 }),
+  /** CALCULATED | POSTED | SKIPPED | FAILED */
+  itemStatus: varchar('item_status', { length: 12 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }),
+  message: text('message'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [assetDepreciationRun.client, assetDepreciationRun.runId],
+    name: 'asset_depreciation_run_item_run_fk',
+  }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_depreciation_run_item_asset_fk',
+  }),
+  check('asset_depreciation_run_item_status_ck', sql`${t.itemStatus} in ('CALCULATED', 'POSTED', 'SKIPPED', 'FAILED')`),
+  check('asset_depreciation_run_item_amount_ck', sql`${t.calculatedAmount} >= 0`),
+  uniqueIndex('asset_depreciation_run_item_asset_uk').on(t.client, t.runId, t.companyCode, t.assetNumber, t.subNumber, t.areaCode),
+  index('asset_depreciation_run_item_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.areaCode, t.itemStatus),
+]);
+
+/**
+ * Posted depreciation per asset × area × period (SCR-094) — the
+ * value record the retirement reversal (SCR-093) reads. The
+ * journal remains the financial authority.
+ */
+export const assetDepreciationPosting = pgTable('asset_depreciation_posting', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  assetNumber: varchar('asset_number', { length: 12 }).notNull(),
+  subNumber: varchar('sub_number', { length: 4 }).notNull().default('0000'),
+  areaCode: varchar('area_code', { length: 2 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  postingPeriod: integer('posting_period').notNull(),
+  postedAmount: numeric('posted_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  currency: char('currency', { length: 3 }).notNull(),
+  runId: varchar('run_id', { length: 36 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }),
+  documentFiscalYear: integer('document_fiscal_year'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.companyCode, t.assetNumber, t.subNumber, t.areaCode, t.fiscalYear, t.postingPeriod] }),
+  foreignKey({
+    columns: [t.client, t.companyCode, t.assetNumber, t.subNumber],
+    foreignColumns: [fixedAsset.client, fixedAsset.companyCode, fixedAsset.assetNumber, fixedAsset.subNumber],
+    name: 'asset_depreciation_posting_asset_fk',
+  }),
+  index('asset_depreciation_posting_asset_idx').on(t.client, t.companyCode, t.assetNumber, t.subNumber, t.areaCode),
 ]);
 
 export const parkedJournalHeader = pgTable('parked_journal_header', {

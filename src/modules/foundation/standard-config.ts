@@ -610,8 +610,8 @@ export async function applyStandardPackage(
     await tx.insert(assetTransactionType).values({ client: input.client, ...row, createdBy: input.activatedBy }).onConflictDoNothing();
   }
   for (const row of [
-    { assetClass: '1000', name: 'Machinery and equipment', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 10, defaultUsefulLifePeriods: 0, reconAccount: '150000', accumDeprAccount: '150100', retirementLossAccount: '590000' },
-    { assetClass: '2000', name: 'Vehicles', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 5, defaultUsefulLifePeriods: 0, reconAccount: '152000', accumDeprAccount: '152100', retirementLossAccount: '590000' },
+    { assetClass: '1000', name: 'Machinery and equipment', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 10, defaultUsefulLifePeriods: 0, reconAccount: '150000', accumDeprAccount: '150100', retirementLossAccount: '590000', depreciationExpenseAccount: '520000' },
+    { assetClass: '2000', name: 'Vehicles', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 5, defaultUsefulLifePeriods: 0, reconAccount: '152000', accumDeprAccount: '152100', retirementLossAccount: '590000', depreciationExpenseAccount: '520000' },
     { assetClass: '3000', name: 'Buildings', numbering: 'INTERNAL', quantityManaged: false, defaultDepreciationKey: 'SL01', defaultUsefulLifeYears: 30, defaultUsefulLifePeriods: 0 },
   ]) {
     await tx.insert(assetClass).values({ client: input.client, ...row, createdBy: input.activatedBy }).onConflictDoNothing();
