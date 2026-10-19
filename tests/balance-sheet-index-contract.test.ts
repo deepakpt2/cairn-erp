@@ -16,6 +16,7 @@ const headerMigration = readFileSync('drizzle/0115_financial_statement_version.s
 const lineMigration = readFileSync('drizzle/0098_journal_item_report_indexes.sql', 'utf8');
 const financeSchema = readFileSync('src/modules/finance/schema.ts', 'utf8');
 const service = readFileSync('src/modules/finance/trial-balance.ts', 'utf8');
+const balanceSheetService = readFileSync('src/modules/finance/balance-sheet.ts', 'utf8');
 
 describe('SCR-107 stage 2: canonical aggregation indexes stand aligned', () => {
   it('header side: (client, company_code, fiscal_year, posting_period) in migration and Drizzle', () => {
@@ -34,5 +35,13 @@ describe('SCR-107 stage 2: canonical aggregation indexes stand aligned', () => {
     expect(service).toContain('from journal_entry_line l');
     expect(service).toContain("e.status = 'POSTED'");
     expect(service).not.toMatch(/insert into|update journal|create table/i);
+  });
+});
+
+describe('SCR-111 stage 2: the P&L statement reuses the same snapshot and FSV canon', () => {
+  it('balance derivation classifies accounts from the master, never from hardcoded ranges', () => {
+    expect(balanceSheetService).toContain('is_balance_sheet');
+    expect(balanceSheetService).toContain('from journal_entry_line l');
+    expect(balanceSheetService).not.toMatch(/insert into|create table/i);
   });
 });
