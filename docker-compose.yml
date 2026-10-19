@@ -33,6 +33,11 @@ services:
       context: .
       target: operations
     restart: "no"
+    # The walkthrough seed ships in the repo root; the operations image also
+    # bakes it in via COPY, and this mount keeps the host copy authoritative
+    # so the seed can be refreshed without rebuilding the image.
+    volumes:
+      - ./walkthrough-seed.ts:/app/walkthrough-seed.ts:ro
     environment:
       CAIRN_ENV: production
       DATABASE_URL: postgresql://cairn_app:${CAIRN_APP_DB_PASSWORD:?Set CAIRN_APP_DB_PASSWORD}@cairn-postgres:5432/cairn
