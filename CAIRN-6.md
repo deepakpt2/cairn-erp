@@ -910,6 +910,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-731.** Migration 0117 (180 total) builds `cost_center_plan` keyed by tenant, controlling area, plan version, fiscal year, period, cost centre and cost element (period and version checks; FK to the controlling area) — the one canon table the actual/plan comparison was missing, with plan-entry UI deferred by name. Journal index paths verified; `tests/cost-center-report-index-contract.test.ts` (3 green) pins the alignment, and actuals keep deriving from the journal. The report service follows in stage 3. Same-stage bookkeeping: B-731 / §26.747 / §30 row 2.565.
 
+## §26.748 — SCR-112 stage 3: cost-centre report service
+
+**B-732.** `calculateCostCenterReport` (appended to the stage-1 vocabulary module) resolves the controlling area and its companies, judges centre validity per fiscal year, resolves group membership through `cost_center_group_leaf` ranges, aggregates POSTED journal actuals on `amount_local` (debit-positive) for the period range and periods 1..cutoff, joins `cost_center_plan` by version (default `000`) with plan signed by account type (REVENUE negative), and derives variance = actual − plan with missing plan null — never zero — and variance % null on missing/zero plan; status follows the signed variance (negative favourable, positive unfavourable). Hierarchy placement is judged at fiscal-year end through `cost_center_node_assignment`; unplaced centres gather under an explicit outside-hierarchy row; centres without validity in the year are excluded and named; foreign-currency lines are excluded with a warning, as is absent plan. Planned activity quantities and fixed/variable prices come from `activity_rate`; actual quantities stay null. The report page executes live and renders `reportError`; `tsc` is green and the stage-2 contract test holds at 3/3. Supporting seed follows in stage 4. Same-stage bookkeeping: B-732 / §26.748 / §30 row 2.566.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1105,6 +1109,12 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.562 | 2026-10-19 | **SCR-111 CLOSED (B-728, §26.744).** FIN.RPT.PROFITLOSS accepted (suite 1498/1498; browser T885). Next SCR: FIN.RPT.COSTCENTER.ACTUAL (cost centre actual vs plan); its package is awaited. The SCR after: FIN.RPT.PROFITCENTER. | Agent |
 | 2.563 | 2026-10-19 | **SCR-112 contract approved (B-729, §26.745, R-160).** FIN.RPT.COSTCENTER.ACTUAL over journal actuals; the missing cost-element plan table is built minimally in stage 2 (entry UI deferred); missing plan is null, never zero. Stage 1 (vocabulary + report shell) follows. | Owner + Agent |
 | 2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
+| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
+| 2.566 | 2026-10-19 | **SCR-112 stage 3 published (B-732, §26.748).** The report service aggregates journal actuals against signed plan with null-plan semantics, hierarchy placement and activity plan; the page executes live. Supporting seed follows in stage 4. | Agent |
+shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |

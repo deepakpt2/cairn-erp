@@ -5,11 +5,12 @@ import type { CostCenterReportResult, CostCenterReportSelection } from '@/module
  * area, fiscal year, periods, plan version, centre/element
  * ranges or a configured group; the grid follows in stage 3.
  */
-export default function CostCenterReportShell({ canUse, areas, selection, result }: {
+export default function CostCenterReportShell({ canUse, areas, selection, result, reportError }: {
   canUse: boolean;
   areas: Array<{ controllingArea: string; currency: string }>;
   selection: CostCenterReportSelection;
   result: CostCenterReportResult | null;
+  reportError?: string | null;
 }) {
   if (!canUse) {
     return (
