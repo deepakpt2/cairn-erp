@@ -197,8 +197,8 @@ export function JournalForm({ companies, types, accounts }: {
                 <tr key={line.key}>
                   <td className="tabular text-ink-faint">{index + 1}</td>
                   <td>
-                    <input name={`line_${index}_account`} value={line.account} onChange={(e) => updateLine(line.key, { account: e.target.value })} className="field-input code w-28" placeholder="400000" list="fb50-accounts" aria-invalid={Boolean(lineErrors[index])} />
-                    {accounts.length > 0 && <datalist id="fb50-accounts">{accounts.map((a) => <option key={a.accountNumber} value={a.accountNumber}>{a.name}</option>)}</datalist>}
+                    <input name={`line_${index}_account`} value={line.account} onChange={(e) => updateLine(line.key, { account: e.target.value })} className="field-input code w-28" placeholder="400000" list="gl-account-value-help" aria-invalid={Boolean(lineErrors[index])} />
+                    {accounts.length > 0 && <datalist id="gl-account-value-help">{accounts.map((a) => <option key={a.accountNumber} value={a.accountNumber}>{a.name}</option>)}</datalist>}
                     {lineErrors[index] && <p className="mt-1 text-2xs text-signal-error">{lineErrors[index]}</p>}
                   </td>
                   <td>

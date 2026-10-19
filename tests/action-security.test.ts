@@ -51,7 +51,7 @@ function form(values: Record<string, string>) {
 }
 function periodForm() { return form({ client: beta.client, changedBy: 'FORGED', variant: 'C001', accountType: 'S', periodFrom: '1', periodTo: '11', allowSpecialPeriods: 'on' }); }
 function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: '0', prefix: 'JE', fromNumber: '1', toNumber: '1000000', numberLength: '6', displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CHANGE', reason: 'Security verification' }); }
-function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
+function journalForm() { return form({ client: beta.client, postedBy: 'FORGED', postingDate: `${year}-04-15`, documentDate: `${year}-04-15`, requestKey: 'security-journal-1', companyCode: '1000', documentType: 'SA', currency: 'USD', reference: 'SECURITY-TEST', line_0_account: '100000', line_0_side: 'S', line_0_amount: '50.0000', line_1_account: '200000', line_1_side: 'H', line_1_amount: '50.0000' }); }
 
 describe('server action security', () => {
   it('derives customer accounting tenant/actor and ignores a forged chart',async()=>{
