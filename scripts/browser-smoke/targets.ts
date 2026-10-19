@@ -89,6 +89,7 @@ export const TARGETS = [
   { id: 'gl-reporting-suite', client: 'T887', label: 'SCR-109 suite completion: drill-down, return link, document date' },
   { id: 'gl-account-transfer', client: 'T886', label: 'SCR-110 FS15 G/L account master transfer' },
   { id: 'profit-loss', client: 'T885', label: 'SCR-111 profit and loss statement' },
+  { id: 'cost-center-report', client: 'T884', label: 'SCR-112 cost centre actual/plan report' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
   { id: 'customer-ageing', client: 'T927', label: 'SCR-070 customer ageing: as-of key date, buckets, item detail' },

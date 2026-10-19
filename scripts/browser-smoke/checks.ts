@@ -107,6 +107,7 @@ import { glReporting } from './gl-reporting';
 import { glReportingSuite } from './gl-reporting-suite';
 import { glAccountTransfer } from './gl-account-transfer';
 import { profitLoss } from './profit-loss';
+import { costCenterReport } from './cost-center-report';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -5021,6 +5022,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'gl-reporting-suite': glReportingSuite,
   'gl-account-transfer': glAccountTransfer,
   'profit-loss': profitLoss,
+  'cost-center-report': costCenterReport,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,

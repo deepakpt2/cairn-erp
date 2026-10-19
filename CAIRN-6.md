@@ -918,6 +918,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-733.** Seed carries the `FIN.RPT.COSTCENTER.ACTUAL` capability and its registry term at `/controlling/cost-center-report`, with aliases S_ALR_87013611 (primary), S_ALR_87013614 and KSB1N (drill layer) all living on the one term; the journal page links the report (`journal.costCenterReport`). Seeded twice idempotent — catalogue 144 capabilities / 117 terms / 136 aliases, all three aliases verified solely on FIN.RPT.COSTCENTER.ACTUAL. Acceptance follows in stage 5. Same-stage bookkeeping: B-733 / §26.749 / §30 row 2.567.
 
+## §26.750 — SCR-112 stage 5: service tests and browser target
+
+**B-734.** `tests/cost-center-report.test.ts` (3 green) proves the signed comparison (expense over plan Unfavorable, revenue over plan Favorable), range beside periods 1..cutoff, missing plan null with null variance and status, excluded centres named, the outside-hierarchy group, the activity plan, the unknown-version warning, and read-only behaviour. Browser target T884 stands registered across targets/checks/database-guards. The shell grid rendering gap found against the stage-1 shell was completed under B-732 before acceptance. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-734 / §26.750 / §30 row 2.568.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1116,6 +1120,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 | 2.566 | 2026-10-19 | **SCR-112 stage 3 published (B-732, §26.748).** The report service aggregates journal actuals against signed plan with null-plan semantics, hierarchy placement and activity plan; the page executes live. Supporting seed follows in stage 4. | Agent |
 | 2.567 | 2026-10-19 | **SCR-112 stage 4 published (B-733, §26.749).** FIN.RPT.COSTCENTER.ACTUAL capability, S_ALR_87013611 / S_ALR_87013614 / KSB1N aliases and journal-page navigation stand (144/117/136). Acceptance follows in stage 5. | Agent |
+| 2.568 | 2026-10-19 | **SCR-112 stage 5 published (B-734, §26.750).** Three report service tests pass and browser target T884 stands registered; grid rendering completed under B-732. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
