@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../src/platform/db/client';
+import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
@@ -23,6 +24,13 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   const { client } = target;
   console.log('SCR-092: simulate, acquire, and reverse an asset against its offsetting account');
 
+  await withTenant(client, async (tx) => {
+    await defineRange(tx, {
+      client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL',
+      fiscalYear: 2026, prefix: 'JE', fromNumber: 1, toNumber: 999999, createdBy: 'browser.admin',
+    });
+  });
+
   await page.goto(`${base}${CREATE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
@@ -32,6 +40,9 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   await createForm.locator('input[name="description1"]').fill('Browser milling machine');
   await createForm.getByRole('tab', { name: 'Time-dependent assignments' }).click();
   await createForm.locator('input[name="validFrom"]').fill('2026-01-01');
+  await createForm.getByRole('tab', { name: 'Depreciation areas' }).click();
+  await createForm.getByLabel('Depreciation key').first().fill('SL01');
+  await createForm.getByLabel('Useful life years').first().fill('10');
   await createForm.getByRole('tab', { name: 'General' }).click();
   await createForm.getByRole('button', { name: 'Create asset', exact: true }).click();
   const created = page.getByText(/Created 1 asset\(s\): AS-\d+\/0000/);
@@ -49,7 +60,7 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   await entry.locator('input[name="documentDate"]').fill('2026-03-10');
   await entry.locator('input[name="postingDate"]').fill('2026-03-15');
   await entry.locator('input[name="assetValueDate"]').fill('2026-03-01');
-  await entry.locator('input[name="currency"]').fill('USD');
+  await entry.locator('input[name="currency"]').fill('KWD');
   await entry.locator('input[name="amount"]').fill('25000');
   await entry.locator('input[name="offsetAccount"]').fill('230200');
   await entry.locator('input[name="text"]').fill('Milling machine acquisition');

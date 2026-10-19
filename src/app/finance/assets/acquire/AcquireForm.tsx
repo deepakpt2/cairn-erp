@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useState, type ChangeEvent } from 'react';
 
 import type { AcquisitionPreview } from '@/modules/finance/asset-acquisition';
 import {
@@ -21,6 +21,20 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
   const [postState, post, posting] = useActionState(postAction, INITIAL);
   const [reverseState, reverse, reversing] = useActionState(reverseAction, INITIAL);
   const [requestKey] = useState(() => crypto.randomUUID());
+  // Controlled entry fields: React resets uncontrolled inputs after a
+  // form action, which would wipe the entry between Simulate and Post.
+  const [fields, setFields] = useState({
+    companyCode: '', assetNumber: '', subNumber: '0000',
+    documentDate: today, postingDate: today, assetValueDate: today,
+    documentType: 'AA', currency: '', amount: '', offsetAccount: '',
+    transactionType: 'ACQ', reference: '', text: '',
+  });
+  const bind = (name: keyof typeof fields) => ({
+    name,
+    value: fields[name],
+    onChange: (e: ChangeEvent<HTMLInputElement>) =>
+      setFields((f) => ({ ...f, [name]: e.target.value })),
+  });
   const preview = simState.preview ?? initialPreview;
   return (
     <>
@@ -36,31 +50,31 @@ export default function AcquireForm({ preview: initialPreview, canAcquire, today
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block"><span className={labelCls}>Company code</span>
-              <input name="companyCode" className={inputCls} placeholder="1000" required /></label>
+              <input {...bind('companyCode')} className={inputCls} placeholder="1000" required /></label>
             <label className="block"><span className={labelCls}>Asset main number</span>
-              <input name="assetNumber" className={inputCls} placeholder="AS-0000001" required /></label>
+              <input {...bind('assetNumber')} className={inputCls} placeholder="AS-0000001" required /></label>
             <label className="block"><span className={labelCls}>Asset sub-number</span>
-              <input name="subNumber" className={inputCls} defaultValue="0000" /></label>
+              <input {...bind('subNumber')} className={inputCls} /></label>
             <label className="block"><span className={labelCls}>Document date</span>
-              <input type="date" name="documentDate" className={inputCls} defaultValue={today} required /></label>
+              <input type="date" {...bind('documentDate')} className={inputCls} required /></label>
             <label className="block"><span className={labelCls}>Posting date</span>
-              <input type="date" name="postingDate" className={inputCls} defaultValue={today} required /></label>
+              <input type="date" {...bind('postingDate')} className={inputCls} required /></label>
             <label className="block"><span className={labelCls}>Asset value date</span>
-              <input type="date" name="assetValueDate" className={inputCls} defaultValue={today} required /></label>
+              <input type="date" {...bind('assetValueDate')} className={inputCls} required /></label>
             <label className="block"><span className={labelCls}>Document type</span>
-              <input name="documentType" className={inputCls} defaultValue="AA" maxLength={2} required /></label>
+              <input {...bind('documentType')} className={inputCls} maxLength={2} required /></label>
             <label className="block"><span className={labelCls}>Currency</span>
-              <input name="currency" className={inputCls} placeholder="USD" required /></label>
+              <input {...bind('currency')} className={inputCls} placeholder="USD" required /></label>
             <label className="block"><span className={labelCls}>Acquisition amount</span>
-              <input name="amount" className={inputCls} placeholder="25000" required /></label>
+              <input {...bind('amount')} className={inputCls} placeholder="25000" required /></label>
             <label className="block"><span className={labelCls}>Offsetting G/L account</span>
-              <input name="offsetAccount" className={inputCls} placeholder="199000" required /></label>
+              <input {...bind('offsetAccount')} className={inputCls} placeholder="199000" required /></label>
             <label className="block"><span className={labelCls}>Asset transaction type</span>
-              <input name="transactionType" className={inputCls} defaultValue="ACQ" required /></label>
+              <input {...bind('transactionType')} className={inputCls} required /></label>
             <label className="block"><span className={labelCls}>Reference</span>
-              <input name="reference" className={inputCls} placeholder="PO-2026-118" /></label>
+              <input {...bind('reference')} className={inputCls} placeholder="PO-2026-118" /></label>
             <label className="block sm:col-span-2"><span className={labelCls}>Text</span>
-              <input name="text" className={inputCls} maxLength={50} placeholder="CNC machine acquisition" /></label>
+              <input {...bind('text')} className={inputCls} maxLength={50} placeholder="CNC machine acquisition" /></label>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="submit" formAction={simulate} className="btn btn-default min-h-11 sm:min-h-8"
