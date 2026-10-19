@@ -43,6 +43,7 @@ export interface GlDocumentLineInput {
   amount: string;
   costCenter?: string;
   profitCenter?: string;
+  businessPartner?: string;
   assignment?: string;
   lineText?: string;
 }
