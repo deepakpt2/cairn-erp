@@ -2,8 +2,9 @@ import { can, requireSession } from '@/platform/auth/current';
 import { listCompanyCodes } from '@/modules/foundation/services';
 import {
   CASHFLOW_CAPABILITY, CASHFLOW_LEDGER,
-  type CashflowSelection,
+  type CashflowResult, type CashflowSelection,
 } from '@/modules/finance/cash-flow-vocabulary';
+import { CashflowError, calculateCashflow } from '@/modules/finance/cash-flow';
 import CashflowShell from './CashflowShell';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,19 @@ export default async function CashflowPage({
     comparative: get('comparative') === '1',
   };
 
+  const canUse = can(session, CASHFLOW_CAPABILITY) || can(session, `${CASHFLOW_CAPABILITY}.read`);
+  let result: CashflowResult | null = null;
+  let reportError: string | null = null;
+  if (canUse && get('companies')) {
+    try {
+      result = await calculateCashflow({ client: session.user.client, selection });
+    } catch (error) {
+      reportError = error instanceof CashflowError
+        ? (error.remedy ? `${error.message} ${error.remedy}` : error.message)
+        : 'The cash flow statement could not be calculated.';
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
@@ -45,10 +59,11 @@ export default async function CashflowPage({
         </p>
       </header>
       <CashflowShell
-        canUse={can(session, CASHFLOW_CAPABILITY) || can(session, `${CASHFLOW_CAPABILITY}.read`)}
+        canUse={canUse}
         companies={companies}
         selection={selection}
-        result={null}
+        result={result}
+        reportError={reportError}
       />
     </div>
   );
