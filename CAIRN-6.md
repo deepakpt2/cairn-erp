@@ -914,6 +914,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-732.** `calculateCostCenterReport` (appended to the stage-1 vocabulary module) resolves the controlling area and its companies, judges centre validity per fiscal year, resolves group membership through `cost_center_group_leaf` ranges, aggregates POSTED journal actuals on `amount_local` (debit-positive) for the period range and periods 1..cutoff, joins `cost_center_plan` by version (default `000`) with plan signed by account type (REVENUE negative), and derives variance = actual − plan with missing plan null — never zero — and variance % null on missing/zero plan; status follows the signed variance (negative favourable, positive unfavourable). Hierarchy placement is judged at fiscal-year end through `cost_center_node_assignment`; unplaced centres gather under an explicit outside-hierarchy row; centres without validity in the year are excluded and named; foreign-currency lines are excluded with a warning, as is absent plan. Planned activity quantities and fixed/variable prices come from `activity_rate`; actual quantities stay null. The report page executes live and renders `reportError`; `tsc` is green and the stage-2 contract test holds at 3/3. Supporting seed follows in stage 4. Same-stage bookkeeping: B-732 / §26.748 / §30 row 2.566.
 
+## §26.749 — SCR-112 stage 4: capability, aliases and navigation
+
+**B-733.** Seed carries the `FIN.RPT.COSTCENTER.ACTUAL` capability and its registry term at `/controlling/cost-center-report`, with aliases S_ALR_87013611 (primary), S_ALR_87013614 and KSB1N (drill layer) all living on the one term; the journal page links the report (`journal.costCenterReport`). Seeded twice idempotent — catalogue 144 capabilities / 117 terms / 136 aliases, all three aliases verified solely on FIN.RPT.COSTCENTER.ACTUAL. Acceptance follows in stage 5. Same-stage bookkeeping: B-733 / §26.749 / §30 row 2.567.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
