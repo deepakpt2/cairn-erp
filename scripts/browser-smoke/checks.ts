@@ -94,6 +94,7 @@ import { assetHistorySheet } from './asset-history';
 import { glDocumentEntry } from './gl-document';
 import { taxReportReturn } from './tax-report';
 import { fxValuationRun } from './fx-valuation';
+import { grIrAnalysis } from './grir-reclass';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4995,6 +4996,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'gl-document': glDocumentEntry,
   'tax-report': taxReportReturn,
   'fx-valuation': fxValuationRun,
+  'grir-reclass': grIrAnalysis,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,

@@ -498,6 +498,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-638.** Seed grows by one capability (FIN.GRIR.RECLASS, 132 total) and by the F.19 alias term; the journal list gains the GR/IR analysis entry. Seeded twice, idempotent. Same-stage bookkeeping: B-638 / §26.654 / §30 row 2.472.
 
+## §26.655 — SCR-099 stage 5: service tests and browser target
+
+**B-639.** Three service tests cover the analysis: classification on quantity and value together (goods received not invoiced at 4/400; a value difference at 0/−50) in test mode posting nothing; a live accrual posting and reversing on the named date, re-accruing after the reversal, then refusing duplicates per item; and the analysis/posting separation with half-specified accruals refused. Browser target T897 (grir-reclass) is registered with its acceptance-database guard and stays unaccepted until the browser run after the push. Same-stage bookkeeping: B-639 / §26.655 / §30 row 2.473.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -601,3 +605,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.470 | 2026-10-19 | **SCR-099 stage 2 published (B-636, §26.652).** GR/IR run/item protocol stands (migration 0107, 170 total). Analysis and accrual service follows in stage 3. | Agent |
 | 2.471 | 2026-10-19 | **SCR-099 stage 3 published (B-637, §26.653).** GR/IR analysis stands: signed PO history, five-way classification, separate atomic accrual with duplicate refusal, CSV protocol. Supporting seed follows in stage 4. | Agent |
 | 2.472 | 2026-10-19 | **SCR-099 stage 4 published (B-638, §26.654).** FIN.GRIR.RECLASS capability (132) and the F.19 alias seed; the journal list exposes the analysis. Acceptance follows in stage 5. | Agent |
+| 2.473 | 2026-10-19 | **SCR-099 stage 5 published (B-639, §26.655).** Three GR/IR service tests pass (classification, accrual lifecycle, separation); browser target T897 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
