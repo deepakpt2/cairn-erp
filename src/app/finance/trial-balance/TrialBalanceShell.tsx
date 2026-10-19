@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
-import type { TrialBalanceResult } from '@/modules/finance/trial-balance';
+import type { TrialBalanceResult, TrialBalanceSelection } from '@/modules/finance/trial-balance';
 
 /**
  * Trial balance / F.01 statement (SCR-106): pick company, FSV,
@@ -9,8 +9,11 @@ import type { TrialBalanceResult } from '@/modules/finance/trial-balance';
  * to balances and line items. Read-only; unassigned accounts
  * are named, never dropped.
  */
-export default function TrialBalanceShell({ canUse, result }: {
+export default function TrialBalanceShell({ canUse, companies, versions, selection, result }: {
   canUse: boolean;
+  companies: Array<{ companyCode: string; name: string }>;
+  versions: Array<{ version: string; name: string; chartOfAccounts: string }>;
+  selection: TrialBalanceSelection;
   result: TrialBalanceResult | null;
 }) {
   if (!canUse) {
@@ -25,25 +28,29 @@ export default function TrialBalanceShell({ canUse, result }: {
       <form method="get" className="panel space-y-3 p-4" aria-label={t('trial.selectionTitle')}>
         <div className="flex flex-wrap gap-3">
           <Field label={t('trial.company')}>
-            <input name="companyCode" required className="field-input code w-36" placeholder="1000" />
+            <select name="companyCode" className="field-input code w-52" defaultValue={selection.companyCode}>
+              {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode} · {c.name}</option>)}
+            </select>
           </Field>
           <Field label={t('trial.version')}>
-            <input name="statementVersion" required className="field-input code w-36" placeholder="INT" />
+            <select name="statementVersion" className="field-input code w-52" defaultValue={selection.statementVersion}>
+              {versions.map((v) => <option key={v.version} value={v.version}>{v.version} — {v.name} ({v.chartOfAccounts})</option>)}
+            </select>
           </Field>
           <Field label={t('trial.fiscalYear')}>
-            <input name="fiscalYear" type="number" required className="field-input code w-28" placeholder="2026" />
+            <input name="fiscalYear" type="number" required defaultValue={selection.fiscalYear} className="field-input code w-28" />
           </Field>
           <Field label={t('trial.periodFrom')}>
-            <input name="periodFrom" type="number" min={1} max={16} defaultValue={1} className="field-input code w-24" />
+            <input name="periodFrom" type="number" min={1} max={16} defaultValue={selection.periodFrom} className="field-input code w-24" />
           </Field>
           <Field label={t('trial.periodTo')}>
-            <input name="periodTo" type="number" min={1} max={16} required className="field-input code w-24" placeholder="12" />
+            <input name="periodTo" type="number" min={1} max={16} required defaultValue={selection.periodTo} className="field-input code w-24" />
           </Field>
           <Field label={t('trial.comparisonYear')}>
-            <input name="comparisonFiscalYear" type="number" className="field-input code w-28" placeholder="2025" />
+            <input name="comparisonFiscalYear" type="number" defaultValue={selection.comparisonFiscalYear ?? ''} className="field-input code w-28" placeholder="2025" />
           </Field>
           <Field label={t('trial.outputCurrency')}>
-            <input name="outputCurrency" maxLength={5} className="field-input code w-28" placeholder="USD" />
+            <input name="outputCurrency" maxLength={5} defaultValue={selection.outputCurrency ?? ''} className="field-input code w-28" placeholder="USD" />
           </Field>
           <Field label={t('trial.specialPeriods')}>
             <span className="flex items-center gap-1 pt-2 text-sm text-ink-soft">
@@ -51,7 +58,7 @@ export default function TrialBalanceShell({ canUse, result }: {
             </span>
           </Field>
         </div>
-        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled>
+        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
           {t('trial.run')}
         </button>
       </form>

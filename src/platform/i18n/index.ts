@@ -2447,6 +2447,7 @@ const en: Catalogue = {
   'trial.variancePercent': 'Variance %',
   'trial.totalTurnover': 'Total turnover (all accounts)',
   'trial.unassignedTitle': 'Accounts without an FSV assignment — named, never dropped',
+  'trial.openBalances': 'Account balances…',
   'release.title': 'Release Credit-Blocked Documents',
   'release.intro': 'The credit determination queue: release re-evaluates against the current credit standing, and a still-failing document needs the separate override privilege with justification. A release creates no delivery, invoice or accounting entry.',
   'release.filtersTitle': 'Document selection',

@@ -738,6 +738,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-688.** Migration `0115_financial_statement_version.sql` (178 total, applied) creates the financial statement version (bound to a chart), its node hierarchy (self-parenting refused), and account-range assignments with NORMAL/INVERTED presentation signs — configuration only — plus the `(client, company_code, fiscal_year, posting_period)` journal index the aggregation scans by. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-688 / §26.704 / §30 row 2.522.
 
+## §26.705 — SCR-106 stage 3: statement calculation service and wired report
+
+**B-689.** `calculateTrialBalance` validates company, chart and FSV compatibility, then aggregates the journal once per account — opening from earlier years, range debit/credit turnover, turnover through the cutoff, comparative equivalents — before mapping into the dynamically resolved FSV hierarchy. Assignments count an account once (first node in statement order) with duplicate warnings; presentation signs apply per assignment; balances at cutoff are opening plus turnover through the cutoff, never double-counted; unassigned accounts with balances surface in warnings and their own list; zero comparatives yield null variance percentages; output currency converts through ratio-aware rates with a missing-rate warning. The report page is wired with company/version selects and account drill-downs. Same-stage bookkeeping: B-689 / §26.705 / §30 row 2.523.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -891,3 +895,4 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.520 | 2026-10-19 | **SCR-106 contract approved (B-686, §26.702, R-154).** FIN.RPT.TRIALBALANCE: the FSV configuration canon arrives with the read-only F.01 statement — dynamic hierarchy, canonical balance semantics, comparatives, explicit unassigned-account warnings. Stage 1 (vocabulary + report shell) follows. | Owner + Agent |
 | 2.521 | 2026-10-19 | **SCR-106 stage 1 published (B-687, §26.703).** Statement vocabulary and the F.01 report shell stand. The FSV schema follows in stage 2. | Agent |
 | 2.522 | 2026-10-19 | **SCR-106 stage 2 published (B-688, §26.704).** Migration 0115 (178 total) stands: FSV version/nodes/assignments and the journal aggregation index. The statement service follows in stage 3. | Agent |
+| 2.523 | 2026-10-19 | **SCR-106 stage 3 published (B-689, §26.705).** The F.01 statement calculates in one snapshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
