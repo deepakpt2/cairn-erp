@@ -1,5 +1,11 @@
+'use client';
+
+import { useActionState } from 'react';
 import { t } from '@/platform/i18n';
 import type { CarryforwardResultView, CarryforwardRunView } from '@/modules/finance/carryforward';
+import { executeCarryforwardAction, type CarryState } from './actions';
+
+const INITIAL: CarryState = { ok: true };
 
 /**
  * G/L balance carryforward (SCR-102 / F.16): choose ledger,
@@ -7,11 +13,13 @@ import type { CarryforwardResultView, CarryforwardRunView } from '@/modules/fina
  * execution stands as its own run with its result protocol. The
  * carryforward never closes the prior year or locks a period.
  */
-export default function CarryforwardShell({ canUse, runs, results }: {
+export default function CarryforwardShell({ canUse, companies, runs, results }: {
   canUse: boolean;
+  companies: Array<{ companyCode: string; name: string }>;
   runs: CarryforwardRunView[];
   results: CarryforwardResultView[];
 }) {
+  const [state, action, pending] = useActionState(executeCarryforwardAction, INITIAL);
   if (!canUse) {
     return (
       <div className="panel p-4 text-sm text-ink-soft">
@@ -22,16 +30,25 @@ export default function CarryforwardShell({ canUse, runs, results }: {
   const latest = runs[0];
   return (
     <div className="space-y-4">
-      <form className="panel space-y-3 p-4" aria-label={t('carry.selectionTitle')}>
+      {state.message && (
+        <div className={`border p-3 ${state.ok ? 'border-signal-ok/30 bg-signal-ok-soft' : 'border-signal-error/30 bg-signal-error-soft'}`}>
+          <p className={`text-sm font-semibold ${state.ok ? 'text-signal-ok' : 'text-signal-error'}`}>{state.message}</p>
+          {state.remedy && <p className="mt-0.5 text-sm text-ink-soft">{state.remedy}</p>}
+        </div>
+      )}
+
+      <form action={action} className="panel space-y-3 p-4" aria-label={t('carry.selectionTitle')}>
         <div className="flex flex-wrap gap-3">
           <Field label={t('carry.ledger')}>
             <input name="ledger" defaultValue="0L" maxLength={2} className="field-input code w-24" />
           </Field>
           <Field label={t('carry.companyCodes')}>
-            <input name="companyCodes" className="field-input code w-56" placeholder="1000, 2000" />
+            <select name="companyCodes" className="field-input code w-56" defaultValue={companies[0]?.companyCode ?? ''}>
+              {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode} · {c.name}</option>)}
+            </select>
           </Field>
           <Field label={t('carry.targetYear')}>
-            <input name="targetFiscalYear" type="number" className="field-input code w-28" placeholder="2027" />
+            <input name="targetFiscalYear" type="number" required className="field-input code w-28" placeholder="2027" />
           </Field>
           <Field label={t('carry.testRun')}>
             <select name="testRun" className="field-input w-36" defaultValue="true">
@@ -41,8 +58,8 @@ export default function CarryforwardShell({ canUse, runs, results }: {
           </Field>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled>
-            {t('carry.execute')}
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending}>
+            {pending ? t('carry.running') : t('carry.execute')}
           </button>
           <span className="text-2xs text-ink-faint">{t('carry.noCloseHint')}</span>
         </div>
@@ -79,8 +96,8 @@ export default function CarryforwardShell({ canUse, runs, results }: {
                 <td>{run.testRun ? t('carry.testRunYes') : t('carry.testRunNo')}</td>
                 <td>{run.status}</td>
                 <td className="tabular text-end">{run.accountsProcessed}</td>
-                <td className="tabular text-end">{run.balancesCarried}</td>
-                <td className="tabular text-end">{run.plTransferred}</td>
+                <td className="tabular text-end">{run.balancesCarried.toFixed(2)}</td>
+                <td className="tabular text-end">{run.plTransferred.toFixed(2)}</td>
                 <td className="tabular text-end">{run.errors}</td>
               </tr>
             ))}
@@ -99,22 +116,23 @@ export default function CarryforwardShell({ canUse, runs, results }: {
               <th>{t('carry.company')}</th><th>{t('carry.account')}</th><th>{t('carry.category')}</th>
               <th className="text-end">{t('carry.sourceClosing')}</th>
               <th className="text-end">{t('carry.targetOpening')}</th>
-              <th>{t('carry.status')}</th>
+              <th>{t('carry.document')}</th><th>{t('carry.status')}</th>
             </tr>
           </thead>
           <tbody>
             {results.map((r, i) => (
-              <tr key={`${r.companyCode}-${r.accountNumber}-${i}`}>
+              <tr key={`${r.companyCode}-${r.accountNumber}-${r.profitCenter ?? ''}-${i}`}>
                 <td className="code">{r.companyCode}</td>
-                <td className="code">{r.accountNumber}</td>
+                <td className="code">{r.accountNumber}{r.profitCenter ? ` / ${r.profitCenter}` : ''}</td>
                 <td>{r.accountCategory}</td>
                 <td className="tabular text-end">{r.sourceClosingBalance.toFixed(2)} {r.currency}</td>
                 <td className="tabular text-end">{r.targetOpeningBalance.toFixed(2)} {r.currency}</td>
-                <td>{r.status}</td>
+                <td className="code">{r.transferDocumentNumber ?? '—'}</td>
+                <td>{r.status}{r.detail ? <span className="block text-2xs text-ink-faint">{r.detail}</span> : null}</td>
               </tr>
             ))}
             {results.length === 0 && (
-              <tr><td colSpan={6} className="text-sm text-ink-soft">{t('carry.resultsEmpty')}</td></tr>
+              <tr><td colSpan={7} className="text-sm text-ink-soft">{t('carry.resultsEmpty')}</td></tr>
             )}
           </tbody>
         </table>

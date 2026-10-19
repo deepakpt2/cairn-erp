@@ -73,3 +73,292 @@ export class CarryforwardError extends Error {
     this.remedy = remedy;
   }
 }
+
+import { sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { withTenant } from '@/platform/db/client';
+import { fromScaled, toScaled } from '@/platform/posting/decimal';
+import { getCompanyCode } from '@/platform/periods';
+import { accountDetermination } from '@/modules/foundation/schema';
+import { postGlDocument } from './gl-document';
+
+function newRunId(): string {
+  return `CF${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 46656).toString(36).toUpperCase().padStart(3, '0')}`.slice(0, 24);
+}
+
+function fail(message: string, remedy?: string): never {
+  throw new CarryforwardError(message, remedy);
+}
+
+interface BalanceRow {
+  account: string; profitCenter: string; balance: bigint; category: string | null;
+}
+
+async function companyBalances(client: string, companyCode: string, chart: string, sourceYear: number): Promise<BalanceRow[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select l.gl_account as account, coalesce(l.profit_center, '') as profit_center,
+             sum(case when l.debit_credit = 'S' then l.amount_local else -l.amount_local end)::text as balance,
+             a.gl_account_type as category
+      from journal_entry_line l
+      join journal_entry e
+        on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
+      left join gl_account a
+        on a.client = l.client and a.chart_of_accounts = ${chart} and a.account_number = l.gl_account
+      where l.client = ${client} and e.company_code = ${companyCode}
+        and e.fiscal_year <= ${sourceYear} and e.status = 'POSTED'
+      group by l.gl_account, coalesce(l.profit_center, ''), a.gl_account_type
+      order by l.gl_account, profit_center
+    `);
+    return (rows as unknown as Array<{ account: string; profit_center: string; balance: string; category: string | null }>).map((r) => ({
+      account: r.account, profitCenter: r.profit_center,
+      balance: toScaled(r.balance ?? '0'), category: r.category,
+    }));
+  });
+}
+
+async function retainedEarningsAccount(client: string, chart: string): Promise<string | null> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.select().from(accountDetermination).where(and(
+      eq(accountDetermination.client, client),
+      eq(accountDetermination.chartOfAccounts, chart),
+      eq(accountDetermination.event, 'RETAINED_EARNINGS'),
+      eq(accountDetermination.valuationClass, ''),
+      eq(accountDetermination.generalModifier, ''),
+    ));
+    return rows[0]?.glAccount ?? null;
+  });
+}
+
+export async function executeCarryforward(input: {
+  client: string; changedBy: string; selection: CarryforwardSelection;
+}): Promise<CarryforwardRunView> {
+  const { client, changedBy } = input;
+  const s = { ...input.selection, companyCodes: [...new Set(input.selection.companyCodes.map((c) => c.trim()).filter(Boolean))] };
+  if (!CLOSE_LEDGERS.includes(s.ledger as (typeof CLOSE_LEDGERS)[number])) {
+    fail(`Ledger ${s.ledger || '(blank)'} is not configured.`, `Configured ledgers: ${CLOSE_LEDGERS.join(', ')}.`);
+  }
+  if (s.companyCodes.length === 0) fail('Select at least one company code.');
+  if (!Number.isInteger(s.targetFiscalYear) || s.targetFiscalYear < 1901 || s.targetFiscalYear > 2199) {
+    fail('A valid target fiscal year following the source year is required.');
+  }
+  const sourceYear = s.targetFiscalYear - 1;
+  const runId = newRunId();
+
+  await withTenant(client, async (tx) => {
+    if (!s.testRun) {
+      const running = await tx.execute(sql`
+        select run_id, company_codes from carryforward_run
+        where client = ${client} and ledger = ${s.ledger} and target_fiscal_year = ${s.targetFiscalYear}
+          and is_test_run = false and status = 'RUNNING'
+      `);
+      for (const row of running as unknown as Array<{ run_id: string; company_codes: string }>) {
+        const overlap = row.company_codes.split(',').filter((c) => s.companyCodes.includes(c));
+        if (overlap.length > 0) {
+          fail(`Carryforward run ${row.run_id} already stands RUNNING for ${overlap.join(', ')}.`,
+            'Wait for it to finish; test runs never block.');
+        }
+      }
+    }
+    await tx.execute(sql`
+      insert into carryforward_run
+        (client, run_id, ledger, source_fiscal_year, target_fiscal_year, company_codes, is_test_run, status, executed_by)
+      values (${client}, ${runId}, ${s.ledger}, ${sourceYear}, ${s.targetFiscalYear},
+              ${s.companyCodes.join(',')}, ${s.testRun}, 'RUNNING', ${changedBy})
+    `);
+  });
+
+  const results: CarryforwardResultView[] = [];
+  const transferDocuments: string[] = [];
+  let runFailed = false;
+
+  for (const companyCode of s.companyCodes) {
+    try {
+      const company = await withTenant(client, (tx) => getCompanyCode(tx, client, companyCode));
+      if (!company) { fail(`Company code ${companyCode} does not stand.`); }
+      const chart = company.chartOfAccounts ?? '';
+      const currency = company.currency ?? 'USD';
+      const balances = await companyBalances(client, companyCode, chart, sourceYear);
+      const retained = await retainedEarningsAccount(client, chart);
+      const byAccount = new Map<string, BalanceRow[]>();
+      for (const row of balances) byAccount.set(row.account, [...(byAccount.get(row.account) ?? []), row]);
+
+      const plRows = balances.filter((r) => r.category === 'PL_STATEMENT');
+      const plNet = plRows.reduce((sum, r) => sum + r.balance, 0n);
+      let transferDocument: string | null = null;
+
+      if (!s.testRun && plRows.length > 0 && plNet !== 0n || (!s.testRun && plRows.some((r) => r.balance !== 0n))) {
+        if (!retained) {
+          fail(`Retained earnings determination (RETAINED_EARNINGS) does not stand in chart ${chart}.`,
+            'Configure the retained earnings account determination, then rerun — reruns post only the delta.');
+        }
+        const lines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; profitCenter?: string; lineText: string }> = [];
+        for (const row of plRows) {
+          if (row.balance === 0n) continue;
+          lines.push({
+            glAccount: row.account,
+            debitCredit: row.balance > 0n ? 'H' : 'S',
+            amount: fromScaled(row.balance > 0n ? row.balance : -row.balance),
+            profitCenter: row.profitCenter || undefined,
+            lineText: `Carryforward ${sourceYear}→${s.targetFiscalYear}`,
+          });
+        }
+        if (plNet !== 0n) {
+          lines.push({
+            glAccount: retained,
+            debitCredit: plNet > 0n ? 'S' : 'H',
+            amount: fromScaled(plNet > 0n ? plNet : -plNet),
+            lineText: `P&L closing ${sourceYear}`,
+          });
+        }
+        const posted = await postGlDocument({
+          client, changedBy, requestKey: `cf-${runId}-${companyCode}`,
+          companyCode, documentDate: `${sourceYear}-12-31`, postingDate: `${sourceYear}-12-31`,
+          documentType: 'SA', currency, headerText: `Balance carryforward ${s.targetFiscalYear}`,
+          lines: lines.map((l) => ({
+            glAccount: l.glAccount, debitCredit: l.debitCredit, amount: l.amount,
+            profitCenter: l.profitCenter, lineText: l.lineText,
+          })),
+        });
+        transferDocument = posted.displayNumber || posted.documentNumber;
+        transferDocuments.push(transferDocument);
+      }
+
+      for (const row of balances) {
+        const isPl = row.category === 'PL_STATEMENT';
+        if (row.category === null) {
+          results.push({
+            companyCode, accountNumber: row.account, accountCategory: 'BALANCE_SHEET',
+            profitCenter: row.profitCenter || null, currency,
+            sourceClosingBalance: Number(fromScaled(row.balance)), targetOpeningBalance: 0,
+            retainedEarningsAccount: null, transferDocumentNumber: null,
+            status: 'EXCEPTION', detail: `Account ${row.account} does not stand in chart ${chart}.`,
+          });
+          continue;
+        }
+        if (!isPl) {
+          const isRetained = retained !== null && row.account === retained;
+          results.push({
+            companyCode, accountNumber: row.account, accountCategory: 'BALANCE_SHEET',
+            profitCenter: row.profitCenter || null, currency,
+            sourceClosingBalance: Number(fromScaled(row.balance)),
+            targetOpeningBalance: Number(fromScaled(row.balance + (isRetained ? plNet : 0n))),
+            retainedEarningsAccount: isRetained ? retained : null,
+            transferDocumentNumber: isRetained ? transferDocument : null,
+            status: 'CARRIED',
+            detail: isRetained
+              ? (s.testRun ? 'Opening includes the P&L result that an update run would transfer.' : 'Opening includes the transferred P&L result.')
+              : null,
+          });
+        } else {
+          results.push({
+            companyCode, accountNumber: row.account, accountCategory: 'PL_STATEMENT',
+            profitCenter: row.profitCenter || null, currency,
+            sourceClosingBalance: Number(fromScaled(row.balance)), targetOpeningBalance: 0,
+            retainedEarningsAccount: retained, transferDocumentNumber: transferDocument,
+            status: s.testRun ? 'CARRIED' : 'TRANSFERRED',
+            detail: s.testRun
+              ? `Test run: an update run would close this balance to retained earnings${retained ? ` ${retained}` : ' (determination missing)'}.`
+              : (retained ? null : 'Retained earnings determination missing.'),
+          });
+        }
+      }
+      if (!retained && plRows.length > 0) {
+        for (const row of plRows) {
+          const existing = results.find((r) => r.companyCode === companyCode && r.accountNumber === row.account && (r.profitCenter ?? '') === row.profitCenter);
+          if (existing) { existing.status = 'EXCEPTION'; existing.detail = `Retained earnings determination (RETAINED_EARNINGS) does not stand in chart ${chart}.`; }
+        }
+      }
+    } catch (error) {
+      runFailed = true;
+      const message = error instanceof Error ? error.message : 'Company processing failed.';
+      results.push({
+        companyCode, accountNumber: '—', accountCategory: 'BALANCE_SHEET', profitCenter: null,
+        currency: '—', sourceClosingBalance: 0, targetOpeningBalance: 0,
+        retainedEarningsAccount: null, transferDocumentNumber: null,
+        status: 'EXCEPTION', detail: message.slice(0, 240),
+      });
+    }
+  }
+
+  const exceptions = results.filter((r) => r.status === 'EXCEPTION').length;
+  const carriedAmount = results.filter((r) => r.status !== 'EXCEPTION')
+    .reduce((sum, r) => sum + (r.accountCategory === 'BALANCE_SHEET' ? Math.abs(r.targetOpeningBalance) : 0), 0);
+  const plAmount = results.filter((r) => r.accountCategory === 'PL_STATEMENT')
+    .reduce((sum, r) => sum + Math.abs(r.sourceClosingBalance), 0);
+
+  await withTenant(client, async (tx) => {
+    for (const r of results) {
+      await tx.execute(sql`
+        insert into carryforward_result
+          (client, run_id, company_code, account_number, account_category, profit_center, currency,
+           source_closing_balance, target_opening_balance, retained_earnings_account, transfer_document_number, status, detail)
+        values (${client}, ${runId}, ${r.companyCode}, ${r.accountNumber}, ${r.accountCategory},
+                ${r.profitCenter ?? ''}, ${r.currency}, ${r.sourceClosingBalance.toFixed(4)}, ${r.targetOpeningBalance.toFixed(4)},
+                ${r.retainedEarningsAccount}, ${r.transferDocumentNumber}, ${r.status}, ${r.detail})
+        on conflict do nothing
+      `);
+    }
+    await tx.execute(sql`
+      update carryforward_run set
+        status = ${runFailed || exceptions > 0 ? 'FAILED' : 'COMPLETED'},
+        accounts_processed = ${new Set(results.map((r) => `${r.companyCode}|${r.accountNumber}`)).size},
+        carried_amount = ${carriedAmount.toFixed(4)}, pl_transfer_amount = ${plAmount.toFixed(4)},
+        error_count = ${exceptions},
+        transfer_documents = ${transferDocuments.length > 0 ? transferDocuments.join(',') : null},
+        ended_at = now()
+      where client = ${client} and run_id = ${runId}
+    `);
+  });
+
+  return getCarryforwardRun(client, runId);
+}
+
+export async function getCarryforwardRun(client: string, runId: string): Promise<CarryforwardRunView> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`select * from carryforward_run where client = ${client} and run_id = ${runId}`);
+    const r = (rows as unknown as Array<Record<string, unknown>>)[0];
+    if (!r) fail(`Carryforward run ${runId} does not stand.`);
+    return {
+      runId: String(r.run_id), ledger: String(r.ledger),
+      sourceFiscalYear: Number(r.source_fiscal_year), targetFiscalYear: Number(r.target_fiscal_year),
+      companyCodes: String(r.company_codes).split(',').filter(Boolean), testRun: Boolean(r.is_test_run),
+      status: r.status as CarryforwardRunStatus, accountsProcessed: Number(r.accounts_processed),
+      balancesCarried: Number(r.carried_amount), plTransferred: Number(r.pl_transfer_amount),
+      errors: Number(r.error_count),
+      transferDocuments: r.transfer_documents ? String(r.transfer_documents).split(',') : [],
+      executedBy: String(r.executed_by),
+      startedAt: new Date(r.started_at as string).toISOString(),
+      endedAt: r.ended_at ? new Date(r.ended_at as string).toISOString() : null,
+    };
+  });
+}
+
+export async function listCarryforwardRuns(client: string, limit = 50): Promise<CarryforwardRunView[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select run_id from carryforward_run where client = ${client} order by started_at desc limit ${limit}
+    `);
+    const views: CarryforwardRunView[] = [];
+    for (const r of rows as unknown as Array<{ run_id: string }>) views.push(await getCarryforwardRun(client, r.run_id));
+    return views;
+  });
+}
+
+export async function listCarryforwardResults(client: string, runId: string): Promise<CarryforwardResultView[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select * from carryforward_result where client = ${client} and run_id = ${runId}
+      order by company_code, account_number, profit_center
+    `);
+    return (rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+      companyCode: String(r.company_code), accountNumber: String(r.account_number),
+      accountCategory: r.account_category as 'BALANCE_SHEET' | 'PL_STATEMENT',
+      profitCenter: r.profit_center ? String(r.profit_center) : null, currency: String(r.currency),
+      sourceClosingBalance: Number(r.source_closing_balance), targetOpeningBalance: Number(r.target_opening_balance),
+      retainedEarningsAccount: (r.retained_earnings_account as string) ?? null,
+      transferDocumentNumber: (r.transfer_document_number as string) ?? null,
+      status: r.status as CarryforwardResultStatus, detail: (r.detail as string) ?? null,
+    }));
+  });
+}

@@ -594,6 +594,10 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 
 **B-658.** Migration `0110_carryforward.sql` (173 total, applied) creates only the protocol structures R-150 permits: `carryforward_run` (repeat executions keyed by run id, target = source + 1 enforced, test flag, totals, transfer document references, actor and timestamps) and `carryforward_result` (per company/account/category/profit-centre/currency closing and opening balances, retained-earnings account and transfer document where applicable, CARRIED/TRANSFERRED/EXCEPTION status). Openings themselves stay derived from the journal — no balance-summary table. Drizzle schemas mirror the migration. Same-stage bookkeeping: B-658 / §26.674 / §30 row 2.492.
 
+## §26.675 — SCR-102 stage 3: carryforward execution service and wired run sheet
+
+**B-659.** `executeCarryforward` validates the ledger vocabulary and target year, stands the run RUNNING (refusing a concurrent update run over the same company/ledger/year while allowing test runs freely), then per company derives cumulative balances from the posted journal, records balance-sheet openings, and — in update mode — posts one judged closing-transfer document per company at the source year-end zeroing each P&L account against the determined retained earnings account. Because the transfer lands inside the source-year totals, reruns post only the remaining delta and late adjustments flow through identically; a missing retained-earnings determination fails the update by name and marks test-run P&L rows EXCEPTION. The run closes with totals and status, every result row persisted. The run sheet is wired (execute with test-first default, latest run, history, result protocol). Same-stage bookkeeping: B-659 / §26.675 / §30 row 2.493.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -717,3 +721,4 @@ Same-stage bookkeeping: B-656 / §26.672 / §30 row 2.490.
 | 2.490 | 2026-10-19 | **SCR-102 contract approved (B-656, §26.672, R-150).** FIN.CLOSE.CARRYFORWARD: derived openings recorded per account, P&L closed by a judged transfer document to determined retained earnings, delta-only repeat runs, test-first. Stage 1 (vocabulary + run sheet shell) follows. | Owner + Agent |
 | 2.491 | 2026-10-19 | **SCR-102 stage 1 published (B-657, §26.673).** Carryforward vocabulary, the run-sheet shell and the RETAINED_EARNINGS determination event stand. Schema follows in stage 2. | Agent |
 | 2.492 | 2026-10-19 | **SCR-102 stage 2 published (B-658, §26.674).** Migration 0110 (173 total) stands: run header and result protocol, repeatable by construction. The execution service follows in stage 3. | Agent |
+| 2.493 | 2026-10-19 | **SCR-102 stage 3 published (B-659, §26.675).** The carryforward executes: derived openings recorded, P&L closed by judged transfer documents, delta-only reruns, concurrency-guarded update runs. Supporting seed follows in stage 4. | Agent |
