@@ -53,6 +53,13 @@ export const glAccount = pgTable(
     isOpenItemManaged: boolean('is_open_item_managed').notNull().default(false),
     /** Reconciliation account: CUSTOMERS | VENDORS | ASSETS | MATERIAL — §14.2. */
     reconciliationType: varchar('reconciliation_type', { length: 16 }),
+    /**
+     * Retained earnings indicator (SCR-121 / OB53): the one-character
+     * key whose standing determination names the retained earnings
+     * account this P&L account closes to at balance carryforward.
+     * Stored only on P/L statement accounts; pinned by check below.
+     */
+    retainedEarningsIndicator: varchar('retained_earnings_indicator', { length: 1 }),
     /** Whether postings to this account require a cost object. */
     requiresCostObject: boolean('requires_cost_object').notNull().default(false),
     /** Tax-relevant accounts participate in tax determination. */
@@ -103,6 +110,10 @@ export const glAccount = pgTable(
     check(
       'gl_account_reconciliation_vocabulary',
       sql`${t.reconciliationType} is null or ${t.reconciliationType} in ('CUSTOMERS', 'VENDORS', 'ASSETS', 'MATERIAL')`,
+    ),
+    check(
+      'gl_account_retained_indicator_ck',
+      sql`${t.retainedEarningsIndicator} is null or (${t.glAccountType} = 'PL_STATEMENT' and ${t.retainedEarningsIndicator} ~ '^[A-Z0-9]$')`,
     ),
     check(
       'gl_account_balance_sheet_derived',

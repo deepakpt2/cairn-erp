@@ -1138,6 +1138,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-788, recorded 2026-10-19.** Stage 1 of SCR-121 stands: `src/modules/foundation/retained-earnings-vocabulary.ts` carries the client-safe vocabulary — activity `CFG.FIN.RETAINED.DEFINE`, route `/config/retained-earnings`, the `RETAINED_EARNINGS` determination event, standard indicator `X`, and the determination row/chart types. `src/app/config/retained-earnings/page.tsx` and `RetainedEarnings.tsx` render the configured-determinations grid (chart, indicator, retained earnings account and name, carrying P&L account count), the maintain form (chart, one-character indicator, account, mandatory reason) and the delete form with its in-use warning; the shell imports vocabulary only and the forms wire to the service in stage 3. TypeScript green; the stage committed separately. Same-stage bookkeeping: B-788 / §26.804 / §30 row 2.622.
 
+## §26.805 — SCR-121 stage 2: retained-earnings schema
+
+**B-789, recorded 2026-10-19.** Stage 2 of SCR-121 stands: migration **0121** (184 total) adds `gl_account.retained_earnings_indicator` (one character) with check `gl_account_retained_indicator_ck` pinning it to P&L-statement accounts in A–Z/0–9; the Drizzle schema carries the same column and check. The `RETAINED_EARNINGS` posting event now declares `usesGeneralModifier: true`, so the indicator lives in the determination's general-modifier slot (valuation class always blank) and the OBYC catalogue and the OB53 screen read one source. `tests/retained-earnings-schema-contract.test.ts` pins the column, the check, the event wiring and the client-safe vocabulary (3/3); migration applied cleanly over the standing dev cluster. The definition service, FS00 enforcement and carryforward rework follow in stage 3. Same-stage bookkeeping: B-789 / §26.805 / §30 row 2.623.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
