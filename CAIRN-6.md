@@ -1030,6 +1030,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-761.** Seed carries the `FIN.RPT.CONSOLIDATE` capability and its registry term at `/config/consolidation` with alias UCWB living on the one term (discovery rides the registry route, following the config-screen pattern). Seeded twice idempotent — catalogue 148 capabilities / 121 terms / 141 aliases, UCWB verified solely on FIN.RPT.CONSOLIDATE. Acceptance follows in stage 5. Same-stage bookkeeping: B-761 / §26.777 / §30 row 2.595.
 
+## §26.778 — SCR-116 stage 5: service tests and browser target
+
+**B-762.** `tests/consolidation-workbench.test.ts` (3 green) proves dimension/reason/reference refusals, acyclic groups, overlap-refused assignments, mapping and task configuration, activation refused while incomplete then ACTIVE, and that configuration posts nothing; browser target T880 stands registered across targets/checks/database-guards. Full suite, production rebuild and browser acceptance follow before closure. Same-stage bookkeeping: B-762 / §26.778 / §30 row 2.596.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1256,6 +1260,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.593 | 2026-10-19 | **SCR-116 stage 2 published (B-759, §26.775).** Migration 0119 (182 total): eleven consolidation configuration tables stand; the schema contract pins keys, FKs and validity checks. The configuration service follows in stage 3. | Agent |
 | 2.594 | 2026-10-19 | **SCR-116 stage 3 published (B-760, §26.776).** The configuration service judges dimensions, parents, overlaps, mappings and task references, with mandatory-reason change audit and the activation gate; folder maintenance posts live. Supporting seed follows in stage 4. | Agent |
 | 2.595 | 2026-10-19 | **SCR-116 stage 4 published (B-761, §26.777).** FIN.RPT.CONSOLIDATE capability and UCWB alias stand (148/121/141). Acceptance follows in stage 5. | Agent |
+| 2.596 | 2026-10-19 | **SCR-116 stage 5 published (B-762, §26.778).** Three workbench service tests pass and browser target T880 stands registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
