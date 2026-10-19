@@ -1,0 +1,185 @@
+'use client';
+
+import { useState } from 'react';
+
+import type { GlClearingView } from '@/modules/finance/gl-clearing';
+
+const itemKey = (i: { documentNumber: string; fiscalYear: number; lineNumber: number }) =>
+  `${i.documentNumber}|${i.fiscalYear}|${i.lineNumber}`;
+
+/**
+ * Stage-1 shell: selection and the open-item grid stand over
+ * the vocabulary; loading and posting arrive in stage 3.
+ */
+export default function GlClearing({ view, loadError, canClear, today }: {
+  view: GlClearingView | null;
+  loadError: string | null;
+  canClear: boolean;
+  today: string;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [clearingDate, setClearingDate] = useState(today);
+  const [postingDate, setPostingDate] = useState(today);
+  const [documentDate, setDocumentDate] = useState(today);
+
+  const toggle = (key: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  const items = view?.openItems ?? [];
+  const chosen = items.filter((i) => selected.has(itemKey(i)));
+  const currencies = [...new Set(chosen.map((i) => i.currency))];
+  const assigned = chosen.reduce((s, i) => s + i.signed, 0);
+  const difference = Math.round(assigned * 10000) / 10000;
+
+  return (
+    <>
+      <section aria-labelledby="glc-selection" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <h2 id="glc-selection" className="text-sm font-semibold">Selection</h2>
+        <form method="get" action="/finance/gl-clearing" className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
+            <input name="companyCode" className="input w-28" placeholder="1000" defaultValue={view?.companyCode ?? ''} required />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">G/L account</span>
+            <input name="glAccount" className="input w-36" placeholder="110100" defaultValue={view?.glAccount ?? ''} required />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document number</span>
+            <input name="documentNumber" className="input w-40" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Assignment</span>
+            <input name="assignment" className="input w-40" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>
+            <input name="reference" className="input w-40" />
+          </label>
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Load open items</button>
+        </form>
+        {loadError && <p role="status" className="mt-2 text-sm text-red-700">{loadError}</p>}
+        {view && (
+          <p className="mt-2 text-sm">
+            Account <strong>{view.glAccount}</strong> in company <strong>{view.companyCode}</strong>:
+            {' '}{view.openItems.length} open items standing at {view.openBalance.toFixed(2)} {view.accountCurrency}.
+          </p>
+        )}
+      </section>
+
+      {view && (
+        <section aria-labelledby="glc-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="glc-items" className="text-sm font-semibold">Open items</h2>
+          {items.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-soft">No open items stand for this account and company.</p>
+          ) : (
+            <form method="post">
+              <div className="mt-3 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                      <th className="px-2 py-2">Select</th><th className="px-2 py-2">Document</th>
+                      <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Type</th>
+                      <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Reference</th>
+                      <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Currency</th>
+                      <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Signed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={itemKey(item)} className="border-t border-line">
+                        <td className="px-2 py-2">
+                          <input
+                            type="checkbox" name="item" value={itemKey(item)}
+                            checked={selected.has(itemKey(item))}
+                            onChange={() => toggle(itemKey(item))}
+                          />
+                        </td>
+                        <td className="px-2 py-2">{item.documentNumber}</td>
+                        <td className="px-2 py-2">{item.postingDate}</td>
+                        <td className="px-2 py-2">{item.documentType}</td>
+                        <td className="px-2 py-2">{item.assignment}</td>
+                        <td className="px-2 py-2">{item.reference}</td>
+                        <td className="px-2 py-2">{item.debitCredit}</td>
+                        <td className="px-2 py-2">{item.currency}</td>
+                        <td className="px-2 py-2">{item.amount}</td>
+                        <td className="px-2 py-2">{item.signed.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-sm text-ink-soft">
+                Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
+                difference {difference.toFixed(2)}. The difference must stand at zero before posting.
+              </p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Clearing date</span>
+                  <input type="date" name="clearingDate" className="input" value={clearingDate} onChange={(e) => setClearingDate(e.target.value)} required />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Posting date</span>
+                  <input type="date" name="postingDate" className="input" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} required />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document date</span>
+                  <input type="date" name="documentDate" className="input" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} required />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document type</span>
+                  <input name="documentType" className="input w-24" maxLength={2} placeholder="AB" required />
+                </label>
+                <label className="flex items-end gap-2">
+                  <input type="checkbox" name="confirmed" value="yes" required className="size-4" />
+                  <span className="text-sm">I confirm this clearing</span>
+                </label>
+                <button
+                  type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
+                  disabled={!canClear || chosen.length === 0 || difference !== 0}
+                >
+                  Post clearing
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+      )}
+
+      {view && (
+        <section aria-labelledby="glc-history" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="glc-history" className="text-sm font-semibold">Cleared history</h2>
+          {view.clearedItems.length === 0 ? (
+            <p className="mt-2 text-sm text-ink-soft">
+              Nothing stands cleared for this selection yet. A posted clearing is history: it is preserved, never edited or deleted.
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="px-2 py-2">Document</th><th className="px-2 py-2">Amount</th>
+                    <th className="px-2 py-2">Cleared by</th><th className="px-2 py-2">Clearing date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {view.clearedItems.map((item) => (
+                    <tr key={itemKey(item)} className="border-t border-line">
+                      <td className="px-2 py-2">{item.documentNumber}</td>
+                      <td className="px-2 py-2">{item.amount} {item.currency}</td>
+                      <td className="px-2 py-2">{item.clearingDocument}</td>
+                      <td className="px-2 py-2">{item.clearingDate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+    </>
+  );
+}
