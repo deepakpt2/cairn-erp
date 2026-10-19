@@ -2189,3 +2189,142 @@ export const consolidationTask = pgTable('consolidation_task', {
   check('consolidation_task_type_ck', sql`${t.taskType} in ('DATA_COLLECTION', 'CURRENCY_TRANSLATION', 'ELIMINATION', 'INVESTMENT', 'VALIDATION', 'OTHER')`),
   check('consolidation_task_validity_ck', sql`${t.validFrom} <= ${t.validTo}`),
 ]);
+
+/** Consolidation monitor execution attempt (SCR-117): immutable attempt history. */
+export const consolidationExecution = pgTable('consolidation_execution', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  area: varchar('area', { length: 4 }).notNull(),
+  groupName: varchar('group_name', { length: 24 }).notNull(),
+  unit: varchar('unit', { length: 10 }),
+  unitScope: varchar('unit_scope', { length: 10 }).notNull().default(''),
+  version: varchar('version', { length: 3 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: integer('period').notNull(),
+  task: varchar('task', { length: 16 }).notNull(),
+  configurationVersion: varchar('configuration_version', { length: 64 }).notNull(),
+  configurationSnapshot: text('configuration_snapshot').notNull(),
+  attemptNumber: integer('attempt_number').notNull(),
+  mode: varchar('mode', { length: 6 }).notNull(),
+  status: varchar('status', { length: 10 }).notNull().default('RUNNING'),
+  executedBy: varchar('executed_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  durationMs: integer('duration_ms'),
+  resultSummary: text('result_summary').notNull().default(''),
+  processedCount: integer('processed_count').notNull().default(0),
+  warningCount: integer('warning_count').notNull().default(0),
+  errorCount: integer('error_count').notNull().default(0),
+  generatedDocumentRefs: text('generated_document_refs').notNull().default('[]'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.area, t.groupName],
+    foreignColumns: [consolidationGroup.client, consolidationGroup.area, consolidationGroup.groupName],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.unit],
+    foreignColumns: [consolidationUnit.client, consolidationUnit.area, consolidationUnit.unit],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.version],
+    foreignColumns: [consolidationVersion.client, consolidationVersion.area, consolidationVersion.version],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.version, t.task],
+    foreignColumns: [consolidationTask.client, consolidationTask.area, consolidationTask.version, consolidationTask.task],
+  }),
+  uniqueIndex('consolidation_execution_running_uq')
+    .on(t.client, t.area, t.groupName, t.unitScope, t.version, t.fiscalYear, t.period, t.task)
+    .where(sql`${t.status} = 'RUNNING'`),
+  index('consolidation_execution_scope_idx')
+    .on(t.client, t.area, t.groupName, t.version, t.fiscalYear, t.period, t.task, t.startedAt),
+  check('consolidation_execution_mode_ck', sql`${t.mode} in ('TEST', 'UPDATE')`),
+  check('consolidation_execution_status_ck', sql`${t.status} in ('RUNNING', 'COMPLETED', 'WARNING', 'ERROR', 'BLOCKED', 'CANCELLED')`),
+  check('consolidation_execution_period_ck', sql`${t.period} between 1 and 20`),
+  check('consolidation_execution_year_ck', sql`${t.fiscalYear} between 1900 and 2199`),
+  check('consolidation_execution_attempt_ck', sql`${t.attemptNumber} >= 1`),
+  check('consolidation_execution_unit_scope_ck', sql`${t.unitScope} = coalesce(${t.unit}, '')`),
+]);
+
+/** Append-only detail lines for one consolidation execution attempt. */
+export const consolidationExecutionLog = pgTable('consolidation_execution_log', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  runId: varchar('run_id', { length: 24 }).notNull(),
+  sequence: integer('sequence').notNull(),
+  level: varchar('level', { length: 8 }).notNull(),
+  message: text('message').notNull(),
+  reference: varchar('reference', { length: 120 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.runId, t.sequence] }),
+  foreignKey({
+    columns: [t.client, t.runId],
+    foreignColumns: [consolidationExecution.client, consolidationExecution.runId],
+  }).onDelete('cascade'),
+  check('consolidation_execution_log_level_ck', sql`${t.level} in ('INFO', 'WARNING', 'ERROR')`),
+  check('consolidation_execution_log_sequence_ck', sql`${t.sequence} >= 1`),
+]);
+
+/** Current consolidation task state, separate from immutable execution history. */
+export const consolidationTaskStatus = pgTable('consolidation_task_status', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  area: varchar('area', { length: 4 }).notNull(),
+  groupName: varchar('group_name', { length: 24 }).notNull(),
+  unit: varchar('unit', { length: 10 }),
+  unitScope: varchar('unit_scope', { length: 10 }).notNull().default(''),
+  version: varchar('version', { length: 3 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: integer('period').notNull(),
+  task: varchar('task', { length: 16 }).notNull(),
+  status: varchar('status', { length: 10 }).notNull().default('OPEN'),
+  blockedReason: text('blocked_reason').notNull().default(''),
+  latestRunId: varchar('latest_run_id', { length: 24 }),
+  lastMode: varchar('last_mode', { length: 6 }),
+  executedBy: varchar('executed_by', { length: 60 }),
+  executedAt: timestamp('executed_at', { withTimezone: true }),
+  durationMs: integer('duration_ms'),
+  resultSummary: text('result_summary').notNull().default(''),
+  warningCount: integer('warning_count').notNull().default(0),
+  errorCount: integer('error_count').notNull().default(0),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.area, t.groupName, t.unitScope, t.version, t.fiscalYear, t.period, t.task] }),
+  foreignKey({
+    columns: [t.client, t.area],
+    foreignColumns: [consolidationArea.client, consolidationArea.area],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.area, t.groupName],
+    foreignColumns: [consolidationGroup.client, consolidationGroup.area, consolidationGroup.groupName],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.unit],
+    foreignColumns: [consolidationUnit.client, consolidationUnit.area, consolidationUnit.unit],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.version],
+    foreignColumns: [consolidationVersion.client, consolidationVersion.area, consolidationVersion.version],
+  }),
+  foreignKey({
+    columns: [t.client, t.area, t.version, t.task],
+    foreignColumns: [consolidationTask.client, consolidationTask.area, consolidationTask.version, consolidationTask.task],
+  }),
+  foreignKey({
+    columns: [t.client, t.latestRunId],
+    foreignColumns: [consolidationExecution.client, consolidationExecution.runId],
+  }),
+  index('consolidation_task_status_scope_idx')
+    .on(t.client, t.area, t.groupName, t.version, t.fiscalYear, t.period, t.status),
+  check('consolidation_task_status_status_ck', sql`${t.status} in ('OPEN', 'BLOCKED', 'RUNNING', 'COMPLETED', 'WARNING', 'ERROR')`),
+  check('consolidation_task_status_mode_ck', sql`${t.lastMode} is null or ${t.lastMode} in ('TEST', 'UPDATE')`),
+  check('consolidation_task_status_period_ck', sql`${t.period} between 1 and 20`),
+  check('consolidation_task_status_year_ck', sql`${t.fiscalYear} between 1900 and 2199`),
+  check('consolidation_task_status_unit_scope_ck', sql`${t.unitScope} = coalesce(${t.unit}, '')`),
+]);

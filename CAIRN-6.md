@@ -1046,6 +1046,10 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 
 **B-765.** `consolidation-monitor-vocabulary.ts` carries the client-safe FIN.CONSOLIDATE vocabulary (Test/Update modes, task and execution states, error policies, scope, matrix and immutable-log shapes, and the standing adapter boundary), and `/finance/consolidation-monitor` renders the area/group/version/year/period/task-group/unit/mode selection, Refresh, the unit-by-task monitor matrix and the execution-history panel over UCWB configuration. Execution controls arrive with the service in stage 3. `tsc` green. Execution schema follows in stage 2. Same-stage bookkeeping: B-765 / §26.781 / §30 row 2.599.
 
+## §26.782 — SCR-117 stage 2: consolidation execution schema
+
+**B-766.** Migration 0120 (183 total) builds `consolidation_execution` (unique run ID, full scope, task configuration fingerprint and snapshot, attempt number, mode, state, user, timing, duration, summary, counts and generated-document references), append-only `consolidation_execution_log`, and `consolidation_task_status` as the separate current/latest-run row. Tenant-aware foreign keys run into UCWB area/group/unit/version/task; a partial unique index refuses a second RUNNING attempt for the same task scope. The schema-contract test (3 green) pins the alignment; `tsc` green. The monitor service follows in stage 3. Same-stage bookkeeping: B-766 / §26.782 / §30 row 2.600.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1276,6 +1280,7 @@ Same-stage bookkeeping: B-686 / §26.702 / §30 row 2.520.
 | 2.597 | 2026-10-19 | **SCR-116 CLOSED (B-763, §26.779).** FIN.RPT.CONSOLIDATE (UCWB) accepted: 1536/1536 suite, build green, browser T880 PASSED. Catalogue 148/121/141; migrations 182. Next: FIN.CONSOLIDATE (UCMON / CX20) awaiting its field package; second-next FIN.RPT.CONSOLIDATE.STMT (CX20). | Agent |
 | 2.598 | 2026-10-19 | **SCR-117 contracted (B-764, R-165, §26.780).** CX20 consolidation monitor as FIN.CONSOLIDATE: UCWB-derived task order and parent prerequisites, immutable execution history separate from current status, Test/Update modes, duplicate-run guard, and only standing journal collection/validation adapters execute; translation, investment and intercompany processing remain blocked by name. Stage 1 monitor shell follows. | Agent |
 | 2.599 | 2026-10-19 | **SCR-117 stage 1 published (B-765, §26.781).** FIN.CONSOLIDATE monitor vocabulary and the CX20 selection/matrix shell stand. Execution schema follows in stage 2. | Agent |
+| 2.600 | 2026-10-19 | **SCR-117 stage 2 published (B-766, §26.782).** Migration 0120 (183 total): immutable execution attempts, append-only logs and separate current task status stand, with a duplicate-running guard. The monitor service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
