@@ -291,6 +291,12 @@ export async function createAsset(input: CreateAssetInput): Promise<AssetView[]>
       }
     }
 
+    if (input.inventoryNumber && count > 1) {
+      throw new AssetMasterError(
+        'Inventory numbers are unique per asset; similar assets cannot share one.',
+        'Create them one at a time so each carries its own inventory number.',
+      );
+    }
     if (input.inventoryNumber) {
       const [dupe] = await tx.select({ assetNumber: fixedAsset.assetNumber }).from(fixedAsset).where(and(
         eq(fixedAsset.client, input.client), eq(fixedAsset.companyCode, input.companyCode),

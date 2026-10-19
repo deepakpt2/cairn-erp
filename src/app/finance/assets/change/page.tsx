@@ -45,7 +45,7 @@ export default async function ChangeAssetPage({ searchParams }: {
           No asset stands under this key. Choose one from the asset list.
         </p>
       ) : (
-        <AssetChange key={`${asset.assetNumber}-${asset.version}`} asset={asset} today={today} />
+        <AssetChange key={`${asset.companyCode}-${asset.assetNumber}-${asset.subNumber}`} asset={asset} today={today} />
       )}
     </div>
   );

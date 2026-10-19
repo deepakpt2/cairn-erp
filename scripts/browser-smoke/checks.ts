@@ -86,6 +86,7 @@ import { parkedJournalFv50 } from './parked-journal';
 import { journalItemsFagll03 } from './journal-items';
 import { glBalancesFs10n } from './gl-balances';
 import { documentDisplayFb03 } from './document-display';
+import { assetMasterAs01As02 } from './asset-master';
 import { customerDownPaymentF29 } from './customer-down-payment';
 import { customerBalancesFd10n } from './customer-balances';
 import { customerAgeingAnalysis } from './customer-ageing';
@@ -4979,6 +4980,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'journal-items': journalItemsFagll03,
   'gl-balances': glBalancesFs10n,
   'document-display': documentDisplayFb03,
+  'asset-master': assetMasterAs01As02,
   'customer-down-payment': customerDownPaymentF29,
   'customer-balances': customerBalancesFd10n,
   'customer-ageing': customerAgeingAnalysis,
