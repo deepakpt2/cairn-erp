@@ -534,6 +534,10 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 
 **B-647.** R-148 stands implemented and accepted. **Suites:** full vitest 197 files, **1440/1440** (was 1436/1436; +3 accrual service tests, +1 revised browser-target registry). **Browser:** target accrual (**T896**) passed against the production build — accrual posted with reversal metadata, due reversal executed from the list, database metadata naming the reversal document. **Clock:** the round opened 09:42 and closed 10:27 (45 min wall) — over the 39-minute box solely on infrastructure: the 2 GB VM repeatedly OOM-killed the production build's type-check worker until a 3 GB swapfile was added (sudo), after which the build finished in 81 seconds; implementation itself occupied the first 15 minutes. The swapfile lives outside the workspace and may need recreating after a sandbox rebuild (noted for the environment memory). Deferred by R-148 itself: recurring accrual schedules beyond the single reversal date, configured same-period-reversal policy, approval workflow. Same-stage bookkeeping: B-647 / §26.663 / §30 row 2.481.
 
+## §26.664 — FX valuation re-run after reversal (small correction)
+
+**B-648.** A working-tree correction surfaced during SCR-100's acceptance (the suite ran green over it): the FX-valuation duplicate guard counted items of reversed live runs as still standing, so a valuation could never be re-run after its reversal. The guard now excludes `REVERSED` runs, mirroring the GR/IR accrual rule of SCR-099. Same-stage bookkeeping: B-648 / §26.664 / §30 row 2.482.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -646,3 +650,4 @@ Deferred by name: transfers in/out and other movement classifications (no transf
 | 2.479 | 2026-10-19 | **SCR-100 stage 4 published (B-645, §26.661).** FIN.ACCRUAL.POST capability (133) and the FBS1/F.81 alias term seed; the journal list exposes accruals. Acceptance follows in stage 5. | Agent |
 | 2.480 | 2026-10-19 | **SCR-100 stage 5 published (B-646, §26.662).** Three accrual service tests pass (atomic metadata, due-date lifecycle, exactly-once reversal); browser target T896 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.481 | 2026-10-19 | **SCR-100 CLOSED (B-647, §26.663).** FIN.ACCRUAL.POST accepted: atomic reversal metadata, F.81 due reversal exactly once (suite 1440/1440; browser T896). Next SCR: FIN.CLOSE.COCKPIT; its package is awaited. | Agent |
+| 2.482 | 2026-10-19 | **FX valuation re-run correction published (B-648, §26.664).** The duplicate guard excludes reversed runs, so a reversed valuation can be re-run; suite stood 1440/1440 over the change. | Agent |

@@ -244,7 +244,7 @@ export async function executeFxValuation(input: {
       join fx_valuation_run r on r.client = i.client and r.run_id = i.run_id
       where i.client = ${input.client} and r.company_code = ${s.companyCode}
         and r.valuation_area = ${s.valuationArea} and r.valuation_key_date = ${s.valuationKeyDate}
-        and r.is_test_run = false and i.status = 'POSTED'
+        and r.is_test_run = false and r.status <> 'REVERSED' and i.status = 'POSTED'
     `);
     const priorKeys = new Set((priorLive as unknown as Array<Record<string, unknown>>).map((r) =>
       r.source_kind === 'BALANCE' ? `B|${r.account_number}|${r.currency}` : `O|${r.source_document}|${r.source_line}`));
