@@ -253,6 +253,10 @@ The owner supplied the AS01/AS02 implementation package (2026-10-19); SAP codes 
 
 **B-585.** Stage 3 of R-139. The service carries creation and change whole: company and active class judged, class numbering obeyed (internal draws from ASSETNR, external validates the supplied number unused, similar assets become distinct mains atomically and never sub-numbers, a sub-number requires its standing main), quantity judged where the class manages it, assignments and depreciation areas judged against standing cost/profit centres, plants, areas and keys, class defaults pre-filling depreciation where none is given, and inventory numbers unique per company. Change locks the asset row: identity, company and class immutable by construction, master edits version-checked, assignment changes close the open interval and append so history is preserved, depreciation changes prospective and audited, deactivation a reasoned status — never a retirement, and nothing anywhere posts. Every write lands change documents with before/after. The tabbed create form, asset list and four-section change screen are live through server actions. Typecheck clean. Same-stage bookkeeping: B-585 / §26.601 / §30 row 2.419.
 
+## §26.602 — SCR-091 stage 4: asset capabilities and number range
+
+**B-586.** Stage 4 of R-139. The capabilities `FIN.ASSET.CREATE` and `FIN.ASSET.CHANGE` (AS01 and AS02 as search aliases) join the seed with full-parity terms — **125 capabilities / 68 config activities / 99 terms / 107 aliases**. `ASSETNR` joins the number-range object catalogue, the object roster and the tenant builder's default ranges (prefix AS), so internally numbered classes draw from birth. Typecheck clean. Same-stage bookkeeping: B-586 / §26.602 / §30 row 2.420.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -303,3 +307,4 @@ The owner supplied the AS01/AS02 implementation package (2026-10-19); SAP codes 
 | 2.417 | 2026-10-19 | **SCR-091 stage 1 published (B-583, §26.599).** The inert tabbed AS01 form and AS02 list shell; i18n keys added. No reads or writes stand yet. | Agent |
 | 2.418 | 2026-10-19 | **SCR-091 stage 2 published (B-584, §26.600).** Asset configuration, master, interval assignments and per-area depreciation parameters stand (migration 0099, 162 migrations) with delivered standard defaults. Service follows in stage 3. | Agent |
 | 2.419 | 2026-10-19 | **SCR-091 stage 3 published (B-585, §26.601).** Asset service stands: judged creation with atomic similar batches and sub-numbers, version-checked change, interval-appending assignments, prospective depreciation changes, reasoned deactivation; screens live. Supporting seed follows in stage 4. | Agent |
+| 2.420 | 2026-10-19 | **SCR-091 stage 4 published (B-586, §26.602).** Asset capabilities AS01/AS02 seeded (125 capabilities / 99 terms / 107 aliases); ASSETNR joins the range catalogue and tenant defaults. Tests and browser acceptance follow in stage 5. | Agent |
