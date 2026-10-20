@@ -3143,6 +3143,32 @@ releasing: no journal, no material document, zero stock moved. An order is a pla
 
 Same-stage bookkeeping: B-887 / §26.899 / §30 row 2.717.
 
+## §26.900 — SCR-138 stage 4: the order screen, and the harness learns T838
+
+**B-888.** `/production/orders` — one screen, two sections, two capabilities. The header
+asks for the material to be produced, the plant, the quantity and the two scheduled dates;
+the component grid is **four stated lines**, entered, never exploded. The company code is
+shown but never asked for: it appears in the order card as `data-company-code`, derived from
+the plant.
+
+**Create and release sit apart.** The release section appears only once an order stands,
+and it is gated on `PROD.ORDER.RELEASE` on its own — a tenant that may create but not
+release sees the form and is told why the button is dark. The order card carries
+`data-order-number`, `data-status` and `data-item` on each component row, so a browser can
+assert what the ledger says without reading the screen's prose.
+
+**T838** (`production-order-create`, `cairn_b210:5432`) joins the harness — **138 targets**.
+The run creates an order through the screen, reads the derived company code and the two
+components back, releases it, then reads the database independently: one order, two
+components, `RELEASED`, **no material document, no journal, no stock moved** — the proof
+that a plan is not a posting. It closes with a refusal: plant `QC99` does not exist.
+
+The registry gains `PROD.ORDER.CREATE` as a term (`/production/orders`, alias CO01) so the
+launchpad and the term registry can reach it; the capability row itself has stood since the
+frozen roadmap was seeded.
+
+Same-stage bookkeeping: B-888 / §26.900 / §30 row 2.718.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3491,6 +3517,7 @@ Same-stage bookkeeping: B-887 / §26.899 / §30 row 2.717.
 | 2.715 | 2026-10-20 | **SCR-138 / CO01 contracted — the order before the issue (B-885, §26.897).** The MIGO 261 package opens with its own prerequisite and is right: **261 cannot post against an order master that does not exist**, so this round builds **`PROD.ORDER.CREATE`** and the next posts 261 against it. The package\u2019s `production_order_goods_issue` table **refused by name** — a 261 is a material document plus its journal, the order a reference on the line (§26.887\u2019s ruling, applied again). **A07/R08 refused**; the package\u2019s columns mapped onto canon\u2019s tables. The order is a header on the standing **`PRODORDER`** range plus a **declared component snapshot** (no BOM master in canon), company derived from the plant, **CREATED \u2192 RELEASED**. The next round inherits the movement types, the `PRODUCTION_ORDER` reference category, `PRODUCTION_CONSUMPTION`, derived withdrawals, over-issue refusal, MD04 demand and both periods \u2014 all decided here. | Agent |
 | 2.716 | 2026-10-20 | **SCR-138 stage 2: the order master stands (B-886, §26.898).** Migration **9076** adds `production_order` (AUFK) and `production_order_component` (RESB) — **198 \u2192 199 migrations**. No company code (derived from the plant), **no stored withdrawn quantity** (derived from the documents), no status history: two statuses, `CREATED` and `RELEASED`, with the release named. Checks on status, quantity and dates; a partial unique index on `(client, request_key)` so a resubmitted create cannot make a second order. Applied and verified in `cairn_b210`. | Agent |
 | 2.717 | 2026-10-20 | **SCR-138 stage 3: the order service (B-887, §26.899).** Create draws the standing **`PRODORDER`** range under the tenant lock and judges every master before the header is drawn — material, plant **with its company code**, plant extension, each component and its storage location — so a refusal writes nothing. **`releaseProductionOrder`** records who and when, and a second release is a no-op. **12/12 service tests**, including: no company column exists (it is derived), nothing posts, and both acts appear in `change_document` — which required real before/after snapshots, since `recordChange` records differences and was silently recording nothing. | Agent |
+| 2.718 | 2026-10-20 | **SCR-138 stage 4: the order screen and T838 (B-888, §26.900).** `/production/orders` creates and releases under two capabilities; the company code is shown as derived and never asked for; the component grid is four stated lines. **Harness 138 targets** (T838), whose run creates an order, releases it, and reads the database back to prove **no document, no journal and no stock moved**. Registry gains `PROD.ORDER.CREATE` (alias CO01). **7/7 UI-contract tests**, 194 green across the touched files. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
