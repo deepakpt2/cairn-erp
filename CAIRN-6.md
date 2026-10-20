@@ -1540,6 +1540,24 @@ Same-stage bookkeeping: B-839 / §26.851 / §30 row 2.669. **Next: MB52 first**,
 
 Same-stage bookkeeping: B-840 / §26.852 / §30 row 2.670. Stage 2 next: the index decision, measured.
 
+## §26.853 — SCR-127 stage 2: MB52 index decision is verification-only (migration 9067 not taken)
+
+**B-841.** The package recommends a composite index on the stock master — tenant, plant, storage location, material. Measured at enterprise size, it earns nothing, and this canon keeps its 188 migrations unchanged for the second round running.
+
+**Method.** `scripts/plan-mb52.mts` seeds a throwaway tenant with **200,000 stock rows** (5,000 materials × 10 plants × 4 storage locations, with quality-inspection and blocked stock mixed in) and **50,000 valuation rows**, gathers statistics, and times the exact snapshot the service issues: the stock master joined to the material description and the plant valuation, aggregated by material, plant and storage location and pivoted on stock type, at three shapes — one material in one plant, a four-plant range, and no material or plant restriction at all (the package makes both ranges optional, so the broad shape is the production risk).
+
+| selection | standing indexes | plus `(client, plant, storage_location, material_number)` |
+| --- | --- | --- |
+| one material, one plant | 1.09 ms | 0.79 ms |
+| plants Q200–Q203 | 15.45 ms | 13.05 ms |
+| no material, no plant range | 11.36 ms | 10.71 ms |
+
+**Decision — verification-only, no migration 9067.** The planner never chooses the candidate in any arm. It reaches the stock master through `stock_quantity_pkey`, which already leads with the material and so serves the material-first shapes, and it seq-scans the plant-first and unrestricted shapes — correctly, because four plants of ten is forty per cent of the table and walking an index across forty per cent loses to reading the heap. A follow-up run forcing the bitmap path confirmed it: both arms remained sequential at 72 ms, and the candidate was not selected even with plain index scans disabled. The headline numbers are inside noise (the largest gain is 2.4 ms on a 15 ms query), and the index would be paid for on every stock movement this system writes. **Migrations stand at 188; 9067 stays unused.**
+
+**For the service.** Stage 3 issues the snapshot as measured — the pivot aggregate grouped by material, plant and storage location, ordered by material, bounded by `maxHits + 1` — and adds no schema. The broad shape is safe at this size because the hit bound, not the index, is what limits the answer.
+
+Same-stage bookkeeping: B-841 / §26.853 / §30 row 2.671. Stage 3 next: the `INV.STOCK.WAREHOUSE` service and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1841,6 +1859,7 @@ Same-stage bookkeeping: B-840 / §26.852 / §30 row 2.670. Stage 2 next: the ind
 | 2.668 | 2026-10-20 | **SCR-126 stage 2 published (B-838, §26.850).** MB5B index decision measured and declined: at 40,000 ledger lines the package's line index is never chosen by the planner — `material_document_line_material_idx` already serves the material predicate and the header key the dates — buying 1 ms on the medium arm and 6 ms on a 118 ms broad one. **Verification-only, no migration 9066; migrations stand at 188.** Required material and plant ranges keep the normal shapes at 2–12 ms. Harness `scripts/plan-mb5b.mts` committed. Service next. | Agent |
 | 2.669 | 2026-10-20 | **SCR-126 closed (B-839, §26.851).** MB5B delivered as `INV.STOCK.POSTINGDATE` at `/inventory/stock-on-posting-date`: a ledger rollforward of opening, receipts, issues and closing in quantity and value across a required window with required material and plant ranges, stock type defaulting to unrestricted, zero-stock lines suppressed, reversed documents contributing nothing, and the stock master compared as a warning that never adjusts. No migration (188 stand). Suite 1679/1679 / 239 files; T826 passed 7 legs; catalogue 158/131/153. Next T-codes: MB52, then MMBE/ME2K. | Agent |
 | 2.670 | 2026-10-20 | **SCR-127 contract settled (B-840, §26.852).** MB52 = new capability `INV.STOCK.WAREHOUSE` at `/inventory/warehouse-stocks`; reads the stock master, not the ledger; does not satisfy `INV.STOCK.VIEW` (MMBE stays Roadmap). Breakdown pivots **stock type** into unrestricted / quality-inspection / blocked plus a fourth **special-other** column so the total is never short. Valuation from `material_valuation` at plant; **no valuation record means unknown value with a warning, never zero**. Scope of List required (ALV / STANDARD, others refused); material/plant/sloc ranges optional as the package states; zero lines suppressed; valuation display defaults on; **batch and valuation type deferred by name, special stock indicator refused by name**. Two drills per row: MB51 movements and MB5B rollforward over the whole recorded window. Index measured at stage 2, not assumed. | Agent |
+| 2.671 | 2026-10-20 | **SCR-127 stage 2 published (B-841, §26.853).** MB52 index decision measured at 200,000 stock rows and 50,000 valuations and declined: the planner never selects `(client, plant, storage_location, material_number)` — it walks `stock_quantity_pkey` for material-first shapes and seq-scans plant-first ones, which is right at forty per cent selectivity. Forcing bitmap paths left both arms sequential at 72 ms. **Verification-only, no migration 9067; migrations stand at 188.** Harness `scripts/plan-mb52.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
