@@ -1832,6 +1832,32 @@ The screen takes the **three-digit number** the package's field matrix names, be
 
 Same-stage bookkeeping: B-852 / §26.864 / §30 row 2.682. Stage 2 next: the schema change and the index decision, measured.
 
+## §26.865 — SCR-131 stage 2: the transfer document's shape lands in schema 9066; no index is taken
+
+**B-853.** Migration **9066** carries the only schema change the contract needs, and it is three lines of intent:
+
+- `material_document_line.line_direction` (`ISSUE` / `RECEIPT`, **default `RECEIPT`**) — every document posted before today is a receipt or a reversal of one, so the default backfills the whole history without touching a row. The side of a transfer is carried by the line, not inferred from its position.
+- `movement_type.direction` widens from `('RECEIPT','REVERSAL')` to admit **`TRANSFER`** — one movement type serves both lines of the transfer, exactly as one BWART serves both MSEG items in SAP.
+- `stock_quantity_nonnegative_ck` is **dropped**: the package permits negative stock where configuration says so, `storage_location.allow_negative_stock` has been inert until now, and a row-level check cannot read another table's flag. The guard moves into the posting path, where the storage location's configuration is known.
+
+**Migrations stand at 189** (188 + 9066).
+
+**The index decision is verification-only.** Measured on 3,000 materials × 4 plants × 2 storage locations × 3 stock types — 72,000 stock rows, 12,000 plant segments, 12,000 valuation rows:
+
+| read | standing | note |
+| --- | --- | --- |
+| issuing stock row | **0.034 ms** (`stock_quantity_pkey`) | full key — the sufficiency check |
+| whole-plant stock | **0.053 ms** (`stock_quantity_pkey`) | material + plant is a prefix of the same key |
+| material-plant extension | **0.026 ms** (`material_plant_client_material_number_plant_pk`) | |
+| storage-location list | **0.031 ms** (seq scan) | eight rows; the key `(client, plant, storage_location)` is a prefix, the planner simply has nothing to skip |
+| valuation row | **0.022 ms** (`material_valuation_client_material_number_valuation_area_pk`) | |
+
+A candidate `(client, plant, material_number, stock_type)` on `stock_quantity` — the shape a plant-wide MARD sum would want — was created, measured and dropped: the issuing read did not touch it (0.033 ms, unchanged) and the plant-wide sum it did serve came in **slower** than the standing prefix walk (0.063 ms against 0.053 ms). **No index, no migration 9067.** The posting path reads by full key at every step; there is nothing worth widening.
+
+**Harness** `scripts/plan-mb1b.mts` committed with the measurement.
+
+Same-stage bookkeeping: B-853 / §26.865 / §30 row 2.683. Stage 3 next: `INV.TRANSFER.POST` service — six movement types, two-line documents, the sufficiency rule with the configured negative, valuation across plants, the counter-movement reversal — and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2145,6 +2171,7 @@ Same-stage bookkeeping: B-852 / §26.864 / §30 row 2.682. Stage 2 next: the sch
 | 2.680 | 2026-10-20 | **SCR-130 stage 2 published (B-850, §26.862).** MD04 index decision measured at 36,000 stock rows, 16,000 requisition items and 8,000 order items and declined: the requisition read is **already** served by the shipped `pr_item_material_plant_idx` (0.039 ms) and the candidate matched it within noise; the order read never chose the candidate and ran slower with it. Both ranges that bound the reads are required, so no shape needs a wider index. **Verification-only, no migration 9070; migrations stand at 188.** Harness `scripts/plan-md04.mts` committed. Service next. | Agent |
 | 2.681 | 2026-10-20 | **SCR-130 closed (B-851, §26.863).** MD04 delivered as `PROD.MRP.STOCKREQ` at `/production/stock-requirements`, flipping a second frozen-roadmap capability this session: a live projection (the package pegging table declined) of stock, open requisitions net of conversions, open orders net of deliveries and safety stock, one chronological list with a running balance; blocked stock excluded from MRP availability and named; hidden past-due rows still move the balance; daily/weekly split; shortage / safety breach / past due. No migration (188 stand). Suite 1765/1765 / 247 files; T830 passed 7 legs; catalogue 161/135/157. Next T-codes: MB1B, then ME2N. | Agent |
 | 2.682 | 2026-10-20 | **SCR-131 stage 1: MB1B contract settled (B-852, §26.864).** `INV.TRANSFER.POST` at `/inventory/transfer-posting`, the frozen-roadmap row at `CAIRN.md` §10 line 895. The package state table `inventory_transfer_posting` is **declined** — a transfer is a two-line material document. Six T156-style movement types (311/312/301/302/321/322) delivered as data with BWART numbers as input aliases only; a transfer writes an ISSUE line and a RECEIPT line, requiring one new `line_direction` column and widening the movement-type direction check to `TRANSFER`. Storage-location, plant and stock-type rules refuse by name; `allow_negative_stock` becomes operational for the issuing side, so the table-level non-negative guard moves into the posting path; 311/321 post no journal, 301 moves value between valuation areas and posts a price difference only where standard price differs; cross-company transfer, batch, special stock and MBST deferred by name. | Agent |
+| 2.683 | 2026-10-20 | **SCR-131 stage 2: schema 9066 and the index decision (B-853, §26.865).** `material_document_line.line_direction` (default `RECEIPT`, backfills all history), movement-type direction widened to `TRANSFER`, `stock_quantity_nonnegative_ck` dropped so the posting path can honour `storage_location.allow_negative_stock`. **Migrations 189.** Measured at 72,000 stock rows: issuing row 0.034 ms, plant sum 0.053 ms, extension 0.026 ms, valuation 0.022 ms — all primary keys; the plant-level candidate was unused by the issuing read and slower on the sum (0.063 vs 0.053 ms). **Verification-only, no migration 9067.** Harness `scripts/plan-mb1b.mts`. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

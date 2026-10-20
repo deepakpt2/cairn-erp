@@ -235,7 +235,8 @@ export const movementType = pgTable('movement_type', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.movementType] }),
-  check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL')`),
+  /** A transfer is one movement type serving both of its lines (SCR-131). */
+  check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL', 'TRANSFER')`),
   check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT')`),
 ]);
 
@@ -266,6 +267,8 @@ export const materialDocumentLine = pgTable('material_document_line', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }),
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** Which side of the document this line is: a transfer writes one ISSUE and one RECEIPT line (SCR-131). */
+  lineDirection: varchar('line_direction', { length: 8 }).notNull().default('RECEIPT'),
   entryQuantity: quantity('entry_quantity').notNull(),
   entryUnit: varchar('entry_unit', { length: 10 }).notNull(),
   baseQuantity: quantity('base_quantity').notNull(),
@@ -285,6 +288,7 @@ export const materialDocumentLine = pgTable('material_document_line', {
   foreignKey({ columns: [t.client, t.materialDocumentNumber], foreignColumns: [materialDocument.client, materialDocument.materialDocumentNumber] }).onDelete('restrict'),
   foreignKey({ columns: [t.client, t.movementType], foreignColumns: [movementType.client, movementType.movementType] }).onDelete('restrict'),
   check('material_document_line_qty_ck', sql`${t.entryQuantity} > 0 and ${t.baseQuantity} > 0`),
+  check('material_document_line_direction_ck', sql`${t.lineDirection} in ('ISSUE', 'RECEIPT')`),
 ]);
 
 export const stockQuantity = pgTable('stock_quantity', {
@@ -293,9 +297,12 @@ export const stockQuantity = pgTable('stock_quantity', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }).notNull().default(''),
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** Which side of the document this line is: a transfer writes one ISSUE and one RECEIPT line (SCR-131). */
+  lineDirection: varchar('line_direction', { length: 8 }).notNull().default('RECEIPT'),
   quantity: quantity('quantity').notNull().default('0'),
   ...auditColumns,
 }, (t) => [
+  // No table-level non-negative guard: negative stock is permitted where the storage
+  // location configures it, and a row check cannot read that configuration (SCR-131).
   primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.storageLocation, t.stockType] }),
-  check('stock_quantity_nonnegative_ck', sql`${t.quantity} >= 0`),
 ]);
