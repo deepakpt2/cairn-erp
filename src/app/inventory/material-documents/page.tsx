@@ -107,7 +107,9 @@ export default async function MaterialDocumentPage({
                   <th className="text-end">{t('mdList.value')}</th>
                   <th>{t('mdList.plant')}</th>
                   <th>{t('mdList.storageLocation')}</th>
+                  <th>{t('mdList.stockType')}</th>
                   <th>{t('mdList.purchaseOrder')}</th>
+                  <th>{t('mdList.itemText')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,6 +123,7 @@ export default async function MaterialDocumentPage({
                     <td className="text-end">{Number(line.value).toFixed(2)}</td>
                     <td className="code">{line.plant}</td>
                     <td className="code">{line.storageLocation ?? ''}</td>
+                    <td className="code">{line.stockType}</td>
                     <td className="code">
                       {line.purchaseOrderNumber
                         ? <Link href={`/purchasing/orders?order=${encodeURIComponent(line.purchaseOrderNumber)}`}>
@@ -128,6 +131,7 @@ export default async function MaterialDocumentPage({
                           </Link>
                         : ''}
                     </td>
+                    <td>{line.itemText ?? ''}</td>
                   </tr>
                 ))}
               </tbody>

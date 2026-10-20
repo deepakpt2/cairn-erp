@@ -197,8 +197,8 @@ export interface MaterialDocumentView {
   reversedBy: string | null;
   lines: Array<{
     lineNumber: number; movementType: string; materialNumber: string; plant: string;
-    storageLocation: string | null; quantity: string; unit: string; value: string;
-    purchaseOrderNumber: string | null; purchaseOrderItem: number | null;
+    storageLocation: string | null; stockType: string; quantity: string; unit: string; value: string;
+    purchaseOrderNumber: string | null; purchaseOrderItem: number | null; itemText: string | null;
   }>;
 }
 
@@ -215,9 +215,9 @@ function toView(header: typeof materialDocument.$inferSelect, lines: Array<typeo
     reversedBy: header.reversedBy,
     lines: lines.map((l) => ({
       lineNumber: l.lineNumber, movementType: l.movementType, materialNumber: l.materialNumber,
-      plant: l.plant, storageLocation: l.storageLocation, quantity: l.baseQuantity,
+      plant: l.plant, storageLocation: l.storageLocation, stockType: l.stockType, quantity: l.baseQuantity,
       unit: l.baseUnit, value: l.value, purchaseOrderNumber: l.purchaseOrderNumber,
-      purchaseOrderItem: l.purchaseOrderItem,
+      purchaseOrderItem: l.purchaseOrderItem, itemText: l.itemText,
     })),
   };
 }
