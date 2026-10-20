@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import type { CostCenterReportResult, CostCenterReportSelection } from '@/modules/foundation/cost-center-report';
 
 /**
@@ -74,12 +76,13 @@ export default function CostCenterReportShell({ canUse, areas, selection, result
               <th className="text-end">Actual YTD</th>
               <th className="text-end">Plan YTD</th>
               <th>Currency</th>
+              <th>Line Items</th>
             </tr>
           </thead>
           <tbody>
             {result === null && !reportError ? (
               <tr>
-                <td colSpan={9} className="text-ink-soft">Choose the selection and execute the report.</td>
+                <td colSpan={10} className="text-ink-soft">Choose the selection and execute the report.</td>
               </tr>
             ) : (result?.rows ?? []).map((row) => (
               <tr key={row.key} className={row.kind === 'GROUP' ? 'font-semibold' : undefined}>
@@ -94,6 +97,16 @@ export default function CostCenterReportShell({ canUse, areas, selection, result
                 <td className="text-end">{row.actualYtd.toFixed(2)}</td>
                 <td className="text-end">{row.planYtd === null ? '—' : row.planYtd.toFixed(2)}</td>
                 <td>{result?.currency ?? ''}</td>
+                <td>
+                  {row.kind !== 'GROUP' && row.costCenter ? (
+                    <Link
+                      className="underline"
+                      href={`/finance/journal/items?accountFrom=${encodeURIComponent(row.costElement ?? selection.costElementFrom ?? '0')}&accountTo=${encodeURIComponent(row.costElement ?? selection.costElementTo ?? '9999999999')}&companyCodes=${encodeURIComponent((result?.companies ?? []).join(','))}&costCenter=${encodeURIComponent(row.costCenter)}&fiscalYear=${selection.fiscalYear}`}
+                    >
+                      Display
+                    </Link>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>

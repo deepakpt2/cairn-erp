@@ -69,6 +69,8 @@ export interface CostCenterReportResult {
   planVersion: string;
   rows: CostCenterReportRow[];
   activities: CostCenterActivityPlan[];
+  /** Company codes of the controlling area — the drill-down scope. */
+  companies: string[];
   /** Centres excluded because no validity covers a reported period. */
   excludedCenters: string[];
   warnings: string[];
@@ -393,6 +395,7 @@ export async function calculateCostCenterReport(input: {
       controllingArea: s.controllingArea, currency, fiscalYear: s.fiscalYear,
       periodFrom: s.periodFrom, periodTo: s.periodTo, planVersion: s.planVersion,
       rows, activities: [...activityMap.values()],
+      companies,
       excludedCenters, warnings, calculatedAt,
     };
   });
