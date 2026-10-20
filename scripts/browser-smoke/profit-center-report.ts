@@ -12,11 +12,13 @@ type Context = { page: Page; base: string; target: BrowserTarget };
 const REPORT = '/controlling/profit-center-report';
 
 /**
- * SCR-113 browser acceptance: profit centre actual line items.
+ * SCR-113 browser acceptance (CSV export): profit centre actual
+ * line items.
  *
  * The journey: a profit centre stands, one cost line posts
- * against it, and the KE5Z grid shows the recorded line with
- * its signed amount — persisting nothing.
+ * against it, the KE5Z grid shows the recorded line with its
+ * signed amount, and the Export CSV action downloads exactly
+ * that selection — persisting nothing.
  */
 export async function profitCenterReport(ctx: Context) {
   const { page, base, target } = ctx;
@@ -51,6 +53,14 @@ export async function profitCenterReport(ctx: Context) {
   await line.getByText('5000.00').first().waitFor();
   await line.getByText('400000').first().waitFor();
   console.log('  ✓ the posted line stands with its profit centre and signed amount');
+
+  await page.getByRole('link', { name: 'Export CSV' }).waitFor();
+  const csv = await page.request.get(`${base}${REPORT}/export?controllingArea=A000&fiscalYear=2026&periodFrom=1&periodTo=12&ledger=0L&maxHits=5000`);
+  assert.equal(csv.status(), 200);
+  const body = await csv.text();
+  assert.ok(body.startsWith('Company Code,Document Number'), 'the CSV opens with its header');
+  assert.ok(body.includes('PC9001') && body.includes('400000') && body.includes('5000.0000'), 'the CSV carries the posted line');
+  console.log('  ✓ the export downloads exactly the shown selection as CSV');
 
   const count = await withTenant(client, async (tx) => tx.execute(sql`
     select count(*)::int as n from journal_entry where client = ${client}

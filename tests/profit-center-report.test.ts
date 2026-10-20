@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument } from '../src/modules/finance/gl-document';
 import {
-  listProfitCenterLines, ProfitCenterReportError,
+  listProfitCenterLines, profitCenterLinesCsv, ProfitCenterReportError,
   type ProfitCenterReportSelection,
 } from '../src/modules/foundation/profit-center-report';
 import { closeDb, createTenant, defineTestRanges, destroyTenant, type TestTenant } from './helpers';
@@ -116,6 +116,23 @@ describe('SCR-113 profit centre actual line items (R-161)', () => {
   it('resolves groups with exclusion leaves in display order', async () => {
     const result = await listProfitCenterLines({ client, selection: selection({ periodFrom: 1, profitCenterGroup: 'GRP1' }) });
     expect(new Set(result.lines.map((l) => l.profitCenter))).toEqual(new Set(['PC1000']));
+  });
+
+  it('exports exactly the shown window to CSV, marked when truncated (SCR-113 export)', async () => {
+    const full = await listProfitCenterLines({ client, selection: selection() });
+    const csv = profitCenterLinesCsv(full);
+    const rows = csv.trimEnd().split('\n');
+    expect(rows[0]).toContain('Company Code,Document Number');
+    expect(rows).toHaveLength(1 + full.lines.length);
+    const revenueRow = rows.find((r) => r.includes('300000'));
+    expect(revenueRow).toContain('PC1000');
+    expect(revenueRow).toContain('-7000.0000');
+    expect(revenueRow).toContain('April revenue');
+
+    const trimmed = await listProfitCenterLines({ client, selection: selection({ periodFrom: 1, maxHits: 1 }) });
+    const trimmedCsv = profitCenterLinesCsv(trimmed);
+    expect(trimmedCsv.startsWith('# TRUNCATED at 1 hits')).toBe(true);
+    expect(trimmedCsv.trimEnd().split('\n')).toHaveLength(3); // marker, header, one line
   });
 
   it('refuses non-leading ledgers and unknown profit centres by name', async () => {
