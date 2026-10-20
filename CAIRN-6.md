@@ -2760,6 +2760,49 @@ contract is green at **136 targets** (T836 registered against `cairn_b210:5432`)
 Same-stage bookkeeping: B-878 / §26.890 / §30 row 2.708. Stage 5 next: build and run
 **T836**.
 
+## §26.891 — SCR-136 stage 5: T836 passes; MB1A is delivered
+
+**B-879.** Acceptance build (`npx next build --turbopack`, 49 s) and the production
+server carried **T836** against `cairn_b210:5432`:
+
+1. the screen opens on **Post Goods Issue**;
+2. a 201 of 10 for `MB1A-MAT` from `QP01/SP01` against `CC7701` posts, and the status
+   names the **material document**, its **journal** and the value;
+3. the stock balance falls from **100 to 90** — read back from the database, not from
+   the screen;
+4. a reservation for **8** is created on the reservation screen and **MD04 demands
+   8.000**;
+5. a second 201 issuing **3** against that reservation's item 10 posts, and the row
+   reports **5.000 still open**;
+6. **MD04 demands the 5.000 that remain**.
+
+The fixture needed two things the screen did not: the journal's number range
+(`RF_BELEG/GENERAL`) and the **INVENTORY account determination** — the first real
+use of the event in a browser tenant. Both are fixture facts, recorded here so the
+next posting screen's fixture starts with them.
+
+**Suite — 1895/1895 in 259 files** (was 1872/257: fourteen service tests and eight
+UI-contract tests).
+
+**Closed.** `INV.GI.POST` is **Implemented** in `FUNCTIONS-AND-ROADMAP.md`;
+catalogue **166 / 141 / 163**; **migrations steady at 198** — this round added no
+table and no index, by measurement (§26.888). SCR-136 is five commits: `6973ad9` ·
+`cfd2bd2` · `1366903` · `2fafacc` · this closure.
+
+**Deferred by name:** the **production-order issue (261)** until `PROD.ORDER.CREATE`
+brings an order master, **batch** (no batch master), and movement types beyond 201 and
+551 — 309/311-style transfers belong to the transfer posting, not here.
+
+**Two consequences worth stating.** SCR-133's withdrawal hook is no longer a hook: it
+is called by a real posting, in the same transaction, and MD04 follows. And the goods
+issue earns its **WA01** output at the periodic cadence, because SCR-135's hook runs
+here too — an issue slip appears in the output queue the moment the issue posts.
+
+**Next:** **MIGO 261** (`PROD.ORDER.GI`, Goods Issue to Order — which needs
+`PROD.ORDER.CREATE` first and should be opened stating that dependency), then **MB03's
+deferred drill**: `FIN.JOURNAL.DISPLAY` (FB03), the one gap every posting screen now
+points at.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3099,7 +3142,7 @@ Same-stage bookkeeping: B-878 / §26.890 / §30 row 2.708. Stage 5 next: build a
 | 2.706 | 2026-10-20 | **SCR-136 stage 2: no table and no index, measured (B-876, §26.888).** Four reads over 20,000 materials, 80,000 balances, 20,000 valuations and 20,000 reservations all land on standing unique keys at **0.027\u20130.034 ms**. **No migration; migrations stay 198.** | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.707 | 2026-10-20 | **SCR-136 stage 3: goods issue service (B-877, §26.889).** One transaction carries the journal, the material document, the stock, the valuation, the **reservation withdrawal** and the output. 201 and 551 with counters 202/552 in the catalogue so **MBST** reverses; **261 refused by name**; INVENTORY credited, CONSUMPTION (cost centre on the line) or SCRAP debited; stock judged on `allow_negative_stock`; **material and accounting periods judged**; batch refused. Catalogue **166/141/163**. **14/14 tests**, including MD04 demand falling 8\u21925 in the same posting and a failed post leaving stock untouched. | Agent |\n
 | 2.708 | 2026-10-20 | **SCR-136 stage 4: the goods issue screen (B-878, §26.890).** `/inventory/goods-issue` — movement with both dates and text, four lines with material, plant, location, quantity, **cost centre (disabled where the movement charges none)** and a reservation with its item; the result shows the document, journal, value and **what still stands open on the reservation**. **8/8 UI-contract tests**; harness **136 targets** (T836). | Agent |\n### §26.881 addendum — a label that shipped in the working tree but not in a commit
-
+| 2.709 | 2026-10-20 | **SCR-136 stage 5 and closure: T836 passes, MB1A delivered (B-879, §26.891).** Six legs: post a 201 of 10 (document, journal, value named), **stock 100\u219290 read back from the database**, a reservation for 8 demanded by **MD04**, an issue of 3 against it leaving **5.000 open**, **MD04 demanding the five that remain**. **Suite 1895/1895 in 259 files**; `INV.GI.POST` **Implemented**; catalogue 166/141/163; **migrations 198 (no table, no index — measured)**. | Agent |\n
 **B-869 (correction).** The MD04 label for the new `RESERVATION` element
 (`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4

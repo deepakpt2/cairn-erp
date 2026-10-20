@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../src/platform/db/client';
+import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
@@ -90,18 +91,34 @@ export async function goodsIssue(ctx: Context) {
       insert into gl_account (client, chart_of_accounts, account_number, name, account_type,
                               is_balance_sheet, is_open_item_managed, reconciliation_type,
                               requires_cost_object, is_tax_relevant, account_group, gl_account_type, created_by)
-      select ${client}, c.chart_of_accounts, '510900', 'Consumption expense', 'EXPENSE',
-             false, false, null, true, false, 'GENL', 'PL_STATEMENT', 'browser.admin'
+      select ${client}, c.chart_of_accounts, v.n, v.d, v.t,
+             v.balance, false, null, v.cost, false, 'GENL', v.kind, 'browser.admin'
       from (select chart_of_accounts from chart_of_accounts where client = ${client} limit 1) c
+      cross join (values
+        ('510900', 'Consumption expense', 'EXPENSE', false, true, 'PL_STATEMENT'),
+        ('120900', 'Raw materials inventory', 'ASSET', true, false, 'BALANCE_SHEET')
+      ) as v(n, d, t, balance, cost, kind)
       on conflict do nothing
     `);
     await tx.execute(sql`
       insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
-      select ${client}, c.chart_of_accounts, 'CONSUMPTION', 'RAW_INVENTORY', '', '510900', 'browser.admin'
+      select ${client}, c.chart_of_accounts, v.e, 'RAW_INVENTORY', '', v.a, 'browser.admin'
       from (select chart_of_accounts from chart_of_accounts where client = ${client} limit 1) c
+      cross join (values ('CONSUMPTION', '510900'), ('INVENTORY', '120900')) as v(e, a)
       on conflict do nothing
     `);
     return code;
+  });
+
+  // The numbers the posting needs: the document's own and the journal's.
+  await withTenant(client, async (tx) => {
+    await defineRange(tx, {
+      client, objectCode: 'RF_BELEG', companyCode: company, subObject: 'GENERAL',
+      fiscalYear: 2026, prefix: 'JE', fromNumber: 1, toNumber: 999999, createdBy: 'browser.admin',
+    });
+    await defineRange(tx, {
+      client, objectCode: 'RESERV', subObject: '*', prefix: 'RSV', numberLength: 8, createdBy: 'browser.admin',
+    });
   });
 
   await page.goto(`${base}${ROUTE}`, { waitUntil: 'domcontentloaded' });

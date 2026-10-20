@@ -129,7 +129,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             </thead>
             <tbody>
               {state.document.lines.map((line) => (
-                <tr key={line.lineNumber} data-line={line.lineNumber} className="border-t border-line">
+                <tr key={line.lineNumber} data-line={line.lineNumber} data-reservation-open={line.reservationOpenAfter ?? ''} className="border-t border-line">
                   <td className="py-1">{line.lineNumber}</td>
                   <td className="py-1"><span className="code">{line.materialNumber}</span></td>
                   <td className="py-1">{line.plant}</td>
@@ -137,7 +137,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
                   <td className="py-1 text-right tabular-nums">{line.quantity} {line.unit}</td>
                   <td className="py-1 text-right tabular-nums">{line.value}</td>
                   <td className="py-1">{line.costCenter ?? '—'}</td>
-                  <td className="py-1" data-reservation-open={line.reservationOpenAfter ?? ''}>
+                  <td className="py-1">
                     {line.reservationNumber ? (
                       <>
                         {line.reservationNumber} / {line.reservationItem}
