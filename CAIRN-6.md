@@ -1642,6 +1642,33 @@ Same-stage bookkeeping: B-844 / §26.856 / §30 row 2.674. Stage 3 next: the `IN
 
 Same-stage bookkeeping: B-845 / §26.857 / §30 row 2.675. **Next: ME2K first**, then **MD04** (`PROD.MRP.STOCKREQ`, still Roadmap on the frozen plan).
 
+## §26.858 — SCR-129 contract: ME2K purchase orders by account assignment, settled before implementation
+
+**B-846.** ME2K arrives as a new capability, **`PROC.PO.ACCOUNTASSIGN`**, at `/purchasing/orders-by-account-assignment`. It is not on the frozen roadmap (ME2L, ME2M, ME2N and ME2C share `PROC.PO.LIST`, delivered at SCR-124), and it satisfies nothing on it. It is the account-assignment perspective over the same order items ME2L already values.
+
+**What the canon carries, and what that settles.** `purchase_order_assignment` is a **multi-line** table: one order item can be distributed across several cost centres by percentage, each line naming its own G/L account. `purchase_order_item.account_assignment_category` carries a check constraint admitting **only `COST_CENTER`** — SAP `K`. Therefore:
+- **Cost centre is the assigned object**, and the package object range is a cost-centre range over the assignment lines.
+- **Account assignment categories `A` (asset), `P` (WBS) and `F` (internal order) are refused by name**, not silently ignored: the canon item constraint cannot carry them, and a filter that quietly answered everything would be a lie. `K` and `COST_CENTER` are both accepted.
+- The package `ekkn` is `purchase_order_assignment` here, and SAP `ZEKKN` (assignment line) is its `line_number`.
+
+**Scope of selection is required**, exactly as the package states, and reuses the SCR-124 derivation rather than reinventing it: delivered quantity from posted material-document lines net of reversals, invoiced quantity from posted supplier-invoice items, and `ALL` / `STILL_TO_BE_DELIVERED` / `STILL_TO_BE_INVOICED` / `COMPLETED` over those. A marked-for-deletion item never stands in a still-to-be or completed scope.
+
+**Scope of list is required** (ALV grid default, standard list); any other value refuses by name.
+
+**Commitment arithmetic, stated once.** An order item net value is distributed across its assignment lines by `distribution_percentage`; the **assigned value of an assignment line is the item net value times its percentage**, rounded to the cent at the line. The report groups by **assigned object** (cost centre), and each group commitment total is the sum of its lines — so the cost-centre view answers the controlling question the package names. The suite pins the roll-up to the cent at every group.
+
+**Grid.** Order number and item, assignment line, category, cost centre, G/L account, material and description, plant, order quantity, unit, net value, distribution percentage, assigned value, delivery date (earliest schedule line), release status, vendor.
+
+**Drills.** Each row names the **order** (the read-only purchase order display ME2L established at `/purchasing/orders?order=…`) and its **cost centre** (`/controlling/cost-center-report?costCenter=…`).
+
+**Read-only.** No insert, update or delete; the report posts nothing and touches no period control.
+
+**Index.** The package recommends (tenant, cost centre, document date) across two tables. Measured at stage 2 as always: the assignment table is small per item, and the question is whether a cost-centre index helps before the header date filter.
+
+**Tests planned.** Service: distribution arithmetic and the cent-exact roll-up; scope of selection over delivered/invoiced; refusal by name for A/P/F categories, unknown cost centre, plant, vendor, scope of list and inverted ranges; multi-line splits; truncation. UI contract: capability gate, session tenant, required scope of list and scope of selection, every grid column, both drills. Browser: T-numbered fixture with a split item across two cost centres, one fully delivered item and one open item, checking grouping, scopes and drills.
+
+Same-stage bookkeeping: B-846 / §26.858 / §30 row 2.676. Stage 2 next: the index decision, measured.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1948,6 +1975,7 @@ Same-stage bookkeeping: B-845 / §26.857 / §30 row 2.675. **Next: ME2K first**,
 | 2.673 | 2026-10-20 | **SCR-128 contract settled (B-843, §26.855).** MMBE = the frozen-roadmap capability **`INV.STOCK.VIEW`** at `/inventory/stock-overview`, to be flipped to Implemented at closure; no new capability code. Three-level tree (plant → storage location → **stock type**) with every parent total rolled up from the children it shows, so a parent can never disagree with them. Material **required and single**; plant/location ranges and zero display optional; expansion level `PLANT`/`STORAGE_LOCATION` (default), others refused by name. **Batch, in-transit and the one-character special stock indicator each deferred or refused by name** — no batch master, no transit movement, special stock is a named stock type. Quantitative only; value stays in MB52. Three drills per node: MB51, MB5B, MB52. Index is a strict prefix of the existing primary key — measured anyway at stage 2. | Agent |
 | 2.674 | 2026-10-20 | **SCR-128 stage 2 published (B-844, §26.856).** MMBE index decision measured and declined: the recommended (client, material, plant, storage_location) is a **strict prefix of `stock_quantity_pkey`**, and where the planner chose it the query ran slower (0.133 ms against 0.052 ms). The primary key answers the only shape MMBE issues because the material is required — there is no plant-first arm to serve. **Verification-only, no migration 9068; migrations stand at 188.** Harness `scripts/plan-mmbe.mts` committed. Service next. | Agent |
 | 2.675 | 2026-10-20 | **SCR-128 closed (B-845, §26.857).** MMBE delivered as **`INV.STOCK.VIEW`** at `/inventory/stock-overview`, flipping the oldest frozen-roadmap capability to Implemented: a three-level tree (plant → storage location → stock type) for one required material, every parent folded from the children it shows, zero nodes suppressed, expansion level selectable, three drills per node, quantitative only. No migration (188 stand). Suite 1722/1722 / 243 files; T828 passed 7 legs; catalogue 159/133/155. Next T-codes: ME2K, then MD04. | Agent |
+| 2.676 | 2026-10-20 | **SCR-129 contract settled (B-846, §26.858).** ME2K = new capability **`PROC.PO.ACCOUNTASSIGN`** at `/purchasing/orders-by-account-assignment`; not on the roadmap, satisfies none. Canon carries a **multi-line** `purchase_order_assignment` (one item split across cost centres by percentage, each line with its own G/L account) and admits **only `COST_CENTER`** as the item category, so **A/P/F are refused by name** rather than silently ignored. Required scope of list (ALV/STANDARD) and required scope of selection, the latter reusing the SCR-124 delivered/invoiced derivation. Assigned value = item net value times line percentage, rounded at the line, grouped by cost centre with cent-exact totals. Drills to the order display and the cost-centre report. Index measured at stage 2. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
