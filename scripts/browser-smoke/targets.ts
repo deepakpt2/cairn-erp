@@ -92,6 +92,7 @@ export const TARGETS = [
   { id: 'cost-center-report', client: 'T884', label: 'SCR-112 cost centre actual/plan report' },
   { id: 'profit-center-report', client: 'T883', label: 'SCR-113 profit centre actual line items' },
   { id: 'gl-clearing', client: 'T882', label: 'SCR-114 F-03 clear G/L account manual clearing' },
+  { id: 'intercompany', client: 'T920', label: 'SCR-122 FB01 intercompany posting and OBYA configuration' },
   { id: 'consolidation-workbench', client: 'T880', label: 'SCR-116 UCWB consolidation workbench' },
   { id: 'consolidation-monitor', client: 'T879', label: 'SCR-117 CX20 consolidation monitor' },
   { id: 'consolidated-statements', client: 'T878', label: 'SCR-118 consolidated statements' },
