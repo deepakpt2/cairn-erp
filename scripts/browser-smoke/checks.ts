@@ -116,6 +116,7 @@ import { purchaseOrderList } from './purchase-order-list';
 import { materialDocumentList } from './material-document-list';
 import { stockOnPostingDate } from './stock-posting-date';
 import { warehouseStocks } from './warehouse-stocks';
+import { stockOverview } from './stock-overview';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5045,6 +5046,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'material-document-list': materialDocumentList,
   'stock-posting-date': stockOnPostingDate,
   'warehouse-stocks': warehouseStocks,
+  'stock-overview': stockOverview,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,
