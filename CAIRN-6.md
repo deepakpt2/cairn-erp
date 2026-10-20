@@ -1480,6 +1480,24 @@ Same-stage bookkeeping: B-836 / §26.848 / §30 row 2.666. The inventory roadmap
 
 **Deferred by name:** batch and valuation type, the *Scope of List* presentation variants (single grid ships, as in every display round since SCR-112), stock ageing (`INV.STOCKAGE.ANALYSE` is its own item) and exporting. Capability **`INV.STOCK.POSTINGDATE`**, alias **MB5B**. Stage order: 1 contract, 2 index decision, 3 service + tests, 4 screen, 5 browser acceptance + closure; each separately committed and pushed. Same-stage bookkeeping: B-837 / §26.849 / §30 row 2.667.
 
+## §26.850 — SCR-126 stage 2: index decision is verification-only (migration 9066 not taken)
+
+**B-838.** The package recommends a composite index on the ledger line — tenant, plant, material. Measured on top of the posting-date index taken at SCR-125, and it does not earn a migration.
+
+**Method.** `scripts/plan-mb5b.mts` seeds a throwaway tenant with **40,000 ledger lines** over 10 plants, 50 materials, 4 storage locations and a full year, gathers statistics, and times the rollforward the service will issue: one pass over the ledger up to the end date folded in a single aggregate into opening (posted before the start), receipts and issues (inside the window) and the corresponding values, grouped by material, plant, storage location and stock type.
+
+| selection | standing indexes | plus `(client, plant, material_number)` | plan |
+| --- | --- | --- | --- |
+| one material, one plant, 1 month | 1.59 ms | 1.67 ms | `material_document_line_material_idx`, hash join to the header |
+| 5 materials, plants Q100–Q104, 3 months | 12.02 ms | 10.90 ms | same index, nested-loop onto the header key |
+| all materials, all plants, 12 months | 118.4 ms | 111.9 ms | same index throughout |
+
+**Decision — verification-only, no migration 9066.** The planner never chooses the candidate: it already walks `material_document_line_material_idx` for the material predicate and the header primary key for the date, and adding plant to the index buys 1 ms on the medium arm and 6 ms on the broad one — inside the run-to-run noise of a 118 ms query, and paid for by write amplification on every goods movement. Two facts make this safe rather than merely convenient: **the material and plant ranges are required**, so the normal shapes are the two cheap ones (2 ms and 12 ms), and the posting-date index from SCR-125 already bounds the scan to the window. **Migrations stand at 188**; 9066 stays unused.
+
+**For the service.** Stage 3 issues the rollforward as measured — one aggregate over the ledger up to the end date, `limit maxHits + 1` on the grouped rows — and adds no schema.
+
+Same-stage bookkeeping: B-838 / §26.850 / §30 row 2.668. Next stage 3: the `INV.STOCK.POSTINGDATE` service and tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1778,6 +1796,7 @@ Same-stage bookkeeping: B-836 / §26.848 / §30 row 2.666. The inventory roadmap
 | 2.665 | 2026-10-20 | **SCR-125 stage 2 published (B-835, §26.847).** MB51 index decision is the first measured yes in three rounds: at 60,000 ledger lines the required posting-date range plus `md_posting_date_idx (client, posting_date)` on the header takes the broad selection from 71.7 ms to 3.0 ms and the plant selection from 36.1 ms to 4.3 ms; the line index the package implies cannot span the two tables and earns nothing anyway. **Migration 9065 taken — 188 migrations.** Harness `scripts/plan-mb51.mts` committed. Service next. | Agent |
 | 2.666 | 2026-10-20 | **SCR-125 inventory CLOSED (B-836, §26.848).** MB51 material document list delivered: `INV.MATERIALDOC.LIST` service (7/7), list screen and a new read-only document display (MB03 equivalent) on the same capability, **T875 PASSED** 5 legs, target guard 162/162, full suite **1661/1661** (237 files). Catalogue **157/130/152**; **migrations 188** — migration 9065 (the header posting-date index) taken on measured evidence, the first since SCR-122. Reversed documents stay visible; the Q/E special stocks remain deferred by name. Three defects caught inside the round (index-contract assertion, duplicate i18n key, a display gap the acceptance leg exposed) and one environment trap recorded. Closed queue drained; next entirely new round is SCR-126. | Agent |
 | 2.667 | 2026-10-20 | **SCR-126 inventory opened (B-837, §26.849).** MB5B stocks on posting date contracted as a **new** capability `INV.STOCK.POSTINGDATE` — not on the frozen roadmap, and it does not satisfy `INV.STOCK.VIEW` (MMBE), which stays Roadmap. Required material range, plant range and reporting window; the rollforward reads the immutable ledger rather than unwinding the snapshot (deviation recorded), with the snapshot used only as a control that warns on any difference. Reversed documents contribute nothing; zero-stock lines suppressed by default; drill reuses the MB51 list filtered to the row. Batch and valuation type deferred by name. Index decision is stage 2. | Agent |
+| 2.668 | 2026-10-20 | **SCR-126 stage 2 published (B-838, §26.850).** MB5B index decision measured and declined: at 40,000 ledger lines the package's line index is never chosen by the planner — `material_document_line_material_idx` already serves the material predicate and the header key the dates — buying 1 ms on the medium arm and 6 ms on a 118 ms broad one. **Verification-only, no migration 9066; migrations stand at 188.** Required material and plant ranges keep the normal shapes at 2–12 ms. Harness `scripts/plan-mb5b.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
