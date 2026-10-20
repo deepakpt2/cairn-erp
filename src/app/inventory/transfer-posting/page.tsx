@@ -22,14 +22,14 @@ const ROUTE = '/inventory/transfer-posting';
  * counter movement type, never a hand-entered document.
  */
 export default async function TransferPostingPage({ searchParams }: {
-  searchParams: Promise<{ material?: string; doc?: string }>;
+  searchParams: Promise<{ material?: string; plant?: string; doc?: string }>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
   const document = params.doc ? await getTransferDocument(client, params.doc) : null;
   const material = params.material ?? document?.lines[0]?.materialNumber ?? '';
-  const plant = document?.lines[0]?.plant ?? '';
+  const plant = params.plant ?? document?.lines[0]?.plant ?? '';
   const stock = material && plant ? await transferStockAt(client, material, plant) : [];
   const today = new Date().toISOString().slice(0, 10);
 

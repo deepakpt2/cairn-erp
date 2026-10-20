@@ -3,7 +3,8 @@
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
-import { TRANSFER_SCENARIOS, type TransferDocumentView, type TransferStockRow } from '@/modules/inventory/transfer-posting';
+import type { TransferDocumentView, TransferStockRow } from '@/modules/inventory/transfer-posting';
+import { TRANSFER_SCENARIOS } from '@/modules/inventory/transfer-scenarios';
 import {
   postTransferAction, reverseTransferAction, type TransferActionState,
 } from './actions';
@@ -27,8 +28,8 @@ export default function TransferPosting({ document, stock, canPost, today }: {
 
   return (
     <>
-      <section aria-labelledby="mb1b-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="mb1b-header" className="text-sm font-semibold">{t('mb1b.header')}</h2>
+      <section aria-labelledby="transfer-header" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <h2 id="transfer-header" className="text-sm font-semibold">{t('mb1b.header')}</h2>
         <form method="get" action="/inventory/transfer-posting" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.movementType')}</span>
@@ -65,8 +66,8 @@ export default function TransferPosting({ document, stock, canPost, today }: {
         <p className="mt-2 text-sm text-ink-soft">{t('mb1b.movementHint')}</p>
       </section>
 
-      <section aria-labelledby="mb1b-item" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="mb1b-item" className="text-sm font-semibold">{t('mb1b.item')}</h2>
+      <section aria-labelledby="transfer-item" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <h2 id="transfer-item" className="text-sm font-semibold">{t('mb1b.item')}</h2>
         {postState.message && (
           <p role="status" className={`mt-2 text-sm ${postState.ok ? 'text-ink' : 'text-red-700'}`}>
             {postState.message}{postState.remedy ? ` ${postState.remedy}` : ''}
@@ -134,8 +135,8 @@ export default function TransferPosting({ document, stock, canPost, today }: {
       </section>
 
       {stock.length > 0 && (
-        <section aria-labelledby="mb1b-stock" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="mb1b-stock" className="text-sm font-semibold">{t('mb1b.stockOnHand')}</h2>
+        <section aria-labelledby="transfer-stock" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="transfer-stock" className="text-sm font-semibold">{t('mb1b.stockOnHand')}</h2>
           <table className="mt-2 w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
@@ -158,8 +159,8 @@ export default function TransferPosting({ document, stock, canPost, today }: {
       )}
 
       {document && (
-        <section aria-labelledby="mb1b-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="mb1b-document" className="text-sm font-semibold">
+        <section aria-labelledby="transfer-document" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="transfer-document" className="text-sm font-semibold">
             {t('mb1b.document')} {document.materialDocumentNumber}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">

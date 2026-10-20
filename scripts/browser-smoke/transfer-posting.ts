@@ -107,7 +107,10 @@ export async function transferPosting(ctx: Context) {
 
   const fill = async (fields: Record<string, string>) => {
     for (const [name, value] of Object.entries(fields)) {
-      await page.locator(`form input[name="${name}"], form select[name="${name}"]`).last().fill(value);
+      const field = page.locator(`form input[name="${name}"], form select[name="${name}"]`).last();
+      const tag = await field.evaluate((el) => el.tagName);
+      if (tag === 'SELECT') await field.selectOption(value);
+      else await field.fill(value);
     }
   };
 
@@ -123,10 +126,10 @@ export async function transferPosting(ctx: Context) {
     postingDate: '2026-10-15', documentDate: '2026-10-15',
   });
   await page.getByRole('button', { name: 'Post transfer', exact: true }).click();
-  const status = page.locator('section[aria-labelledby="mb1b-item"] p[role="status"]');
+  const status = page.locator('section[aria-labelledby="transfer-item"] p[role="status"]');
   await status.waitFor();
   const message = await status.innerText();
-  const documentNumber = /material document ([A-Za-z0-9]+)/.exec(message)?.[1];
+  const documentNumber = /material document ([A-Za-z0-9-]+)/.exec(message)?.[1];
   assert.ok(documentNumber, `the posting names its document: ${message}`);
   console.log(`  ✓ a 311 posted as material document ${documentNumber}`);
 
@@ -141,8 +144,8 @@ export async function transferPosting(ctx: Context) {
   assert.equal(await page.locator('tr[data-side]').count(), 2, 'a transfer is two lines and no more');
   console.log('  ✓ the document carries an issuing line and a receiving line, net zero');
 
-  await page.goto(`${base}${ROUTE}?material=MB1B-MAT`, { waitUntil: 'domcontentloaded' });
-  const stockTable = page.locator('section[aria-labelledby="mb1b-stock"] table');
+  await page.goto(`${base}${ROUTE}?material=MB1B-MAT&plant=QH01`, { waitUntil: 'domcontentloaded' });
+  const stockTable = page.locator('section[aria-labelledby="transfer-stock"] table');
   await stockTable.waitFor();
   assert.match(await stockTable.innerText(), /SH01\s+UNRESTRICTED\s+75\.000/);
   assert.match(await stockTable.innerText(), /SH02\s+UNRESTRICTED\s+25\.000/);
@@ -189,15 +192,16 @@ export async function transferPosting(ctx: Context) {
   // ── The counter movement reversal ───────────────────────────────────────
   await page.goto(`${base}${ROUTE}?doc=${documentNumber}`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Reverse transfer', exact: true }).click();
-  const reverseStatus = page.locator('section[aria-labelledby="mb1b-document"] p[role="status"]');
+  const reverseStatus = page.locator('section[aria-labelledby="transfer-document"] p[role="status"]');
   await reverseStatus.waitFor();
   assert.match(await reverseStatus.innerText(), /Reversal posted as material document/);
   console.log('  ✓ the 311 was reversed by its counter movement type');
 
-  await page.goto(`${base}${ROUTE}?material=MB1B-MAT`, { waitUntil: 'domcontentloaded' });
-  await page.locator('section[aria-labelledby="mb1b-stock"] table').waitFor();
-  const text = await page.locator('section[aria-labelledby="mb1b-stock"] table').innerText();
-  assert.match(text, /SH01\s+UNRESTRICTED\s+100\.000/);
+  await page.goto(`${base}${ROUTE}?material=MB1B-MAT&plant=QH01`, { waitUntil: 'domcontentloaded' });
+  await page.locator('section[aria-labelledby="transfer-stock"] table').waitFor();
+  const text = await page.locator('section[aria-labelledby="transfer-stock"] table').innerText();
+  // 100 unrestricted + the 10 released by the 321 stand back at SH01 once the 25 returns.
+  assert.match(text, /SH01\s+UNRESTRICTED\s+110\.000/);
   assert.match(text, /SH02\s+UNRESTRICTED\s+0\.000/);
   console.log('  ✓ the reversal restored both sides');
 }
