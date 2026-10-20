@@ -412,10 +412,21 @@ export interface WithdrawReservationInput {
  * not exist in this canon yet.
  */
 export async function withdrawReservation(input: WithdrawReservationInput): Promise<ReservationView> {
+  return withTenant(input.client, (tx) => withdrawReservationInTx(tx, input));
+}
+
+/**
+ * The withdrawal, inside a caller's transaction — SCR-136's goods issue posts the
+ * document and withdraws from the reservation in one commit, so the stock movement
+ * and the falling demand can never disagree.
+ */
+export async function withdrawReservationInTx(
+  tx: Tx, input: WithdrawReservationInput,
+): Promise<ReservationView> {
   if (!(input.quantity > 0)) {
     throw new ReservationError('The withdrawal quantity must be positive.', 'Enter a quantity greater than zero.');
   }
-  return withTenant(input.client, async (tx) => {
+  {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reservation/${input.reservationNumber}`}, 0))`);
     const [header] = await tx.select().from(reservationHeader).where(and(
       eq(reservationHeader.client, input.client),
@@ -474,8 +485,8 @@ export async function withdrawReservation(input: WithdrawReservationInput): Prom
       after: { item: input.itemNumber, withdrawn: String(withdrawn), completed },
       reason: 'Withdrawal against the reservation',
     });
-    return (await toView(tx, input.client, header));
-  });
+    return toView(tx, input.client, header);
+  }
 }
 
 /** Completing an item by hand stops it being a demand at once. */

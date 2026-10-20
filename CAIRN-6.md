@@ -2671,6 +2671,69 @@ The plan script is kept as `scripts/plan-mb1a.mts`.
 
 Same-stage bookkeeping: B-876 / §26.888 / §30 row 2.706.
 
+## §26.889 — SCR-136 stage 3: the goods issue service, and the hook that was waiting
+
+**B-877.** `src/modules/inventory/goods-issue.ts` exports `GOODS_ISSUE_CAPABILITY =
+'INV.GI.POST'`, `GoodsIssueError`, `GOODS_ISSUE_SCENARIOS`, the delivered movement
+catalogue and `postGoodsIssue`.
+
+**One transaction, seven writes.** The journal, the material document header and its
+lines, the stock balance, the valuation, the reservation's withdrawn quantity and the
+document's output all commit together. A refusal anywhere leaves stock exactly where
+it stood — a test asserts that against a locked cost centre.
+
+**Movements.** `201` → `GI_ISSUE_CC` (cost centre) and `551` → `GI_SCRAP`
+(scrapping), each with its counter movement delivered in the catalogue (202 / 552 as
+`GI_ISSUE_CC_REVERSAL` / `GI_SCRAP_REVERSAL`) and its `reversal_movement_type` link,
+so **MBST reverses a goods issue** through the path SCR-132 already tested. **261
+refuses by name** naming `PROD.ORDER.CREATE`; **202 and 552 refuse naming MBST**.
+
+**Value and journal.** An issue is worth `quantity × price`, standard price under
+`S` and moving average under `V`, both divided by the price unit and rounded to two
+places. The journal **credits INVENTORY** at the valuation class and **debits
+CONSUMPTION** — carrying the **cost centre on the line** — or **SCRAP**. Both events
+are new account determinations; a missing one refuses by name before anything moves.
+
+**The cost centre** must stand in the plant's company code, be valid on the posting
+date and not be posting-locked — the same judgement MB21 makes. A 551 that names one
+**refuses** rather than ignoring it: a scrapping that charged a cost centre is a
+different transaction wearing the movement's name.
+
+**Stock** is judged on the issuing location's own terms: enough on hand unless the
+location carries `allow_negative_stock` (SCR-131, operational), an inactive location
+refuses, and the issue reads only unrestricted stock.
+
+**The reservation hook is wired.** `withdrawReservationInTx` was extracted from
+`withdrawReservation` so the goods issue can call it **inside its own transaction**;
+the item's withdrawn quantity rises, it completes when issued in full, and MD04's
+demand falls **in the same commit**. A reservation whose material or plant differs
+from the line refuses, naming both; an issue beyond what stands open refuses with the
+open quantity in the message. **SCR-133's deferral is closed.**
+
+**Periods.** The material period (OMSY) and the accounting period (OB52, through
+`postJournalEntry`) both judge the posting date — unlike a reservation, this writes
+to the ledger.
+
+**Batch** is refused if entered, because canon has no batch master to point at.
+
+**Catalogue.** `INV.GI.POST` delivered (posting) and its term at
+`/inventory/goods-issue`, alias **MB1A**: **166 capabilities / 141 terms / 163
+aliases**.
+
+**Tests — 14/14** (`tests/goods-issue.test.ts`): the 201 with its document, journal,
+stock and valuation (100 → 90, 1,000 → 990, 50,000 → 49,500, credit and debit of 500
+with the cost centre on the debit); the 551 to the scrapping account with no
+controlling object; a 551 naming a cost centre refused; 261 refused naming the
+capability that would deliver it; 202 and 552 refused naming MBST; stock judged on
+the location's terms, including the open store that takes a negative; a closed
+material period refused; the cost centre missing, locked and foreign; an unknown
+material, a blocked location and a batch; **the reservation withdrawal clearing MD04's
+demand from 8 to 5 in the same posting**; an issue beyond the reservation refused; the
+request-key replay; **a failed post leaving stock untouched**; and another tenant
+refused before anything is written.
+
+Same-stage bookkeeping: B-877 / §26.889 / §30 row 2.707. Stage 4 next: the screen.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3008,7 +3071,7 @@ Same-stage bookkeeping: B-876 / §26.888 / §30 row 2.706.
 | 2.704 | 2026-10-20 | **SCR-135 stage 5 and closure: T835 passes, MB90 delivered (B-874, §26.886).** Six legs: the screen opens, the run determines and dispatches, `4900000901` carries **WE01 PROCESSED with one send**, the **slip preview** renders the document, an **EMAIL fails for want of a recipient with its reason in the row**, a recipient is set and the retry **processes with the send counted**. **Suite 1872/1872 in 257 files**; `INV.MATERIALDOC.RECEIVEPRINT` **Implemented**; catalogue 166/140/162; migrations 198. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.705 | 2026-10-20 | **SCR-136 / MB1A stage 1: the goods issue contract (B-875, §26.887).** The package\u2019s `goods_issue_posting` table **refused**: a goods issue is a **material document** in canon\u2019s one ledger, and a parallel table would give two answers to "what moved" — **no table added**. **201** (cost centre) and **551** (scrapping) delivered, **261 refused by name** (no order master), counter movements **202/552 in the catalogue** so **MBST** reverses a goods issue; issue valued at the material\u2019s own price, journal credits **INVENTORY** and debits **CONSUMPTION** (with the cost centre on the line) or **SCRAP**; the **reservation hook is wired** (MB21\u2019s deferral closed, MD04 demand falls in the same commit); location stock judged on `allow_negative_stock`; **material and accounting periods both judged**; batch deferred and a batch refused if entered. | Agent |\n seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.706 | 2026-10-20 | **SCR-136 stage 2: no table and no index, measured (B-876, §26.888).** Four reads over 20,000 materials, 80,000 balances, 20,000 valuations and 20,000 reservations all land on standing unique keys at **0.027\u20130.034 ms**. **No migration; migrations stay 198.** | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
-
+| 2.707 | 2026-10-20 | **SCR-136 stage 3: goods issue service (B-877, §26.889).** One transaction carries the journal, the material document, the stock, the valuation, the **reservation withdrawal** and the output. 201 and 551 with counters 202/552 in the catalogue so **MBST** reverses; **261 refused by name**; INVENTORY credited, CONSUMPTION (cost centre on the line) or SCRAP debited; stock judged on `allow_negative_stock`; **material and accounting periods judged**; batch refused. Catalogue **166/141/163**. **14/14 tests**, including MD04 demand falling 8\u21925 in the same posting and a failed post leaving stock untouched. | Agent |\n
 ### §26.881 addendum — a label that shipped in the working tree but not in a commit
 
 **B-869 (correction).** The MD04 label for the new `RESERVATION` element
