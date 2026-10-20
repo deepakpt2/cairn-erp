@@ -2339,3 +2339,87 @@ export const consolidationTaskStatus = pgTable('consolidation_task_status', {
   check('consolidation_task_status_year_ck', sql`${t.fiscalYear} between 1900 and 2199`),
   check('consolidation_task_status_unit_scope_ck', sql`${t.unitScope} = coalesce(${t.unit}, '')`),
 ]);
+
+/**
+ * Residual reason master (SCR-114 advanced clearing / B-808). Three
+ * characters at T041C parity; a reason is deactivated, never deleted,
+ * because posted residual lineage cites it.
+ */
+export const residualReason = pgTable('residual_reason', {
+  client: tenantClient(),
+  reasonCode: varchar('reason_code', { length: 3 }).notNull(),
+  description: varchar('description', { length: 80 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.reasonCode] }),
+]);
+
+/**
+ * Clearing allocation (SCR-114 advanced clearing / B-808). One row per
+ * clearing line × source line: the amount a clearing applied to a source
+ * item, under its method. An item's remaining open balance derives as its
+ * local amount minus its active allocations — never a second ledger.
+ */
+export const glClearingAllocation = pgTable('gl_clearing_allocation', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  clearingDocument: varchar('clearing_document', { length: 40 }).notNull(),
+  clearingFiscalYear: integer('clearing_fiscal_year').notNull(),
+  clearingLineNumber: integer('clearing_line_number').notNull(),
+  sourceDocument: varchar('source_document', { length: 40 }).notNull(),
+  sourceFiscalYear: integer('source_fiscal_year').notNull(),
+  sourceLineNumber: integer('source_line_number').notNull(),
+  allocatedAmount: numeric('allocated_amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  /** STANDARD | PARTIAL | RESIDUAL */
+  clearingMethod: varchar('clearing_method', { length: 8 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  resetNumber: varchar('reset_number', { length: 16 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({
+    columns: [
+      t.client, t.clearingDocument, t.clearingFiscalYear, t.clearingLineNumber,
+      t.sourceDocument, t.sourceFiscalYear, t.sourceLineNumber,
+    ],
+  }),
+  index('gl_clearing_allocation_source_idx').on(
+    t.client, t.companyCode, t.glAccount,
+    t.sourceDocument, t.sourceFiscalYear, t.sourceLineNumber,
+  ),
+  check('gl_clearing_allocation_amount_positive', sql`${t.allocatedAmount} > 0`),
+]);
+
+/**
+ * Residual lineage (SCR-114 advanced clearing / B-808): the original item,
+ * the residual line the clearing generated, its reason and amount. The
+ * original item and the residual line keep their own identities.
+ */
+export const glClearingResidual = pgTable('gl_clearing_residual', {
+  client: tenantClient(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  glAccount: varchar('gl_account', { length: 10 }).notNull(),
+  clearingDocument: varchar('clearing_document', { length: 40 }).notNull(),
+  clearingFiscalYear: integer('clearing_fiscal_year').notNull(),
+  clearingLineNumber: integer('clearing_line_number').notNull(),
+  originalDocument: varchar('original_document', { length: 40 }).notNull(),
+  originalFiscalYear: integer('original_fiscal_year').notNull(),
+  originalLineNumber: integer('original_line_number').notNull(),
+  residualDocument: varchar('residual_document', { length: 40 }).notNull(),
+  residualFiscalYear: integer('residual_fiscal_year').notNull(),
+  residualLineNumber: integer('residual_line_number').notNull(),
+  reasonCode: varchar('reason_code', { length: 3 }).notNull(),
+  generatedAmount: numeric('generated_amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  resetNumber: varchar('reset_number', { length: 16 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.residualDocument, t.residualFiscalYear, t.residualLineNumber] }),
+  index('gl_clearing_residual_original_idx').on(
+    t.client, t.originalDocument, t.originalFiscalYear, t.originalLineNumber,
+  ),
+  check('gl_clearing_residual_amount_positive', sql`${t.generatedAmount} > 0`),
+]);

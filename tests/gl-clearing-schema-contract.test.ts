@@ -32,3 +32,36 @@ describe('SCR-114 stage 2: clearing canon stands, nothing added', () => {
     expect(vocabulary).toContain('Partial/residual clearing remains deferred');
   });
 });
+
+describe('SCR-114 advanced clearing (B-808): normalized allocation and residual lineage', () => {
+  const migration = readFileSync('drizzle/9062_gl_clearing_advanced.sql', 'utf8');
+
+  it('adds the allocation record, the residual lineage and the reason master', () => {
+    expect(migration).toContain('create table public.gl_clearing_allocation');
+    expect(migration).toContain('create table public.gl_clearing_residual');
+    expect(migration).toContain('create table public.residual_reason');
+    expect(migration).toContain('gl_clearing_allocation_amount_positive');
+    expect(migration).toContain('check (clearing_method in');
+    expect(migration).toContain('gl_clearing_allocation_source_idx');
+    expect(migration).toContain('gl_clearing_residual_original_idx');
+  });
+
+  it('forces tenant isolation on every new table', () => {
+    for (const table of ['gl_clearing_allocation', 'gl_clearing_residual', 'residual_reason']) {
+      expect(migration).toContain(`alter table public.${table} enable row level security`);
+      expect(migration).toContain(`alter table public.${table} force row level security`);
+      expect(migration).toContain(`create policy tenant_isolation on public.${table}`);
+      expect(migration).toContain(`grant select, insert, update, delete on public.${table} to cairn_app`);
+    }
+  });
+
+  it('carries the columns the derivation reads', () => {
+    expect(financeSchema).toContain("export const glClearingAllocation = pgTable('gl_clearing_allocation'");
+    expect(financeSchema).toContain("export const glClearingResidual = pgTable('gl_clearing_residual'");
+    expect(financeSchema).toContain("export const residualReason = pgTable('residual_reason'");
+    expect(financeSchema).toContain("allocatedAmount: numeric('allocated_amount'");
+    expect(financeSchema).toContain("generatedAmount: numeric('generated_amount'");
+    expect(financeSchema).toContain("reasonCode: varchar('reason_code', { length: 3 })");
+    expect(financeSchema).toContain("isActive: boolean('is_active')");
+  });
+});
