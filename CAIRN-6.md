@@ -2991,6 +2991,89 @@ posting-period check**.
 
 Same-stage bookkeeping: B-884 / §26.896 / §30 row 2.714.
 
+## §26.897 — SCR-138 / CO01: the order must stand before the issue, and the issue is a material document
+
+**B-885.** Owner package: **MIGO 261, goods issue to a production order** — action A07, reference
+R08, the order number, dates, and a component grid; the issue consumes stock, charges the order,
+and credits inventory. The package opens with its own prerequisite note, and it is right to:
+**261 cannot post against an order master that does not exist.**
+
+**So the round's deliverable is the prerequisite, named honestly.** `PROD.ORDER.CREATE` (CO01)
+stands in the registry as a code with no service, no table and no screen; SCR-133 already refuses
+a 261 reservation in these words — *"Production orders are a roadmap capability
+(PROD.ORDER.CREATE); reserve on 201 against a cost centre until orders exist"* (§26.7xx). A 261
+posted against a number nobody can display would be a deferral outliving its deferral, which is
+the one thing this ledger refuses to do. **SCR-138 delivers CO01; SCR-139 posts 261 against it.**
+Nothing in the 261 package is dropped — it is carried in this section as the consumer contract the
+order master is shaped for, so the next round inherits decisions rather than re-opening them.
+
+**The package's table is refused by name.** `production_order_goods_issue` would be a second
+answer to "what moved", exactly what §26.887 refused for `goods_issue_posting` when MB1A was
+built. In canon a goods issue **is** a material document plus its journal entry; the order is a
+**reference on the line**, not a new ledger. The package's column set is carried onto canon's
+tables rather than onto a table of its own:
+
+| package | canon |
+| --- | --- |
+| `tenant_id varchar(64)` | `client varchar(4)` — the tenant key every table carries |
+| `document_number` + `fiscal_year` | `material_document.material_document_number` (unique per tenant) + `document_year` |
+| `manufacturing_order_number varchar(12)` (AUFNR) | a reference column on `material_document_line`, FK to the order header — **stages 2–3, next round** |
+| `accountingHeader` foreign key | no such table — the journal is reached by `material_document.journal_document_number`, as MB03 and MB90 already do |
+| `mkpf` / `mseg` | `material_document` / `material_document_line` |
+| `mard` | `stock_quantity` |
+
+**MIGO's action and reference dropdowns are refused by name.** A07 and R08 exist in SAP because
+MIGO is one screen reaching dozens of movements; canon reaches each movement through its own
+capability (MB1A for 201/551, MB1B for transfers, and now CO01 then 261). A dropdown whose only
+other value is unavailable is furniture, and it invites the reader to believe the other movements
+stand.
+
+**The order master this round builds, and what it deliberately is not.** A production order in
+canon is a **header** (order number from the standing `PRODORDER` range — length 12, prefix `PRD`,
+already in the tenant defaults and never yet drawn — the material to be produced, the plant, the
+order quantity and unit, the scheduled dates, the status) and a **component list** (material, plant,
+storage location, required quantity, unit) stored as a **snapshot on the order**. There is no BOM
+master and no routing in canon, so the component list is entered, not exploded — **declared, not
+inferred**, and named as such at the point of entry. The order's company code is **derived from its
+plant**, never typed, as MB03 derives its own (§26.877).
+
+Status is a two-step lifecycle this round: **CREATED → RELEASED**. 261 will judge `RELEASED` and
+refuse anything else by name. Deferred by name: **TECO / technically complete**, order closure,
+deletion flags, and the status history — nothing posts until a release stands, so nothing needs
+retiring yet.
+
+**What the next round inherits, recorded so it is decided once.**
+
+- **Movement types** `PROD_ISSUE_ORDER` (261) and `PROD_ISSUE_ORDER_REV` (262), `account_assignment
+  ORDER` — the column already permits `ORDER` (SCR-133) — and a **new reference category
+  `PRODUCTION_ORDER`**, which the standing check does not allow and which needs the round's one
+  migration.
+- A **`production_order_number`** on the material document line and the component item beside it;
+  the order's **withdrawn quantity is derived** from the documents, never written back — the same
+  discipline MBST keeps for open quantities (§26.884).
+- Account determination gains **`PRODUCTION_CONSUMPTION`**: WIP (balance sheet) debited per
+  valuation class, `INVENTORY` credited — the package's "WIP or production cost collector".
+- **Over-issue refused by name**, naming what the component still requires: SAP warns, canon has no
+  tolerance master, so a silent over-issue would be an unaudited one.
+- **MD04 gains the order**, exactly as a reservation is a requirement element today (§26.882).
+- **Both periods judged** — the material period (OMSY/MARV) and the accounting period
+  (OB52), as MB1A judges them (§26.889).
+- **The drill** — the material document opens the accounting document display, delivered last round
+  (§26.896), so a 261 is inspectable from the order, from the document and from the ledger.
+
+**Refused by name, beyond the dropdowns.** The package's blanket "negative inventory is blocked":
+canon judges the **storage location's own** `allow_negative_stock` (§26.887), and a rule invented
+at the movement would contradict the flag a user maintains. Company-code-level authorisation, as
+MB03 and FB03 refused it.
+
+**Deferred by name:** routing and capacity, a real BOM master, order settlement
+(`PROD.ORDER.SETTLE`), the finished-goods receipt (`PROD.ORDER.GR`, 101), availability checking
+(ATP), batch (CHARG), collective orders, and order-number **external** assignment.
+
+**No writes this stage.** A contract that posted would not be a contract.
+
+Same-stage bookkeeping: B-885 / §26.897 / §30 row 2.715.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3336,6 +3419,7 @@ Same-stage bookkeeping: B-884 / §26.896 / §30 row 2.714.
 | 2.712 | 2026-10-20 | **SCR-137 stage 3: the display refuses the wrong company and derives KOART (B-882, §26.894).** `DocumentLookup` grows **`COMPANY_MISMATCH`** — the header is found by number and year, and a disagreeing company is refused in SAP's words instead of collapsing into "not found"; every line carries **`accountType`** (`S` default, `D` for a supplier of the company, `K` for a customer) derived from two equality reads against the role masters, never stored. No writes, no period check. **Tests 8/8 new, 3/3 reworked**; the whole-program `tsc` gate **could not run** in this container (heap exhaustion) and a scoped `tsc -p` over the touched graph is clean. | Agent |
 | 2.713 | 2026-10-20 | **SCR-137 stage 4: the display splits its capabilities and the anchors become real (B-883, §26.895).** Base gated on **`FIN.JOURNAL.DISPLAY`**, flow panel kept on **`FIN.DOC.FLOW`**; the company code is an optional cross-check; **`data-account-type`** on every line; the journal list, **MB03** and the **goods issue result** now link here, and the stale `mdDoc.journalDeferred` note is deleted. **Harness 137 targets** (T837). Tests: UI contract 7 new, MB03 contract reworked, 202 green across the touched files. | Agent |
 | 2.714 | 2026-10-20 | **SCR-137 stage 5 and closure: T837 passes, FB03 delivered (B-884, §26.896).** Eight legs on the production build: number and year alone, **S/D/K in one document**, a disagreeing company refused in SAP's words with no header, the flow panel beside it, **nothing written**, and the **journal list**, **MB03** and the **goods issue result** each followed to the display. **Suite 1911/1911 in 261 files**; harness **137 targets**; registry unchanged 166/141/163; **migrations 198**. | Agent |
+| 2.715 | 2026-10-20 | **SCR-138 / CO01 contracted — the order before the issue (B-885, §26.897).** The MIGO 261 package opens with its own prerequisite and is right: **261 cannot post against an order master that does not exist**, so this round builds **`PROD.ORDER.CREATE`** and the next posts 261 against it. The package\u2019s `production_order_goods_issue` table **refused by name** — a 261 is a material document plus its journal, the order a reference on the line (§26.887\u2019s ruling, applied again). **A07/R08 refused**; the package\u2019s columns mapped onto canon\u2019s tables. The order is a header on the standing **`PRODORDER`** range plus a **declared component snapshot** (no BOM master in canon), company derived from the plant, **CREATED \u2192 RELEASED**. The next round inherits the movement types, the `PRODUCTION_ORDER` reference category, `PRODUCTION_CONSUMPTION`, derived withdrawals, over-issue refusal, MD04 demand and both periods \u2014 all decided here. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
