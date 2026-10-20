@@ -3631,6 +3631,31 @@ refused in the screen's own words.
 
 Same-stage bookkeeping: B-900 / §26.912 / §30 row 2.730.
 
+## §26.913 — SCR-141 stage 2: no migration, because the transfer already stored everything
+
+**B-901.** A round that adds an entry point adds no storage, and this is the proof rather than
+the assertion.
+
+1. **No table.** A transfer posting is a two-line material document plus its journal, delivered
+   by SCR-131 in `material_document` and `material_document_line`. MIGO writes the same rows
+   through the same service; a table of its own would be the second answer §26.912 refuses.
+2. **No column.** `A04 + R10` carries **no reference document** — that is what "Other" means —
+   so the transfer posts exactly the fields `postTransfer` already takes: material, movement,
+   the issuing and receiving plant and location, quantity, both dates. Nothing new to store, and
+   therefore nothing to add to the line.
+3. **No new catalogue row by hand.** `311`/`301`/`321` and their counters `312`/`302`/`322` are
+   `movement_type` rows written **per tenant by the service** the first time it runs, the same
+   mechanism that wrote `101`/`102` in §26.909. The live check constraints already permit them:
+   `direction` accepts `TRANSFER`, `reference_category` accepts `MATERIAL_DOCUMENT`.
+
+**No index either.** The transfer's two looks — the issuing stock row and the valuation at each
+plant — land on `stock_quantity_pkey` and the `material_valuation` primary key, exactly the query
+shape SCR-131 measured; MIGO does not add a read, it adds a caller.
+
+**Migrations stay 200.**
+
+Same-stage bookkeeping: B-901 / §26.913 / §30 row 2.731.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3992,6 +4017,7 @@ Same-stage bookkeeping: B-900 / §26.912 / §30 row 2.730.
 | 2.728 | 2026-10-20 | **SCR-140 stage 4: the cell posts (B-898, §26.910).** `A01 + R08` becomes **`POST_HERE 101`**, so the matrix keeps its **twenty cells** and carries **exactly two** that post. The screen grows a **second form** — order, both dates, header text, location, quantity — instead of overloading the issue grid with fields dead in one cell and required in the other; `postReceiptAction` re-resolves the cell server-side. Result panel names the document, links **MB03** and **FB03**, and reads **received / ordered / still expected**. **11/11 matrix contract tests**; production build green. | Agent |
 | 2.729 | 2026-10-20 | **SCR-140 stage 5: T840 passes, MIGO receives the order's output (B-899, §26.911).** Five legs on the production build: the cell reads **POST_HERE \u00b7 101**, four received at **160 for four units of forty**, the database read back (**stock 4**, `stock_value` 160, **RECEIPT**, order on the line, debit **121960**, credit **590960**, consumption **510960 absent**), **seven against six expected refused with the number in the sentence**, and six more leaving the order **expecting 0.000**. **T839 amended** — its refusal leg pointed at the cell that now posts — and passes. **Harness 140 targets**; migrations 200; **suite 1961/1961 in 266 files**. | Agent |
 | 2.730 | 2026-10-20 | **SCR-141 / MIGO A04 contracted — the transfer posts from the same screen (B-900, §26.912).** SAP enters a transfer posting in MIGO against reference **\u201cOther\u201d** with the movement on the item, so the reference list gains **`R10 · Other`** and the matrix becomes **25 cells**. **`A04 + R10` becomes `POST_HERE`** with **311 / 301 / 321** chosen per item, the pair of locations judging coherence (same plant for 311, different plant and one company code for 301, same plant and location for 321). **One engine, two entry points**: the form calls the standing `postTransfer`, so MB1B and MIGO share one implementation, and the server re-resolves the cell. `A04` with any other reference **refuses by name**, naming `R10`. Deferred by name: delivery references, 309, 305, two-step 303/313, cross-company transfer, batch, special stock. | Agent |
+| 2.731 | 2026-10-20 | **SCR-141 stage 2: no migration, and nothing to store (B-901, §26.913).** The transfer is a two-line material document that already exists, `A04 + R10` carries **no reference document**, and 311/301/321 with their counters are **per-tenant catalogue rows the service writes** — the live constraints already accept `TRANSFER` and `MATERIAL_DOCUMENT`. The two looks land on `stock_quantity_pkey` and the valuation primary key, the shape SCR-131 measured, so **no index**. **Migrations stay 200.** | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
