@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const migration = readFileSync('drizzle/9065_material_document_posting_date.sql', 'utf8');
-const schema = readFileSync('src/modules/inventory/schema.ts', 'utf8');
+const ledgerMigration = readFileSync('drizzle/0073_material_document.sql', 'utf8');
 
 describe('SCR-125 stage 2: the material document date path stands', () => {
   it('adds exactly one index, on the header posting date, tenant first', () => {
@@ -20,7 +20,8 @@ describe('SCR-125 stage 2: the material document date path stands', () => {
   });
 
   it('relies on the line material index that already stands', () => {
-    expect(schema).toContain("index('material_document_line_material_idx')");
+    // Shipped with the ledger itself (0073); the Drizzle mirror does not repeat it.
+    expect(ledgerMigration).toContain('create index material_document_line_material_idx');
     expect(migration).not.toContain('material_document_line (client, plant, material_number)');
   });
 });
