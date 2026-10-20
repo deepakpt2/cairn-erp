@@ -416,3 +416,58 @@ export const outputMessage = pgTable('output_message', {
   index('output_message_queue_idx').on(t.client, t.status, t.createdAt),
   check('output_message_recipient_ck', sql`${t.recipient} is null or length(btrim(${t.recipient})) > 0`),
 ]);
+
+/**
+ * Production orders — SCR-138 (CO01 / AUFK + RESB shape).
+ *
+ * An order is a header: what is to be produced, where, how much, and when — plus the
+ * status that decides whether work may be charged to it. Its company code is not a
+ * column: it stands on the plant (SCR-030), and is derived wherever it is needed,
+ * exactly as MB03 derives its own.
+ *
+ * The component list is a **snapshot on the order**, not an explosion of a BOM: canon
+ * carries no BOM master, so the components are entered and stored as stated. A later
+ * issue may consume them; nothing recomputes them.
+ */
+export const productionOrder = pgTable('production_order', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  /** What the order produces (AUFK-MATNR). */
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  orderQuantity: quantity('order_quantity').notNull(),
+  unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
+  scheduledStart: varchar('scheduled_start', { length: 10 }).notNull(),
+  scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
+  /** CREATED or RELEASED. A 261 will judge RELEASED and refuse anything else (SCR-139). */
+  status: varchar('status', { length: 16 }).notNull().default('CREATED'),
+  requestKey: varchar('request_key', { length: 64 }),
+  releasedBy: varchar('released_by', { length: 64 }),
+  releasedAt: timestamp('released_at', { withTimezone: true }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber] }),
+  foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
+  check('production_order_status_ck', sql`${t.status} in ('CREATED', 'RELEASED')`),
+  check('production_order_quantity_ck', sql`${t.orderQuantity} > 0`),
+  check('production_order_dates_ck', sql`${t.scheduledFinish} >= ${t.scheduledStart}`),
+]);
+
+/** The order's components — the RESB shape its goods issue will consume (SCR-139). */
+export const productionOrderComponent = pgTable('production_order_component', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  requiredQuantity: quantity('required_quantity').notNull(),
+  unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),
+  foreignKey({ columns: [t.client, t.orderNumber], foreignColumns: [productionOrder.client, productionOrder.orderNumber] })
+    .onDelete('cascade'),
+  check('production_order_component_quantity_ck', sql`${t.requiredQuantity} > 0`),
+]);
+
