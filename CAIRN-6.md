@@ -2954,6 +2954,43 @@ three anchors followed click-by-click to the same display.
 
 Same-stage bookkeeping: B-883 / §26.895 / §30 row 2.713.
 
+## §26.896 — SCR-137 stage 5 and closure: T837 passes, FB03 delivered
+
+**B-884.** The display is accepted, and the round's point — that every posting screen has
+somewhere to jump to — stands closed.
+
+**T837** (`journal-document-display`, `cairn_b210:5432`) ran against the production build
+(`npx next build --turbopack` → `next start`, exit 0) in eight legs:
+
+1. a document read **by number and year alone**, no company given — the key the drills
+   actually carry;
+2. **KOART derived in one document**: one D, one K, two S, read from
+   `data-account-type` and from the column;
+3. a company that **disagrees** refused as `Document … does not exist in company code …`
+   with **no header rendered** — the refusal is not a warning above a document;
+4. the **flow panel standing beside the document** under its own capability;
+5. **nothing written**: four lines and 240.00 in the ledger before and after every visit;
+6. the **journal list** carrying the complete key in its link, followed to the display;
+7. **MB03** — the number §26.877 deferred as text — followed to the same document;
+8. the **goods issue result**, its journal followed to the display it just wrote.
+
+**Suite 1911/1911 in 261 files.** Harness **137 targets**. Capability registry unchanged
+at **166 / 141 / 163** — `FIN.JOURNAL.DISPLAY` and `FIN.DOC.FLOW` were both already
+seeded, and this round re-gated rather than added. **Migrations stay 198**: the index was
+refused on measurement (§26.893) and no table was needed.
+
+**The type gate, for the record.** The owner ruled that the acceptance build is the gate
+(`typescript.ignoreBuildErrors` stands, B-879's option 2), and the build passed; the
+whole-program `npx tsc --noEmit` still cannot run in this container — it exhausts a
+1.9 GB heap. The scoped `tsc -p` over the touched graph stays the substitute evidence,
+recorded here rather than claimed as a full pass.
+
+Two deferred by name, still deferred: the **tax-detail jump** and **F4 search help**.
+Two refused by name, still refused: **company-code-level authorisation** and **every
+posting-period check**.
+
+Same-stage bookkeeping: B-884 / §26.896 / §30 row 2.714.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3298,6 +3335,7 @@ Same-stage bookkeeping: B-883 / §26.895 / §30 row 2.713.
 | 2.711 | 2026-10-20 | **SCR-137 stage 2: the package\u2019s index refused, measured (B-881, §26.893).** Over 40,000 documents / 160,000 lines the three reads stand at **0.032\u20130.037 ms on the primary keys**; the company-leading candidate left two unchanged and made the company-checked read **0.033 \u2192 0.052 ms**. **No migration; migrations stay 198.** | Agent |\n(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
 | 2.712 | 2026-10-20 | **SCR-137 stage 3: the display refuses the wrong company and derives KOART (B-882, §26.894).** `DocumentLookup` grows **`COMPANY_MISMATCH`** — the header is found by number and year, and a disagreeing company is refused in SAP's words instead of collapsing into "not found"; every line carries **`accountType`** (`S` default, `D` for a supplier of the company, `K` for a customer) derived from two equality reads against the role masters, never stored. No writes, no period check. **Tests 8/8 new, 3/3 reworked**; the whole-program `tsc` gate **could not run** in this container (heap exhaustion) and a scoped `tsc -p` over the touched graph is clean. | Agent |
 | 2.713 | 2026-10-20 | **SCR-137 stage 4: the display splits its capabilities and the anchors become real (B-883, §26.895).** Base gated on **`FIN.JOURNAL.DISPLAY`**, flow panel kept on **`FIN.DOC.FLOW`**; the company code is an optional cross-check; **`data-account-type`** on every line; the journal list, **MB03** and the **goods issue result** now link here, and the stale `mdDoc.journalDeferred` note is deleted. **Harness 137 targets** (T837). Tests: UI contract 7 new, MB03 contract reworked, 202 green across the touched files. | Agent |
+| 2.714 | 2026-10-20 | **SCR-137 stage 5 and closure: T837 passes, FB03 delivered (B-884, §26.896).** Eight legs on the production build: number and year alone, **S/D/K in one document**, a disagreeing company refused in SAP's words with no header, the flow panel beside it, **nothing written**, and the **journal list**, **MB03** and the **goods issue result** each followed to the display. **Suite 1911/1911 in 261 files**; harness **137 targets**; registry unchanged 166/141/163; **migrations 198**. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

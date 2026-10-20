@@ -71,7 +71,13 @@ export async function journalDocumentDisplay(ctx: Context) {
       select company_code from company_code where client = ${client} order by company_code offset 1 limit 1
     `) as unknown as Array<{ company_code: string }>;
     if (rows[0]) return rows[0].company_code;
-    throw new Error('the browser tenant carries only one company code, so the cross-check cannot be exercised');
+    await tx.execute(sql`
+      insert into company_code (client, company_code, name, country, currency, chart_of_accounts, created_by)
+      select ${client}, 'FB03X', 'Second display company', 'KW', c.currency, c.chart_of_accounts, 'browser.admin'
+      from (select currency, chart_of_accounts from company_code where client = ${client} limit 1) c
+      on conflict do nothing
+    `);
+    return 'FB03X';
   });
 
   const docs = await withTenant(client, async (tx) => {
@@ -81,8 +87,8 @@ export async function journalDocumentDisplay(ctx: Context) {
     });
     const plain = await postJournalEntry(tx, {
       client, companyCode: fixture, documentType: 'SA',
-      documentDate: '2026-07-04', postingDate: '2026-07-04',
-      fiscalYear: 2026, postingPeriod: 7, currency: 'USD', localCurrency: 'USD',
+      documentDate: '2026-10-19', postingDate: '2026-10-19',
+      fiscalYear: 2026, postingPeriod: 10, currency: 'USD', localCurrency: 'USD',
       reference: 'FB03-PLAIN',
       lines: [
         { glAccount: '400000', debitCredit: 'S', amount: '300.00', lineText: 'Revenue line' },
@@ -92,8 +98,8 @@ export async function journalDocumentDisplay(ctx: Context) {
     });
     const partners = await postJournalEntry(tx, {
       client, companyCode: fixture, documentType: 'SA',
-      documentDate: '2026-07-05', postingDate: '2026-07-05',
-      fiscalYear: 2026, postingPeriod: 7, currency: 'USD', localCurrency: 'USD',
+      documentDate: '2026-10-19', postingDate: '2026-10-19',
+      fiscalYear: 2026, postingPeriod: 10, currency: 'USD', localCurrency: 'USD',
       reference: 'FB03-PARTNERS',
       lines: [
         { glAccount: '210000', debitCredit: 'H', amount: '90.00', businessPartner: 'FB03-V1' },
@@ -157,7 +163,10 @@ export async function journalDocumentDisplay(ctx: Context) {
 
   // ---- Leg 6: the journal list drills here with its full key ----
   await page.goto(`${base}${JOURNAL}`, { waitUntil: 'domcontentloaded' });
-  const row = page.locator('tr').filter({ hasText: docs.plain }).first();
+  // The list shows the displayed number, so the row is found by the key it carries.
+  const row = page.locator('tr').filter({
+    has: page.locator(`a[href*="document=${encodeURIComponent(docs.plain)}"]`),
+  }).first();
   await row.waitFor();
   const rowLink = row.locator('a').first();
   const href = await rowLink.getAttribute('href');
@@ -183,7 +192,7 @@ export async function journalDocumentDisplay(ctx: Context) {
     await tx.execute(sql`
       insert into material_document (client, material_document_number, document_year, document_date, posting_date,
                                      header_text, status, journal_document_number, created_by)
-      values (${client}, '4900037001', 2026, '2026-07-04', '2026-07-04', 'Anchored receipt', 'POSTED',
+      values (${client}, '4900037001', 2026, '2026-10-19', '2026-10-19', 'Anchored receipt', 'POSTED',
               ${docs.plain}, 'browser.admin')
       on conflict do nothing
     `);
@@ -264,6 +273,27 @@ export async function journalDocumentDisplay(ctx: Context) {
       values (${client}, ${area}, 'CC3701', '2026-01-01', '2026-12-31', 'Anchor centre', 'PRODUCTION', ${code}, false, 'browser.admin')
       on conflict do nothing
     `);
+    // Account determination: the issue credits inventory and debits consumption.
+    await tx.execute(sql`
+      insert into gl_account (client, chart_of_accounts, account_number, name, account_type,
+                              is_balance_sheet, is_open_item_managed, reconciliation_type,
+                              requires_cost_object, is_tax_relevant, account_group, gl_account_type, created_by)
+      select ${client}, c.chart_of_accounts, v.n, v.d, v.t,
+             v.balance, false, null, v.cost, false, 'GENL', v.kind, 'browser.admin'
+      from (select chart_of_accounts from chart_of_accounts where client = ${client} limit 1) c
+      cross join (values
+        ('510900', 'Consumption expense', 'EXPENSE', false, true, 'PL_STATEMENT'),
+        ('120900', 'Raw materials inventory', 'ASSET', true, false, 'BALANCE_SHEET')
+      ) as v(n, d, t, balance, cost, kind)
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
+      select ${client}, c.chart_of_accounts, v.e, 'RAW_INVENTORY', '', v.a, 'browser.admin'
+      from (select chart_of_accounts from chart_of_accounts where client = ${client} limit 1) c
+      cross join (values ('CONSUMPTION', '510900'), ('INVENTORY', '120900')) as v(e, a)
+      on conflict do nothing
+    `);
     return code;
   });
 
@@ -278,7 +308,9 @@ export async function journalDocumentDisplay(ctx: Context) {
   await page.fill('input[name="quantity-1"]', '5');
   await page.fill('input[name="costCenter-1"]', 'CC3701');
   await page.getByRole('button', { name: 'Post the goods issue', exact: true }).click();
-  await page.locator('p[role="status"]').filter({ hasText: 'Issued: material document' }).waitFor();
+  await page.locator('p[role="status"], [role="alert"]').first().waitFor();
+  const issueFeedback = await page.locator('p[role="status"], [role="alert"]').first().innerText();
+  assert.match(issueFeedback, /Issued: material document/, `the goods issue posts: ${issueFeedback}`);
   const issueJournalLink = page.locator('a[href*="/finance/journal/document?document="]').first();
   await issueJournalLink.waitFor();
   const issueHref = await issueJournalLink.getAttribute('href');
