@@ -690,7 +690,71 @@ export async function clearGlItems(input: {
     if (carryingDifference !== 0) {
       const gain = carryingDifference > 0; // credits exceed debits: settle above carrying
       const event = gain ? 'FXGAIN' : 'FXLOSS';
-      const account = await determinationAccount(tx, input.client, chart, event);
+
+      // Spread tolerance (B-816): a realized difference beyond the ceiling
+      // refuses unless the operator routes it explicitly.
+      const spread = input.exchangeRateSpreadTolerancePercent;
+      if (spread !== undefined && spread !== null) {
+        if (!Number.isFinite(spread) || spread < 0) {
+          throw new GlClearingError(
+            `The exchange-rate spread tolerance ${spread} is not a non-negative percentage.`,
+            'Enter the tolerance as a percentage, or leave it blank for no ceiling.',
+          );
+        }
+        const grossTranslated = round4(held.reduce((s, h) => s + Math.abs(localValue(h)), 0));
+        const actualPercent = grossTranslated === 0 ? 0 : Math.abs(carryingDifference) / grossTranslated * 100;
+        if (actualPercent - spread > 0.00005) {
+          throw new GlClearingError(
+            `The realized exchange difference of ${Math.abs(carryingDifference).toFixed(2)} ${localCurrency} stands at ${actualPercent.toFixed(4)}% of the gross settlement, beyond the ${spread}% spread tolerance.`,
+            'Name the realized-FX account explicitly for this clearing, or widen the spread tolerance.',
+          );
+        }
+      }
+
+      // An explicit override (the OBA1/F-05 parity field) must stand in the
+      // company's chart, extended to the company, as a P&L account — never the
+      // cleared account itself; otherwise the standing determination routes it.
+      let account: string | null = null;
+      if (input.fxDifferenceAccount) {
+        const override = input.fxDifferenceAccount.trim().toUpperCase();
+        const [chartRow] = await tx.select().from(glAccount).where(and(
+          eq(glAccount.client, input.client),
+          eq(glAccount.chartOfAccounts, chart),
+          eq(glAccount.accountNumber, override),
+        ));
+        if (!chartRow) {
+          throw new GlClearingError(
+            `Realized-FX account ${override} does not stand in chart ${chart}.`,
+            'Name an account of the company chart, or leave the field blank for the standing determination.',
+          );
+        }
+        if (override === input.glAccount) {
+          throw new GlClearingError(
+            `Realized-FX account ${override} is the cleared account itself.`,
+            'Name a different account, or leave the field blank for the standing determination.',
+          );
+        }
+        const [segment] = await tx.select().from(glAccountCompany).where(and(
+          eq(glAccountCompany.client, input.client),
+          eq(glAccountCompany.companyCode, input.companyCode),
+          eq(glAccountCompany.glAccount, override),
+        ));
+        if (!segment) {
+          throw new GlClearingError(
+            `Realized-FX account ${override} does not stand extended to company ${input.companyCode}.`,
+            'Extend the account to the company code, or leave the field blank for the standing determination.',
+          );
+        }
+        if (chartRow.accountType !== 'REVENUE' && chartRow.accountType !== 'EXPENSE') {
+          throw new GlClearingError(
+            `Realized-FX account ${override} carries account type ${chartRow.accountType}; a realized exchange difference posts to a P&L account.`,
+            'Name a revenue or expense account, or leave the field blank for the standing determination.',
+          );
+        }
+        account = override;
+      } else {
+        account = await determinationAccount(tx, input.client, chart, event);
+      }
       if (!account) {
         throw new GlClearingError(
           `Account determination for ${event} does not stand in chart ${chart}.`,
@@ -818,7 +882,13 @@ export async function clearGlItems(input: {
           inheritedTerms: inherited.map((r) => r.paymentTerms ?? '').join(','),
           inheritedBaselines: inherited.map((r) => r.baselineDate ?? '').join(','),
         } : {}),
-        ...(fxLine ? { exchangeDifference: fxLine.amountLocal.toFixed(2), exchangeAccount: fxLine.glAccount } : {}),
+        ...(fxLine ? {
+          exchangeDifference: fxLine.amountLocal.toFixed(2),
+          exchangeAccount: fxLine.glAccount,
+          ...(input.fxDifferenceAccount ? { exchangeAccountOverride: true } : {}),
+          ...(input.exchangeRateSpreadTolerancePercent !== undefined
+            ? { spreadTolerancePercent: input.exchangeRateSpreadTolerancePercent } : {}),
+        } : {}),
         ...(toleranceLine ? { difference: toleranceLine.amountLocal.toFixed(2), differenceAccount: toleranceLine.glAccount } : {}),
         ...(crossMode ? { crossCurrency: currencies } : {}),
       },

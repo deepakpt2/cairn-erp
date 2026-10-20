@@ -609,3 +609,91 @@ describe('SCR-114 follow-up B-816: cross-currency partial clearing', () => {
     }))).rejects.toThrow(/Cross-currency residual clearing is not supported/);
   }, 60_000);
 });
+
+describe('SCR-114 follow-up B-816: realized-FX routing and spread tolerance', () => {
+  beforeAll(async () => {
+    // The package extends P&L accounts; these two must stand extended to the
+    // company so the override validation can judge them.
+    await withTenant(client, async (tx) => {
+      const [company] = await tx.execute(sql`
+        select chart_of_accounts as chart from company_code where client = ${client} and company_code = '1000'
+      `) as unknown as [{ chart: string }];
+      for (const account of ['320000', '101000']) {
+        await tx.execute(sql`
+          insert into gl_account_company (client, company_code, chart_of_accounts, gl_account, account_currency, created_by)
+          values (${client}, '1000', ${company.chart}, ${account}, ${currency}, ${ACTOR})
+          on conflict do nothing
+        `);
+      }
+    });
+  }, 60_000);
+
+  async function crossPair(key: string, eurRate: string, gbpRate: string) {
+    const eur = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-05', postingDate: '2026-05-05',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'EUR', localCurrency: currency, exchangeRate: eurRate,
+      lines: [
+        { glAccount: '400000', debitCredit: 'S', amount: '100' },
+        { glAccount: '101000', debitCredit: 'H', amount: '100' },
+      ],
+      postedBy: ACTOR,
+    }));
+    const gbp = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-05', postingDate: '2026-05-05',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'GBP', localCurrency: currency, exchangeRate: gbpRate,
+      lines: [
+        { glAccount: '101000', debitCredit: 'S', amount: '100' },
+        { glAccount: '400000', debitCredit: 'H', amount: '100' },
+      ],
+      postedBy: ACTOR,
+    }));
+    return [
+      { documentNumber: eur.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+      { documentNumber: gbp.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+    ];
+  }
+
+  it('routes the realized difference to an explicit FX account after validation', async () => {
+    const items = await crossPair('fxo-1', '0.30', '0.31');
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'fxo-clear-1', crossCurrency: true, fxDifferenceAccount: '320000',
+      items,
+    }));
+    const lines = await withTenant(client, async (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.clearingDocumentNumber}
+    `)) as unknown as Array<{ gl_account: string; debit_credit: string; amount: string }>;
+    const fx = lines.find((l) => l.gl_account === '320000');
+    expect(fx?.debit_credit).toBe('H');
+    expect(Number(fx?.amount)).toBe(1);
+  }, 60_000);
+
+  it('refuses an FX account outside the company chart, a balance-sheet FX account, and the cleared account', async () => {
+    const items = await crossPair('fxo-2', '0.30', '0.31');
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fxo-bad-1', crossCurrency: true, fxDifferenceAccount: '999999', items,
+    }))).rejects.toThrow(/does not stand in chart/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fxo-bad-2', crossCurrency: true, fxDifferenceAccount: '101000', items,
+    }))).rejects.toThrow(/P&L account/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fxo-bad-3', crossCurrency: true, fxDifferenceAccount: '400000', items,
+    }))).rejects.toThrow(/is the cleared account itself/);
+  }, 60_000);
+
+  it('refuses a realized difference beyond the spread tolerance and accepts one within it', async () => {
+    const items = await crossPair('fxo-3', '0.30', '0.31');
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fxo-spread-1', crossCurrency: true, exchangeRateSpreadTolerancePercent: 0.1, items,
+    }))).rejects.toThrow(/beyond the 0.1% spread tolerance/);
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'fxo-spread-2', crossCurrency: true, exchangeRateSpreadTolerancePercent: 5, items,
+    }));
+    expect(result.clearingDocumentNumber).toBeTruthy();
+  }, 60_000);
+});
