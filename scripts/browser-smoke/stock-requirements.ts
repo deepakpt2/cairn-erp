@@ -104,17 +104,18 @@ export async function stockRequirements(ctx: Context) {
   // ── The projection ────────────────────────────────────────────────────────
   await page.goto(`${base}${ROUTE}?material=MD04-MAT&plant=QG01`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { level: 1, name: 'Stock/Requirements List', exact: true }).waitFor();
+  // Every fixture document is dated before today, so the chronology opens with the
+  // past-due requisition and reaches the stock element last — the balance is the same.
+  const firstRow = page.locator('tbody tr').first();
+  await firstRow.waitFor();
+  assert.equal(await firstRow.getAttribute('data-date'), '2026-05-01', 'the past-due requisition opens the list');
+  assert.equal(await firstRow.getAttribute('data-balance'), '4.000', 'the requisition of 4 stands alone');
   const stockRow = page.locator('tr[data-element="STOCK"]').first();
-  await stockRow.waitFor();
-  assert.equal(await stockRow.getAttribute('data-balance'), '44.000',
-    'the past-due requisition of 4 lifts stock of 40 to 44 before safety stock');
+  assert.equal(await stockRow.getAttribute('data-balance'), '87.000',
+    '4 + 18 delivered-open + 25 requisition + 40 stock = 87 before safety stock');
   const safetyRow = page.locator('tr[data-element="SAFETY_STOCK"]').first();
-  assert.equal(await safetyRow.getAttribute('data-balance'), '24.000', 'the safety stock of 20 leaves 24');
-  const poRow = page.locator('tr[data-element="PURCHASE_ORDER"]').first();
-  assert.equal(await poRow.getAttribute('data-balance'), '42.000', '18 open of a 30 order leaves 42');
-  const reqRow = page.locator('tr[data-element="PURCHASE_REQUISITION"][data-date="2026-07-01"]').first();
-  assert.equal(await reqRow.getAttribute('data-balance'), '67.000', 'the open requisition of 25 closes at 67');
-  console.log('  ✓ the list projects 4 + 40 − 20 + 18 + 25 into a closing balance of 67');
+  assert.equal(await safetyRow.getAttribute('data-balance'), '67.000', 'the safety stock of 20 closes the list at 67');
+  console.log('  ✓ the list projects 4 + 18 + 25 + 40 − 20 into a closing balance of 67');
 
   // ── Blocked stock excluded ───────────────────────────────────────────────
   await page.locator('section[aria-label="Report warnings"] li').filter({ hasText: 'BLOCKED 5.000' }).waitFor();
@@ -124,10 +125,11 @@ export async function stockRequirements(ctx: Context) {
   const pastDueRow = page.locator('tr[data-date="2026-05-01"]').first();
   await pastDueRow.locator('[data-exception-code="PAST_DUE"]').waitFor();
   await page.goto(`${base}${ROUTE}?material=MD04-MAT&plant=QG01&pastDueOff=1`, { waitUntil: 'domcontentloaded' });
-  const firstVisible = page.locator('tr[data-element="STOCK"]').first();
+  const firstVisible = page.locator('tbody tr').first();
   await firstVisible.waitFor();
   assert.equal(await page.locator('tr[data-date="2026-05-01"]').count(), 0, 'the past-due row is hidden');
-  assert.equal(await firstVisible.getAttribute('data-balance'), '44.000', 'its 4 still moved the balance');
+  assert.equal(await firstVisible.getAttribute('data-balance'), '87.000',
+    'the 47 hidden before today still moved the balance');
   console.log('  ✓ hidden past-due rows leave the list but never leave the balance');
 
   // ── Weekly split ─────────────────────────────────────────────────────────
