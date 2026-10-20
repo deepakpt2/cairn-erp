@@ -105,7 +105,7 @@ export async function requisitionList(ctx: Context) {
 
   // ── Derived organisation and status on the toggle ─────────────────────────
   await page.locator('input[name="displayClosed"]').check();
-  await page.getByRole('button', { name: 'Execute' }).click();
+  await page.getByRole('form', { name: 'Selection' }).getByRole('button', { name: 'Execute' }).click();
   await page.getByText('9100000003').waitFor();
   const convertedRow = page.locator('tr', { hasText: '9100000003' }).first();
   assert.equal((await convertedRow.innerText()).includes('CONVERTED'), true, 'converted status derived');
@@ -119,7 +119,7 @@ export async function requisitionList(ctx: Context) {
   // ── Plant filter ──────────────────────────────────────────────────────────
   await page.locator('input[name="plantFrom"]').fill('P210');
   await page.locator('input[name="plantTo"]').fill('P210');
-  await page.getByRole('button', { name: 'Execute' }).click();
+  await page.getByRole('form', { name: 'Selection' }).getByRole('button', { name: 'Execute' }).click();
   await page.getByText('9100000001').waitFor();
   assert.equal(await page.getByText('9100000002').count(), 0, 'P220 line filtered out');
   console.log('  ✓ the plant range narrows the list');
@@ -129,7 +129,7 @@ export async function requisitionList(ctx: Context) {
   await page.locator('input[name="plantTo"]').fill('');
   await page.locator('input[name="purchasingOrgFrom"]').fill('O220');
   await page.locator('input[name="purchasingOrgTo"]').fill('O220');
-  await page.getByRole('button', { name: 'Execute' }).click();
+  await page.getByRole('form', { name: 'Selection' }).getByRole('button', { name: 'Execute' }).click();
   await page.getByText('9100000002').waitFor();
   assert.equal(await page.getByText('9100000001').count() > 0, true, 'P210 stands because it maps to O220 too');
   console.log('  ✓ the organisation filter matches through the plant assignment');
@@ -137,8 +137,9 @@ export async function requisitionList(ctx: Context) {
   // ── A plant that does not stand refuses by name ───────────────────────────
   await page.goto(`${base}${ROUTE}?plantFrom=P999`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  await page.getByRole('alert').waitFor();
-  const alertText = await page.getByRole('alert').innerText();
+  const refusal = page.locator('div[role="alert"]').filter({ hasText: 'plant P999' });
+  await refusal.waitFor();
+  const alertText = await refusal.innerText();
   assert.equal(/plant P999/.test(alertText), true, `names the plant: ${alertText}`);
   console.log('  ✓ an unknown plant refuses by name instead of answering an empty list');
 
