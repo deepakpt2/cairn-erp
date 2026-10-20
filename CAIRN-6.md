@@ -1938,6 +1938,26 @@ Same-stage bookkeeping: B-855 / §26.867 / §30 row 2.685. **Next: MBST first** 
 
 Same-stage bookkeeping: B-856 / §26.868 / §30 row 2.686. Stage 2 next: migration 9067 and the index decision, measured.
 
+## §26.869 — SCR-132 stage 2: the status gains a third state, and the reversal link is indexed at last
+
+**B-857.** Two migrations, one decision each.
+
+**9067 — `material_document.status` admits `PARTIALLY_REVERSED`.** The check was `('POSTED','REVERSED')`; the column is the cancellation flag the package calls `XSTBW`, and a document whose lines are only partly reversed needs a word for it. Every existing row is `POSTED` or `REVERSED` and keeps its value; nothing is rewritten.
+
+**9068 — `mdl_reversal_of_idx` on `material_document_line (client, reversal_of_document)`.** This is the first index taken in three rounds, and it was measured, not assumed:
+
+| read | standing | with the candidate |
+| --- | --- | --- |
+| original header (primary key) | 0.033 ms | 0.038 ms |
+| original lines (primary key) | 0.027 ms | 0.028 ms |
+| **per-line reversed quantity** | **10.093 ms — sequential scan** | **0.049 ms** |
+
+At 60,000 document lines with 5,000 reversal lines, the coverage read cost a scan of every line the tenant had ever written. **Two hundred times faster with the index.** Taken.
+
+**Migrations stand at 191.** Harness `scripts/plan-mbst.mts` committed with the measurement.
+
+Same-stage bookkeeping: B-857 / §26.869 / §30 row 2.687. Stage 3 next: the reversal engine and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2255,6 +2275,7 @@ Same-stage bookkeeping: B-856 / §26.868 / §30 row 2.686. Stage 2 next: migrati
 | 2.684 | 2026-10-20 | **SCR-131 stage 3: transfer service (B-854, §26.866).** `INV.TRANSFER.POST` posts six movement types in three scenarios as two-line documents; movement keys shortened to the 20-character column (`TRANSFER_SLOC`, `TRANSFER_PLANT`, `TRANSFER_STYPE` and their `_REV` counters) with BWART numbers as input aliases. Structure, master data, cross-company, material period and sufficiency each refuse by name; `allow_negative_stock` operational (negative `-5.000` posted where configured). 311/321 write zero value; 301 carries 100 between plants and values 200 at a standard-priced receiver, posting the price difference under document type `WA`. Counter-movement reversal restores both sides and reverses the journal. **16/16 tests.** Catalogue 162/136/158. | Agent |
 | 2.685 | 2026-10-20 | **SCR-131 closed (B-855, §26.867).** MB1B delivered as `INV.TRANSFER.POST` at `/inventory/transfer-posting`: a two-line material document for 311 / 301 / 321 with counter movement types 312 / 302 / 322, `allow_negative_stock` made operational (the table guard moved into the posting path), 311/321 valuation-neutral, 301 carrying value between plants and posting a price difference only at a standard-priced receiver (document type `WA`), cross-company / batch / special stock / multi-material / MBST deferred by name. Migration 9066 (line direction, TRANSFER direction, guard dropped); **189 migrations**; no index. Service 16/16, UI 9/9, **T831 9 legs**, suite **1791/1791 / 249 files**, catalogue **162/136/158**. Next T-codes: MBST, then MB21. | Agent |
 | 2.686 | 2026-10-20 | **SCR-132 stage 1: MBST contract settled (B-856, §26.868).** `INV.REVERSE` at `/inventory/reversal`, the frozen-roadmap row at `CAIRN.md` §10 line 897. The package state table is **declined** — cancellation (XSTBW) is the existing document status, and `reversal_of` / `reversed_by` already bind the pair. Partial reversal is **by whole line** (a line selection, never part of a line), so migration 9067 widens the status check to `PARTIALLY_REVERSED` and the duplicate guard reads the per-line reversed quantity. The engine inverts each line\u2019s direction and posts the counter movement type; stock and value follow the inverted sides; order open quantities are **restored by derivation**, not written back; the invoice dependency and the reason code are refused by name. | Agent |
+| 2.687 | 2026-10-20 | **SCR-132 stage 2: schema 9067 and 9068 (B-857, §26.869).** Status check widened to `PARTIALLY_REVERSED`; and the first index taken in three rounds — `mdl_reversal_of_idx (client, reversal_of_document)` — because the per-line reversed-quantity read cost a 10.093 ms sequential scan at 60,000 lines and answers in **0.049 ms** with it. Header and line reads stay primary keys (0.033 / 0.027 ms). **Migrations 191.** Harness `scripts/plan-mbst.mts`. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

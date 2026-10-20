@@ -255,7 +255,7 @@ export const materialDocument = pgTable('material_document', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialDocumentNumber] }),
-  check('material_document_status_ck', sql`${t.status} in ('POSTED', 'REVERSED')`),
+  check('material_document_status_ck', sql`${t.status} in ('POSTED', 'PARTIALLY_REVERSED', 'REVERSED')`),
 ]);
 
 export const materialDocumentLine = pgTable('material_document_line', {
