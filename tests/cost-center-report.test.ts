@@ -182,4 +182,40 @@ describe('SCR-112 cost centre actual/plan report (R-160)', () => {
     expect(expense?.actual).toBe(5000);
     expect(expense?.plan).toBeNull();
   });
+
+  it('resolves group leaves in display order: E excludes, a later I re-includes (SCR-112 repair)', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into cost_center_group (client, controlling_area, group_name, title, created_by)
+        values (${client}, 'A000', 'OPS', 'Operations centres', ${ACTOR}),
+               (${client}, 'A000', 'OPS2', 'Re-included centre', ${ACTOR}),
+               (${client}, 'A000', 'OPS3', 'Nothing stands', ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into cost_center_group_leaf
+          (client, controlling_area, group_name, val_sign, val_option, val_from, val_to, display_order, created_by)
+        values
+          (${client}, 'A000', 'OPS', 'I', 'BT', 'CC1000', 'CC2999', 10, ${ACTOR}),
+          (${client}, 'A000', 'OPS', 'E', 'EQ', 'CC2000', '', 20, ${ACTOR}),
+          (${client}, 'A000', 'OPS2', 'E', 'EQ', 'CC1000', '', 10, ${ACTOR}),
+          (${client}, 'A000', 'OPS2', 'I', 'BT', 'CC1000', 'CC1999', 20, ${ACTOR}),
+          (${client}, 'A000', 'OPS3', 'I', 'BT', 'CC1000', 'CC2999', 10, ${ACTOR}),
+          (${client}, 'A000', 'OPS3', 'E', 'BT', 'CC1000', 'CC9999', 20, ${ACTOR})
+      `);
+    });
+
+    const centresOf = (rows: { kind: string; costCenter?: string }[]) =>
+      rows.filter((r) => r.kind === 'CENTER').map((r) => r.costCenter).sort();
+
+    const excluded = await calculateCostCenterReport({ client, selection: selection({ costCenterGroup: 'OPS' }) });
+    expect(centresOf(excluded.rows)).toEqual(['CC1000']);
+    expect(excluded.rows.find((r) => r.kind === 'CENTER' && r.costCenter === 'CC1000')?.actual).toBe(-4000);
+    expect(excluded.rows.find((r) => r.kind === 'ELEMENT' && r.costCenter === 'CC1000' && r.costElement === '400000')?.actual).toBe(5000);
+
+    const reincluded = await calculateCostCenterReport({ client, selection: selection({ costCenterGroup: 'OPS2' }) });
+    expect(centresOf(reincluded.rows)).toEqual(['CC1000']);
+
+    await expect(calculateCostCenterReport({ client, selection: selection({ costCenterGroup: 'OPS3' }) }))
+      .rejects.toThrow(/No cost centers match the selection/);
+  });
 });
