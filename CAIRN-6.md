@@ -2516,6 +2516,35 @@ queue. **The three posting suites stay green — 27/27.**
 
 Same-stage bookkeeping: B-872 / §26.884 / §30 row 2.702. Stage 4 next: the screen.
 
+## §26.885 — SCR-135 stage 4: the output screen
+
+**B-873.** `/inventory/material-document-output` is delivered: the selection the
+package lists — output type, medium, dispatch time, status, document range, year,
+plant range and posting dates — a run that determines the missing slips and
+dispatches the pending ones, and the queue itself.
+
+**The queue** shows every row with its document and year, the output type and its
+description, the medium and dispatch time **with SAP's digits beside them**, the
+status with its VSTAT digit, the send count, the recipient, the last attempt and
+the reason a failure failed. **SAP's one-character codes appear only as aliases**;
+the stored and filtered values are the names.
+
+**Per row:** Dispatch (disabled once processed), a recipient field with Set, and a
+Preview that renders the slip from the document as posted into a `<pre>` the same
+screen shows. A failure states its reason in the row, not only in a status line.
+
+**Message placement.** Both action state lines — the row action's and the
+recipient's — stand **outside** the table's conditional blocks, so a message never
+vanishes with the state that produced it (the standing ruling from the SCR-1xx
+screens).
+
+**Tests — 9/9** (`tests/material-document-output-ui-contract.test.ts`), and the
+browser-harness contract is green at **135 targets** (T835 registered against
+`cairn_b210:5432`). `tsc` clean.
+
+Same-stage bookkeeping: B-873 / §26.885 / §30 row 2.703. Stage 5 next: build and run
+**T835**.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2849,7 +2878,7 @@ Same-stage bookkeeping: B-872 / §26.884 / §30 row 2.702. Stage 4 next: the scr
 | 2.700 | 2026-10-20 | **SCR-135 / MB90 stage 1: the output contract (B-870, §26.882).** Two NAST-shaped tables — `output_type` (catalogue **and** condition) and `output_message` (queue and log); the package\u2019s concatenated `object_key` **refused** for three foreign-keyed columns, its `accountingHeader` company code **refused** for a code derived from the plants; named states with SAP\u2019s digits as aliases (`PENDING`/`PROCESSED`/`ERROR`, `PRINT`/`EMAIL`, `IMMEDIATE`/`PERIODIC`), **FAX and EDI refused by name**; WE01 and WA01 delivered; determination at posting **and** a run that fills what stands missing; print renders and records, **spool and transport deferred**; an EMAIL with no recipient **fails for real** and is retried after a recipient is set. | Agent |\n2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.701 | 2026-10-20 | **SCR-135 stage 2: two tables and the queue index, measured (B-871, §26.883).** 9074 creates `output_type` (catalogue **and** condition) and `output_message` (queue and log) with a real foreign key to the document and **no company code**; over 40,000 messages the package\u2019s `(status, output_type)` index was **never chosen by the planner** while `(client, status, created_at)` took the grid from **9.650 to 0.085 ms** and the periodic run from **6.197 to 0.394 ms** — 9075 takes it. **Migrations 197.** | Agent |\n| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 | 2.702 | 2026-10-20 | **SCR-135 stage 3: the output engine and its posting hook (B-872, §26.884).** Determination runs **inside all three posting transactions** (goods receipt, transfer and its counter, reversal); a receipt earns **WE01** and dispatches immediately, an issue earns **WA01** at the periodic cadence, a **transfer earns neither** (it both receipts and issues). The run fills history idempotently; dispatch renders the slip and records the attempt; an EMAIL fails without a recipient and succeeds after one. Catalogue **166/140/162**. **11/11 tests**; posting suites **27/27**. | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
-| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.703 | 2026-10-20 | **SCR-135 stage 4: the output screen (B-873, §26.885).** `/inventory/material-document-output` — the full selection, a **run** that determines and dispatches, the queue with SAP\u2019s digits as aliases only, per-row **dispatch, recipient and slip preview**; failures state their reason in the row; action messages stand outside the conditional blocks. **9/9 UI-contract tests**; harness **135 targets** (T835). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
  seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
