@@ -183,3 +183,64 @@ describe('SCR-114 follow-up: tolerance difference posting (B-805)', () => {
     expect(await journalCount()).toBe(before);
   });
 });
+
+describe('SCR-114 advanced clearing B-808: partial clearing', () => {
+  async function postBoth(debitAmount: string, creditAmount: string, key: string) {
+    const debit = await post(debitAmount, '400000', '101000', `${key}-d`, '2026-04-18');
+    const credit = await post(creditAmount, '101000', '400000', `${key}-c`, '2026-04-19');
+    return [
+      { documentNumber: debit.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+      { documentNumber: credit.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+    ];
+  }
+
+  it('settles part of an item, keeps it open for the balance, and clears later', async () => {
+    const [a, b] = await postBoth('1000', '600', 'part-1');
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'part-clear-1', method: 'PARTIAL',
+      items: [
+        { ...a!, settlementAmount: '600' },
+        { ...b!, settlementAmount: '600' },
+      ],
+    }));
+    // A stays open for 400; B settles in full and stands cleared.
+    const open = result.openItems.filter((i) => i.documentNumber === a!.documentNumber);
+    expect(open).toHaveLength(1);
+    expect(open[0]!.remaining).toBe(400);
+    expect(open[0]!.applied).toBe(600);
+    expect(result.openItems.some((i) => i.documentNumber === b!.documentNumber)).toBe(false);
+    expect(result.openBalance).toBeGreaterThanOrEqual(400); // residual items from earlier cases stand open too
+
+    const allocations = await withTenant(client, async (tx) => tx.execute(sql`
+      select clearing_method, allocated_amount::text as amount, source_document
+      from gl_clearing_allocation where client = ${client} and source_document = ${a!.documentNumber}
+    `)) as unknown as Array<{ clearing_method: string; amount: string; source_document: string }>;
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0]!.clearing_method).toBe('PARTIAL');
+    expect(Number(allocations[0]!.amount)).toBe(600);
+
+    // A second clearing settles the remaining 400 against a fresh credit item.
+    const c = await post('400', '101000', '400000', 'part-2-fresh', '2026-04-20');
+    const final = await clearGlItems(clearingInput({
+      requestKey: 'part-clear-2', method: 'STANDARD',
+      items: [a!, { documentNumber: c.documentNumber, fiscalYear: 2026, lineNumber: 2 }],
+    }));
+    expect(final.openItems.some((i) => i.documentNumber === a!.documentNumber)).toBe(false);
+  }, 60_000);
+
+  it('refuses a settlement above the remaining balance and zero settlement', async () => {
+    const [a, b] = await postBoth('100', '50', 'part-3');
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'part-bad-1', method: 'PARTIAL',
+      items: [{ ...a!, settlementAmount: '150' }, b!],
+    }))).rejects.toThrow(/exceeds its remaining/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'part-bad-2', method: 'PARTIAL',
+      items: [{ ...a!, settlementAmount: '0' }, b!],
+    }))).rejects.toThrow(/must stand positive/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'part-bad-3', method: 'PARTIAL',
+      items: [{ ...a!, settlementAmount: '75' }, b!],
+    }))).rejects.toThrow(/do not balance/);
+  });
+});

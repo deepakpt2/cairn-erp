@@ -46,8 +46,13 @@ export interface GlClearingItem {
   reference: string;
   debitCredit: string;
   currency: string;
+  /** The item's original amount (local currency). */
   amount: string;
-  /** Local-currency amount signed by debit/credit (debit positive). */
+  /** Amount already applied by active allocations, in the item's currency. */
+  applied: number;
+  /** Remaining open amount (local currency, positive). */
+  remaining: number;
+  /** Remaining amount signed by debit/credit (debit positive). */
   signed: number;
   clearingDocument: string | null;
   clearingDate: string | null;
@@ -82,8 +87,11 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-trail';
-import { accountDetermination, documentType, employeeToleranceGroup } from '../foundation/schema';
-import { glAccount, glAccountCompany, journalEntry, journalEntryLine } from './schema';
+import { accountDetermination, documentType, employeeToleranceGroup, exchangeRate } from '../foundation/schema';
+import {
+  glAccount, glAccountCompany, glClearingAllocation, glClearingResidual,
+  journalEntry, journalEntryLine, residualReason,
+} from './schema';
 
 const CLEARING_CLASS = 'gl_clearing';
 
@@ -167,6 +175,7 @@ async function loadItems(
     debitCredit: journalEntryLine.debitCredit,
     currency: journalEntryLine.currency,
     amount: journalEntryLine.amountLocal,
+    amountDocument: journalEntryLine.amountDocument,
     clearingDocument: journalEntryLine.clearingDocument,
     clearingDate: journalEntryLine.clearingDate,
   }).from(journalEntryLine)
@@ -190,14 +199,34 @@ async function loadItems(
       filters?.postingDateTo ? sql`${journalEntry.postingDate} <= ${filters.postingDateTo}` : undefined,
     ))
     .orderBy(journalEntry.postingDate, journalEntryLine.documentNumber, journalEntryLine.lineNumber);
-  return rows.map((r) => ({
-    documentNumber: r.documentNumber, fiscalYear: r.fiscalYear, lineNumber: r.lineNumber,
-    postingDate: r.postingDate, documentType: r.documentType,
-    assignment: r.assignment ?? '', reference: r.reference ?? '',
-    debitCredit: r.debitCredit, currency: r.currency, amount: r.amount,
-    signed: r.debitCredit === 'S' ? Number(r.amount) : -Number(r.amount),
-    clearingDocument: r.clearingDocument, clearingDate: r.clearingDate,
-  }));
+  const appliedRows = await tx.execute(sql`
+    select source_document, source_fiscal_year, source_line_number,
+           coalesce(sum(allocated_amount), 0)::text as applied
+    from gl_clearing_allocation
+    where client = ${client} and company_code = ${companyCode}
+      and gl_account = ${account} and is_active
+    group by source_document, source_fiscal_year, source_line_number
+  `) as unknown as Array<{
+    source_document: string; source_fiscal_year: number; source_line_number: number; applied: string;
+  }>;
+  const appliedBy = new Map(appliedRows.map((r) =>
+    [`${r.source_document}|${r.source_fiscal_year}|${r.source_line_number}`, Number(r.applied)]));
+  return rows.map((r) => {
+    const applied = appliedBy.get(`${r.documentNumber}|${r.fiscalYear}|${r.lineNumber}`) ?? 0;
+    const amountDocument = Number(r.amountDocument);
+    const amountLocal = Number(r.amount);
+    const remainingDocument = Math.max(0, round4(amountDocument - applied));
+    // Carrying value carves proportionally: an item settled in full leaves nothing.
+    const remaining = amountDocument === 0 ? 0 : round4(amountLocal * remainingDocument / amountDocument);
+    return {
+      documentNumber: r.documentNumber, fiscalYear: r.fiscalYear, lineNumber: r.lineNumber,
+      postingDate: r.postingDate, documentType: r.documentType,
+      assignment: r.assignment ?? '', reference: r.reference ?? '',
+      debitCredit: r.debitCredit, currency: r.currency, amount: r.amount,
+      applied, remaining, signed: r.debitCredit === 'S' ? remaining : -remaining,
+      clearingDocument: r.clearingDocument, clearingDate: r.clearingDate,
+    };
+  });
 }
 
 async function loadView(
@@ -233,7 +262,11 @@ export interface GlClearingItemRef {
   documentNumber: string;
   fiscalYear: number;
   lineNumber: number;
+  /** Amount to apply in the item's currency; omitted applies the full remaining balance. */
+  settlementAmount?: string;
 }
+
+export type GlClearingMethod = 'STANDARD' | 'PARTIAL' | 'RESIDUAL';
 
 async function standingClearingForRequestKey(
   tx: Tx, client: string, requestKey: string,
@@ -261,18 +294,53 @@ async function standingClearingForRequestKey(
   return doc?.newValue ?? null;
 }
 
+/** Latest AVERAGE rate from a currency to the company's local currency on or before a date. */
+async function rateToLocal(
+  tx: Tx, client: string, currency: string, localCurrency: string, onDate: string,
+): Promise<number | null> {
+  if (currency === localCurrency) return 1;
+  const [row] = await tx.select().from(exchangeRate).where(and(
+    eq(exchangeRate.client, client),
+    eq(exchangeRate.rateType, 'AVERAGE'),
+    eq(exchangeRate.fromCurrency, currency),
+    eq(exchangeRate.toCurrency, localCurrency),
+  )).orderBy(sql`${exchangeRate.validFrom} desc`);
+  if (!row || row.validFrom > onDate) return null;
+  return Number(row.rate) * row.ratioTo / row.ratioFrom;
+}
+
 export async function clearGlItems(input: {
   client: string; changedBy: string;
   companyCode: string; glAccount: string; documentType: string;
   clearingDate: string; postingDate: string; documentDate: string;
   confirmed: boolean; requestKey: string;
   items: GlClearingItemRef[];
-}): Promise<GlClearingView & { clearingDocumentNumber: string; clearingFiscalYear: number }> {
+  /** STANDARD clears in full; PARTIAL leaves a short-settled item open; RESIDUAL re-stands its remainder as a new item. */
+  method?: GlClearingMethod;
+  /** Required when a residual item is generated; configured three-character key. */
+  residualReasonCode?: string;
+  /** Permit a selection spanning currencies, translated at the clearing date. */
+  crossCurrency?: boolean;
+}): Promise<GlClearingView & {
+  clearingDocumentNumber: string;
+  clearingFiscalYear: number;
+  residualItems: Array<{ documentNumber: string; fiscalYear: number; lineNumber: number; amount: string; reasonCode: string }>;
+}> {
   if (!input.confirmed) {
     throw new GlClearingError('The clearing stands unconfirmed.', 'Tick the confirmation, then post the clearing.');
   }
   if (input.items.length === 0) {
     throw new GlClearingError('Select at least one open item to clear.', 'Tick the items that settle each other.');
+  }
+  const method: GlClearingMethod = input.method ?? 'STANDARD';
+  if (!['STANDARD', 'PARTIAL', 'RESIDUAL'].includes(method)) {
+    throw new GlClearingError(`Clearing method ${method} is not one of STANDARD, PARTIAL or RESIDUAL.`, 'Choose the method, then post.');
+  }
+  if (method === 'RESIDUAL' && !input.residualReasonCode?.trim()) {
+    throw new GlClearingError(
+      'Residual clearing requires a residual reason code.',
+      'Name the configured residual reason that justifies the new open item.',
+    );
   }
   for (const [label, value] of [['Clearing date', input.clearingDate], ['Posting date', input.postingDate], ['Document date', input.documentDate]] as const) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new GlClearingError(`${label} ${value} is not a calendar date.`);
@@ -291,7 +359,10 @@ export async function clearGlItems(input: {
       const [yearRow] = await tx.select({ fiscalYear: journalEntry.fiscalYear }).from(journalEntry).where(and(
         eq(journalEntry.client, input.client), eq(journalEntry.documentNumber, replay),
       ));
-      return { ...view, clearingDocumentNumber: replay, clearingFiscalYear: yearRow?.fiscalYear ?? 0 };
+      return {
+        ...view, clearingDocumentNumber: replay,
+        clearingFiscalYear: yearRow?.fiscalYear ?? 0, residualItems: [],
+      };
     }
     const [typeRow] = await tx.select().from(documentType).where(and(
       eq(documentType.client, input.client),
@@ -301,15 +372,47 @@ export async function clearGlItems(input: {
       throw new GlClearingError(`Document type ${input.documentType} is not configured.`, 'Choose a configured document type (OBA7).');
     }
     const company = await getCompanyCode(tx, input.client, input.companyCode);
+    const localCurrency = company!.currency;
+    const chart = company!.chartOfAccounts ?? '';
 
-    interface Held { ref: GlClearingItemRef; currency: string; amount: string; signed: number }
+    if (method === 'RESIDUAL') {
+      const [reason] = await tx.select().from(residualReason).where(and(
+        eq(residualReason.client, input.client),
+        eq(residualReason.reasonCode, input.residualReasonCode!.trim()),
+      ));
+      if (!reason || !reason.isActive) {
+        throw new GlClearingError(
+          `Residual reason ${input.residualReasonCode} does not stand configured and active.`,
+          'Maintain the residual reason master, then post.',
+        );
+      }
+    }
+
+    interface Held {
+      ref: GlClearingItemRef;
+      currency: string;
+      debitCredit: string;
+      businessPartner: string | null;
+      amountDocument: number;
+      amountLocal: number;
+      /** Applied by standing allocations, in the item's currency. */
+      priorApplied: number;
+      /** The settlement this clearing applies, in the item's currency. */
+      applied: number;
+      /** Carrying value released by this clearing (local currency). */
+      appliedLocal: number;
+    }
     const held: Held[] = [];
     for (const ref of input.items) {
       // Row lock: a competing clearing that already took the item is refused here.
       const rows = await tx.execute(sql`
         select l.document_number, l.fiscal_year, l.line_number, l.company_code, l.gl_account,
-               l.currency, l.amount_local::text as amount_local, l.debit_credit,
-               l.clearing_document, e.status as header_status
+               l.currency, l.amount_local::text as amount_local, l.amount_document::text as amount_document,
+               l.debit_credit, l.business_partner, l.clearing_document, e.status as header_status,
+               coalesce((select sum(a.allocated_amount) from gl_clearing_allocation a
+                 where a.client = l.client and a.company_code = l.company_code and a.gl_account = l.gl_account
+                   and a.source_document = l.document_number and a.source_fiscal_year = l.fiscal_year
+                   and a.source_line_number = l.line_number and a.is_active), 0)::text as prior_applied
         from journal_entry_line l
         join journal_entry e
           on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
@@ -320,8 +423,9 @@ export async function clearGlItems(input: {
         for update of l
       `) as unknown as Array<{
         company_code: string; gl_account: string; currency: string;
-        amount_local: string; debit_credit: string;
-        clearing_document: string | null; header_status: string;
+        amount_local: string; amount_document: string; debit_credit: string;
+        business_partner: string | null;
+        clearing_document: string | null; header_status: string; prior_applied: string;
       }>;
       const line = rows[0];
       if (!line || line.company_code !== input.companyCode || line.gl_account !== input.glAccount) {
@@ -339,42 +443,111 @@ export async function clearGlItems(input: {
           'Reload the open items, then clear.',
         );
       }
+      const amountDocument = Number(line.amount_document);
+      const amountLocal = Number(line.amount_local);
+      const priorApplied = Number(line.prior_applied);
+      const remainingDocument = round4(amountDocument - priorApplied);
+      if (remainingDocument <= 0) {
+        throw new GlClearingError(
+          `Document ${ref.documentNumber} line ${ref.lineNumber} stands settled in full by its allocations.`,
+          'Reload the open items, then clear.',
+        );
+      }
+      const applied = ref.settlementAmount === undefined || ref.settlementAmount === ''
+        ? remainingDocument
+        : Number(ref.settlementAmount);
+      if (!Number.isFinite(applied) || applied <= 0) {
+        throw new GlClearingError(
+          `The settlement on document ${ref.documentNumber} must stand positive; ${ref.settlementAmount} does not.`,
+          'Enter a settlement above zero, or leave it blank to settle the item in full.',
+        );
+      }
+      if (applied - remainingDocument > 0.005) {
+        throw new GlClearingError(
+          `The settlement of ${applied.toFixed(2)} on document ${ref.documentNumber} exceeds its remaining ${remainingDocument.toFixed(2)}.`,
+          'Settle no more than the item leaves open.',
+        );
+      }
+      if (method === 'STANDARD' && remainingDocument - applied > 0.005) {
+        throw new GlClearingError(
+          `Standard clearing settles document ${ref.documentNumber} in full; ${applied.toFixed(2)} of ${remainingDocument.toFixed(2)} stands entered.`,
+          'Choose partial clearing to leave a balance open, or residual clearing to re-stand it.',
+        );
+      }
+      // Carrying value released proportionally, so the account reverses exactly.
+      const appliedLocal = amountDocument === 0 ? 0 : round4(amountLocal * applied / amountDocument);
       held.push({
-        ref, currency: line.currency, amount: line.amount_local,
-        signed: line.debit_credit === 'S' ? Number(line.amount_local) : -Number(line.amount_local),
+        ref, currency: line.currency, debitCredit: line.debit_credit,
+        businessPartner: line.business_partner,
+        amountDocument, amountLocal, priorApplied, applied, appliedLocal,
       });
     }
 
     const currencies = [...new Set(held.map((h) => h.currency))];
-    if (currencies.length > 1) {
+    const crossMode = currencies.length > 1;
+    if (crossMode && !input.crossCurrency) {
       throw new GlClearingError(
-        `The selected items stand in ${currencies.join(' and ')}; one clearing settles one currency.`,
-        'Select items in a single currency.',
+        `The selected items stand in ${currencies.join(' and ')}; one clearing settles one currency unless cross-currency clearing is asked for.`,
+        'Select items in a single currency, or tick cross-currency clearing.',
       );
     }
-    const difference = round4(held.reduce((s, h) => s + h.signed, 0));
-    let differenceLine: { glAccount: string; debitCredit: 'S' | 'H'; amount: number } | null = null;
-    if (difference !== 0) {
+    if (crossMode && method !== 'STANDARD') {
+      throw new GlClearingError(
+        `Cross-currency clearing stands for standard clearing only; ${method} clearing stays within one currency.`,
+        'Clear the items in full across currencies, or settle the balance in its own currency.',
+      );
+    }
+
+    // ── Balance the settlements ───────────────────────────────────────────────
+    // The settlements must offset. A remainder within an item is a residual
+    // (RESIDUAL) or a balance that stays open (PARTIAL) — never an imbalance.
+    const documentCurrency = crossMode ? localCurrency : currencies[0]!;
+    const rates = new Map<string, number>();
+    if (crossMode || documentCurrency !== localCurrency) {
+      for (const currency of currencies) {
+        const rate = await rateToLocal(tx, input.client, currency, localCurrency, input.clearingDate);
+        if (rate === null) {
+          throw new GlClearingError(
+            `No AVERAGE rate stands from ${currency} to ${localCurrency} on or before ${input.clearingDate}.`,
+            'Maintain the exchange rate (SCR-034), then clear.',
+          );
+        }
+        rates.set(currency, rate);
+      }
+    }
+    const localValue = (h: Held) => crossMode
+      ? round4(h.applied * rates.get(h.currency)!)
+      : h.appliedLocal;
+    const signedLocal = held.reduce((s, h) => s + (h.debitCredit === 'S' ? localValue(h) : -localValue(h)), 0);
+    const settleDifference = round4(signedLocal);
+
+    let toleranceLine: { glAccount: string; debitCredit: 'S' | 'H'; amountLocal: number } | null = null;
+    if (settleDifference !== 0) {
+      if (crossMode) {
+        throw new GlClearingError(
+          `The settlements translate to ${Math.abs(settleDifference).toFixed(2)} ${localCurrency} apart at the clearing date.`,
+          'Settle items whose translated values offset, then clear.',
+        );
+      }
       // A debit difference judges on the expense limits, a credit on the
       // revenue limits; both the absolute and the percentage limit must
       // hold (the smaller binds), exactly as the payment screens judge.
-      const expense = difference > 0;
+      const expense = settleDifference > 0;
       const fail = (remedy: string) => new GlClearingError(
-        `The selected items do not balance: the difference stands at ${Math.abs(difference).toFixed(2)} ${currencies[0]}.`,
+        `The selected items do not balance: the difference stands at ${Math.abs(settleDifference).toFixed(2)} ${currencies[0]}.`,
         remedy,
       );
       const tolerance = await defaultTolerance(tx, input.client, input.companyCode);
       if (!tolerance) {
-        throw fail('Select items whose signed sum stands at zero, or maintain the default tolerance group so a difference within tolerance can post.');
+        throw fail('Select items whose settlements offset, or maintain the default tolerance group so a difference within tolerance can post.');
       }
       const amountLimit = Number(expense ? tolerance.paymentDiffExpenseAmount : tolerance.paymentDiffRevenueAmount);
       const percentLimit = Number(expense ? tolerance.paymentDiffExpensePercent : tolerance.paymentDiffRevenuePercent);
-      const gross = round4(held.reduce((s, h) => s + Math.abs(h.signed), 0));
+      const gross = round4(held.reduce((s, h) => s + Math.abs(localValue(h)), 0));
       const percentAmount = round2(gross * percentLimit / 100);
-      if (Math.abs(difference) - Math.min(amountLimit, percentAmount) > 0.005) {
-        throw fail(`The difference stands beyond the tolerance of the default group (at most ${Math.min(amountLimit, percentAmount).toFixed(2)} ${currencies[0]} on this selection). Select items whose signed sum stands at zero, or widen the tolerance group.`);
+      if (Math.abs(settleDifference) - Math.min(amountLimit, percentAmount) > 0.005) {
+        throw fail(`The difference stands beyond the tolerance of the default group (at most ${Math.min(amountLimit, percentAmount).toFixed(2)} ${documentCurrency} on this selection). Select items whose settlements offset, or widen the tolerance group.`);
       }
-      const chart = company!.chartOfAccounts ?? '';
       const account = await determinationAccount(tx, input.client, chart, 'PAYMENT_DIFFERENCE', expense ? 'EXP' : 'REV');
       if (!account) {
         throw new GlClearingError(
@@ -382,7 +555,77 @@ export async function clearGlItems(input: {
           'Maintain the account determination for the payment difference event, then post again.',
         );
       }
-      differenceLine = { glAccount: account, debitCredit: expense ? 'S' : 'H', amount: Math.abs(difference) };
+      toleranceLine = { glAccount: account, debitCredit: expense ? 'S' : 'H', amountLocal: Math.abs(settleDifference) };
+    }
+
+    // ── Build the document ────────────────────────────────────────────────────
+    interface DocLine { glAccount: string; debitCredit: 'S' | 'H'; amount: number; amountLocal: number; businessPartner?: string | null }
+    const lines: DocLine[] = [];
+    const residualDrafts: Array<{ held: Held; amount: number; amountLocal: number }> = [];
+    const offsetLineNumbers = new Map<Held, number>();
+    for (const h of held) {
+      // Standard and residual clearings offset the item in full; partial clears
+      // only what it settles. A debit item is credited, a credit item debited.
+      const clearingAmount = method === 'PARTIAL' ? h.applied : round4(h.amountDocument - h.priorApplied);
+      const clearingLocal = method === 'PARTIAL'
+        ? h.appliedLocal
+        : round4(h.amountLocal - (h.amountDocument === 0 ? 0 : round4(h.amountLocal * h.priorApplied / h.amountDocument)));
+      const direction: 'S' | 'H' = h.debitCredit === 'S' ? 'H' : 'S';
+      if (method === 'RESIDUAL' && clearingAmount - h.applied > 0.005) {
+        residualDrafts.push({
+          held: h,
+          amount: round4(clearingAmount - h.applied),
+          amountLocal: round4(clearingLocal - h.appliedLocal),
+        });
+      }
+      lines.push({ glAccount: input.glAccount, debitCredit: direction, amount: clearingAmount, amountLocal: clearingLocal });
+      offsetLineNumbers.set(h, lines.length);
+    }
+    if (method === 'RESIDUAL' && residualDrafts.length === 0) {
+      throw new GlClearingError(
+        'Residual clearing found no remainder to re-stand — every item settles in full.',
+        'Settle an item below its remaining balance to generate a residual, or clear it as a standard clearing.',
+      );
+    }
+    // A residual is a new open item: it carries the original item's side and partner.
+    for (const draft of residualDrafts) {
+      lines.push({
+        glAccount: input.glAccount, debitCredit: draft.held.debitCredit as 'S' | 'H',
+        amount: draft.amount, amountLocal: draft.amountLocal,
+        businessPartner: draft.held.businessPartner,
+      });
+    }
+    if (toleranceLine) {
+      lines.push({
+        glAccount: toleranceLine.glAccount, debitCredit: toleranceLine.debitCredit,
+        amount: documentCurrency === localCurrency ? toleranceLine.amountLocal : round4(toleranceLine.amountLocal / (rates.get(documentCurrency) ?? 1)),
+        amountLocal: toleranceLine.amountLocal,
+      });
+    }
+    // Realized exchange difference: the carrying values released need not offset
+    // when items were carried at different rates; the net posts to FXGAIN/FXLOSS.
+    const carryingDifference = round4(lines.reduce(
+      (s, l) => s + (l.debitCredit === 'S' ? l.amountLocal : -l.amountLocal), 0));
+    let fxLine: { glAccount: string; debitCredit: 'S' | 'H'; amountLocal: number } | null = null;
+    if (carryingDifference !== 0) {
+      const gain = carryingDifference > 0; // credits exceed debits: settle above carrying
+      const event = gain ? 'FXGAIN' : 'FXLOSS';
+      const account = await determinationAccount(tx, input.client, chart, event);
+      if (!account) {
+        throw new GlClearingError(
+          `Account determination for ${event} does not stand in chart ${chart}.`,
+          `Maintain the account determination for the ${gain ? 'exchange gain' : 'exchange loss'} event, then post again.`,
+        );
+      }
+      fxLine = {
+        glAccount: account, debitCredit: gain ? 'H' : 'S',
+        amountLocal: Math.abs(carryingDifference),
+      };
+      lines.push({
+        glAccount: account, debitCredit: fxLine.debitCredit,
+        amount: documentCurrency === localCurrency ? fxLine.amountLocal : round4(fxLine.amountLocal / (rates.get(documentCurrency) ?? 1)),
+        amountLocal: fxLine.amountLocal,
+      });
     }
 
     const position = await derivePosition(tx, input.client, company!.fiscalYearVariant!, input.postingDate);
@@ -394,22 +637,18 @@ export async function clearGlItems(input: {
       postingDate: input.postingDate,
       fiscalYear: position.fiscalYear,
       postingPeriod: position.period,
-      currency: currencies[0]!,
-      localCurrency: company!.currency,
+      currency: documentCurrency,
+      localCurrency,
+      exchangeRate: documentCurrency === localCurrency ? '1' : String(rates.get(documentCurrency)),
       reference: input.glAccount,
-      headerText: `G/L clearing ${input.glAccount}`,
-      lines: [
-        ...held.map((h) => ({
-          glAccount: input.glAccount,
-          debitCredit: h.signed > 0 ? 'H' as const : 'S' as const,
-          amount: Number(h.amount).toFixed(2),
-        })),
-        ...(differenceLine ? [{
-          glAccount: differenceLine.glAccount,
-          debitCredit: differenceLine.debitCredit,
-          amount: differenceLine.amount.toFixed(2),
-        }] : []),
-      ],
+      headerText: `${method === 'STANDARD' ? 'G/L clearing' : method === 'PARTIAL' ? 'G/L partial clearing' : 'G/L residual clearing'} ${input.glAccount}`,
+      lines: lines.map((l) => ({
+        glAccount: l.glAccount,
+        debitCredit: l.debitCredit,
+        amount: Math.abs(l.amount).toFixed(2),
+        amountLocal: Math.abs(l.amountLocal).toFixed(2),
+        ...(l.businessPartner ? { businessPartner: l.businessPartner } : {}),
+      })),
       origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.glAccount}` },
       postedBy: input.changedBy,
       transactionCode: GL_CLEARING_CAPABILITY,
@@ -418,7 +657,11 @@ export async function clearGlItems(input: {
       throw error;
     });
 
-    for (const h of held) {
+    // Stamp the offsets of the items this clearing closes in full; a partially
+    // settled item stays open, and a residual line is a new open item.
+    const closed = held.filter((h) =>
+      method !== 'PARTIAL' || h.applied - (h.amountDocument - h.priorApplied) > -0.005);
+    for (const h of closed) {
       await tx.update(journalEntryLine).set({
         clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
       }).where(and(
@@ -428,14 +671,53 @@ export async function clearGlItems(input: {
         eq(journalEntryLine.lineNumber, h.ref.lineNumber),
       ));
     }
+    const offsetNumbers = [...held.map((h) => offsetLineNumbers.get(h)!)];
     await tx.update(journalEntryLine).set({
       clearingDocument: journal.documentNumber, clearingDate: input.clearingDate,
     }).where(and(
       eq(journalEntryLine.client, input.client),
       eq(journalEntryLine.documentNumber, journal.documentNumber),
       eq(journalEntryLine.fiscalYear, journal.fiscalYear),
-      eq(journalEntryLine.glAccount, input.glAccount),
+      sql`${journalEntryLine.lineNumber} in (${sql.join(offsetNumbers.map((n) => sql`${n}`), sql`, `)})`,
     ));
+
+    // Normalized allocations: one row per offset line × source line.
+    for (const h of held) {
+      await tx.insert(glClearingAllocation).values({
+        client: input.client, companyCode: input.companyCode, glAccount: input.glAccount,
+        clearingDocument: journal.documentNumber, clearingFiscalYear: journal.fiscalYear,
+        clearingLineNumber: offsetLineNumbers.get(h)!,
+        sourceDocument: h.ref.documentNumber, sourceFiscalYear: h.ref.fiscalYear,
+        sourceLineNumber: h.ref.lineNumber,
+        allocatedAmount: h.applied.toFixed(4), currency: h.currency,
+        clearingMethod: method, createdBy: input.changedBy,
+      });
+    }
+
+    // Residual lineage: each generated residual line, its original item and reason.
+    const residualItems: Array<{ documentNumber: string; fiscalYear: number; lineNumber: number; amount: string; reasonCode: string }> = [];
+    let lineCursor = held.length;
+    for (const draft of residualDrafts) {
+      lineCursor += 1;
+      await tx.insert(glClearingResidual).values({
+        client: input.client, companyCode: input.companyCode, glAccount: input.glAccount,
+        clearingDocument: journal.documentNumber, clearingFiscalYear: journal.fiscalYear,
+        clearingLineNumber: offsetLineNumbers.get(draft.held)!,
+        originalDocument: draft.held.ref.documentNumber, originalFiscalYear: draft.held.ref.fiscalYear,
+        originalLineNumber: draft.held.ref.lineNumber,
+        residualDocument: journal.documentNumber, residualFiscalYear: journal.fiscalYear,
+        residualLineNumber: lineCursor,
+        reasonCode: input.residualReasonCode!.trim(),
+        generatedAmount: draft.amount.toFixed(4), currency: draft.held.currency,
+        createdBy: input.changedBy,
+      });
+      residualItems.push({
+        documentNumber: journal.documentNumber, fiscalYear: journal.fiscalYear,
+        lineNumber: lineCursor, amount: draft.amount.toFixed(2),
+        reasonCode: input.residualReasonCode!.trim(),
+      });
+    }
+
     await recordChange(tx, {
       client: input.client, objectClass: CLEARING_CLASS,
       objectKey: `${input.companyCode}/${input.glAccount}/${journal.documentNumber}`,
@@ -444,15 +726,18 @@ export async function clearGlItems(input: {
         clearingDocument: journal.documentNumber, items: held.length,
         clearingDate: input.clearingDate, requestKey: input.requestKey,
         documentType: input.documentType, glAccount: input.glAccount,
-        companyCode: input.companyCode,
-        ...(differenceLine ? {
-          difference: differenceLine.amount.toFixed(2),
-          differenceAccount: differenceLine.glAccount,
-        } : {}),
+        companyCode: input.companyCode, method,
+        ...(residualItems.length ? { residualItems: residualItems.length, residualReasonCode: input.residualReasonCode } : {}),
+        ...(fxLine ? { exchangeDifference: fxLine.amountLocal.toFixed(2), exchangeAccount: fxLine.glAccount } : {}),
+        ...(toleranceLine ? { difference: toleranceLine.amountLocal.toFixed(2), differenceAccount: toleranceLine.glAccount } : {}),
+        ...(crossMode ? { crossCurrency: currencies } : {}),
       },
     });
 
     const view = await loadView(tx, input.client, input.companyCode, input.glAccount, judged);
-    return { ...view, clearingDocumentNumber: journal.documentNumber, clearingFiscalYear: journal.fiscalYear };
+    return {
+      ...view, clearingDocumentNumber: journal.documentNumber,
+      clearingFiscalYear: journal.fiscalYear, residualItems,
+    };
   });
 }
