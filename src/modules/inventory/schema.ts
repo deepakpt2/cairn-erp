@@ -432,7 +432,7 @@ export const outputMessage = pgTable('output_message', {
 export const productionOrder = pgTable('production_order', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 12 }).notNull(),
-  /** What the order produces (AUFK-MATNR). */
+  /** What the order produces. */
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
   orderQuantity: quantity('order_quantity').notNull(),

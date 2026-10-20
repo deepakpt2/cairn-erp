@@ -77,11 +77,11 @@ export async function productionOrderCreate(ctx: Context) {
   const status = page.locator('p[role="status"]').first();
   await status.waitFor();
   const message = await status.innerText();
-  assert.match(message, /Order PRD\d+ created\./, `the order is created: ${message}`);
-  const orderNumber = /Order (PRD\d+) created\./.exec(message)![1];
+  assert.match(message, /Order PRD-?\d+ created\./, `the order is created: ${message}`);
+  const orderNumber = /Order (PRD-?\d+) created\./.exec(message)![1];
 
   // The order card: derived company, status, both components.
-  const card = page.locator('section[aria-labelledby="co01-order"]');
+  const card = page.locator('section[aria-labelledby="order-summary"]');
   await card.waitFor();
   assert.equal(await card.locator('[data-order-number]').getAttribute('data-order-number'), orderNumber,
     'the order shows its number');
@@ -95,10 +95,10 @@ export async function productionOrderCreate(ctx: Context) {
   // Release it.
   await page.getByRole('button', { name: 'Release the order', exact: true }).click();
   await page.locator('p[role="status"]').filter({ hasText: 'released' }).waitFor();
-  const releasedCard = page.locator('section[aria-labelledby="co01-order"]');
+  const releasedCard = page.locator('section[aria-labelledby="order-summary"]');
   await page.waitForFunction(
     (selector) => document.querySelector(`${selector} [data-status]`)?.getAttribute('data-status') === 'RELEASED',
-    'section[aria-labelledby="co01-order"]',
+    'section[aria-labelledby="order-summary"]',
   );
   assert.equal(await releasedCard.locator('[data-status]').getAttribute('data-status'), 'RELEASED',
     'the release is recorded on the order');

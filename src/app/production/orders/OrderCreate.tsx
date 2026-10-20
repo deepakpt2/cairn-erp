@@ -18,8 +18,8 @@ export default function OrderCreate({
 
   return (
     <>
-      <section aria-labelledby="co01-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
-        <h2 id="co01-create" className="text-sm font-semibold">{t('co01.createHeader')}</h2>
+      <section aria-labelledby="order-create" className="rounded-card border border-line bg-surface p-4 shadow-card">
+        <h2 id="order-create" className="text-sm font-semibold">{t('co01.createHeader')}</h2>
         <p className="mt-1 text-sm text-ink-soft">{t('co01.createHint')}</p>
         <p role="status" className={`mt-2 text-sm ${created.ok ? 'text-ink' : 'text-red-700'}`}>
           {created.message}{created.remedy ? ` ${created.remedy}` : ''}
@@ -87,8 +87,8 @@ export default function OrderCreate({
       </section>
 
       {created.ok && created.order && (
-        <section aria-labelledby="co01-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="co01-release" className="text-sm font-semibold">{t('co01.releaseHeader')}</h2>
+        <section aria-labelledby="order-release" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="order-release" className="text-sm font-semibold">{t('co01.releaseHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('co01.releaseHint')}</p>
           <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-red-700'}`}>
             {released.message}{released.remedy ? ` ${released.remedy}` : ''}
@@ -107,8 +107,8 @@ export default function OrderCreate({
       )}
 
       {order && (
-        <section aria-labelledby="co01-order" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="co01-order" className="text-sm font-semibold">
+        <section aria-labelledby="order-summary" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="order-summary" className="text-sm font-semibold">
             {t('co01.order')} <span className="code" data-order-number={order.orderNumber}>{order.orderNumber}</span>
           </h2>
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">

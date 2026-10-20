@@ -41,8 +41,8 @@ export default async function ProductionOrdersPage({ searchParams }: {
       </header>
 
       {existing && (
-        <section aria-labelledby="co01-existing" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="co01-existing" className="text-sm font-semibold">
+        <section aria-labelledby="order-existing" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="order-existing" className="text-sm font-semibold">
             {t('co01.order')} <span className="code" data-order-number={existing.orderNumber}>{existing.orderNumber}</span>
           </h2>
           <p className="mt-1 text-sm text-ink-soft">

@@ -3169,6 +3169,46 @@ frozen roadmap was seeded.
 
 Same-stage bookkeeping: B-888 / §26.900 / §30 row 2.718.
 
+## §26.901 — SCR-138 stage 5 and closure: T838 passes, the order stands before the issue
+
+**B-889.** `PROD.ORDER.CREATE` (CO01) is delivered, and the prerequisite the MIGO 261 package
+opened with is met. The next round posts 261 against an order that exists, is released, and
+carries the components it will consume.
+
+**T838** (`production-order-create`, `cairn_b210:5432`) ran against the production build
+(`npx next build --turbopack` → `next start`, exit 0):
+
+1. an order **created through the screen** — `PRD-0000001`, with two components entered as a
+   grid and no bill of materials exploded;
+2. the **company code derived from the plant** and read back off the order card, never typed;
+3. **`CREATED` → `RELEASED`**, the release recorded with who and when, on its own capability;
+4. read **independently of the screen**: one order, two components, `RELEASED`, and
+   **no material document, no journal, no stock moved** — a plan is not a posting;
+5. a refusal in SAP's shape — plant `QC99` does not exist.
+
+**Suite 1931/1931 in 263 files.** Harness **138 targets**. **Migrations 199** (one: 9076).
+Registry **166 / 141 / 163** capabilities and terms, with `PROD.ORDER.CREATE` now carrying its
+route and alias.
+
+**Two things this stage taught, both recorded because they will bite again.**
+
+- **The keyword-hygiene gate caught the round twice**: a data-dictionary keyword in a comment
+  (`AUFK-MATNR`) and four DOM identifiers built from the transaction code. The screen now uses
+  `order-create`, `order-release`, `order-summary`, `order-existing`. A transaction code belongs
+  in the registry and in prose, never in a selector.
+- **A rebuild while `next start` is running can hang the build indefinitely.** The first
+  `next build` after the hygiene fix ran past ten minutes without progressing; killing the
+  server, clearing `.next` and rebuilding finished in ~75 s. Stop the server before rebuilding,
+  not after.
+
+**Deferred by name, unchanged:** TECO and order closure, deletion flags, the finished-goods
+receipt (`PROD.ORDER.GR`), settlement (`PROD.ORDER.SETTLE`), availability checking, batch,
+collective orders, and external numbering. **Refused by name:** MIGO's A07/R08 dropdowns (each
+movement has its own capability in canon) and the package's `production_order_goods_issue`
+table (a 261 is a material document plus its journal).
+
+Same-stage bookkeeping: B-889 / §26.901 / §30 row 2.719.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3518,6 +3558,7 @@ Same-stage bookkeeping: B-888 / §26.900 / §30 row 2.718.
 | 2.716 | 2026-10-20 | **SCR-138 stage 2: the order master stands (B-886, §26.898).** Migration **9076** adds `production_order` (AUFK) and `production_order_component` (RESB) — **198 \u2192 199 migrations**. No company code (derived from the plant), **no stored withdrawn quantity** (derived from the documents), no status history: two statuses, `CREATED` and `RELEASED`, with the release named. Checks on status, quantity and dates; a partial unique index on `(client, request_key)` so a resubmitted create cannot make a second order. Applied and verified in `cairn_b210`. | Agent |
 | 2.717 | 2026-10-20 | **SCR-138 stage 3: the order service (B-887, §26.899).** Create draws the standing **`PRODORDER`** range under the tenant lock and judges every master before the header is drawn — material, plant **with its company code**, plant extension, each component and its storage location — so a refusal writes nothing. **`releaseProductionOrder`** records who and when, and a second release is a no-op. **12/12 service tests**, including: no company column exists (it is derived), nothing posts, and both acts appear in `change_document` — which required real before/after snapshots, since `recordChange` records differences and was silently recording nothing. | Agent |
 | 2.718 | 2026-10-20 | **SCR-138 stage 4: the order screen and T838 (B-888, §26.900).** `/production/orders` creates and releases under two capabilities; the company code is shown as derived and never asked for; the component grid is four stated lines. **Harness 138 targets** (T838), whose run creates an order, releases it, and reads the database back to prove **no document, no journal and no stock moved**. Registry gains `PROD.ORDER.CREATE` (alias CO01). **7/7 UI-contract tests**, 194 green across the touched files. | Agent |
+| 2.719 | 2026-10-20 | **SCR-138 stage 5 and closure: T838 passes, CO01 delivered (B-889, §26.901).** Five legs on the production build: an order created through the screen on **`PRD-0000001`**, the **company derived from the plant**, `CREATED` \u2192 **`RELEASED`** with who and when, the database read back to prove **no document, no journal and no stock moved**, and a refusal in SAP\u2019s shape. **Suite 1931/1931 in 263 files**; harness **138 targets**; **migrations 199**. Two lessons kept: the keyword-hygiene gate refuses data-dictionary keywords and transaction codes in selectors, and a rebuild during `next start` can hang the build. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
