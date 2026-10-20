@@ -2854,6 +2854,29 @@ re-judging it would make the audit trail conditional on today's calendar.
 
 Same-stage bookkeeping: B-880 / §26.892 / §30 row 2.710.
 
+## §26.893 — SCR-137 stage 2: the package's index is refused, measured again
+
+**B-881.** No migration. FB03 reads one document by a key that is already unique, and
+the package's company-leading index buys nothing and costs a little.
+
+Over **40,000 documents of four lines each** in two company codes:
+
+| read | standing keys | with `(client, company, number, year)` |
+| --- | --- | --- |
+| header by number and year | 0.032 ms (`…_pk`) | 0.031 ms — unchanged |
+| header **and company** | 0.033 ms (`…_pk`) | 0.052 ms — **1.6× slower** |
+| the document's lines | 0.037 ms (`…_line_…_pk`) | 0.049 ms — unchanged |
+
+Same structural reason as MB03 and MB90 (§26.878, §26.883): the lookup is **equality
+on a unique key**, so the year and the company in the index cannot narrow it further,
+and a second candidate only makes the planner consider more before choosing the same
+plan. The company code is a **filter on the row found**, not a way to find it.
+
+**Index refused. Migrations stay at 198.** `scripts/plan-fb03.mts` keeps the evidence
+re-runnable.
+
+Same-stage bookkeeping: B-881 / §26.893 / §30 row 2.711.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3195,7 +3218,7 @@ Same-stage bookkeeping: B-880 / §26.892 / §30 row 2.710.
 | 2.708 | 2026-10-20 | **SCR-136 stage 4: the goods issue screen (B-878, §26.890).** `/inventory/goods-issue` — movement with both dates and text, four lines with material, plant, location, quantity, **cost centre (disabled where the movement charges none)** and a reservation with its item; the result shows the document, journal, value and **what still stands open on the reservation**. **8/8 UI-contract tests**; harness **136 targets** (T836). | Agent |\n### §26.881 addendum — a label that shipped in the working tree but not in a commit
 | 2.709 | 2026-10-20 | **SCR-136 stage 5 and closure: T836 passes, MB1A delivered (B-879, §26.891).** Six legs: post a 201 of 10 (document, journal, value named), **stock 100\u219290 read back from the database**, a reservation for 8 demanded by **MD04**, an issue of 3 against it leaving **5.000 open**, **MD04 demanding the five that remain**. **Suite 1895/1895 in 259 files**; `INV.GI.POST` **Implemented**; catalogue 166/141/163; **migrations 198 (no table, no index — measured)**. | Agent |\n
 | 2.710 | 2026-10-20 | **SCR-137 / FB03 stage 1: the universal drill-down anchor (B-880, §26.892).** The SCR-090 display is **re-gated**: base on **`FIN.JOURNAL.DISPLAY`**, flow panel keeps **`FIN.DOC.FLOW`** — two questions, two capabilities. The package\u2019s required company code becomes a **cross-check** (the number and year identify; a disagreement refuses as `Document \u2026 does not exist in company code \u2026`) because the anchors must not be broken to duplicate a fact. **KOART derived**: S by default, D/K from `supplier_company_code` / `customer_company_code` where the line names a partner; **A and M refused by name** (no asset number, material is an assignment). The journal number on MB03, the goods issue and the list **become links** — §26.877\u2019s deferral closes. Tax-detail jump and F4 deferred; company-code authorisation and period checks refused. | Agent |\n**B-869 (correction).** The MD04 label for the new `RESERVATION` element
-(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
+| 2.711 | 2026-10-20 | **SCR-137 stage 2: the package\u2019s index refused, measured (B-881, §26.893).** Over 40,000 documents / 160,000 lines the three reads stand at **0.032\u20130.037 ms on the primary keys**; the company-leading candidate left two unchanged and made the company-checked read **0.033 \u2192 0.052 ms**. **No migration; migrations stay 198.** | Agent |\n(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
