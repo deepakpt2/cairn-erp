@@ -22,6 +22,7 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   materialDocument, materialDocumentLine, materialValuation, movementType, stockQuantity,
 } from './schema';
@@ -521,6 +522,9 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         reversedLines: wanted.length,
       },
     });
+
+    // SCR-135: the cancellation is a document of its own and carries its own slip.
+    await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 
     return (await existingByRequestKey(tx, input.client, input.requestKey))!;
   });

@@ -21,6 +21,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
@@ -478,6 +479,10 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         lines: prepared.length, journal: journal.documentNumber, status: 'POSTED',
       },
     });
+
+    // SCR-135: the document carries its output with it — determined here, and the
+    // immediate ones dispatched inside this same transaction.
+    await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 
     return (await existingByRequestKey(tx, input.client, input.requestKey))!;
   });

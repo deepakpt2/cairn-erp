@@ -25,6 +25,7 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
@@ -635,6 +636,9 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       },
     });
 
+    // SCR-135: the document carries its output with it, determined as it posts.
+    await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
+
     return (await existingByRequestKey(tx, input.client, input.requestKey))!;
   });
 }
@@ -808,6 +812,9 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
         journal: journalNumber, status: 'POSTED',
       },
     });
+
+    // SCR-135: the document carries its output with it, determined as it posts.
+    await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 
     return (await existingByRequestKey(tx, input.client, input.requestKey))!;
   });

@@ -2465,6 +2465,57 @@ ERROR without saying why.
 
 Same-stage bookkeeping: B-871 / §26.883 / §30 row 2.701.
 
+## §26.884 — SCR-135 stage 3: the output engine and its posting hook
+
+**B-872.** `src/modules/inventory/material-document-output.ts` exports
+`MATERIAL_DOC_OUTPUT_CAPABILITY = 'INV.MATERIALDOC.RECEIVEPRINT'`,
+`MaterialDocumentOutputError`, the delivered catalogue, determination, dispatch,
+the queue read, the slip renderer and the recipient change.
+
+**Determination is at the document's birth.** `recordOutputsForPostedDocument`
+runs **inside the posting transaction** and is called by all three posting paths —
+goods receipt (`postGoodsReceipt`), transfer posting (`postTransfer`, and the counter
+movement that reverses it) and reversal (`reverseMaterialDocument`). A document
+whose lines are all receipts earns **WE01**, all issues earns **WA01**, and a
+document that does both — a transfer — earns **neither**, because neither slip
+describes it; the run counts those as `transfers` rather than pretending. That
+ruling is recorded here rather than in §26.882 because the measurement of the
+catalogue came first.
+
+**Immediate means immediate.** The hook dispatches `IMMEDIATE` messages in the same
+transaction: a goods receipt's WE01 is `PROCESSED`, `send_count` 1 and stamped
+before the posting returns. `PERIODIC` messages — WA01 defaults to it, because a
+goods issue slip is a batch print in SAP too — wait for the run.
+
+**The run** (`determineOutputs`) fills what stands missing across a document, year
+and posting-date selection, so documents posted before this capability acquire
+their slips — the walkthrough rule needs that. It is **idempotent**: the primary key
+refuses a second row, so a second run creates nothing.
+
+**Dispatch** renders the slip from the document as posted and records the attempt.
+`PRINT` always renders; `EMAIL` needs a recipient and **fails for real** without
+one — status `ERROR`, the reason stored, and a `setRecipient` followed by a second
+dispatch succeeds. A `PROCESSED` message refuses a repeat by name.
+
+**The slip** is plain text: the document and year, when it posted and by whom, the
+header text, and every line with its movement, material and description, plant,
+storage location, quantity and unit, with the item count at the foot.
+
+**Catalogue.** `INV.MATERIALDOC.RECEIVEPRINT` delivered (not posting) and its term
+at `/inventory/material-document-output`, alias **MB90**: **166 capabilities / 140
+terms / 162 aliases**.
+
+**Tests — 11/11** (`tests/material-document-output.test.ts`): the receipt slip
+determined and dispatched as it posts; the issue slip pending at the periodic
+cadence; a transfer earning nothing; the run filling history and staying
+idempotent; the status counts and the output-type narrowing; the rendered slip; the
+EMAIL failure, its recorded reason and its success after a recipient; the refusal of
+a second dispatch; the periodic run clearing the queue; FAX and EDI refused by name
+with the media that exist; and a missing message plus another tenant's invisible
+queue. **The three posting suites stay green — 27/27.**
+
+Same-stage bookkeeping: B-872 / §26.884 / §30 row 2.702. Stage 4 next: the screen.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2797,7 +2848,7 @@ Same-stage bookkeeping: B-871 / §26.883 / §30 row 2.701.
 | 2.699 | 2026-10-20 | **SCR-134 stage 5 and closure: T834 passes, MB03 delivered (B-869, §26.881).** Eight legs: open by number and year, poster named, **company code derived**, descriptions resolved, item narrowing, wrong year refused, wrong number refused in the SAP shape, wrong item refused naming the items it carries, and a **reversed closed-year document shown as posted**. **Suite 1851/1851 in 255 files**; `INV.DISPLAY` **Implemented**; catalogue 165/139/161; **migrations 196 (no index added)**. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.700 | 2026-10-20 | **SCR-135 / MB90 stage 1: the output contract (B-870, §26.882).** Two NAST-shaped tables — `output_type` (catalogue **and** condition) and `output_message` (queue and log); the package\u2019s concatenated `object_key` **refused** for three foreign-keyed columns, its `accountingHeader` company code **refused** for a code derived from the plants; named states with SAP\u2019s digits as aliases (`PENDING`/`PROCESSED`/`ERROR`, `PRINT`/`EMAIL`, `IMMEDIATE`/`PERIODIC`), **FAX and EDI refused by name**; WE01 and WA01 delivered; determination at posting **and** a run that fills what stands missing; print renders and records, **spool and transport deferred**; an EMAIL with no recipient **fails for real** and is retried after a recipient is set. | Agent |\n2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.701 | 2026-10-20 | **SCR-135 stage 2: two tables and the queue index, measured (B-871, §26.883).** 9074 creates `output_type` (catalogue **and** condition) and `output_message` (queue and log) with a real foreign key to the document and **no company code**; over 40,000 messages the package\u2019s `(status, output_type)` index was **never chosen by the planner** while `(client, status, created_at)` took the grid from **9.650 to 0.085 ms** and the periodic run from **6.197 to 0.394 ms** — 9075 takes it. **Migrations 197.** | Agent |\n| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
-shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.702 | 2026-10-20 | **SCR-135 stage 3: the output engine and its posting hook (B-872, §26.884).** Determination runs **inside all three posting transactions** (goods receipt, transfer and its counter, reversal); a receipt earns **WE01** and dispatches immediately, an issue earns **WA01** at the periodic cadence, a **transfer earns neither** (it both receipts and issues). The run fills history idempotently; dispatch renders the slip and records the attempt; an EMAIL fails without a recipient and succeeds after one. Catalogue **166/140/162**. **11/11 tests**; posting suites **27/27**. | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
  seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
