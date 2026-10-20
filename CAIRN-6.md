@@ -3209,6 +3209,80 @@ table (a 261 is a material document plus its journal).
 
 Same-stage bookkeeping: B-889 / §26.901 / §30 row 2.719.
 
+## §26.902 — SCR-139 / MIGO: the screen is one screen, and the matrix is the contract
+
+**B-890.** Owner ruling, 2026-10-20: **MIGO gets complete parity with SAP.** SAP has no
+"261 page" — MIGO is one screen where an **action** and a **reference document type** select
+a movement, and 261 is one cell of that matrix. SCR-138 stage 1 refused the dropdowns as
+furniture; that ruling is **withdrawn** and replaced by this one. A screen whose only value
+is the one already delivered teaches the reader that the other values do not exist.
+
+**The frame.** `/inventory/migo`, under a new capability `INV.MIGO.POST`, with two selectors:
+
+| Action | Value | Meaning |
+| --- | --- | --- |
+| Goods receipt | `A01` | stock arrives |
+| Return delivery | `A02` | stock goes back to its source |
+| Cancellation | `A03` | the document is cancelled |
+| Transfer posting | `A04` | stock moves without leaving the company |
+| Goods issue | `A07` | stock leaves, charged to something |
+
+| Reference | Value | Meaning |
+| --- | --- | --- |
+| Purchase order | `R01` | the receipt's origin is a purchase order |
+| Reservation | `R04` | the issue's origin is a reservation |
+| Material document | `R05` | the document itself is the reference |
+| Order | `R08` | the issue's origin is a production order |
+
+**Every cell resolves to exactly one of three answers, and the screen says which.**
+
+1. **Posts from this screen.** `A07 + R08` — the 261 of this round: components consumed
+   from stock against a released order.
+2. **Delivered elsewhere, and the screen says where.** Canon already posts these movements
+   through their own capabilities, and a second implementation inside MIGO would be a second
+   answer to the same question — the ruling this ledger applies everywhere (§26.887, §26.897):
+   - `A01 + R01` → the purchase-order goods receipt (`INV.GR.POST`, MB01/MIGO);
+   - `A04` → the transfer posting (`INV.TRANSFER.POST`, MB1B) for 311 / 301 / 321;
+   - `A03 + R05` → the reversal (`INV.REVERSE`, MBST);
+   - `R05` without an action → the material document display (`INV.DISPLAY`, MB03).
+   Each of these cells **names its capability and links to it**; none pretends to post here.
+3. **Refused by name.** Every remaining cell names the capability that would light it up:
+   `A02` return delivery (vendor returns, no returns chain), `A07 + R04` from the MIGO
+   screen (delivered as the reservation withdrawal inside MB1A), `A01 + R04`.
+
+**The matrix is data, not markup.** One exported table — action, reference, resolution,
+capability, reason — drives the selector, the grid and the refusal text. A round that
+delivers a movement adds one row; it does not touch the screen.
+
+**What 261 does, decided here so stages 2–4 do not re-open it.**
+
+- **Consumption lands on a P&L production-consumption account**, not on WIP. Canon has no
+  settlement (KO88) and no order completion, so capitalising to WIP would grow a balance
+  sheet that nothing can ever relieve. WIP is **deferred by name** until `PROD.ORDER.SETTLE`
+  exists. The event is `PRODUCTION_CONSUMPTION`, per valuation class, with `INVENTORY`
+  credited — the shape MB1A already uses.
+- **Over-issue is refused by name**, quoting what the component still requires. SAP warns;
+  canon has no tolerance master, and a silent over-issue is an unaudited one.
+- **262 joins the catalogue** so MBST reverses a 261 like any other document; no second
+  reversal screen.
+- **The order and its component item stand on the material-document line** — a reference,
+  never a second ledger.
+- **The order becomes a requirement in MD04**, net of what has been issued.
+- **Both periods judged**: the material period (OMSY/MARV) and the accounting period (OB52),
+  exactly as MB1A judges them.
+- **The drill**: the resulting material document opens MB03, and its journal opens FB03 —
+  both delivered (§26.896).
+
+**Refused by name:** a second MIGO route per movement, MIGO's own number range (the
+`MATDOC` and `RF_BELEG` ranges stand), and company-code-level authorisation.
+
+**Deferred by name:** `A05`–`A09` and every other reference type beyond `R01/R04/R05/R08`,
+return delivery, GR blocked stock, and the tolerance master an over-delivery rule would need.
+
+**No writes this stage.**
+
+Same-stage bookkeeping: B-890 / §26.902 / §30 row 2.720.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3559,6 +3633,7 @@ Same-stage bookkeeping: B-889 / §26.901 / §30 row 2.719.
 | 2.717 | 2026-10-20 | **SCR-138 stage 3: the order service (B-887, §26.899).** Create draws the standing **`PRODORDER`** range under the tenant lock and judges every master before the header is drawn — material, plant **with its company code**, plant extension, each component and its storage location — so a refusal writes nothing. **`releaseProductionOrder`** records who and when, and a second release is a no-op. **12/12 service tests**, including: no company column exists (it is derived), nothing posts, and both acts appear in `change_document` — which required real before/after snapshots, since `recordChange` records differences and was silently recording nothing. | Agent |
 | 2.718 | 2026-10-20 | **SCR-138 stage 4: the order screen and T838 (B-888, §26.900).** `/production/orders` creates and releases under two capabilities; the company code is shown as derived and never asked for; the component grid is four stated lines. **Harness 138 targets** (T838), whose run creates an order, releases it, and reads the database back to prove **no document, no journal and no stock moved**. Registry gains `PROD.ORDER.CREATE` (alias CO01). **7/7 UI-contract tests**, 194 green across the touched files. | Agent |
 | 2.719 | 2026-10-20 | **SCR-138 stage 5 and closure: T838 passes, CO01 delivered (B-889, §26.901).** Five legs on the production build: an order created through the screen on **`PRD-0000001`**, the **company derived from the plant**, `CREATED` \u2192 **`RELEASED`** with who and when, the database read back to prove **no document, no journal and no stock moved**, and a refusal in SAP\u2019s shape. **Suite 1931/1931 in 263 files**; harness **138 targets**; **migrations 199**. Two lessons kept: the keyword-hygiene gate refuses data-dictionary keywords and transaction codes in selectors, and a rebuild during `next start` can hang the build. | Agent |
+| 2.720 | 2026-10-20 | **SCR-139 / MIGO — one screen, complete action/reference parity (B-890, §26.902).** Owner ruling: **MIGO gets complete parity**, and SCR-138\u2019s refusal of the A07/R08 dropdowns is **withdrawn**. `/inventory/migo` under `INV.MIGO.POST` carries the action list (A01 receipt, A02 return, A03 cancellation, A04 transfer, A07 issue) and the reference list (R01 order-document, R04 reservation, R05 material document, R08 order); **every cell resolves to posts-here, delivered-elsewhere-with-a-link, or refused-by-name**, and the matrix is **data**, so a later movement adds a row and not a screen. 261 posts here: consumption to a **P&L account, not WIP** (no settlement exists to relieve WIP), over-issue **refused by name**, **262 in the catalogue** so MBST reverses it, order on the line, MD04 demand, both periods, FB03/MB03 drills. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
