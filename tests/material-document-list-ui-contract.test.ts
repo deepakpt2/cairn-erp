@@ -19,7 +19,10 @@ describe('SCR-125 material document list UI contract', () => {
   it('gates both screens on the exact capability and takes tenant scope from the session', () => {
     expect(service).toContain(`export const MATERIAL_DOC_LIST_CAPABILITY = '${capability}'`);
     expect(page).toContain('can(session, MATERIAL_DOC_LIST_CAPABILITY)');
-    expect(display).toContain('can(session, MATERIAL_DOC_LIST_CAPABILITY)');
+    // SCR-134: the display is its own capability now (INV.DISPLAY), so the list
+    // gates itself and the display gates itself.
+    expect(display).toContain('can(session, MATERIAL_DOC_DISPLAY_CAPABILITY)');
+    expect(display).not.toContain('can(session, MATERIAL_DOC_LIST_CAPABILITY)');
     expect(page).toContain('session.user.client');
     expect(page).not.toContain('params.client');
     expect(shell).toContain('mdList.capabilityMissing');
@@ -57,7 +60,10 @@ describe('SCR-125 material document list UI contract', () => {
   it('drills to a read-only document display that reads the ledger', () => {
     expect(service).toContain('`/inventory/material-documents?document=${encodeURIComponent');
     expect(shell).toContain('href={row.drillDown}');
-    expect(display).toContain('getMaterialDocument(session.user.client');
+    // SCR-134 reworked the drill target into MB03 under its own INV.DISPLAY:
+    // the list still links to it, but the display now reads through its own service.
+    expect(display).toContain('displayMaterialDocument({');
+    expect(display).toContain('session.user.client');
     expect(display).toContain('mdDoc.lines');
     expect(display).not.toMatch(/\bpostGoodsReceipt\b|\breverseGoodsReceipt\b/);
   });

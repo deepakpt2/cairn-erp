@@ -2278,6 +2278,42 @@ tenant never reaching the document.
 
 Same-stage bookkeeping: B-867 / §26.879 / §30 row 2.697. Stage 4 next: the screen.
 
+## §26.880 — SCR-134 stage 4: the display screen re-gated and reworked
+
+**B-868.** `/inventory/material-documents` is now MB03 rather than MB51's drill: it
+carries `INV.DISPLAY` in its own right, and a reader without that capability sees
+the capability message even though the list may be theirs.
+
+**The lookup** asks for the document number (required), the fiscal year (a
+cross-check) and an optional item that narrows the grid. The hint beside the
+button says exactly that, so nobody wonders why the year can be left empty and why
+it is refused when wrong.
+
+**The header** names the poster and the entry time, shows the company codes derived
+from the plants, both dates, the header text, the status and the reversal pair, and
+carries the journal number as **text with the reason** — the accounting-document
+display is still Roadmap, and a dead link would be worse than a note.
+
+**The item grid** shows the item, the movement type with its description and
+direction, the material with its description, plant, storage location, stock type,
+quantity with unit, value with currency, and the reference column: the purchase
+order with its item as a link, the reversal-of pair as text. A deferred note under
+the grid states that a reservation reference would be empty because no posting path
+writes one yet.
+
+**Two older assertions reworked, not deleted.** The MB51 contract used to assert
+that the display shared its capability and called `getMaterialDocument`; both were
+true when the display was the list's drill (§26.877 supersedes them), so the test
+now asserts the opposite — the display gates itself and reads through its own
+service.
+
+**Tests — 18/18** across the two contracts (10 new for MB03, 8 for MB51 reworked);
+the browser-harness contract is green at **134 targets** (T834 registered against
+`cairn_b210:5432`). `tsc` clean.
+
+Same-stage bookkeeping: B-868 / §26.880 / §30 row 2.698. Stage 5 next: build and
+run **T834**.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2606,7 +2642,7 @@ Same-stage bookkeeping: B-867 / §26.879 / §30 row 2.697. Stage 4 next: the scr
 | 2.695 | 2026-10-20 | **SCR-134 / MB03 stage 1: display contract (B-865, §26.877).** The SCR-125 display is **reworked** into MB03 and re-gated on its own `INV.DISPLAY`; the package\u2019s `[tenant, company, mblnr, mjahr]` key is refused in canon\u2019s favour (the header carries no company code; the number is tenant-unique, so the year is a **cross-check**); optional item filter; poster and entry time, material description, stock type, direction, value, PO reference and reversal pair added; F4/search-help **deferred**, FB03 drill **deferred** (`FIN.JOURNAL.DISPLAY` still Roadmap), RSNUM **deferred** (no posting path), plant-level authorisation and period checks **refused by name**. No tables. | Agent |
 | 2.696 | 2026-10-20 | **SCR-134 stage 2: the package\u2019s index is refused, measured (B-866, §26.878).** 5,000 documents / 15,000 lines: every display read is already 0.02\u20130.04 ms on the primary keys; the year-leading candidate measured **0.055 ms against 0.020 ms**, i.e. 2.7\u00d7 slower on the very read it was proposed for. **No migration; migrations stay 196.** | Agent |
 | 2.697 | 2026-10-20 | **SCR-134 stage 3: display service (B-867, §26.879).** `INV.DISPLAY` reads one document — header with **poster and entry time**, lines with movement and material descriptions, direction, value, PO reference and reversal pair, **company code derived from the plants**; the year is a **cross-check**, the item a narrowing, the not-found message in the SAP shape. Catalogue **165/139/161**. **10/10 tests.** | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
-| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.698 | 2026-10-20 | **SCR-134 stage 4: the display screen re-gated and reworked (B-868, §26.880).** `/inventory/material-documents` carries **INV.DISPLAY**; lookup with required number, year cross-check and optional item; header names the **poster and entry time** and the **derived company codes**; the grid carries movement and material descriptions, direction, value, PO reference and reversal pair; the journal shows as text **with its reason**. **18/18** contract tests; harness **134 targets** (T834). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
