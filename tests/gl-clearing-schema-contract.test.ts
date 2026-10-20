@@ -65,3 +65,23 @@ describe('SCR-114 advanced clearing (B-808): normalized allocation and residual 
     expect(financeSchema).toContain("isActive: boolean('is_active')");
   });
 });
+
+describe('SCR-114 follow-up (B-816): line-level terms for residual items', () => {
+  const termMigration = readFileSync('drizzle/9063_journal_line_terms.sql', 'utf8');
+
+  it('adds payment terms and baseline date to the canonical journal line', () => {
+    expect(termMigration).toContain('alter table public.journal_entry_line');
+    expect(termMigration).toContain('add column payment_terms varchar(12)');
+    expect(termMigration).toContain('add column baseline_date date');
+    expect(financeSchema).toContain("paymentTerms: varchar('payment_terms', { length: 12 })");
+    expect(financeSchema).toContain("baselineDate: date('baseline_date', { mode: 'string' })");
+  });
+
+  it('carries the fields through the posting engine, not around it', () => {
+    const posting = readFileSync('src/platform/posting/index.ts', 'utf8');
+    expect(posting).toContain('paymentTerms?: string;');
+    expect(posting).toContain('baselineDate?: string;');
+    expect(posting).toContain('paymentTerms: line.paymentTerms,');
+    expect(posting).toContain('baselineDate: line.baselineDate,');
+  });
+});

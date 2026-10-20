@@ -202,6 +202,13 @@ export const journalEntryLine = pgTable(
     taxCode: varchar('tax_code', { length: 4 }),
     /** Line assignment (SCR-096): matching and reporting reference, at most 18 characters. */
     assignment: varchar('assignment', { length: 18 }),
+    /**
+     * Line-level payment terms and baseline date (SCR-114 follow-up). A residual
+     * item inherits them from its source invoice; the ageing derivation reads
+     * them ahead of origin resolution, so the line judges its own due date.
+     */
+    paymentTerms: varchar('payment_terms', { length: 12 }),
+    baselineDate: date('baseline_date', { mode: 'string' }),
     /** Tax return stamp (SCR-097): the update run that reported this tax line, if any. */
     taxReturnRunId: varchar('tax_return_run_id', { length: 24 }),
     lineText: text('line_text'),

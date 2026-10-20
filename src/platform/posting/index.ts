@@ -62,6 +62,9 @@ export interface PostingLineInput {
   taxCode?: string;
   /** Line assignment (SCR-096): matching and reporting reference. */
   assignment?: string;
+  /** Line-level terms and baseline (SCR-114 follow-up): a residual item's own ageing basis. */
+  paymentTerms?: string;
+  baselineDate?: string;
   lineText?: string;
 }
 
@@ -215,6 +218,8 @@ export async function postJournalEntry(
         plant: line.plant,
         taxCode: line.taxCode,
         assignment: line.assignment,
+        paymentTerms: line.paymentTerms,
+        baselineDate: line.baselineDate,
         lineText: line.lineText,
       };
     }),
