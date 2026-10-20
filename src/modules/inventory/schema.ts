@@ -297,8 +297,6 @@ export const stockQuantity = pgTable('stock_quantity', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }).notNull().default(''),
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
-  /** Which side of the document this line is: a transfer writes one ISSUE and one RECEIPT line (SCR-131). */
-  lineDirection: varchar('line_direction', { length: 8 }).notNull().default('RECEIPT'),
   quantity: quantity('quantity').notNull().default('0'),
   ...auditColumns,
 }, (t) => [

@@ -12,7 +12,8 @@ const capability = 'INV.TRANSFER.POST';
 const page = readFileSync('src/app/inventory/transfer-posting/page.tsx', 'utf8');
 const shell = readFileSync('src/app/inventory/transfer-posting/TransferPosting.tsx', 'utf8');
 const actions = readFileSync('src/app/inventory/transfer-posting/actions.ts', 'utf8');
-const service = readFileSync('src/modules/inventory/transfer-posting.ts', 'utf8');
+const service = readFileSync('src/modules/inventory/transfer-posting.ts', 'utf8')
+  + readFileSync('src/modules/inventory/transfer-scenarios.ts', 'utf8');
 const messages = readFileSync('src/platform/i18n/index.ts', 'utf8');
 const registry = readFileSync('scripts/seed.ts', 'utf8');
 
