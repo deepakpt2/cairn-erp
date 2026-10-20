@@ -1705,6 +1705,45 @@ Same-stage bookkeeping: B-847 / §26.859 / §30 row 2.677. Stage 3 next: the `PR
 
 Same-stage bookkeeping: B-848 / §26.860 / §30 row 2.678. **Next: MD04 first** (`PROD.MRP.STOCKREQ`, still Roadmap — the next roadmap capability in line), then **MB1B** (`INV.TRANSFER.POST`, Roadmap — stock transfers between storage locations and plants).
 
+## §26.861 — SCR-130 contract: MD04 stock/requirements list, settled before implementation
+
+**B-849.** MD04 arrives as **`PROD.MRP.STOCKREQ`** at `/production/stock-requirements` — the frozen-roadmap capability at `CAIRN.md` §10 line 922, flipped to Implemented at closure. No new capability code is coined.
+
+**No state table. Deviation recorded.** The package defines `mrp_stock_requirement_element` with a stored projected balance. It is **declined**: MD04 is a projection over live documents, and storing the projection would freeze a calculation that must always agree with the stock master, the requisitions and the orders it is made from — the moment a goods receipt posts, a stored pegging list is wrong. The list is computed on every execution and nothing new is written.
+
+**The element universe this canon can honestly supply**, and nothing else:
+
+| element | source | sign |
+| --- | --- | --- |
+| **Stock** | `stock_quantity`, **MRP-available types only** | receipt, dated today |
+| **Purchase requisition** | `purchase_requisition_item` **less what has already been converted to orders** | receipt at its delivery date |
+| **Purchase order** | `purchase_order_item` **less delivered** (posted documents net of reversals, the SCR-124 derivation) | receipt at its earliest schedule date |
+| **Safety stock** | `material_plant.safety_stock` | requirement at the start of the list |
+
+**Blocked stock is excluded from MRP availability** — SAP parity: planning covers unrestricted-use and quality-inspection stock, never blocked stock, which is held for a reason. Every other stock type is excluded the same way, and a warning names the quantity left out so nobody wonders where it went.
+
+**Deferred by name: planned orders, production orders, sales orders and reservations** — no such tables exist in this canon. **Deferred by name: excess-stock alerts** — the canon carries lot-sizing bounds, not a stock ceiling, and inventing a threshold would manufacture an exception. **Refused by name:** MRP area (`BERID`, no decentralised planning here), the one-character special stock indicator (named stock types, on the SCR-127 ruling), and a simulation version (no planning runs exist to version).
+
+**Running balance.** One chronological list: stock first, then every element by date, each row carrying its receipt or requirement quantity and the **projected stock after it**. Ties on a date put receipts before requirements, so a receipt landing the same day is available to meet it — the planner's own reading of the list.
+
+**Past due.** The package defaults the display on. Switched **off**, past-due elements leave the list but **still move the balance**: the first visible row carries the running position the hidden rows produced. A hidden quantity that silently vanished from the projection would be the worst of both worlds.
+
+**Period split.** `DAILY` (default) lists every element on its date; `WEEKLY` buckets the list into Monday-started weeks with summed receipts and requirements and the week-end balance. Both are implemented; the exceptions are recomputed on whatever rows are shown.
+
+**Exceptions**, recomputed per row and per bucket: **shortage** (projected balance below zero), **safety breach** (below safety stock but not negative), **past due** (dated before today). Each row names its code; the header counts them.
+
+**Horizon.** An optional horizon end truncates the list at that date; an inverted horizon refuses by name.
+
+**Read-only, and the action workbench deferred by name.** The package asks for PR-to-PO conversion from the list. That is a posting action which belongs to the capabilities that own it (`PROC.PO.CREATE`), not to a read-only report, and it is not wired here; the contract says so rather than pretending the button exists.
+
+**Selection.** Material and plant are **both required**, as the package states.
+
+**Index.** Measured at stage 2 — the columns are the leading keys of the tables involved, so the expectation is a decline, but it is measured.
+
+**Tests planned.** Service: the running balance and its tie rule; PR open quantity after conversion; PO open quantity after delivery; blocked stock excluded and warned; safety stock as the opening requirement; past-due hidden but carried; weekly buckets; the three exceptions; refusals. UI contract: capability gate, session tenant, required material and plant, every column, exceptions visible. Browser: T-numbered fixture with stock, a PR partly converted, a PO partly delivered and safety stock, checking the projection, an exception, the past-due toggle and the drill.
+
+Same-stage bookkeeping: B-849 / §26.861 / §30 row 2.679. Stage 2 next: the index decision, measured.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2014,6 +2053,7 @@ Same-stage bookkeeping: B-848 / §26.860 / §30 row 2.678. **Next: MD04 first** 
 | 2.676 | 2026-10-20 | **SCR-129 contract settled (B-846, §26.858).** ME2K = new capability **`PROC.PO.ACCOUNTASSIGN`** at `/purchasing/orders-by-account-assignment`; not on the roadmap, satisfies none. Canon carries a **multi-line** `purchase_order_assignment` (one item split across cost centres by percentage, each line with its own G/L account) and admits **only `COST_CENTER`** as the item category, so **A/P/F are refused by name** rather than silently ignored. Required scope of list (ALV/STANDARD) and required scope of selection, the latter reusing the SCR-124 delivered/invoiced derivation. Assigned value = item net value times line percentage, rounded at the line, grouped by cost centre with cent-exact totals. Drills to the order display and the cost-centre report. Index measured at stage 2. | Agent |
 | 2.677 | 2026-10-20 | **SCR-129 stage 2 published (B-847, §26.859).** ME2K index decision measured at 12,000 assignment rows and **refused for harm**: the recommended cost-centre index was ignored in the narrow arms and, in the broad arm, **turned 45.62 ms into 1,934.41 ms** — a 42x regression from 12,000 nested header lookups. The service drives from the document date instead. **Verification-only, no migration 9069; migrations stand at 188.** Harness `scripts/plan-me2k.mts` committed. Service next. | Agent |
 | 2.678 | 2026-10-20 | **SCR-129 closed (B-848, §26.860).** ME2K delivered as `PROC.PO.ACCOUNTASSIGN` at `/purchasing/orders-by-account-assignment`: assignment lines with cost centre, G/L account, distribution percentage and the share of the item net value, rounded at the line and grouped by assigned object with cent-exact totals; required scope of list and scope of selection over the SCR-124 delivered/invoiced derivation; drills to the order and the cost-centre report; A/P/F categories refused by name. Index refused for harm (45.6 ms to 1934 ms), so no migration; 188 stand. Suite 1742/1742 / 245 files; T829 passed 7 legs; catalogue 160/134/156. Next T-codes: MD04, then MB1B. | Agent |
+| 2.679 | 2026-10-20 | **SCR-130 contract settled (B-849, §26.861).** MD04 = frozen-roadmap **`PROD.MRP.STOCKREQ`** at `/production/stock-requirements`, flipped at closure. **The package state table `mrp_stock_requirement_element` is declined**: a stored pegging list goes wrong the moment anything posts; the list is computed live. Elements: **stock (MRP-available types only, blocked excluded with a warning), open purchase requisitions net of conversions, open purchase orders net of deliveries, and safety stock as the opening requirement**. Planned/production orders, sales orders and reservations **deferred by name**; excess alerts **deferred by name**; MRP area, the special stock indicator and a simulation version **refused by name**. Receipts precede requirements on the same date; hidden past-due rows still move the balance; DAILY and WEEKLY splits both implemented; exceptions shortage / safety breach / past due. **PR-to-PO conversion deferred by name** — posting belongs to the capability that owns it. Material and plant both required. Index measured at stage 2. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
