@@ -11,8 +11,12 @@
  * Blocked stock is excluded, as SAP excludes it, and a warning names what was
  * left out.
  *
- * Deferred by name: planned orders, production orders, sales orders and
- * reservations (no such tables); excess-stock alerts (no stock ceiling exists).
+ * Reservations (SCR-133) are a requirement element: an open item is stock the
+ * plant has already promised away, dated at its required date. SCR-130 deferred
+ * them because no table existed; the deferral is closed.
+ *
+ * Deferred by name: planned orders, production orders and sales orders (no such
+ * tables); excess-stock alerts (no stock ceiling exists).
  * Refused by name: MRP area, the one-character special stock indicator, a
  * simulation version, and PR-to-PO conversion (a posting action, not a report).
  */
@@ -30,7 +34,8 @@ export const MRP_AVAILABLE_STOCK_TYPES = ['UNRESTRICTED', 'QUALITY'] as const;
 export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
-export type ElementType = 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'SAFETY_STOCK';
+export type ElementType =
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'SAFETY_STOCK' | 'RESERVATION';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -279,6 +284,17 @@ export async function stockRequirementsList(input: {
       order by po.document_date, i.order_number, i.item_number
     `) as unknown as Array<Record<string, unknown>>;
 
+    const reservationRows = await tx.execute(sql`
+      select i.reservation_number, i.item_number, i.required_quantity::text as required_quantity,
+             i.withdrawn_quantity::text as withdrawn_quantity, h.base_date
+      from reservation_item i
+      join reservation_header h
+        on h.client = i.client and h.reservation_number = i.reservation_number
+      where i.client = ${client} and i.plant = ${s.plant!} and i.material_number = ${s.material!}
+        and not i.is_completed
+      order by h.base_date, i.reservation_number, i.item_number
+    `) as unknown as Array<Record<string, unknown>>;
+
     const elements: Element[] = [];
     // The opening element is always drawn, even at zero: the list starts from a position.
     {
@@ -331,6 +347,20 @@ export async function stockRequirementsList(input: {
         documentItem: String(row.item_number),
         quantity: open,
         drillDown: `/purchasing/orders?order=${encodeURIComponent(String(row.order_number))}`,
+      });
+    }
+    for (const row of reservationRows) {
+      const open = Number((num(row.required_quantity) - num(row.withdrawn_quantity)).toFixed(3));
+      if (open <= 0) continue;
+      elements.push({
+        date: String(row.base_date),
+        elementType: 'RESERVATION',
+        elementLabel: 'Reservation',
+        direction: 'REQUIREMENT',
+        documentNumber: String(row.reservation_number),
+        documentItem: String(row.item_number),
+        quantity: open,
+        drillDown: `/inventory/reservations?reservation=${encodeURIComponent(String(row.reservation_number))}`,
       });
     }
 

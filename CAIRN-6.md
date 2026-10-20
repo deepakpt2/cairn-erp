@@ -2060,6 +2060,28 @@ Same-stage bookkeeping: B-860 / §26.872 / §30 row 2.690. Stage 2 next: the two
 
 Same-stage bookkeeping: B-861 / §26.873 / §30 row 2.691. Stage 3 next: the reservation service, the MD04 demand element, and the withdrawal hook, with their tests.
 
+## §26.874 — SCR-133 stage 3: reservations exist, and MD04 answers with them
+
+**B-862.** `src/modules/inventory/reservations.ts` creates, reads, withdraws from and completes reservations; `stock-requirements.ts` gains the element.
+
+**The document.** A numbered header (RKPF shape) carrying the movement type, the required date and the cost centre; items (RESB shape) at 10, 20, 30 carrying material, plant, optional storage location, required and withdrawn quantities, unit from the master, the movement-allowed flag and the completion flag. Every item is judged **before anything is written** — material exists and is not flagged for deletion, extended to its plant, storage location belongs to the plant and is active, quantity positive — and the cost centre is judged once: it must stand in the plant's company code, be valid on the required date, and be unlocked. A reservation whose items span **two company codes refuses**, because one cost centre cannot bear both.
+
+**The 261 refusal is the honest one.** The order movement is delivered in the catalogue so the catalogue tells the truth, and a reservation on it refuses by name with the remedy naming `PROD.ORDER.CREATE` — the capability that would bring the order master.
+
+**Withdrawals.** `withdrawReservation` records that stock has left against an item, refuses more than the open quantity (naming what stands), refuses a completed item and one whose movement is not allowed, and **completes the item** the moment the required quantity is reached. `completeReservationItem` completes one by hand. Both are audited as changes on the reservation.
+
+**MD04 now answers with reservations.** A new `RESERVATION` element — direction `REQUIREMENT`, dated at the required date, quantity **required − withdrawn**, drilled to `/inventory/reservations?reservation=…` — joins the list for every item not completed. The SCR-130 deferral is closed for reservations; the module header says so.
+
+**Two widths the run corrected.** The movement keys had to shorten to fit the twenty-character column (`RESERV_ISSUE_CC`, `RESERV_ISSUE_ORDER`), and — migration **9073** — the reservation number column had been written at the package's `CHAR(10)`, while canon's numbering engine renders `RSV-00000001` (twelve). The column widens to 20 to hold what the engine issues, exactly as material documents do; the FK pair widened together. **Migrations stand at 196.**
+
+**Catalogue.** `INV.RESERVATION.CREATE` (not posting) and its term at `/inventory/reservations`, alias **MB21**. Catalogue now **164 capabilities / 138 terms / 160 aliases**.
+
+**Tests — 11/11** (`tests/reservations.test.ts`): the numbered header with two items in two plants, company code derived; the MD04 requirement at its required date; part withdrawal leaving the remainder as demand and full withdrawal removing it; the hand-completed item leaving the list at once; over-withdrawal, completed item and forbidden movement refused; the cost-centre set (missing, unlisted, locked, expired) refused by name; the 261 refusal naming the order capability; unknown movement, unknown material and both storage-location refusals; empty items, non-positive quantity and a malformed date; the two-company-code refusal; and the replayed request key. **MD04's own 22 tests stay green** with the new element.
+
+`tsc` clean.
+
+Same-stage bookkeeping: B-862 / §26.874 / §30 row 2.692. Stage 4 next: the reservation screen, its i18n, the UI contract and browser target **T833**.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2382,6 +2404,7 @@ Same-stage bookkeeping: B-861 / §26.873 / §30 row 2.691. Stage 3 next: the res
 | 2.689 | 2026-10-20 | **SCR-132 closed (B-859, §26.871).** MBST delivered as `INV.REVERSE` at `/inventory/reversal`: any material document mirrored line by line under its counter movement type, whole document or whole lines, cancellation computed from per-line coverage (`PARTIALLY_REVERSED` between `POSTED` and `REVERSED`), journal and valuation returned, order open quantity restored by derivation, reason code refused by name. Migrations 9067-9070 (**193 stand**) including the measured `mdl_reversal_of_idx` (10.093 → 0.049 ms). Engine 9/9, UI 9/9, **T832 9 legs**, suite **1810/1810 / 251 files**, catalogue **163/137/159**. Build runs on turbopack inside the 2 GB box. Next T-codes: MB21, then MB03. | Agent |
 | 2.690 | 2026-10-20 | **SCR-133 stage 1: MB21 contract settled (B-860, §26.872).** `INV.RESERVATION.CREATE` at `/inventory/reservations`, the frozen-roadmap row at `CAIRN.md` §10 line 903. The package\u2019s RKPF/RESB shapes are **taken** — a reservation is genuine new state — with the plant on the item (SAP parity, and the package\u2019s own schema agrees), company code derived from the plant, and number range `RESERV`. The movement catalogue gains a fourth direction `ISSUE` and an **account-assignment category per movement type**; 201 (cost centre) is delivered end to end, **261 refuses by name** because no order master exists. A reservation posts nothing, so no posting period judges it — recorded. **MD04 gains a `RESERVATION` requirement element**, closing the deferral SCR-130 left; withdrawal tracking ships as a tested hook with the MB1A wiring deferred by name. | Agent |
 | 2.691 | 2026-10-20 | **SCR-133 stage 2: reservations schema (B-861, §26.873).** 9071 creates `reservation_header` / `reservation_item` and teaches the movement catalogue `ISSUE` plus an `account_assignment` column; number range `RESERV` added. 9072 takes `ri_plant_material_idx` on measurement — MD04\u2019s open-reservation read **9.418 → 0.114 ms** at 60,000 items; the screen read is the primary key (0.044 ms). **Migrations 195.** | Agent |
+| 2.692 | 2026-10-20 | **SCR-133 stage 3: reservation service and the MD04 element (B-862, §26.874).** `INV.RESERVATION.CREATE` writes the numbered header and its items after judging every item and the cost centre; withdrawals complete items and refuse over-draw, completed and forbidden ones; **MD04 answers with a `RESERVATION` requirement** at the required date for OPEN = required \u2212 withdrawn, closing SCR-130\u2019s deferral. 9073 widens the number columns to hold what the numbering engine renders. **Migrations 196.** **11/11 tests**; MD04\u2019s 22 stay green. Catalogue 164/138/160. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

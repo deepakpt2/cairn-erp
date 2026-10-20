@@ -318,7 +318,7 @@ export const stockQuantity = pgTable('stock_quantity', {
  */
 export const reservationHeader = pgTable('reservation_header', {
   client: tenant(),
-  reservationNumber: varchar('reservation_number', { length: 10 }).notNull(),
+  reservationNumber: varchar('reservation_number', { length: 20 }).notNull(),
   movementType: varchar('movement_type', { length: 20 }).notNull(),
   baseDate: varchar('base_date', { length: 10 }).notNull(),
   /** The cost centre the movement type charges, where it charges one. */
@@ -336,7 +336,7 @@ export const reservationHeader = pgTable('reservation_header', {
 /** Reservation items — SCR-133 (RESB shape). The plant is the item's, as SAP's is. */
 export const reservationItem = pgTable('reservation_item', {
   client: tenant(),
-  reservationNumber: varchar('reservation_number', { length: 10 }).notNull(),
+  reservationNumber: varchar('reservation_number', { length: 20 }).notNull(),
   itemNumber: integer('item_number').notNull(),
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
