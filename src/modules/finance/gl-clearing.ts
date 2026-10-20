@@ -18,8 +18,8 @@
  * A difference within the default tolerance group's limits
  * (SCR-114 follow-up, OBA4 canon) posts as one PAYMENT_DIFFERENCE
  * line of the clearing journal; beyond tolerance it refuses by
- * name — a difference is never silently discarded. Partial and
- * residual clearing remain deferred by name.
+ * name — a difference is never silently discarded.
+ * Partial/residual clearing remains deferred by name.
  *
  * Stage 1 carries the vocabulary only; the schema/index
  * check lands in stage 2 and the clearing service in stage 3.

@@ -25,9 +25,10 @@ describe('SCR-114 stage 2: clearing canon stands, nothing added', () => {
     expect(financeSchema).toContain("index('jel_company_account_idx').on(t.client, t.companyCode, t.glAccount, t.fiscalYear, t.documentNumber, t.lineNumber)");
   });
 
-  it('names the deferred difference posting instead of discarding it', () => {
+  it('names the delivered tolerance posting and the still-deferred partial clearing', () => {
     expect(vocabulary).toContain("export const GL_CLEARING_CAPABILITY = 'FIN.GL.CLEAR'");
-    expect(vocabulary).toContain('Tolerance-based difference posting');
+    expect(vocabulary).toContain('within the default tolerance group');
     expect(vocabulary).toContain('silently discarded');
+    expect(vocabulary).toContain('Partial/residual clearing remains deferred');
   });
 });

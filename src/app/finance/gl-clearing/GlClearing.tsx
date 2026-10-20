@@ -37,6 +37,19 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   const currencies = [...new Set(chosen.map((i) => i.currency))];
   const assigned = chosen.reduce((s, i) => s + i.signed, 0);
   const difference = Math.round(assigned * 10000) / 10000;
+  // Live tolerance judgement, mirroring the service: a debit difference
+  // judges on the expense limits, a credit on the revenue limits, and
+  // both the absolute and percentage limits must hold.
+  const gross = chosen.reduce((s, i) => s + Math.abs(i.signed), 0);
+  const tol = view?.differenceTolerance ?? null;
+  const differenceLimit = tol && difference !== 0
+    ? Math.min(
+        difference > 0 ? tol.expenseAmount : tol.revenueAmount,
+        Math.round(gross * (difference > 0 ? tol.expensePercent : tol.revenuePercent)) / 100,
+      )
+    : 0;
+  const withinTolerance = difference !== 0 && tol !== null && Math.abs(difference) - differenceLimit <= 0.005;
+  const postable = difference === 0 || withinTolerance;
   const requestKey = view
     ? `gl-${view.companyCode}-${view.glAccount}-${chosen.map(itemKey).join(',')}-${clearingDate}-${postingDate}-${documentDate}`
     : '';
@@ -129,7 +142,14 @@ export default function GlClearing({ view, loadError, canClear, today }: {
               </div>
               <p className="mt-2 text-sm text-ink-soft">
                 Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
-                difference {difference.toFixed(2)}. The difference must stand at zero before posting.
+                difference {difference.toFixed(2)}.
+                {difference === 0
+                  ? ' The selected items balance.'
+                  : withinTolerance
+                    ? ' The difference stands within the tolerance of the default group and posts to the payment difference account.'
+                    : tol
+                      ? ` The difference stands beyond the tolerance of the default group (at most ${differenceLimit.toFixed(2)} on this selection).`
+                      : ' No default tolerance group stands, so the difference must stand at zero before posting.'}
               </p>
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="block">
@@ -154,7 +174,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                 </label>
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled={!canClear || clearing || chosen.length === 0 || difference !== 0}
+                  disabled={!canClear || clearing || chosen.length === 0 || !postable}
                 >
                   Post clearing
                 </button>
