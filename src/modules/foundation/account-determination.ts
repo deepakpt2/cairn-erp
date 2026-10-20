@@ -46,6 +46,10 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'INVENTORY', referenceAlias: 'BSX', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'GR_IR_CLEARING', referenceAlias: 'WRX', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'OFFSETTING_INVENTORY', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: true },
+  // The goods-issue offsets, maintainable since SCR-136; production consumption since SCR-139.
+  { event: 'CONSUMPTION', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  { event: 'SCRAP', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  { event: 'PRODUCTION_CONSUMPTION', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'FXGAIN', referenceAlias: 'FXGAIN', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },

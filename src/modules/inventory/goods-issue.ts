@@ -31,7 +31,7 @@ import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
-  movementType, stockQuantity,
+  movementType, productionOrder, productionOrderComponent, stockQuantity,
 } from './schema';
 
 export const GOODS_ISSUE_CAPABILITY = 'INV.GI.POST';
@@ -54,23 +54,38 @@ export interface GoodsIssueScenario {
   movementType: string;
   reversalMovementType: string;
   description: string;
-  accountAssignment: 'COST_CENTER' | 'NONE';
+  accountAssignment: 'COST_CENTER' | 'NONE' | 'ORDER';
   /** The account-determination event the offsetting debit reads. */
-  expenseEvent: 'CONSUMPTION' | 'SCRAP';
+  expenseEvent: 'CONSUMPTION' | 'SCRAP' | 'PRODUCTION_CONSUMPTION';
+  /** Which screen offers this movement: MIGO carries the order issue (SCR-139). */
+  screen: 'MB1A' | 'MIGO';
 }
 
 export const GOODS_ISSUE_SCENARIOS: readonly GoodsIssueScenario[] = [
   {
     code: '201', movementType: 'GI_ISSUE_CC', reversalMovementType: 'GI_ISSUE_CC_REVERSAL',
     description: 'Goods issue for a cost centre', accountAssignment: 'COST_CENTER',
-    expenseEvent: 'CONSUMPTION',
+    expenseEvent: 'CONSUMPTION', screen: 'MB1A',
   },
   {
     code: '551', movementType: 'GI_SCRAP', reversalMovementType: 'GI_SCRAP_REVERSAL',
     description: 'Scrapping', accountAssignment: 'NONE',
-    expenseEvent: 'SCRAP',
+    expenseEvent: 'SCRAP', screen: 'MB1A',
+  },
+  {
+    // SCR-139: the component issue a production order consumes. Offered by MIGO alone —
+    // SAP's MB1A reaches it too, and canon keeps one screen per movement so the matrix
+    // in MIGO stays the single place an action and a reference select a movement.
+    code: '261', movementType: 'PROD_ISSUE_ORDER', reversalMovementType: 'PROD_ISSUE_ORDER_REV',
+    description: 'Goods issue for a production order', accountAssignment: 'ORDER',
+    expenseEvent: 'PRODUCTION_CONSUMPTION', screen: 'MIGO',
   },
 ] as const;
+
+/** The movements the MB1A screen offers: the order issue lives on MIGO (SCR-139). */
+export const MB1A_SCENARIOS = GOODS_ISSUE_SCENARIOS.filter((s) => s.screen === 'MB1A');
+/** The movements MIGO posts from its own grid. */
+export const MIGO_ISSUE_SCENARIOS = GOODS_ISSUE_SCENARIOS.filter((s) => s.screen === 'MIGO');
 
 /** The catalogue rows this round delivers, counter movements included. */
 export const DELIVERED_GOODS_ISSUE_MOVEMENTS = GOODS_ISSUE_SCENARIOS.flatMap((s) => [
@@ -78,7 +93,7 @@ export const DELIVERED_GOODS_ISSUE_MOVEMENTS = GOODS_ISSUE_SCENARIOS.flatMap((s)
     movementType: s.movementType,
     description: `${s.description} (${s.code})`,
     direction: 'ISSUE',
-    referenceCategory: 'MATERIAL_DOCUMENT',
+    referenceCategory: s.accountAssignment === 'ORDER' ? 'PRODUCTION_ORDER' : 'MATERIAL_DOCUMENT',
     accountAssignment: s.accountAssignment,
     reversalMovementType: s.reversalMovementType,
   },
@@ -86,7 +101,7 @@ export const DELIVERED_GOODS_ISSUE_MOVEMENTS = GOODS_ISSUE_SCENARIOS.flatMap((s)
     movementType: s.reversalMovementType,
     description: `Reversal of ${s.description} (${Number(s.code) + 1})`,
     direction: 'ISSUE',
-    referenceCategory: 'MATERIAL_DOCUMENT',
+    referenceCategory: s.accountAssignment === 'ORDER' ? 'PRODUCTION_ORDER' : 'MATERIAL_DOCUMENT',
     accountAssignment: s.accountAssignment,
     reversalMovementType: null,
   },
@@ -100,6 +115,9 @@ export interface GoodsIssueLineInput {
   costCenter?: string;
   reservationNumber?: string;
   reservationItem?: number;
+  /** The production order a 261 consumes for, and which component item it satisfies. */
+  productionOrderNumber?: string;
+  productionOrderItem?: number;
   /** Refused by name: canon has no batch master. */
   batch?: string;
 }
@@ -153,17 +171,19 @@ function requireDate(value: string, what: string) {
   }
 }
 
-function resolveScenario(code: string): GoodsIssueScenario {
+function resolveScenario(code: string, screen: 'MB1A' | 'MIGO'): GoodsIssueScenario {
   const found = GOODS_ISSUE_SCENARIOS.find((s) => s.code === code.trim());
-  if (found) return found;
-  const trimmed = code.trim();
-  if (trimmed === '261') {
+  if (found && found.screen === screen) return found;
+  if (found) {
     throw new GoodsIssueError(
-      '261 consumes against a production order, and canon carries no order master.',
-      'Production-order consumption waits on PROD.ORDER.CREATE. Post a 201 to a cost centre instead.',
+      `Movement ${found.code} is posted from ${found.screen === 'MIGO' ? 'MIGO' : 'MB1A'}, not from this screen.`,
+      found.screen === 'MIGO'
+        ? 'Open MIGO, choose Goods issue with an order reference, then post it there.'
+        : 'Post this movement from the goods issue screen.',
     );
   }
-  if (['202', '552'].includes(trimmed)) {
+  const trimmed = code.trim();
+  if (['202', '552', '262'].includes(trimmed)) {
     throw new GoodsIssueError(
       `${trimmed} is a reversal, not an issue.`,
       'Reverse a posted goods issue through MBST (INV.REVERSE); this screen posts issues only.',
@@ -275,7 +295,10 @@ async function toView(
  * material document, the reservation's withdrawn quantity and the document's
  * output all commit together or not at all.
  */
-export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsIssueView> {
+export async function postGoodsIssue(
+  input: PostGoodsIssueInput,
+  screen: 'MB1A' | 'MIGO' = 'MB1A',
+): Promise<GoodsIssueView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
   if ((input.headerText ?? '').length > 25) {
@@ -284,7 +307,7 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
   if (input.lines.length === 0) {
     throw new GoodsIssueError('No issue lines were entered.', 'Enter at least one material to issue.');
   }
-  const scenario = resolveScenario(input.movementTypeCode);
+  const scenario = resolveScenario(input.movementTypeCode, screen);
 
   return withTenant(input.client, async (tx) => {
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
@@ -355,6 +378,9 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
       unitPrice: string;
       priceUnit: string;
       reservationOpenAfter: string | null;
+      productionOrderNumber: string | null;
+      productionOrderItem: number | null;
+      orderOpenAfter: string | null;
     };
     const prepared: Prepared[] = [];
 
@@ -402,6 +428,85 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
           );
         }
         location = found;
+      }
+
+      // SCR-139: a 261 consumes for a released order, and no more than the component still needs.
+      let productionOrderNumber: string | null = null;
+      let productionOrderItem: number | null = null;
+      let orderOpenAfter: string | null = null;
+      if (scenario.accountAssignment === 'ORDER') {
+        const orderNumber = (line.productionOrderNumber ?? '').trim();
+        if (!orderNumber) {
+          throw new GoodsIssueError(
+            `Movement ${scenario.code} consumes for a production order, and none was named on ${materialNumber}.`,
+            'Name the released order the component is issued to.',
+          );
+        }
+        const itemNumber = line.productionOrderItem ?? 0;
+        if (!itemNumber) {
+          throw new GoodsIssueError(
+            `Order ${orderNumber}: the component item was not named on the line for ${materialNumber}.`,
+            'Name the component item the issue satisfies.',
+          );
+        }
+        const [order] = await tx.select().from(productionOrder).where(and(
+          eq(productionOrder.client, input.client), eq(productionOrder.orderNumber, orderNumber),
+        ));
+        if (!order) {
+          throw new GoodsIssueError(
+            `Production order ${orderNumber} does not exist.`,
+            'Create the order first (CO01), then issue its components.',
+          );
+        }
+        if (order.status !== 'RELEASED') {
+          throw new GoodsIssueError(
+            `Production order ${orderNumber} stands ${order.status.toLowerCase()}, and only a released order may be charged.`,
+            'Release the order, then post the component issue.',
+          );
+        }
+        const [component] = await tx.select().from(productionOrderComponent).where(and(
+          eq(productionOrderComponent.client, input.client),
+          eq(productionOrderComponent.orderNumber, orderNumber),
+          eq(productionOrderComponent.itemNumber, itemNumber),
+        ));
+        if (!component) {
+          throw new GoodsIssueError(
+            `Production order ${orderNumber} carries no component item ${itemNumber}.`,
+            'Issue a component the order states.',
+          );
+        }
+        if (component.materialNumber !== materialNumber || component.plant !== line.plant) {
+          throw new GoodsIssueError(
+            `Order ${orderNumber} item ${itemNumber} requires ${component.materialNumber} in plant ${component.plant}, and the line issues ${materialNumber} from ${line.plant}.`,
+            'Issue the component the order states, from the plant it states.',
+          );
+        }
+        // What the component still needs: required minus everything already issued against it.
+        const issuedRows = await tx.execute(sql`
+          select coalesce(sum(entry_quantity), 0)::text as issued
+          from material_document_line
+          where client = ${input.client}
+            and production_order_number = ${orderNumber}
+            and production_order_item = ${itemNumber}
+            and movement_type = ${scenario.movementType}
+        `) as unknown as Array<{ issued: string }>;
+        const required = Number(component.requiredQuantity);
+        const issued = Number(issuedRows[0]?.issued ?? 0);
+        const open = Math.max(0, required - issued);
+        if (line.quantity > open + 1e-9) {
+          throw new GoodsIssueError(
+            `Order ${orderNumber} item ${itemNumber} still requires ${open.toFixed(3)} ${component.unitOfMeasure} of ${materialNumber}, and ${line.quantity.toFixed(3)} was entered.`,
+            'Reduce the quantity to what the component still requires; a tolerance master does not stand in canon.',
+          );
+        }
+        productionOrderNumber = orderNumber;
+        productionOrderItem = itemNumber;
+        orderOpenAfter = (open - line.quantity).toFixed(3);
+      } else if ((line.productionOrderNumber ?? '').trim()) {
+        throw new GoodsIssueError(
+          `Movement ${scenario.code} consumes for no production order, and ${line.productionOrderNumber} was named on ${materialNumber}.`,
+          'Clear the order reference on this line.',
+        );
       }
 
       const [valuation] = await tx.select().from(materialValuation).where(and(
@@ -510,6 +615,7 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
         unitPrice: valuation.priceControl === 'STANDARD' ? valuation.standardPrice : valuation.movingAveragePrice,
         priceUnit: valuation.priceUnit,
         reservationOpenAfter,
+        productionOrderNumber, productionOrderItem, orderOpenAfter,
       });
     }
 
@@ -538,6 +644,7 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
         glAccount: expenseAccountCache.get(cacheKey)!,
         debitCredit: 'S', amount: p.value.toFixed(2),
         costCenter: scenario.accountAssignment === 'COST_CENTER' ? p.line.costCenter : undefined,
+        productionOrder: p.productionOrderNumber ?? undefined,
         material: p.materialNumber, plant: p.line.plant,
       });
     }
@@ -589,6 +696,8 @@ export async function postGoodsIssue(input: PostGoodsIssueInput): Promise<GoodsI
         baseQuantity: String(p.quantity), baseUnit: p.unit,
         unitPrice: p.unitPrice, priceUnit: p.priceUnit, currency: company.currency,
         value: String(p.value),
+        productionOrderNumber: p.productionOrderNumber,
+        productionOrderItem: p.productionOrderItem,
         createdBy: input.changedBy,
       });
 

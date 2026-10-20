@@ -209,14 +209,16 @@ describe('SCR-136 goods issue (MB1A)', () => {
     expect((error as GoodsIssueError).message).toMatch(/carries no account assignment, and a cost centre was named/);
   });
 
-  it('refuses 261 by name with the remedy that would deliver it', async () => {
+  it('refuses 261 on MB1A and names the screen that posts it (SCR-139)', async () => {
+    // The movement is delivered now, but MIGO is its screen: one screen per movement keeps
+    // the MIGO action/reference matrix the single place a movement is selected.
     const error = await postGoodsIssue(input({ movementTypeCode: '261' })).catch((e: unknown) => e);
-    expect((error as GoodsIssueError).message).toMatch(/canon carries no order master/);
-    expect((error as GoodsIssueError).remedy).toMatch(/PROD.ORDER.CREATE/);
+    expect((error as GoodsIssueError).message).toMatch(/Movement 261 is posted from MIGO, not from this screen/);
+    expect((error as GoodsIssueError).remedy).toMatch(/MIGO/);
   });
 
   it('refuses a counter movement and names MBST', async () => {
-    for (const code of ['202', '552']) {
+    for (const code of ['202', '552', '262']) {
       const error = await postGoodsIssue(input({ movementTypeCode: code })).catch((e: unknown) => e);
       expect((error as GoodsIssueError).message).toMatch(/is a reversal, not an issue/);
       expect((error as GoodsIssueError).remedy).toMatch(/MBST/);

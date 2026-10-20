@@ -3307,6 +3307,45 @@ Applied and verified in `cairn_b210`.
 
 Same-stage bookkeeping: B-891 / §26.903 / §30 row 2.721.
 
+## §26.904 — SCR-139 stage 3: one posting engine, two screens, and the order on the line
+
+**B-892.** 261 is posted by the engine that already posts 201 and 551 — not by a second copy
+of it. `postGoodsIssue` gains a **screen** argument and a third scenario:
+
+| code | movement | assignment | offset event | screen |
+| --- | --- | --- | --- | --- |
+| 201 | `GI_ISSUE_CC` | cost centre | `CONSUMPTION` | MB1A |
+| 551 | `GI_SCRAP` | none | `SCRAP` | MB1A |
+| **261** | **`PROD_ISSUE_ORDER`** | **order** | **`PRODUCTION_CONSUMPTION`** | **MIGO** |
+
+The screen argument is the enforcement, not a comment: `postGoodsIssue(…, 'MB1A')` refuses 261
+with *"Movement 261 is posted from MIGO, not from this screen"*, and MIGO refuses 201/551 the
+same way. One screen per movement is what keeps the MIGO matrix the single place a movement is
+selected — and it is why one screen can carry the whole action/reference vocabulary without
+becoming a second implementation of everything.
+
+**The order is judged before the stock is.** A 261 line must name a released order and a
+component item that stands on it; the item's material and plant must be the line's. Only then
+is the location's stock judged, the valuation read and the journal built. A reference that
+does not stand is refused before a quantity is ever considered — SAP's own order of judgement.
+
+**Over-issue is refused with the number in the sentence**: *"Order PRD-… item 10 still
+requires 10.000 PC of MIGO-RM, and 11.000 was entered."* What is required comes from the
+order's component; what has been issued comes from the **material-document lines**, never from
+a stored counter (the §26.884 discipline).
+
+**The order lands in two places and no third**: `production_order_number` /
+`production_order_item` on the material-document line, and `production_order` on the **journal
+line** — the posting engine already carried the field, so the ledger names the order natively.
+
+**Account determination** gains `PRODUCTION_CONSUMPTION` — and, with it, `CONSUMPTION` and
+`SCRAP`, which MB1A had been resolving straight from the table since SCR-136 without ever
+appearing in the maintenance screen's vocabulary. All three are maintainable now.
+
+**8/8 service tests**, plus MB1A's 14/14 after its 261 assertion was reworked to name MIGO.
+
+Same-stage bookkeeping: B-892 / §26.904 / §30 row 2.722.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3659,6 +3698,7 @@ Same-stage bookkeeping: B-891 / §26.903 / §30 row 2.721.
 | 2.719 | 2026-10-20 | **SCR-138 stage 5 and closure: T838 passes, CO01 delivered (B-889, §26.901).** Five legs on the production build: an order created through the screen on **`PRD-0000001`**, the **company derived from the plant**, `CREATED` \u2192 **`RELEASED`** with who and when, the database read back to prove **no document, no journal and no stock moved**, and a refusal in SAP\u2019s shape. **Suite 1931/1931 in 263 files**; harness **138 targets**; **migrations 199**. Two lessons kept: the keyword-hygiene gate refuses data-dictionary keywords and transaction codes in selectors, and a rebuild during `next start` can hang the build. | Agent |
 | 2.720 | 2026-10-20 | **SCR-139 / MIGO — one screen, complete action/reference parity (B-890, §26.902).** Owner ruling: **MIGO gets complete parity**, and SCR-138\u2019s refusal of the A07/R08 dropdowns is **withdrawn**. `/inventory/migo` under `INV.MIGO.POST` carries the action list (A01 receipt, A02 return, A03 cancellation, A04 transfer, A07 issue) and the reference list (R01 order-document, R04 reservation, R05 material document, R08 order); **every cell resolves to posts-here, delivered-elsewhere-with-a-link, or refused-by-name**, and the matrix is **data**, so a later movement adds a row and not a screen. 261 posts here: consumption to a **P&L account, not WIP** (no settlement exists to relieve WIP), over-issue **refused by name**, **262 in the catalogue** so MBST reverses it, order on the line, MD04 demand, both periods, FB03/MB03 drills. | Agent |
 | 2.721 | 2026-10-20 | **SCR-139 stage 2: the order stands on the line (B-891, §26.903).** Migration **9077**: `production_order_number` + `production_order_item` on the material-document line, foreign-keyed to the order, and **`PRODUCTION_ORDER`** joins the movement catalogue\u2019s reference category. **Migrations 199 \u2192 200.** **No index** — every read is one order at a time through the document key, and this book does not carry an index without a measurement behind it. No table, no stored issued quantity. | Agent |
+| 2.722 | 2026-10-20 | **SCR-139 stage 3: one engine, two screens (B-892, §26.904).** `postGoodsIssue` gains a **screen** argument and the **261** scenario (`PROD_ISSUE_ORDER`, order assignment, `PRODUCTION_CONSUMPTION`); MB1A refuses 261 naming MIGO and MIGO refuses 201/551, so one screen per movement. **The order is judged before the stock** — released, component item, its material and plant — and an **over-issue is refused quoting what remains**, derived from the lines, never a counter. The order lands on the document line and on the **journal line**. `CONSUMPTION`, `SCRAP` and `PRODUCTION_CONSUMPTION` join the maintainable event vocabulary. **8/8 new tests, MB1A 14/14.** | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
