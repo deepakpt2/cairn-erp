@@ -171,6 +171,10 @@ export interface CreateReservationInput {
   requestKey: string;
 }
 
+/**
+ * A replayed request key finds the reservation already standing for it, so a
+ * double submit writes one document, never two.
+ */
 async function existingByRequestKey(tx: Tx, client: string, requestKey: string) {
   const [header] = await tx.select().from(reservationHeader).where(and(
     eq(reservationHeader.client, client), eq(reservationHeader.requestKey, requestKey),

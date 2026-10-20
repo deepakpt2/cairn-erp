@@ -121,6 +121,7 @@ import { poAccountAssignment } from './po-account-assignment';
 import { stockRequirements } from './stock-requirements';
 import { transferPosting } from './transfer-posting';
 import { materialDocumentReversal } from './material-document-reversal';
+import { reservations } from './reservations';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5054,6 +5055,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'po-account-assignment': poAccountAssignment,
   'stock-requirements': stockRequirements,
   'transfer-posting': transferPosting,
+  reservations,
   'material-document-reversal': materialDocumentReversal,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
