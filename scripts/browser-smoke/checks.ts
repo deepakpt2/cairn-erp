@@ -115,6 +115,7 @@ import { requisitionList } from './requisition-list';
 import { purchaseOrderList } from './purchase-order-list';
 import { materialDocumentList } from './material-document-list';
 import { stockOnPostingDate } from './stock-posting-date';
+import { warehouseStocks } from './warehouse-stocks';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5043,6 +5044,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'purchase-order-list': purchaseOrderList,
   'material-document-list': materialDocumentList,
   'stock-posting-date': stockOnPostingDate,
+  'warehouse-stocks': warehouseStocks,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,
