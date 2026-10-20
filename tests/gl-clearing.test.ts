@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument } from '../src/modules/finance/gl-document';
 import { postJournalEntry } from '../src/platform/posting';
+import { resetClearing } from '../src/modules/finance/clearing-reset';
 import {
   clearGlItems, getGlClearing, GlClearingError,
   type GlClearingItemRef,
@@ -388,5 +389,52 @@ describe('SCR-114 advanced clearing B-808: multi-currency clearing', () => {
         { documentNumber: eur2.documentNumber, fiscalYear: 2026, lineNumber: 2 },
       ],
     }))).rejects.toThrow(/No AVERAGE rate stands from JPY/);
+  }, 60_000);
+});
+
+describe('SCR-114 advanced clearing B-808: reset of partial and residual clearings', () => {
+  it('lifts partial allocations and restores the original remaining balance', async () => {
+    const a = await post('300', '400000', '101000', 'rst-1-a', '2026-04-26');
+    const b = await post('200', '101000', '400000', 'rst-1-b', '2026-04-26');
+    const cleared = await clearGlItems(clearingInput({
+      requestKey: 'rst-clear-1', method: 'PARTIAL',
+      items: [
+        { documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '200' },
+        { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '200' },
+      ],
+    }));
+    let view = await getGlClearing({ client, companyCode: '1000', glAccount: '400000' });
+    const partial = view.openItems.find((i) => i.documentNumber === a.documentNumber);
+    expect(partial?.remaining).toBe(100);
+
+    await resetClearing({
+      client, changedBy: ACTOR, companyCode: '1000',
+      clearingDocument: cleared.clearingDocumentNumber, fiscalYear: cleared.clearingFiscalYear,
+      reason: 'Settled wrongly',
+    });
+    view = await getGlClearing({ client, companyCode: '1000', glAccount: '400000' });
+    const restored = view.openItems.find((i) => i.documentNumber === a.documentNumber);
+    expect(restored?.remaining).toBe(300);
+    expect(restored?.applied).toBe(0);
+    expect(view.openItems.some((i) => i.documentNumber === b.documentNumber)).toBe(true);
+  }, 60_000);
+
+  it('refuses a plain reset of a residual clearing, naming the reversal', async () => {
+    const a = await post('500', '400000', '101000', 'rst-2-a', '2026-04-27');
+    const b = await post('200', '101000', '400000', 'rst-2-b', '2026-04-27');
+    const cleared = await clearGlItems(clearingInput({
+      requestKey: 'rst-clear-2', method: 'RESIDUAL', residualReasonCode: 'R01',
+      items: [
+        { documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '200' },
+        { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '200' },
+      ],
+    }));
+    const err = await resetClearing({
+      client, changedBy: ACTOR, companyCode: '1000',
+      clearingDocument: cleared.clearingDocumentNumber, fiscalYear: cleared.clearingFiscalYear,
+      reason: 'Attempt',
+    }).catch((e: unknown) => e);
+    expect(String(err)).toMatch(/residual item/);
+    expect((err as { remedy?: string }).remedy).toMatch(/Reverse the clearing document/);
   }, 60_000);
 });

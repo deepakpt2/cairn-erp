@@ -13,7 +13,7 @@ import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
-import { clearingReset, journalEntry, journalEntryLine } from './schema';
+import { clearingReset, glClearingAllocation, journalEntry, journalEntryLine } from './schema';
 
 export const CLEARING_RESET_CAPABILITY = 'FIN.CLEARING.RESET';
 const RESET_CLASS = 'clearing_reset';
@@ -183,6 +183,20 @@ export async function resetClearing(input: {
       );
     }
 
+    // A clearing that generated residual items cannot simply be reset: the
+    // residual line is a posted open item of the clearing document, so lifting
+    // the stamps alone would leave it open beside the reopened originals.
+    const residualRows = await tx.execute(sql`
+      select count(*)::int as n from gl_clearing_residual
+      where client = ${input.client} and clearing_document = ${input.clearingDocument} and is_active
+    `) as unknown as Array<{ n: number }>;
+    if ((residualRows[0]?.n ?? 0) > 0) {
+      throw new ClearingResetError(
+        `Clearing document ${input.clearingDocument} generated ${residualRows[0]!.n} residual item(s); a reset would leave them open beside the reopened originals.`,
+        'Reverse the clearing document through the standing reversal workflow, which cancels the residual line, then reset.',
+      );
+    }
+
     const clearingDate = lines[0].clearingDate!;
     const itemRefs = lines.map((l) => `${l.documentNumber}/${l.fiscalYear}/${l.lineNumber}`).join(',');
     const count = await tx.select({ n: sql<number>`count(*)::int` }).from(clearingReset)
@@ -193,6 +207,15 @@ export async function resetClearing(input: {
       eq(journalEntryLine.client, input.client),
       eq(journalEntryLine.companyCode, input.companyCode),
       eq(journalEntryLine.clearingDocument, input.clearingDocument),
+    ));
+    // Allocations lift as history, never as a delete: the rows stand inactive
+    // and the source items' remaining balances restore.
+    await tx.update(glClearingAllocation).set({
+      isActive: false, resetNumber, changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(glClearingAllocation.client, input.client),
+      eq(glClearingAllocation.clearingDocument, input.clearingDocument),
+      eq(glClearingAllocation.isActive, true),
     ));
     await tx.insert(clearingReset).values({
       client: input.client, resetNumber, companyCode: input.companyCode,
