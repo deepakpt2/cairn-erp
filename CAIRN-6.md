@@ -2877,6 +2877,43 @@ re-runnable.
 
 Same-stage bookkeeping: B-881 / §26.893 / §30 row 2.711.
 
+## §26.894 — SCR-137 stage 3: the document refuses the wrong company, and derives KOART
+
+**B-882.** The display answers three questions differently now: what the key finds, whether
+the company agrees, and what kind of partner each line stands against.
+
+`DocumentLookup` is `FOUND | NOT_FOUND | COMPANY_MISMATCH | PARKED`. The header is read by
+**number and year** — canon's primary key — and the company is judged *after* the row is in
+hand: a document that exists under the number in another company is refused as
+`Document … does not exist in company code …`, naming the company it does stand in, rather
+than the bare "not found" the old fold produced. A number that names nothing, and a number
+that names a parked document, keep their own answers.
+
+Every line carries `accountType` — SAP's `KOART`. It is **derived, never stored**: `S` for a
+G/L line, `D` where the line's partner stands in `supplier_company_code` for the document's
+company, `K` where it stands in `customer_company_code`. Two equality reads with the
+document's partner numbers, only when the document names any partner at all — no query per
+line, and no fourth table to drift from the two role masters. A partner that stands in
+neither table is a G/L line, which is what a one-time address is.
+
+Nothing is written: no change history, no audit row, no period check. The display shows the
+document as it was posted, which is what FB03 is for.
+
+**Tests.** 8/8 new (`tests/journal-document-display.test.ts`) and 3/3 in the reworked
+`tests/document-display.test.ts` (its mismatch assertion now expects `COMPANY_MISMATCH`).
+Fixture lesson, recorded because it cost the stage twenty minutes of silence:
+`supplier_company_code` and `customer_company_code` take a foreign key to **`bp_role`**, not
+to `business_partner`; `role_code` is checked to `SUPPLIER` / `CUSTOMER` and `company_status`
+to `INCOMPLETE` / `CREATED` / `MAINTAINED`. A `.catch` around a fixture turns broken masters
+into **skipped** tests — the suite reports green while testing nothing — so the catch is gone
+and a broken fixture now fails loudly.
+
+**Type gate, honestly.** `npx tsc --noEmit` could not finish in this container (1.9 GB):
+heap exhaustion at ~940 MB, and killed at 1.4 GB. A scoped `tsc -p` over the four touched
+files and their import graph types clean in 11 s and is what carried the stage; the whole
+program is recorded as **not run**, not as passed. Same-stage bookkeeping: B-882 / §26.894 /
+§30 row 2.712.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3219,6 +3256,7 @@ Same-stage bookkeeping: B-881 / §26.893 / §30 row 2.711.
 | 2.709 | 2026-10-20 | **SCR-136 stage 5 and closure: T836 passes, MB1A delivered (B-879, §26.891).** Six legs: post a 201 of 10 (document, journal, value named), **stock 100\u219290 read back from the database**, a reservation for 8 demanded by **MD04**, an issue of 3 against it leaving **5.000 open**, **MD04 demanding the five that remain**. **Suite 1895/1895 in 259 files**; `INV.GI.POST` **Implemented**; catalogue 166/141/163; **migrations 198 (no table, no index — measured)**. | Agent |\n
 | 2.710 | 2026-10-20 | **SCR-137 / FB03 stage 1: the universal drill-down anchor (B-880, §26.892).** The SCR-090 display is **re-gated**: base on **`FIN.JOURNAL.DISPLAY`**, flow panel keeps **`FIN.DOC.FLOW`** — two questions, two capabilities. The package\u2019s required company code becomes a **cross-check** (the number and year identify; a disagreement refuses as `Document \u2026 does not exist in company code \u2026`) because the anchors must not be broken to duplicate a fact. **KOART derived**: S by default, D/K from `supplier_company_code` / `customer_company_code` where the line names a partner; **A and M refused by name** (no asset number, material is an assignment). The journal number on MB03, the goods issue and the list **become links** — §26.877\u2019s deferral closes. Tax-detail jump and F4 deferred; company-code authorisation and period checks refused. | Agent |\n**B-869 (correction).** The MD04 label for the new `RESERVATION` element
 | 2.711 | 2026-10-20 | **SCR-137 stage 2: the package\u2019s index refused, measured (B-881, §26.893).** Over 40,000 documents / 160,000 lines the three reads stand at **0.032\u20130.037 ms on the primary keys**; the company-leading candidate left two unchanged and made the company-checked read **0.033 \u2192 0.052 ms**. **No migration; migrations stay 198.** | Agent |\n(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
+| 2.712 | 2026-10-20 | **SCR-137 stage 3: the display refuses the wrong company and derives KOART (B-882, §26.894).** `DocumentLookup` grows **`COMPANY_MISMATCH`** — the header is found by number and year, and a disagreeing company is refused in SAP's words instead of collapsing into "not found"; every line carries **`accountType`** (`S` default, `D` for a supplier of the company, `K` for a customer) derived from two equality reads against the role masters, never stored. No writes, no period check. **Tests 8/8 new, 3/3 reworked**; the whole-program `tsc` gate **could not run** in this container (heap exhaustion) and a scoped `tsc -p` over the touched graph is clean. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

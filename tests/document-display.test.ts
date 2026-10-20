@@ -68,8 +68,10 @@ describe('SCR-090 document display and flow (R-138)', () => {
     expect(found.document.creditLocal).toBe(250);
     expect(found.document.reference).toBeNull();
 
+    // SCR-137 reworked this: a company code that disagrees is now named rather than
+    // folded into "not found", which is SAP's own wording for the case.
     const mismatch = await getJournalDocument(client, { documentNumber: secondDoc, companyCode: '9999', fiscalYear: 2026 });
-    expect(mismatch.kind).toBe('NOT_FOUND');
+    expect(mismatch.kind).toBe('COMPANY_MISMATCH');
     const wrongYear = await getJournalDocument(client, { documentNumber: secondDoc, companyCode: company, fiscalYear: 2025 });
     expect(wrongYear.kind).toBe('NOT_FOUND');
   });

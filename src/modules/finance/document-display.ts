@@ -14,6 +14,8 @@
  * Stage 1 carries the vocabulary only; retrieval lands in stage 3.
  */
 export const DOCUMENT_FLOW_CAPABILITY = 'FIN.DOC.FLOW';
+/** SCR-137: the document itself is FB03's capability; the flow around it is FIN.DOC.FLOW. */
+export const FIN_JOURNAL_DISPLAY_CAPABILITY = 'FIN.JOURNAL.DISPLAY';
 
 export class DocumentDisplayError extends Error {
   remedy?: string;
@@ -33,6 +35,8 @@ export interface DocumentKeyInput {
 
 export interface DocumentLineView {
   lineNumber: number;
+  /** KOART, derived: S = G/L, D = vendor, K = customer. A and M are refused by name. */
+  accountType: 'S' | 'D' | 'K';
   glAccount: string;
   debitCredit: 'S' | 'H';
   amountDocument: number;
@@ -97,13 +101,17 @@ export interface JournalDocumentView {
 export type DocumentLookup =
   | { kind: 'FOUND'; document: JournalDocumentView }
   | { kind: 'NOT_FOUND' }
+  /** The document stands, but in another company code: SAP's own wording. */
+  | { kind: 'COMPANY_MISMATCH'; documentNumber: string; fiscalYear: number; standsIn: string }
   | { kind: 'PARKED'; parkedNumber: string };
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
 import { changeHistory } from '../../platform/change';
 import { withTenant } from '../../platform/db/client';
 import { journalEntry, journalEntryLine, parkedJournalHeader } from './schema';
+import { supplierCompany } from '../foundation/supplier-company-schema';
+import { customerCompany } from '../foundation/customer-company-schema';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -126,7 +134,15 @@ export async function getJournalDocument(
       eq(journalEntry.documentNumber, documentNumber),
       eq(journalEntry.fiscalYear, key.fiscalYear),
     ));
-    if (!header || header.companyCode !== key.companyCode.trim()) {
+    if (header && header.companyCode !== key.companyCode.trim()) {
+      return {
+        kind: 'COMPANY_MISMATCH',
+        documentNumber: header.documentNumber,
+        fiscalYear: header.fiscalYear,
+        standsIn: header.companyCode,
+      };
+    }
+    if (!header) {
       const [parked] = await tx.select({ parkedNumber: parkedJournalHeader.parkedNumber })
         .from(parkedJournalHeader).where(and(
           eq(parkedJournalHeader.client, client),
@@ -141,8 +157,38 @@ export async function getJournalDocument(
       eq(journalEntryLine.fiscalYear, key.fiscalYear),
     )).orderBy(asc(journalEntryLine.lineNumber));
 
+    // KOART, derived honestly: a line naming a partner that stands as a vendor in
+    // this company is D, as a customer K, and every other line is a G/L line (S).
+    const partnerNumbers = [...new Set(lineRows.map((l) => l.businessPartner).filter(Boolean))] as string[];
+    const vendors = new Set<string>();
+    const customers = new Set<string>();
+    if (partnerNumbers.length > 0) {
+      const supplierRows = await tx.select({ partnerNumber: supplierCompany.partnerNumber })
+        .from(supplierCompany)
+        .where(and(
+          eq(supplierCompany.client, client),
+          eq(supplierCompany.companyCode, header.companyCode),
+          inArray(supplierCompany.partnerNumber, partnerNumbers),
+        ));
+      for (const r of supplierRows) vendors.add(r.partnerNumber);
+      const customerRows = await tx.select({ partnerNumber: customerCompany.partnerNumber })
+        .from(customerCompany)
+        .where(and(
+          eq(customerCompany.client, client),
+          eq(customerCompany.companyCode, header.companyCode),
+          inArray(customerCompany.partnerNumber, partnerNumbers),
+        ));
+      for (const r of customerRows) customers.add(r.partnerNumber);
+    }
+    const accountTypeOf = (l: { businessPartner: string | null }): 'S' | 'D' | 'K' => {
+      if (!l.businessPartner) return 'S';
+      if (vendors.has(l.businessPartner)) return 'D';
+      if (customers.has(l.businessPartner)) return 'K';
+      return 'S';
+    };
+
     const lines: DocumentLineView[] = lineRows.map((l) => ({
-      lineNumber: l.lineNumber, glAccount: l.glAccount,
+      lineNumber: l.lineNumber, accountType: accountTypeOf(l), glAccount: l.glAccount,
       debitCredit: l.debitCredit as 'S' | 'H',
       amountDocument: Number(l.amountDocument), currency: l.currency,
       amountLocal: Number(l.amountLocal),
