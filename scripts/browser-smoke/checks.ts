@@ -114,6 +114,7 @@ import { intercompany } from './intercompany';
 import { requisitionList } from './requisition-list';
 import { purchaseOrderList } from './purchase-order-list';
 import { materialDocumentList } from './material-document-list';
+import { stockOnPostingDate } from './stock-posting-date';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5041,6 +5042,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'requisition-list': requisitionList,
   'purchase-order-list': purchaseOrderList,
   'material-document-list': materialDocumentList,
+  'stock-posting-date': stockOnPostingDate,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,
