@@ -239,7 +239,7 @@ export const movementType = pgTable('movement_type', {
   primaryKey({ columns: [t.client, t.movementType] }),
   /** A transfer is a movement serving both of its lines (SCR-131); a reservation's future issue is an ISSUE (SCR-133). */
   check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL', 'TRANSFER', 'ISSUE')`),
-  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION')`),
+  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION', 'PRODUCTION_ORDER')`),
   check('movement_type_account_assignment_ck', sql`${t.accountAssignment} in ('NONE', 'COST_CENTER', 'ORDER')`),
 ]);
 
@@ -282,6 +282,9 @@ export const materialDocumentLine = pgTable('material_document_line', {
   value: money('value').notNull().default('0'),
   purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }),
   purchaseOrderItem: integer('purchase_order_item'),
+  /** The production order a component issue consumed for (SCR-139), and its component item. */
+  productionOrderNumber: varchar('production_order_number', { length: 12 }),
+  productionOrderItem: integer('production_order_item'),
   reversalOfDocument: varchar('reversal_of_document', { length: 20 }),
   reversalOfLine: integer('reversal_of_line'),
   itemText: varchar('item_text', { length: 100 }),

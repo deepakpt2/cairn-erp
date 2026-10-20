@@ -3283,6 +3283,30 @@ return delivery, GR blocked stock, and the tolerance master an over-delivery rul
 
 Same-stage bookkeeping: B-890 / §26.902 / §30 row 2.720.
 
+## §26.903 — SCR-139 stage 2: the order stands on the line, one migration
+
+**B-891.** Migration **9077**, migrations **199 → 200**. Two columns and one catalogue value:
+
+- `material_document_line.production_order_number` + `production_order_item` — the order and
+  the component item that consumed the stock, foreign-keyed to the order header;
+- the movement catalogue's `reference_category` gains **`PRODUCTION_ORDER`**, so 261 and 262
+  can name an origin the check previously forbade.
+
+**No index, and the reason is recorded rather than assumed.** Every read of these lines is
+for **one order at a time** — what the order has consumed, and its MD04 demand — so the rows
+come back through the document's own primary key in numbers a plan cannot improve on. The
+standing discipline in this ledger is that an index appears when a measurement asks for it,
+and MB03, FB03 and MB1A each **refused** theirs on measurement; inventing one here would be
+the first index in the book with no number behind it.
+
+**What is deliberately absent.** No `production_order_goods_issue` table (§26.887's ruling),
+no issued-quantity column on the order (derived from these lines, never stored), no separate
+number range.
+
+Applied and verified in `cairn_b210`.
+
+Same-stage bookkeeping: B-891 / §26.903 / §30 row 2.721.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3634,6 +3658,7 @@ Same-stage bookkeeping: B-890 / §26.902 / §30 row 2.720.
 | 2.718 | 2026-10-20 | **SCR-138 stage 4: the order screen and T838 (B-888, §26.900).** `/production/orders` creates and releases under two capabilities; the company code is shown as derived and never asked for; the component grid is four stated lines. **Harness 138 targets** (T838), whose run creates an order, releases it, and reads the database back to prove **no document, no journal and no stock moved**. Registry gains `PROD.ORDER.CREATE` (alias CO01). **7/7 UI-contract tests**, 194 green across the touched files. | Agent |
 | 2.719 | 2026-10-20 | **SCR-138 stage 5 and closure: T838 passes, CO01 delivered (B-889, §26.901).** Five legs on the production build: an order created through the screen on **`PRD-0000001`**, the **company derived from the plant**, `CREATED` \u2192 **`RELEASED`** with who and when, the database read back to prove **no document, no journal and no stock moved**, and a refusal in SAP\u2019s shape. **Suite 1931/1931 in 263 files**; harness **138 targets**; **migrations 199**. Two lessons kept: the keyword-hygiene gate refuses data-dictionary keywords and transaction codes in selectors, and a rebuild during `next start` can hang the build. | Agent |
 | 2.720 | 2026-10-20 | **SCR-139 / MIGO — one screen, complete action/reference parity (B-890, §26.902).** Owner ruling: **MIGO gets complete parity**, and SCR-138\u2019s refusal of the A07/R08 dropdowns is **withdrawn**. `/inventory/migo` under `INV.MIGO.POST` carries the action list (A01 receipt, A02 return, A03 cancellation, A04 transfer, A07 issue) and the reference list (R01 order-document, R04 reservation, R05 material document, R08 order); **every cell resolves to posts-here, delivered-elsewhere-with-a-link, or refused-by-name**, and the matrix is **data**, so a later movement adds a row and not a screen. 261 posts here: consumption to a **P&L account, not WIP** (no settlement exists to relieve WIP), over-issue **refused by name**, **262 in the catalogue** so MBST reverses it, order on the line, MD04 demand, both periods, FB03/MB03 drills. | Agent |
+| 2.721 | 2026-10-20 | **SCR-139 stage 2: the order stands on the line (B-891, §26.903).** Migration **9077**: `production_order_number` + `production_order_item` on the material-document line, foreign-keyed to the order, and **`PRODUCTION_ORDER`** joins the movement catalogue\u2019s reference category. **Migrations 199 \u2192 200.** **No index** — every read is one order at a time through the document key, and this book does not carry an index without a measurement behind it. No table, no stored issued quantity. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
