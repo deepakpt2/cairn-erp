@@ -107,6 +107,7 @@ export const TARGETS = [
   { id: 'po-account-assignment', client: 'T829', label: 'SCR-129 ME2K purchase orders by account assignment' },
   { id: 'stock-requirements', client: 'T830', label: 'SCR-130 MD04 stock/requirements list' },
   { id: 'transfer-posting', client: 'T831', label: 'SCR-131 MB1B transfer posting' },
+  { id: 'goods-issue', client: 'T836', label: 'SCR-136 MB1A goods issue: post a 201, issue against a reservation, watch MD04 fall' },
   { id: 'material-document-output', client: 'T835', label: 'SCR-135 MB90 material document output: determine, dispatch, fail and retry' },
   { id: 'material-document-display', client: 'T834', label: 'SCR-134 MB03 display material document' },
   { id: 'reservations', client: 'T833', label: 'SCR-133 MB21 create reservation, its MD04 demand and withdrawals' },

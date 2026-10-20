@@ -2734,6 +2734,32 @@ refused before anything is written.
 
 Same-stage bookkeeping: B-877 / §26.889 / §30 row 2.707. Stage 4 next: the screen.
 
+## §26.890 — SCR-136 stage 4: the goods issue screen
+
+**B-878.** `/inventory/goods-issue` is delivered: the header (movement, both dates,
+text), four item lines with material, plant, storage location, quantity, cost centre
+and a reservation with its item, and the posted document once it stands.
+
+**The cost centre follows the movement.** Choosing 551 disables the cost-centre
+inputs rather than inviting a value the service will refuse — the screen and the
+service agree on what the movement charges.
+
+**The result** carries the document, its movement, the company code derived from the
+plant, the journal and the total value, then every line as posted — and, where a
+reservation was named, **what still stands open on it after the posting**, which is
+the fact that makes the MD04 demand fall visible on the same screen.
+
+**The status line** sits above the form and outside every conditional block, so a
+refusal — the 261 message, the stock message, the locked cost centre — never
+disappears with the state that produced it.
+
+**Tests — 8/8** (`tests/goods-issue-ui-contract.test.ts`); the browser-harness
+contract is green at **136 targets** (T836 registered against `cairn_b210:5432`).
+`tsc` clean.
+
+Same-stage bookkeeping: B-878 / §26.890 / §30 row 2.708. Stage 5 next: build and run
+**T836**.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3072,7 +3098,7 @@ Same-stage bookkeeping: B-877 / §26.889 / §30 row 2.707. Stage 4 next: the scr
 | 2.705 | 2026-10-20 | **SCR-136 / MB1A stage 1: the goods issue contract (B-875, §26.887).** The package\u2019s `goods_issue_posting` table **refused**: a goods issue is a **material document** in canon\u2019s one ledger, and a parallel table would give two answers to "what moved" — **no table added**. **201** (cost centre) and **551** (scrapping) delivered, **261 refused by name** (no order master), counter movements **202/552 in the catalogue** so **MBST** reverses a goods issue; issue valued at the material\u2019s own price, journal credits **INVENTORY** and debits **CONSUMPTION** (with the cost centre on the line) or **SCRAP**; the **reservation hook is wired** (MB21\u2019s deferral closed, MD04 demand falls in the same commit); location stock judged on `allow_negative_stock`; **material and accounting periods both judged**; batch deferred and a batch refused if entered. | Agent |\n seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.706 | 2026-10-20 | **SCR-136 stage 2: no table and no index, measured (B-876, §26.888).** Four reads over 20,000 materials, 80,000 balances, 20,000 valuations and 20,000 reservations all land on standing unique keys at **0.027\u20130.034 ms**. **No migration; migrations stay 198.** | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.707 | 2026-10-20 | **SCR-136 stage 3: goods issue service (B-877, §26.889).** One transaction carries the journal, the material document, the stock, the valuation, the **reservation withdrawal** and the output. 201 and 551 with counters 202/552 in the catalogue so **MBST** reverses; **261 refused by name**; INVENTORY credited, CONSUMPTION (cost centre on the line) or SCRAP debited; stock judged on `allow_negative_stock`; **material and accounting periods judged**; batch refused. Catalogue **166/141/163**. **14/14 tests**, including MD04 demand falling 8\u21925 in the same posting and a failed post leaving stock untouched. | Agent |\n
-### §26.881 addendum — a label that shipped in the working tree but not in a commit
+| 2.708 | 2026-10-20 | **SCR-136 stage 4: the goods issue screen (B-878, §26.890).** `/inventory/goods-issue` — movement with both dates and text, four lines with material, plant, location, quantity, **cost centre (disabled where the movement charges none)** and a reservation with its item; the result shows the document, journal, value and **what still stands open on the reservation**. **8/8 UI-contract tests**; harness **136 targets** (T836). | Agent |\n### §26.881 addendum — a label that shipped in the working tree but not in a commit
 
 **B-869 (correction).** The MD04 label for the new `RESERVATION` element
 (`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
