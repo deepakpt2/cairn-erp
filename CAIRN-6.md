@@ -1578,6 +1578,33 @@ Same-stage bookkeeping: B-841 / §26.853 / §30 row 2.671. Stage 3 next: the `IN
 
 Same-stage bookkeeping: B-842 / §26.854 / §30 row 2.672. **Next: MMBE first**, then MB51-free alternatives — MB51 and MB5B are delivered, so the next order is **MMBE** (`INV.STOCK.VIEW`, still Roadmap) then **ME2K**.
 
+## §26.855 — SCR-128 contract: MMBE Stock Overview, the roadmap capability finally satisfied
+
+**B-843.** MMBE arrives as **`INV.STOCK.VIEW`** at `/inventory/stock-overview` — the one capability that has stood on the frozen roadmap since the beginning (`CAIRN.md` §10 line 898), and which MB5B and MB52 each deliberately left untouched. This round flips it to Implemented at closure. No new capability code is coined.
+
+**Shape: a tree, not a grid.** Three levels, each rolling up to its parent:
+- **Level 1 — plant**: the material's total in that plant across every stock type shown.
+- **Level 2 — storage location**: the breakdown per location.
+- **Level 3 — stock type**: the special-stock half of the package's "batch / special stock node". **Batch is deferred by name** — this canon carries no batch master — so the third level names the stock type (`UNRESTRICTED`, `QUALITY`, `BLOCKED`, and every other type present, such as `PROJECT`).
+
+**What rolls up.** Every parent total is computed from its children as they are shown, and the material total from its plants — never from a second query, so a parent can never disagree with its own children. The suite pins that the leaf quantities sum to the location, the location quantities to the plant, and the plants to the material total, including after zero-suppression.
+
+**Quantitative, deliberately.** MMBE is opened to see *where* stock stands, not what it is worth, so the tree carries quantities and no valuation. Value stays in MB52 where it belongs, and the drill from every node reaches it in one click.
+
+**Selection.** Material is **required and single**, exactly as the package states — the overview is of one material, and a range would be MB52's job. Plant range, storage-location range and zero-stock display are optional. The expansion level dropdown takes `PLANT` (plants only) or `STORAGE_LOCATION` (default: plants and locations open); anything else refuses by name.
+
+**Refusals and deferrals.** The one-character **special stock indicator is refused by name** on the SCR-127 ruling — Cairn carries special stock as a named stock type — with the remedy naming the third-level nodes. **Batch deferred by name.** **In-transit is deferred by name**: no movement type in this canon produces transit stock, so a Level-1 "in transit" column would be a permanent zero pretending to be a measure; the contract says so rather than drawing it.
+
+**Drills.** Every plant and storage-location node carries the same three drills MB52 established: **Movements** (MB51), **Rollforward** (MB5B) and **Warehouse snapshot** (MB52), filtered to that node's material, plant and storage location over the client's whole recorded ledger window. A node with no posted movement behind it carries no drill.
+
+**Read-only.** No insert, update or delete. The tree reads the stock master and the material description and nothing else.
+
+**Index.** The package recommends (tenant, material, plant, storage location). Note before measuring that this is a strict **prefix of `stock_quantity_pkey`** (client, material, plant, storage location, stock type), so it may be redundant by construction — but it is measured, not assumed, at stage 2, as the last two rounds were.
+
+**Tests planned.** Service: the three-level roll-up arithmetic in both directions; zero suppression at every level; refusal by name for a missing/unknown material, unknown plant/location, the special stock indicator, batch and an unknown expansion level; drills present at the right nodes; read-only. UI contract: capability gate on `INV.STOCK.VIEW`, session tenant, required material, expansion dropdown, tree rendering. Browser: T-numbered fixture with two plants, three locations and a project stock type, checking the roll-ups, the zero toggle, the expansions and the drills.
+
+Same-stage bookkeeping: B-843 / §26.855 / §30 row 2.673. Stage 2 next: the index decision, measured.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1881,6 +1908,7 @@ Same-stage bookkeeping: B-842 / §26.854 / §30 row 2.672. **Next: MMBE first**,
 | 2.670 | 2026-10-20 | **SCR-127 contract settled (B-840, §26.852).** MB52 = new capability `INV.STOCK.WAREHOUSE` at `/inventory/warehouse-stocks`; reads the stock master, not the ledger; does not satisfy `INV.STOCK.VIEW` (MMBE stays Roadmap). Breakdown pivots **stock type** into unrestricted / quality-inspection / blocked plus a fourth **special-other** column so the total is never short. Valuation from `material_valuation` at plant; **no valuation record means unknown value with a warning, never zero**. Scope of List required (ALV / STANDARD, others refused); material/plant/sloc ranges optional as the package states; zero lines suppressed; valuation display defaults on; **batch and valuation type deferred by name, special stock indicator refused by name**. Two drills per row: MB51 movements and MB5B rollforward over the whole recorded window. Index measured at stage 2, not assumed. | Agent |
 | 2.671 | 2026-10-20 | **SCR-127 stage 2 published (B-841, §26.853).** MB52 index decision measured at 200,000 stock rows and 50,000 valuations and declined: the planner never selects `(client, plant, storage_location, material_number)` — it walks `stock_quantity_pkey` for material-first shapes and seq-scans plant-first ones, which is right at forty per cent selectivity. Forcing bitmap paths left both arms sequential at 72 ms. **Verification-only, no migration 9067; migrations stand at 188.** Harness `scripts/plan-mb52.mts` committed. Service next. | Agent |
 | 2.672 | 2026-10-20 | **SCR-127 closed (B-842, §26.854).** MB52 delivered as `INV.STOCK.WAREHOUSE` at `/inventory/warehouse-stocks`: stock-master snapshot pivoted on stock type (unrestricted / quality / blocked / special-other) and valued at the plant price, unknown rather than zero where no valuation stands, required scope of list, optional ranges, zero suppression, valuation display defaulting on, two drills per row. No migration (188 stand). Suite 1701/1701 / 241 files; T827 passed 8 legs; catalogue 159/132/154. Next T-codes: MMBE, then ME2K. | Agent |
+| 2.673 | 2026-10-20 | **SCR-128 contract settled (B-843, §26.855).** MMBE = the frozen-roadmap capability **`INV.STOCK.VIEW`** at `/inventory/stock-overview`, to be flipped to Implemented at closure; no new capability code. Three-level tree (plant → storage location → **stock type**) with every parent total rolled up from the children it shows, so a parent can never disagree with them. Material **required and single**; plant/location ranges and zero display optional; expansion level `PLANT`/`STORAGE_LOCATION` (default), others refused by name. **Batch, in-transit and the one-character special stock indicator each deferred or refused by name** — no batch master, no transit movement, special stock is a named stock type. Quantitative only; value stays in MB52. Three drills per node: MB51, MB5B, MB52. Index is a strict prefix of the existing primary key — measured anyway at stage 2. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
