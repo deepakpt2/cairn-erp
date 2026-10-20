@@ -118,6 +118,7 @@ import { stockOnPostingDate } from './stock-posting-date';
 import { warehouseStocks } from './warehouse-stocks';
 import { stockOverview } from './stock-overview';
 import { poAccountAssignment } from './po-account-assignment';
+import { stockRequirements } from './stock-requirements';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5049,6 +5050,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'warehouse-stocks': warehouseStocks,
   'stock-overview': stockOverview,
   'po-account-assignment': poAccountAssignment,
+  'stock-requirements': stockRequirements,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,

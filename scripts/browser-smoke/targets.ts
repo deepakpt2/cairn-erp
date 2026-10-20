@@ -105,6 +105,7 @@ export const TARGETS = [
   { id: 'warehouse-stocks', client: 'T827', label: 'SCR-127 MB52 warehouse stocks on hand snapshot' },
   { id: 'stock-overview', client: 'T828', label: 'SCR-128 MMBE stock overview tree' },
   { id: 'po-account-assignment', client: 'T829', label: 'SCR-129 ME2K purchase orders by account assignment' },
+  { id: 'stock-requirements', client: 'T830', label: 'SCR-130 MD04 stock/requirements list' },
   { id: 'subledger-tie-out', client: 'T881', label: 'SCR-115 subledger tie-out reconciliation report' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
