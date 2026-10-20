@@ -54,6 +54,12 @@ export default function Reversal({ document, canPost, today }: {
             {document.reversedBy ? ` · ${t('mbst.reversedBy')} ${document.reversedBy}` : ''}
           </p>
 
+          {state.message && (
+            <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
+              {state.message}{state.remedy ? ` ${state.remedy}` : ''}
+            </p>
+          )}
+
           {document.status !== 'REVERSED' && !document.reversalOf && (
             <form action={action} className="mt-3">
               <input type="hidden" name="materialDocumentNumber" value={document.materialDocumentNumber} />
@@ -106,11 +112,6 @@ export default function Reversal({ document, canPost, today }: {
             </tbody>
           </table>
 
-          {state.message && (
-            <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
-              {state.message}{state.remedy ? ` ${state.remedy}` : ''}
-            </p>
-          )}
 
               <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="block">
