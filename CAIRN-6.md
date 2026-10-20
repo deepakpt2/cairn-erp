@@ -1328,6 +1328,24 @@ Capabilities: **`FIN.IC.POST`** (posting) and **`CFG.FIN.IC.DEFINE`** (configura
 
 **Deferred by name:** the tracking-number filter (the standing requisition item carries no such field and the create screen does not capture one — it arrives with a change transaction that can maintain it), display variants beyond the single grid (the ALV/standard-list choice, consistent with the layout-variant deferrals of SCR-112/113), requisition release-status display (release belongs to its own round), and exporting. Capability **`PROC.REQ.LIST`** with alias **ME5A**. Stage order: 1 contract, 2 index decision, 3 service + tests, 4 screen, 5 browser acceptance + closure; each separately committed and pushed. Same-stage bookkeeping: B-828 / §26.840 / §30 row 2.658.
 
+## §26.841 — SCR-123 stage 2: index decision is verification-only (no migration 9065)
+
+**B-829.** The contract made migration 9065 conditional on a measured plan. Measured, and it is not justified.
+
+**Method.** `scripts/plan-me5a.mts` (committed as the evidence for this decision) seeds a throwaway tenant — 60,000 `purchase_requisition_item` rows over 10 plants × 8 purchasing groups × 24 months, 20,000 `purchase_order_item` rows citing half of them, plus the plant / purchasing-group / business-partner masters the foreign keys need — gathers statistics in a separate session so they are visible to the measured plans, and times the exact list query the service will issue (left join to the aggregated live conversion per requisition item, ordered requisition-date descending, `limit 500`). Three selection shapes, with and without the candidate index `(client, plant, purchasing_group, requisition_date)`, which is dropped afterwards; the tenant is destroyed.
+
+| selection | no index | with candidate index | plan used |
+| --- | --- | --- | --- |
+| plant 1003, groups 001–002, 3 months | 33.3 ms | 25.6 ms | Seq Scan → Hash Right Join (index version: Index Scan using the candidate) |
+| plants 1002–1005, groups 001–004, 6 months | 37.1 ms | 38.3 ms | Seq Scan on `purchase_requisition_item` → Hash Right Join on the conversion aggregate |
+| all plants, all groups, 12 months | 176.0 ms | 73.9 ms (parallel seq scan both arms — planner ignores the index; difference is cache warmth) | Parallel Seq Scan → Hash Left Join |
+
+**Decision — verification-only, no migration 9065.** The candidate index is chosen only for the narrowest shape, where it saves about 8 ms on a warm-cache 33 ms query, and it changes nothing for the medium shape (38.3 ms against 37.1 ms means the planner declines it). The two dominant costs are the top-N sort and the aggregate over `purchase_order_item`, which the index does not touch — `po_item_requisition_idx (client, requisition_number, requisition_item)` already serves the join. Adding a third index to a write-path table for an 8 ms gain in one of three shapes would spend write amplification on a read that already answers in well under a second at three times the pilot's expected volume. Migrations stand at **187**; the next migration number remains 9065, unused.
+
+**For the service.** Stage 3 issues the query as measured (aggregate then left join, ordered by requisition date descending, `limit maxHits + 1` to prove truncation) and needs no schema change. If a later round makes the requisition table materially larger — or adds a filter shape the measurement did not cover — this decision is re-measured with the same harness rather than assumed.
+
+Same-stage bookkeeping: B-829 / §26.841 / §30 row 2.659. Next stage 3: `PROC.REQ.LIST` service and tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1617,6 +1635,7 @@ Capabilities: **`FIN.IC.POST`** (posting) and **`CFG.FIN.IC.DEFINE`** (configura
 | 2.656 | 2026-10-20 | **SCR-122 stage 2 published (B-824, §26.838).** Atomic pair posting with OBYA clearing lines both sides, trading-partner stamps, rate per company, request-key replay; configuration service validated. Tests 6/6 (incl. F-03 clearing of the OBYA balance and rollback). Screens next. | Agent |
 | 2.657 | 2026-10-20 | **SCR-122 intercompany CLOSED (B-827, §26.839).** Screens `/config/intercompany-clearing` (CFG.FIN.IC.DEFINE / OBYA) and `/finance/intercompany` (FIN.IC.POST / FB01); catalogue **154/127/146**. **T920 PASSED** (pair configured, two balanced documents, trading partners stamped, pairing recorded); service 6/6, contract 4/4, target guard 159/159, full suite **1610/1610**; migrations 187. T885 was already taken — target re-keyed to T920 and the displaced profit-loss target re-run green. Clearing queue drained; next entirely new round is SCR-123. | Agent |
 | 2.658 | 2026-10-20 | **SCR-123 procurement opened (B-828, §26.840).** ME5A requisition list display contracted: ranges on purchasing group / plant / material / org, requisitioner, dates, account assignment and closed toggle; org derived through the plant assignment; conversion derived from live PO items (OPEN/PARTIAL/CONVERTED); closed = converted or marked; drill to the standing display; hit cap with truncation. Tracking-number filter, display variants and export deferred by name. Index decision is stage 2. | Agent |
+| 2.659 | 2026-10-20 | **SCR-123 stage 2 published (B-829, §26.841).** ME5A index decision measured, not assumed: at 60,000 requisition items the list query runs 33–176 ms and the candidate composite index only helps the narrowest shape by ~8 ms while the planner declines it for the medium shape; dominant costs are the top-N sort and the PO aggregate. **Verification-only — no migration 9065**, as the SCR-120 precedent allowed. Harness `scripts/plan-me5a.mts` committed as evidence; migrations remain 187. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
