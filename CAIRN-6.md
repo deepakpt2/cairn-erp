@@ -2148,6 +2148,65 @@ until `PROD.ORDER.CREATE` brings an order master.
 (`INV.MATERIALDOC.RECEIVEPRINT`, Print Goods Receipt Note — the next unimplemented
 MB row standing after MB21 in `CAIRN.md` §10), as reported under B-444.
 
+## §26.877 — SCR-134 / MB03: the display contract
+
+**B-865.** Owner package: **MB03 Display Material Document** — lookup by document
+number and fiscal year, read-only header (posting date, document date, header
+text, user, entry time) and an item grid (movement type, material, plant, storage
+location, quantity, base unit, upstream reference), a not-found message in the
+SAP shape, and **no writes at all**.
+
+**The screen exists already and is reworked, not duplicated.** SCR-125 delivered
+`/inventory/material-documents` as MB51's drill and shared `INV.MATERIALDOC.LIST`
+with the list, because a report and its drill were judged one capability. The
+frozen roadmap gives MB03 its own capability `INV.DISPLAY`, so the display is
+re-gated on it: **the list alone no longer opens a document** — a reader without
+`INV.DISPLAY` sees the capability message, which is SAP's own division (MB51 shows
+lines; MB03 shows the document, and each checks its own authorisation). The drill
+from MB51 keeps its route and is subject to the display capability.
+
+**The key the package proposes cannot exist here.** The package asks for
+`[tenantId, companyCode, mblnr, mjahr]`; canon's material document header carries
+**no company code** — a document may move stock in two plants of two company codes
+(the transfer refuses cross-company transfers, but the receipt path does not pin a
+header company), and SCR-125 already settled that **the document number is unique
+per tenant**. The lookup therefore stands on `(client, material_document_number)`
+with the **fiscal year accepted as a cross-check**: an entered year that disagrees
+with the document refuses by name, exactly as MBST does. The package's matrix and
+schema disagree again and parity of behaviour beats parity of columns.
+
+**Item number (ZEILE)** is optional and contextual, as the package states: given,
+it narrows the grid to that line and marks it; an item the document does not carry
+refuses by name. **F4 on both fields is deferred by name** — canon has no
+search-help framework, so the number and year are typed, and the screen says what
+an F4 would have shown rather than pretending.
+
+**What the display adds to the row:** the poster (`created_by`, the package's
+USNAM) and the entry time (`created_at`), the material description from the
+master, the stock type and line direction (canon's transfer writes an issuing and
+a receiving line), the value and currency, the purchase order reference
+(`EBELN`/`EBELP`), and the reversal pair.
+
+**Drills.** To **MB51** on the same document (the list, filtered), and to the
+upstream **purchase order** where a line names one. The **accounting document**
+(FB03, `FIN.JOURNAL.DISPLAY`) is **deferred by name** — that capability is still
+Roadmap, so the journal number is shown as text with the reason. The **reservation
+reference (RSNUM)** is **deferred by name**: no path posts a document against a
+reservation yet (`INV.GI.POST` has no service; SCR-133 shipped withdrawals as a
+tested hook only), so a reservation number would be a column nothing could fill.
+
+**Refused by name.** Plant- and storage-location-level authorisation objects: canon
+authorises by capability and tenant, not by plant; inventing a plant filter here
+would refuse documents the postings themselves allow. **Period checks (OMSY /
+MARV / OB52): a display never applies them** — MB03 shows the document as posted,
+including one whose period has since closed, which is the whole point of a
+historical display.
+
+**No tables, no writes.** Stage 2 will measure the package's proposed index
+`(tenant, company, mblnr, mjahr)` against the primary key before agreeing to it.
+
+Same-stage bookkeeping: B-865 / §26.877 / §30 row 2.695.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2473,6 +2532,7 @@ MB row standing after MB21 in `CAIRN.md` §10), as reported under B-444.
 | 2.692 | 2026-10-20 | **SCR-133 stage 3: reservation service and the MD04 element (B-862, §26.874).** `INV.RESERVATION.CREATE` writes the numbered header and its items after judging every item and the cost centre; withdrawals complete items and refuse over-draw, completed and forbidden ones; **MD04 answers with a `RESERVATION` requirement** at the required date for OPEN = required \u2212 withdrawn, closing SCR-130\u2019s deferral. 9073 widens the number columns to hold what the numbering engine renders. **Migrations 196.** **11/11 tests**; MD04\u2019s 22 stay green. Catalogue 164/138/160. | Agent |
 | 2.693 | 2026-10-20 | **SCR-133 stage 4: the reservation screen (B-863, §26.875).** `/inventory/reservations` — lookup, create form (201/261, required date, cost centre, three item lines, company code from the plant), items with required/withdrawn/open and per-item withdrawal and completion; MD04 learned the **Reservation** label. **8/8 UI-contract tests**; harness contract green at **133 targets** (T833). | Agent |
 | 2.694 | 2026-10-20 | **SCR-133 stage 5 and closure: T833 passes, MB21 delivered (B-864, §26.876).** Nine legs: create (201, 25 at 2026-11-20, cost centre), item open 25, **MD04 demands 25**, withdraw 10 → 15 open, MD04 demands 15, withdraw 15 → completed, **MD04 demand gone**, 261 refused by name. `data-completed` moved onto the item row. **Suite 1830/1830 in 253 files**; `INV.RESERVATION.CREATE` **Implemented**; catalogue 164/138/160; migrations 196. | Agent |
+| 2.695 | 2026-10-20 | **SCR-134 / MB03 stage 1: display contract (B-865, §26.877).** The SCR-125 display is **reworked** into MB03 and re-gated on its own `INV.DISPLAY`; the package\u2019s `[tenant, company, mblnr, mjahr]` key is refused in canon\u2019s favour (the header carries no company code; the number is tenant-unique, so the year is a **cross-check**); optional item filter; poster and entry time, material description, stock type, direction, value, PO reference and reversal pair added; F4/search-help **deferred**, FB03 drill **deferred** (`FIN.JOURNAL.DISPLAY` still Roadmap), RSNUM **deferred** (no posting path), plant-level authorisation and period checks **refused by name**. No tables. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
