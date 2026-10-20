@@ -2235,6 +2235,49 @@ index that only repeats what the primary key already guarantees.
 
 Same-stage bookkeeping: B-866 / §26.878 / §30 row 2.696.
 
+## §26.879 — SCR-134 stage 3: the display service
+
+**B-867.** `src/modules/inventory/material-document-display.ts` exports
+`MATERIAL_DOC_DISPLAY_CAPABILITY = 'INV.DISPLAY'`, `MaterialDocumentDisplayError`
+and `displayMaterialDocument`.
+
+**What it reads.** The header — number, year, both dates, header text, status,
+journal document, reversal pair, and **the poster and the entry time** the package
+asks for as USNAM and CPUTM. The lines — item, movement type **with its
+description**, the line direction canon writes transfers with, material **with its
+description**, plant, storage location, stock type, base quantity and unit, entry
+quantity and unit, value and currency, the purchase order and item, and the
+reversal-of pair. The **company codes are derived** from the plants the lines
+stand in and sorted: the document header has no company code, and inventing one
+would be the fiction the package's schema already asks for (§26.877).
+
+**The year is a cross-check.** Given, it must equal the document's own year; a
+disagreement refuses with `Material document … does not exist in fiscal year …`
+and a remedy naming the year it does stand in. Absent, the number alone is
+enough — because the number is unique per tenant.
+
+**The item is a narrowing.** `itemNumber` filters the grid and is reported back as
+`selectedItem`; an item the document does not carry refuses with the items it does
+carry listed.
+
+**Refusals by name:** an empty number, a year that is not four digits, an item
+that is not a whole number. The not-found message is the SAP shape —
+`Material document 4999999999 does not exist.`
+
+**Catalogue.** `INV.DISPLAY` delivered (not posting) and its term at
+`/inventory/material-documents`, alias **MB03**: **165 capabilities / 139 terms /
+161 aliases**.
+
+**Tests — 10/10** (`tests/material-document-display.test.ts`): the header with
+poster and entry time; material and movement descriptions resolved onto the line;
+the company codes derived from two plants in two companies; the not-found message;
+the year cross-check both ways; the malformed year and empty number; the item
+narrowing and its refusal listing the real items; a reversed document in a closed
+year shown exactly as posted; the list drill on the same posting date; and another
+tenant never reaching the document.
+
+Same-stage bookkeeping: B-867 / §26.879 / §30 row 2.697. Stage 4 next: the screen.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2562,7 +2605,7 @@ Same-stage bookkeeping: B-866 / §26.878 / §30 row 2.696.
 | 2.694 | 2026-10-20 | **SCR-133 stage 5 and closure: T833 passes, MB21 delivered (B-864, §26.876).** Nine legs: create (201, 25 at 2026-11-20, cost centre), item open 25, **MD04 demands 25**, withdraw 10 → 15 open, MD04 demands 15, withdraw 15 → completed, **MD04 demand gone**, 261 refused by name. `data-completed` moved onto the item row. **Suite 1830/1830 in 253 files**; `INV.RESERVATION.CREATE` **Implemented**; catalogue 164/138/160; migrations 196. | Agent |
 | 2.695 | 2026-10-20 | **SCR-134 / MB03 stage 1: display contract (B-865, §26.877).** The SCR-125 display is **reworked** into MB03 and re-gated on its own `INV.DISPLAY`; the package\u2019s `[tenant, company, mblnr, mjahr]` key is refused in canon\u2019s favour (the header carries no company code; the number is tenant-unique, so the year is a **cross-check**); optional item filter; poster and entry time, material description, stock type, direction, value, PO reference and reversal pair added; F4/search-help **deferred**, FB03 drill **deferred** (`FIN.JOURNAL.DISPLAY` still Roadmap), RSNUM **deferred** (no posting path), plant-level authorisation and period checks **refused by name**. No tables. | Agent |
 | 2.696 | 2026-10-20 | **SCR-134 stage 2: the package\u2019s index is refused, measured (B-866, §26.878).** 5,000 documents / 15,000 lines: every display read is already 0.02\u20130.04 ms on the primary keys; the year-leading candidate measured **0.055 ms against 0.020 ms**, i.e. 2.7\u00d7 slower on the very read it was proposed for. **No migration; migrations stay 196.** | Agent |
-shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
+| 2.697 | 2026-10-20 | **SCR-134 stage 3: display service (B-867, §26.879).** `INV.DISPLAY` reads one document — header with **poster and entry time**, lines with movement and material descriptions, direction, value, PO reference and reversal pair, **company code derived from the plants**; the year is a **cross-check**, the item a narrowing, the not-found message in the SAP shape. Catalogue **165/139/161**. **10/10 tests.** | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
