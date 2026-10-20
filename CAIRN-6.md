@@ -2144,9 +2144,9 @@ commits: `131725c` · `e9a804d` · `b343deb` · `e239646` · this closure.
 still has no service), retention and expiry of reservations, and the 261 order path
 until `PROD.ORDER.CREATE` brings an order master.
 
-**Next:** **MB03** (`INV.DISPLAY`, Display Material Document), then **MB25**
-(`INV.DISPLAY.STOCK`, Stock Overview — the next unimplemented row of `CAIRN.md`
-§10), as reported under B-444.
+**Next:** **MB03** (`INV.DISPLAY`, Display Material Document), then **MB90**
+(`INV.MATERIALDOC.RECEIVEPRINT`, Print Goods Receipt Note — the next unimplemented
+MB row standing after MB21 in `CAIRN.md` §10), as reported under B-444.
 
 ## §30 · Change log (continued)
 
