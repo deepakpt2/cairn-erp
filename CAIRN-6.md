@@ -3413,6 +3413,56 @@ over-delivery rule would need, and WIP capitalisation (which needs settlement to
 
 Same-stage bookkeeping: B-894 / §26.906 / §30 row 2.724.
 
+## §26.907 — SCR-140 / MIGO 101: the finished good comes back, and the cell that refused stops refusing
+
+**B-895.** The matrix said `A01 + R08` waits on **`PROD.ORDER.GR`**. This round delivers it: the
+production order issues components (§26.904) and now **receives the finished good** against the
+same order, into stock, at a value the ledger can defend.
+
+**The value, and the honest limit of it.** SAP valuates a production receipt at the order's
+**planned cost** — a costing sheet, a standard cost estimate, a routing. Canon carries none of
+those, and inventing a planned cost here would be a number nobody could trace to any master.
+So the receipt valuates at **the material's own price in the plant** — the standard price under
+`S`, the moving average under `V` — which is exactly the rule the issue already uses (§26.889).
+Named plainly: **the receipt says what the finished good is worth in this ledger, not what it
+cost to make.** A cost estimate is deferred by name until costing exists, and no report in this
+book will claim otherwise.
+
+**The journal, and why the two production flows do not share an account.** The issue debits
+`PRODUCTION_CONSUMPTION` and credits `INVENTORY`. The receipt debits `INVENTORY` (the finished
+good's valuation class) and credits a **new** determination event, **`PRODUCTION_OUTPUT`**. Two
+events, not one: a single account would net consumption against output silently, and a reader
+looking at the trial balance would see a number whose meaning depended on which movements
+happened to have posted. Two accounts say what happened, and their difference is what stands in
+production — the closest this ledger can come to WIP without a settlement run to relieve it
+(§26.902).
+
+**What is judged, in this order.** The order must exist and be **released**; the material must
+be **the order's own produced material**; the receiving plant must be **the order's plant**
+(a receipt into another valuation area is a transfer, not a production receipt, and would file
+the output where nothing produced it); the storage location must stand in that plant and be
+active; and the quantity must not exceed **what the order still expects** — its order quantity
+less everything already received against it, derived from the material-document lines, never a
+stored counter. An over-receipt is refused quoting both numbers.
+
+**No new column, no new table.** The line already carries the order (§26.903); the event column
+is free text with a shape check, so `PRODUCTION_OUTPUT` needs no DDL; and the movement catalogue
+is data, written per tenant when the screen first runs. **Stage 2 records that as a decision
+with its reason** rather than skipping it silently.
+
+**Reversal** is `102`, in the catalogue, reversed through MBST like every other document
+(§26.884) — a receipt takes its stock back and its value with it.
+
+**Deferred by name:** the order's **yield and scrap** (a receipt of less than the order quantity
+says nothing about why), **co-products and by-products**, the **cost estimate**, and order
+completion. **Refused by name:** receiving a material the order does not produce, receiving into
+another plant, and any tolerance on the order quantity — the order states what it will make, and
+canon has no tolerance master to soften it.
+
+**No writes this stage.**
+
+Same-stage bookkeeping: B-895 / §26.907 / §30 row 2.725.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3768,6 +3818,7 @@ Same-stage bookkeeping: B-894 / §26.906 / §30 row 2.724.
 | 2.722 | 2026-10-20 | **SCR-139 stage 3: one engine, two screens (B-892, §26.904).** `postGoodsIssue` gains a **screen** argument and the **261** scenario (`PROD_ISSUE_ORDER`, order assignment, `PRODUCTION_CONSUMPTION`); MB1A refuses 261 naming MIGO and MIGO refuses 201/551, so one screen per movement. **The order is judged before the stock** — released, component item, its material and plant — and an **over-issue is refused quoting what remains**, derived from the lines, never a counter. The order lands on the document line and on the **journal line**. `CONSUMPTION`, `SCRAP` and `PRODUCTION_CONSUMPTION` join the maintainable event vocabulary. **8/8 new tests, MB1A 14/14.** | Agent |
 | 2.723 | 2026-10-20 | **SCR-139 stage 4: the MIGO screen and the matrix as data (B-893, §26.905).** `/inventory/migo`: two selectors, one resolution panel, three answers. **20 cells**, every one resolved by a typed function — exactly **one posts here**, the rest link or refuse by name. The **server re-resolves** the cell, so a tampered form cannot post a movement the matrix does not offer. **MB1A stops offering 261.** The result reads as a posting slip: document, journal link to FB03, MB03 link, and what the order still requires. **Harness 139 targets** (T839). | Agent |
 | 2.724 | 2026-10-20 | **SCR-139 stage 5 and closure: T839 passes, MIGO delivers 261 (B-894, §26.906).** Six legs: a released order, **A07 + R08 posting ten components**, the result naming **what the order still requires**, the database read back (**stock 100 \u2192 90**, the order on the document line **and the journal line**, the debit on **production consumption**), a **delivered cell linking away**, a **refused cell naming its capability**, and an **over-issue refused with the number in the sentence**. **Suite 1950/1950 in 265 files**; harness **139 targets**; **migrations 200**; `INV.MIGO.POST` registered. | Agent |
+| 2.725 | 2026-10-20 | **SCR-140 / MIGO 101 contracted — the cell that refused stops refusing (B-895, §26.907).** `A01 + R08` becomes **`PROD.ORDER.GR`**: the finished good received against the order that made it. Value at **the material\u2019s own price in the plant** — canon has no cost estimate, and the receipt says what the good is worth, not what it cost to make. The receipt credits a **new `PRODUCTION_OUTPUT`** event, never the consumption account, so the two flows cannot net silently. Judged in order: **released order, its own material, its own plant**, active location, and quantity within **what the order still expects** (derived from the lines). **102 in the catalogue** so MBST reverses it. **No DDL** — stage 2 records why. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
