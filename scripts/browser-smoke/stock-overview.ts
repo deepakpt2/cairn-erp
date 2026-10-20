@@ -76,7 +76,7 @@ export async function stockOverview(ctx: Context) {
 
   // ── The tree and its roll-ups ─────────────────────────────────────────────
   await page.goto(`${base}${ROUTE}?material=MMBE-MAT&expansionLevel=STORAGE_LOCATION`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: /Stock Overview/i }).waitFor();
+  await page.getByRole('heading', { level: 1, name: 'Stock Overview', exact: true }).waitFor();
   const plantA = page.locator('[data-plant="QB01"]').first();
   await plantA.waitFor();
   assert.match(await plantA.locator('summary').first().innerText(), /42\.000/, 'plant QB01 rolls up to 42');
