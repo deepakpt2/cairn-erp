@@ -354,3 +354,65 @@ export const reservationItem = pgTable('reservation_item', {
   foreignKey({ columns: [t.client, t.reservationNumber], foreignColumns: [reservationHeader.client, reservationHeader.reservationNumber] }).onDelete('cascade'),
   check('reservation_item_quantity_ck', sql`${t.requiredQuantity} > 0 and ${t.withdrawnQuantity} >= 0`),
 ]);
+
+/**
+ * Output determination and dispatch — SCR-135 / MB90 (NAST shape).
+ *
+ * `output_type` is the catalogue *and* the condition: what a slip is called, which
+ * direction it applies to, and the medium and dispatch time it defaults to.
+ * `output_message` is the queue and the log: one row per document, output type and
+ * medium, carrying its status, its send count and its last attempt.
+ *
+ * The document is referenced by its own columns with a foreign key — never by a
+ * concatenated key, which no database can check (§26.882). No company code is
+ * stored: it is derived from the plants the document moved.
+ */
+export const outputType = pgTable('output_type', {
+  client: tenant(),
+  outputType: varchar('output_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 60 }).notNull(),
+  /** RECEIPT | ISSUE | ANY — the line direction a document must carry to receive it. */
+  direction: varchar('direction', { length: 8 }).notNull(),
+  /** PRINT | EMAIL. FAX and EDI are refused by name: no endpoint exists. */
+  transmissionMedium: varchar('transmission_medium', { length: 8 }).notNull().default('PRINT'),
+  /** IMMEDIATE | PERIODIC (SAP VSZTP 1 / 3). */
+  dispatchTime: varchar('dispatch_time', { length: 10 }).notNull().default('IMMEDIATE'),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.outputType] }),
+  check('output_type_code_ck', sql`${t.outputType} ~ '^[A-Z0-9]{2,4}$'`),
+  check('output_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'ISSUE', 'ANY')`),
+  check('output_type_medium_ck', sql`${t.transmissionMedium} in ('PRINT', 'EMAIL')`),
+  check('output_type_dispatch_ck', sql`${t.dispatchTime} in ('IMMEDIATE', 'PERIODIC')`),
+]);
+
+export const outputMessage = pgTable('output_message', {
+  client: tenant(),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }).notNull(),
+  /** Written from the header, never from input — the document owns its year. */
+  documentYear: integer('document_year').notNull(),
+  outputType: varchar('output_type', { length: 4 }).notNull(),
+  transmissionMedium: varchar('transmission_medium', { length: 8 }).notNull(),
+  dispatchTime: varchar('dispatch_time', { length: 10 }).notNull(),
+  /** PENDING | PROCESSED | ERROR (SAP VSTAT 0 / 1 / 2). */
+  status: varchar('status', { length: 10 }).notNull().default('PENDING'),
+  sendCount: integer('send_count').notNull().default(0),
+  recipient: varchar('recipient', { length: 50 }),
+  printerQueue: varchar('printer_queue', { length: 30 }),
+  lastProcessedAt: timestamp('last_processed_at', { withTimezone: true }),
+  /** Why the last attempt failed; only an ERROR carries one. */
+  errorText: varchar('error_text', { length: 200 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialDocumentNumber, t.outputType, t.transmissionMedium] }),
+  foreignKey({ columns: [t.client, t.materialDocumentNumber], foreignColumns: [materialDocument.client, materialDocument.materialDocumentNumber] }).onDelete('cascade'),
+  foreignKey({ columns: [t.client, t.outputType], foreignColumns: [outputType.client, outputType.outputType] }).onDelete('restrict'),
+  check('output_message_medium_ck', sql`${t.transmissionMedium} in ('PRINT', 'EMAIL')`),
+  check('output_message_dispatch_ck', sql`${t.dispatchTime} in ('IMMEDIATE', 'PERIODIC')`),
+  check('output_message_status_ck', sql`${t.status} in ('PENDING', 'PROCESSED', 'ERROR')`),
+  check('output_message_send_count_ck', sql`${t.sendCount} >= 0`),
+  check('output_message_error_ck', sql`${t.status} <> 'ERROR' or ${t.errorText} is not null`),
+  index('output_message_queue_idx').on(t.client, t.status, t.createdAt),
+  check('output_message_recipient_ck', sql`${t.recipient} is null or length(btrim(${t.recipient})) > 0`),
+]);

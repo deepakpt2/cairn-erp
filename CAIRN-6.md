@@ -2432,6 +2432,39 @@ printer or mail server.
 
 Same-stage bookkeeping: B-870 / §26.882 / §30 row 2.700.
 
+## §26.883 — SCR-135 stage 2: two tables, and the index the queue actually needs
+
+**B-871.** Migration **9074** creates `output_type` (catalogue and condition) and
+`output_message` (queue and log), both keyed by `client`, with the document
+referenced by `(client, material_document_number)` through a real foreign key and
+no company code anywhere. Migration **9075** adds the queue index the measurements
+demanded. **Migrations stand at 197.**
+
+Measured over **40,000 documents and 40,000 messages**:
+
+| read | standing keys | package's `(status, output_type)` | taken: `(status, created_at)` |
+| --- | --- | --- | --- |
+| the grid, newest first | 9.650 ms, seq scan | 7.836 ms, **still seq scan** | **0.085 ms** — `Index Scan Backward` |
+| grid narrowed to one output type | 10.277 ms | 7.407 ms, still seq scan | **0.069 ms** |
+| the periodic run (pending, oldest first) | 6.197 ms | 4.920 ms, still seq scan | **0.394 ms** |
+| one document's messages | 0.020 ms (pk) | 0.024 ms | 0.025 ms |
+
+**The package's index is refused because the planner refused it**: after `analyze`
+it was never chosen, and it cannot be — MB90 reads the queue by *status and time*,
+never by status alone. The index taken is `(client, status, created_at)`, which
+serves both the grid's backward scan and the run's forward one; the plan is a
+limit over an index scan reading exactly the 200 rows asked for.
+
+**What the tables carry.** `output_type`: the code, its description, the direction
+it applies to, the medium and the dispatch time it defaults to, and an active flag.
+`output_message`: the document and its year, the output type and medium, the
+dispatch time, the status, the send count, the recipient, the printer queue, the
+last attempt and its reason — with the status, the medium, the dispatch time, the
+send count and the error text each guarded by a check, so no row can claim an
+ERROR without saying why.
+
+Same-stage bookkeeping: B-871 / §26.883 / §30 row 2.701.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2763,7 +2796,7 @@ Same-stage bookkeeping: B-870 / §26.882 / §30 row 2.700.
 | 2.698 | 2026-10-20 | **SCR-134 stage 4: the display screen re-gated and reworked (B-868, §26.880).** `/inventory/material-documents` carries **INV.DISPLAY**; lookup with required number, year cross-check and optional item; header names the **poster and entry time** and the **derived company codes**; the grid carries movement and material descriptions, direction, value, PO reference and reversal pair; the journal shows as text **with its reason**. **18/18** contract tests; harness **134 targets** (T834). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.699 | 2026-10-20 | **SCR-134 stage 5 and closure: T834 passes, MB03 delivered (B-869, §26.881).** Eight legs: open by number and year, poster named, **company code derived**, descriptions resolved, item narrowing, wrong year refused, wrong number refused in the SAP shape, wrong item refused naming the items it carries, and a **reversed closed-year document shown as posted**. **Suite 1851/1851 in 255 files**; `INV.DISPLAY` **Implemented**; catalogue 165/139/161; **migrations 196 (no index added)**. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.700 | 2026-10-20 | **SCR-135 / MB90 stage 1: the output contract (B-870, §26.882).** Two NAST-shaped tables — `output_type` (catalogue **and** condition) and `output_message` (queue and log); the package\u2019s concatenated `object_key` **refused** for three foreign-keyed columns, its `accountingHeader` company code **refused** for a code derived from the plants; named states with SAP\u2019s digits as aliases (`PENDING`/`PROCESSED`/`ERROR`, `PRINT`/`EMAIL`, `IMMEDIATE`/`PERIODIC`), **FAX and EDI refused by name**; WE01 and WA01 delivered; determination at posting **and** a run that fills what stands missing; print renders and records, **spool and transport deferred**; an EMAIL with no recipient **fails for real** and is retried after a recipient is set. | Agent |\n2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
-| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
+| 2.701 | 2026-10-20 | **SCR-135 stage 2: two tables and the queue index, measured (B-871, §26.883).** 9074 creates `output_type` (catalogue **and** condition) and `output_message` (queue and log) with a real foreign key to the document and **no company code**; over 40,000 messages the package\u2019s `(status, output_type)` index was **never chosen by the planner** while `(client, status, created_at)` took the grid from **9.650 to 0.085 ms** and the periodic run from **6.197 to 0.394 ms** — 9075 takes it. **Migrations 197.** | Agent |\n| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
