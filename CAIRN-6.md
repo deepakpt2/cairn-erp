@@ -2545,6 +2545,43 @@ browser-harness contract is green at **135 targets** (T835 registered against
 Same-stage bookkeeping: B-873 / §26.885 / §30 row 2.703. Stage 5 next: build and run
 **T835**.
 
+## §26.886 — SCR-135 stage 5: T835 passes; MB90 is delivered
+
+**B-874.** Acceptance build (`npx next build --turbopack`, 49 s) and the production
+server carried **T835** against `cairn_b210:5432`:
+
+1. the screen opens on **Material Document Output**;
+2. **Determine and dispatch** runs; the status line reports what it determined and
+   dispatched;
+3. document `4900000901` carries **WE01, PROCESSED, one send**;
+4. the slip **preview** renders `MATERIAL DOCUMENT 4900000901 / 2026`, the material
+   and `10.000 PC`;
+5. an **EMAIL** message with no recipient fails, and the row says **why** — "needs a
+   recipient";
+6. a recipient is set, the row reports it, and a second dispatch **processes** it
+   with the send counted to one.
+
+**Suite — 1872/1872 in 257 files** (was 1851/255: eleven service tests and nine
+UI-contract tests; the three posting suites stayed green through the hook).
+
+**Closed.** `INV.MATERIALDOC.RECEIVEPRINT` is **Implemented** in
+`FUNCTIONS-AND-ROADMAP.md`; catalogue **166 / 140 / 162**; **migrations 197**. SCR-135
+is six commits: `b06b607` · `e924bc7` · `7a04937` · `cb1eea1` · this closure.
+
+**Deferred by name:** the scheduler (the run is operator-triggered), condition
+technology beyond direction, spool files and PDF attachments, hand-off to a printer
+or a mail server, and a repeat dispatch of a processed message.
+
+**Two things the round decided late and recorded in §26.884 rather than the
+contract:** a **transfer earns neither slip** — it both receipts and issues, and
+neither document describes it; and the three posting paths call the hook **inside
+their own transaction**, so a slip cannot exist for a document that rolled back.
+
+**Next:** **MB1A** (`INV.GI.POST`, Goods Issue — the last unimplemented MB row in
+`CAIRN.md` §10 and the service SCR-133's withdrawal hook has been waiting for), then
+**MIGO 261** (`PROD.ORDER.GI`, Goods Issue to Order — which needs `PROD.ORDER.CREATE`
+first and should be opened with that dependency stated).
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2879,7 +2916,7 @@ Same-stage bookkeeping: B-873 / §26.885 / §30 row 2.703. Stage 5 next: build a
 | 2.701 | 2026-10-20 | **SCR-135 stage 2: two tables and the queue index, measured (B-871, §26.883).** 9074 creates `output_type` (catalogue **and** condition) and `output_message` (queue and log) with a real foreign key to the document and **no company code**; over 40,000 messages the package\u2019s `(status, output_type)` index was **never chosen by the planner** while `(client, status, created_at)` took the grid from **9.650 to 0.085 ms** and the periodic run from **6.197 to 0.394 ms** — 9075 takes it. **Migrations 197.** | Agent |\n| 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 | 2.702 | 2026-10-20 | **SCR-135 stage 3: the output engine and its posting hook (B-872, §26.884).** Determination runs **inside all three posting transactions** (goods receipt, transfer and its counter, reversal); a receipt earns **WE01** and dispatches immediately, an issue earns **WA01** at the periodic cadence, a **transfer earns neither** (it both receipts and issues). The run fills history idempotently; dispatch renders the slip and records the attempt; an EMAIL fails without a recipient and succeeds after one. Catalogue **166/140/162**. **11/11 tests**; posting suites **27/27**. | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.703 | 2026-10-20 | **SCR-135 stage 4: the output screen (B-873, §26.885).** `/inventory/material-document-output` — the full selection, a **run** that determines and dispatches, the queue with SAP\u2019s digits as aliases only, per-row **dispatch, recipient and slip preview**; failures state their reason in the row; action messages stand outside the conditional blocks. **9/9 UI-contract tests**; harness **135 targets** (T835). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
-| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.704 | 2026-10-20 | **SCR-135 stage 5 and closure: T835 passes, MB90 delivered (B-874, §26.886).** Six legs: the screen opens, the run determines and dispatches, `4900000901` carries **WE01 PROCESSED with one send**, the **slip preview** renders the document, an **EMAIL fails for want of a recipient with its reason in the row**, a recipient is set and the retry **processes with the send counted**. **Suite 1872/1872 in 257 files**; `INV.MATERIALDOC.RECEIVEPRINT` **Implemented**; catalogue 166/140/162; migrations 197. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
  seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 
