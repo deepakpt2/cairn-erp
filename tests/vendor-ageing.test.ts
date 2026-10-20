@@ -200,3 +200,152 @@ describe('SCR-066 vendor ageing (S_ALR_87012085)', () => {
     })).rejects.toThrow('do not increase');
   });
 });
+
+/**
+ * SCR-120 acceptance: the repaired derivation — reconciliation-account
+ * eligibility (the walkthrough defect), special G/L inclusion, due
+ * dates recomputed from baseline + payment terms, and historical
+ * standing around a clearing of the repaired (self-stamped) shape.
+ */
+describe('SCR-120 vendor ageing repair (S_ALR_87012085)', () => {
+  let client = '';
+
+  afterAll(async () => {
+    if (client) await destroyTenant(client);
+  });
+
+  async function post(
+    reference: string,
+    postingDate: string,
+    lines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; businessPartner?: string }>,
+    origin?: { documentClass: string; documentKey: string },
+  ): Promise<string> {
+    return withTenant(client, async (tx) => {
+      const company = await getCompanyCode(tx, client, '1000');
+      const position = await derivePosition(tx, client, company!.fiscalYearVariant!, postingDate);
+      const posted = await postJournalEntry(tx, {
+        client, companyCode: '1000', documentType: 'SA',
+        documentDate: postingDate, postingDate,
+        fiscalYear: position.fiscalYear, postingPeriod: position.period,
+        currency: 'USD', localCurrency: company!.currency,
+        reference, lines, origin,
+        postedBy: ACTOR, transactionCode: 'FIN.AP.AGEING',
+      });
+      return posted.documentNumber;
+    });
+  }
+
+  it('ages only reconciliation items, resolves terms due dates, and honours special G/L selection', async () => {
+    const tenant = await createTenant('scr120-ageing-repair');
+    client = tenant.client;
+    await defineTestRanges(tenant, { fiscalYear: 2026 });
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into business_partner (client, partner_number, category, name, created_by)
+        values (${client}, 'V20000', 'ORGANIZATION', 'Repair Supplier', ${ACTOR}),
+               (${client}, 'C10000', 'ORGANIZATION', 'Noise Customer', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into payment_terms (client, terms_code, description, baseline_source, net_days, created_by)
+        values (${client}, 'NET30', 'Net 30 days', 'DOCUMENT_DATE', 30, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into vendor_invoice (
+          client, invoice_number, fiscal_year, category, vendor_number, company_code,
+          document_date, posting_date, reference, currency, gross_amount, tax_amount,
+          payment_terms, baseline_date, due_date, status, journal_document_number, created_by
+        ) values (
+          ${client}, 'VI-1', 2026, 'INVOICE', 'V20000', '1000',
+          '2026-10-10', '2026-10-10', 'VI-1', 'USD', 400, 0,
+          'NET30', '2026-10-10', '2026-11-09', 'POSTED', null, ${ACTOR}
+        ) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into special_gl_config (
+          client, company_code, account_type, indicator,
+          alternative_reconciliation_account, target_special_gl_indicator, description, created_by
+        ) values (${client}, '', 'AP', 'A', '230000', null, 'Repair down payments', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    // A manual vendor invoice: the expense line carries the partner too,
+    // yet only the reconciliation credit may age.
+    await post('MANUAL-INV', '2026-10-05', [
+      { glAccount: '500000', debitCredit: 'S', amount: '1000.00', businessPartner: 'V20000' },
+      { glAccount: '200000', debitCredit: 'H', amount: '1000.00', businessPartner: 'V20000' },
+    ]);
+    // A customer receivable: the walkthrough's C20000 noise. Never a vendor item.
+    await post('CUST-NOISE', '2026-10-06', [
+      { glAccount: '110000', debitCredit: 'S', amount: '700.00', businessPartner: 'C10000' },
+      { glAccount: '300000', debitCredit: 'H', amount: '700.00' },
+    ]);
+    // A down-payment-shaped debit on the indicator's alternative account.
+    await post('DP-A', '2026-10-07', [
+      { glAccount: '230000', debitCredit: 'S', amount: '250.00', businessPartner: 'V20000' },
+      { glAccount: '101000', debitCredit: 'H', amount: '250.00' },
+    ]);
+    // A direct vendor invoice whose due date lives in its terms.
+    await post('VI-1', '2026-10-10', [
+      { glAccount: '500000', debitCredit: 'S', amount: '400.00' },
+      { glAccount: '200000', debitCredit: 'H', amount: '400.00', businessPartner: 'V20000' },
+    ], { documentClass: 'vendor_invoice', documentKey: 'VI-1' });
+
+    const plain = await getVendorAgeing(client, { companyCode: '1000', keyDate: '2026-11-20' });
+    expect(plain.suppliers.map((s) => s.supplier)).toEqual(['V20000']);
+    expect(plain.grandTotal).toBe(-1400);
+    const vi = plain.items.find((i) => i.documentNumber && i.paymentTerms === 'NET30')!;
+    expect(vi.dueDate).toBe('2026-11-09');
+    expect(vi.daysOverdue).toBe(11);
+    expect(vi.bucket).toBe(1);
+    expect(vi.specialGlIndicator).toBeNull();
+    expect(plain.items.every((i) => i.supplier === 'V20000')).toBe(true);
+
+    const withSpecial = await getVendorAgeing(client, {
+      companyCode: '1000', keyDate: '2026-11-20', includeSpecialGl: true,
+    });
+    expect(withSpecial.grandTotal).toBe(-1150);
+    const dp = withSpecial.items.find((i) => i.specialGlIndicator === 'A')!;
+    expect(dp.signed).toBe(250);
+    expect(dp.supplierName).toBe('Repair Supplier');
+
+    // The due date is recomputed from the terms as they stand now:
+    // stretching NET30 to 45 days moves VI-1 out of overdue.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update payment_terms set net_days = 45 where client = ${client} and terms_code = 'NET30'
+      `);
+    });
+    const stretched = await getVendorAgeing(client, { companyCode: '1000', keyDate: '2026-11-20' });
+    const viLater = stretched.items.find((i) => i.paymentTerms === 'NET30')!;
+    expect(viLater.dueDate).toBe('2026-11-24');
+    expect(viLater.daysOverdue).toBe(0);
+    expect(viLater.bucket).toBe(0);
+  });
+
+  it('stands a cleared pair before its clearing date and drops it after', async () => {
+    const invoiceDoc = await post('PAIR-INV', '2026-10-05', [
+      { glAccount: '500000', debitCredit: 'S', amount: '300.00' },
+      { glAccount: '200000', debitCredit: 'H', amount: '300.00', businessPartner: 'V20000' },
+    ]);
+    const paymentDoc = await post('PAIR-PAY', '2026-10-20', [
+      { glAccount: '200000', debitCredit: 'S', amount: '300.00', businessPartner: 'V20000' },
+      { glAccount: '101000', debitCredit: 'H', amount: '300.00' },
+    ]);
+    // The repaired F110 shape: the clearing stamps the invoice and the
+    // payment document's own vendor line alike — here effective the
+    // 25th, after both documents stand posted.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update journal_entry_line set clearing_document = ${paymentDoc}, clearing_date = '2026-10-25'
+        where client = ${client} and business_partner = 'V20000'
+          and document_number in (${invoiceDoc}, ${paymentDoc})
+      `);
+    });
+    const before = await getVendorAgeing(client, { companyCode: '1000', keyDate: '2026-10-21' });
+    expect(before.items.filter((i) => [invoiceDoc, paymentDoc].includes(i.documentNumber))).toHaveLength(2);
+    const after = await getVendorAgeing(client, { companyCode: '1000', keyDate: '2026-10-26' });
+    expect(after.items.filter((i) => [invoiceDoc, paymentDoc].includes(i.documentNumber))).toHaveLength(0);
+  });
+});

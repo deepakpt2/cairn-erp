@@ -114,3 +114,104 @@ describe('SCR-070 customer ageing (S_ALR_87012178)', () => {
     })).rejects.toThrow('do not increase');
   });
 });
+
+/**
+ * SCR-120 mirror acceptance: the repaired derivation on the customer
+ * side — vendor payable lines never age as customer items, and an
+ * AR special G/L item joins only when selected.
+ */
+describe('SCR-120 customer ageing mirror repair (S_ALR_87012178)', () => {
+  let client = '';
+
+  afterAll(async () => {
+    if (client) await destroyTenant(client);
+  });
+
+  it('ages only customer reconciliation items and honours the special G/L selection', async () => {
+    const tenant = await createTenant('scr120-customer-ageing-repair');
+    client = tenant.client;
+    await defineTestRanges(tenant, { fiscalYear: 2026 });
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into business_partner (client, partner_number, category, name, created_by)
+        values (${client}, 'C20000', 'ORGANIZATION', 'Repair Customer', ${ACTOR}),
+               (${client}, 'V10000', 'ORGANIZATION', 'Noise Vendor', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into special_gl_config (
+          client, company_code, account_type, indicator,
+          alternative_reconciliation_account, target_special_gl_indicator, description, created_by
+        ) values (${client}, '', 'AR', 'A', '110100', null, 'Repair customer advances', ${ACTOR})
+        on conflict do nothing
+      `);
+      // A customer receivable on the reconciliation account.
+      await tx.execute(sql`
+        insert into journal_entry (
+          client, document_number, fiscal_year, document_type, company_code,
+          document_date, posting_date, posting_period, document_currency,
+          local_currency, status, created_by
+        ) values (${client}, 'MIR-1', 2026, 'SA', '1000',
+          '2026-10-05', '2026-10-05', 10, 'USD', 'USD', 'POSTED', ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into journal_entry_line (
+          client, document_number, fiscal_year, line_number, gl_account,
+          company_code, debit_credit, amount_local, amount_document, currency, business_partner
+        ) values
+          (${client}, 'MIR-1', 2026, 1, '110000', '1000', 'S', 800, 800, 'USD', 'C20000'),
+          (${client}, 'MIR-1', 2026, 2, '300000', '1000', 'H', 800, 800, 'USD', null)
+      `);
+      // A vendor payable carrying the vendor partner: never a customer item.
+      await tx.execute(sql`
+        insert into journal_entry (
+          client, document_number, fiscal_year, document_type, company_code,
+          document_date, posting_date, posting_period, document_currency,
+          local_currency, status, created_by
+        ) values (${client}, 'MIR-2', 2026, 'SA', '1000',
+          '2026-10-06', '2026-10-06', 10, 'USD', 'USD', 'POSTED', ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into journal_entry_line (
+          client, document_number, fiscal_year, line_number, gl_account,
+          company_code, debit_credit, amount_local, amount_document, currency, business_partner
+        ) values
+          (${client}, 'MIR-2', 2026, 1, '500000', '1000', 'S', 600, 600, 'USD', 'V10000'),
+          (${client}, 'MIR-2', 2026, 2, '200000', '1000', 'H', 600, 600, 'USD', 'V10000')
+      `);
+      // A customer advance standing on the indicator's alternative account
+      // (110100 also reconciles normally, but while the account stands
+      // configured as an alternative account its lines are special G/L
+      // items and leave the plain derivation).
+      await tx.execute(sql`
+        insert into journal_entry (
+          client, document_number, fiscal_year, document_type, company_code,
+          document_date, posting_date, posting_period, document_currency,
+          local_currency, status, created_by
+        ) values (${client}, 'MIR-3', 2026, 'SA', '1000',
+          '2026-10-07', '2026-10-07', 10, 'USD', 'USD', 'POSTED', ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into journal_entry_line (
+          client, document_number, fiscal_year, line_number, gl_account,
+          company_code, debit_credit, amount_local, amount_document, currency, business_partner
+        ) values
+          (${client}, 'MIR-3', 2026, 1, '101000', '1000', 'S', 300, 300, 'USD', null),
+          (${client}, 'MIR-3', 2026, 2, '110100', '1000', 'H', 300, 300, 'USD', 'C20000')
+      `);
+    });
+
+    const plain = await getCustomerAgeing(client, { companyCode: '1000', keyDate: '2026-11-20' });
+    expect(plain.customers.map((c) => c.customer)).toEqual(['C20000']);
+    expect(plain.items.every((i) => i.customer === 'C20000')).toBe(true);
+    expect(plain.grandTotal).toBe(800); // the special G/L advance is excluded unselected
+
+    const withSpecial = await getCustomerAgeing(client, {
+      companyCode: '1000', keyDate: '2026-11-20', includeSpecialGl: true,
+    });
+    expect(withSpecial.grandTotal).toBe(500); // 800 receivable − 300 advance, once selected
+    const advance = withSpecial.items.find((i) => i.documentNumber === 'MIR-3')!;
+    expect(advance.specialGlIndicator).toBe('A');
+    expect(advance.customerName).toBe('Repair Customer');
+  });
+});

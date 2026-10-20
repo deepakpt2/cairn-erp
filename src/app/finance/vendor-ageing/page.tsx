@@ -75,6 +75,8 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
         thresholds: [
           Number(params.bucket1 ?? 30), Number(params.bucket2 ?? 60), Number(params.bucket3 ?? 90),
         ],
+        includeSpecialGl: params.includeSpecialGl === 'on',
+        sort,
       }));
     } catch (error) {
       if (error instanceof VendorAgeingError) errors.push(error.remedy ? `${error.message} ${error.remedy}` : error.message);
@@ -118,10 +120,14 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
         <thead>
           <tr className="text-xs uppercase tracking-wide text-ink-faint">
             <th className="px-2 py-2">Document</th><th className="px-2 py-2">Fiscal year</th>
-            <th className="px-2 py-2">Line</th><th className="px-2 py-2">Posting date</th>
+            <th className="px-2 py-2">Line</th><th className="px-2 py-2">Type</th>
+            <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Document date</th>
+            <th className="px-2 py-2">Baseline date</th><th className="px-2 py-2">Terms</th>
             <th className="px-2 py-2">Due date</th><th className="px-2 py-2">Days overdue</th>
-            <th className="px-2 py-2">Bucket</th><th className="px-2 py-2">Remaining amount</th>
-            <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Document display</th>
+            <th className="px-2 py-2">Bucket</th><th className="px-2 py-2">Spec. G/L</th>
+            <th className="px-2 py-2">Original amount</th><th className="px-2 py-2">Remaining amount</th>
+            <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Clearing</th>
+            <th className="px-2 py-2">Document display</th>
           </tr>
         </thead>
         <tbody>
@@ -130,12 +136,19 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
               <td className="px-2 py-2">{item.documentNumber}</td>
               <td className="px-2 py-2">{item.fiscalYear}</td>
               <td className="px-2 py-2">{item.lineNumber}</td>
+              <td className="px-2 py-2">{item.documentType}</td>
               <td className="px-2 py-2">{item.postingDate}</td>
+              <td className="px-2 py-2">{item.documentDate}</td>
+              <td className="px-2 py-2">{item.baselineDate ?? '—'}</td>
+              <td className="px-2 py-2">{item.paymentTerms ?? '—'}</td>
               <td className="px-2 py-2">{item.dueDate}</td>
               <td className="px-2 py-2">{item.daysOverdue}</td>
               <td className="px-2 py-2">{bucketLabel(view, item.bucket)}</td>
+              <td className="px-2 py-2">{item.specialGlIndicator ?? '—'}</td>
+              <td className="px-2 py-2">{fmt(Number(item.documentAmount))}</td>
               <td className="px-2 py-2">{fmt(item.signed)}</td>
               <td className="px-2 py-2">{item.currency}</td>
+              <td className="px-2 py-2">{item.clearingDocument ? `${item.clearingDocument} · ${item.clearingDate ?? ''}` : '—'}</td>
               <td className="px-2 py-2">
                 <Link className="underline" href={`/finance/journal/document?document=${encodeURIComponent(item.documentNumber)}&company=${view.companyCode}&year=${item.fiscalYear}`}>
                   Display

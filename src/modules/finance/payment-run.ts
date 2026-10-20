@@ -453,8 +453,7 @@ export async function executePaymentRun(input: {
           eq(journalEntryLine.documentNumber, entry.item.journalDocumentNumber),
           eq(journalEntryLine.fiscalYear, entry.item.journalFiscalYear),
           eq(journalEntryLine.lineNumber, entry.item.journalLineNumber),
-        ));
-        paymentNumber += 1;
+        ));        paymentNumber += 1;
         await tx.insert(paymentDocument).values({
           client: input.client, runDate: input.runDate, runId: input.runId,
           itemNumber: paymentNumber, companyCode: group.company,
@@ -467,6 +466,20 @@ export async function executePaymentRun(input: {
           createdBy: input.changedBy,
         });
       }
+      // The payment document clears its own vendor lines too (SCR-120):
+      // like F-53/F-28, the clearing stamps the payment side as well as
+      // the invoices, so a paid vendor's payment never stands open in
+      // ageing or open-item displays. The bank line carries no partner
+      // and is untouched.
+      await tx.update(journalEntryLine).set({
+        clearingDocument: journal.documentNumber, clearingDate: run.postingDate,
+      }).where(and(
+        eq(journalEntryLine.client, input.client),
+        eq(journalEntryLine.documentNumber, journal.documentNumber),
+        eq(journalEntryLine.fiscalYear, journal.fiscalYear),
+        sql`${journalEntryLine.businessPartner} is not null`,
+        sql`${journalEntryLine.clearingDocument} is null`,
+      ));
     }
 
     await tx.update(paymentRun).set({

@@ -199,6 +199,18 @@ describe('SCR-063 payment run (F110)', () => {
     expect(clearedRows[0].clearing_document).toBe(executed.payments[0].journalDocumentNumber);
     expect(String(clearedRows[0].clearing_date)).toContain('2026-11-16');
 
+    // SCR-120: the payment document clears its own vendor line too, so
+    // the paid vendor's payment never stands open downstream.
+    const ownLine = await withTenant(c, (tx) => tx.execute(sql`
+      select clearing_document, clearing_date from journal_entry_line
+      where client = ${c} and document_number = ${executed.payments[0].journalDocumentNumber}
+        and business_partner = 'V10000'
+    `));
+    const ownRows = ownLine as unknown as Array<{ clearing_document: string; clearing_date: string }>;
+    expect(ownRows).toHaveLength(1);
+    expect(ownRows[0].clearing_document).toBe(executed.payments[0].journalDocumentNumber);
+    expect(String(ownRows[0].clearing_date)).toContain('2026-11-16');
+
     await expect(executePaymentRun({
       client: c, changedBy: ACTOR, runDate: '2026-10-18', runId: 'RUNC',
       houseBankKey: 'HB01', bankAccountId: 'MAIN',
