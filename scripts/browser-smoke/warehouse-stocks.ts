@@ -96,7 +96,6 @@ export async function warehouseStocks(ctx: Context) {
 
   // ── The snapshot with its four-way split and value ────────────────────────
   await page.goto(`${base}${ROUTE}?scopeOfList=ALV&plantFrom=Q850&plantTo=Q850`, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { name: /Warehouse Stocks on Hand/i }).waitFor();
 
   const split = page.locator('tr[data-material="MB52-MAT"]').first();
@@ -129,13 +128,11 @@ export async function warehouseStocks(ctx: Context) {
   assert.equal(await page.locator('tr[data-material="MB52-ZER"]').count(), 0, 'the zero line is suppressed');
   await page.goto(`${base}${ROUTE}?scopeOfList=STANDARD&plantFrom=Q850&plantTo=Q850&displayZero=on`,
     { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   await page.locator('tr[data-material="MB52-ZER"]').first().waitFor();
   console.log('  ✓ zero-stock lines stay hidden until the display flag asks for them');
 
   await page.goto(`${base}${ROUTE}?scopeOfList=ALV&plantFrom=Q850&plantTo=Q850&valuationPriceOff=1`,
     { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   const noValue = page.locator('tr[data-material="MB52-MAT"]').first();
   const noValueCells = (await noValue.locator('td').allInnerTexts()).map((text) => text.trim());
   assert.equal(noValueCells.length, 11, `the value columns are gone: ${noValueCells.join(' | ')}`);
@@ -144,22 +141,18 @@ export async function warehouseStocks(ctx: Context) {
 
   // ── Refusals by name ─────────────────────────────────────────────────────
   await page.goto(`${base}${ROUTE}?scopeOfList=HIERARCHY&plantFrom=Q850&plantTo=Q850`, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   await page.locator('div[role="alert"]').filter({ hasText: 'scope of list HIERARCHY' }).waitFor();
   console.log('  ✓ an unknown scope of list refuses by name');
 
   await page.goto(`${base}${ROUTE}?scopeOfList=ALV&plantFrom=Q850&plantTo=Q850&specialStockIndicator=Q`,
     { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   await page.locator('div[role="alert"]').filter({ hasText: 'special stock indicator Q' }).waitFor();
   console.log('  ✓ the one-character special stock indicator is refused in favour of a stock type');
 
   // ── Drill into the movements ─────────────────────────────────────────────
   await page.goto(`${base}${ROUTE}?scopeOfList=ALV&plantFrom=Q850&plantTo=Q850`, { waitUntil: 'domcontentloaded' });
-  await page.waitForLoadState('networkidle');
   await page.locator('tr[data-material="MB52-MAT"]').first().getByRole('link', { name: 'Movements' }).click();
   await page.waitForURL(/\/inventory\/material-document-list\?.*materialFrom=MB52-MAT/);
-  await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { name: /Material Documents: List Display/i }).waitFor();
   assert.equal((await page.locator('body').innerText()).includes('5960000001'), true, 'the movement is listed');
   console.log('  ✓ the row drills into the material document list for the same material');
