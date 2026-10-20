@@ -2207,6 +2207,34 @@ historical display.
 
 Same-stage bookkeeping: B-865 / §26.877 / §30 row 2.695.
 
+## §26.878 — SCR-134 stage 2: the package's index is refused, measured
+
+**B-866.** No migration. The display is served by keys that already stand, and the
+index the package proposes would be dead weight — and slower.
+
+Seeded 5,000 material documents of three lines each (15,000 lines) over three
+fiscal years, then timed the three reads a display makes, before and after adding
+`(client, document_year, material_document_number)`:
+
+| read | standing keys | with the package's index |
+| --- | --- | --- |
+| header by number | 0.026 ms (`material_document_pkey`) | 0.023 ms — unchanged |
+| header by number **and year** | 0.020 ms (`material_document_pkey`) | 0.055 ms — the candidate, **2.7× slower** |
+| the document's lines | 0.027 ms (`material_document_line_pkey`) | 0.037 ms — unchanged |
+
+The reason is structural, not incidental: the lookup is **equality on a unique
+key**. Adding the year to the index cannot make a unique lookup cheaper — the
+primary key finds the row in one descent — while the year-leading candidate forces
+a second index to be considered and chosen where the planner would rather not.
+The package's `[tenantId, companyCode, mblnr, mjahr]` cannot be built at all
+(§26.877: the header carries no company code), and dropping the company leaves an
+index that only repeats what the primary key already guarantees.
+
+**Index refused. Migrations stay at 196.** The plan script is kept as
+`scripts/plan-mb03.mts` so the refusal can be re-run.
+
+Same-stage bookkeeping: B-866 / §26.878 / §30 row 2.696.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2533,6 +2561,7 @@ Same-stage bookkeeping: B-865 / §26.877 / §30 row 2.695.
 | 2.693 | 2026-10-20 | **SCR-133 stage 4: the reservation screen (B-863, §26.875).** `/inventory/reservations` — lookup, create form (201/261, required date, cost centre, three item lines, company code from the plant), items with required/withdrawn/open and per-item withdrawal and completion; MD04 learned the **Reservation** label. **8/8 UI-contract tests**; harness contract green at **133 targets** (T833). | Agent |
 | 2.694 | 2026-10-20 | **SCR-133 stage 5 and closure: T833 passes, MB21 delivered (B-864, §26.876).** Nine legs: create (201, 25 at 2026-11-20, cost centre), item open 25, **MD04 demands 25**, withdraw 10 → 15 open, MD04 demands 15, withdraw 15 → completed, **MD04 demand gone**, 261 refused by name. `data-completed` moved onto the item row. **Suite 1830/1830 in 253 files**; `INV.RESERVATION.CREATE` **Implemented**; catalogue 164/138/160; migrations 196. | Agent |
 | 2.695 | 2026-10-20 | **SCR-134 / MB03 stage 1: display contract (B-865, §26.877).** The SCR-125 display is **reworked** into MB03 and re-gated on its own `INV.DISPLAY`; the package\u2019s `[tenant, company, mblnr, mjahr]` key is refused in canon\u2019s favour (the header carries no company code; the number is tenant-unique, so the year is a **cross-check**); optional item filter; poster and entry time, material description, stock type, direction, value, PO reference and reversal pair added; F4/search-help **deferred**, FB03 drill **deferred** (`FIN.JOURNAL.DISPLAY` still Roadmap), RSNUM **deferred** (no posting path), plant-level authorisation and period checks **refused by name**. No tables. | Agent |
+| 2.696 | 2026-10-20 | **SCR-134 stage 2: the package\u2019s index is refused, measured (B-866, §26.878).** 5,000 documents / 15,000 lines: every display read is already 0.02\u20130.04 ms on the primary keys; the year-leading candidate measured **0.055 ms against 0.020 ms**, i.e. 2.7\u00d7 slower on the very read it was proposed for. **No migration; migrations stay 196.** | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
