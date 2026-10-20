@@ -1428,6 +1428,24 @@ Same-stage bookkeeping: B-833 / §26.845 / §30 row 2.663. The procurement roadm
 
 **Deferred by name:** the *Scope of List* presentation variants (ALV grid against standard list — the single grid ships, as in SCR-112, SCR-113, SCR-123 and SCR-124), project and sales-order special stock (the Q/E indicators — the canon carries none), batch and serial-number selection (not carried), and exporting. Capability **`INV.MATERIALDOC.LIST`**, alias **MB51**. Stage order: 1 contract, 2 index decision, 3 service + tests, 4 screen and the document display, 5 browser acceptance + closure; each separately committed and pushed. Same-stage bookkeeping: B-834 / §26.846 / §30 row 2.664.
 
+## §26.847 — SCR-125 stage 2: the date index is taken (migration 9065)
+
+**B-835.** The first measured **yes** in three rounds. The package recommends one composite over plant, material and posting date; that index cannot exist in this canon as written — plant and material stand on `material_document_line`, the posting date on `material_document` — so the measurement tested what the schema can actually carry: a header date index, alone and with a line index beside it.
+
+**Method.** `scripts/plan-mb51.mts` seeds a throwaway tenant with 20,000 material documents × 3 lines (**60,000 ledger lines**) over 10 plants, 50 materials and 4 storage locations, gathers statistics, and times the list query — lines joined to headers and movement types, the required posting-date range, ordered newest first, `limit 501`.
+
+| selection | no index | header date index | + line plant/material index |
+| --- | --- | --- | --- |
+| one material, one month | 5.37 ms | 3.30 ms | 3.61 ms |
+| plants Q100–Q104, 3 months | 36.05 ms | **4.34 ms** | 4.19 ms |
+| all materials, all plants, 12 months | 71.74 ms | **3.02 ms** | — |
+
+**Decision — migration 9065, one index.** `md_posting_date_idx on material_document (client, posting_date)`. The win is structural, not marginal: the plan flips from a sequential scan of the whole line table to a backward walk of the date index stopping at the hit limit, so the broad selection falls from 71.7 ms to 3.0 ms and the plant selection from 36.1 ms to 4.3 ms. It is the required posting-date range that makes this safe and strong — without a date bound there is no index path at all, which is the same reason the contract requires the range. The second index earns nothing (3.61 ms against 3.30 ms; the planner declines it) and `material_document_line_material_idx` already serves the material predicate, so **no line index is added**. Migrations go from 187 to **188**; 9065 is the first migration this canon has taken since SCR-122.
+
+**For the service.** Stage 3 issues the query as measured — header joined to line, newest first, `limit maxHits + 1` — and the required posting-date range is what keeps it on the index.
+
+Same-stage bookkeeping: B-835 / §26.847 / §30 row 2.665. Next stage 3: the `INV.MATERIALDOC.LIST` service and tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1723,6 +1741,7 @@ Same-stage bookkeeping: B-833 / §26.845 / §30 row 2.663. The procurement roadm
 | 2.662 | 2026-10-20 | **SCR-124 stage 2 published (B-832, §26.844).** ME2L index decision measured: at 40,000 order items, 20,000 goods-receipt lines and 12,000 invoice lines the list query answers in 1.4–224 ms and the recommended header index buys 1.2 ms on the fastest shape, 7 % on the medium one and nothing on the broad one, where the item scan and the aggregates dominate. **Verification-only — migration 9065 stays unused.** Harness `scripts/plan-po-list.mts` committed; migrations 187. Service next. | Agent |
 | 2.663 | 2026-10-20 | **SCR-124 procurement CLOSED (B-833, §26.845).** ME2L purchasing report suite delivered as one capability `PROC.PO.LIST` with four perspectives and aliases ME2L/ME2M/ME2N/ME2C: derived delivered and invoiced quantities from posted material documents and supplier invoices, four scopes of selection, requisition linkage, release and deletion badges, drill to the order display. Service 8/8, UI contract 8/8, target guard 161/161, **T874 PASSED** 5 legs, full suite **1643/1643** (234 files). Catalogue **156/129/151**; migrations 187 — the recommended index was measured and declined. A stale server on port 3000 cost one failed run; recorded in §26.845. Closed queue drained; next entirely new round is SCR-125. | Agent |
 | 2.664 | 2026-10-20 | **SCR-125 inventory opened (B-834, §26.846).** MB51 material document list contracted as `INV.MATERIALDOC.LIST`: ranges on material, plant, storage location, movement type and purchase order, a required posting-date range, document dates, stock type and user; movement type judges the canon key (SAP 101/201/311 stay search aliases), the Q/E special-stock indicators are deferred by name because the canon carries no project or sales-order stock. Rows carry quantities, value, the order cited, the journal document and the document status, with reversed documents listed rather than hidden. Drill to a new read-only material document display (MB03 equivalent) on the same capability. Index decision is stage 2. | Agent |
+| 2.665 | 2026-10-20 | **SCR-125 stage 2 published (B-835, §26.847).** MB51 index decision is the first measured yes in three rounds: at 60,000 ledger lines the required posting-date range plus `md_posting_date_idx (client, posting_date)` on the header takes the broad selection from 71.7 ms to 3.0 ms and the plant selection from 36.1 ms to 4.3 ms; the line index the package implies cannot span the two tables and earns nothing anyway. **Migration 9065 taken — 188 migrations.** Harness `scripts/plan-mb51.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
