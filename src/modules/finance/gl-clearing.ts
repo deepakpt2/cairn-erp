@@ -530,10 +530,13 @@ export async function clearGlItems(input: {
         'Select items in a single currency, or tick cross-currency clearing.',
       );
     }
-    if (crossMode && method !== 'STANDARD') {
+    if (crossMode && method === 'RESIDUAL') {
+      // A residual must re-stand in its source item's currency, but a journal
+      // line carries its document's currency — a foreign residual inside a
+      // local-currency clearing document cannot be represented faithfully.
       throw new GlClearingError(
-        `Cross-currency clearing stands for standard clearing only; ${method} clearing stays within one currency.`,
-        'Clear the items in full across currencies, or settle the balance in its own currency.',
+        'Cross-currency residual clearing is not supported: the residual item must re-stand in its source currency, and a journal line carries its document currency.',
+        'Clear across currencies in full or partially, or run the residual clearing within one currency.',
       );
     }
 

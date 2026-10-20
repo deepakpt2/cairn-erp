@@ -526,3 +526,86 @@ describe('SCR-114 follow-up B-816: residual terms inheritance', () => {
     expect(residualLine[0]!.assignment).toBeNull();
   }, 60_000);
 });
+
+describe('SCR-114 follow-up B-816: cross-currency partial clearing', () => {
+  it('settles part of a foreign item and posts the realized difference on the settled portion', async () => {
+    const [company] = await withTenant(client, async (tx) => tx.execute(sql`
+      select chart_of_accounts as chart from company_code where client = ${client} and company_code = '1000'
+    `)) as unknown as [{ chart: string }];
+    void company;
+    const eur = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-02', postingDate: '2026-05-02',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'EUR', localCurrency: currency, exchangeRate: '0.30',
+      lines: [
+        { glAccount: '400000', debitCredit: 'S', amount: '1000' },
+        { glAccount: '101000', debitCredit: 'H', amount: '1000' },
+      ],
+      postedBy: ACTOR,
+    }));
+    const gbp = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-02', postingDate: '2026-05-02',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'GBP', localCurrency: currency, exchangeRate: '0.30',
+      lines: [
+        { glAccount: '101000', debitCredit: 'S', amount: '600' },
+        { glAccount: '400000', debitCredit: 'H', amount: '600' },
+      ],
+      postedBy: ACTOR,
+    }));
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'xcur-partial-1', method: 'PARTIAL', crossCurrency: true,
+      items: [
+        { documentNumber: eur.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '600' },
+        { documentNumber: gbp.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '600' },
+      ],
+    }));
+    const open = result.openItems.find((i) => i.documentNumber === eur.documentNumber)!;
+    expect(open.remaining).toBe(120); // 1,000 EUR at 0.30 carrying; 600 settled leaves 400 EUR = 120 local
+    expect(open.applied).toBe(600);
+    expect(result.openItems.some((i) => i.documentNumber === gbp.documentNumber)).toBe(false);
+
+    const lines = await withTenant(client, async (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.clearingDocumentNumber}
+    `)) as unknown as Array<{ gl_account: string; debit_credit: string; amount: string }>;
+    const debit = lines.reduce((s, l) => s + (l.debit_credit === 'S' ? Number(l.amount) : 0), 0);
+    const credit = lines.reduce((s, l) => s + (l.debit_credit === 'H' ? Number(l.amount) : 0), 0);
+    expect(Math.abs(debit - credit)).toBeLessThan(0.005);
+  }, 60_000);
+
+  it('refuses cross-currency residual clearing by name', async () => {
+    const eur = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-03', postingDate: '2026-05-03',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'EUR', localCurrency: currency, exchangeRate: '0.30',
+      lines: [
+        { glAccount: '400000', debitCredit: 'S', amount: '500' },
+        { glAccount: '101000', debitCredit: 'H', amount: '500' },
+      ],
+      postedBy: ACTOR,
+    }));
+    const gbp = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-05-03', postingDate: '2026-05-03',
+      fiscalYear: 2026, postingPeriod: 5,
+      currency: 'GBP', localCurrency: currency, exchangeRate: '0.30',
+      lines: [
+        { glAccount: '101000', debitCredit: 'S', amount: '300' },
+        { glAccount: '400000', debitCredit: 'H', amount: '300' },
+      ],
+      postedBy: ACTOR,
+    }));
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'xcur-res-1', method: 'RESIDUAL', residualReasonCode: 'R01', crossCurrency: true,
+      items: [
+        { documentNumber: eur.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '300' },
+        { documentNumber: gbp.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '300' },
+      ],
+    }))).rejects.toThrow(/Cross-currency residual clearing is not supported/);
+  }, 60_000);
+});
