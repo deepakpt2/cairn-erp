@@ -5,7 +5,7 @@ import { t } from '@/platform/i18n';
 import {
   GOODS_ISSUE_CAPABILITY,
   GOODS_ISSUE_ROUTE,
-  GOODS_ISSUE_SCENARIOS,
+  MB1A_SCENARIOS,
 } from '@/modules/inventory/goods-issue';
 import GoodsIssue from './GoodsIssue';
 
@@ -34,7 +34,7 @@ export default async function GoodsIssuePage() {
       </header>
 
       <GoodsIssue
-        scenarios={GOODS_ISSUE_SCENARIOS.map((s) => ({
+        scenarios={MB1A_SCENARIOS.map((s) => ({
           code: s.code, description: s.description, accountAssignment: s.accountAssignment,
         }))}
         canPost={can(session, GOODS_ISSUE_CAPABILITY)}

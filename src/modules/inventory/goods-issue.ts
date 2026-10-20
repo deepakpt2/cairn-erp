@@ -147,6 +147,10 @@ export interface GoodsIssueLineView {
   reservationItem: number | null;
   /** What the reservation still holds after this posting, when one was named. */
   reservationOpenAfter: string | null;
+  /** What the production order's component still requires after this issue (SCR-139). */
+  productionOrderNumber: string | null;
+  productionOrderItem: number | null;
+  orderOpenAfter: string | null;
 }
 
 export interface GoodsIssueView {
@@ -286,6 +290,9 @@ async function toView(
       reservationNumber: prepared[index]?.line?.reservationNumber ?? null,
       reservationItem: prepared[index]?.line?.reservationItem ?? null,
       reservationOpenAfter: prepared[index]?.reservationOpenAfter ?? null,
+      productionOrderNumber: prepared[index]?.productionOrderNumber ?? null,
+      productionOrderItem: prepared[index]?.productionOrderItem ?? null,
+      orderOpenAfter: prepared[index]?.orderOpenAfter ?? null,
     })),
   };
 }
@@ -750,7 +757,11 @@ export async function postGoodsIssue(
 
 async function toViewWithReservations(
   tx: Tx, client: string, number: string,
-  prepared: Array<{ line: GoodsIssueLineInput; reservationOpenAfter: string | null }>,
+  prepared: Array<{
+    line: GoodsIssueLineInput; reservationOpenAfter: string | null;
+    productionOrderNumber: string | null; productionOrderItem: number | null;
+    orderOpenAfter: string | null;
+  }>,
 ): Promise<GoodsIssueView> {
   const [header] = await tx.select().from(materialDocument).where(and(
     eq(materialDocument.client, client), eq(materialDocument.materialDocumentNumber, number),

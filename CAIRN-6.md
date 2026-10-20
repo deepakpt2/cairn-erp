@@ -3346,6 +3346,35 @@ appearing in the maintenance screen's vocabulary. All three are maintainable now
 
 Same-stage bookkeeping: B-892 / §26.904 / §30 row 2.722.
 
+## §26.905 — SCR-139 stage 4: the screen, and the matrix as data
+
+**B-893.** `/inventory/migo`, under `INV.MIGO.POST`. Two selectors and one resolution panel:
+the reader picks an action and a reference, and the screen answers with one of the three
+truths — **posted from this screen** (movement 261), **delivered elsewhere** (the capability
+named, and a link to it), or **refused by name** (with the capability that would light it up).
+
+**The matrix is a module, not markup.** `resolveMigoCell(action, reference)` returns a typed
+resolution, `migoMatrix()` returns all twenty cells, and the UI contract asserts that **every
+one of the twenty resolves**, that exactly **one posts here**, and that every `ELSEWHERE`
+carries a real route and an `INV.` capability. The screen renders what the table says; adding
+a movement next round means adding a row.
+
+**The server re-resolves the cell.** The form carries the action and the reference, but
+`postMigoAction` resolves them again and refuses to post anything that is not `POST_HERE` —
+so a tampered form cannot turn MIGO into a second MB1A.
+
+**MB1A stops offering 261.** Its page now renders `MB1A_SCENARIOS` (201, 551), and the
+engine refuses a movement posted from the other screen. Two screens, one movement each, and
+the matrix remains the only place a movement is selected by action and reference.
+
+**The result panel reads like a posting slip**: the material document, its journal as a link
+to FB03, a link to the document in MB03, and per line the quantity, the value and **what the
+order still requires** after this issue.
+
+**T839** (`migo-component-issue`, `cairn_b210:5432`) joins the harness — **139 targets**.
+
+Same-stage bookkeeping: B-893 / §26.905 / §30 row 2.723.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3699,6 +3728,7 @@ Same-stage bookkeeping: B-892 / §26.904 / §30 row 2.722.
 | 2.720 | 2026-10-20 | **SCR-139 / MIGO — one screen, complete action/reference parity (B-890, §26.902).** Owner ruling: **MIGO gets complete parity**, and SCR-138\u2019s refusal of the A07/R08 dropdowns is **withdrawn**. `/inventory/migo` under `INV.MIGO.POST` carries the action list (A01 receipt, A02 return, A03 cancellation, A04 transfer, A07 issue) and the reference list (R01 order-document, R04 reservation, R05 material document, R08 order); **every cell resolves to posts-here, delivered-elsewhere-with-a-link, or refused-by-name**, and the matrix is **data**, so a later movement adds a row and not a screen. 261 posts here: consumption to a **P&L account, not WIP** (no settlement exists to relieve WIP), over-issue **refused by name**, **262 in the catalogue** so MBST reverses it, order on the line, MD04 demand, both periods, FB03/MB03 drills. | Agent |
 | 2.721 | 2026-10-20 | **SCR-139 stage 2: the order stands on the line (B-891, §26.903).** Migration **9077**: `production_order_number` + `production_order_item` on the material-document line, foreign-keyed to the order, and **`PRODUCTION_ORDER`** joins the movement catalogue\u2019s reference category. **Migrations 199 \u2192 200.** **No index** — every read is one order at a time through the document key, and this book does not carry an index without a measurement behind it. No table, no stored issued quantity. | Agent |
 | 2.722 | 2026-10-20 | **SCR-139 stage 3: one engine, two screens (B-892, §26.904).** `postGoodsIssue` gains a **screen** argument and the **261** scenario (`PROD_ISSUE_ORDER`, order assignment, `PRODUCTION_CONSUMPTION`); MB1A refuses 261 naming MIGO and MIGO refuses 201/551, so one screen per movement. **The order is judged before the stock** — released, component item, its material and plant — and an **over-issue is refused quoting what remains**, derived from the lines, never a counter. The order lands on the document line and on the **journal line**. `CONSUMPTION`, `SCRAP` and `PRODUCTION_CONSUMPTION` join the maintainable event vocabulary. **8/8 new tests, MB1A 14/14.** | Agent |
+| 2.723 | 2026-10-20 | **SCR-139 stage 4: the MIGO screen and the matrix as data (B-893, §26.905).** `/inventory/migo`: two selectors, one resolution panel, three answers. **20 cells**, every one resolved by a typed function — exactly **one posts here**, the rest link or refuse by name. The **server re-resolves** the cell, so a tampered form cannot post a movement the matrix does not offer. **MB1A stops offering 261.** The result reads as a posting slip: document, journal link to FB03, MB03 link, and what the order still requires. **Harness 139 targets** (T839). | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
