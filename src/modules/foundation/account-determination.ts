@@ -50,6 +50,9 @@ export const POSTING_EVENTS: PostingEvent[] = [
   { event: 'CONSUMPTION', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'SCRAP', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'PRODUCTION_CONSUMPTION', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  // The credit side of a production order receipt (WRX-style): what the order produced is worth
+  // to the plant, offset against inventory. Added with SCR-140.
+  { event: 'PRODUCTION_OUTPUT', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'FXGAIN', referenceAlias: 'FXGAIN', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },

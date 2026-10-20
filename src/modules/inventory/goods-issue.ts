@@ -205,7 +205,7 @@ async function ensureMovements(tx: Tx, client: string, changedBy: string) {
   }
 }
 
-async function getMaterialPeriodControlInTx(tx: Tx, client: string, company: string) {
+export async function getMaterialPeriodControlInTx(tx: Tx, client: string, company: string) {
   const rows = await tx.execute(sql`
     select current_fiscal_year, current_period, previous_fiscal_year, previous_period,
            allow_backposting, disallow_backposting_after_change
