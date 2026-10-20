@@ -3107,6 +3107,42 @@ database), `199` migration files.
 
 Same-stage bookkeeping: B-886 / §26.898 / §30 row 2.716.
 
+## §26.899 — SCR-138 stage 3: the order service — created, and released apart from created
+
+**B-887.** `createProductionOrder` and `releaseProductionOrder` in
+`src/modules/inventory/production-orders.ts`, under `PROD.ORDER.CREATE` and
+`PROD.ORDER.RELEASE`. **12/12 service tests.**
+
+The order is drawn from the standing `PRODORDER` range (`PRD` + seven digits) under the
+tenant's production-order lock, so two creates cannot draw the same number.
+
+**Every master is judged before the header is drawn.** The produced material must exist,
+carry a base unit and not be flagged for deletion; the plant must exist **and carry a
+company code** — because the order derives its company from exactly there, and a plant
+without one would leave an order that cannot be posted to; the material must be extended
+to that plant. Each component repeats the judgement at its own plant, and names its
+storage location only if that location stands in the same plant and is active. A refusal
+therefore writes nothing at all, not even a number.
+
+**The company code is derived, and the schema proves it**: the test reads
+`information_schema` for any company column on `production_order` and finds none, then
+reads the view and sees the four-digit code come back from the plant.
+
+**Release is its own act, and a second release is a no-op.** The first records who and
+when; a resubmitted release returns the order exactly as the first left it — it neither
+fails nor rewrites history. Releasing a number that does not stand refuses in SAP's shape:
+`Production order … does not exist.`
+
+**The change history carries both acts**, which meant giving `recordChange` real before/after
+snapshots: a CREATE with no field diff would have recorded *nothing* — the platform records
+differences, and an order with no "after" has none. This is worth remembering: a module that
+calls `recordChange` with only a reason is recording silence.
+
+**Nothing posts.** The test asserts the ledger and the stock are untouched after creating and
+releasing: no journal, no material document, zero stock moved. An order is a plan.
+
+Same-stage bookkeeping: B-887 / §26.899 / §30 row 2.717.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3454,6 +3490,7 @@ Same-stage bookkeeping: B-886 / §26.898 / §30 row 2.716.
 | 2.714 | 2026-10-20 | **SCR-137 stage 5 and closure: T837 passes, FB03 delivered (B-884, §26.896).** Eight legs on the production build: number and year alone, **S/D/K in one document**, a disagreeing company refused in SAP's words with no header, the flow panel beside it, **nothing written**, and the **journal list**, **MB03** and the **goods issue result** each followed to the display. **Suite 1911/1911 in 261 files**; harness **137 targets**; registry unchanged 166/141/163; **migrations 198**. | Agent |
 | 2.715 | 2026-10-20 | **SCR-138 / CO01 contracted — the order before the issue (B-885, §26.897).** The MIGO 261 package opens with its own prerequisite and is right: **261 cannot post against an order master that does not exist**, so this round builds **`PROD.ORDER.CREATE`** and the next posts 261 against it. The package\u2019s `production_order_goods_issue` table **refused by name** — a 261 is a material document plus its journal, the order a reference on the line (§26.887\u2019s ruling, applied again). **A07/R08 refused**; the package\u2019s columns mapped onto canon\u2019s tables. The order is a header on the standing **`PRODORDER`** range plus a **declared component snapshot** (no BOM master in canon), company derived from the plant, **CREATED \u2192 RELEASED**. The next round inherits the movement types, the `PRODUCTION_ORDER` reference category, `PRODUCTION_CONSUMPTION`, derived withdrawals, over-issue refusal, MD04 demand and both periods \u2014 all decided here. | Agent |
 | 2.716 | 2026-10-20 | **SCR-138 stage 2: the order master stands (B-886, §26.898).** Migration **9076** adds `production_order` (AUFK) and `production_order_component` (RESB) — **198 \u2192 199 migrations**. No company code (derived from the plant), **no stored withdrawn quantity** (derived from the documents), no status history: two statuses, `CREATED` and `RELEASED`, with the release named. Checks on status, quantity and dates; a partial unique index on `(client, request_key)` so a resubmitted create cannot make a second order. Applied and verified in `cairn_b210`. | Agent |
+| 2.717 | 2026-10-20 | **SCR-138 stage 3: the order service (B-887, §26.899).** Create draws the standing **`PRODORDER`** range under the tenant lock and judges every master before the header is drawn — material, plant **with its company code**, plant extension, each component and its storage location — so a refusal writes nothing. **`releaseProductionOrder`** records who and when, and a second release is a no-op. **12/12 service tests**, including: no company column exists (it is derived), nothing posts, and both acts appear in `change_document` — which required real before/after snapshots, since `recordChange` records differences and was silently recording nothing. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
