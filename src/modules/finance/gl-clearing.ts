@@ -90,8 +90,9 @@ import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-
 import { accountDetermination, documentType, employeeToleranceGroup, exchangeRate } from '../foundation/schema';
 import {
   glAccount, glAccountCompany, glClearingAllocation, glClearingResidual,
-  journalEntry, journalEntryLine, residualReason,
+  journalEntry, journalEntryLine, residualReason, vendorInvoice,
 } from './schema';
+import { customerInvoice, supplierInvoice } from '../purchasing/schema';
 
 const CLEARING_CLASS = 'gl_clearing';
 
@@ -268,6 +269,36 @@ export interface GlClearingItemRef {
 
 export type GlClearingMethod = 'STANDARD' | 'PARTIAL' | 'RESIDUAL';
 
+/**
+ * The terms a residual item inherits (SCR-114 follow-up): the source item's
+ * origin invoice carries the payment terms and baseline date; a source with no
+ * resolvable origin inherits nothing and names that on the screen.
+ */
+async function originTerms(
+  tx: Tx, client: string, documentNumber: string, fiscalYear: number,
+): Promise<{ paymentTerms: string | null; baselineDate: string | null } | null> {
+  const [header] = await tx.select({
+    originClass: journalEntry.originClass, originKey: journalEntry.originKey,
+  }).from(journalEntry).where(and(
+    eq(journalEntry.client, client),
+    eq(journalEntry.documentNumber, documentNumber),
+    eq(journalEntry.fiscalYear, fiscalYear),
+  ));
+  if (!header?.originClass || !header.originKey) return null;
+  const table = header.originClass === 'vendor_invoice'
+    ? vendorInvoice
+    : header.originClass === 'supplier_invoice'
+      ? supplierInvoice
+      : header.originClass === 'customer_invoice' ? customerInvoice : null;
+  if (!table) return null;
+  const [invoice] = await tx.select({
+    paymentTerms: table.paymentTerms, baselineDate: table.baselineDate,
+  }).from(table).where(and(
+    eq(table.client, client), eq(table.invoiceNumber, header.originKey),
+  ));
+  return invoice ?? null;
+}
+
 async function standingClearingForRequestKey(
   tx: Tx, client: string, requestKey: string,
 ): Promise<string | null> {
@@ -321,6 +352,14 @@ export async function clearGlItems(input: {
   residualReasonCode?: string;
   /** Permit a selection spanning currencies, translated at the clearing date. */
   crossCurrency?: boolean;
+  /** Inherit the source invoice's payment terms and baseline onto a residual item (default on). */
+  inheritPaymentTerms?: boolean;
+  /** Inherit the source line's assignment onto a residual item (default on). */
+  inheritAssignment?: boolean;
+  /** Explicit realized-FX account for this clearing, replacing the FXGAIN/FXLOSS determination. */
+  fxDifferenceAccount?: string;
+  /** Ceiling on the realized difference as a percentage of the gross translated settlement volume. */
+  exchangeRateSpreadTolerancePercent?: number;
 }): Promise<GlClearingView & {
   clearingDocumentNumber: string;
   clearingFiscalYear: number;
@@ -559,7 +598,11 @@ export async function clearGlItems(input: {
     }
 
     // ── Build the document ────────────────────────────────────────────────────
-    interface DocLine { glAccount: string; debitCredit: 'S' | 'H'; amount: number; amountLocal: number; businessPartner?: string | null }
+    interface DocLine {
+      glAccount: string; debitCredit: 'S' | 'H'; amount: number; amountLocal: number;
+      businessPartner?: string | null; assignment?: string;
+      paymentTerms?: string; baselineDate?: string;
+    }
     const lines: DocLine[] = [];
     const residualDrafts: Array<{ held: Held; amount: number; amountLocal: number }> = [];
     const offsetLineNumbers = new Map<Held, number>();
@@ -593,12 +636,40 @@ export async function clearGlItems(input: {
         'Settle an item below its remaining balance to generate a residual, or clear it as a standard clearing.',
       );
     }
-    // A residual is a new open item: it carries the original item's side and partner.
+    // A residual is a new open item: it carries the original item's side, partner,
+    // and — when the operator keeps the inheritance on — the source invoice's
+    // payment terms and baseline plus the source line's assignment (SCR-114 follow-up).
+    const inheritTerms = input.inheritPaymentTerms !== false;
+    const inheritAssignment = input.inheritAssignment !== false;
+    const inherited: Array<{ paymentTerms: string | null; baselineDate: string | null; assignment: string | null }> = [];
     for (const draft of residualDrafts) {
+      const terms = inheritTerms
+        ? await originTerms(tx, input.client, draft.held.ref.documentNumber, draft.held.ref.fiscalYear)
+        : null;
+      let assignment: string | null = null;
+      if (inheritAssignment) {
+        const [sourceLine] = await tx.select({ assignment: journalEntryLine.assignment })
+          .from(journalEntryLine).where(and(
+            eq(journalEntryLine.client, input.client),
+            eq(journalEntryLine.documentNumber, draft.held.ref.documentNumber),
+            eq(journalEntryLine.fiscalYear, draft.held.ref.fiscalYear),
+            eq(journalEntryLine.lineNumber, draft.held.ref.lineNumber),
+          ));
+        assignment = sourceLine?.assignment ?? null;
+      }
+      const record = {
+        paymentTerms: terms?.paymentTerms ?? null,
+        baselineDate: terms?.baselineDate ?? null,
+        assignment,
+      };
+      inherited.push(record);
       lines.push({
         glAccount: input.glAccount, debitCredit: draft.held.debitCredit as 'S' | 'H',
         amount: draft.amount, amountLocal: draft.amountLocal,
         businessPartner: draft.held.businessPartner,
+        ...(record.assignment ? { assignment: record.assignment } : {}),
+        ...(record.paymentTerms ? { paymentTerms: record.paymentTerms } : {}),
+        ...(record.baselineDate ? { baselineDate: record.baselineDate } : {}),
       });
     }
     if (toleranceLine) {
@@ -654,6 +725,9 @@ export async function clearGlItems(input: {
         amount: Math.abs(l.amount).toFixed(2),
         amountLocal: Math.abs(l.amountLocal).toFixed(2),
         ...(l.businessPartner ? { businessPartner: l.businessPartner } : {}),
+        ...(l.assignment ? { assignment: l.assignment } : {}),
+        ...(l.paymentTerms ? { paymentTerms: l.paymentTerms } : {}),
+        ...(l.baselineDate ? { baselineDate: l.baselineDate } : {}),
       })),
       origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.glAccount}` },
       postedBy: input.changedBy,
@@ -733,7 +807,14 @@ export async function clearGlItems(input: {
         clearingDate: input.clearingDate, requestKey: input.requestKey,
         documentType: input.documentType, glAccount: input.glAccount,
         companyCode: input.companyCode, method,
-        ...(residualItems.length ? { residualItems: residualItems.length, residualReasonCode: input.residualReasonCode } : {}),
+        ...(residualItems.length ? {
+          residualItems: residualItems.length,
+          residualReasonCode: input.residualReasonCode,
+          inheritPaymentTerms: inheritTerms,
+          inheritAssignment,
+          inheritedTerms: inherited.map((r) => r.paymentTerms ?? '').join(','),
+          inheritedBaselines: inherited.map((r) => r.baselineDate ?? '').join(','),
+        } : {}),
         ...(fxLine ? { exchangeDifference: fxLine.amountLocal.toFixed(2), exchangeAccount: fxLine.glAccount } : {}),
         ...(toleranceLine ? { difference: toleranceLine.amountLocal.toFixed(2), differenceAccount: toleranceLine.glAccount } : {}),
         ...(crossMode ? { crossCurrency: currencies } : {}),

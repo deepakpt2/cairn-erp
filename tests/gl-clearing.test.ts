@@ -438,3 +438,91 @@ describe('SCR-114 advanced clearing B-808: reset of partial and residual clearin
     expect((err as { remedy?: string }).remedy).toMatch(/Reverse the clearing document/);
   }, 60_000);
 });
+
+describe('SCR-114 follow-up B-816: residual terms inheritance', () => {
+  it('stamps the source invoice terms, baseline and assignment onto the residual line', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into payment_terms (client, terms_code, description, baseline_source, net_days, created_by)
+        values (${client}, 'NET30', 'Net 30 days', 'DOCUMENT_DATE', 30, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into vendor_invoice (
+          client, invoice_number, fiscal_year, category, vendor_number, company_code,
+          document_date, posting_date, reference, currency, gross_amount, tax_amount,
+          payment_terms, baseline_date, due_date, status, created_by
+        ) values (
+          ${client}, 'VI-T1', 2026, 'INVOICE', 'V20000', '1000',
+          '2026-04-28', '2026-04-28', 'VI-T1', ${currency}, 1000, 0,
+          'NET30', '2026-04-28', '2026-05-28', 'POSTED', ${ACTOR}
+        ) on conflict do nothing
+      `);
+    });
+    const origin = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-04-28', postingDate: '2026-04-28',
+      fiscalYear: 2026, postingPeriod: 4,
+      currency, localCurrency: currency,
+      lines: [
+        { glAccount: '400000', debitCredit: 'S', amount: '800', businessPartner: 'V20000', assignment: 'PO-778' },
+        { glAccount: '101000', debitCredit: 'H', amount: '800' },
+      ],
+      origin: { documentClass: 'vendor_invoice', documentKey: 'VI-T1' },
+      postedBy: ACTOR,
+    }));
+    const credit = await post('200', '101000', '400000', 'inh-1-b', '2026-04-29');
+
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'inh-clear-1', method: 'RESIDUAL', residualReasonCode: 'R01',
+      items: [
+        { documentNumber: origin.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '200' },
+        { documentNumber: credit.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '200' },
+      ],
+    }));
+    expect(result.residualItems).toHaveLength(1);
+    expect(result.residualItems[0]!.amount).toBe('600.00');
+
+    const residualLine = await withTenant(client, async (tx) => tx.execute(sql`
+      select payment_terms, baseline_date::text as baseline_date, assignment
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.residualItems[0]!.documentNumber}
+        and line_number = ${result.residualItems[0]!.lineNumber}
+    `)) as unknown as Array<{ payment_terms: string | null; baseline_date: string | null; assignment: string | null }>;
+    expect(residualLine[0]!.payment_terms).toBe('NET30');
+    expect(residualLine[0]!.baseline_date).toBe('2026-04-28');
+    expect(residualLine[0]!.assignment).toBe('PO-778');
+  }, 60_000);
+
+  it('honours the inheritance switches when they stand off', async () => {
+    const origin = await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-04-30', postingDate: '2026-04-30',
+      fiscalYear: 2026, postingPeriod: 4,
+      currency, localCurrency: currency,
+      lines: [
+        { glAccount: '400000', debitCredit: 'S', amount: '400', businessPartner: 'V20000', assignment: 'PO-999' },
+        { glAccount: '101000', debitCredit: 'H', amount: '400' },
+      ],
+      origin: { documentClass: 'vendor_invoice', documentKey: 'VI-T1' },
+      postedBy: ACTOR,
+    }));
+    const credit = await post('150', '101000', '400000', 'inh-2-b', '2026-04-30');
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'inh-clear-2', method: 'RESIDUAL', residualReasonCode: 'R01',
+      inheritPaymentTerms: false, inheritAssignment: false,
+      items: [
+        { documentNumber: origin.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '150' },
+        { documentNumber: credit.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '150' },
+      ],
+    }));
+    const residualLine = await withTenant(client, async (tx) => tx.execute(sql`
+      select payment_terms, baseline_date::text as baseline_date, assignment
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.residualItems[0]!.documentNumber}
+        and line_number = ${result.residualItems[0]!.lineNumber}
+    `)) as unknown as Array<{ payment_terms: string | null; baseline_date: string | null; assignment: string | null }>;
+    expect(residualLine[0]!.payment_terms).toBeNull();
+    expect(residualLine[0]!.baseline_date).toBeNull();
+    expect(residualLine[0]!.assignment).toBeNull();
+  }, 60_000);
+});

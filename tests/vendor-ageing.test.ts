@@ -324,6 +324,38 @@ describe('SCR-120 vendor ageing repair (S_ALR_87012085)', () => {
     expect(viLater.bucket).toBe(0);
   });
 
+  it('judges a line carrying its own terms by those terms, ahead of origin resolution', async () => {
+    // SCR-114 follow-up: a residual item's own payment terms and baseline
+    // win over any origin-invoice resolution — here a NET60 line whose
+    // baseline puts it far in the future, while its posting date is old.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into payment_terms (client, terms_code, description, baseline_source, net_days, created_by)
+        values (${client}, 'NET60', 'Net 60 days', 'DOCUMENT_DATE', 60, ${ACTOR}) on conflict do nothing
+      `);
+    });
+    await withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-10-10', postingDate: '2026-10-10',
+      fiscalYear: 2026, postingPeriod: 10,
+      currency: 'USD', localCurrency: 'USD',
+      lines: [
+        { glAccount: '500000', debitCredit: 'S', amount: '500.00' },
+        {
+          glAccount: '200000', debitCredit: 'H', amount: '500.00', businessPartner: 'V20000',
+          paymentTerms: 'NET60', baselineDate: '2026-12-01',
+        },
+      ],
+      postedBy: ACTOR,
+    }));
+    const view = await getVendorAgeing(client, { companyCode: '1000', keyDate: '2026-12-20' });
+    const item = view.items.find((i) => i.paymentTerms === 'NET60')!;
+    expect(item.baselineDate).toBe('2026-12-01');
+    expect(item.dueDate).toBe('2027-01-30');
+    expect(item.daysOverdue).toBe(0);
+    expect(item.bucket).toBe(0);
+  });
+
   it('stands a cleared pair before its clearing date and drops it after', async () => {
     const invoiceDoc = await post('PAIR-INV', '2026-10-05', [
       { glAccount: '500000', debitCredit: 'S', amount: '300.00' },

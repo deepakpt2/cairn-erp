@@ -176,6 +176,8 @@ export async function deriveAgeingItems(
     originKey: journalEntry.originKey,
     clearingDocument: journalEntryLine.clearingDocument,
     clearingDate: journalEntryLine.clearingDate,
+    lineTerms: journalEntryLine.paymentTerms,
+    lineBaseline: journalEntryLine.baselineDate,
   }).from(journalEntryLine)
     .innerJoin(journalEntry, and(
       eq(journalEntry.client, journalEntryLine.client),
@@ -228,7 +230,7 @@ export async function deriveAgeingItems(
     }
   }
   const termsByCode = new Map<string, PaymentTermRule & { isActive: boolean }>();
-  if (invoiceSources.size > 0) {
+  if (invoiceSources.size > 0 || rows.some((r) => r.lineTerms)) {
     for (const row of await tx.select().from(paymentTermsTable).where(eq(paymentTermsTable.client, client))) {
       termsByCode.set(row.termsCode, {
         termsCode: row.termsCode,
@@ -263,7 +265,24 @@ export async function deriveAgeingItems(
     let dueDate = r.postingDate;
     let baselineDate: string | null = null;
     let paymentTermsCode: string | null = null;
-    if (invoice) {
+    if (r.lineTerms) {
+      // A line carrying its own terms — a residual item, SCR-114 follow-up —
+      // judges its own due date; origin resolution never overrides it.
+      paymentTermsCode = r.lineTerms;
+      baselineDate = r.lineBaseline;
+      const rule = termsByCode.get(r.lineTerms);
+      if (baselineDate && rule?.isActive) {
+        try {
+          dueDate = calculatePaymentSchedule(rule, {
+            [rule.baselineSource]: baselineDate,
+          }).netDueDate;
+        } catch {
+          dueDate = r.postingDate;
+        }
+      } else {
+        dueDate = r.postingDate;
+      }
+    } else if (invoice) {
       baselineDate = invoice.baselineDate;
       paymentTermsCode = invoice.paymentTerms;
       const rule = invoice.paymentTerms ? termsByCode.get(invoice.paymentTerms) : undefined;
