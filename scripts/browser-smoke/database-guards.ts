@@ -105,6 +105,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'gl-clearing': { database: 'cairn_b210', port: '5432', batch: 'SCR-114 local loopback' },
   'intercompany': { database: 'cairn_b210', port: '5432', batch: 'SCR-122 local loopback' },
   'requisition-list': { database: 'cairn_b210', port: '5432', batch: 'SCR-123 local loopback' },
+  'purchase-order-list': { database: 'cairn_b210', port: '5432', batch: 'SCR-124 local loopback' },
   'consolidation-workbench': { database: 'cairn_b210', port: '5432', batch: 'SCR-116 local loopback' },
   'consolidation-monitor': { database: 'cairn_b210', port: '5432', batch: 'SCR-117 local loopback' },
   'consolidated-statements': { database: 'cairn_b210', port: '5432', batch: 'SCR-118 local loopback' },

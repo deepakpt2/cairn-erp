@@ -112,6 +112,7 @@ import { profitCenterReport } from './profit-center-report';
 import { glClearing } from './gl-clearing';
 import { intercompany } from './intercompany';
 import { requisitionList } from './requisition-list';
+import { purchaseOrderList } from './purchase-order-list';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5037,6 +5038,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'gl-clearing': glClearing,
   'intercompany': intercompany,
   'requisition-list': requisitionList,
+  'purchase-order-list': purchaseOrderList,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,

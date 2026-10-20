@@ -99,6 +99,7 @@ export const TARGETS = [
   { id: 'cash-flow', client: 'T877', label: 'SCR-119 cash flow statement' },
   { id: 'retained-earnings', client: 'T876', label: 'SCR-121 OB53 retained earnings account definition' },
   { id: 'requisition-list', client: 'T873', label: 'SCR-123 ME5A purchase requisition list display' },
+  { id: 'purchase-order-list', client: 'T874', label: 'SCR-124 ME2L purchase order list display' },
   { id: 'subledger-tie-out', client: 'T881', label: 'SCR-115 subledger tie-out reconciliation report' },
   { id: 'customer-down-payment', client: 'T913', label: 'SCR-083 F-29 customer down payment: AR indicator resolution, DZ journal on the alternative account' },
   { id: 'customer-balances', client: 'T928', label: 'SCR-069 customer balances: derived periods, drill-down' },
