@@ -3463,6 +3463,27 @@ canon has no tolerance master to soften it.
 
 Same-stage bookkeeping: B-895 / §26.907 / §30 row 2.725.
 
+## §26.908 — SCR-140 stage 2: no migration, and each of the three reasons checked
+
+**B-896.** The receipt needs three things and none of them is a table.
+
+1. **The order on the line** — `production_order_number` and `production_order_item` already
+   stand on `material_document_line`, added by 9077 (§26.903) for the issue. A receipt is the
+   same document shape with the opposite direction, so the same two columns carry it.
+2. **The determination event** — `account_determination.event` is constrained by a **shape**
+   (`^[A-Z][A-Z0-9_]{2,23}$`), not an enumeration, so `PRODUCTION_OUTPUT` is a row, not a
+   migration. Checked against the live constraint before saying so; the alternative is to
+   assume a check that would reject it and write a migration nobody needs.
+3. **The movements** — `101` and `102` are rows in `movement_type`, written per tenant by the
+   screen the first time it runs, exactly as MB1A writes 201/551 and reservations write their
+   two. `reference_category` already permits `PRODUCTION_ORDER` since 9077.
+
+**Migrations stay 200.** No index either: the receipt's read of "what has already been received
+for this order" is a handful of lines found through the document key, the same measurement that
+refused an index for the issue (§26.903).
+
+Same-stage bookkeeping: B-896 / §26.908 / §30 row 2.726.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3819,6 +3840,7 @@ Same-stage bookkeeping: B-895 / §26.907 / §30 row 2.725.
 | 2.723 | 2026-10-20 | **SCR-139 stage 4: the MIGO screen and the matrix as data (B-893, §26.905).** `/inventory/migo`: two selectors, one resolution panel, three answers. **20 cells**, every one resolved by a typed function — exactly **one posts here**, the rest link or refuse by name. The **server re-resolves** the cell, so a tampered form cannot post a movement the matrix does not offer. **MB1A stops offering 261.** The result reads as a posting slip: document, journal link to FB03, MB03 link, and what the order still requires. **Harness 139 targets** (T839). | Agent |
 | 2.724 | 2026-10-20 | **SCR-139 stage 5 and closure: T839 passes, MIGO delivers 261 (B-894, §26.906).** Six legs: a released order, **A07 + R08 posting ten components**, the result naming **what the order still requires**, the database read back (**stock 100 \u2192 90**, the order on the document line **and the journal line**, the debit on **production consumption**), a **delivered cell linking away**, a **refused cell naming its capability**, and an **over-issue refused with the number in the sentence**. **Suite 1950/1950 in 265 files**; harness **139 targets**; **migrations 200**; `INV.MIGO.POST` registered. | Agent |
 | 2.725 | 2026-10-20 | **SCR-140 / MIGO 101 contracted — the cell that refused stops refusing (B-895, §26.907).** `A01 + R08` becomes **`PROD.ORDER.GR`**: the finished good received against the order that made it. Value at **the material\u2019s own price in the plant** — canon has no cost estimate, and the receipt says what the good is worth, not what it cost to make. The receipt credits a **new `PRODUCTION_OUTPUT`** event, never the consumption account, so the two flows cannot net silently. Judged in order: **released order, its own material, its own plant**, active location, and quantity within **what the order still expects** (derived from the lines). **102 in the catalogue** so MBST reverses it. **No DDL** — stage 2 records why. | Agent |
+| 2.726 | 2026-10-20 | **SCR-140 stage 2: no migration, each reason checked (B-896, §26.908).** The order columns already stand (9077), `account_determination.event` is shape-constrained rather than enumerated — **checked against the live constraint** — so `PRODUCTION_OUTPUT` is a row, and 101/102 are catalogue data. **Migrations stay 200**; no index, for the reason the issue refused one. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
