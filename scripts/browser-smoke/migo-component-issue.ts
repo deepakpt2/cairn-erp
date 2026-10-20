@@ -186,7 +186,10 @@ export async function migoComponentIssue(ctx: Context) {
   await refused.waitFor();
   assert.match(await refused.innerText(), /PROD\.ORDER\.GR/, 'the order receipt names the capability it waits on');
 
-  // An over-issue is refused with the number in the sentence.
+  // An over-issue is refused with the number in the sentence. A fresh load gives the form a
+  // fresh request key: the same key would replay the document already posted, which is the
+  // duplicate-submit protection doing its job.
+  await page.goto(`${base}${MIGO}`, { waitUntil: 'domcontentloaded' });
   await page.selectOption('select[name="migoAction"]', 'A07');
   await page.selectOption('select[name="migoReference"]', 'R08');
   await page.fill('input[name="orderNumber"]', order.orderNumber);

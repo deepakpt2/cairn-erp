@@ -3375,6 +3375,44 @@ order still requires** after this issue.
 
 Same-stage bookkeeping: B-893 / §26.905 / §30 row 2.723.
 
+## §26.906 — SCR-139 stage 5 and closure: T839 passes, MIGO delivers 261
+
+**B-894.** MIGO stands with SAP's own shape — one screen, an action and a reference — and
+A07 + R08 posts the 261 the package asked for.
+
+**T839** (`migo-component-issue`, `cairn_b210:5432`) on the production build:
+
+1. an order **released** with 25 of the component required;
+2. **A07 + R08 posts** ten components — `MD-00000001` written, the result saying the order
+   **still requires 15.000**;
+3. read independently: **stock 100 → 90**, the **material-document line names the order**, the
+   **journal line names the order**, and the debit is **510960 production consumption**, not
+   inventory — the P&L ruling of §26.902 standing in the data;
+4. a **delivered cell links away**: A01 + R01 names `INV.GR.POST` and links to it rather than
+   posting a second receipt implementation;
+5. a **refused cell names its capability**: A01 + R08 waits on `PROD.ORDER.GR`;
+6. an **over-issue refused** with the number in the sentence — *still requires 15.000 PC*.
+
+**Suite 1950/1950 in 265 files.** Harness **139 targets**. **Migrations 200** (one: 9077).
+Registry gains `INV.MIGO.POST` (route `/inventory/migo`, alias MIGO).
+
+**What the matrix buys.** Adding the next movement — the finished-goods receipt of an order,
+a return delivery once a returns chain exists — is a row in `migo.ts` and a scenario in the
+engine, not a screen. The screen already carries the vocabulary to say what it cannot do yet,
+which is the difference between a roadmap and a silence.
+
+**Two corrections made in this round, both worth keeping.** SCR-138's refusal of the action and
+reference selectors is **withdrawn** — an owner ruling beats an agent's tidiness. And the
+`requestKey` that protects against a double submit **also prevents a second test post from the
+same form state**: a browser run that expects two outcomes must reload between them, which is
+the protection working, not a bug.
+
+**Deferred by name:** `A05`–`A09`, reference types beyond `R01/R04/R05/R08`, return delivery,
+GR blocked stock, order receipt (`PROD.ORDER.GR`), settlement, the tolerance master an
+over-delivery rule would need, and WIP capitalisation (which needs settlement to relieve it).
+
+Same-stage bookkeeping: B-894 / §26.906 / §30 row 2.724.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3729,6 +3767,7 @@ Same-stage bookkeeping: B-893 / §26.905 / §30 row 2.723.
 | 2.721 | 2026-10-20 | **SCR-139 stage 2: the order stands on the line (B-891, §26.903).** Migration **9077**: `production_order_number` + `production_order_item` on the material-document line, foreign-keyed to the order, and **`PRODUCTION_ORDER`** joins the movement catalogue\u2019s reference category. **Migrations 199 \u2192 200.** **No index** — every read is one order at a time through the document key, and this book does not carry an index without a measurement behind it. No table, no stored issued quantity. | Agent |
 | 2.722 | 2026-10-20 | **SCR-139 stage 3: one engine, two screens (B-892, §26.904).** `postGoodsIssue` gains a **screen** argument and the **261** scenario (`PROD_ISSUE_ORDER`, order assignment, `PRODUCTION_CONSUMPTION`); MB1A refuses 261 naming MIGO and MIGO refuses 201/551, so one screen per movement. **The order is judged before the stock** — released, component item, its material and plant — and an **over-issue is refused quoting what remains**, derived from the lines, never a counter. The order lands on the document line and on the **journal line**. `CONSUMPTION`, `SCRAP` and `PRODUCTION_CONSUMPTION` join the maintainable event vocabulary. **8/8 new tests, MB1A 14/14.** | Agent |
 | 2.723 | 2026-10-20 | **SCR-139 stage 4: the MIGO screen and the matrix as data (B-893, §26.905).** `/inventory/migo`: two selectors, one resolution panel, three answers. **20 cells**, every one resolved by a typed function — exactly **one posts here**, the rest link or refuse by name. The **server re-resolves** the cell, so a tampered form cannot post a movement the matrix does not offer. **MB1A stops offering 261.** The result reads as a posting slip: document, journal link to FB03, MB03 link, and what the order still requires. **Harness 139 targets** (T839). | Agent |
+| 2.724 | 2026-10-20 | **SCR-139 stage 5 and closure: T839 passes, MIGO delivers 261 (B-894, §26.906).** Six legs: a released order, **A07 + R08 posting ten components**, the result naming **what the order still requires**, the database read back (**stock 100 \u2192 90**, the order on the document line **and the journal line**, the debit on **production consumption**), a **delivered cell linking away**, a **refused cell naming its capability**, and an **over-issue refused with the number in the sentence**. **Suite 1950/1950 in 265 files**; harness **139 targets**; **migrations 200**; `INV.MIGO.POST` registered. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

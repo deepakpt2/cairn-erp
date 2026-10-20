@@ -31,7 +31,8 @@ describe('SCR-136 goods issue UI contract', () => {
     expect(shell).toMatch(/name="postingDate"[^>]*required/);
     expect(shell).toMatch(/name="documentDate"[^>]*required/);
     expect(shell).toMatch(/name="headerText"[^>]*maxLength=\{25\}/);
-    expect(page).toContain('GOODS_ISSUE_SCENARIOS.map');
+    // SCR-139: MB1A offers its own two movements; 261 lives on the MIGO matrix.
+    expect(page).toContain('MB1A_SCENARIOS.map');
   });
 
   it('offers item lines with material, plant, location, quantity, cost centre and reservation', () => {
