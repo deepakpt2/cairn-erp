@@ -2649,6 +2649,28 @@ posted.
 
 Same-stage bookkeeping: B-875 / §26.887 / §30 row 2.705.
 
+## §26.888 — SCR-136 stage 2: no table, and no index either — measured
+
+**B-876.** A goods issue adds **no table** (§26.887: it writes the one ledger canon
+has), so the question is whether any read it makes wants an index the standing keys
+do not carry. It does not.
+
+Seeded 20,000 materials extended to a plant, 80,000 location balances, 20,000
+valuations and 20,000 reservations of three items, then timed the four reads a
+posting makes:
+
+| read | plan | time |
+| --- | --- | --- |
+| the material master | `material_client_material_number_pk` | 0.034 ms |
+| the location's balance | `stock_quantity_pkey` | 0.028 ms |
+| the valuation | `material_valuation_…_pk` | 0.027 ms |
+| the reservation item the hook withdraws | `reservation_item_pk` | 0.027 ms |
+
+Every one is an equality on a unique key. **No migration. Migrations stand at 198.**
+The plan script is kept as `scripts/plan-mb1a.mts`.
+
+Same-stage bookkeeping: B-876 / §26.888 / §30 row 2.706.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2985,7 +3007,7 @@ Same-stage bookkeeping: B-875 / §26.887 / §30 row 2.705.
 | 2.703 | 2026-10-20 | **SCR-135 stage 4: the output screen (B-873, §26.885).** `/inventory/material-document-output` — the full selection, a **run** that determines and dispatches, the queue with SAP\u2019s digits as aliases only, per-row **dispatch, recipient and slip preview**; failures state their reason in the row; action messages stand outside the conditional blocks. **9/9 UI-contract tests**; harness **135 targets** (T835). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.704 | 2026-10-20 | **SCR-135 stage 5 and closure: T835 passes, MB90 delivered (B-874, §26.886).** Six legs: the screen opens, the run determines and dispatches, `4900000901` carries **WE01 PROCESSED with one send**, the **slip preview** renders the document, an **EMAIL fails for want of a recipient with its reason in the row**, a recipient is set and the retry **processes with the send counted**. **Suite 1872/1872 in 257 files**; `INV.MATERIALDOC.RECEIVEPRINT` **Implemented**; catalogue 166/140/162; migrations 198. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 | 2.705 | 2026-10-20 | **SCR-136 / MB1A stage 1: the goods issue contract (B-875, §26.887).** The package\u2019s `goods_issue_posting` table **refused**: a goods issue is a **material document** in canon\u2019s one ledger, and a parallel table would give two answers to "what moved" — **no table added**. **201** (cost centre) and **551** (scrapping) delivered, **261 refused by name** (no order master), counter movements **202/552 in the catalogue** so **MBST** reverses a goods issue; issue valued at the material\u2019s own price, journal credits **INVENTORY** and debits **CONSUMPTION** (with the cost centre on the line) or **SCRAP**; the **reservation hook is wired** (MB21\u2019s deferral closed, MD04 demand falls in the same commit); location stock judged on `allow_negative_stock`; **material and accounting periods both judged**; batch deferred and a batch refused if entered. | Agent |\n seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
-| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.706 | 2026-10-20 | **SCR-136 stage 2: no table and no index, measured (B-876, §26.888).** Four reads over 20,000 materials, 80,000 balances, 20,000 valuations and 20,000 reservations all land on standing unique keys at **0.027\u20130.034 ms**. **No migration; migrations stay 198.** | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 
 ### §26.881 addendum — a label that shipped in the working tree but not in a commit
 
