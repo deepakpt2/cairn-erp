@@ -2582,6 +2582,73 @@ their own transaction**, so a slip cannot exist for a document that rolled back.
 **MIGO 261** (`PROD.ORDER.GI`, Goods Issue to Order — which needs `PROD.ORDER.CREATE`
 first and should be opened with that dependency stated).
 
+## §26.887 — SCR-136 / MB1A: the goods issue contract
+
+**B-875.** Owner package: **MB1A Post Goods Issue** — a movement type, a header with
+its posting and document dates and text, and item lines with material, plant,
+storage location, quantity, unit, optional batch, a controlling object and an
+optional reservation; stock reduced, the ledger written, the period judged.
+
+**The package's table is refused, table and all.** `goods_issue_posting` is a
+*second* place where a material movement is recorded — its own document number, its
+own fiscal year, its own status, foreign-keyed to an `accountingHeader` that canon
+does not have. Canon already has one ledger of movements: `material_document` and
+`material_document_line` (MKPF/MSEG shapes), written by goods receipt, transfer
+posting, reversal and reservation withdrawal. A goods issue is a **material
+document**, and a parallel table would mean two answers to "what moved", either of
+which could be wrong. **No table is added this round.**
+
+**Movements delivered: 201 and 551.** `GI_ISSUE_CC` — goods issue to a cost centre —
+and `GI_SCRAP` — scrapping. **261 is refused by name**: it consumes against a
+production order, canon has no order master, and `PROD.ORDER.CREATE` is still
+Roadmap; SCR-133 refused the reservation on the same ground and the remedy is the
+same. The counter movements (202 / 552) are delivered **in the catalogue** with
+their `reversal_movement_type` links, so **MBST reverses a goods issue** through the
+tested path — MB1A itself posts nothing but an issue, and an attempt to post a
+counter movement here is refused with the remedy naming MBST.
+
+**The valuation decides the value, and the cost centre decides the debit.** An issue
+is valued at the material's own price in the plant — standard price under `S`,
+moving average under `V` — and the plant's valuation carries the quantity and value
+down by exactly that. The journal credits **INVENTORY** at the valuation class; it
+debits **CONSUMPTION** (201), carrying the **cost centre on the line**, or **SCRAP**
+(551) with no controlling object. Both are new account-determination events, and an
+unmaintained one refuses by name before anything moves.
+
+**201 needs a cost centre that stands**: present, in the plant's company code,
+valid on the posting date, not posting-locked — the same judgement MB21 makes, so
+the two agree. 551 refuses a cost centre rather than ignoring it, because a
+scrapping that charged a cost centre would be a different transaction wearing the
+movement's name.
+
+**The reservation hook is finally wired.** A 201 line may name a reservation number
+and its item; the posting calls SCR-133's `withdrawReservation` **inside the same
+transaction**, so `withdrawn_quantity` rises, the item completes when it is issued in
+full, and **MD04's demand falls in the same commit** — the deferral SCR-133 recorded
+by name is closed. A reservation whose material or plant differs from the line
+refuses, and issuing beyond what stands open refuses with the open quantity named.
+
+**Stock sufficiency, on the location's own terms.** The issuing storage location must
+carry the quantity unless it carries `allow_negative_stock` — the SCR-131 ruling,
+operational since. Blocked stock is never issued; an unrestricted issue reads only
+the unrestricted balance.
+
+**Periods are judged, because a goods issue posts a journal.** The material period
+(OMSY, `material_period_control`) and the accounting posting period (OB52 through
+`checkPostingAllowed`) both judge the posting date — unlike a reservation, this
+transaction writes to the ledger.
+
+**Batch is deferred by name**: canon has no batch master (SCR-131 deferred it on the
+same ground), so the field the package marks conditional has nothing to point at and
+is refused if entered rather than silently dropped.
+
+**Delivered with the screen:** a header (movement, both dates, text), lines of
+material, plant, storage location, quantity de-read from the master's base unit,
+cost centre, reservation; results showing the document and journal, and the lines as
+posted.
+
+Same-stage bookkeeping: B-875 / §26.887 / §30 row 2.705.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2917,7 +2984,7 @@ first and should be opened with that dependency stated).
 | 2.702 | 2026-10-20 | **SCR-135 stage 3: the output engine and its posting hook (B-872, §26.884).** Determination runs **inside all three posting transactions** (goods receipt, transfer and its counter, reversal); a receipt earns **WE01** and dispatches immediately, an issue earns **WA01** at the periodic cadence, a **transfer earns neither** (it both receipts and issues). The run fills history idempotently; dispatch renders the slip and records the attempt; an EMAIL fails without a recipient and succeeds after one. Catalogue **166/140/162**. **11/11 tests**; posting suites **27/27**. | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.703 | 2026-10-20 | **SCR-135 stage 4: the output screen (B-873, §26.885).** `/inventory/material-document-output` — the full selection, a **run** that determines and dispatches, the queue with SAP\u2019s digits as aliases only, per-row **dispatch, recipient and slip preview**; failures state their reason in the row; action messages stand outside the conditional blocks. **9/9 UI-contract tests**; harness **135 targets** (T835). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.704 | 2026-10-20 | **SCR-135 stage 5 and closure: T835 passes, MB90 delivered (B-874, §26.886).** Six legs: the screen opens, the run determines and dispatches, `4900000901` carries **WE01 PROCESSED with one send**, the **slip preview** renders the document, an **EMAIL fails for want of a recipient with its reason in the row**, a recipient is set and the retry **processes with the send counted**. **Suite 1872/1872 in 257 files**; `INV.MATERIALDOC.RECEIVEPRINT` **Implemented**; catalogue 166/140/162; migrations 198. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
- seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
+| 2.705 | 2026-10-20 | **SCR-136 / MB1A stage 1: the goods issue contract (B-875, §26.887).** The package\u2019s `goods_issue_posting` table **refused**: a goods issue is a **material document** in canon\u2019s one ledger, and a parallel table would give two answers to "what moved" — **no table added**. **201** (cost centre) and **551** (scrapping) delivered, **261 refused by name** (no order master), counter movements **202/552 in the catalogue** so **MBST** reverses a goods issue; issue valued at the material\u2019s own price, journal credits **INVENTORY** and debits **CONSUMPTION** (with the cost centre on the line) or **SCRAP**; the **reservation hook is wired** (MB21\u2019s deferral closed, MD04 demand falls in the same commit); location stock judged on `allow_negative_stock`; **material and accounting periods both judged**; batch deferred and a batch refused if entered. | Agent |\n seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 
 ### §26.881 addendum — a label that shipped in the working tree but not in a commit
