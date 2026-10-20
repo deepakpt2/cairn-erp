@@ -1378,6 +1378,24 @@ Same-stage bookkeeping: B-830 / §26.842 / §30 row 2.660. The procurement roadm
 
 **Deferred by name:** the *Scope of List* presentation variants (ALV grid against standard list — the single grid ships, the same deferral as SCR-112, SCR-113 and SCR-123), the purchase-order history line-item drill (the EKBE equivalent) beyond the document display, release-strategy detail (the strategy behind `UNRELEASED` is its own round), and exporting. Capability **`PROC.PO.LIST`**, aliases **ME2L, ME2M, ME2N, ME2C**. Stage order: 1 contract, 2 index decision, 3 service + tests, 4 screen, 5 browser acceptance + closure; each separately committed and pushed. Same-stage bookkeeping: B-831 / §26.843 / §30 row 2.661.
 
+## §26.844 — SCR-124 stage 2: index decision is verification-only (migration 9065 stays unused)
+
+**B-832.** The package recommends a composite index on the header — tenant, vendor, purchasing organisation, document date. Measured, and it does not earn a migration.
+
+**Method.** `scripts/plan-po-list.mts` (committed as this decision's evidence) seeds a throwaway tenant with 8,000 purchase orders × 5 items (**40,000 order items**), **20,000 goods-receipt lines** and **12,000 supplier-invoice items** citing them, plus the vendor, organisation, group, plant, material and movement-type masters the foreign keys need; statistics are gathered in a separate session; the exact list query the service will issue is timed — items joined to their headers, left-joined to the signed goods-receipt aggregate and the posted-invoice aggregate, ordered by the vendor perspective, `limit 501`. Three shapes, with and without `(client, supplier_number, purchasing_org, document_date)`, which is dropped afterwards.
+
+| selection | no index | with candidate index | what the planner did |
+| --- | --- | --- | --- |
+| vendor V00007, org O100, 3 months | 1.36 ms | 0.17 ms | index chosen; both shapes already sub-2 ms |
+| vendors V00010–V00060, all orgs, 6 months | 187.1 ms | 174.4 ms | index chosen on the header, but the item scan and the two aggregates dominate |
+| all vendors, all orgs, 12 months | 223.8 ms | 220.3 ms | planner ignores the index; both arms scan |
+
+**Decision — verification-only, no migration.** The index is worth 1.2 ms on a 1.4 ms query and about 7 % on the medium shape, and it is ignored outright on the broad one. Every shape that a user actually waits on is dominated by the sequential scan over `purchase_order_item` and the two aggregate joins over material documents and supplier invoices, none of which a header index touches; `po_item_requisition_idx` already serves the requisition link. A 500-row page answering in under a quarter of a second at 40,000 order items does not justify write amplification on every purchase order creation. **Migration 9065 stays unused; migrations stand at 187** — the second consecutive measured decline, and the harness ships so the decision can be re-measured rather than re-argued if volume or a filter shape changes.
+
+**For the service.** Stage 3 issues the query as measured — aggregate before limiting, `limit maxHits + 1` to prove truncation, no schema change.
+
+Same-stage bookkeeping: B-832 / §26.844 / §30 row 2.662. Next stage 3: the `PROC.PO.LIST` service and tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1670,6 +1688,7 @@ Same-stage bookkeeping: B-830 / §26.842 / §30 row 2.660. The procurement roadm
 | 2.659 | 2026-10-20 | **SCR-123 stage 2 published (B-829, §26.841).** ME5A index decision measured, not assumed: at 60,000 requisition items the list query runs 33–176 ms and the candidate composite index only helps the narrowest shape by ~8 ms while the planner declines it for the medium shape; dominant costs are the top-N sort and the PO aggregate. **Verification-only — no migration 9065**, as the SCR-120 precedent allowed. Harness `scripts/plan-me5a.mts` committed as evidence; migrations remain 187. Service next. | Agent |
 | 2.660 | 2026-10-20 | **SCR-123 procurement CLOSED (B-830, §26.842).** ME5A purchase requisition list delivered: `PROC.REQ.LIST` service (9/9), screen `/purchasing/requisition-list` (UI contract 6/6), **T873 PASSED** 6 legs, target guard 160/160, full suite **1626/1626** (232 files). Catalogue **155/128/147**; migrations 187 — the candidate index was measured in stage 2 and declined, so no schema change landed. Closed queue drained; next entirely new round is SCR-124. | Agent |
 | 2.661 | 2026-10-20 | **SCR-124 procurement opened (B-831, §26.843).** ME2L purchasing report suite contracted as one capability `PROC.PO.LIST` with four perspectives (vendor/material/PO/material group) and aliases ME2L, ME2M, ME2N, ME2C: ranges on vendor, org, group, plant, material, material group and PO number, document dates, and a scope of selection (all / still to be delivered / still to be invoiced / completed) derived from posted material documents and supplier invoices. Release badge, deletion flag, requisition conversion linkage, drill to the order display. Scope-of-list variants, PO history drill and export deferred by name. Index decision is stage 2. | Agent |
+| 2.662 | 2026-10-20 | **SCR-124 stage 2 published (B-832, §26.844).** ME2L index decision measured: at 40,000 order items, 20,000 goods-receipt lines and 12,000 invoice lines the list query answers in 1.4–224 ms and the recommended header index buys 1.2 ms on the fastest shape, 7 % on the medium one and nothing on the broad one, where the item scan and the aggregates dominate. **Verification-only — migration 9065 stays unused.** Harness `scripts/plan-po-list.mts` committed; migrations 187. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
