@@ -216,7 +216,6 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'release-strategies') return '/config/release-strategies';
   if (target.id === 'release-acts') return '/purchasing/orders';
   if (target.id === 'goods-receipt') return '/inventory/goods-receipt';
-  if (target.id === 'stock-posting-date') return '/inventory/stock-posting-date';
   if (target.id === 'invoice-verification') return '/purchasing/invoice-verification';
   if (target.id === 'payment-terms') return '/config/payment-terms';
   if (target.id === 'payment-methods') return '/config/payment-methods';

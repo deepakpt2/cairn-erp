@@ -13,8 +13,9 @@ const ROUTE = '/inventory/stock-posting-date';
  * SCR-126 browser acceptance: MB5B stocks on posting date.
  *
  * The fixture is a small but complete rollforward. One material is received
- * before the window, received and issued inside it, and also carries a reversed
- * receipt of 99 that must never reach the figures. A second material moves in
+ * before the window, received inside it and reduced by a reversal-direction
+ * movement (this canon carries no separate issue direction), and also holds a
+ * reversed receipt of 99 that must never reach the figures. A second material moves in
  * and straight back out, so it nets to zero and is suppressed unless asked for.
  * A third has drifted from the stock master: its closing position disagrees with
  * the snapshot, which must be reported as a warning without touching the figure.
@@ -49,7 +50,6 @@ export async function stockOnPostingDate(ctx: Context) {
     await tx.execute(sql`
       insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
         (${client}, 'GOODS_RECEIPT_PO', 'Goods receipt for purchase order', 'RECEIPT', 'PURCHASE_ORDER', 'browser.admin'),
-        (${client}, 'GOODS_ISSUE', 'Goods issue', 'ISSUE', 'COST_CENTER', 'browser.admin'),
         (${client}, 'RECEIPT_REVERSAL', 'Reversal of a goods receipt', 'REVERSAL', 'MATERIAL_DOCUMENT', 'browser.admin')
       on conflict do nothing
     `);
@@ -73,10 +73,10 @@ export async function stockOnPostingDate(ctx: Context) {
       ) values
         (${client}, '5950000001', 1, 'GOODS_RECEIPT_PO', 'MB5B-MAT', 'Q800', 'SL80', 'UNRESTRICTED', 10, 'PC', 10, 'PC', 5, 1, 'USD', 50, 'browser.admin'),
         (${client}, '5950000002', 1, 'GOODS_RECEIPT_PO', 'MB5B-MAT', 'Q800', 'SL80', 'UNRESTRICTED',  5, 'PC',  5, 'PC', 5, 1, 'USD', 25, 'browser.admin'),
-        (${client}, '5950000003', 1, 'GOODS_ISSUE',      'MB5B-MAT', 'Q800', 'SL80', 'UNRESTRICTED',  2, 'PC',  2, 'PC', 5, 1, 'USD', 10, 'browser.admin'),
+        (${client}, '5950000003', 1, 'RECEIPT_REVERSAL', 'MB5B-MAT', 'Q800', 'SL80', 'UNRESTRICTED',  2, 'PC',  2, 'PC', 5, 1, 'USD', 10, 'browser.admin'),
         (${client}, '5950000004', 1, 'GOODS_RECEIPT_PO', 'MB5B-MAT', 'Q800', 'SL80', 'UNRESTRICTED', 99, 'PC', 99, 'PC', 5, 1, 'USD', 495, 'browser.admin'),
         (${client}, '5950000005', 1, 'GOODS_RECEIPT_PO', 'MB5B-NET', 'Q800', 'SL80', 'UNRESTRICTED',  3, 'PC',  3, 'PC', 5, 1, 'USD', 15, 'browser.admin'),
-        (${client}, '5950000006', 1, 'GOODS_ISSUE',      'MB5B-NET', 'Q800', 'SL80', 'UNRESTRICTED',  3, 'PC',  3, 'PC', 5, 1, 'USD', 15, 'browser.admin'),
+        (${client}, '5950000006', 1, 'RECEIPT_REVERSAL', 'MB5B-NET', 'Q800', 'SL80', 'UNRESTRICTED',  3, 'PC',  3, 'PC', 5, 1, 'USD', 15, 'browser.admin'),
         (${client}, '5950000007', 1, 'GOODS_RECEIPT_PO', 'MB5B-DRIFT', 'Q800', 'SL80', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 5, 1, 'USD', 20, 'browser.admin')
       on conflict do nothing
     `);
@@ -125,13 +125,15 @@ export async function stockOnPostingDate(ctx: Context) {
   console.log('  ✓ the rollforward refuses to run without a material range');
 
   // ── A plant that does not stand refuses by name ───────────────────────────
-  await page.goto(`${base}${ROUTE}?${april}&plantFrom=Q999&plantTo=Q999`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}${ROUTE}?materialFrom=MB5B-MAT&materialTo=MB5B-MAT&plantFrom=Q999&plantTo=Q999`
+    + '&dateFrom=2026-04-01&dateTo=2026-04-30', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   await page.locator('div[role="alert"]').filter({ hasText: 'plant Q999' }).waitFor();
   console.log('  ✓ an unknown plant refuses by name instead of answering an empty list');
 
   // ── The stock master is a control, not an adjustment ──────────────────────
-  await page.goto(`${base}${ROUTE}?${april}&dateTo=2026-04-20`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}${ROUTE}?materialFrom=MB5B-DRIFT&materialTo=MB5B-DRIFT&plantFrom=Q800&plantTo=Q800`
+    + '&dateFrom=2026-04-01&dateTo=2026-04-20', { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   const warning = page.locator('section[aria-label="Report warnings"] li').filter({ hasText: 'MB5B-DRIFT' });
   await warning.waitFor();
