@@ -39,12 +39,12 @@ describe('SCR-139 MIGO action/reference matrix', () => {
     }
   });
 
-  it('posts A07 + R08 and nothing else from this screen', () => {
+  it('posts exactly two cells — the issue to an order and its finished good coming back', () => {
     const posting = migoMatrix().filter((c) => c.resolution.kind === 'POST_HERE');
-    expect(posting).toHaveLength(1);
-    expect(posting[0].action.value).toBe('A07');
-    expect(posting[0].reference.value).toBe('R08');
+    expect(posting).toHaveLength(2);
+    expect(posting.map((c) => `${c.action.value}+${c.reference.value}`)).toEqual(['A01+R08', 'A07+R08']);
     expect(resolveMigoCell('A07', 'R08')).toMatchObject({ kind: 'POST_HERE', movement: '261' });
+    expect(resolveMigoCell('A01', 'R08')).toMatchObject({ kind: 'POST_HERE', movement: '101' });
   });
 
   it('links the delivered movements rather than reimplementing them', () => {
@@ -56,8 +56,8 @@ describe('SCR-139 MIGO action/reference matrix', () => {
   });
 
   it('refuses the rest by name, naming the capability that would deliver it', () => {
-    expect(resolveMigoCell('A01', 'R08')).toMatchObject({ kind: 'REFUSED', deliveredBy: 'PROD.ORDER.GR' });
     expect(resolveMigoCell('A02', 'R01')).toMatchObject({ kind: 'REFUSED', deliveredBy: null });
+    expect(resolveMigoCell('A01', 'R04')).toMatchObject({ kind: 'REFUSED', deliveredBy: null });
     expect(shell).toContain('cell.deliveredBy');
   });
 
@@ -86,6 +86,17 @@ describe('SCR-139 MIGO action/reference matrix', () => {
     expect(shell).toContain('/finance/journal/document?document=');
     expect(messages).toContain("'migo.title'");
     expect(messages).toContain("'migo.itemsHeader'");
+  });
+
+  it('carries a receipt form of its own for A01 + R08, and posts through the receipt service', () => {
+    expect(shell).toContain("cell.movement === '101'");
+    expect(shell).toContain("cell.movement === '261'");
+    expect(shell).toContain('data-receipt-document');
+    expect(shell).toContain('name="storageLocation"');
+    expect(shell).toContain("name=\"quantity\"");
+    expect(actions).toContain('postProductionReceipt');
+    expect(actions).toContain("cell.movement !== '101'");
+    expect(messages).toContain("'migo.receiptHeader'");
   });
 
   it('registers INV.MIGO.POST on its route with MIGO as the alias', () => {

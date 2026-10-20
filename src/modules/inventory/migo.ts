@@ -5,7 +5,7 @@
  * type** together select the movement. Canon carries the same two selectors, and every cell
  * of the matrix resolves to exactly one of three answers:
  *
- *   POST_HERE  — this screen posts it (A07 + R08, movement 261)
+ *   POST_HERE  — this screen posts it (A07 + R08, movement 261; A01 + R08, movement 101)
  *   ELSEWHERE  — a delivered capability already posts it, and the cell links there rather
  *                than implementing a second copy of the same posting
  *   REFUSED    — nothing posts it yet; the cell names the capability that would light it up
@@ -40,7 +40,7 @@ export const MIGO_REFERENCES: readonly MigoReference[] = [
   { value: 'R01', label: 'Purchase order', meaning: "the receipt's origin is a purchase order" },
   { value: 'R04', label: 'Reservation', meaning: "the issue's origin is a reservation" },
   { value: 'R05', label: 'Material document', meaning: 'the document itself is the reference' },
-  { value: 'R08', label: 'Order', meaning: "the issue's origin is a production order" },
+  { value: 'R08', label: 'Order', meaning: 'the origin is a production order' },
 ] as const;
 
 export type MigoResolution =
@@ -84,11 +84,18 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
   if (!action && !reference) return null;
   if (!action || !reference) return null;
 
-  // The one cell this round posts.
+  // The two cells this screen posts: the issue to an order, and its finished good coming back.
   if (action === 'A07' && reference === 'R08') {
     return {
       kind: 'POST_HERE', movement: '261',
       title: 'Goods issue to a production order',
+      capability: MIGO_CAPABILITY,
+    };
+  }
+  if (action === 'A01' && reference === 'R08') {
+    return {
+      kind: 'POST_HERE', movement: '101',
+      title: 'Goods receipt from a production order',
       capability: MIGO_CAPABILITY,
     };
   }
@@ -115,13 +122,6 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
     return elsewhere('INV.GI.POST', '/inventory/goods-issue', 'Goods issue against a reservation');
   }
 
-  if (action === 'A01' && reference === 'R08') {
-    return refused(
-      'Goods receipt from a production order',
-      'Receiving the finished good from an order is its own movement and its own capability; nothing posts it yet.',
-      'PROD.ORDER.GR',
-    );
-  }
   if (action === 'A02') {
     return refused(
       'Return delivery',

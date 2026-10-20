@@ -7,13 +7,17 @@ import { t } from '@/platform/i18n';
 import {
   MIGO_ACTIONS, MIGO_REFERENCES, resolveMigoCell,
 } from '@/modules/inventory/migo';
-import { postMigoAction, type MigoActionState } from './actions';
+import {
+  postMigoAction, postReceiptAction, type MigoActionState, type ReceiptActionState,
+} from './actions';
 
 const INITIAL: MigoActionState = { ok: false, message: '' };
+const INITIAL_RECEIPT: ReceiptActionState = { ok: false, message: '' };
 const LINES = [1, 2, 3, 4];
 
 export default function MigoShell({ canPost, today }: { canPost: boolean; today: string }) {
   const [state, action, posting] = useActionState(postMigoAction, INITIAL);
+  const [receipt, receiptAction, receiving] = useActionState(postReceiptAction, INITIAL_RECEIPT);
   const [migoAction, setAction] = useState('A07');
   const [reference, setReference] = useState('R08');
   const [requestKey] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -79,7 +83,109 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         )}
       </section>
 
-      {cell?.kind === 'POST_HERE' && (
+      {cell?.kind === 'POST_HERE' && cell.movement === '101' && (
+        <section aria-labelledby="movement-receipt" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="movement-receipt" className="text-sm font-semibold">{t('migo.receiptHeader')}</h2>
+          <p className="mt-1 text-sm text-ink-soft">{t('migo.receiptHint')}</p>
+          <p role="status" className={`mt-2 text-sm ${receipt.ok ? 'text-ink' : 'text-red-700'}`}>
+            {receipt.message}{receipt.remedy ? ` ${receipt.remedy}` : ''}
+          </p>
+          <form action={receiptAction}>
+            <input type="hidden" name="requestKey" value={requestKey} />
+            <input type="hidden" name="migoAction" value={migoAction} />
+            <input type="hidden" name="migoReference" value={reference} />
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="block">
+                <span className="field-label">{t('migo.orderNumber')}</span>
+                <input name="orderNumber" className="input w-full" placeholder="PRD-…" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.postingDate')}</span>
+                <input type="date" name="postingDate" className="input w-full" defaultValue={today} required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.documentDate')}</span>
+                <input type="date" name="documentDate" className="input w-full" defaultValue={today} required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.headerText')}</span>
+                <input name="headerText" className="input w-full" maxLength={25} />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.columnLocation')}</span>
+                <input name="storageLocation" className="input w-full" placeholder="0001" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.receiptQuantity')}</span>
+                <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full text-right" required />
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || receiving}>
+                {receiving ? t('migo.posting') : t('migo.receiptPost')}
+              </button>
+              {!canPost && <p className="text-sm text-ink-soft">{t('migo.noPost')}</p>}
+            </div>
+          </form>
+
+          {receipt.document && (
+            <section aria-labelledby="movement-receipt-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+              <h3 id="movement-receipt-result" className="text-sm font-semibold">
+                {t('migo.document')} <span className="code" data-receipt-document={receipt.document.materialDocumentNumber}>{receipt.document.materialDocumentNumber}</span>
+              </h3>
+              <p className="mt-1 text-sm text-ink-soft">
+                {receipt.document.movementCode} · {receipt.document.movementType} · {t('migo.journal')}{' '}
+                {receipt.document.journalDocumentNumber ? (
+                  <Link
+                    className="code text-accent hover:underline"
+                    href={`/finance/journal/document?document=${encodeURIComponent(receipt.document.journalDocumentNumber)}`}
+                  >
+                    {receipt.document.journalDocumentNumber}
+                  </Link>
+                ) : '—'}
+                {' · '}
+                <Link
+                  className="text-accent hover:underline"
+                  href={`/inventory/material-documents?document=${encodeURIComponent(receipt.document.materialDocumentNumber)}&fiscalYear=${receipt.document.documentYear}`}
+                >
+                  {t('migo.openDocument')}
+                </Link>
+              </p>
+              <p className="mt-1 text-sm text-ink-soft">
+                {t('migo.receiptValue')} {receipt.document.totalValue} · {t('migo.receiptReceived')}{' '}
+                <span data-received-after={receipt.document.receivedAfter}>{receipt.document.receivedAfter}</span>{' '}
+                / {receipt.document.orderQuantity} · {t('migo.columnOrderOpen')}{' '}
+                <span data-order-open={receipt.document.lines[0]?.orderOpenAfter ?? ''}>{receipt.document.lines[0]?.orderOpenAfter ?? '—'}</span>
+              </p>
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="py-1">{t('migo.columnLine')}</th>
+                    <th className="py-1">{t('migo.columnMaterial')}</th>
+                    <th className="py-1">{t('migo.columnLocation')}</th>
+                    <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
+                    <th className="py-1 text-right">{t('migo.columnValue')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {receipt.document.lines.map((line) => (
+                    <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
+                      <td className="py-1">{line.lineNumber}</td>
+                      <td className="py-1">{line.materialNumber}</td>
+                      <td className="py-1">{line.storageLocation ?? '—'}</td>
+                      <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
+                      <td className="py-1 text-right tabular">{line.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+        </section>
+      )}
+
+      {cell?.kind === 'POST_HERE' && cell.movement === '261' && (
         <section aria-labelledby="movement-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="movement-items" className="text-sm font-semibold">{t('migo.itemsHeader')}</h2>
           <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
