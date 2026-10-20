@@ -114,3 +114,72 @@ describe('SCR-114 clear G/L account (R-162)', () => {
       .rejects.toThrow(/already stands cleared by/);
   });
 });
+
+describe('SCR-114 follow-up: tolerance difference posting (B-805)', () => {
+  async function postPair(debitAmount: string, creditAmount: string, key: string) {
+    const debit = await post(debitAmount, '400000', '101000', `${key}-d`, '2026-04-15');
+    const credit = await post(creditAmount, '101000', '400000', `${key}-c`, '2026-04-16');
+    return [
+      { documentNumber: debit.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+      { documentNumber: credit.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+    ] as GlClearingItemRef[];
+  }
+
+  it('refuses a difference while no default tolerance group stands', async () => {
+    const pair = await postPair('100', '95', 'tol-none');
+    const err = await clearGlItems(clearingInput({ requestKey: 'tol-none-clear', items: pair })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GlClearingError);
+    expect(`${(err as GlClearingError).message} ${(err as GlClearingError).remedy ?? ''}`)
+      .toMatch(/maintain the default tolerance group/);
+  });
+
+  it('posts a within-tolerance difference to the determined account and clears in full', async () => {
+    await withTenant(client, async (tx) => {
+      const [company] = await tx.execute(sql`
+        select chart_of_accounts as chart from company_code where client = ${client} and company_code = '1000'
+      `) as unknown as [{ chart: string }];
+      await tx.execute(sql`
+        insert into employee_tolerance_group
+          (client, company_code, group_key, max_document_amount, max_line_amount, max_cash_discount_percent,
+           payment_diff_revenue_amount, payment_diff_expense_amount, payment_diff_revenue_percent, payment_diff_expense_percent,
+           created_by)
+        values (${client}, '', '', 0, 0, 0, 10, 10, 50, 50, ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
+        values (${client}, ${company.chart}, 'PAYMENT_DIFFERENCE', '', 'EXP', '310000', ${ACTOR}),
+               (${client}, ${company.chart}, 'PAYMENT_DIFFERENCE', '', 'REV', '320000', ${ACTOR})
+      `);
+    });
+
+    const view = await getGlClearing({ client, companyCode: '1000', glAccount: '400000' });
+    expect(view.differenceTolerance?.expenseAmount).toBe(10);
+
+    const pair = await postPair('1000', '995', 'tol-within');
+    const before = await journalCount();
+    const result = await clearGlItems(clearingInput({ requestKey: 'tol-within-clear', items: pair }));
+    expect(await journalCount()).toBe(before + 1);
+
+    const lines = await withTenant(client, async (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount, clearing_document
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.clearingDocumentNumber}
+      order by line_number
+    `)) as unknown as Array<{ gl_account: string; debit_credit: string; amount: string; clearing_document: string | null }>;
+    const difference = lines.find((l) => l.gl_account === '310000');
+    expect(difference?.debit_credit).toBe('S');
+    expect(Number(difference?.amount)).toBe(5);
+    expect(difference?.clearing_document).toBeNull(); // stands as an ordinary expense line
+    expect(result.clearedItems.some((i) => i.documentNumber === pair[0]!.documentNumber)).toBe(true);
+  });
+
+  it('refuses a difference beyond the tolerance of the default group', async () => {
+    const pair = await postPair('1000', '900', 'tol-beyond');
+    const before = await journalCount();
+    const err = await clearGlItems(clearingInput({ requestKey: 'tol-beyond-clear', items: pair })).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(GlClearingError);
+    expect(`${(err as GlClearingError).message} ${(err as GlClearingError).remedy ?? ''}`)
+      .toMatch(/beyond the tolerance of the default group/);
+    expect(await journalCount()).toBe(before);
+  });
+});

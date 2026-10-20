@@ -15,9 +15,11 @@
  * as fallback (SCR-110 settlement). The clearing document
  * type is operator-selected and validated against configured
  * document types — never a universal hardcoded type.
- * Tolerance-based difference posting and partial/residual
- * clearing are deferred by name; a difference is never
- * silently discarded.
+ * A difference within the default tolerance group's limits
+ * (SCR-114 follow-up, OBA4 canon) posts as one PAYMENT_DIFFERENCE
+ * line of the clearing journal; beyond tolerance it refuses by
+ * name — a difference is never silently discarded. Partial and
+ * residual clearing remain deferred by name.
  *
  * Stage 1 carries the vocabulary only; the schema/index
  * check lands in stage 2 and the clearing service in stage 3.
@@ -58,6 +60,11 @@ export interface GlClearingView {
   openItems: GlClearingItem[];
   clearedItems: GlClearingItem[];
   openBalance: number;
+  /** The default tolerance group's payment-difference limits, when one stands. */
+  differenceTolerance: {
+    revenueAmount: number; revenuePercent: number;
+    expenseAmount: number; expensePercent: number;
+  } | null;
 }
 
 export interface GlClearingFilters {
@@ -75,10 +82,37 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { changeDocument, changeDocumentItem } from '../../platform/tables/audit-trail';
-import { documentType } from '../foundation/schema';
+import { accountDetermination, documentType, employeeToleranceGroup } from '../foundation/schema';
 import { glAccount, glAccountCompany, journalEntry, journalEntryLine } from './schema';
 
 const CLEARING_CLASS = 'gl_clearing';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The default tolerance group of the company scope, else the tenant-wide default. */
+async function defaultTolerance(tx: Tx, client: string, companyCode: string) {
+  const groups = await tx.select().from(employeeToleranceGroup)
+    .where(eq(employeeToleranceGroup.client, client));
+  return groups.find((g) => g.companyCode === companyCode && g.groupKey === '')
+    ?? groups.find((g) => g.companyCode === '' && g.groupKey === '')
+    ?? null;
+}
+
+/** Determination by event and modifier, falling back to the unmodified row. */
+async function determinationAccount(
+  tx: Tx, client: string, chart: string, event: string, modifier = '',
+): Promise<string | null> {
+  const pick = async (mod: string) => {
+    const rows = await tx.select().from(accountDetermination).where(and(
+      eq(accountDetermination.client, client),
+      eq(accountDetermination.chartOfAccounts, chart),
+      eq(accountDetermination.event, event),
+      eq(accountDetermination.generalModifier, mod),
+    ));
+    return rows[0]?.glAccount ?? null;
+  };
+  return (modifier ? await pick(modifier) : null) ?? (await pick(''));
+}
 
 const round4 = (n: number) => Math.round(n * 10000) / 10000;
 
@@ -172,10 +206,17 @@ async function loadView(
 ): Promise<GlClearingView> {
   const openItems = await loadItems(tx, client, companyCode, account, false, filters);
   const clearedItems = await loadItems(tx, client, companyCode, account, true, filters);
+  const tolerance = await defaultTolerance(tx, client, companyCode);
   return {
     companyCode, glAccount: account, accountCurrency: judged.accountCurrency,
     openItems, clearedItems,
     openBalance: round4(openItems.reduce((s, i) => s + i.signed, 0)),
+    differenceTolerance: tolerance ? {
+      revenueAmount: Number(tolerance.paymentDiffRevenueAmount),
+      revenuePercent: Number(tolerance.paymentDiffRevenuePercent),
+      expenseAmount: Number(tolerance.paymentDiffExpenseAmount),
+      expensePercent: Number(tolerance.paymentDiffExpensePercent),
+    } : null,
   };
 }
 
@@ -312,11 +353,36 @@ export async function clearGlItems(input: {
       );
     }
     const difference = round4(held.reduce((s, h) => s + h.signed, 0));
+    let differenceLine: { glAccount: string; debitCredit: 'S' | 'H'; amount: number } | null = null;
     if (difference !== 0) {
-      throw new GlClearingError(
+      // A debit difference judges on the expense limits, a credit on the
+      // revenue limits; both the absolute and the percentage limit must
+      // hold (the smaller binds), exactly as the payment screens judge.
+      const expense = difference > 0;
+      const fail = (remedy: string) => new GlClearingError(
         `The selected items do not balance: the difference stands at ${Math.abs(difference).toFixed(2)} ${currencies[0]}.`,
-        'Select items whose signed sum stands at zero; tolerance and residual clearing stand deferred.',
+        remedy,
       );
+      const tolerance = await defaultTolerance(tx, input.client, input.companyCode);
+      if (!tolerance) {
+        throw fail('Select items whose signed sum stands at zero, or maintain the default tolerance group so a difference within tolerance can post.');
+      }
+      const amountLimit = Number(expense ? tolerance.paymentDiffExpenseAmount : tolerance.paymentDiffRevenueAmount);
+      const percentLimit = Number(expense ? tolerance.paymentDiffExpensePercent : tolerance.paymentDiffRevenuePercent);
+      const gross = round4(held.reduce((s, h) => s + Math.abs(h.signed), 0));
+      const percentAmount = round2(gross * percentLimit / 100);
+      if (Math.abs(difference) - Math.min(amountLimit, percentAmount) > 0.005) {
+        throw fail(`The difference stands beyond the tolerance of the default group (at most ${Math.min(amountLimit, percentAmount).toFixed(2)} ${currencies[0]} on this selection). Select items whose signed sum stands at zero, or widen the tolerance group.`);
+      }
+      const chart = company!.chartOfAccounts ?? '';
+      const account = await determinationAccount(tx, input.client, chart, 'PAYMENT_DIFFERENCE', expense ? 'EXP' : 'REV');
+      if (!account) {
+        throw new GlClearingError(
+          `Account determination for PAYMENT_DIFFERENCE does not stand in chart ${chart}.`,
+          'Maintain the account determination for the payment difference event, then post again.',
+        );
+      }
+      differenceLine = { glAccount: account, debitCredit: expense ? 'S' : 'H', amount: Math.abs(difference) };
     }
 
     const position = await derivePosition(tx, input.client, company!.fiscalYearVariant!, input.postingDate);
@@ -332,11 +398,18 @@ export async function clearGlItems(input: {
       localCurrency: company!.currency,
       reference: input.glAccount,
       headerText: `G/L clearing ${input.glAccount}`,
-      lines: held.map((h) => ({
-        glAccount: input.glAccount,
-        debitCredit: h.signed > 0 ? 'H' as const : 'S' as const,
-        amount: Number(h.amount).toFixed(2),
-      })),
+      lines: [
+        ...held.map((h) => ({
+          glAccount: input.glAccount,
+          debitCredit: h.signed > 0 ? 'H' as const : 'S' as const,
+          amount: Number(h.amount).toFixed(2),
+        })),
+        ...(differenceLine ? [{
+          glAccount: differenceLine.glAccount,
+          debitCredit: differenceLine.debitCredit,
+          amount: differenceLine.amount.toFixed(2),
+        }] : []),
+      ],
       origin: { documentClass: CLEARING_CLASS, documentKey: `${input.companyCode}/${input.glAccount}` },
       postedBy: input.changedBy,
       transactionCode: GL_CLEARING_CAPABILITY,
@@ -361,6 +434,7 @@ export async function clearGlItems(input: {
       eq(journalEntryLine.client, input.client),
       eq(journalEntryLine.documentNumber, journal.documentNumber),
       eq(journalEntryLine.fiscalYear, journal.fiscalYear),
+      eq(journalEntryLine.glAccount, input.glAccount),
     ));
     await recordChange(tx, {
       client: input.client, objectClass: CLEARING_CLASS,
@@ -371,6 +445,10 @@ export async function clearGlItems(input: {
         clearingDate: input.clearingDate, requestKey: input.requestKey,
         documentType: input.documentType, glAccount: input.glAccount,
         companyCode: input.companyCode,
+        ...(differenceLine ? {
+          difference: differenceLine.amount.toFixed(2),
+          differenceAccount: differenceLine.glAccount,
+        } : {}),
       },
     });
 
