@@ -40,12 +40,12 @@ try {
     `);
     await tx.execute(sql`
       insert into movement_type (client, movement_type, description, direction, reference_category, account_assignment, created_by)
-      values (${client}, 'RESERVATION_ISSUE_CC', 'Issue to cost centre', 'ISSUE', 'RESERVATION', 'COST_CENTER', 'plan')
+      values (${client}, 'RESERV_ISSUE_CC', 'Issue to cost centre', 'ISSUE', 'RESERVATION', 'COST_CENTER', 'plan')
       on conflict do nothing
     `);
     await tx.execute(sql`
       insert into reservation_header (client, reservation_number, movement_type, base_date, cost_center, created_by)
-      select ${client}, 'RSV-' || lpad(g::text, 6, '0'), 'RESERVATION_ISSUE_CC',
+      select ${client}, 'RSV-' || lpad(g::text, 6, '0'), 'RESERV_ISSUE_CC',
              (date '2026-10-01' + (g % 120))::text, 'CC01', 'plan'
       from generate_series(1, 20000) g
     `);

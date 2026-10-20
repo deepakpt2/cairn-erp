@@ -2693,3 +2693,18 @@ shot over the resolved FSV with comparatives and explicit warnings; the report i
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
  seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+
+### §26.881 addendum — a label that shipped in the working tree but not in a commit
+
+**B-869 (correction).** The MD04 label for the new `RESERVATION` element
+(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
+movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
+but **were never staged**: the stage-4 commit listed directories, and
+`src/app/production` was not among them. The green suite and the passing browser
+runs read the working tree, so nothing was falsely reported as passing — but the
+pushed tree lacked the label, which would have shown a reservation as a
+safety-stock line for anyone who cloned it.
+
+Both files are committed now. Standing lesson: stage by path list that names every
+directory touched, not by the directories the change was *about*.
+
