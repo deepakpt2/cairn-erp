@@ -187,11 +187,12 @@ export async function glClearing(ctx: Context) {
       on conflict do nothing
     `);
   });
+  const residualDocs: string[] = [];
   for (const [key, debit, credit, amount] of [
     ['browser-gl-7', '400000', '101000', '500'],
     ['browser-gl-8', '101000', '400000', '200'],
   ] as const) {
-    await postGlDocument({
+    const doc = await postGlDocument({
       client, changedBy: 'browser.admin', requestKey: key, companyCode: '1000',
       documentDate: '2026-04-13', postingDate: '2026-04-13', documentType: 'SA', currency: 'KWD',
       lines: [
@@ -199,18 +200,20 @@ export async function glClearing(ctx: Context) {
         { glAccount: credit, debitCredit: 'H', amount },
       ],
     });
+    residualDocs.push(doc.documentNumber);
   }
   await page.goto(`${base}${ROUTE}?companyCode=1000&glAccount=400000`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  const resBoxes = page.locator('input[name="item"]');
-  assert.equal(await resBoxes.count(), 2);
-  await resBoxes.nth(0).check();
-  await resBoxes.nth(1).check();
+  // The short-settled 400 remainder from the partial leg still stands open, so
+  // select this leg's own two documents by their rows.
+  for (const doc of residualDocs) {
+    await page.locator('tr', { hasText: doc }).locator('input[name="item"]').check();
+  }
   await page.locator('select[name="method"]').selectOption('RESIDUAL');
   await page.locator('input[name="residualReasonCode"]').fill('R01');
-  const resSettlements = page.locator('input[name^="settlement:"]');
-  await resSettlements.nth(0).fill('200');
-  await resSettlements.nth(1).fill('200');
+  for (const doc of residualDocs) {
+    await page.locator('tr', { hasText: doc }).locator('input[name^="settlement:"]').fill('200');
+  }
   await page.locator('input[name="documentType"]').fill('AB');
   await page.locator('input[name="confirmed"]').check();
   await page.getByRole('button', { name: 'Post clearing' }).click();
