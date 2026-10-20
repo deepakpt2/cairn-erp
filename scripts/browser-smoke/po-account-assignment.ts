@@ -77,6 +77,40 @@ export async function poAccountAssignment(ctx: Context) {
       on conflict do nothing
     `);
     await tx.execute(sql`
+      insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
+        (${client}, 'GOODS_RECEIPT_PO', 'Goods receipt for purchase order', 'RECEIPT', 'PURCHASE_ORDER', 'browser.admin')
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into material_document (client, material_document_number, document_year, document_date, posting_date, header_text, status, created_by) values
+        (${client}, '5980000001', 2026, '2026-03-02', '2026-03-02', 'Receipt for order 1', 'POSTED', 'browser.admin')
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into material_document_line (
+        client, material_document_number, line_number, movement_type, material_number, plant, storage_location,
+        stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, currency, value,
+        purchase_order_number, purchase_order_item, created_by
+      ) values
+        (${client}, '5980000001', 1, 'GOODS_RECEIPT_PO', 'ME2K-MAT', 'QE01', null, 'UNRESTRICTED',
+         10, 'PC', 10, 'PC', 10, 1, 'KWD', 100, '4710000001', 10, 'browser.admin')
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into supplier_invoice (client, invoice_number, fiscal_year, category, supplier_number, company_code,
+                                    purchase_order_number, invoice_date, posting_date, supplier_reference, currency,
+                                    gross_amount, tax_amount, status, created_by) values
+        (${client}, '5120000001', 2026, 'INVOICE', 'V92000', '1000', '4710000001', '2026-03-05', '2026-03-05',
+         'REF-5120000001', 'KWD', 100, 0, 'POSTED', 'browser.admin')
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into supplier_invoice_item (client, invoice_number, line_number, purchase_order_number, purchase_order_item,
+                                         material_number, plant, quantity, unit, net_amount, expected_amount, created_by) values
+        (${client}, '5120000001', 1, '4710000001', 10, 'ME2K-MAT', 'QE01', 10, 'PC', 100, 100, 'browser.admin')
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
       insert into purchase_order_schedule_line (client, order_number, item_number, line_number, delivery_date, quantity, created_by) values
         (${client}, '4710000001', 10, 1, '2026-03-01', 10, 'browser.admin'),
         (${client}, '4710000002', 20, 1, '2026-04-01', 5, 'browser.admin')
@@ -91,11 +125,11 @@ export async function poAccountAssignment(ctx: Context) {
   await splitLine.waitFor();
   const cells = (await splitLine.locator('td').allInnerTexts()).map((text) => text.trim());
   // item, line, cost centre, G/L, material, description, plant, qty, unit, net value, %, assigned value
-  assert.equal(cells[9], '100.00', 'the item net value');
-  assert.equal(cells[10], '60.00', 'the distribution percentage');
-  assert.equal(cells[11], '60.00', `60% of 100 assigned to CC1000: ${cells.join(' | ')}`);
+  assert.equal(cells[10], '100.00', 'the item net value');
+  assert.equal(cells[11], '60.00', 'the distribution percentage');
+  assert.equal(cells[12], '60.00', `60% of 100 assigned to CC1000: ${cells.join(' | ')}`);
   const forty = page.locator('tr[data-order="4710000001"][data-cost-center="CC2000"]').first();
-  assert.equal((await forty.locator('td').allInnerTexts())[11].trim(), '40.00', '40% of 100 assigned to CC2000');
+  assert.equal((await forty.locator('td').allInnerTexts())[12].trim(), '40.00', '40% of 100 assigned to CC2000');
   console.log('  ✓ the split item distributes 60/40 across two cost centres and adds back to 100');
 
   const group1000 = page.locator('tr[data-group="CC1000"]').first();
