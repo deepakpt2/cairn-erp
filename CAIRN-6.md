@@ -2356,6 +2356,82 @@ writes one, and plant-level authorisation objects.
 **MB1A** (`INV.GI.POST`, Goods Issue) — the next two unimplemented Inventory rows in
 `CAIRN.md` §10.
 
+## §26.882 — SCR-135 / MB90: the output contract
+
+**B-870.** Owner package: **MB90 output determination and dispatch for material
+documents** — output type, medium, dispatch time, a selection over documents,
+plants and status, and a queue of records whose dispatch is logged with its
+success, its failure and its timestamps.
+
+**Two NAST-shaped tables, not the package's one.** `output_type` is the catalogue
+*and* the condition record — the output type, its description, the direction it
+applies to, the transmission medium and the dispatch time it defaults to.
+`output_message` is the queue and the log: the document and year it belongs to, the
+output type, the medium, the dispatch time, the status, the send count, the
+recipient, the printer queue, the last attempt and its reason. The package's single
+`material_document_output_log` folded the condition into the log, which means a
+rule could only be learned from a message that happened to exist.
+
+**The package's object key is refused.** It stores `MBLNR + MJAHR + ZEILE` in one
+`object_key` column. A concatenation cannot be foreign-keyed, cannot be indexed by
+year, and lets a record point at a document that does not exist. Canon stores
+**three columns** — document, year — with a foreign key to the material document
+header, and no item: SAP's output for MB90 is per document, not per line, and the
+package's own matrix says so.
+
+**The package's company code is refused again.** `tenantId` + `companyCode` with a
+foreign key to an `accountingHeader` table that canon does not have, on a header
+that carries **no company code** (§26.877). The tenant key is `client`; the company
+code is **derived from the plants** the document moved and shown, never stored, as
+MB03 does.
+
+**Named states, with SAP's digits as aliases.** One-character codes are refused as
+canon refuses them everywhere else: status is `PENDING` / `PROCESSED` / `ERROR`
+(SAP 0 / 1 / 2), medium is `PRINT` (1) and `EMAIL` (5), dispatch time is
+`IMMEDIATE` (1) and `PERIODIC` (3). **FAX (2) and EDI (6) are refused by name** — canon
+has neither a fax nor an EDI endpoint, and a message that could never leave is a
+lie in the audit trail.
+
+**Two output types are delivered:** **WE01**, the goods receipt slip, for documents
+whose lines receipt, and **WA01**, the goods issue slip, for documents whose lines
+issue. The capability keeps its frozen roadmap name `INV.MATERIALDOC.RECEIVEPRINT`
+even though the package's MB90 is both slips; the term reads "Material document
+output" and the route is `/inventory/material-document-output`.
+
+**Determination happens where a document is born** — goods receipt, transfer
+posting and material document reversal each ask for their outputs as they post, so
+an immediate output is dispatched inside the posting that caused it. A **run**
+determines what stands missing and dispatches what is pending, which is both the
+periodic path (VSZTP = 3 has no scheduler in canon) and the way documents posted
+before this capability existed acquire their slips — the walkthrough rule needs
+that, and asking an owner to re-post history to see a printout would be worse.
+
+**Printing is rendering, and it is recorded.** A dispatch renders the slip from the
+document as posted — document, year, dates, poster, every line with its material,
+description, plant, storage location, quantity with unit and value — and marks the
+message `PROCESSED`, increments the send count and stamps the time. It hands
+nothing to a printer or a mail server: **the spool and the transport are deferred by
+name**, because canon has no device or SMTP client and inventing one would be
+untested infrastructure.
+
+**Failure is real, not decorative.** An `EMAIL` message with no recipient fails at
+dispatch with a recorded reason and status `ERROR`; entering a recipient and
+dispatching again succeeds. That is the package's "re-trigger failed transmissions"
+and "modify recipient queues" in one mechanism. A `PRINT` message always renders.
+
+**Refused by name:** FAX and EDI media; re-dispatching a `PROCESSED` message (a
+repeat is a new output, deferred); and every posting-period instinct — MB90 never
+re-judges a period, because a document that stands passed its own checks when it
+posted, and this screen reads history.
+
+**Deferred by name:** the scheduler, condition technology beyond direction (access
+sequences, requirements), spool files and PDF attachments, and hand-off to a
+printer or mail server.
+
+**No writes to the ledger.** The only writes are the output queue's own rows.
+
+Same-stage bookkeeping: B-870 / §26.882 / §30 row 2.700.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2686,7 +2762,7 @@ writes one, and plant-level authorisation objects.
 | 2.697 | 2026-10-20 | **SCR-134 stage 3: display service (B-867, §26.879).** `INV.DISPLAY` reads one document — header with **poster and entry time**, lines with movement and material descriptions, direction, value, PO reference and reversal pair, **company code derived from the plants**; the year is a **cross-check**, the item a narrowing, the not-found message in the SAP shape. Catalogue **165/139/161**. **10/10 tests.** | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.698 | 2026-10-20 | **SCR-134 stage 4: the display screen re-gated and reworked (B-868, §26.880).** `/inventory/material-documents` carries **INV.DISPLAY**; lookup with required number, year cross-check and optional item; header names the **poster and entry time** and the **derived company codes**; the grid carries movement and material descriptions, direction, value, PO reference and reversal pair; the journal shows as text **with its reason**. **18/18** contract tests; harness **134 targets** (T834). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.699 | 2026-10-20 | **SCR-134 stage 5 and closure: T834 passes, MB03 delivered (B-869, §26.881).** Eight legs: open by number and year, poster named, **company code derived**, descriptions resolved, item narrowing, wrong year refused, wrong number refused in the SAP shape, wrong item refused naming the items it carries, and a **reversed closed-year document shown as posted**. **Suite 1851/1851 in 255 files**; `INV.DISPLAY` **Implemented**; catalogue 165/139/161; **migrations 196 (no index added)**. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
-2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
+| 2.700 | 2026-10-20 | **SCR-135 / MB90 stage 1: the output contract (B-870, §26.882).** Two NAST-shaped tables — `output_type` (catalogue **and** condition) and `output_message` (queue and log); the package\u2019s concatenated `object_key` **refused** for three foreign-keyed columns, its `accountingHeader` company code **refused** for a code derived from the plants; named states with SAP\u2019s digits as aliases (`PENDING`/`PROCESSED`/`ERROR`, `PRINT`/`EMAIL`, `IMMEDIATE`/`PERIODIC`), **FAX and EDI refused by name**; WE01 and WA01 delivered; determination at posting **and** a run that fills what stands missing; print renders and records, **spool and transport deferred**; an EMAIL with no recipient **fails for real** and is retried after a recipient is set. | Agent |\n2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
