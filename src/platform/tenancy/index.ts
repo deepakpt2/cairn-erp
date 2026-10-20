@@ -107,6 +107,7 @@ const STANDARD_RANGES: Array<{
   length: number;
 }> = [
   { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', length: 8 },
+  { objectCode: 'RESERV', subObject: '*', prefix: 'RSV', length: 8 },
   { objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', length: 7 },
   { objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', length: 7 },
   { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', length: 7 },

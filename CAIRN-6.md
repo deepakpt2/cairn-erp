@@ -2041,6 +2041,25 @@ Same-stage bookkeeping: B-859 / §26.871 / §30 row 2.689. **Next: MB21 first** 
 
 Same-stage bookkeeping: B-860 / §26.872 / §30 row 2.690. Stage 2 next: the two tables, the movement-catalogue widening and the index decision, measured.
 
+## §26.873 — SCR-133 stage 2: the reservation tables land (9071) and the demand read is indexed (9072)
+
+**B-861.** Migration **9071** creates `reservation_header` (RKPF shape) and `reservation_item` (RESB shape) in canon's standing form — `client` as the tenant key, audit columns, the item's primary key `(client, reservation_number, item_number)` and the header foreign key with `on delete cascade` — and teaches the movement catalogue two facts it never carried: the **`ISSUE`** direction and an **`account_assignment`** column (`NONE` / `COST_CENTER` / `ORDER`), with the reference-category check widened to admit `RESERVATION`. The number range **`RESERV`** (`RSV`, 8 digits) joins the tenant's standard operational ranges, inside the R-98 ten-character rule.
+
+**Migration 9072 — the second index in two rounds, taken on the same terms.** Measured on 20,000 reservations of three items over 3,000 materials and 4 plants (60,000 items):
+
+| read | standing | with the candidate |
+| --- | --- | --- |
+| one reservation's items (screen) | **0.044 ms** (`reservation_item_pk`) | 0.036 ms — unchanged, already the key |
+| **a material's open reservations by plant (MD04)** | **9.418 ms** — walked every header | **0.114 ms** |
+
+**Eighty-two times faster.** `ri_plant_material_idx (client, plant, material_number)` is taken. The screen needs nothing.
+
+**Migrations stand at 195.** Harness `scripts/plan-mb21.mts` committed with the measurement.
+
+**Two mistakes the harness caught, both mine, both before any test:** the `account_assignment` column was written into the constraint array instead of the column object (the transform refused to compile), and the harness's own seeding used a ten-character reservation number where the column is ten — `RSV-` plus eight digits is eleven, so the seeded length is six digits.
+
+Same-stage bookkeeping: B-861 / §26.873 / §30 row 2.691. Stage 3 next: the reservation service, the MD04 demand element, and the withdrawal hook, with their tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2362,6 +2381,7 @@ Same-stage bookkeeping: B-860 / §26.872 / §30 row 2.690. Stage 2 next: the two
 | 2.688 | 2026-10-20 | **SCR-132 stage 3: MBST engine (B-858, §26.870).** `INV.REVERSE` reverses any material document by mirroring each line inverted under the counter movement type; cancellation is computed from per-line coverage, so a document stands `PARTIALLY_REVERSED` until every line is covered. Two schema facts the tests found: the status column was ten characters wide (9069) and 0073\u2019s reversal-link check did not admit the partial state (9070). **Migrations 192.** Journal reversed, order open quantity restored by derivation, reason code refused by name. **9/9 tests.** Catalogue 163/137/159. | Agent |
 | 2.689 | 2026-10-20 | **SCR-132 closed (B-859, §26.871).** MBST delivered as `INV.REVERSE` at `/inventory/reversal`: any material document mirrored line by line under its counter movement type, whole document or whole lines, cancellation computed from per-line coverage (`PARTIALLY_REVERSED` between `POSTED` and `REVERSED`), journal and valuation returned, order open quantity restored by derivation, reason code refused by name. Migrations 9067-9070 (**193 stand**) including the measured `mdl_reversal_of_idx` (10.093 → 0.049 ms). Engine 9/9, UI 9/9, **T832 9 legs**, suite **1810/1810 / 251 files**, catalogue **163/137/159**. Build runs on turbopack inside the 2 GB box. Next T-codes: MB21, then MB03. | Agent |
 | 2.690 | 2026-10-20 | **SCR-133 stage 1: MB21 contract settled (B-860, §26.872).** `INV.RESERVATION.CREATE` at `/inventory/reservations`, the frozen-roadmap row at `CAIRN.md` §10 line 903. The package\u2019s RKPF/RESB shapes are **taken** — a reservation is genuine new state — with the plant on the item (SAP parity, and the package\u2019s own schema agrees), company code derived from the plant, and number range `RESERV`. The movement catalogue gains a fourth direction `ISSUE` and an **account-assignment category per movement type**; 201 (cost centre) is delivered end to end, **261 refuses by name** because no order master exists. A reservation posts nothing, so no posting period judges it — recorded. **MD04 gains a `RESERVATION` requirement element**, closing the deferral SCR-130 left; withdrawal tracking ships as a tested hook with the MB1A wiring deferred by name. | Agent |
+| 2.691 | 2026-10-20 | **SCR-133 stage 2: reservations schema (B-861, §26.873).** 9071 creates `reservation_header` / `reservation_item` and teaches the movement catalogue `ISSUE` plus an `account_assignment` column; number range `RESERV` added. 9072 takes `ri_plant_material_idx` on measurement — MD04\u2019s open-reservation read **9.418 → 0.114 ms** at 60,000 items; the screen read is the primary key (0.044 ms). **Migrations 195.** | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

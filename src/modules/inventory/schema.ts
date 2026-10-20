@@ -232,12 +232,15 @@ export const movementType = pgTable('movement_type', {
   direction: varchar('direction', { length: 10 }).notNull(),
   referenceCategory: varchar('reference_category', { length: 20 }).notNull(),
   reversalMovementType: varchar('reversal_movement_type', { length: 20 }),
+  /** What a withdrawal under this movement must be charged to — the T156 fact (SCR-133). */
+  accountAssignment: varchar('account_assignment', { length: 16 }).notNull().default('NONE'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.movementType] }),
-  /** A transfer is one movement type serving both of its lines (SCR-131). */
-  check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL', 'TRANSFER')`),
-  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT')`),
+  /** A transfer is a movement serving both of its lines (SCR-131); a reservation's future issue is an ISSUE (SCR-133). */
+  check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL', 'TRANSFER', 'ISSUE')`),
+  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION')`),
+  check('movement_type_account_assignment_ck', sql`${t.accountAssignment} in ('NONE', 'COST_CENTER', 'ORDER')`),
 ]);
 
 export const materialDocument = pgTable('material_document', {
@@ -303,4 +306,51 @@ export const stockQuantity = pgTable('stock_quantity', {
   // No table-level non-negative guard: negative stock is permitted where the storage
   // location configures it, and a row check cannot read that configuration (SCR-131).
   primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.storageLocation, t.stockType] }),
+]);
+
+/**
+ * Reservations — SCR-133 / MB21 (RKPF shape).
+ *
+ * A reservation is a demand nobody has posted: a planned withdrawal of a
+ * material from a plant on a required date. The header carries the movement
+ * type, the required date and the account assignment the movement type demands;
+ * the items carry the material, the plant and the quantities.
+ */
+export const reservationHeader = pgTable('reservation_header', {
+  client: tenant(),
+  reservationNumber: varchar('reservation_number', { length: 10 }).notNull(),
+  movementType: varchar('movement_type', { length: 20 }).notNull(),
+  baseDate: varchar('base_date', { length: 10 }).notNull(),
+  /** The cost centre the movement type charges, where it charges one. */
+  costCenter: varchar('cost_center', { length: 10 }),
+  controllingArea: varchar('controlling_area', { length: 4 }),
+  /** The order the movement type charges, where it charges one. */
+  orderNumber: varchar('order_number', { length: 12 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.reservationNumber] }),
+  foreignKey({ columns: [t.client, t.movementType], foreignColumns: [movementType.client, movementType.movementType] }).onDelete('restrict'),
+]);
+
+/** Reservation items — SCR-133 (RESB shape). The plant is the item's, as SAP's is. */
+export const reservationItem = pgTable('reservation_item', {
+  client: tenant(),
+  reservationNumber: varchar('reservation_number', { length: 10 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  requiredQuantity: quantity('required_quantity').notNull(),
+  withdrawnQuantity: quantity('withdrawn_quantity').notNull().default('0'),
+  unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
+  /** False blocks a withdrawal against this item, as the package's indicator does. */
+  movementAllowed: boolean('movement_allowed').notNull().default(true),
+  /** Set when the item is withdrawn in full or completed by hand. */
+  isCompleted: boolean('is_completed').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.reservationNumber, t.itemNumber] }),
+  foreignKey({ columns: [t.client, t.reservationNumber], foreignColumns: [reservationHeader.client, reservationHeader.reservationNumber] }).onDelete('cascade'),
+  check('reservation_item_quantity_ck', sql`${t.requiredQuantity} > 0 and ${t.withdrawnQuantity} >= 0`),
 ]);
