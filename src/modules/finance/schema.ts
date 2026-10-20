@@ -209,6 +209,8 @@ export const journalEntryLine = pgTable(
      */
     paymentTerms: varchar('payment_terms', { length: 12 }),
     baselineDate: date('baseline_date', { mode: 'string' }),
+    /** Trading partner company of an intercompany line (SCR-122): the other company of the pair. */
+    tradingPartnerCompany: varchar('trading_partner_company', { length: 10 }),
     /** Tax return stamp (SCR-097): the update run that reported this tax line, if any. */
     taxReturnRunId: varchar('tax_return_run_id', { length: 24 }),
     lineText: text('line_text'),
@@ -2429,4 +2431,50 @@ export const glClearingResidual = pgTable('gl_clearing_residual', {
     t.client, t.originalDocument, t.originalFiscalYear, t.originalLineNumber,
   ),
   check('gl_clearing_residual_amount_positive', sql`${t.generatedAmount} > 0`),
+]);
+
+
+/**
+ * Intercompany clearing configuration (SCR-122 / OBYA parity). One row per
+ * ordered company pair; the clearing accounts here override each company's
+ * standing OBYA clearing account, and the default currency settles the
+ * transaction currency when the operator names none.
+ */
+export const intercompanyClearingConfig = pgTable('intercompany_clearing_config', {
+  client: tenantClient(),
+  sendingCompanyCode: varchar('sending_company_code', { length: 10 }).notNull(),
+  receivingCompanyCode: varchar('receiving_company_code', { length: 10 }).notNull(),
+  sendingClearingGl: varchar('sending_clearing_gl', { length: 10 }),
+  receivingClearingGl: varchar('receiving_clearing_gl', { length: 10 }),
+  defaultCurrency: char('default_currency', { length: 3 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.sendingCompanyCode, t.receivingCompanyCode] }),
+  check('intercompany_clearing_config_distinct', sql`${t.sendingCompanyCode} <> ${t.receivingCompanyCode}`),
+]);
+
+/**
+ * Intercompany document pairing (SCR-122). Links the sending journal to the
+ * receiving journal posted in the same transaction; neither stands alone.
+ */
+export const intercompanyDocumentHeader = pgTable('intercompany_document_header', {
+  client: tenantClient(),
+  sendingCompanyCode: varchar('sending_company_code', { length: 10 }).notNull(),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  receivingCompanyCode: varchar('receiving_company_code', { length: 10 }).notNull(),
+  partnerDocumentNumber: varchar('partner_document_number', { length: 40 }).notNull(),
+  partnerFiscalYear: integer('partner_fiscal_year').notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  reference: varchar('reference', { length: 16 }),
+  status: varchar('status', { length: 12 }).notNull().default('POSTED'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.sendingCompanyCode, t.documentNumber, t.fiscalYear] }),
+  index('intercompany_document_header_partner_idx').on(
+    t.client, t.receivingCompanyCode, t.partnerDocumentNumber,
+  ),
+  check('intercompany_document_header_distinct', sql`${t.sendingCompanyCode} <> ${t.receivingCompanyCode}`),
 ]);
