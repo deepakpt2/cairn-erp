@@ -578,7 +578,13 @@ export async function clearGlItems(input: {
           amountLocal: round4(clearingLocal - h.appliedLocal),
         });
       }
-      lines.push({ glAccount: input.glAccount, debitCredit: direction, amount: clearingAmount, amountLocal: clearingLocal });
+      // Cross-currency clearing posts in the local currency, so the document-currency
+      // amount of each line is its local carrying value.
+      lines.push({
+        glAccount: input.glAccount, debitCredit: direction,
+        amount: documentCurrency === localCurrency ? clearingLocal : clearingAmount,
+        amountLocal: clearingLocal,
+      });
       offsetLineNumbers.set(h, lines.length);
     }
     if (method === 'RESIDUAL' && residualDrafts.length === 0) {

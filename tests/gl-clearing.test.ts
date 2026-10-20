@@ -12,6 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { postGlDocument } from '../src/modules/finance/gl-document';
+import { postJournalEntry } from '../src/platform/posting';
 import {
   clearGlItems, getGlClearing, GlClearingError,
   type GlClearingItemRef,
@@ -298,4 +299,94 @@ describe('SCR-114 advanced clearing B-808: residual clearing', () => {
       items: [{ documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1 }, { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2 }],
     }))).rejects.toThrow(/requires a residual reason code/);
   });
+});
+
+describe('SCR-114 advanced clearing B-808: multi-currency clearing', () => {
+  async function postForeign(currencyCode: string, rate: string, debit: string, credit: string, amount: string, key: string) {
+    void key;
+    return withTenant(client, async (tx) => postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'SA',
+      documentDate: '2026-04-25', postingDate: '2026-04-25',
+      fiscalYear: 2026, postingPeriod: 4,
+      currency: currencyCode, localCurrency: currency, exchangeRate: rate,
+      lines: [
+        { glAccount: debit, debitCredit: 'S', amount },
+        { glAccount: credit, debitCredit: 'H', amount },
+      ],
+      postedBy: ACTOR,
+    }));
+  }
+
+  it('clears across currencies at the clearing-date rates and posts the realized difference', async () => {
+    const chart = await withTenant(client, async (tx) => {
+      const [company] = await tx.execute(sql`
+        select chart_of_accounts as chart from company_code where client = ${client} and company_code = '1000'
+      `) as unknown as [{ chart: string }];
+      for (const [from, rate] of [['EUR', '0.30'], ['GBP', '0.30']] as const) {
+        await tx.execute(sql`
+          insert into exchange_rate (client, rate_type, from_currency, to_currency, valid_from, rate, created_by)
+          values (${client}, 'AVERAGE', ${from}, ${currency}, '2026-01-01', ${rate}, ${ACTOR})
+          on conflict do nothing
+        `);
+      }
+      for (const [event, account] of [['FXGAIN', '310000'], ['FXLOSS', '320000']] as const) {
+        await tx.execute(sql`
+          insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
+          values (${client}, ${company.chart}, ${event}, '', '', ${account}, ${ACTOR})
+          on conflict do nothing
+        `);
+      }
+      return company.chart;
+    });
+    void chart;
+
+    // Same foreign amount, differing historical carrying rates: 100 EUR at 0.30
+    // (30 local) against 100 GBP at 0.31 (31 local).
+    const usd = await postForeign('EUR', '0.30', '400000', '101000', '100', 'fx-eur');
+    const eur = await postForeign('GBP', '0.31', '101000', '400000', '100', 'fx-gbp');
+
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fx-no-flag',
+      items: [
+        { documentNumber: usd.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+        { documentNumber: eur.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+      ],
+    }))).rejects.toThrow(/one clearing settles one currency/);
+
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'fx-clear-1', crossCurrency: true,
+      items: [
+        { documentNumber: usd.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+        { documentNumber: eur.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+      ],
+    }));
+    expect(result.openItems.some((i) => i.documentNumber === usd.documentNumber)).toBe(false);
+    expect(result.openItems.some((i) => i.documentNumber === eur.documentNumber)).toBe(false);
+
+    const doc = await withTenant(client, async (tx) => tx.execute(sql`
+      select gl_account, debit_credit, amount_local::text as amount
+      from journal_entry_line
+      where client = ${client} and document_number = ${result.clearingDocumentNumber}
+      order by line_number
+    `)) as unknown as Array<{ gl_account: string; debit_credit: string; amount: string }>;
+    // Credits 30 (USD carrying) + 1 (gain); debits 31 (EUR carrying).
+    expect(doc).toHaveLength(3);
+    const gain = doc.find((l) => l.gl_account === '310000');
+    expect(gain?.debit_credit).toBe('H');
+    expect(Number(gain?.amount)).toBe(1);
+    const debit = doc.reduce((s, l) => s + (l.debit_credit === 'S' ? Number(l.amount) : 0), 0);
+    const credit = doc.reduce((s, l) => s + (l.debit_credit === 'H' ? Number(l.amount) : 0), 0);
+    expect(Math.abs(debit - credit)).toBeLessThan(0.005);
+
+    // A currency with no rate to the local currency refuses by name.
+    const jpy = await postForeign('JPY', '1', '400000', '101000', '100', 'fx-jpy');
+    const eur2 = await postForeign('EUR', '0.30', '101000', '400000', '100', 'fx-eur-2');
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'fx-missing-rate', crossCurrency: true,
+      items: [
+        { documentNumber: jpy.documentNumber, fiscalYear: 2026, lineNumber: 1 },
+        { documentNumber: eur2.documentNumber, fiscalYear: 2026, lineNumber: 2 },
+      ],
+    }))).rejects.toThrow(/No AVERAGE rate stands from JPY/);
+  }, 60_000);
 });
