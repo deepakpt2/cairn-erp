@@ -247,7 +247,7 @@ export const materialDocument = pgTable('material_document', {
   documentDate: varchar('document_date', { length: 10 }).notNull(),
   postingDate: varchar('posting_date', { length: 10 }).notNull(),
   headerText: varchar('header_text', { length: 25 }),
-  status: varchar('status', { length: 10 }).notNull().default('POSTED'),
+  status: varchar('status', { length: 20 }).notNull().default('POSTED'),
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
   reversalOf: varchar('reversal_of', { length: 20 }),
   reversedBy: varchar('reversed_by', { length: 20 }),

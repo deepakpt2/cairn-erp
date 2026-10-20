@@ -1958,6 +1958,28 @@ At 60,000 document lines with 5,000 reversal lines, the coverage read cost a sca
 
 Same-stage bookkeeping: B-857 / §26.869 / §30 row 2.687. Stage 3 next: the reversal engine and its tests.
 
+## §26.870 — SCR-132 stage 3: the general reversal engine, nine tests green
+
+**B-858.** `src/modules/inventory/material-document-reversal.ts` reverses any material document this canon posts — a goods receipt, a transfer, or anything a later round adds.
+
+**The mirror rule, in one sentence.** For every selected line the reversal writes a line of the same material, quantity, plant, storage location, stock type and value, with the **direction inverted** and under the original movement's **`reversal_movement_type`**; stock and valuation follow the inverted side, and a movement that names no counter refuses by name.
+
+**Cancellation is arithmetic, not a flag.** `material_document.status` is set from the per-line coverage the reversal leaves behind: `REVERSED` when every line is fully covered, `PARTIALLY_REVERSED` when some line still stands open. The coverage itself is read from the reversal lines' `reversal_of_line` — the indexed read stage 2 bought — never from the header. A line already fully reversed refuses with its own sentence, so a document cannot be cancelled twice through the same line.
+
+**Two schema facts the run discovered.** The status column was **ten characters wide** and `PARTIALLY_REVERSED` is eighteen (9069), and migration **0073** had tied the reversal link to a status of `POSTED` or `REVERSED` — a document that named its reverser could not also be partly reversed (9070). Both were caught by the tests, not by reading, which is the point of running them.
+
+**The journal, the order and the period.** A document with a journal has it reversed into the reversal's header through the standing journal reversal. The order's open quantity is **restored by derivation** — `receivedQuantities` signs a `REVERSAL` movement's lines negative, so the reversal line itself reopens the order the moment it exists; nothing is written onto the order. The posting date judges every company code the reversed lines touch against the material period.
+
+**Refusals by name.** An unknown document; a reversal of a reversal; a document already cancelled; a line already reversed; a wrong fiscal year (the number is unique per tenant — the year names the document, it does not select one); a **reversal reason code** (no reason table stands in canon; the remedy names the header text); a closed material period; a movement with no counter; and — the downstream case — **a receipt whose stock has gone**, refused with the quantity that stands unless the storage location permits a negative.
+
+**Catalogue.** `INV.REVERSE` (capability, action `REVERSE`, posting) and its term at `/inventory/reversal`, alias **MBST**. Catalogue now **163 capabilities / 137 terms / 159 aliases**.
+
+**Tests — 9/9** (`tests/material-document-reversal.test.ts`), one case each for: the goods receipt reversed (stock to zero, journal reversed, order back to `remaining 5`); a transfer reversed through the same engine; the partial reversal (line 2 only, `PARTIALLY_REVERSED`, line 2 refused again, line 1 completes to `REVERSED`); the double cancellation and the reversal of a reversal; the unknown document, the wrong year and the reason code; the closed period; the consumed-stock refusal beside the configured negative posting `−9.000`; the replayed request key; and the movement without a counter.
+
+**Migrations stand at 192.**
+
+Same-stage bookkeeping: B-858 / §26.870 / §30 row 2.688. Stage 4 next: the screen, its i18n, the UI contract and browser target **T832**.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2276,6 +2298,7 @@ Same-stage bookkeeping: B-857 / §26.869 / §30 row 2.687. Stage 3 next: the rev
 | 2.685 | 2026-10-20 | **SCR-131 closed (B-855, §26.867).** MB1B delivered as `INV.TRANSFER.POST` at `/inventory/transfer-posting`: a two-line material document for 311 / 301 / 321 with counter movement types 312 / 302 / 322, `allow_negative_stock` made operational (the table guard moved into the posting path), 311/321 valuation-neutral, 301 carrying value between plants and posting a price difference only at a standard-priced receiver (document type `WA`), cross-company / batch / special stock / multi-material / MBST deferred by name. Migration 9066 (line direction, TRANSFER direction, guard dropped); **189 migrations**; no index. Service 16/16, UI 9/9, **T831 9 legs**, suite **1791/1791 / 249 files**, catalogue **162/136/158**. Next T-codes: MBST, then MB21. | Agent |
 | 2.686 | 2026-10-20 | **SCR-132 stage 1: MBST contract settled (B-856, §26.868).** `INV.REVERSE` at `/inventory/reversal`, the frozen-roadmap row at `CAIRN.md` §10 line 897. The package state table is **declined** — cancellation (XSTBW) is the existing document status, and `reversal_of` / `reversed_by` already bind the pair. Partial reversal is **by whole line** (a line selection, never part of a line), so migration 9067 widens the status check to `PARTIALLY_REVERSED` and the duplicate guard reads the per-line reversed quantity. The engine inverts each line\u2019s direction and posts the counter movement type; stock and value follow the inverted sides; order open quantities are **restored by derivation**, not written back; the invoice dependency and the reason code are refused by name. | Agent |
 | 2.687 | 2026-10-20 | **SCR-132 stage 2: schema 9067 and 9068 (B-857, §26.869).** Status check widened to `PARTIALLY_REVERSED`; and the first index taken in three rounds — `mdl_reversal_of_idx (client, reversal_of_document)` — because the per-line reversed-quantity read cost a 10.093 ms sequential scan at 60,000 lines and answers in **0.049 ms** with it. Header and line reads stay primary keys (0.033 / 0.027 ms). **Migrations 191.** Harness `scripts/plan-mbst.mts`. | Agent |
+| 2.688 | 2026-10-20 | **SCR-132 stage 3: MBST engine (B-858, §26.870).** `INV.REVERSE` reverses any material document by mirroring each line inverted under the counter movement type; cancellation is computed from per-line coverage, so a document stands `PARTIALLY_REVERSED` until every line is covered. Two schema facts the tests found: the status column was ten characters wide (9069) and 0073\u2019s reversal-link check did not admit the partial state (9070). **Migrations 192.** Journal reversed, order open quantity restored by derivation, reason code refused by name. **9/9 tests.** Catalogue 163/137/159. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
