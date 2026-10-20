@@ -113,6 +113,7 @@ import { glClearing } from './gl-clearing';
 import { intercompany } from './intercompany';
 import { requisitionList } from './requisition-list';
 import { purchaseOrderList } from './purchase-order-list';
+import { materialDocumentList } from './material-document-list';
 import { consolidationWorkbench } from './consolidation-workbench';
 import { consolidationMonitor } from './consolidation-monitor';
 import { consolidatedStatements } from './consolidated-statements';
@@ -5039,6 +5040,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'intercompany': intercompany,
   'requisition-list': requisitionList,
   'purchase-order-list': purchaseOrderList,
+  'material-document-list': materialDocumentList,
   'consolidation-workbench': consolidationWorkbench,
   'consolidation-monitor': consolidationMonitor,
   'consolidated-statements': consolidatedStatements,
