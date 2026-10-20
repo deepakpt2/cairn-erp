@@ -22,7 +22,7 @@ const ROUTE = '/purchasing/purchase-order-list';
 export async function purchaseOrderList(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
-  console.log('SCR-123: list purchase orders, derive delivery and invoice status, drill to the order');
+  console.log('SCR-124: list purchase orders, derive delivery and invoice status, drill to the order');
 
   await withTenant(client, async (tx) => {
     await tx.execute(sql`
