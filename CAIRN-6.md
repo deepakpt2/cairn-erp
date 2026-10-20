@@ -2803,6 +2803,57 @@ here too — an issue slip appears in the output queue the moment the issue post
 deferred drill**: `FIN.JOURNAL.DISPLAY` (FB03), the one gap every posting screen now
 points at.
 
+## §26.892 — SCR-137 / FB03: the universal drill-down anchor
+
+**B-880.** Owner package: **FB03 Display Financial Accounting Document** — number,
+company code and fiscal year in; header, line items, account type and amounts out;
+read-only, immutable, the destination every posting screen jumps to.
+
+**The screen exists and is re-gated, not duplicated.** SCR-090 delivered
+`/finance/journal/document` as the accounting document display with its flow, under
+**`FIN.DOC.FLOW`**. The frozen roadmap gives **`FIN.JOURNAL.DISPLAY`** (FB03) its own
+row, and the two are not the same question: FB03 shows the document; the flow shows
+what surrounds it. So the display's **base** is re-gated on `FIN.JOURNAL.DISPLAY`
+and the **flow panel keeps `FIN.DOC.FLOW`** — a reader may hold the one without the
+other, exactly as SAP separates the document from its flow.
+
+**The company code is a cross-check, not a second key.** The package calls it
+required. Canon's document number is unique per tenant **and year** (`journal_entry`
+primary key `[client, documentNumber, fiscalYear]`), and the drills this round is
+supposed to anchor — MB03, the goods issue, the journal list — already carry the
+number, so demanding a company before the lookup would break the anchors to protect
+a second copy of a fact. Ruling: **the number and year identify; the company code,
+when given, must agree** and a disagreement refuses in SAP's own words —
+`Document … does not exist in company code …`. Omitting it resolves it, which is
+what the existing drills rely on.
+
+**KOART is derived, and derived honestly.** A line's account type is **S** (G/L)
+unless it carries a business partner — then **D** (vendor) or **K** (customer),
+judged by whether that partner stands in `supplier_company_code` or
+`customer_company_code` for the line's company code, both of which canon has. **A
+(asset) and M (material) are refused by name**: canon's journal line carries the
+material as an assignment and no asset number at all, so a type the data cannot
+support would be a label nobody could audit.
+
+**The anchor becomes real.** MB03 shows the journal number as text "because
+`FIN.JOURNAL.DISPLAY` is still Roadmap" (§26.877); the goods issue result names its
+journal; the journal list names its documents. All three now **link** here. That is
+the deferral closing, and it is the point of the round.
+
+**Navigation kept:** the reversal pair, the origin document, the clearing documents
+and the change history the display already carries. **Deferred by name:** the tax
+detail jump (a tax reporting capability owns it), and F4 search help, which canon has
+no framework for anywhere.
+
+**Refused by name:** company-code-level authorisation (canon authorises by capability
+and tenant, as MB03 refused plant-level objects), and **every posting-period check** —
+this display shows a document as posted, including one whose period has closed, and
+re-judging it would make the audit trail conditional on today's calendar.
+
+**No writes.** A display that wrote would not be a display.
+
+Same-stage bookkeeping: B-880 / §26.892 / §30 row 2.710.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3143,7 +3194,7 @@ points at.
 | 2.707 | 2026-10-20 | **SCR-136 stage 3: goods issue service (B-877, §26.889).** One transaction carries the journal, the material document, the stock, the valuation, the **reservation withdrawal** and the output. 201 and 551 with counters 202/552 in the catalogue so **MBST** reverses; **261 refused by name**; INVENTORY credited, CONSUMPTION (cost centre on the line) or SCRAP debited; stock judged on `allow_negative_stock`; **material and accounting periods judged**; batch refused. Catalogue **166/141/163**. **14/14 tests**, including MD04 demand falling 8\u21925 in the same posting and a failed post leaving stock untouched. | Agent |\n
 | 2.708 | 2026-10-20 | **SCR-136 stage 4: the goods issue screen (B-878, §26.890).** `/inventory/goods-issue` — movement with both dates and text, four lines with material, plant, location, quantity, **cost centre (disabled where the movement charges none)** and a reservation with its item; the result shows the document, journal, value and **what still stands open on the reservation**. **8/8 UI-contract tests**; harness **136 targets** (T836). | Agent |\n### §26.881 addendum — a label that shipped in the working tree but not in a commit
 | 2.709 | 2026-10-20 | **SCR-136 stage 5 and closure: T836 passes, MB1A delivered (B-879, §26.891).** Six legs: post a 201 of 10 (document, journal, value named), **stock 100\u219290 read back from the database**, a reservation for 8 demanded by **MD04**, an issue of 3 against it leaving **5.000 open**, **MD04 demanding the five that remain**. **Suite 1895/1895 in 259 files**; `INV.GI.POST` **Implemented**; catalogue 166/141/163; **migrations 198 (no table, no index — measured)**. | Agent |\n
-**B-869 (correction).** The MD04 label for the new `RESERVATION` element
+| 2.710 | 2026-10-20 | **SCR-137 / FB03 stage 1: the universal drill-down anchor (B-880, §26.892).** The SCR-090 display is **re-gated**: base on **`FIN.JOURNAL.DISPLAY`**, flow panel keeps **`FIN.DOC.FLOW`** — two questions, two capabilities. The package\u2019s required company code becomes a **cross-check** (the number and year identify; a disagreement refuses as `Document \u2026 does not exist in company code \u2026`) because the anchors must not be broken to duplicate a fact. **KOART derived**: S by default, D/K from `supplier_company_code` / `customer_company_code` where the line names a partner; **A and M refused by name** (no asset number, material is an assignment). The journal number on MB03, the goods issue and the list **become links** — §26.877\u2019s deferral closes. Tax-detail jump and F4 deferred; company-code authorisation and period checks refused. | Agent |\n**B-869 (correction).** The MD04 label for the new `RESERVATION` element
 (`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
