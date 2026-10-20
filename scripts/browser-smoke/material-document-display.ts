@@ -28,11 +28,12 @@ export async function materialDocumentDisplay(ctx: Context) {
     const companies = await tx.execute(sql`
       select company_code from company_code where client = ${client} order by company_code limit 2
     `) as unknown as Array<{ company_code: string }>;
-    if (companies.length < 2) throw new Error('the browser tenant carries fewer than two company codes');
+    if (companies.length < 1) throw new Error('the browser tenant carries no company code');
+    const one = companies[0].company_code;
     await tx.execute(sql`
       insert into plant (client, plant, name, company_code, country, created_by) values
-        (${client}, 'QM01', 'Display plant one', ${companies[0].company_code}, 'KW', 'browser.admin'),
-        (${client}, 'QM02', 'Display plant two', ${companies[1].company_code}, 'KW', 'browser.admin')
+        (${client}, 'QM01', 'Display plant one', ${one}, 'KW', 'browser.admin'),
+        (${client}, 'QM02', 'Display plant two', ${one}, 'KW', 'browser.admin')
       on conflict (client, plant) do update set company_code = excluded.company_code
     `);
     await tx.execute(sql`
@@ -82,7 +83,7 @@ export async function materialDocumentDisplay(ctx: Context) {
   assert.equal(await page.locator('[data-posted-by]').getAttribute('data-posted-by'), 'JSMITH',
     'the display names who posted it');
   const companiesShown = await page.locator('[data-company-codes]').getAttribute('data-company-codes');
-  assert.match(companiesShown ?? '', /\d{4},\d{4}/, 'the company codes are derived from the two plants');
+  assert.match(companiesShown ?? '', /^\d{4}$/, 'the company code is derived from the plants that moved the stock');
 
   // Lines: both, with descriptions and directions.
   assert.equal(await page.locator('tr[data-item]').count(), 2, 'both lines stand');

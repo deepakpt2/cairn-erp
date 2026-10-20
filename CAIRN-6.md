@@ -2314,6 +2314,48 @@ the browser-harness contract is green at **134 targets** (T834 registered agains
 Same-stage bookkeeping: B-868 / §26.880 / §30 row 2.698. Stage 5 next: build and
 run **T834**.
 
+## §26.881 — SCR-134 stage 5: T834 passes; MB03 is delivered
+
+**B-869.** Acceptance build (`npx next build --turbopack`, 47 s) and the production
+server carried **T834** through its legs against `cairn_b210:5432`:
+
+1. the document opens on **Display Material Document 4900000777** at fiscal year
+   2026;
+2. the header names the poster **JSMITH**, and the **company code is derived** from
+   the plants that moved the stock;
+3. both lines stand, and the material and movement **descriptions resolve** onto
+   them; the purchase order reference is shown; the issuing line carries
+   `ISSUE`;
+4. an item narrows the grid to one line;
+5. a year that disagrees refuses: `Material document 4900000777 does not exist in
+   fiscal year 2025`;
+6. a number that does not stand refuses in the SAP shape:
+   `Material document 4999999999 does not exist.`;
+7. an item the document does not carry refuses and names the items it does carry;
+8. a **reversed document in a closed year** still shows, status `REVERSED` — a
+   display applies no period check.
+
+The one fixture correction the run forced: the browser tenant carries a single
+company code, so the acceptance asserts the derived code rather than a pair of
+them. The suite test keeps the two-company case, where the fixture can build it.
+
+**Suite — 1851/1851 in 255 files** (was 1830/253: ten service tests, ten UI-contract
+tests, and the MB51 contract reworked).
+
+**Closed.** `INV.DISPLAY` is **Implemented** in `FUNCTIONS-AND-ROADMAP.md`;
+catalogue **165 / 139 / 161**; **migrations steady at 196** — no table and no index
+was added, because the primary keys already serve every read (§26.878). SCR-134 is
+delivered in five commits: `348a38f` · `3345297` · `7a7437a` · `8c7834c` · this
+closure.
+
+**Deferred by name:** F4 search help, the accounting-document drill until
+`FIN.JOURNAL.DISPLAY` is delivered, the reservation reference until a posting path
+writes one, and plant-level authorisation objects.
+
+**Next:** **MB90** (`INV.MATERIALDOC.RECEIVEPRINT`, Print Goods Receipt Note), then
+**MB1A** (`INV.GI.POST`, Goods Issue) — the next two unimplemented Inventory rows in
+`CAIRN.md` §10.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2643,7 +2685,7 @@ run **T834**.
 | 2.696 | 2026-10-20 | **SCR-134 stage 2: the package\u2019s index is refused, measured (B-866, §26.878).** 5,000 documents / 15,000 lines: every display read is already 0.02\u20130.04 ms on the primary keys; the year-leading candidate measured **0.055 ms against 0.020 ms**, i.e. 2.7\u00d7 slower on the very read it was proposed for. **No migration; migrations stay 196.** | Agent |
 | 2.697 | 2026-10-20 | **SCR-134 stage 3: display service (B-867, §26.879).** `INV.DISPLAY` reads one document — header with **poster and entry time**, lines with movement and material descriptions, direction, value, PO reference and reversal pair, **company code derived from the plants**; the year is a **cross-check**, the item a narrowing, the not-found message in the SAP shape. Catalogue **165/139/161**. **10/10 tests.** | Agent |\nshot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.698 | 2026-10-20 | **SCR-134 stage 4: the display screen re-gated and reworked (B-868, §26.880).** `/inventory/material-documents` carries **INV.DISPLAY**; lookup with required number, year cross-check and optional item; header names the **poster and entry time** and the **derived company codes**; the grid carries movement and material descriptions, direction, value, PO reference and reversal pair; the journal shows as text **with its reason**. **18/18** contract tests; harness **134 targets** (T834). | Agent |\n| 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
-| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
+| 2.699 | 2026-10-20 | **SCR-134 stage 5 and closure: T834 passes, MB03 delivered (B-869, §26.881).** Eight legs: open by number and year, poster named, **company code derived**, descriptions resolved, item narrowing, wrong year refused, wrong number refused in the SAP shape, wrong item refused naming the items it carries, and a **reversed closed-year document shown as posted**. **Suite 1851/1851 in 255 files**; `INV.DISPLAY` **Implemented**; catalogue 165/139/161; **migrations 196 (no index added)**. | Agent |\n| 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
 2.564 | 2026-10-19 | **SCR-112 stage 1 published (B-730, §26.746).** Actual/plan vocabulary and the cost-centre report shell stand. The plan schema follows in stage 2. | Agent |
 | 2.565 | 2026-10-19 | **SCR-112 stage 2 published (B-731, §26.747).** Migration 0117 (180 total): cost_center_plan stands; index contract pins plan and journal paths. The report service follows in stage 3. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
