@@ -294,3 +294,30 @@ export async function listProfitCenterLines(input: {
     };
   });
 }
+
+/**
+ * CSV of one executed selection (SCR-113 export): exactly the line
+ * window the screen shows for that selection, in the screen's fixed
+ * order. A truncated window opens with a `# TRUNCATED` comment so a
+ * partial file is never mistaken for the complete selection.
+ */
+export function profitCenterLinesCsv(result: ProfitCenterReportResult): string {
+  const esc = (v: string | number | null) => {
+    const s = v === null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = 'Company Code,Document Number,Display Number,Fiscal Year,Line,Posting Date,Document Date,Document Type,Ledger,Profit Center,Profit Center Name,G/L Account,Debit/Credit,Document Currency,Amount (Document),Local Currency,Amount (Local),Assignment,Reference,Line Text,Cost Center,Internal Order,Production Order,Business Partner,Material,Plant,Origin Class,Origin Key';
+  const lines = result.lines.map((l) => [
+    l.companyCode, l.documentNumber, l.displayNumber, l.fiscalYear, l.lineNumber,
+    l.postingDate, l.documentDate, l.documentType, l.ledger, l.profitCenter,
+    l.profitCenterName, l.glAccount, l.debitCredit, l.documentCurrency,
+    l.amountDocument.toFixed(4), l.localCurrency, l.amountLocal.toFixed(4),
+    l.assignment, l.reference, l.lineText, l.costCenter, l.internalOrder,
+    l.productionOrder, l.businessPartner, l.material, l.plant,
+    l.originClass, l.originKey,
+  ].map(esc).join(','));
+  const marker = result.truncated
+    ? [`# TRUNCATED at ${result.maxHits} hits - narrow the selection for the complete list`]
+    : [];
+  return [...marker, header, ...lines].join('\n') + '\n';
+}

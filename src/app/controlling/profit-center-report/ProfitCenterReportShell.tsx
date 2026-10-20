@@ -67,9 +67,17 @@ export default function ProfitCenterReportShell({ canUse, areas, selection, resu
             <input name="maxHits" type="number" min={1} required defaultValue={selection.maxHits} className="field-input code w-32" />
           </Field>
         </div>
-        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
-          Execute report
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
+            Execute report
+          </button>
+          <a
+            className="btn btn-default min-h-11 sm:min-h-8"
+            href={`/controlling/profit-center-report/export?controllingArea=${encodeURIComponent(selection.controllingArea)}&fiscalYear=${selection.fiscalYear}&periodFrom=${selection.periodFrom}&periodTo=${selection.periodTo}&ledger=${encodeURIComponent(selection.ledger)}&profitCenterFrom=${encodeURIComponent(selection.profitCenterFrom ?? '')}&profitCenterTo=${encodeURIComponent(selection.profitCenterTo ?? '')}&profitCenterGroup=${encodeURIComponent(selection.profitCenterGroup ?? '')}&glAccountFrom=${encodeURIComponent(selection.glAccountFrom ?? '')}&glAccountTo=${encodeURIComponent(selection.glAccountTo ?? '')}&documentFrom=${encodeURIComponent(selection.documentFrom ?? '')}&documentTo=${encodeURIComponent(selection.documentTo ?? '')}&maxHits=${selection.maxHits}`}
+          >
+            Export CSV
+          </a>
+        </div>
       </form>
 
       {reportError ? (
