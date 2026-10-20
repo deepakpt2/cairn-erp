@@ -1744,6 +1744,24 @@ Same-stage bookkeeping: B-848 / §26.860 / §30 row 2.678. **Next: MD04 first** 
 
 Same-stage bookkeeping: B-849 / §26.861 / §30 row 2.679. Stage 2 next: the index decision, measured.
 
+## §26.862 — SCR-130 stage 2: MD04 index decision is verification-only (migration 9070 not taken)
+
+**B-850.** The package recommends (client, plant, material, requirement_date) on a pegging table this round declined. Because the date lives on each source document instead, the decision was measured where the reads actually happen: the three queries MD04 issues for one material and one plant.
+
+**Method.** `scripts/plan-md04.mts` seeds 3,000 materials across 4 plants — 36,000 stock rows, 16,000 requisition items, 8,000 order items — gathers statistics, and times the stock read, the open-requisition read and the open-order read, with and without leading-key candidates on the two document tables.
+
+| read | standing indexes | plus leading-key candidates |
+| --- | --- | --- |
+| stock for one material and plant | 0.063 ms (`stock_quantity_pkey`) | 0.064 ms |
+| open requisitions | **0.039 ms** (`pr_item_material_plant_idx`, already shipped) | 0.038 ms (`md04_pr_cand`) |
+| open orders | 16.79 ms (`purchase_order_pkey` + item key) | 19.66 ms, candidate unused |
+
+**Decision — verification-only, no migration 9070.** The requisition read is **already** served by `pr_item_material_plant_idx` at a twentieth of a millisecond; the candidate matched it to within noise. The order read is driven by the document date and the candidate was never chosen — the arm even ran slower. Every read is bounded by a required material and plant, so no shape exists that a wider index could serve better. **Migrations stand at 188; 9070 stays unused.**
+
+**For the service.** Stage 3 reads the three sources exactly as measured — stock by key, requisitions by the shipped material/plant index, orders driven by the header — and folds the chronology in TypeScript.
+
+Same-stage bookkeeping: B-850 / §26.862 / §30 row 2.680. Stage 3 next: the `PROD.MRP.STOCKREQ` service and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2054,6 +2072,7 @@ Same-stage bookkeeping: B-849 / §26.861 / §30 row 2.679. Stage 2 next: the ind
 | 2.677 | 2026-10-20 | **SCR-129 stage 2 published (B-847, §26.859).** ME2K index decision measured at 12,000 assignment rows and **refused for harm**: the recommended cost-centre index was ignored in the narrow arms and, in the broad arm, **turned 45.62 ms into 1,934.41 ms** — a 42x regression from 12,000 nested header lookups. The service drives from the document date instead. **Verification-only, no migration 9069; migrations stand at 188.** Harness `scripts/plan-me2k.mts` committed. Service next. | Agent |
 | 2.678 | 2026-10-20 | **SCR-129 closed (B-848, §26.860).** ME2K delivered as `PROC.PO.ACCOUNTASSIGN` at `/purchasing/orders-by-account-assignment`: assignment lines with cost centre, G/L account, distribution percentage and the share of the item net value, rounded at the line and grouped by assigned object with cent-exact totals; required scope of list and scope of selection over the SCR-124 delivered/invoiced derivation; drills to the order and the cost-centre report; A/P/F categories refused by name. Index refused for harm (45.6 ms to 1934 ms), so no migration; 188 stand. Suite 1742/1742 / 245 files; T829 passed 7 legs; catalogue 160/134/156. Next T-codes: MD04, then MB1B. | Agent |
 | 2.679 | 2026-10-20 | **SCR-130 contract settled (B-849, §26.861).** MD04 = frozen-roadmap **`PROD.MRP.STOCKREQ`** at `/production/stock-requirements`, flipped at closure. **The package state table `mrp_stock_requirement_element` is declined**: a stored pegging list goes wrong the moment anything posts; the list is computed live. Elements: **stock (MRP-available types only, blocked excluded with a warning), open purchase requisitions net of conversions, open purchase orders net of deliveries, and safety stock as the opening requirement**. Planned/production orders, sales orders and reservations **deferred by name**; excess alerts **deferred by name**; MRP area, the special stock indicator and a simulation version **refused by name**. Receipts precede requirements on the same date; hidden past-due rows still move the balance; DAILY and WEEKLY splits both implemented; exceptions shortage / safety breach / past due. **PR-to-PO conversion deferred by name** — posting belongs to the capability that owns it. Material and plant both required. Index measured at stage 2. | Agent |
+| 2.680 | 2026-10-20 | **SCR-130 stage 2 published (B-850, §26.862).** MD04 index decision measured at 36,000 stock rows, 16,000 requisition items and 8,000 order items and declined: the requisition read is **already** served by the shipped `pr_item_material_plant_idx` (0.039 ms) and the candidate matched it within noise; the order read never chose the candidate and ran slower with it. Both ranges that bound the reads are required, so no shape needs a wider index. **Verification-only, no migration 9070; migrations stand at 188.** Harness `scripts/plan-md04.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
