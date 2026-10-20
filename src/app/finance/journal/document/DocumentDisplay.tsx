@@ -5,11 +5,13 @@ import type { JournalDocumentView } from '@/modules/finance/document-display';
 const inputCls = 'input w-full';
 const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint';
 
-export default function DocumentDisplay({ document, parkedNumber, notFound, canDisplay }: {
+export default function DocumentDisplay({ document, parkedNumber, notFound, mismatch, canDisplay, canFlow }: {
   document: JournalDocumentView | null;
   parkedNumber: string | null;
   notFound: boolean;
+  mismatch: string | null;
   canDisplay: boolean;
+  canFlow: boolean;
 }) {
   return (
     <>
@@ -23,7 +25,7 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
             </label>
             <label className="block">
               <span className={labelCls}>Company code</span>
-              <input name="company" className={inputCls} placeholder="1000" required />
+              <input name="company" className={inputCls} placeholder="1000" />
             </label>
             <label className="block">
               <span className={labelCls}>Fiscal year</span>
@@ -33,10 +35,17 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
           <button type="submit" className="btn btn-primary mt-3 min-h-11 sm:min-h-8" disabled={!canDisplay}>
             Display
           </button>
+          <p className="mt-2 text-sm text-ink-soft">
+            The number and the fiscal year identify the document; the company code, when
+            given, must agree with the one it was posted in.
+          </p>
           {!canDisplay && (
-            <p className="mt-2 text-sm text-ink-soft">You do not hold the document flow capability.</p>
+            <p className="mt-2 text-sm text-ink-soft">You do not hold the document display capability.</p>
           )}
         </form>
+        {mismatch && (
+          <p role="alert" data-company-mismatch className="mt-2 text-sm text-red-700">{mismatch}</p>
+        )}
         {notFound && (
           <p role="alert" className="mt-2 text-sm text-red-700">
             No posted document stands under this key within your scope.
@@ -81,7 +90,7 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
               <table className="min-w-full text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide text-ink-faint">
-                    <th className="px-2 py-2">Line</th><th className="px-2 py-2">Account</th>
+                    <th className="px-2 py-2">Line</th><th className="px-2 py-2">Acct type</th><th className="px-2 py-2">Account</th>
                     <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Document amount</th>
                     <th className="px-2 py-2">Currency</th><th className="px-2 py-2">Local amount</th>
                     <th className="px-2 py-2">Partner</th><th className="px-2 py-2">Cost centre</th>
@@ -91,8 +100,9 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
                 </thead>
                 <tbody>
                   {document.lines.map((line) => (
-                    <tr key={line.lineNumber} className="border-t border-line">
+                    <tr key={line.lineNumber} className="border-t border-line" data-account-type={line.accountType}>
                       <td className="px-2 py-2">{line.lineNumber}</td>
+                      <td className="px-2 py-2 code">{line.accountType}</td>
                       <td className="px-2 py-2">{line.glAccount}</td>
                       <td className="px-2 py-2">{line.debitCredit}</td>
                       <td className="px-2 py-2">{line.amountDocument.toFixed(2)}</td>
@@ -114,13 +124,20 @@ export default function DocumentDisplay({ document, parkedNumber, notFound, canD
               Totals in {document.documentCurrency}: debits {document.debitDocument.toFixed(2)},
               credits {document.creditDocument.toFixed(2)}. In {document.localCurrency}:
               debits {document.debitLocal.toFixed(2)}, credits {document.creditLocal.toFixed(2)}.
-              Stored amounts stand as posted; nothing is recalculated here.
+              Stored amounts stand as posted; nothing is recalculated here. Account type
+              is derived: S for a G/L line, D where the partner stands as a supplier in
+              this company, K where it stands as a customer.
             </p>
           </section>
 
           <section aria-labelledby="dd-flow" className="rounded-card border border-line bg-surface p-4 shadow-card">
             <h2 id="dd-flow" className="text-sm font-semibold">Document flow</h2>
-            {document.flow.length === 0 ? (
+            {!canFlow ? (
+              <p className="mt-2 text-sm text-ink-soft">
+                The flow around the document needs the document flow capability; this
+                display shows the document alone.
+              </p>
+            ) : document.flow.length === 0 ? (
               <p className="mt-2 text-sm text-ink-soft">No related documents stand linked.</p>
             ) : (
               <ul className="mt-2 space-y-1 text-sm">

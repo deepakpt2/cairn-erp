@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
@@ -111,7 +112,15 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             {state.document.movementCode} · {state.document.movementType} · {t('mb1a.company')} {state.document.companyCode}
-            {' · '}{t('mb1a.journal')} <span className="code">{state.document.journalDocumentNumber ?? '—'}</span>
+            {' · '}{t('mb1a.journal')}{' '}
+            {state.document.journalDocumentNumber ? (
+              <Link
+                className="code text-accent hover:underline"
+                href={`/finance/journal/document?document=${encodeURIComponent(state.document.journalDocumentNumber)}`}
+              >
+                {state.document.journalDocumentNumber}
+              </Link>
+            ) : '—'}
             {' · '}{t('mb1a.value')} {state.document.totalValue}
           </p>
           <table className="mt-2 w-full text-sm">

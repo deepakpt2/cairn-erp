@@ -169,9 +169,15 @@ export default async function MaterialDocumentPage({ searchParams }: {
             <p className="mt-3 text-xs text-ink-faint">
               {t('mdDoc.journal')}:{' '}
               {document.journalDocumentNumber
-                ? <span className="code">{document.journalDocumentNumber}</span>
+                ? (
+                  <Link
+                    className="code text-accent hover:underline"
+                    href={`/finance/journal/document?document=${encodeURIComponent(document.journalDocumentNumber)}`}
+                  >
+                    {document.journalDocumentNumber}
+                  </Link>
+                )
                 : t('mdDoc.noJournal')}
-              {' · '}{t('mdDoc.journalDeferred')}
             </p>
           </section>
 

@@ -73,10 +73,14 @@ describe('SCR-134 material document display UI contract', () => {
     expect(service).toContain('no period check');
   });
 
-  it('names the deferred drills rather than leaving a dead column', () => {
-    expect(messages).toContain("'mdDoc.journalDeferred'");
-    expect(messages).toContain("'mdDoc.reservationDeferred'");
+  it('drills to the accounting document and names only the drill still deferred', () => {
+    // SCR-137 delivered FIN.JOURNAL.DISPLAY: the journal number is a link now, and
+    // the "shown as text" note it used to carry is gone with the deferral.
+    expect(page).toContain('/finance/journal/document?document=');
+    expect(service).not.toContain('FIN.JOURNAL.DISPLAY` is still Roadmap');
     expect(service).toContain('FIN.JOURNAL.DISPLAY');
+    expect(messages).not.toContain("'mdDoc.journalDeferred'");
+    expect(messages).toContain("'mdDoc.reservationDeferred'");
   });
 
   it('registers INV.DISPLAY with its route and its alias', () => {

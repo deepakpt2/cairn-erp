@@ -16,10 +16,12 @@
  * Optional item number (ZEILE) narrows the grid to one line and marks it; a line
  * the document does not carry refuses by name.
  *
- * Deferred by name: F4 search help (no search-help framework exists), the
- * accounting-document drill (`FIN.JOURNAL.DISPLAY` is still Roadmap, so the journal
- * number is shown as text), and the reservation reference — no posting path writes
- * one yet (`INV.GI.POST` has no service; SCR-133 shipped withdrawals as a hook).
+ * The journal number is the drill: SCR-137 delivered `FIN.JOURNAL.DISPLAY`, so the
+ * number opens the accounting document display (§26.892) rather than standing as text.
+ *
+ * Deferred by name: F4 search help (no search-help framework exists) and the
+ * reservation reference — no posting path writes one yet (`INV.GI.POST` has no
+ * service; SCR-133 shipped withdrawals as a hook).
  *
  * Refused by name: plant- and storage-location-level authorisation objects. Canon
  * authorises by capability and tenant; a plant filter invented here would hide

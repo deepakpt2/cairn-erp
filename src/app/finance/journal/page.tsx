@@ -214,7 +214,7 @@ export default async function JournalPage({
                 <tr key={`${row.document_number}-${row.fiscal_year}`}>
                   <td>
                     <Link
-                      href={`/finance/journal?document=${encodeURIComponent(row.document_number)}`}
+                      href={`/finance/journal/document?document=${encodeURIComponent(row.document_number)}&company=${encodeURIComponent(row.company_code)}&year=${row.fiscal_year}`}
                       className="code text-accent hover:underline"
                     >
                       {row.display_number || row.document_number}

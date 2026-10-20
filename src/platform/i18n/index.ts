@@ -2634,7 +2634,6 @@ const en: Catalogue = {
   'mdDoc.postedBy': 'Posted by',
   'mdDoc.enteredAt': 'Entered',
   'mdDoc.companyCode': 'Company code',
-  'mdDoc.journalDeferred': 'the accounting document display (FB03) is not yet delivered, so the journal number is shown as text',
   'mdDoc.itemNarrowed': 'narrowed to item',
   'mdDoc.openInList': 'Open the list on this posting date',
   'mdDoc.columnItem': 'Item',

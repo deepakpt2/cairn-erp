@@ -2914,6 +2914,46 @@ files and their import graph types clean in 11 s and is what carried the stage; 
 program is recorded as **not run**, not as passed. Same-stage bookkeeping: B-882 / §26.894 /
 §30 row 2.712.
 
+## §26.895 — SCR-137 stage 4: the screen splits its two capabilities, and the anchors become real
+
+**B-883.** The display's base gates on **`FIN.JOURNAL.DISPLAY`**; the flow panel keeps
+**`FIN.DOC.FLOW`** and says so plainly when the reader holds only the first — "the flow
+around the document needs the document flow capability; this display shows the document
+alone". One screen, two questions, and a reader may hold either alone.
+
+**The lookup form reads like the rule it follows.** Document number and fiscal year stay
+required; the **company code no longer is**, and the form says why: *the number and the
+fiscal year identify the document; the company code, when given, must agree with the one
+it was posted in.* A disagreement renders beside the other refusals with
+`data-company-mismatch` and SAP's sentence — `Document … does not exist in company code …`
+— never a silent "not found".
+
+**KOART is a column, not a footnote.** Every line row carries `data-account-type` and the
+grid shows the type beside the line number, so an S, a D and a K in one document can be
+read at a glance and asserted from a browser.
+
+**The anchor is the point of the round, and it is closed.** Three screens that showed a
+journal number as dead text now link here:
+
+- the **journal list** (`/finance/journal`) — with the complete key it already carries
+  (`document`, `company`, `year`), so the cross-check cannot disagree with the row;
+- **MB03** — the number it deferred in §26.877, linking by number alone and letting the
+  display resolve the company and year, exactly as the contract made possible;
+- the **goods issue result** (MB1A) — the journal the posting wrote.
+
+The mirror-image note `mdDoc.journalDeferred` ("the accounting document display (FB03) is
+not yet delivered, so the journal number is shown as text") is **deleted**: a deferred
+sentence that outlives its deferral is a lie the next reader has to disprove. Its MB03
+contract test now asserts the link and the reservation deferral that remains.
+
+**Target T837** (`journal-document-display`, `cairn_b210:5432`) joins the harness — 137
+targets — with an eight-leg run: number and year with no company given, S/D/K from one
+document, a company that disagrees refused in SAP's words with no header rendered,
+the flow panel beside the document, the ledger unchanged after every visit, and all
+three anchors followed click-by-click to the same display.
+
+Same-stage bookkeeping: B-883 / §26.895 / §30 row 2.713.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3257,6 +3297,7 @@ program is recorded as **not run**, not as passed. Same-stage bookkeeping: B-882
 | 2.710 | 2026-10-20 | **SCR-137 / FB03 stage 1: the universal drill-down anchor (B-880, §26.892).** The SCR-090 display is **re-gated**: base on **`FIN.JOURNAL.DISPLAY`**, flow panel keeps **`FIN.DOC.FLOW`** — two questions, two capabilities. The package\u2019s required company code becomes a **cross-check** (the number and year identify; a disagreement refuses as `Document \u2026 does not exist in company code \u2026`) because the anchors must not be broken to duplicate a fact. **KOART derived**: S by default, D/K from `supplier_company_code` / `customer_company_code` where the line names a partner; **A and M refused by name** (no asset number, material is an assignment). The journal number on MB03, the goods issue and the list **become links** — §26.877\u2019s deferral closes. Tax-detail jump and F4 deferred; company-code authorisation and period checks refused. | Agent |\n**B-869 (correction).** The MD04 label for the new `RESERVATION` element
 | 2.711 | 2026-10-20 | **SCR-137 stage 2: the package\u2019s index refused, measured (B-881, §26.893).** Over 40,000 documents / 160,000 lines the three reads stand at **0.032\u20130.037 ms on the primary keys**; the company-leading candidate left two unchanged and made the company-checked read **0.033 \u2192 0.052 ms**. **No migration; migrations stay 198.** | Agent |\n(`md04.reservationElement` and its use in `StockRequirementsShell`) and the two
 | 2.712 | 2026-10-20 | **SCR-137 stage 3: the display refuses the wrong company and derives KOART (B-882, §26.894).** `DocumentLookup` grows **`COMPANY_MISMATCH`** — the header is found by number and year, and a disagreeing company is refused in SAP's words instead of collapsing into "not found"; every line carries **`accountType`** (`S` default, `D` for a supplier of the company, `K` for a customer) derived from two equality reads against the role masters, never stored. No writes, no period check. **Tests 8/8 new, 3/3 reworked**; the whole-program `tsc` gate **could not run** in this container (heap exhaustion) and a scoped `tsc -p` over the touched graph is clean. | Agent |
+| 2.713 | 2026-10-20 | **SCR-137 stage 4: the display splits its capabilities and the anchors become real (B-883, §26.895).** Base gated on **`FIN.JOURNAL.DISPLAY`**, flow panel kept on **`FIN.DOC.FLOW`**; the company code is an optional cross-check; **`data-account-type`** on every line; the journal list, **MB03** and the **goods issue result** now link here, and the stale `mdDoc.journalDeferred` note is deleted. **Harness 137 targets** (T837). Tests: UI contract 7 new, MB03 contract reworked, 202 green across the touched files. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
 import {
-  DOCUMENT_FLOW_CAPABILITY, DocumentDisplayError, getJournalDocument,
-  resolveDocumentNumber, type JournalDocumentView,
+  DOCUMENT_FLOW_CAPABILITY, DocumentDisplayError, FIN_JOURNAL_DISPLAY_CAPABILITY,
+  getJournalDocument, resolveDocumentNumber, type JournalDocumentView,
 } from '@/modules/finance/document-display';
 import DocumentDisplay from './DocumentDisplay';
 
@@ -21,10 +21,14 @@ export default async function JournalDocumentPage({ searchParams }: {
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
-  const canDisplay = can(session, DOCUMENT_FLOW_CAPABILITY);
+  // FB03 shows the document (FIN.JOURNAL.DISPLAY); the flow around it is a second
+  // question with a second capability (FIN.DOC.FLOW) — a reader may hold one alone.
+  const canDisplay = can(session, FIN_JOURNAL_DISPLAY_CAPABILITY);
+  const canFlow = can(session, DOCUMENT_FLOW_CAPABILITY);
   let document: JournalDocumentView | null = null;
   let parkedNumber: string | null = null;
   let notFound = false;
+  let mismatch: string | null = null;
   let error: string | null = null;
   if (params.document && canDisplay) {
     try {
@@ -43,7 +47,10 @@ export default async function JournalDocumentPage({ searchParams }: {
         });
         if (lookup.kind === 'FOUND') document = lookup.document;
         else if (lookup.kind === 'PARKED') parkedNumber = lookup.parkedNumber;
-        else notFound = true;
+        else if (lookup.kind === 'COMPANY_MISMATCH') {
+          // SAP's own refusal: the document stands, in another company.
+          mismatch = `Document ${lookup.documentNumber} does not exist in company code ${company}.`;
+        } else notFound = true;
       } else {
         notFound = true;
       }
@@ -55,7 +62,7 @@ export default async function JournalDocumentPage({ searchParams }: {
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
-        <span className="code text-ink-faint">FIN.DOC.FLOW · FB03</span>
+        <span className="code text-ink-faint">FIN.JOURNAL.DISPLAY · FB03</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('documentDisplay.title')}</h1>
           <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
@@ -72,7 +79,9 @@ export default async function JournalDocumentPage({ searchParams }: {
         document={document}
         parkedNumber={parkedNumber}
         notFound={notFound}
+        mismatch={mismatch}
         canDisplay={canDisplay}
+        canFlow={canFlow}
       />
     </div>
   );

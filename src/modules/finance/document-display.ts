@@ -1,5 +1,5 @@
 /**
- * Accounting document display with flow — SCR-090 / R-138.
+ * Accounting document display — SCR-090 / R-138, re-gated and extended by SCR-137.
  *
  * A faithful, read-only window into the canonical posted
  * document: retrieved by its complete supplied key (number,
@@ -9,9 +9,13 @@
  * to the reversal chain, clearing documents and origin. Parked
  * documents are a distinct lifecycle and are answered as such,
  * never conflated with the ledger. Reading mutates nothing and
- * checks no posting period.
+ * applies no period check.
  *
- * Stage 1 carries the vocabulary only; retrieval lands in stage 3.
+ * SCR-137 adds the second question the roadmap always carried: the display's base
+ * is `FIN.JOURNAL.DISPLAY` (FB03), the flow around it stays `FIN.DOC.FLOW`. The
+ * company code is a cross-check on a document the number and year already identify,
+ * and each line carries its derived account type (S, D or K) — never stored, never
+ * guessed, and never A or M, which this data cannot support.
  */
 export const DOCUMENT_FLOW_CAPABILITY = 'FIN.DOC.FLOW';
 /** SCR-137: the document itself is FB03's capability; the flow around it is FIN.DOC.FLOW. */
@@ -36,7 +40,7 @@ export interface DocumentKeyInput {
 export interface DocumentLineView {
   lineNumber: number;
   /** KOART, derived: S = G/L, D = vendor, K = customer. A and M are refused by name. */
-  accountType: 'S' | 'D' | 'K';
+  accountType: AccountType;
   glAccount: string;
   debitCredit: 'S' | 'H';
   amountDocument: number;
@@ -97,6 +101,9 @@ export interface JournalDocumentView {
   flow: DocumentFlowLink[];
   history: DocumentHistoryEntry[];
 }
+
+/** SAP's KOART, derived: S for a G/L line, D for a vendor, K for a customer. */
+export type AccountType = 'S' | 'D' | 'K';
 
 export type DocumentLookup =
   | { kind: 'FOUND'; document: JournalDocumentView }
@@ -180,7 +187,7 @@ export async function getJournalDocument(
         ));
       for (const r of customerRows) customers.add(r.partnerNumber);
     }
-    const accountTypeOf = (l: { businessPartner: string | null }): 'S' | 'D' | 'K' => {
+    const accountTypeOf = (l: { businessPartner: string | null }): AccountType => {
       if (!l.businessPartner) return 'S';
       if (vendors.has(l.businessPartner)) return 'D';
       if (customers.has(l.businessPartner)) return 'K';
