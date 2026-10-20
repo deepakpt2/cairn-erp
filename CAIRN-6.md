@@ -3484,6 +3484,98 @@ refused an index for the issue (§26.903).
 
 Same-stage bookkeeping: B-896 / §26.908 / §30 row 2.726.
 
+## §26.909 — SCR-140 stage 3: the receipt service — the good comes back at its own price
+
+**B-897.** `postProductionReceipt` is the opposite of 261 and deliberately not its mirror image.
+The issue takes a component out of stock and charges it to consumption; the receipt puts the
+**finished good** into stock and credits **production output**, and the two never share an
+account — the service refuses when they resolve to the same one, because a receipt that debits
+and credits the same account says nothing.
+
+**The value is the material's own price in the plant.** `STANDARD` divides the standard price
+by its price unit; `MOVING_AVERAGE` the moving average. No cost estimate is consulted, because
+canon has none, and inventing one here would make the ledger disagree with every other
+valuation of the same material. A good worth forty is received at forty whether the order
+consumed ten of raw material or a hundred.
+
+**The order is judged before anything is written, and in this order:** it exists; it stands
+`RELEASED`; its material is the material being received; the plant carries a company code; the
+quantity is within what the order **still expects** — the order quantity less every
+`PROD_RECEIPT_ORDER` line already posted against it, derived from the documents and never from
+a counter. The storage location must stand in the order's plant and be active, the valuation
+class must exist, and both the material and the accounting periods must be open.
+
+**The order row is never written.** `receivedQuantityFor` reads the documents; a test checks
+that `production_order` carries no `%received%` column at all, so no future round can quietly
+start maintaining a total that the ledger could contradict.
+
+One bound came out of the build rather than the design: `movement_type.reversal_movement_type`
+is `varchar(20)`, and `PROD_RECEIPT_ORDER_REV` is twenty-two characters. The reversal is
+therefore **`PROD_RECEIPT_ORD_REV`** — twenty, the same shape as the issue's
+`PROD_ISSUE_ORDER_REV` — and no migration is needed for a name.
+
+**9/9 tests** in `tests/production-receipt.test.ts`: the value at the price, the stock and
+valuation rising together, inventory debited and production output credited with the
+consumption account asserted absent, the over-receipt refusal quoting `still expects 3.000 PC`,
+an unreleased order, a missing order, a location of another plant, an empty receipt, the
+derived received quantity with no column behind it, replay by `requestKey`, and the same-account
+refusal.
+
+Same-stage bookkeeping: B-897 / §26.909 / §30 row 2.727.
+
+## §26.910 — SCR-140 stage 4: the cell posts, and the screen grows a second form
+
+**B-898.** `A01 + R08` stops being a refusal and becomes `POST_HERE 101`. The matrix law from
+§26.905 does not change: it still returns **twenty cells**, and now **exactly two** of them post
+— `A07 + R08` (261) and `A01 + R08` (101). The contract test that asserted *exactly one*
+`POST_HERE` was the thing keeping the screen honest, so it was reworked rather than deleted:
+two cells, named in order, each with its movement.
+
+The screen carries **two forms, one per posting cell**, and only one renders at a time. The
+receipt form asks what a receipt needs and nothing more — order, posting date, document date,
+header text, storage location, quantity — where the issue form carries the four-line component
+grid. Sharing one form would have meant fields that are dead in one cell and required in the
+other, which is how a screen starts lying about what it needs.
+
+`postReceiptAction` **re-resolves the cell on the server** and refuses anything that is not
+`POST_HERE 101`, so a tampered form cannot reach the receipt service from another cell. The
+result panel names the material document, links **MB03** and **FB03**, and states the order's
+receipt position: `received / ordered` and **what it still expects** (`data-order-open`), the
+same reading the issue panel gives from the other side.
+
+**11/11 matrix contract tests.** Production build green in 50 s.
+
+Same-stage bookkeeping: B-898 / §26.910 / §30 row 2.728.
+
+## §26.911 — SCR-140 stage 5 and closure: T840 passes, MIGO receives the order's output
+
+**B-899.** T840 (`migo-production-receipt`, `cairn_b210:5432`, fixture `T840`) runs on the
+production build and proves the whole path:
+
+1. an order for ten released through the service, and the cell `A01 + R08` reading
+   **POST_HERE · 101** — the cell that refused in SCR-139;
+2. **four received**: the result states `received 4.000` and **still expects 6.000**;
+3. the database read back independently — stock **4**, `stock_value` **160** (four × the
+   standard price of forty, not a cost), `line_direction` **RECEIPT**, the order on the
+   document line, debit **121960 (finished goods inventory)**, credit **590960 (production
+   output)** — and the consumption account **510960 absent**;
+4. **seven entered against six expected** refused with `still expects 6.000 PC of MGR-FG`
+   and the over-tolerance remedy;
+5. **six more**: the order stands at `10.000` received and **expects 0.000**.
+
+T839 was amended the same round: its refusal leg pointed at `A01 + R08`, which now posts, so it
+asserts the cell posts 101 and takes its refusal example from `A02` (return delivery). Both
+targets pass — a closure that left the earlier target asserting the opposite of the screen
+would be a green suite describing a system that no longer exists.
+
+**Harness 140 targets** (T840 registered, guarded to `cairn_b210:5432`); **migrations 200**
+(no table, no index — measured, §26.908); `PRODUCTION_OUTPUT` joins the maintainable event
+vocabulary. **Suite 1961/1961 in 266 files** — run after the sandbox was restored and the
+working tree reconciled to `origin/main`, so the number covers the tree that carries this
+closure rather than a claim made ahead of the run.
+
+Same-stage bookkeeping: B-899 / §26.911 / §30 row 2.729.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -3841,6 +3933,9 @@ Same-stage bookkeeping: B-896 / §26.908 / §30 row 2.726.
 | 2.724 | 2026-10-20 | **SCR-139 stage 5 and closure: T839 passes, MIGO delivers 261 (B-894, §26.906).** Six legs: a released order, **A07 + R08 posting ten components**, the result naming **what the order still requires**, the database read back (**stock 100 \u2192 90**, the order on the document line **and the journal line**, the debit on **production consumption**), a **delivered cell linking away**, a **refused cell naming its capability**, and an **over-issue refused with the number in the sentence**. **Suite 1950/1950 in 265 files**; harness **139 targets**; **migrations 200**; `INV.MIGO.POST` registered. | Agent |
 | 2.725 | 2026-10-20 | **SCR-140 / MIGO 101 contracted — the cell that refused stops refusing (B-895, §26.907).** `A01 + R08` becomes **`PROD.ORDER.GR`**: the finished good received against the order that made it. Value at **the material\u2019s own price in the plant** — canon has no cost estimate, and the receipt says what the good is worth, not what it cost to make. The receipt credits a **new `PRODUCTION_OUTPUT`** event, never the consumption account, so the two flows cannot net silently. Judged in order: **released order, its own material, its own plant**, active location, and quantity within **what the order still expects** (derived from the lines). **102 in the catalogue** so MBST reverses it. **No DDL** — stage 2 records why. | Agent |
 | 2.726 | 2026-10-20 | **SCR-140 stage 2: no migration, each reason checked (B-896, §26.908).** The order columns already stand (9077), `account_determination.event` is shape-constrained rather than enumerated — **checked against the live constraint** — so `PRODUCTION_OUTPUT` is a row, and 101/102 are catalogue data. **Migrations stay 200**; no index, for the reason the issue refused one. | Agent |
+| 2.727 | 2026-10-20 | **SCR-140 stage 3: the receipt service (B-897, §26.909).** `postProductionReceipt` values the finished good at **the material's own price in the plant** and never a cost estimate, rises stock and valuation in one transaction, debits **INVENTORY** and credits the new **`PRODUCTION_OUTPUT`** event, refuses when the two resolve alike, and judges **released order \u2192 its own material and plant \u2192 active location \u2192 quantity within what the order still expects** before it writes. The order row is never written; received quantity is derived from the documents. The catalogue's 20-character bound renamed the reversal **`PROD_RECEIPT_ORD_REV`**. **9/9 tests.** | Agent |
+| 2.728 | 2026-10-20 | **SCR-140 stage 4: the cell posts (B-898, §26.910).** `A01 + R08` becomes **`POST_HERE 101`**, so the matrix keeps its **twenty cells** and carries **exactly two** that post. The screen grows a **second form** — order, both dates, header text, location, quantity — instead of overloading the issue grid with fields dead in one cell and required in the other; `postReceiptAction` re-resolves the cell server-side. Result panel names the document, links **MB03** and **FB03**, and reads **received / ordered / still expected**. **11/11 matrix contract tests**; production build green. | Agent |
+| 2.729 | 2026-10-20 | **SCR-140 stage 5: T840 passes, MIGO receives the order's output (B-899, §26.911).** Five legs on the production build: the cell reads **POST_HERE \u00b7 101**, four received at **160 for four units of forty**, the database read back (**stock 4**, `stock_value` 160, **RECEIPT**, order on the line, debit **121960**, credit **590960**, consumption **510960 absent**), **seven against six expected refused with the number in the sentence**, and six more leaving the order **expecting 0.000**. **T839 amended** — its refusal leg pointed at the cell that now posts — and passes. **Harness 140 targets**; migrations 200; **suite 1961/1961 in 266 files**. | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

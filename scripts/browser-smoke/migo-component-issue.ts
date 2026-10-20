@@ -179,12 +179,18 @@ export async function migoComponentIssue(ctx: Context) {
     'and links to it',
   );
 
-  // A refused cell names what would deliver it.
+  // The order's finished good coming back posts here since SCR-140, as its own movement.
   await page.selectOption('select[name="migoAction"]', 'A01');
   await page.selectOption('select[name="migoReference"]', 'R08');
+  const receipt = page.locator('[data-cell="POST_HERE"]');
+  await receipt.waitFor();
+  assert.match(await receipt.innerText(), /101/, 'A01 + R08 posts movement 101 from this screen');
+
+  // A refused cell still names what would deliver it.
+  await page.selectOption('select[name="migoAction"]', 'A02');
   const refused = page.locator('[data-cell="REFUSED"]');
   await refused.waitFor();
-  assert.match(await refused.innerText(), /PROD\.ORDER\.GR/, 'the order receipt names the capability it waits on');
+  assert.match(await refused.innerText(), /return/i, 'the return delivery refuses by name');
 
   // An over-issue is refused with the number in the sentence. A fresh load gives the form a
   // fresh request key: the same key would replay the document already posted, which is the
