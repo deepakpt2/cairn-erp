@@ -2111,6 +2111,43 @@ contract suite stays green with **133 targets** (T833 registered against
 Same-stage bookkeeping: B-863 / §26.875 / §30 row 2.693. Stage 5 next: build and
 run **T833**.
 
+## §26.876 — SCR-133 stage 5: T833 passes; MB21 is delivered
+
+**B-864.** The acceptance build (`npx next build --turbopack`, 55 s) and the
+production server carried **T833** through its legs against `cairn_b210:5432`:
+
+1. the screen opens on **Create Reservation**;
+2. a 201 reservation for 25 at 2026-11-20, charged to `CC9001`, is created and the
+   status reads `Reservation RSV-00000001 created with 1 item.`;
+3. the loaded document shows item 10 open at **25.000**;
+4. MD04 shows a **RESERVATION** row dated **2026-11-20** demanding **25.000**;
+5. a withdrawal of 10 leaves the item open at **15.000**;
+6. MD04 demands the **15.000** that remain;
+7. a withdrawal of the last 15 completes the item, which offers no further
+   withdrawal;
+8. MD04 carries no reservation row for it — the demand is gone;
+9. a 261 refuses by name (`carries no order master`).
+
+The screen fix the run forced: `data-completed` sat on the state cell while the
+row carried `data-item`; the row now carries both, because the completion is a
+fact about the item, and the browser reads it there.
+
+**Suite — 1830/1830 in 253 files** (up from 1810/251: eleven reservation tests and
+eight UI-contract tests).
+
+**Closed.** `INV.RESERVATION.CREATE` is **Implemented** in
+`FUNCTIONS-AND-ROADMAP.md`; the catalogue reads **164 capabilities / 138 terms /
+160 aliases**; migrations **196**. SCR-133 is delivered end to end in five
+commits: `131725c` · `e9a804d` · `b343deb` · `e239646` · this closure.
+
+**Deferred by name:** the MB1A/MIGO wiring of the withdrawal hook (`INV.GI.POST`
+still has no service), retention and expiry of reservations, and the 261 order path
+until `PROD.ORDER.CREATE` brings an order master.
+
+**Next:** **MB03** (`INV.DISPLAY`, Display Material Document), then **MB25**
+(`INV.DISPLAY.STOCK`, Stock Overview — the next unimplemented row of `CAIRN.md`
+§10), as reported under B-444.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -2435,6 +2472,7 @@ run **T833**.
 | 2.691 | 2026-10-20 | **SCR-133 stage 2: reservations schema (B-861, §26.873).** 9071 creates `reservation_header` / `reservation_item` and teaches the movement catalogue `ISSUE` plus an `account_assignment` column; number range `RESERV` added. 9072 takes `ri_plant_material_idx` on measurement — MD04\u2019s open-reservation read **9.418 → 0.114 ms** at 60,000 items; the screen read is the primary key (0.044 ms). **Migrations 195.** | Agent |
 | 2.692 | 2026-10-20 | **SCR-133 stage 3: reservation service and the MD04 element (B-862, §26.874).** `INV.RESERVATION.CREATE` writes the numbered header and its items after judging every item and the cost centre; withdrawals complete items and refuse over-draw, completed and forbidden ones; **MD04 answers with a `RESERVATION` requirement** at the required date for OPEN = required \u2212 withdrawn, closing SCR-130\u2019s deferral. 9073 widens the number columns to hold what the numbering engine renders. **Migrations 196.** **11/11 tests**; MD04\u2019s 22 stay green. Catalogue 164/138/160. | Agent |
 | 2.693 | 2026-10-20 | **SCR-133 stage 4: the reservation screen (B-863, §26.875).** `/inventory/reservations` — lookup, create form (201/261, required date, cost centre, three item lines, company code from the plant), items with required/withdrawn/open and per-item withdrawal and completion; MD04 learned the **Reservation** label. **8/8 UI-contract tests**; harness contract green at **133 targets** (T833). | Agent |
+| 2.694 | 2026-10-20 | **SCR-133 stage 5 and closure: T833 passes, MB21 delivered (B-864, §26.876).** Nine legs: create (201, 25 at 2026-11-20, cost centre), item open 25, **MD04 demands 25**, withdraw 10 → 15 open, MD04 demands 15, withdraw 15 → completed, **MD04 demand gone**, 261 refused by name. `data-completed` moved onto the item row. **Suite 1830/1830 in 253 files**; `INV.RESERVATION.CREATE` **Implemented**; catalogue 164/138/160; migrations 196. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |

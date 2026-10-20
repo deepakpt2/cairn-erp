@@ -150,7 +150,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
             </thead>
             <tbody>
               {reservation.items.map((item) => (
-                <tr key={item.itemNumber} data-item={item.itemNumber} data-open={item.openQuantity} className="border-t border-line">
+                <tr key={item.itemNumber} data-item={item.itemNumber} data-open={item.openQuantity} data-completed={item.isCompleted} className="border-t border-line">
                   <td className="py-1">{item.itemNumber}</td>
                   <td className="py-1">{item.materialNumber}</td>
                   <td className="py-1">{item.plant}</td>
@@ -158,7 +158,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
                   <td className="py-1 text-right tabular-nums">{Number(item.requiredQuantity).toFixed(3)} {item.unit}</td>
                   <td className="py-1 text-right tabular-nums">{Number(item.withdrawnQuantity).toFixed(3)}</td>
                   <td className="py-1 text-right tabular-nums">{Number(item.openQuantity).toFixed(3)}</td>
-                  <td className="py-1" data-completed={item.isCompleted}>
+                  <td className="py-1">
                     {item.isCompleted ? t('mb21.completed') : item.movementAllowed ? t('mb21.open') : t('mb21.forbidden')}
                   </td>
                   <td className="py-1">
