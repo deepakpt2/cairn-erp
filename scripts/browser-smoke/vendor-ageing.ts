@@ -17,12 +17,16 @@ const ORDERS = '/purchasing/orders';
 const AGEING = '/finance/vendor-ageing';
 
 /**
- * SCR-064 browser acceptance: vendor open-item clearing.
+ * SCR-120 browser acceptance (T931 reworked): vendor ageing.
  *
- * The journey: an order through the grid, its receipt and invoice,
- * a manual payment standing as the debit item, then both items
- * cleared on the clearing screen under three distinct dates — the
- * database remembering the clearing document and its date.
+ * The journey: order, receipt and two verified invoices, a manual
+ * payment standing as its own open debit item, and a customer
+ * receivable in the same ledger. Ageing as of the key date shows
+ * only the vendor subledger items, nets the payment inside the
+ * supplier total, and excludes the customer item; clearing stamps
+ * dated after the key date leave the pair standing historically;
+ * a special G/L item joins only when selected; an item drills to
+ * its accounting document and the selection exports to CSV.
  */
 export async function vendorAgeingAnalysis(ctx: Context) {
   const { page, base, target } = ctx;
@@ -163,25 +167,114 @@ export async function vendorAgeingAnalysis(ctx: Context) {
   });
   console.log('  ✓ invoices of 500 and 300 and a payment of 500 stand in the ledger');
 
+  // A customer receivable carrying a partner must never enter a vendor
+  // report (the SCR-120 walkthrough defect): Dr trade receivables / Cr revenue.
+  await withTenant(client, async (tx) => {
+    const company = await getCompanyCode(tx, client, '1000');
+    const position = await derivePosition(tx, client, company!.fiscalYearVariant!, '2026-10-20');
+    await postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'DR',
+      documentDate: '2026-10-20', postingDate: '2026-10-20',
+      fiscalYear: position.fiscalYear, postingPeriod: position.period,
+      currency: 'USD', localCurrency: company!.currency,
+      reference: 'CUSTOMER-ITEM',
+      lines: [
+        { glAccount: '110000', debitCredit: 'S', amount: '999.00', businessPartner: 'C10000' },
+        { glAccount: '300000', debitCredit: 'H', amount: '999.00' },
+      ],
+      postedBy: 'BROWSER_SMOKE', transactionCode: 'FIN.AR.INVOICE',
+    });
+  });
+  console.log('  ✓ a customer receivable of 999 stands in the same ledger');
+
   await page.goto(`${base}${AGEING}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Vendor Ageing', exact: true }).waitFor();
   const selection = page.locator('section[aria-labelledby="va-selection"]');
-  await selection.locator('input[name="companyCode"]').fill('1000');
+  await selection.locator('input[name="companyFrom"]').fill('1000');
   await selection.locator('input[name="keyDate"]').fill('2026-12-20');
   await selection.getByRole('button', { name: 'Age the open items', exact: true }).click();
   await page.waitForLoadState('networkidle');
   await selection.getByText(/-300\.00 standing open across 1 suppliers/).waitFor();
   console.log('  ✓ the company stands at -300.00 open as of 2026-12-20');
 
-  const grid = page.locator('section[aria-labelledby="va-grid"]');
+  const grid = page.locator('section[aria-labelledby="va-grid-1000"]');
+  assert.equal(await grid.getByText('C10000', { exact: true }).count(), 0, 'no customer item ages in a vendor report');
   const supplierRow = grid.locator('tbody tr').filter({ hasText: 'V10000' }).first();
-  await supplierRow.getByText('-800.00').waitFor();
+  await supplierRow.getByText('-300.00').waitFor();
+  await supplierRow.getByText('3', { exact: true }).waitFor();
   await supplierRow.getByRole('link', { name: 'V10000' }).click();
   await page.waitForLoadState('networkidle');
   await grid.getByText('Items for V10000').waitFor();
   await grid.locator('tbody tr').filter({ hasText: '35' }).first().waitFor();
-  console.log('  ✓ the supplier detail shows the items aged by their due dates');
+  await grid.locator('tbody tr').filter({ hasText: '61' }).first().waitFor();
+  console.log('  ✓ supplier total nets the payment item; due dates age 35 (invoices) and 61 (payment) days');
+
+  // Clearing standing is historical: stamped cleared on 2026-10-21 (the
+  // F110 self-stamp shape), the pair stands as of 2026-10-20 and is gone
+  // as of 2026-12-20, leaving only the second invoice.
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      update journal_entry_line
+      set clearing_document = 'BROWSER-PAY', clearing_date = '2026-10-21'
+      where client = ${client} and business_partner = 'V10000' and amount_local = 500
+    `);
+  });
+  await page.goto(`${base}${AGEING}?companyFrom=1000&keyDate=2026-10-20&supplier=V10000`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  const standingRow = grid.locator('tbody tr').filter({ hasText: 'V10000' }).first();
+  await standingRow.getByText('3', { exact: true }).waitFor();
+  console.log('  ✓ as of 2026-10-20 the later-cleared pair still stands (3 items)');
+  await page.goto(`${base}${AGEING}?companyFrom=1000&keyDate=2026-12-20&supplier=V10000`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await selection.getByText(/-300\.00 standing open across 1 suppliers/).waitFor();
+  const clearedRow = grid.locator('tbody tr').filter({ hasText: 'V10000' }).first();
+  await clearedRow.getByText('1', { exact: true }).waitFor();
+  console.log('  ✓ as of 2026-12-20 only the unpaid invoice stands');
+
+  // Special G/L: a down-payment-shaped debit on the alternative account
+  // stays out until the selection includes special G/L transactions.
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      insert into special_gl_config (client, company_code, account_type, indicator, alternative_reconciliation_account, created_by)
+      values (${client}, '', 'AP', 'A', '200100', 'BROWSER_SMOKE')
+      on conflict do nothing
+    `);
+    const company = await getCompanyCode(tx, client, '1000');
+    const position = await derivePosition(tx, client, company!.fiscalYearVariant!, '2026-10-20');
+    await postJournalEntry(tx, {
+      client, companyCode: '1000', documentType: 'KZ',
+      documentDate: '2026-10-20', postingDate: '2026-10-20',
+      fiscalYear: position.fiscalYear, postingPeriod: position.period,
+      currency: 'USD', localCurrency: company!.currency,
+      reference: 'DOWN-PAYMENT',
+      lines: [
+        { glAccount: '200100', debitCredit: 'S', amount: '200.00', businessPartner: 'V10000' },
+        { glAccount: '101000', debitCredit: 'H', amount: '200.00' },
+      ],
+      postedBy: 'BROWSER_SMOKE', transactionCode: 'FIN.AP.DOWNPAYMENT.POST',
+    });
+  });
+  await page.goto(`${base}${AGEING}?companyFrom=1000&keyDate=2026-12-20`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await selection.getByText(/-300\.00 standing open across 1 suppliers/).waitFor();
+  console.log('  ✓ the special G/L item stays out by default');
+  await page.goto(`${base}${AGEING}?companyFrom=1000&keyDate=2026-12-20&includeSpecialGl=on&supplier=V10000`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await selection.getByText(/-100\.00 standing open across 1 suppliers/).waitFor();
+  await grid.locator('tbody tr').filter({ hasText: '200.00' }).first().waitFor();
+  console.log('  ✓ selected, the special G/L item joins at +200.00');
+
+  // FB03 drill-through from an item row.
+  await grid.getByRole('link', { name: 'Display' }).first().click();
+  await page.waitForURL(/\/finance\/journal\/document\?/, { waitUntil: 'domcontentloaded' });
+  console.log('  ✓ the item drills through to the accounting document');
+
+  const csv = await page.request.get(`${base}${AGEING}/export?companyCode=1000&keyDate=2026-12-20`);
+  assert.equal(csv.status(), 200);
+  const body = await csv.text();
+  assert.ok(body.includes('V10000') && body.includes('-300'), 'the CSV carries the aged selection');
+  console.log('  ✓ the CSV export carries the same selection');
 
   const evidence = await withTenant(client, async (tx) => {
     const lines = await tx.execute(sql`
@@ -190,7 +283,6 @@ export async function vendorAgeingAnalysis(ctx: Context) {
     `);
     return lines as unknown as Array<{ debit_credit: string }>;
   });
-  assert.equal(evidence.length, 3);
-  assert.equal(evidence.filter((l) => l.debit_credit === 'H').length, 2);
-  console.log('  ✓ the database holds the three partner lines the balances derived from');
+  assert.equal(evidence.length, 4);
+  console.log('  ✓ the database holds the four vendor partner lines the report derived from');
 }
