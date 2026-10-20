@@ -25,9 +25,22 @@ export async function materialDocumentReversal(ctx: Context) {
   console.log('SCR-132: reverse a receipt in full, a transfer line by line, and refuse the second cancellation');
 
   await withTenant(client, async (tx) => {
+    const company = await tx.execute(sql`
+      select company_code from company_code where client = ${client} order by company_code limit 1
+    `) as unknown as Array<{ company_code: string }>;
+    if (!company[0]) throw new Error('the browser tenant carries no company code');
     await tx.execute(sql`
-      insert into plant (client, plant, name, country, created_by)
-      values (${client}, 'QJ01', 'Reversal plant', 'KW', 'browser.admin') on conflict do nothing
+      insert into plant (client, plant, name, company_code, country, created_by)
+      values (${client}, 'QJ01', 'Reversal plant', ${company[0].company_code}, 'KW', 'browser.admin')
+      on conflict (client, plant) do update set company_code = excluded.company_code
+    `);
+    await tx.execute(sql`
+      insert into material_period_control (client, company_code, current_fiscal_year, current_period,
+                                           previous_fiscal_year, previous_period, allow_backposting, created_by)
+      values (${client}, ${company[0].company_code}, 2026, 10, 2026, 9, true, 'browser.admin')
+      on conflict (client, company_code) do update set
+        current_fiscal_year = 2026, current_period = 10,
+        previous_fiscal_year = 2026, previous_period = 9, allow_backposting = true
     `);
     await tx.execute(sql`
       insert into storage_location (client, plant, storage_location, name, is_active, created_by) values
@@ -121,9 +134,9 @@ export async function materialDocumentReversal(ctx: Context) {
   assert.equal(await partial.getAttribute('data-status'), 'PARTIALLY_REVERSED');
   const first = page.locator('tr[data-line="1"]').first();
   const second = page.locator('tr[data-line="2"]').first();
-  assert.equal(await first.getAttribute('data-remaining'), '5.000');
-  assert.equal(await second.getAttribute('data-remaining'), '0.000');
-  assert.equal(await stockOf('SJ02'), 0);
+  assert.equal(await first.getAttribute('data-remaining'), '0.000');
+  assert.equal(await second.getAttribute('data-remaining'), '5.000');
+  assert.equal(await stockOf('SJ02'), 5);
   console.log('  ✓ the document stands partly reversed, one line still open');
 
   await page.getByRole('button', { name: 'Reverse', exact: true }).click();

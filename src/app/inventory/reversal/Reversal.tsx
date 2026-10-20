@@ -54,6 +54,10 @@ export default function Reversal({ document, canPost, today }: {
             {document.reversedBy ? ` · ${t('mbst.reversedBy')} ${document.reversedBy}` : ''}
           </p>
 
+          {document.status !== 'REVERSED' && !document.reversalOf && (
+            <form action={action} className="mt-3">
+              <input type="hidden" name="materialDocumentNumber" value={document.materialDocumentNumber} />
+              <input type="hidden" name="requestKey" value={requestKey} />
           <table className="mt-3 w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
@@ -108,36 +112,24 @@ export default function Reversal({ document, canPost, today }: {
             </p>
           )}
 
-          {document.status !== 'REVERSED' && !document.reversalOf && (
-            <form action={action} className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <input type="hidden" name="materialDocumentNumber" value={document.materialDocumentNumber} />
-              <input type="hidden" name="requestKey" value={requestKey} />
-              {document.lines.map((line) => (
-                Number(line.remainingQuantity) > 0 ? (
-                  <input
-                    key={line.lineNumber}
-                    type="hidden"
-                    name="lines"
-                    value={line.lineNumber}
-                  />
-                ) : null
-              ))}
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.postingDate')}</span>
-                <input type="date" name="postingDate" className="input w-full" defaultValue={today} required />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.documentDate')}</span>
-                <input type="date" name="documentDate" className="input w-full" defaultValue={today} required />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.headerText')}</span>
-                <input name="headerText" maxLength={25} className="input w-full" />
-              </label>
-              <div className="flex items-end">
-                <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-8" disabled={!canPost || working || !reversible}>
-                  {working ? t('mbst.reversing') : t('mbst.reverse')}
-                </button>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.postingDate')}</span>
+                  <input type="date" name="postingDate" className="input w-full" defaultValue={today} required />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.documentDate')}</span>
+                  <input type="date" name="documentDate" className="input w-full" defaultValue={today} required />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mbst.headerText')}</span>
+                  <input name="headerText" maxLength={25} className="input w-full" />
+                </label>
+                <div className="flex items-end">
+                  <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-8" disabled={!canPost || working}>
+                    {working ? t('mbst.reversing') : t('mbst.reverse')}
+                  </button>
+                </div>
               </div>
             </form>
           )}
