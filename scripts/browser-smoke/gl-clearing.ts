@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postGlDocument } from '../../src/modules/finance/gl-document';
+import { postJournalEntry } from '../../src/platform/posting';
 import type { BrowserTarget } from './targets';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
@@ -233,4 +234,79 @@ export async function glClearing(ctx: Context) {
   assert.equal(Number(residual[0]!.amount), 300);
   assert.equal(Number(residual[0]!.line_amount), 300);
   console.log('  ✓ the residual lineage names R01 with a 300 open line');
+
+  // Terms inheritance (F-03 follow-up): a residual off an invoice-carrying
+  // document inherits its payment terms, baseline and assignment.
+  await withTenant(client, async (tx) => {
+    await tx.execute(sql`
+      insert into payment_terms (client, terms_code, description, baseline_source, net_days, created_by)
+      values (${client}, 'NET30', 'Net 30 days', 'DOCUMENT_DATE', 30, 'browser.admin') on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into vendor_invoice (
+        client, invoice_number, fiscal_year, category, vendor_number, company_code,
+        document_date, posting_date, reference, currency, gross_amount, tax_amount,
+        payment_terms, baseline_date, due_date, status, created_by
+      ) values (
+        ${client}, 'VI-B1', 2026, 'INVOICE', 'V20000', '1000',
+        '2026-04-14', '2026-04-14', 'VI-B1', 'KWD', 800, 0,
+        'NET30', '2026-04-14', '2026-05-14', 'POSTED', 'browser.admin'
+      ) on conflict do nothing
+    `);
+  });
+  const originDoc = await withTenant(client, async (tx) => postJournalEntry(tx, {
+    client, companyCode: '1000', documentType: 'SA',
+    documentDate: '2026-04-14', postingDate: '2026-04-14',
+    fiscalYear: 2026, postingPeriod: 4,
+    currency: 'KWD', localCurrency: 'KWD',
+    lines: [
+      { glAccount: '400000', debitCredit: 'S', amount: '800', businessPartner: 'V20000', assignment: 'PO-B1' },
+      { glAccount: '101000', debitCredit: 'H', amount: '800' },
+    ],
+    origin: { documentClass: 'vendor_invoice', documentKey: 'VI-B1' },
+    postedBy: 'browser.admin',
+  }));
+  const inheritCredit = await postGlDocument({
+    client, changedBy: 'browser.admin', requestKey: 'browser-gl-9', companyCode: '1000',
+    documentDate: '2026-04-14', postingDate: '2026-04-14', documentType: 'SA', currency: 'KWD',
+    lines: [
+      { glAccount: '101000', debitCredit: 'S', amount: '200' },
+      { glAccount: '400000', debitCredit: 'H', amount: '200' },
+    ],
+  });
+  await page.goto(`${base}${ROUTE}?companyCode=1000&glAccount=400000`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle');
+  await page.locator('tr', { hasText: originDoc.documentNumber }).locator('input[name="item"]').check();
+  await page.locator('tr', { hasText: inheritCredit.documentNumber }).locator('input[name="item"]').check();
+  await page.locator('select[name="method"]').selectOption('RESIDUAL');
+  await page.locator('input[name="residualReasonCode"]').fill('R01');
+  await page.locator('tr', { hasText: originDoc.documentNumber }).locator('input[name^="settlement:"]').fill('200');
+  await page.locator('tr', { hasText: inheritCredit.documentNumber }).locator('input[name^="settlement:"]').fill('200');
+  assert.equal(await page.locator('input[name="inheritPaymentTerms"]').isChecked(), true);
+  assert.equal(await page.locator('input[name="inheritAssignment"]').isChecked(), true);
+  await page.locator('input[name="documentType"]').fill('AB');
+  await page.locator('input[name="confirmed"]').check();
+  await page.getByRole('button', { name: 'Post clearing' }).click();
+  await page.getByText(/residual item\(s\) re-stood/).waitFor();
+  console.log('  ✓ the inheritance switches stand checked by default and the clearing posted');
+
+  const inheritedLine = await withTenant(client, async (tx) => tx.execute(sql`
+    select payment_terms, baseline_date::text as baseline_date, assignment
+    from journal_entry_line
+    where client = ${client} and document_number = ${originDoc.documentNumber} and gl_account = '400000'
+      and clearing_document is not null
+  `)) as unknown as Array<{ payment_terms: string | null; baseline_date: string | null; assignment: string | null }>;
+  void inheritedLine;
+  const inheritedLineRow = await withTenant(client, async (tx) => tx.execute(sql`
+    select l.payment_terms, l.baseline_date::text as baseline_date, l.assignment, l.amount_local::text as amount
+    from journal_entry_line l
+    where l.client = ${client} and l.gl_account = '400000' and l.payment_terms is not null
+    order by l.amount_local desc limit 1
+  `)) as unknown as Array<{ payment_terms: string | null; baseline_date: string | null; assignment: string | null; amount: string }>;
+  assert.equal(inheritedLineRow.length, 1);
+  assert.equal(inheritedLineRow[0]!.payment_terms, 'NET30');
+  assert.equal(inheritedLineRow[0]!.baseline_date, '2026-04-14');
+  assert.equal(inheritedLineRow[0]!.assignment, 'PO-B1');
+  assert.equal(Number(inheritedLineRow[0]!.amount), 600);
+  console.log('  ✓ the 600 residual line carries NET30, the source baseline and the source assignment');
 }

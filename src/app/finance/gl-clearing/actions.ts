@@ -57,6 +57,12 @@ export async function clearAction(
       method,
       ...(text(form, 'residualReasonCode') ? { residualReasonCode: text(form, 'residualReasonCode').toUpperCase() } : {}),
       crossCurrency: text(form, 'crossCurrency') === 'yes',
+      inheritPaymentTerms: text(form, 'inheritPaymentTerms') === 'yes',
+      inheritAssignment: text(form, 'inheritAssignment') === 'yes',
+      ...(text(form, 'fxDifferenceAccount') ? { fxDifferenceAccount: text(form, 'fxDifferenceAccount').toUpperCase() } : {}),
+      ...(text(form, 'exchangeRateSpreadTolerancePercent')
+        ? { exchangeRateSpreadTolerancePercent: Number(text(form, 'exchangeRateSpreadTolerancePercent')) }
+        : {}),
     });
     revalidatePath(ROUTE);
     return {

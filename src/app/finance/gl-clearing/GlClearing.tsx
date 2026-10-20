@@ -167,7 +167,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                 Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
                 difference {difference.toFixed(2)}.
                 {method === 'PARTIAL' && ' Items settled below their remaining balance stay open.'}
-                {method === 'RESIDUAL' && ' Items settled below their remaining balance close, their remainder re-standing as a new open item.'}
+                {method === 'RESIDUAL' && ' Items settled below their remaining balance close, their remainder re-standing as a new open item with the source terms inherited where they exist.'}
                 {difference === 0
                   ? ' The selected items balance.'
                   : withinTolerance
@@ -207,6 +207,18 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                     <input name="residualReasonCode" className="input w-24" maxLength={3} placeholder="R01" required />
                   </label>
                 )}
+                {method === 'RESIDUAL' && (
+                  <>
+                    <label className="flex items-end gap-2">
+                      <input type="checkbox" name="inheritPaymentTerms" value="yes" className="size-4" defaultChecked />
+                      <span className="text-sm">Inherit payment terms</span>
+                    </label>
+                    <label className="flex items-end gap-2">
+                      <input type="checkbox" name="inheritAssignment" value="yes" className="size-4" defaultChecked />
+                      <span className="text-sm">Inherit assignment</span>
+                    </label>
+                  </>
+                )}
                 {currencies.length > 1 && (
                   <label className="flex items-end gap-2">
                     <input
@@ -215,6 +227,18 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                     />
                     <span className="text-sm">Clear across currencies at the clearing date</span>
                   </label>
+                )}
+                {crossCurrency && (
+                  <>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Realized FX account</span>
+                      <input name="fxDifferenceAccount" className="input w-32" maxLength={10} placeholder="determined" aria-label="Realized FX difference account" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Spread tolerance %</span>
+                      <input name="exchangeRateSpreadTolerancePercent" className="input w-24" inputMode="decimal" placeholder="none" aria-label="Exchange rate spread tolerance percent" />
+                    </label>
+                  </>
                 )}
                 <label className="flex items-end gap-2">
                   <input type="checkbox" name="confirmed" value="yes" required className="size-4" />
