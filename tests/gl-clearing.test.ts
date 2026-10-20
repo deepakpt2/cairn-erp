@@ -244,3 +244,58 @@ describe('SCR-114 advanced clearing B-808: partial clearing', () => {
     }))).rejects.toThrow(/do not balance/);
   });
 });
+
+describe('SCR-114 advanced clearing B-808: residual clearing', () => {
+  it('closes the original item and re-stands exactly one reasoned residual item', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into residual_reason (client, reason_code, description, created_by)
+        values (${client}, 'R01', 'Underpayment remainder', ${ACTOR})
+      `);
+    });
+    const a = await post('1000', '400000', '101000', 'res-1-a', '2026-04-22');
+    const b = await post('400', '101000', '400000', 'res-1-b', '2026-04-23');
+    const result = await clearGlItems(clearingInput({
+      requestKey: 'res-clear-1', method: 'RESIDUAL', residualReasonCode: 'R01',
+      items: [
+        { documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '400' },
+        { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '400' },
+      ],
+    }));
+    // The original item is closed; exactly one residual line stands open.
+    expect(result.residualItems).toHaveLength(1);
+    expect(result.residualItems[0]!.amount).toBe('600.00');
+    const open = result.openItems.filter((i) => i.documentNumber === result.clearingDocumentNumber);
+    expect(open).toHaveLength(1);
+    expect(open[0]!.debitCredit).toBe('S');
+    expect(open[0]!.remaining).toBe(600);
+    expect(result.openItems.some((i) => i.documentNumber === a.documentNumber)).toBe(false);
+    expect(result.openItems.some((i) => i.documentNumber === b.documentNumber)).toBe(false);
+
+    const lineage = await withTenant(client, async (tx) => tx.execute(sql`
+      select reason_code, generated_amount::text as amount, original_document, residual_line_number
+      from gl_clearing_residual where client = ${client} and original_document = ${a.documentNumber}
+    `)) as unknown as Array<{ reason_code: string; amount: string; original_document: string; residual_line_number: number }>;
+    expect(lineage).toHaveLength(1);
+    expect(lineage[0]!.reason_code).toBe('R01');
+    expect(Number(lineage[0]!.amount)).toBe(600);
+    expect(lineage[0]!.residual_line_number).toBe(open[0]!.lineNumber);
+  }, 60_000);
+
+  it('refuses an unconfigured reason and a residual with no remainder', async () => {
+    const a = await post('100', '400000', '101000', 'res-2-a', '2026-04-24');
+    const b = await post('100', '101000', '400000', 'res-2-b', '2026-04-24');
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'res-bad-1', method: 'RESIDUAL', residualReasonCode: 'ZZZ',
+      items: [{ documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1, settlementAmount: '50' }, { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2, settlementAmount: '50' }],
+    }))).rejects.toThrow(/does not stand configured/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'res-bad-2', method: 'RESIDUAL', residualReasonCode: 'R01',
+      items: [{ documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1 }, { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2 }],
+    }))).rejects.toThrow(/no remainder to re-stand/);
+    await expect(clearGlItems(clearingInput({
+      requestKey: 'res-bad-3', method: 'RESIDUAL',
+      items: [{ documentNumber: a.documentNumber, fiscalYear: 2026, lineNumber: 1 }, { documentNumber: b.documentNumber, fiscalYear: 2026, lineNumber: 2 }],
+    }))).rejects.toThrow(/requires a residual reason code/);
+  });
+});
