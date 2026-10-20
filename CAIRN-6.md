@@ -1605,6 +1605,23 @@ Same-stage bookkeeping: B-842 / §26.854 / §30 row 2.672. **Next: MMBE first**,
 
 Same-stage bookkeeping: B-843 / §26.855 / §30 row 2.673. Stage 2 next: the index decision, measured.
 
+## §26.856 — SCR-128 stage 2: MMBE index decision is verification-only (migration 9068 not taken)
+
+**B-844.** The package recommends (client, material, plant, storage_location). That column list is a **strict prefix of `stock_quantity_pkey`** (client, material, plant, storage_location, stock_type), so it can never filter better than the key it duplicates — and the measurement says exactly that.
+
+**Method.** `scripts/plan-mmbe.mts` seeds 6,000 stock rows (40 materials × 10 plants × 5 locations × 3 stock types) with statistics gathered, then times the tree query MMBE will issue — one material, grouped by plant, location and stock type, ordered for the three-level roll-up — at one plant and across all ten.
+
+| selection | standing indexes | plus `(client, material, plant, storage_location)` |
+| --- | --- | --- |
+| one material, one plant | 0.052 ms | 0.133 ms |
+| one material, all plants | 0.042 ms | 0.052 ms |
+
+**Decision — verification-only, no migration 9068.** Where the planner took the candidate it was **slower** than the primary key, as a wider key with the same prefix must be: same rows, more bytes to walk. The primary key already answers the only query MMBE issues, because **the material is required** — there is no plant-first shape in this transaction, which is exactly what made MB52's measurement different. **Migrations stand at 188; 9068 stays unused.**
+
+**For the service.** Stage 3 reads the stock master once for the selected material and folds the three levels in TypeScript, so the roll-ups are arithmetic on the same rows the leaves came from rather than a second query that could disagree.
+
+Same-stage bookkeeping: B-844 / §26.856 / §30 row 2.674. Stage 3 next: the `INV.STOCK.VIEW` tree service and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1909,6 +1926,7 @@ Same-stage bookkeeping: B-843 / §26.855 / §30 row 2.673. Stage 2 next: the ind
 | 2.671 | 2026-10-20 | **SCR-127 stage 2 published (B-841, §26.853).** MB52 index decision measured at 200,000 stock rows and 50,000 valuations and declined: the planner never selects `(client, plant, storage_location, material_number)` — it walks `stock_quantity_pkey` for material-first shapes and seq-scans plant-first ones, which is right at forty per cent selectivity. Forcing bitmap paths left both arms sequential at 72 ms. **Verification-only, no migration 9067; migrations stand at 188.** Harness `scripts/plan-mb52.mts` committed. Service next. | Agent |
 | 2.672 | 2026-10-20 | **SCR-127 closed (B-842, §26.854).** MB52 delivered as `INV.STOCK.WAREHOUSE` at `/inventory/warehouse-stocks`: stock-master snapshot pivoted on stock type (unrestricted / quality / blocked / special-other) and valued at the plant price, unknown rather than zero where no valuation stands, required scope of list, optional ranges, zero suppression, valuation display defaulting on, two drills per row. No migration (188 stand). Suite 1701/1701 / 241 files; T827 passed 8 legs; catalogue 159/132/154. Next T-codes: MMBE, then ME2K. | Agent |
 | 2.673 | 2026-10-20 | **SCR-128 contract settled (B-843, §26.855).** MMBE = the frozen-roadmap capability **`INV.STOCK.VIEW`** at `/inventory/stock-overview`, to be flipped to Implemented at closure; no new capability code. Three-level tree (plant → storage location → **stock type**) with every parent total rolled up from the children it shows, so a parent can never disagree with them. Material **required and single**; plant/location ranges and zero display optional; expansion level `PLANT`/`STORAGE_LOCATION` (default), others refused by name. **Batch, in-transit and the one-character special stock indicator each deferred or refused by name** — no batch master, no transit movement, special stock is a named stock type. Quantitative only; value stays in MB52. Three drills per node: MB51, MB5B, MB52. Index is a strict prefix of the existing primary key — measured anyway at stage 2. | Agent |
+| 2.674 | 2026-10-20 | **SCR-128 stage 2 published (B-844, §26.856).** MMBE index decision measured and declined: the recommended (client, material, plant, storage_location) is a **strict prefix of `stock_quantity_pkey`**, and where the planner chose it the query ran slower (0.133 ms against 0.052 ms). The primary key answers the only shape MMBE issues because the material is required — there is no plant-first arm to serve. **Verification-only, no migration 9068; migrations stand at 188.** Harness `scripts/plan-mmbe.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
