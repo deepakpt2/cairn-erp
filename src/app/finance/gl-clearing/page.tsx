@@ -49,7 +49,7 @@ export default async function GlClearingPage({ searchParams }: {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Clear open items of an open-item-managed G/L account against each other. The difference must stand at zero, or within the tolerance of the default group, before posting.
+          Clear open items of an open-item-managed G/L account against each other — in full, partially (the item stays open for its balance), or residually (the item closes and its remainder re-stands as a new open item). The difference must stand at zero, or within the tolerance of the default group, before posting; cross-currency clearing translates at the clearing date and posts the realized exchange difference.
         </p>
       </header>
 

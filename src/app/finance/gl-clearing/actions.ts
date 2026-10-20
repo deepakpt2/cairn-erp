@@ -35,9 +35,16 @@ export async function clearAction(
   }
   try {
     const items = form.getAll('item').map((value) => {
-      const [documentNumber, fiscalYear, lineNumber] = String(value).split('|');
-      return { documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber) };
+      const key = String(value);
+      const [documentNumber, fiscalYear, lineNumber] = key.split('|');
+      const settlement = text(form, `settlement:${key}`);
+      return {
+        documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber),
+        ...(settlement ? { settlementAmount: settlement } : {}),
+      };
     });
+    const methodValue = text(form, 'method');
+    const method = methodValue === 'PARTIAL' || methodValue === 'RESIDUAL' ? methodValue : 'STANDARD';
     const result = await clearGlItems({
       client: session.user.client, changedBy: session.user.username,
       companyCode: text(form, 'companyCode'), glAccount: text(form, 'glAccount').toUpperCase(),
@@ -47,11 +54,19 @@ export async function clearAction(
       confirmed: text(form, 'confirmed') === 'yes',
       requestKey: text(form, 'requestKey'),
       items,
+      method,
+      ...(text(form, 'residualReasonCode') ? { residualReasonCode: text(form, 'residualReasonCode').toUpperCase() } : {}),
+      crossCurrency: text(form, 'crossCurrency') === 'yes',
     });
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `Clearing posted as document ${result.clearingDocumentNumber} (fiscal year ${result.clearingFiscalYear}): ${items.length} items cleared on ${text(form, 'clearingDate')}.`,
+      message: `Clearing posted as document ${result.clearingDocumentNumber} (fiscal year ${result.clearingFiscalYear}): ${items.length} items settled on ${text(form, 'clearingDate')} by ${method.toLowerCase()} clearing`
+        + (result.residualItems.length
+          ? `, ${result.residualItems.length} residual item(s) re-stood (${result.residualItems.map((r) => `${r.amount} ${r.reasonCode}`).join(', ')}).`
+          : method === 'PARTIAL'
+            ? ', the short-settled items standing open.'
+            : '.'),
     };
   } catch (error) {
     return wrap(error);

@@ -22,6 +22,9 @@ export default function GlClearing({ view, loadError, canClear, today }: {
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [method, setMethod] = useState<'STANDARD' | 'PARTIAL' | 'RESIDUAL'>('STANDARD');
+  const [settlements, setSettlements] = useState<Record<string, string>>({});
+  const [crossCurrency, setCrossCurrency] = useState(false);
   const [clearingDate, setClearingDate] = useState(today);
   const [postingDate, setPostingDate] = useState(today);
   const [documentDate, setDocumentDate] = useState(today);
@@ -35,12 +38,19 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   const items = view?.openItems ?? [];
   const chosen = items.filter((i) => selected.has(itemKey(i)));
   const currencies = [...new Set(chosen.map((i) => i.currency))];
-  const assigned = chosen.reduce((s, i) => s + i.signed, 0);
+  // The amount this clearing applies to an item: the entered settlement, else its remaining balance.
+  const appliedOf = (i: { documentNumber: string; fiscalYear: number; lineNumber: number; remaining: number; debitCredit: string }) => {
+    const entered = settlements[itemKey(i)];
+    const value = entered === undefined || entered === '' ? i.remaining : Number(entered);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const signedOf = (i: Parameters<typeof appliedOf>[0]) => (i.debitCredit === 'S' ? 1 : -1) * appliedOf(i);
+  const assigned = chosen.reduce((s, i) => s + signedOf(i), 0);
   const difference = Math.round(assigned * 10000) / 10000;
   // Live tolerance judgement, mirroring the service: a debit difference
   // judges on the expense limits, a credit on the revenue limits, and
   // both the absolute and percentage limits must hold.
-  const gross = chosen.reduce((s, i) => s + Math.abs(i.signed), 0);
+  const gross = chosen.reduce((s, i) => s + Math.abs(appliedOf(i)), 0);
   const tol = view?.differenceTolerance ?? null;
   const differenceLimit = tol && difference !== 0
     ? Math.min(
@@ -113,7 +123,8 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                       <th className="px-2 py-2">Posting date</th><th className="px-2 py-2">Type</th>
                       <th className="px-2 py-2">Assignment</th><th className="px-2 py-2">Reference</th>
                       <th className="px-2 py-2">D/C</th><th className="px-2 py-2">Currency</th>
-                      <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Signed</th>
+                      <th className="px-2 py-2">Amount</th><th className="px-2 py-2">Applied</th>
+                      <th className="px-2 py-2">Remaining</th><th className="px-2 py-2">Settlement</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -133,8 +144,20 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                         <td className="px-2 py-2">{item.reference}</td>
                         <td className="px-2 py-2">{item.debitCredit}</td>
                         <td className="px-2 py-2">{item.currency}</td>
-                        <td className="px-2 py-2">{item.amount}</td>
-                        <td className="px-2 py-2">{item.signed.toFixed(2)}</td>
+                        <td className="px-2 py-2">{Number(item.amount).toFixed(2)}</td>
+                        <td className="px-2 py-2">{item.applied.toFixed(2)}</td>
+                        <td className="px-2 py-2">{item.remaining.toFixed(2)}</td>
+                        <td className="px-2 py-2">
+                          <input
+                            name={`settlement:${itemKey(item)}`}
+                            className="input w-28"
+                            inputMode="decimal"
+                            placeholder={item.remaining.toFixed(2)}
+                            value={settlements[itemKey(item)] ?? ''}
+                            onChange={(e) => setSettlements((prev) => ({ ...prev, [itemKey(item)]: e.target.value }))}
+                            aria-label={`Settlement for document ${item.documentNumber} line ${item.lineNumber}`}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -143,6 +166,8 @@ export default function GlClearing({ view, loadError, canClear, today }: {
               <p className="mt-2 text-sm text-ink-soft">
                 Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
                 difference {difference.toFixed(2)}.
+                {method === 'PARTIAL' && ' Items settled below their remaining balance stay open.'}
+                {method === 'RESIDUAL' && ' Items settled below their remaining balance close, their remainder re-standing as a new open item.'}
                 {difference === 0
                   ? ' The selected items balance.'
                   : withinTolerance
@@ -168,6 +193,29 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document type</span>
                   <input name="documentType" className="input w-24" maxLength={2} placeholder="AB" required />
                 </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Clearing method</span>
+                  <select name="method" className="input w-40" value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
+                    <option value="STANDARD">Standard clearing</option>
+                    <option value="PARTIAL">Partial clearing</option>
+                    <option value="RESIDUAL">Residual clearing</option>
+                  </select>
+                </label>
+                {method === 'RESIDUAL' && (
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Residual reason</span>
+                    <input name="residualReasonCode" className="input w-24" maxLength={3} placeholder="R01" required />
+                  </label>
+                )}
+                {currencies.length > 1 && (
+                  <label className="flex items-end gap-2">
+                    <input
+                      type="checkbox" name="crossCurrency" value="yes" className="size-4"
+                      checked={crossCurrency} onChange={(e) => setCrossCurrency(e.target.checked)}
+                    />
+                    <span className="text-sm">Clear across currencies at the clearing date</span>
+                  </label>
+                )}
                 <label className="flex items-end gap-2">
                   <input type="checkbox" name="confirmed" value="yes" required className="size-4" />
                   <span className="text-sm">I confirm this clearing</span>
