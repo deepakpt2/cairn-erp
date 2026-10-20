@@ -1669,6 +1669,24 @@ Same-stage bookkeeping: B-845 / §26.857 / §30 row 2.675. **Next: ME2K first**,
 
 Same-stage bookkeeping: B-846 / §26.858 / §30 row 2.676. Stage 2 next: the index decision, measured.
 
+## §26.859 — SCR-129 stage 2: ME2K index decision is verification-only, and the index is refused for harm (migration 9069 not taken)
+
+**B-847.** The package recommends an index on cost centre with the header document date. Measured on the report the service issues, it does not merely fail to help — it makes the broad case **forty-two times slower**.
+
+**Method.** `scripts/plan-me2k.mts` seeds 2,000 purchase orders × 3 items × 2 assignment lines (**12,000 assignment rows**) across 200 cost centres and a year, then times the report: assignment lines joined to their item and header, filtered on a cost-centre range and a document-date range.
+
+| selection | standing indexes | plus `(client, cost_center)` |
+| --- | --- | --- |
+| one cost centre, 1 month | 13.37 ms | 14.08 ms |
+| 40 cost centres, one quarter | 17.33 ms | 18.59 ms |
+| all cost centres, full year | **45.62 ms** | **1,934.41 ms** |
+
+**Decision — not taken; the index is refused for harm, not merely for being unhelpful.** In the narrow arms the planner ignored it. In the broad arm it **chose** it, then nested-looped into `purchase_order_pkey` once per surviving row, which costs two thousand times more than walking the header by date and joining the assignment lines to it. An index that is neutral when narrow and catastrophic when broad is a liability on a report whose required fields are dates and whose optional fields are ranges. **Migrations stand at 188; 9069 stays unused.**
+
+**For the service.** Stage 3 drives from the **header date** — the one predicate the package makes meaningful — and joins items and assignment lines to it, which is the plan every standing arm already chose.
+
+Same-stage bookkeeping: B-847 / §26.859 / §30 row 2.677. Stage 3 next: the `PROC.PO.ACCOUNTASSIGN` service and its tests.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -1976,6 +1994,7 @@ Same-stage bookkeeping: B-846 / §26.858 / §30 row 2.676. Stage 2 next: the ind
 | 2.674 | 2026-10-20 | **SCR-128 stage 2 published (B-844, §26.856).** MMBE index decision measured and declined: the recommended (client, material, plant, storage_location) is a **strict prefix of `stock_quantity_pkey`**, and where the planner chose it the query ran slower (0.133 ms against 0.052 ms). The primary key answers the only shape MMBE issues because the material is required — there is no plant-first arm to serve. **Verification-only, no migration 9068; migrations stand at 188.** Harness `scripts/plan-mmbe.mts` committed. Service next. | Agent |
 | 2.675 | 2026-10-20 | **SCR-128 closed (B-845, §26.857).** MMBE delivered as **`INV.STOCK.VIEW`** at `/inventory/stock-overview`, flipping the oldest frozen-roadmap capability to Implemented: a three-level tree (plant → storage location → stock type) for one required material, every parent folded from the children it shows, zero nodes suppressed, expansion level selectable, three drills per node, quantitative only. No migration (188 stand). Suite 1722/1722 / 243 files; T828 passed 7 legs; catalogue 159/133/155. Next T-codes: ME2K, then MD04. | Agent |
 | 2.676 | 2026-10-20 | **SCR-129 contract settled (B-846, §26.858).** ME2K = new capability **`PROC.PO.ACCOUNTASSIGN`** at `/purchasing/orders-by-account-assignment`; not on the roadmap, satisfies none. Canon carries a **multi-line** `purchase_order_assignment` (one item split across cost centres by percentage, each line with its own G/L account) and admits **only `COST_CENTER`** as the item category, so **A/P/F are refused by name** rather than silently ignored. Required scope of list (ALV/STANDARD) and required scope of selection, the latter reusing the SCR-124 delivered/invoiced derivation. Assigned value = item net value times line percentage, rounded at the line, grouped by cost centre with cent-exact totals. Drills to the order display and the cost-centre report. Index measured at stage 2. | Agent |
+| 2.677 | 2026-10-20 | **SCR-129 stage 2 published (B-847, §26.859).** ME2K index decision measured at 12,000 assignment rows and **refused for harm**: the recommended cost-centre index was ignored in the narrow arms and, in the broad arm, **turned 45.62 ms into 1,934.41 ms** — a 42x regression from 12,000 nested header lookups. The service drives from the document date instead. **Verification-only, no migration 9069; migrations stand at 188.** Harness `scripts/plan-me2k.mts` committed. Service next. | Agent |
 shot over the resolved FSV with comparatives and explicit warnings; the report is wired. Supporting seed follows in stage 4. | Agent |
 | 2.524 | 2026-10-19 | **SCR-106 stage 4 published (B-690, §26.706).** FIN.RPT.TRIALBALANCE capability (140), the F.01 alias term and the standard INT statement version seed; statement navigation stands. Acceptance follows in stage 5. | Agent |
 | 2.525 | 2026-10-19 | **SCR-106 stage 5 published (B-691, §26.707).** Four statement service tests pass (derivation, unassigned naming, special periods, comparatives); browser target T890 registered. Full suite, rebuild and browser acceptance follow before closure. | Agent |
