@@ -130,3 +130,23 @@ export async function getVendorAgeing(client: string, input: {
     throw error;
   }
 }
+
+/** CSV export of a standing ageing view (SCR-120): the item detail. */
+export function vendorAgeingCsv(view: VendorAgeingView): string {
+  const esc = (v: string | number | null) => {
+    const s = v === null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const [a, b, c] = view.thresholds;
+  const bucketLabel = (bucket: number) =>
+    ['Not yet due', `1-${a} days`, `${a + 1}-${b} days`, `${b + 1}-${c} days`, `Over ${c} days`][bucket];
+  const header = 'Company Code,Supplier,Supplier Name,Document,Fiscal Year,Line,Document Type,Posting Date,Document Date,Baseline Date,Payment Terms,Due Date,Days Overdue,Bucket,Special G/L,Original Amount,Remaining Amount,Currency,Clearing Document,Clearing Date';
+  const lines = view.items.map((i) => [
+    view.companyCode, i.supplier, i.supplierName, i.documentNumber, i.fiscalYear, i.lineNumber,
+    i.documentType, i.postingDate, i.documentDate, i.baselineDate ?? '', i.paymentTerms ?? '',
+    i.dueDate, i.daysOverdue, bucketLabel(i.bucket), i.specialGlIndicator ?? '',
+    i.documentAmount, i.signed.toFixed(4), i.currency,
+    i.clearingDocument ?? '', i.clearingDate ?? '',
+  ].map(esc).join(','));
+  return [header, ...lines].join('\n') + '\n';
+}

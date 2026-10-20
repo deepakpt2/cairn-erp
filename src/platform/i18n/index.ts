@@ -2070,9 +2070,11 @@ const en: Catalogue = {
   'vendorAgeing.title': 'Vendor Ageing',
   'vendorAgeing.subtitle':
     'What a company owes its suppliers, aged as of a key date: every open ' +
-    'item reconstructed to its standing on that date and placed by its due ' +
-    'date — not yet due standing apart from the overdue buckets. This ' +
-    'screen displays; it never posts.',
+    'item on the payables reconciliation accounts reconstructed to its ' +
+    'standing on that date and placed by its due date — the origin ' +
+    "invoice's payment terms applied to its baseline date — not yet due " +
+    'standing apart from the overdue buckets. This screen displays; ' +
+    'it never posts.',
   'customerBalances.title': 'Customer Balances',
   'customerBalances.subtitle':
     'A customer\u2019s period balances in a company, derived from the posted ' +

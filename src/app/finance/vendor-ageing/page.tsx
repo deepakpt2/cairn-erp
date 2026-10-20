@@ -261,9 +261,17 @@ export default async function VendorAgeingPage({ searchParams }: { searchParams:
           : [];
         return (
           <section key={view.companyCode} aria-labelledby={`va-grid-${view.companyCode}`} className="rounded-card border border-line bg-surface p-4 shadow-card">
-            <h2 id={`va-grid-${view.companyCode}`} className="text-sm font-semibold">
-              Ageing — company {view.companyCode} ({view.currency})
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id={`va-grid-${view.companyCode}`} className="text-sm font-semibold">
+                Ageing — company {view.companyCode} ({view.currency})
+              </h2>
+              <a
+                className="btn btn-default min-h-11 sm:min-h-8"
+                href={`${ROUTE}/export?companyCode=${view.companyCode}&keyDate=${keyDate}${params.supplierFrom ? `&supplierFrom=${params.supplierFrom}` : ''}${params.supplierTo ? `&supplierTo=${params.supplierTo}` : ''}${params.bucket1 ? `&bucket1=${params.bucket1}` : ''}${params.bucket2 ? `&bucket2=${params.bucket2}` : ''}${params.bucket3 ? `&bucket3=${params.bucket3}` : ''}${params.includeSpecialGl ? '&includeSpecialGl=on' : ''}`}
+              >
+                Export CSV
+              </a>
+            </div>
             {view.suppliers.length === 0 ? (
               <p className="mt-2 text-sm text-ink-soft">No items stand open as of the key date.</p>
             ) : (
