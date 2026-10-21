@@ -4211,6 +4211,82 @@ and **plant-scoped authorization**.
 
 Same-stage bookkeeping: B-915 / §26.927 / §30 row 2.745.
 
+## §26.928 — SCR-145 contracted: MBRL return delivery, against the corrected specification
+
+**B-916.** The owner supplied a corrected MBRL specification on 2026-10-21 with four corrections to
+what a naive reading would have built: **122 is a configured movement, not a universal one**; the
+return must not reference an accounting header as though every movement posts one; the canonical
+material-document engine is the only one; and shipping delivery is a separate, explicitly supported
+logistics workflow. This contract is written against the tree, so each clause says what stands and
+what has to be built.
+
+**Movement is resolved from configuration. `RETURN_TO_VENDOR` (122).** Canon's scenario tables in
+`goods-issue.ts`, `transfer-posting.ts` and `goods-receipt.ts` are TypeScript constants — a
+compile-time decision wearing configuration's clothes. MBRL does not add a fourth: it reads the
+`movement_type` row (direction, reference category, reversal movement, account assignment) and
+refuses a movement whose configuration does not describe a return. Seeded: **`RETURN_TO_VENDOR`**,
+code **122**, direction **ISSUE**, reference `PURCHASE_ORDER`, account assignment `NONE`, counter
+**123**. A tenant that configures a different return movement gets that movement; a movement whose
+direction is not ISSUE cannot be posted as a return, because a return that adds stock is a receipt
+with a different label.
+
+**Lineage gets its own columns.** `material_document_line` carries `reversal_of_document` and
+`reversal_of_line` and nothing else. A return is **not** a cancellation — §7 of the specification is
+explicit that cancelling a wrong receipt is the reversal workflow, not a commercial return — so
+reusing the reversal pair would make the two indistinguishable to every reader, including the
+returnable-quantity calculation. Migration 9084 adds **`return_of_document`**,
+**`return_of_document_year`** and **`return_of_line`**, a distinct lineage in both directions.
+
+**Remaining returnable quantity is derived, never stored.** Original receipt quantity, less every
+active return line pointing at that item, net of those returns' own reversals. Server-side only: a
+client-supplied returnable quantity is not read. The count is taken **under an advisory lock on the
+original document item** and revalidated after the lock, so two returns cannot both consume the last
+ten pieces; the stock dimension is separately locked through the standing block-and-scope guard, so a
+return and a goods issue cannot take the same stock.
+
+**PO history is corrected, not extended.** `goods-receipt.ts:97` signs a line negative only when the
+movement direction is `REVERSAL`. A 122 that carried the PO reference would therefore **increase**
+the received quantity. The signing becomes the movement's actual stock direction — receipt adds,
+issue subtracts, reversal subtracts — which is a fix to a latent defect rather than a return-only
+special case. Receipts keep the number they show today, and a test pins that.
+
+**Accounting is the mirror of the receipt, and only when the movement requires it.**
+`GR_IR_CLEARING` already stands: a receipt debits inventory and credits GR/IR, and invoice
+verification debits GR/IR and credits the vendor. A return credits **inventory** and debits
+**GR/IR**, with the price difference where the PO price and the stock value disagree — which reopens
+the clearing position a credit memo later closes, exactly as §3.5 and §9 require. **No vendor
+liability is touched, and no credit memo is created**: that remains the invoice-verification chain's
+own work. The journal link stays nullable on the header, as it already is for 311 and 321.
+
+**Refused by name, not silently ignored.** Canon carries **no batch master, no serial-number master,
+no split valuation and no special-stock categories**; a return of such stock cannot be expressed, so
+the form offers no batch, serial, valuation type or special stock field and the service refuses any
+request that names one. **Shipping integration (§2.3, §8) is not implemented** — canon has no
+logistics module, delivery type or shipping point — so the flag is hidden and any invocation is
+rejected in the service, which is what §8's closing paragraph demands. Also deferred: outbound
+delivery, picking, goods issue for delivery, and vendor credit memo.
+
+**The screens, and why they are one.** MBRL is its own route,
+**`/inventory/return-delivery`**: it selects by reference document and year, which the other MIGO
+cells do not, and §3.2's lineage is per item rather than per document. It posts through the same
+canonical engine and numbering service, and its result links to the original document, the PO and
+the journal.
+
+**Acceptance (stage 5): T844** — return a partial quantity from a PO goods receipt and read the
+reduced received quantity back; return the remainder and watch a third attempt refused by quantity;
+see a fully reversed receipt refused; see a return of stock the location does not carry refused;
+reverse the return and watch the received quantity and the stock both return to the original figures.
+
+**Tests (§13) — what will be proven and what cannot be.** Partial return, remaining return, several
+items in one document, configured movement resolution, display and lineage, reversal, over-return
+refusal, ineligible-reference refusal, insufficient-stock refusal, concurrent-return protection,
+concurrent issue-versus-return protection, closed-period refusal, tenant isolation, duplicate-request
+idempotence, and projection-versus-ledger reconciliation. **Not provable here, and named as such:**
+batch, serial, special stock, split valuation and shipping integration, because the structures they
+would test against do not exist.
+
+Same-stage bookkeeping: B-916 / §26.928 / §30 row 2.746.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4587,3 +4663,4 @@ Same-stage bookkeeping: B-915 / §26.927 / §30 row 2.745.
 | 2.743 | 2026-10-20 | **SCR-143 stage 4 and closure: T842 proves the reversal path, MI01 parity closes (B-913, §26.925).** The browser run now moves `MPI-FREE` with a **311 before any count exists**, creates **`PI-2026-0000002`** over it with the block, and has the **reversal refused** by the document\u2019s number \u2014 the leg that would have caught the original bypass \u2014 then cancels the count to release the material. The parity list closes: every non-deferred item of the second package is delivered; MI04/MI20/MI07, batch, special stock and the cycle indicator stay deferred by name; selection-driven generation and snapshots are conditional and satisfied by the supported workflow; plant-scoped authorization is refused by canon\u2019s capability model. **Suite 2005/2005 in 270 files; harness 142 targets; migrations 204.** | Agent |\n
 | 2.744 | 2026-10-20 | **SCR-144 contracted — the three structural gaps against the MIGO specification (B-914, §26.926).** **`INV.STOCK.RECONCILE`** makes the stock projection rebuildable and guarded: a hand-query showed **0 drift**, but nothing rebuilt or guarded it. **`INV.STOCK.UOM`** adds `material_uom_conversion` — one alternative unit per material with numerator and denominator, so conversion is exact rational arithmetic rounded to the base unit's decimals, and an unconverted unit is **refused by name** rather than silently mis-posted. **`A03 + R05` becomes a fourth posting cell**: reversal entered where the specification puts it, through the standing `reverseMaterialDocument`. Named deferrals: display from MIGO, return deliveries, two-step transfers, batch/serial/special stock, split valuation, drafts and the Validated state, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |\n
 | 2.745 | 2026-10-21 | **SCR-144 closed — the three structural gaps against the MIGO specification are shut (B-915, §26.927).** **`INV.STOCK.UOM`**: `material_uom_conversion` states one alternative unit per material with an integer numerator and denominator, and **every writer converts or refuses** — goods issue, transfer posting and production receipt all convert before judging sufficiency or value, so two boxes move twenty-four pieces while the line keeps 2 BOX; a unit with no row is refused by name naming the missing conversion. **`INV.STOCK.RECONCILE`**: the projection is compared with the ledger per material × plant × storage location × stock type, only disagreement is listed, and a drifted dimension rebuilds from the documents — refusing while a physical count holds it open, a bypass the SCR-143 block invariant caught in this round's own new module. **`A03 + R05`** posts reversal inside MIGO through the standing engine: four posting cells of twenty-five. Screens: a unit on all three MIGO forms, `/inventory/uom-conversion` (CUNI) and `/inventory/stock-reconcile` (MB5L, own route by owner decision because it is the only writer). T843 green — conversion maintained, 2 BOX posted and read back as 24.000 PC, GAL refused by name, plant balanced, document reversed in place. Suite 2027/2027 in 272 files; harness 143; migrations 206. Still deferred: display from MIGO, returns, two-step transfers, batch/serial/special stock, split valuation, drafts and Validated, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |
+| 2.746 | 2026-10-21 | **SCR-145 contracted — MBRL return delivery against the corrected specification (B-916, §26.928).** Four corrections shape the round: the return movement is **resolved from `movement_type` configuration** (`RETURN_TO_VENDOR` = 122, direction ISSUE, reversal 123) rather than hardcoded, and a movement that adds stock cannot post as a return; the return posts through the **canonical material-document engine and numbering service**, never a separate subsystem — §15's `return_delivery_posting` is refused by name; the accounting link stays **nullable and mirror-shaped** (credit inventory, debit GR/IR, price difference where it differs), touching no vendor liability and creating no credit memo, because that is invoice verification's work; and **shipping delivery is a separate logistics workflow** that does not exist, so the flag is hidden and invocation rejected. Lineage gains its own columns (`return_of_document`, `return_of_document_year`, `return_of_line`) distinct from the reversal pair, so a commercial return and a cancellation stay distinguishable. Remaining returnable is derived from posted returns net of their reversals, under an advisory lock on the original item, revalidated after the lock. `receivedQuantities` is corrected to sign by the movement's actual stock direction — a latent defect that would have made a 122 inflate received quantity. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, picking, goods issue for delivery, vendor credit memo. | Agent |
