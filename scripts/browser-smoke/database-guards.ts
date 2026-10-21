@@ -123,6 +123,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'scr146-mb1b-configuration': { database: 'cairn_b210', port: '5432', batch: 'SCR-146 local loopback' },
   'scr147-mi04-count': { database: 'cairn_b210', port: '5432', batch: 'SCR-147 local loopback' },
   'scr148-mi20-differences': { database: 'cairn_b210', port: '5432', batch: 'SCR-148 local loopback' },
+  'scr149-mi07-posting': { database: 'cairn_b210', port: '5432', batch: 'SCR-149 local loopback' },
   'production-order-create': { database: 'cairn_b210', port: '5432', batch: 'SCR-138 local loopback' },
   'journal-document-display': { database: 'cairn_b210', port: '5432', batch: 'SCR-137 local loopback' },
   'material-document-output': { database: 'cairn_b210', port: '5432', batch: 'SCR-135 local loopback' },

@@ -658,6 +658,26 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
   };
 }
 
+
+/** A load must not call an unvalued item eligible, or selecting every eligible item fails the batch. */
+async function missingValuationReason(
+  tx: Tx, client: string, plant: string, materialNumber: string, direction: 'ISSUE' | 'RECEIPT',
+): Promise<string | null> {
+  const movements = await tx.execute(sql`
+    select movement_type, valuation_relevant from movement_type
+     where client = ${client} and movement_kind = 'INVENTORY_DIFFERENCE' and direction = ${direction}
+  `) as unknown as Array<{ movement_type: string; valuation_relevant: boolean }>;
+  const values = movements.length === 0 || movements.some((row) => row.valuation_relevant);
+  if (!values) return null;
+  const standing = await tx.execute(sql`
+    select 1 from material_valuation
+     where client = ${client} and material_number = ${materialNumber} and valuation_area = ${plant}
+  `) as unknown as unknown[];
+  if (standing.length > 0) return null;
+  const named = movements.length === 1 ? `movement ${movements[0].movement_type}` : 'a difference movement that values';
+  return `Material ${materialNumber} has no valuation record, and ${named} requires one.`;
+}
+
 /** The document and its items, with the reason an item cannot be posted. Writes nothing. */
 export async function getDifferencePosting(
   client: string,
@@ -674,6 +694,31 @@ export async function getDifferencePosting(
     const header = rows[0];
     if (!header) return null;
     const items = await loadItems(tx, client, keys.documentNumber, keys.fiscalYear);
+    const lines = [];
+    for (const item of items) {
+      const reason = itemReason(item, item.item_number, header);
+      const signed = item.difference_quantity === null ? 0 : Number(item.difference_quantity);
+      const valuationReason = reason === null && Math.abs(signed) > 0.0005
+        ? await missingValuationReason(tx, client, header.plant, item.material_number, signed < 0 ? 'ISSUE' : 'RECEIPT')
+        : null;
+      const shown = reason ?? valuationReason;
+      lines.push({
+        itemNumber: item.item_number,
+        materialNumber: item.material_number,
+        stockType: item.stock_type,
+        difference: item.difference_quantity === null ? '' : signed.toFixed(3),
+        direction: signed < 0 ? 'SHORTAGE' as const : 'SURPLUS' as const,
+        movementType: '',
+        quantity: item.difference_quantity === null ? '' : Math.abs(signed).toFixed(3),
+        postingValue: null,
+        estimate: null,
+        currency: null,
+        inventoryAccount: null,
+        offsetAccount: null,
+        eligible: shown === null,
+        reason: shown,
+      });
+    }
     return {
       documentNumber: header.inventory_document_number,
       fiscalYear: header.fiscal_year,
@@ -685,26 +730,7 @@ export async function getDifferencePosting(
       documentDate: null,
       materialPeriod: null,
       journalRequired: false,
-      lines: items.map((item) => {
-        const reason = itemReason(item, item.item_number, header);
-        const signed = item.difference_quantity === null ? 0 : Number(item.difference_quantity);
-        return {
-          itemNumber: item.item_number,
-          materialNumber: item.material_number,
-          stockType: item.stock_type,
-          difference: item.difference_quantity === null ? '' : signed.toFixed(3),
-          direction: signed < 0 ? 'SHORTAGE' as const : 'SURPLUS' as const,
-          movementType: '',
-          quantity: item.difference_quantity === null ? '' : Math.abs(signed).toFixed(3),
-          postingValue: null,
-          estimate: null,
-          currency: null,
-          inventoryAccount: null,
-          offsetAccount: null,
-          eligible: reason === null,
-          reason,
-        };
-      }),
+      lines,
     };
   });
 }

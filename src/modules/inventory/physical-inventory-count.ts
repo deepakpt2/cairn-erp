@@ -479,10 +479,21 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
         );
       }
       if (item.postingStatus === 'POSTED') {
-        throw new PhysicalInventoryCountError(
-          `Item ${item.itemNumber} has had its difference posted, and a posted count is not edited here.`,
-          'Reverse the posting, then count again. This screen does not post and does not reverse.',
-        );
+        const postedZero = line.zeroCount === true;
+        const postedQuantity = postedZero ? 0 : Number(line.quantity);
+        const storedQuantity = item.countedQuantity === null ? null : Number(item.countedQuantity);
+        const unchanged = postedZero === item.zeroCountFlag
+          && storedQuantity !== null
+          && Math.abs(storedQuantity - postedQuantity) <= 0.0005;
+        // The count form resubmits every filled row. An unchanged posted row is not an edit, and
+        // refusing it would make a remaining uncounted item unreachable once anything is posted.
+        if (!unchanged) {
+          throw new PhysicalInventoryCountError(
+            `Item ${item.itemNumber} has had its difference posted, and a posted count is not edited here.`,
+            'Reverse the posting, then count again. This screen does not post and does not reverse.',
+          );
+        }
+        continue;
       }
       const [master] = await tx.select({ baseUnit: material.baseUnit }).from(material).where(and(
         eq(material.client, input.client), eq(material.materialNumber, item.materialNumber),
