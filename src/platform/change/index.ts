@@ -29,6 +29,8 @@ export interface RecordChangeInput {
   changedBy: string;
   transactionCode?: string;
   reason?: string;
+  /** SCR-147: the request that caused the change (§9). */
+  correlationId?: string;
   effectiveFrom?: Date;
   /** State before the change. Omit for CREATE. */
   before?: Record<string, unknown>;
@@ -107,6 +109,7 @@ export async function recordChange(
     changeType: input.changeType,
     transactionCode: input.transactionCode,
     reason,
+    correlationId: input.correlationId,
     changedBy: input.changedBy,
     effectiveFrom: input.effectiveFrom,
   });

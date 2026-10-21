@@ -36,6 +36,8 @@ export const changeDocument = pgTable(
     changeType: varchar('change_type', { length: 24 }).notNull(),
     transactionCode: varchar('transaction_code', { length: 64 }),
     reason: text('reason'),
+    /** SCR-147: the request that caused the change, so a retry can be told from a fresh call. */
+    correlationId: varchar('correlation_id', { length: 64 }),
     changedBy: varchar('changed_by', { length: 60 }).notNull(),
     changedAt: timestamp('changed_at', { withTimezone: true }).notNull().defaultNow(),
     /** Business-effective date, which may differ from the technical change date. */

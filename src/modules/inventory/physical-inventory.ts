@@ -62,6 +62,10 @@ export interface PhysicalInventoryItemView {
   description: string;
   stockQuantity: string;
   unit: string;
+  /** SCR-147: the stock identity this item counts, and where its count has got to. */
+  stockType: string;
+  countStatus: string;
+  countedQuantity: string | null;
 }
 
 export interface PhysicalInventoryView {
@@ -86,6 +90,29 @@ function requireDate(value: string, label: string): string {
     );
   }
   return trimmed;
+}
+
+/**
+ * SCR-147: the stock a count will cover, per stock type.
+ *
+ * `stockAt` below measures only UNRESTRICTED, which was right while an item was one material row.
+ * A count that produces a difference MI07 must post needs the identity the difference belongs to,
+ * so a document now carries one item per stock type that actually holds stock.
+ */
+async function stockByType(
+  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string,
+) {
+  const rows = await tx.execute(sql`
+    select s.stock_type, sum(s.quantity)::text as quantity, min(m.base_unit) as unit
+      from stock_quantity s
+      join material m on m.client = s.client and m.material_number = s.material_number
+     where s.client = ${client} and s.material_number = ${materialNumber}
+       and s.plant = ${plant}
+       and (${location}::text is null or s.storage_location = ${location}::text)
+     group by s.stock_type
+     order by s.stock_type
+  `) as unknown as Array<{ stock_type: string; quantity: string; unit: string }>;
+  return rows.map((r) => ({ stockType: r.stock_type, quantity: Number(r.quantity), unit: r.unit ?? '' }));
 }
 
 /** The stock the count will be measured against — read for the screen, never written. */
@@ -126,13 +153,22 @@ async function toView(tx: Tx, client: string, header: {
       .from(material).where(and(
         eq(material.client, client), eq(material.materialNumber, item.materialNumber),
       ));
-    const stock = await stockAt(tx, client, header.plant, header.storageLocation, item.materialNumber);
+    // The book quantity is the one frozen at creation when the document carries one — the count
+    // answers for that quantity, not for whatever the stock has drifted to since.
+    const held = await stockByType(tx, client, header.plant, header.storageLocation, item.materialNumber);
+    const live = held.find((h) => h.stockType === item.stockType);
+    const book = item.bookQuantitySnapshot !== null
+      ? Number(item.bookQuantitySnapshot)
+      : live?.quantity ?? 0;
     described.push({
       itemNumber: item.itemNumber,
       materialNumber: item.materialNumber,
       description: master?.description ?? '',
-      stockQuantity: stock.quantity.toFixed(3),
-      unit: stock.unit || master?.unit || '',
+      stockQuantity: book.toFixed(3),
+      unit: item.bookQuantityUnit || live?.unit || master?.unit || '',
+      stockType: item.stockType,
+      countStatus: item.countStatus,
+      countedQuantity: item.countedQuantity,
     });
   }
 
@@ -314,14 +350,32 @@ export async function createPhysicalInventory(
       createdBy: input.createdBy,
     }).returning();
 
-    await tx.insert(physicalInventoryItem).values(materials.map((materialNumber, index) => ({
-      client: input.client,
-      inventoryDocumentNumber,
-      fiscalYear: position.fiscalYear,
-      itemNumber: (index + 1) * 10,
-      materialNumber,
-      createdBy: input.createdBy,
-    })));
+    // One item per material per stock type holding stock — and one for the material itself when
+    // it holds none, so a material that is expected and missing still appears in the count.
+    const itemRows: Array<typeof physicalInventoryItem.$inferInsert> = [];
+    for (const materialNumber of materials) {
+      const held = await stockByType(tx, input.client, plant, location || null, materialNumber);
+      const [_master] = await tx.select({ unit: material.baseUnit }).from(material).where(and(
+        eq(material.client, input.client), eq(material.materialNumber, materialNumber),
+      ));
+      const types = held.length > 0 ? held : [{ stockType: 'UNRESTRICTED', quantity: 0, unit: _master?.unit ?? '' }];
+      for (const type of types) {
+        itemRows.push({
+          client: input.client,
+          inventoryDocumentNumber,
+          fiscalYear: position.fiscalYear,
+          itemNumber: (itemRows.length + 1) * 10,
+          materialNumber,
+          stockType: type.stockType,
+          // §11: the book quantity is frozen when the count is created, with the basis on the row.
+          bookQuantitySnapshot: String(type.quantity),
+          bookQuantityUnit: type.unit || _master?.unit || null,
+          bookQuantityBasis: 'DOCUMENT_CREATION',
+          createdBy: input.createdBy,
+        });
+      }
+    }
+    await tx.insert(physicalInventoryItem).values(itemRows);
 
     await recordChange(tx, {
       client: input.client,
