@@ -3744,6 +3744,64 @@ screen, which is the parity the owner asked for at §26.902 and again at §26.91
 
 Same-stage bookkeeping: B-904 / §26.916 / §30 row 2.734.
 
+## §26.917 — SCR-142 / MI01: the count document, and a table this time earns its place
+
+**B-905.** Three rounds refused a package table by name — the goods issue (§26.887), the
+production order (§26.897) and the production receipt (§26.909) — because in each case the
+ledger already held the fact and a second table would have been a second answer. **A physical
+inventory document is the opposite case and the refusal would be wrong here.** Nothing in
+`material_document` records "a count is in progress over these materials"; the ledger records
+what moved, and a count records what *will be* counted. So `physical_inventory_document` and
+`physical_inventory_item` are new tables with nothing to duplicate, and the rule that refused
+the others is the rule that admits these.
+
+**The package's columns, judged one by one.**
+
+| Package | Ruling | Why |
+|---|---|---|
+| `tenant_id varchar(64)` | **`client varchar(4)`** | the tenant key is four characters everywhere in canon |
+| `company_code` on the header | **refused** | it is the plant's fact; storing it here is the second copy that could drift — the MB03 ruling (§26.877) applied to CO01 (§26.898) and now here |
+| `fiscal_year` | **kept** | not a copy of a plant fact: it is the **document's own** identity and the scope of its number interval, exactly as `material_document.document_year` is. Derived from the planned count date against the plant's company's fiscal year variant |
+| `is_counted` + `count_status` | **`is_counted` refused** | two columns answering one question; the status is the answer |
+| `batch` (CHARG) | **refused by name** | batch has been deferred by name in every movement round (SCR-131, 136, 139); a column no posting can fill is a promise the system cannot keep |
+| `special_stock` | **refused by name** | SAP's special stock categories are not canon's stock types (`UNRESTRICTED`/`QUALITY`/`BLOCKED`); mapping one onto the other would mislabel stock |
+| physical inventory indicator | **refused by name** | that is the cycle-counting indicator, and canon carries no count scheduling |
+| table names `ikpf` / `iseq` | **canon names** | `physical_inventory_document` / `physical_inventory_item`; SAP's names live in the registry as aliases, never in the database |
+| `idx_physical_inventory_mi01` | **measured in stage 2** | this book does not carry an index without a measurement behind it |
+
+**What MI01 does, in SAP's order.** The count document names a **plant**, optionally a **storage
+location**, a **planned count date**, and optionally **blocks postings** for the materials it
+covers; its items name the materials. It draws its own number (`PI-0000001`; SAP's IBLNR is ten
+characters), takes no stock and posts no journal — creating a count changes nothing in the
+ledger, and this round proves that in the database rather than asserting it.
+
+**Judged in order, before the number is drawn:** plant exists → the plant carries a company code
+→ the plant is not flagged for deletion → the storage location, if named, stands in that plant
+and is active → at least one material → each material exists, is not flagged for deletion and is
+extended to the plant → no material appears twice → the planned count date is a date → **the
+fiscal year and period of the count date are open** for the plant's company (`material_period_control`,
+canon's counterpart of OMSY/MARV).
+
+**The posting block is enforced, not recorded.** `assertInventoryCountOpen` is called inside
+every service that moves stock — goods receipt, goods issue (and therefore the production issue
+it carries), transfer posting and production receipt — and refuses with the blocking document's
+number. A flag written and never read would be a control that does not control, and this book
+has refused that shape before. **Cancellation of an uncounted document** joins the round under
+its own capability, because a block that cannot be lifted is a trap rather than a control.
+
+**Deferred by name:** count entry (**MI04**), the difference list (**MI20**), difference posting
+(**MI07**), the document list (**MI23**), inventory sampling, cycle counting, batch and special
+stock.
+
+**Capabilities and route:** `INV.PHYINV.CREATE` (alias **MI01**) and `INV.PHYINV.CANCEL` (alias
+**MI02**) on `/inventory/physical-inventory`; number object **`PHYINV`**, prefix `PI`, length 7.
+
+**Acceptance (stage 5):** T842 — a blocked count created through the screen, a transfer of a
+counted material refused with the count's number in the sentence, the count cancelled, the same
+transfer then posting, and the database read back to prove the count itself moved no stock.
+
+Same-stage bookkeeping: B-905 / §26.917 / §30 row 2.735.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4109,7 +4167,7 @@ Same-stage bookkeeping: B-904 / §26.916 / §30 row 2.734.
 | 2.732 | 2026-10-20 | **SCR-141 stage 3: 25 cells, three of them posting (B-902, §26.914).** `R10 \u00b7 Other` joins the reference list; **`POST_HERE` gains a `form` discriminator** (ISSUE / RECEIPT / TRANSFER) so the screen renders by shape rather than by matching a movement string, and the transfer cell carries **`movements: 311/301/321`** drawn from the catalogue. `A04` with any other reference **refuses by name and names R10**. The coherence rules are SCR-131\u2019s, reached from a second caller \u2014 no judgement of its own. **7 new tests, matrix contract reworked to 25 cells / three posting cells, 35/35 across the four MIGO suites.** | Agent |
 | 2.733 | 2026-10-20 | **SCR-141 stage 4: the third form (B-903, §26.915).** `MigoShell` renders **by `cell.form`**, not by matching a movement code \u2014 the matrix stays the only place that decides what a cell is. The transfer form offers movement, material, quantity, both locations and both plants; the result states **\u201cno journal\u201d** where 311/321 moved quantity only and links MB03, adding FB03 where 301 carried value. `postTransferAction` re-resolves the cell and checks the movement against `cell.movements`, and calls the **standing `postTransfer`** \u2014 two doors, one engine. **12/12 matrix contract, 7/7 transfer.** | Agent |\nmovement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 | 2.734 | 2026-10-20 | **SCR-141 stage 5 and closure: T841 passes, A04 delivers (B-904, §26.916).** Four legs on the production build: a **311** moving ten units inside a plant with **no journal** and a two-line document, a **301** across plants valuing the arrival at its own standard price (120 for ten) and posting **the difference on its own account**, a **321** taking five from quality inspection to unrestricted, and a **311 whose plants differ refused** with both plants named and 301 offered as the remedy. The first run failed on a **camel-case SQL alias the driver lower-cased** \u2014 the assertion was wrong, not the posting. **Suite 1970/1970 in 267 files**; harness **141 targets**; migrations 200. | Agent |\nbut **were never staged**: the stage-4 commit listed directories, and
-`src/app/production` was not among them. The green suite and the passing browser
+| 2.735 | 2026-10-20 | **SCR-142 / MI01 contracted — the physical inventory document (B-905, §26.917).** Every recent package table was refused because the ledger already held the fact; **a count in progress is not in the ledger**, so this one earns its two tables. The package is judged field by field: `tenant_id` becomes **`client`**, **`company_code` is refused** (derived from the plant, the standing ruling), **`is_counted` refused** as a second answer to the status question, **batch / special stock / cycle-count indicator refused by name**, SAP's `ikpf`/`iseq` names kept as aliases only, and the package index **measured before it is believed**. `fiscal_year` is kept because it is the document's own identity, not a plant fact. **The posting block is enforced** through one guard called by every service that moves stock, and **cancellation joins the round** because a block that cannot be lifted is a trap. Capabilities `INV.PHYINV.CREATE` (MI01) and `INV.PHYINV.CANCEL` (MI02); number object `PHYINV`. | Agent |\n`src/app/production` was not among them. The green suite and the passing browser
 runs read the working tree, so nothing was falsely reported as passing — but the
 pushed tree lacked the label, which would have shown a reservation as a
 safety-stock line for anyone who cloned it.
