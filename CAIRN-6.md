@@ -3880,6 +3880,37 @@ now runs inside every movement without costing any of them.
 
 Same-stage bookkeeping: B-907 / §26.919 / §30 row 2.737.
 
+## §26.920 — SCR-142 stage 4: the screen, and a list that can release a block
+
+**B-908.** `/inventory/physical-inventory` carries **`INV.PHYINV.CREATE`** and
+**`INV.PHYINV.CANCEL`**, and its own route. The page states plainly, in its subtitle and again
+under the result, that **a count posts nothing** — the ledger records what has moved and a count
+records what has not moved yet — so the reader does not go looking for a document number where
+there is none.
+
+**The package's fields are all there** — plant, storage location, planned count date, posting
+block, and one material per line — and **none of the refused ones**: no company code field, no
+fiscal year field, no batch, no special stock, no cycle-count indicator. The company code and
+fiscal year appear in the result as **derived** facts, which is where the reader should first
+learn them.
+
+**The result panel** names the document, its status, whether it carries the block, and the
+**stock the count starts from** for each material (`data-stock`), read from the stock master and
+displayed so the counter knows what the count will be measured against.
+
+**Cancellation is reachable two ways, and the second one matters.** The result panel cancels the
+document just created; the **list row** cancels any open document of the tenant. The row is the
+one that makes the block releasable at all after the page has been left — a control that can
+only be lifted in the session that created it would be half a control. `cancelListedAction`
+re-checks the capability on the server, so the row's button is not the authorisation.
+
+**6/6 UI-contract tests**, including one that reads the shell for the refused fields by name.
+
+**Harness 142 targets** (T842 `physical-inventory`, guarded to `cairn_b210:5432`); the run
+itself belongs to stage 5.
+
+Same-stage bookkeeping: B-908 / §26.920 / §30 row 2.738.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4248,7 +4279,7 @@ Same-stage bookkeeping: B-907 / §26.919 / §30 row 2.737.
 | 2.735 | 2026-10-20 | **SCR-142 / MI01 contracted — the physical inventory document (B-905, §26.917).** Every recent package table was refused because the ledger already held the fact; **a count in progress is not in the ledger**, so this one earns its two tables. The package is judged field by field: `tenant_id` becomes **`client`**, **`company_code` is refused** (derived from the plant, the standing ruling), **`is_counted` refused** as a second answer to the status question, **batch / special stock / cycle-count indicator refused by name**, SAP's `ikpf`/`iseq` names kept as aliases only, and the package index **measured before it is believed**. `fiscal_year` is kept because it is the document's own identity, not a plant fact. **The posting block is enforced** through one guard called by every service that moves stock, and **cancellation joins the round** because a block that cannot be lifted is a trap. Capabilities `INV.PHYINV.CREATE` (MI01) and `INV.PHYINV.CANCEL` (MI02); number object `PHYINV`. | Agent |\n`src/app/production` was not among them. The green suite and the passing browser
 | 2.736 | 2026-10-20 | **SCR-142 stage 2: two tables, two measured indexes (B-906, §26.918).** 9078 adds `physical_inventory_document` (+ items) with **no company code, no `is_counted`, no batch, no special stock**, status limited to what this round can reach, and a unique key making one-material-once a database fact. 9079 adds the two indexes the planner chose: the **posting-block guard** \u2014 which runs inside every stock movement \u2014 falls from **15.228 ms on a miss** (the normal path) to **0.046 ms**, and the plant list from 10.137 to 0.898. The package\u2019s own index was **built, analyzed and measured and not chosen** (9.365 ms, still a seq scan and a sort), so it is not carried. **Migrations 200 \u2192 202.** | Agent |\nruns read the working tree, so nothing was falsely reported as passing — but the
 | 2.737 | 2026-10-20 | **SCR-142 stage 3: the count service and an enforced block (B-907, §26.919).** `createPhysicalInventory` draws `PI-2026-0000001` under its fiscal year, writes header and items, and leaves **`material_document` and `journal_entry` empty** \u2014 the test reads the ledger. `assertInventoryCountOpen` is called by **receipt, issue, transfer and production receipt**, each translating it into its own error type so no screen learns a new failure mode; the proof is a **311 and a 551 refused** while a **second material in the same location posts**, and the same transfer passing once the count is cancelled. **9080** widens the number column: 9078 sized it from SAP\u2019s bare IBLNR instead of canon\u2019s year-bearing display. **14/14 tests; suite 1984/1984 in 268 files.** | Agent |\npushed tree lacked the label, which would have shown a reservation as a
-safety-stock line for anyone who cloned it.
+| 2.738 | 2026-10-20 | **SCR-142 stage 4: the count screen (B-908, §26.920).** `/inventory/physical-inventory` under **`INV.PHYINV.CREATE`** and **`INV.PHYINV.CANCEL`**: the package\u2019s fields in full and **none of the refused ones**, the company code and fiscal year shown as derived, and the stock each material starts from. Cancellation is reachable from the result panel **and from the list row** \u2014 a block that could only be lifted in the session that created it would be half a control \u2014 and the row\u2019s action re-checks the capability server-side. **6/6 UI-contract tests; harness 142 targets (T842).** | Agent |\nsafety-stock line for anyone who cloned it.
 
 Both files are committed now. Standing lesson: stage by path list that names every
 directory touched, not by the directories the change was *about*.

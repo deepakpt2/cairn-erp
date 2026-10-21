@@ -91,6 +91,7 @@ import { productionOrderCreate } from './production-order-create';
 import { migoComponentIssue } from './migo-component-issue';
 import { migoProductionReceipt } from './migo-production-receipt';
 import { migoTransferPosting } from './migo-transfer-posting';
+import { physicalInventoryCount } from './physical-inventory';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5034,6 +5035,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'migo-component-issue': migoComponentIssue,
   'migo-production-receipt': migoProductionReceipt,
   'migo-transfer-posting': migoTransferPosting,
+  'physical-inventory': physicalInventoryCount,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

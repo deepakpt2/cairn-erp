@@ -110,6 +110,7 @@ export const TARGETS = [
   { id: 'goods-issue', client: 'T836', label: 'SCR-136 MB1A goods issue: post a 201, issue against a reservation, watch MD04 fall' },
   { id: 'migo-component-issue', client: 'T839', label: 'SCR-139 MIGO 261 goods issue to a production order: matrix, posting, ledger naming the order' },
   { id: 'migo-production-receipt', client: 'T840', label: 'SCR-140 MIGO 101 finished good from a production order: value at the material price, over-receipt refusal' },
+  { id: 'physical-inventory', client: 'T842', label: 'SCR-142 MI01 physical inventory: blocked count, a transfer refused by it, cancelled, then posted' },
   { id: 'migo-transfer-posting', client: 'T841', label: 'SCR-141 MIGO A04 transfer posting against Other: 311, 301 across plants, 321, and a wrong pair refused' },
   { id: 'production-order-create', client: 'T838', label: 'SCR-138 CO01 production order: create with components, derived company, release, nothing posted' },
   { id: 'journal-document-display', client: 'T837', label: 'SCR-137 FB03 display accounting document: derived KOART, company cross-check, the anchors that drill here' },
