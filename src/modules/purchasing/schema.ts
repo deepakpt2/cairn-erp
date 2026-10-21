@@ -1,5 +1,5 @@
 /** Purchase requisitions — SCR-055 / R-103 (ME51N). Item-level documents, no header record. */
-import { pgTable, varchar, char, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, char, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, unique, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
@@ -570,4 +570,147 @@ export const customerInvoiceLine = pgTable('customer_invoice_line', {
   primaryKey({ columns: [t.client, t.invoiceNumber, t.lineNumber] }),
   foreignKey({ columns: [t.client, t.invoiceNumber], foreignColumns: [customerInvoice.client, customerInvoice.invoiceNumber] }).onDelete('restrict'),
   check('customer_invoice_line_amount_ck', sql`${t.netAmount} > 0`),
+]);
+
+/**
+ * Request for quotation — SCR-155. One event groups the requirement. Each
+ * invited supplier receives a separate request, and that request copies the
+ * lines. The drawn numbers are the keys. A collective number is a label, not
+ * the key. There is no status, no price, no quotation, and no company code.
+ * The order is not given a request column.
+ */
+export const purchasingRfqEvent = pgTable('purchasing_rfq_event', {
+  client: tenant(),
+  eventNumber: varchar('event_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 20 }).notNull().default('STANDARD'),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  purchasingGroup: varchar('purchasing_group', { length: 3 }).notNull(),
+  rfqDate: date('rfq_date', { mode: 'string' }).notNull(),
+  quotationDeadline: date('quotation_deadline', { mode: 'string' }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  collectiveNumber: varchar('collective_number', { length: 10 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventNumber] }),
+  foreignKey({
+    columns: [t.client, t.purchasingOrg],
+    foreignColumns: [purchasingOrg.client, purchasingOrg.purchasingOrg],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.purchasingGroup],
+    foreignColumns: [purchasingGroup.client, purchasingGroup.purchasingGroup],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.currency],
+    foreignColumns: [currency.code],
+  }).onDelete('restrict'),
+  check('purchasing_rfq_event_type_ck', sql`${t.documentType} = 'STANDARD'`),
+  check('purchasing_rfq_event_deadline_ck', sql`${t.quotationDeadline} >= ${t.rfqDate}`),
+  check('purchasing_rfq_event_currency_ck', sql`btrim(${t.currency}) ~ '^[A-Z]{3}$'`),
+  check('purchasing_rfq_event_collective_ck', sql`${t.collectiveNumber} is null or char_length(btrim(${t.collectiveNumber})) between 1 and 10`),
+]);
+
+export const purchasingRfqEventItem = pgTable('purchasing_rfq_event_item', {
+  client: tenant(),
+  eventNumber: varchar('event_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  shortText: varchar('short_text', { length: 40 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.eventNumber],
+    foreignColumns: [purchasingRfqEvent.client, purchasingRfqEvent.eventNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant, t.storageLocation],
+    foreignColumns: [storageLocation.client, storageLocation.plant, storageLocation.storageLocation],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.unit],
+    foreignColumns: [unitOfMeasure.code],
+  }).onDelete('restrict'),
+  check('purchasing_rfq_event_item_number_ck', sql`${t.itemNumber} > 0 and ${t.itemNumber} % 10 = 0`),
+  check('purchasing_rfq_event_item_qty_ck', sql`${t.quantity} > 0`),
+  check('purchasing_rfq_event_item_text_ck', sql`char_length(btrim(${t.shortText})) between 1 and 40`),
+]);
+
+export const purchasingRfq = pgTable('purchasing_rfq', {
+  client: tenant(),
+  rfqNumber: varchar('rfq_number', { length: 20 }).notNull(),
+  eventNumber: varchar('event_number', { length: 20 }).notNull(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  roleCode: varchar('role_code', { length: 16 }).notNull().default('SUPPLIER'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.rfqNumber] }),
+  unique('purchasing_rfq_event_number_uq').on(t.client, t.rfqNumber, t.eventNumber),
+  unique('purchasing_rfq_supplier_uq').on(t.client, t.eventNumber, t.partnerNumber),
+  foreignKey({
+    columns: [t.client, t.eventNumber],
+    foreignColumns: [purchasingRfqEvent.client, purchasingRfqEvent.eventNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.partnerNumber, t.roleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('restrict'),
+  check('purchasing_rfq_role_ck', sql`${t.roleCode} = 'SUPPLIER'`),
+]);
+
+export const purchasingRfqItem = pgTable('purchasing_rfq_item', {
+  client: tenant(),
+  rfqNumber: varchar('rfq_number', { length: 20 }).notNull(),
+  eventNumber: varchar('event_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  shortText: varchar('short_text', { length: 40 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.rfqNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.rfqNumber, t.eventNumber],
+    foreignColumns: [purchasingRfq.client, purchasingRfq.rfqNumber, purchasingRfq.eventNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.eventNumber, t.itemNumber],
+    foreignColumns: [purchasingRfqEventItem.client, purchasingRfqEventItem.eventNumber, purchasingRfqEventItem.itemNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant, t.storageLocation],
+    foreignColumns: [storageLocation.client, storageLocation.plant, storageLocation.storageLocation],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.unit],
+    foreignColumns: [unitOfMeasure.code],
+  }).onDelete('restrict'),
+  check('purchasing_rfq_item_number_ck', sql`${t.itemNumber} > 0 and ${t.itemNumber} % 10 = 0`),
+  check('purchasing_rfq_item_qty_ck', sql`${t.quantity} > 0`),
+  check('purchasing_rfq_item_text_ck', sql`char_length(btrim(${t.shortText})) between 1 and 40`),
 ]);

@@ -5109,6 +5109,70 @@ ME56, MD01 and MD02 remain later rounds. They were not wired.
 
 Same-stage bookkeeping: B-949 / §26.961 / §30 row 2.779.
 
+## §26.962 — ME41 contracted: a request for quotation asks, and it does not buy
+
+**B-950.** SCR-155. The owner's package (2026-10-22, three parts) is the contract. ME41 is not a purchase order, not a requisition, not a quotation, and not a quota. Creating a request does not create an order, a goods movement, or a journal. It does not read a posting period. ME42, ME47, ME48 and ME49 are later rounds. A supplier portal, EDI, email dispatch, an award, and a price comparison are later. Balance-form suggestions stay deferred.
+
+**What this round is.** One sourcing event groups the requirement. Each invited supplier receives a separate request, with its own drawn number. A collective number is an optional label of ten characters. It is not unique, and it is not the key. The event number is drawn from `RFQEVENT`, prefix `EV`, length 7. Each request is drawn from `RFQ`, prefix `RQ`, length 7. Both are company `*`, sub-object `*`, fiscal year 0, unbuffered. The drawn number is the key. A row number is not a second identity. There is no `tenant_id` and no uuid. The column is `client`.
+
+The event names a purchasing organisation, a purchasing group, an RFQ date, a quotation deadline, and a currency. The deadline is on or after the RFQ date. Both are dates. There is no time of day and no timezone column. The currency is the local currency of the company the plants share. It is not hard-coded, and it is not a price. The purchasing organisation must stand and be active. The purchasing group must stand and be active. If the group names an organisation, it must be this one. Every line plant must be assigned to the organisation, and every line plant must belong to one company. A company code is not a column. The plant carries it.
+
+One delivered type, `STANDARD`. Any other type is refused by name. There is no type-maintenance screen. Item numbers start at 10 and step by ten. They are not renumbered, and the client does not assign them. A line has a short text, a quantity greater than zero at scale 3, a standing unit, a plant, and a delivery date. The delivery date is not required to fall after the deadline. A material is optional. When it is named, it must exist, not be blocked, and be extended to the plant, and the unit defaults from its base unit. An alternate unit is accepted only when a conversion already stands. A storage location is optional, and an unknown one is refused. A line with no item does not stand. At least one supplier is required. Each supplier must stand, be unblocked, hold the supplier role, and have a purchasing assignment for the organisation. The same supplier is not invited twice. Each request copies the lines. A later material-master change does not alter that copy.
+
+**Check.** A check writes nothing, including either number. Save draws both numbers inside one transaction. A thrown failure rolls the numbers back with the rows. Two concurrent creates of different events both stand. There is no request key. A second submit is a second event.
+
+**Refused by name, so a later round does not mistake refusal for absence:** a client-assigned number, a stored status of draft, ready, issued, closed, awarded or cancelled, a delivery channel, a contact, a sent time, a delivery reference, an outbox, a request key, a price, a quotation, an award, a comparison, a requisition reference, an order, a goods movement, a journal, a company-code column, a uuid, a second history table, a supplier login, and physical deletion. Issued is not a status. The requests stand when they are saved. There is no dispatcher in this round, so a failed email cannot roll a request back, and it cannot be recorded.
+
+**Acceptance (stage 5): T854** — one supplier and two suppliers under one event, each request with its own number and a copy of the lines; an unknown supplier, a blocked supplier, a missing purchasing assignment, an unknown material, a missing extension, an unknown plant, an unassigned plant, an unknown unit, an alternate unit with no conversion, a zero or negative quantity, a deadline before the RFQ date, and a second invitation of the same supplier refused, with nothing written; a check writing nothing, including both numbers; a collective number that is not the key; a later material description leaving the copy; the requisition unchanged; the order unchanged; no journal and no material document. The service tests carry the rollback, the tenant boundary and the audit delta. The browser acceptance is the production build. T853 is not rerun.
+
+**Next, in order:** the schema, if the cut stands. The capability is not seeded in that stage. The screen is not built. T854 is not run. ME42, ME47, ME48 and ME49 are not wired.
+
+Same-stage bookkeeping: B-950 / §26.962 / §30 row 2.780.
+
+## §26.963 — ME41 schema: the event groups the requirement, and the request keeps the copy
+
+**B-951.** SCR-155 stage 2. Migration `9096`. Four tables: `purchasing_rfq_event`, `purchasing_rfq_event_item`, `purchasing_rfq`, `purchasing_rfq_item`. The keys are the drawn numbers. A collective number is a label of at most ten characters, and two events may share it. One delivered type, `STANDARD`. The deadline is on or after the RFQ date. Item numbers are positive and step by ten. A quantity is `numeric(13, 3)` and greater than zero. A short text is required. A material and a storage location are optional, and a named one must stand. The unit must stand. One supplier is invited once on an event; the same supplier may be invited on another event. A request item must name that request's event and a line of that event. Deleting an event that still has a line, or a request that still has its copy, is refused. There is no company code, status, price, quotation, delivery attempt, request key, or uuid. The order and the requisition gain no request column. Row-level security is forced. No index name carries an alias.
+
+The lookup of 20,000 events, two requests each, hit the unique supplier index. A standing event returned its two requests in 0.049 ms and 5 buffers. A missing event returned none in 0.020 ms and 3 buffers. No further index.
+
+Schema contract 3/3. The capability is not seeded. The number objects are not registered. The screen is not built. T854 is not run. ME42, ME47, ME48 and ME49 are not wired.
+
+**Next, in order:** the service, if the owner continues. A check writes nothing, including either number. Save draws `RFQEVENT` and `RFQ` in one transaction, and a thrown failure rolls both back.
+
+Same-stage bookkeeping: B-951 / §26.963 / §30 row 2.781.
+
+## §26.964 — ME41 service: a check writes nothing, and save draws both numbers
+
+**B-952.** SCR-155 stage 3. `src/modules/purchasing/rfq.ts`. `RFQEVENT` and `RFQ` are registered, prefixes `EV` and `RQ`, length 7, company `*`, sub-object `*`, fiscal year 0, unbuffered. A check calls `previewRequestForQuotation` and draws neither number. It says nothing has been created. Save draws the event, then one request per supplier, in one transaction. A thrown failure rolls both numbers back with the rows. Two concurrent creates of different events both stand. There is no request key. A second submit is a second event.
+
+The currency is the local currency of the company the plants share. It is not a field, and it is not a price. A short text defaults from the material and is copied. A later material description does not alter the copy. An alternate unit is stored as asked, and only when a conversion already stands. The quantity is not rewritten into the base unit. Item numbers start at 10 and step by ten. One supplier is invited once. The named refusals write nothing: a client number, another document type, a deadline before the RFQ date, a zero or negative quantity, a company code, a request key, a price, a status, a delivery channel, a requisition, an order, a physical deletion, a currency that is not the company's, a group that belongs to another organisation, an unknown or blocked or unextended material, an unknown or unassigned plant, a plant in another company, an unknown storage location, an unknown unit, a unit with no conversion, an unknown or blocked supplier, and a supplier with no purchasing assignment.
+
+An audit row stands for the event and for each request. No order, requisition, journal or material document is written. Service tests 2/2. The capability is not seeded. The screen is not built. T854 is not run. ME42, ME47, ME48 and ME49 are not wired.
+
+**Next, in order:** the screen, if the owner continues. One route. A check writes nothing. The screen does not allocate, and it says so.
+
+Same-stage bookkeeping: B-952 / §26.964 / §30 row 2.782.
+
+## §26.965 — ME41 screen: one route, and a check writes nothing
+
+**B-953.** SCR-155 stage 4. Route `/purchasing/rfq`. One screen opens an event and creates the next one. It does not change an event. Check calls `previewRequestForQuotation` and does not draw either number. It says nothing has been created. Save calls the service. A price, a status, a delivery channel, a company code, a currency, a request key, a requisition and an order are not fields. If one is posted, the action passes it through and the service refuses it by name. A goods movement is refused at the door.
+
+Suggestions use the save cuts. A material is unblocked, and extended to the plant when a plant is named. A produced material is not hidden. A supplier is unblocked, holds the supplier role, and has a purchasing assignment for the organisation. A purchasing group that names another organisation is not offered. A unit, when a material is named, is that material's base unit or a conversion that already stands. Plant, organisation, group and storage location stay dropdowns. The alias is only in the catalogue and the code line. Screen contract 4/4. Seed 181/155/178. Capability posting false. Alias `ME41` points at `/purchasing/rfq`.
+
+T854 is not run. ME42, ME47, ME48 and ME49 are not wired.
+
+**Next, in order:** the browser acceptance, if the owner continues. Production build, not `npm run dev`. T853 is not rerun.
+
+Same-stage bookkeeping: B-953 / §26.965 / §30 row 2.783.
+
+## §26.966 — ME41 acceptance: T854 leaves the order where it was
+
+**B-954.** T854 green on the production build. ME41 opened the one screen. A price, a status, a delivery channel and a currency are not fields. A check wrote nothing, including either number, and said nothing has been created. EV-0000001 stands with two requests under collective number BID-1. Both requests keep the copy. The collective number is not the key. A later material description leaves the copy. EV-0000002 is a second event under the same label, with one request. An unknown supplier, a blocked supplier, a missing purchasing assignment, an unknown material, a missing extension, an unknown plant, an unassigned plant, an unknown unit, an alternate unit with no conversion, a zero quantity, a negative quantity, a deadline before the RFQ date, and a second invitation of the same supplier were refused, and nothing was written. Purchase order PO-RFQ and requisition PR-RFQ were not rewritten. No request column stands on the order or the requisition. No journal and no material document. The currency shown is the company's, KWD. T853 was not rerun.
+
+ME42, ME47, ME48 and ME49 remain later rounds. They were not wired. Dispatch, award, a supplier portal and EDI were not started.
+
+Same-stage bookkeeping: B-954 / §26.966 / §30 row 2.784.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -5519,3 +5583,8 @@ Same-stage bookkeeping: B-949 / §26.961 / §30 row 2.779.
 | 2.777 | 2026-10-22 | **SCR-154 stage 3 — the quota is a weight, and the rating is one function (B-947, §26.959).** Create draws `QUOTAARR` in the transaction; a failure rolls the number back. A check writes nothing. Two concurrent creates leave one arrangement. A required list names the fixed source and does not replace the supplier. Quota 60 with 120 allocated rates 2.000000; quota 40 with 40 allocated rates 1.000000 and is preferred. Quota tests 7/7. Capability not seeded. Screen not built. T853 not run. | Agent |
 | 2.778 | 2026-10-22 | **SCR-154 stage 4 — one screen, and a check that writes nothing (B-948, §26.960).** Route `/purchasing/quota-arrangement`. Check calls the preview and does not draw the number. A date rating allocates nothing and says so. Refused fields are passed through and refused by name. Alias only in the catalogue and the i18n code line. Capability `PROC.QUOTA.MAINTAIN` seeded, posting false. Seed 180/154/177. Screen contract 4/4. The order, the requisition, ME56, MD01 and MD02 are not wired. T853 not run. | Agent |
 | 2.779 | 2026-10-22 | **SCR-154 stage 5 — T853 leaves the order where it was (B-949, §26.961).** Production build. MEQ1 opened the one screen. A check wrote nothing. QA-0000001 stands. The package example rated 2.000000 and 1.000000 without writing. The named refusals wrote nothing. A required list named its fixed source. The order and the requisition were not rewritten. No journal and no material document. ME56, MD01 and MD02 were not wired. T852 not rerun. | Agent |
+| 2.780 | 2026-10-22 | **SCR-155 / ME41 contracted from the owner's three-part package — a request for quotation asks, and it does not buy (B-950, §26.962).** One event, one request per supplier, drawn numbers `RFQEVENT` and `RFQ`. A collective number is a label, not the key. The copy of the lines is what was asked. No price, no quotation, no order, no journal. ME42, ME47, ME48 and ME49 are later. Capability not seeded. Screen not built. Acceptance **T854**. | Agent |
+| 2.781 | 2026-10-22 | **SCR-155 stage 2 — the event groups the requirement, and the request keeps the copy (B-951, §26.963).** Migration `9096`. Schema contract 3/3. Lookup of 20,000 events, two requests each: hit 0.049 ms and 5 buffers on `purchasing_rfq_supplier_uq`; miss 0.020 ms and 3 buffers. No further index. Number objects not registered. Capability not seeded. Screen not built. T854 not run. | Agent |
+| 2.782 | 2026-10-22 | **SCR-155 stage 3 — a check writes nothing, and save draws both numbers (B-952, §26.964).** `RFQEVENT` and `RFQ` registered. Service tests 2/2. One event, one request per supplier, and the copy is what was asked. A failure rolls both numbers back. Two concurrent creates both stand. No order, requisition, journal or material document. Capability not seeded. Screen not built. T854 not run. | Agent |
+| 2.783 | 2026-10-22 | **SCR-155 stage 4 — one screen, and a check writes nothing (B-953, §26.965).** Route `/purchasing/rfq`. Screen contract 4/4. Suggestions use the save cuts. Seed 181/155/178. Capability posting false. Alias `ME41` only in the catalogue and the code line. T854 not run. ME42, ME47, ME48 and ME49 not wired. | Agent |
+| 2.784 | 2026-10-22 | **SCR-155 stage 5 — T854 leaves the order where it was (B-954, §26.966).** Production build. ME41 opened the one screen. A check wrote nothing, including either number. EV-0000001 stands with two requests under BID-1. Both keep the copy. EV-0000002 is a second event with one request. The named refusals wrote nothing. The order and the requisition were not rewritten. No journal and no material document. T853 not rerun. ME42, ME47, ME48 and ME49 not wired. | Agent |

@@ -66,6 +66,7 @@ async function search(
   const company = clean(context.companyCode);
   const plant = clean(context.plant);
   const org = clean(context.purchasingOrg);
+  const material = clean(context.materialNumber).toUpperCase();
   const dimension = clean(context.dimension).toUpperCase();
   const postingDate = DATE.test(clean(context.postingDate))
     ? clean(context.postingDate)
@@ -139,6 +140,15 @@ async function search(
         select code, name as label, dimension as meta
           from unit_of_measure
          where (${dimension === ''} or dimension = ${dimension})
+           and (${material === ''} or code = (
+             select upper(base_unit) from material
+              where client = ${client} and material_number = ${material}
+           ) or exists (
+             select 1 from material_uom_conversion c
+              where c.client = ${client}
+                and c.material_number = ${material}
+                and c.alternative_unit = unit_of_measure.code
+           ))
            and (${!typed} or code ilike ${pattern} escape '\\' or name ilike ${pattern} escape '\\')
          order by code
          limit ${cap}
@@ -169,6 +179,20 @@ async function search(
               where mp.client = m.client and mp.material_number = m.material_number and mp.plant = ${plant}
                 and not mp.marked_for_deletion
                 and mp.procurement_type is distinct from 'MAKE'
+           ))
+           and (m.material_number ilike ${pattern} escape '\\' or m.description ilike ${pattern} escape '\\')
+         order by m.material_number
+         limit ${cap}
+      `);
+    case 'material-rfq':
+      return rows(tx, sql`
+        select m.material_number as code, m.description as label, coalesce(m.base_unit, '') as meta
+          from material m
+         where m.client = ${client}
+           and not m.is_blocked
+           and (${plant === ''} or exists (
+             select 1 from material_plant mp
+              where mp.client = m.client and mp.material_number = m.material_number and mp.plant = ${plant}
            ))
            and (m.material_number ilike ${pattern} escape '\\' or m.description ilike ${pattern} escape '\\')
          order by m.material_number

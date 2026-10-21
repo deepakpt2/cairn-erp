@@ -13,6 +13,7 @@ export const CONSTRAINED_KINDS = [
   'unit',
   'material-order',
   'material-info',
+  'material-rfq',
   'material-stock',
   'material-issue',
   'supplier-purchasing',
@@ -41,6 +42,8 @@ export interface ConstrainedContext {
   companyCode?: string;
   plant?: string;
   purchasingOrg?: string;
+  /** When set, a unit suggestion is the material's base unit or a conversion that already stands. */
+  materialNumber?: string;
   /** MASS for a weight unit. Any other value is ignored. */
   dimension?: string;
   /** Posting date for a cost or profit centre. Defaults to today. */

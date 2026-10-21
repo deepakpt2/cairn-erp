@@ -45,6 +45,7 @@ function useConstrained(kind: ConstrainedKind, query: string, context: Constrain
   const company = context?.companyCode ?? '';
   const plant = context?.plant ?? '';
   const org = context?.purchasingOrg ?? '';
+  const material = context?.materialNumber ?? '';
   const dimension = context?.dimension ?? '';
   const postingDate = context?.postingDate ?? '';
   const request = useRef(0);
@@ -58,7 +59,7 @@ function useConstrained(kind: ConstrainedKind, query: string, context: Constrain
         kind,
         query,
         limit,
-        context: { companyCode: company, plant, purchasingOrg: org, dimension, postingDate },
+        context: { companyCode: company, plant, purchasingOrg: org, materialNumber: material, dimension, postingDate },
       }).then((next) => {
         if (request.current !== current) return;
         setRows(next);
@@ -70,7 +71,7 @@ function useConstrained(kind: ConstrainedKind, query: string, context: Constrain
       });
     }, query === '' ? 0 : 180);
     return () => clearTimeout(handle);
-  }, [kind, query, limit, enabled, company, plant, org, dimension, postingDate]);
+  }, [kind, query, limit, enabled, company, plant, org, material, dimension, postingDate]);
 
   return { rows, pending };
 }
