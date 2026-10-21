@@ -533,6 +533,8 @@ export const physicalInventoryDocument = pgTable('physical_inventory_document', 
   /** SCR-147: the count's progress. POSTED belongs to MI07 and DIFFERENCES_REVIEWED to MI20. */
   check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'DIFFERENCES_REVIEWED', 'POSTED', 'CANCELLED')`),
   index('physical_inventory_document_plant_idx').on(t.client, t.plant, t.plannedCountDate),
+  /** SCR-148: plant + fiscal year, the difference list's required predicate. Measured; a plan selects it. */
+  index('physical_inventory_document_plant_year_idx').on(t.client, t.plant, t.fiscalYear, t.inventoryDocumentNumber),
 ]);
 
 /** The materials a count covers. One material, once, per document. */

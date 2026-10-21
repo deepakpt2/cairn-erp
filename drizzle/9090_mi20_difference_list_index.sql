@@ -1,0 +1,23 @@
+-- SCR-148 — the difference list's plant-and-year read, kept because a plan selects it.
+--
+-- Measured on 20,000 documents and 80,000 items in cairn_b210, the volume SCR-142 used.
+--
+-- The list filters a required plant and a required fiscal year, then joins items on the
+-- document key. The primary key is (client, inventory_document_number, fiscal_year), so a
+-- plant predicate is a filter applied after the year has been scanned.
+--
+-- A miss — plant P001 has no 2026 documents — scanned 16,000 year-matching headers and
+-- discarded all of them: 3.205 ms, 386 buffers. With (client, plant, fiscal_year,
+-- inventory_document_number) the planner chose the index and the same miss was 0.057 ms,
+-- 2 buffers.
+--
+-- A hit of the first 100 rows is a wash (0.314 ms on the primary key, 0.372 ms on the new
+-- index): the item side dominates a short page. A year-wide read that does not name one
+-- plant stays on the primary key and does not use this index, so the broad case is
+-- unchanged. The standing (client, plant, planned_count_date) index serves a different
+-- predicate and is not a duplicate.
+--
+-- SCR-142 dropped an index no plan selected. This one is selected for the predicate the
+-- screen is required to send. The name does not carry a transaction alias.
+create index if not exists physical_inventory_document_plant_year_idx
+  on public.physical_inventory_document (client, plant, fiscal_year, inventory_document_number);
