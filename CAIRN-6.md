@@ -4921,6 +4921,16 @@ The capability is `PROC.INFO.RECORD.MAINTAIN`, posting false. It does not grant 
 
 Same-stage bookkeeping: B-933 / §26.945 / §30 row 2.763.
 
+## §26.946 — SCR-151 stage 5: T850 keeps the price the order used
+
+**B-934.** T850 green on the production build. ME11 opened the one screen, and Standard was text. A check wrote nothing, including the number. IR-0000001 stood at the organisation, and a supplier and material named that number instead of creating another. A material group, neither identifier, subcontracting, an unknown supplier, a blocked supplier, a missing plant assignment, a material procured by production, a foreign currency, a negative price, an end before the start, a missing unit conversion and a company code were refused, and nothing was written. Zero stood as a price on IR-0000002. POF-0000001 took IR-0000001 at 10.00 because no price was typed, and the screen named the minimum. A later price of 25 left that order at 10.00 and sequence 1. POF-0000002 kept the typed 99, stored the reference, and the warning named the difference. POF-0000003 kept a typed price with no record. An overlap was refused and the record was not rewritten. A plant segment stood on the same number and was retired. An inactive plant segment did not fall through: POF-0000004 kept the typed 8 and stored no reference. Two concurrent creates left one record. The requisition quantity was unchanged. No journal and no material document.
+
+The browser could not leave the price empty. A blank field was sent as zero, and zero is a typed price, so the order could never take the record. The order form now omits a blank net price. A typed zero is still sent.
+
+Seed 178/152/175, measured at stage 4. Migrations through 9093. SCR-151 is closed.
+
+Same-stage bookkeeping: B-934 / §26.946 / §30 row 2.764.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -5315,3 +5325,4 @@ Same-stage bookkeeping: B-933 / §26.945 / §30 row 2.763.
 | 2.761 | 2026-10-21 | **SCR-151 stage 2 — the info record (B-931, §26.943).** Migration 9093 adds the general record, the organisational segment and the price. A blank plant is NULL, and the scope index is NULLS NOT DISTINCT. The order item may point at the price and cannot delete it. A hit of 20,000 records was 0.053 ms and 9 buffers on the unique keys; a miss was 0.021 ms and 2 buffers. No further index was added. No `company_code`. Schema contract 4/4. Capability not seeded. Screen not built. T850 not run. | Agent |
 | 2.762 | 2026-10-21 | **SCR-151 stage 3 — the info record is a default, and the order keeps the price it used (B-932, §26.944).** Create draws `INFOREC` in the transaction; a failure rolls the number back. A check writes nothing. Two concurrent creates leave one record. One overlapping price is closed; two are refused. The order stores the reference and keeps its snapshot. A typed price whose unit cannot convert stores neither side. Lead time rewrites one schedule line only. An inactive plant segment does not fall through. Info-record tests 6/6. Purchase-order tests 3/3. Capability not seeded. Screen not built. T850 not run. | Agent |
 | 2.763 | 2026-10-21 | **SCR-151 stage 4 — the info record screen (B-933, §26.945).** `/purchasing/info-record` opens a record by number, and a supplier and material name the standing number. The category is Standard, not a list. Check writes nothing. A material group, another category, tax, incoterms, a company code, a requisition and an order are refused and not dropped. Capability `PROC.INFO.RECORD.MAINTAIN`, posting false, aliases only in the catalogue. Seed 178/152/175. A new tenant draws `INFOREC`. Screen contract 4/4. T850 not run. | Agent |
+| 2.764 | 2026-10-21 | **SCR-151 closed — T850 keeps the price the order used (B-934, §26.946).** Production build. ME11 opened the one screen. A check wrote nothing. IR-0000001 stood, and the named cuts wrote nothing. Zero was a price. An order with no typed price took the record; a later price left that snapshot. A typed price was kept and the reference stored. A missing record still allowed the typed price. An inactive plant segment did not fall through. Two concurrent creates left one record. No journal, no material document, and the requisition unchanged. A blank order price is now omitted rather than sent as zero. | Agent |

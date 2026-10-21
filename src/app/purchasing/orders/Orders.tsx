@@ -132,7 +132,7 @@ export default function Orders({ documents, choices, selected, canCreate, releas
         shortText: item.text,
         quantity: Number(item.quantity),
         unit: item.unit,
-        netPrice: Number(item.netPrice),
+        netPrice: item.netPrice.trim() === '' ? undefined : Number(item.netPrice),
         priceUnit: Number(item.priceUnit || 1),
         taxCode: item.taxCode,
         plant: item.plant,

@@ -211,6 +211,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'material-period-control') return '/config/material-period-control';
   if (target.id === 'purchase-requisitions') return '/purchasing/requisitions';
   if (target.id === 'purchase-orders') return '/purchasing/orders';
+  if (target.id === 'scr151-info-record') return '/purchasing/info-record';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
   if (target.id === 'release-strategies') return '/config/release-strategies';
