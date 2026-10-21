@@ -3656,6 +3656,38 @@ shape SCR-131 measured; MIGO does not add a read, it adds a caller.
 
 Same-stage bookkeeping: B-901 / §26.913 / §30 row 2.731.
 
+## §26.914 — SCR-141 stage 3: the matrix resolves 25 cells, three of them posting
+
+**B-902.** `R10 · Other` joins the reference list and the matrix grows from 20 cells to **25** —
+and the growth is entirely additive: every previously resolved cell keeps its answer except
+`A04`, which stops linking away and starts posting.
+
+**A cell now says which form posts it.** `POST_HERE` gained a **`form`** discriminator —
+`ISSUE`, `RECEIPT`, `TRANSFER` — because the three shapes need different fields and the screen
+should render a form by what it *is*, not by string-matching a movement code. The transfer cell
+also carries **`movements: ['311','301','321']`**, the movements the reader chooses between, so
+the list the screen offers and the list the tests assert are the same list
+(`TRANSFER_SCENARIOS.map(s => s.code)`).
+
+**Three cells post:** `A01 + R08` (RECEIPT, 101), `A04 + R10` (TRANSFER, 311/301/321) and
+`A07 + R08` (ISSUE, 261). **`A04` with any other reference refuses by name and names `R10`** —
+a transfer posting carries no purchase order, reservation, material document or order, so
+attaching one would be a reference the document cannot honour. That refusal is stronger than
+the `ELSEWHERE` it replaces: it teaches where the movement is entered instead of pointing at a
+second screen.
+
+**The coherence rules already stood and are now reached from MIGO.** `postTransfer` judges the
+pair of locations before it reads any stock — `311` inside one plant, `301` between plants and
+inside one company code, `321` inside one plant *and* one storage location — with the refusal
+messages SCR-131 delivered. SCR-141 adds no judgement of its own; it adds a caller.
+
+**Tests:** `tests/migo-transfer.test.ts` (7) — the fifth reference, 25 cells, the transfer cell's
+form and movements matching the catalogue, the other three cells unchanged, the refusal for
+every other reference, and the standing links. **Matrix contract reworked to 25 cells and three
+posting cells** (11). Combined with the two order suites: **35/35**.
+
+Same-stage bookkeeping: B-902 / §26.914 / §30 row 2.732.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4018,6 +4050,7 @@ Same-stage bookkeeping: B-901 / §26.913 / §30 row 2.731.
 | 2.729 | 2026-10-20 | **SCR-140 stage 5: T840 passes, MIGO receives the order's output (B-899, §26.911).** Five legs on the production build: the cell reads **POST_HERE \u00b7 101**, four received at **160 for four units of forty**, the database read back (**stock 4**, `stock_value` 160, **RECEIPT**, order on the line, debit **121960**, credit **590960**, consumption **510960 absent**), **seven against six expected refused with the number in the sentence**, and six more leaving the order **expecting 0.000**. **T839 amended** — its refusal leg pointed at the cell that now posts — and passes. **Harness 140 targets**; migrations 200; **suite 1961/1961 in 266 files**. | Agent |
 | 2.730 | 2026-10-20 | **SCR-141 / MIGO A04 contracted — the transfer posts from the same screen (B-900, §26.912).** SAP enters a transfer posting in MIGO against reference **\u201cOther\u201d** with the movement on the item, so the reference list gains **`R10 · Other`** and the matrix becomes **25 cells**. **`A04 + R10` becomes `POST_HERE`** with **311 / 301 / 321** chosen per item, the pair of locations judging coherence (same plant for 311, different plant and one company code for 301, same plant and location for 321). **One engine, two entry points**: the form calls the standing `postTransfer`, so MB1B and MIGO share one implementation, and the server re-resolves the cell. `A04` with any other reference **refuses by name**, naming `R10`. Deferred by name: delivery references, 309, 305, two-step 303/313, cross-company transfer, batch, special stock. | Agent |
 | 2.731 | 2026-10-20 | **SCR-141 stage 2: no migration, and nothing to store (B-901, §26.913).** The transfer is a two-line material document that already exists, `A04 + R10` carries **no reference document**, and 311/301/321 with their counters are **per-tenant catalogue rows the service writes** — the live constraints already accept `TRANSFER` and `MATERIAL_DOCUMENT`. The two looks land on `stock_quantity_pkey` and the valuation primary key, the shape SCR-131 measured, so **no index**. **Migrations stay 200.** | Agent |
+| 2.732 | 2026-10-20 | **SCR-141 stage 3: 25 cells, three of them posting (B-902, §26.914).** `R10 \u00b7 Other` joins the reference list; **`POST_HERE` gains a `form` discriminator** (ISSUE / RECEIPT / TRANSFER) so the screen renders by shape rather than by matching a movement string, and the transfer cell carries **`movements: 311/301/321`** drawn from the catalogue. `A04` with any other reference **refuses by name and names R10**. The coherence rules are SCR-131\u2019s, reached from a second caller \u2014 no judgement of its own. **7 new tests, matrix contract reworked to 25 cells / three posting cells, 35/35 across the four MIGO suites.** | Agent |
 movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser

@@ -5,7 +5,7 @@
  * type** together select the movement. Canon carries the same two selectors, and every cell
  * of the matrix resolves to exactly one of three answers:
  *
- *   POST_HERE  — this screen posts it (A07 + R08, movement 261; A01 + R08, movement 101)
+ *   POST_HERE  — this screen posts it (A07 + R08 261, A01 + R08 101, A04 + R10 311/301/321)
  *   ELSEWHERE  — a delivered capability already posts it, and the cell links there rather
  *                than implementing a second copy of the same posting
  *   REFUSED    — nothing posts it yet; the cell names the capability that would light it up
@@ -41,12 +41,18 @@ export const MIGO_REFERENCES: readonly MigoReference[] = [
   { value: 'R04', label: 'Reservation', meaning: "the issue's origin is a reservation" },
   { value: 'R05', label: 'Material document', meaning: 'the document itself is the reference' },
   { value: 'R08', label: 'Order', meaning: 'the origin is a production order' },
+  // SAP's "Other": the movement names no preceding document, which is what a transfer posting is.
+  { value: 'R10', label: 'Other', meaning: 'the movement names no preceding document' },
 ] as const;
 
 export type MigoResolution =
   | {
       kind: 'POST_HERE';
+      /** Which form posts it — the three shapes need different fields. */
+      form: 'ISSUE' | 'RECEIPT' | 'TRANSFER';
       movement: string;
+      /** Where the movement is chosen per item rather than fixed by the cell. */
+      movements?: readonly string[];
       title: string;
       /** The capability the posting runs under. */
       capability: string;
@@ -87,15 +93,25 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
   // The two cells this screen posts: the issue to an order, and its finished good coming back.
   if (action === 'A07' && reference === 'R08') {
     return {
-      kind: 'POST_HERE', movement: '261',
+      kind: 'POST_HERE', form: 'ISSUE', movement: '261',
       title: 'Goods issue to a production order',
       capability: MIGO_CAPABILITY,
     };
   }
   if (action === 'A01' && reference === 'R08') {
     return {
-      kind: 'POST_HERE', movement: '101',
+      kind: 'POST_HERE', form: 'RECEIPT', movement: '101',
       title: 'Goods receipt from a production order',
+      capability: MIGO_CAPABILITY,
+    };
+  }
+
+  // A transfer posting names no preceding document: SAP's "Other", movement chosen on the item.
+  if (action === 'A04' && reference === 'R10') {
+    return {
+      kind: 'POST_HERE', form: 'TRANSFER', movement: '311/301/321',
+      movements: ['311', '301', '321'],
+      title: 'Transfer posting',
       capability: MIGO_CAPABILITY,
     };
   }
@@ -105,9 +121,13 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
     return elsewhere('INV.REVERSE', '/inventory/reversal', 'Cancellation of a material document');
   }
 
-  // A transfer posting is its own screen, whatever the reference.
+  // A transfer posting carries no other reference: there is no document to attach it to.
   if (action === 'A04') {
-    return elsewhere('INV.TRANSFER.POST', '/inventory/transfer-posting', 'Transfer posting');
+    return refused(
+      'Transfer posting against a reference document',
+      'A transfer posting names no preceding document — SAP enters it against "Other" — so a purchase order, a reservation, a material document or an order would be a reference it cannot honour.',
+      'R10',
+    );
   }
 
   // The material document as the reference is a display question unless something is cancelled.
