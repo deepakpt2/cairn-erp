@@ -472,7 +472,7 @@ export const productionOrder = pgTable('production_order', {
   scheduledStart: varchar('scheduled_start', { length: 10 }).notNull(),
   scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
   /** CREATED or RELEASED. A 261 will judge RELEASED and refuse anything else (SCR-139). */
-  status: varchar('status', { length: 16 }).notNull().default('CREATED'),
+  status: varchar('status', { length: 20 }).notNull().default('CREATED'),
   requestKey: varchar('request_key', { length: 64 }),
   releasedBy: varchar('released_by', { length: 64 }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
@@ -522,7 +522,7 @@ export const physicalInventoryDocument = pgTable('physical_inventory_document', 
   plannedCountDate: varchar('planned_count_date', { length: 10 }).notNull(),
   postingBlock: boolean('posting_block').notNull().default(false),
   /** CREATED, or CANCELLED before anything is counted. COUNTED and ADJUSTED arrive with MI04/MI07. */
-  status: varchar('status', { length: 16 }).notNull().default('CREATED'),
+  status: varchar('status', { length: 20 }).notNull().default('CREATED'),
   /** Bumped on every change, so two states of one document are distinguishable without timestamps. */
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
@@ -530,7 +530,8 @@ export const physicalInventoryDocument = pgTable('physical_inventory_document', 
 }, (t) => [
   primaryKey({ columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear] }),
   foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
-  check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'CANCELLED')`),
+  /** SCR-147: the count's progress. POSTED belongs to MI07 and DIFFERENCES_REVIEWED to MI20. */
+  check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'DIFFERENCES_REVIEWED', 'POSTED', 'CANCELLED')`),
   index('physical_inventory_document_plant_idx').on(t.client, t.plant, t.plannedCountDate),
 ]);
 
@@ -541,6 +542,28 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
   fiscalYear: integer('fiscal_year').notNull(),
   itemNumber: integer('item_number').notNull(),
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  /**
+   * SCR-147: the stock identity the count measures. MI01 creates one item per stock type that
+   * holds stock, because a difference at material level cannot be posted to the stock type MI07
+   * must name — and `stockAt` reads only UNRESTRICTED, which hid quality stock entirely.
+   */
+  stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** SCR-147: the count result. Nullable on purpose — null is "nobody has looked". */
+  countedQuantity: quantity('counted_quantity'),
+  entryUnit: varchar('entry_unit', { length: 10 }),
+  countedBaseQuantity: quantity('counted_base_quantity'),
+  /** Zero is a state, not a number: a person looked and found nothing. */
+  zeroCountFlag: boolean('zero_count_flag').notNull().default(false),
+  counterName: varchar('counter_name', { length: 35 }),
+  countDate: varchar('count_date', { length: 10 }),
+  /** The book quantity the variance is measured against, with the basis it was taken on. */
+  bookQuantitySnapshot: quantity('book_quantity_snapshot'),
+  bookQuantityUnit: varchar('book_quantity_unit', { length: 10 }),
+  bookQuantityBasis: varchar('book_quantity_basis', { length: 20 }),
+  differenceQuantity: quantity('difference_quantity'),
+  countStatus: varchar('count_status', { length: 24 }).notNull().default('UNCOUNTED'),
+  itemText: varchar('item_text', { length: 60 }),
+  version: integer('version').notNull().default(1),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear, t.itemNumber] }),
@@ -553,6 +576,30 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
     ],
   }).onDelete('cascade'),
   index('physical_inventory_item_material_idx').on(t.client, t.materialNumber),
+  check('physical_inventory_item_count_status_ck', sql`${t.countStatus} in ('UNCOUNTED', 'COUNTED', 'RECOUNT_REQUIRED')`),
+  check(
+    'physical_inventory_item_zero_ck',
+    sql`not ${t.zeroCountFlag} or ${t.countedBaseQuantity} is not distinct from 0`,
+  ),
+  check(
+    'physical_inventory_item_count_positive_ck',
+    sql`(${t.countedQuantity} is null or ${t.countedQuantity} >= 0)
+      and (${t.countedBaseQuantity} is null or ${t.countedBaseQuantity} >= 0)`,
+  ),
+  check(
+    'physical_inventory_item_count_complete_ck',
+    sql`(${t.countedBaseQuantity} is null and ${t.countStatus} <> 'COUNTED')
+      or (${t.countedBaseQuantity} is not null and ${t.countedQuantity} is not null
+          and ${t.entryUnit} is not null and ${t.countDate} is not null)`,
+  ),
+  check(
+    'physical_inventory_item_count_date_ck',
+    sql`${t.countDate} is null or ${t.countDate} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`,
+  ),
+  check(
+    'physical_inventory_item_book_basis_ck',
+    sql`${t.bookQuantityBasis} is null or ${t.bookQuantityBasis} in ('DOCUMENT_CREATION', 'COUNT_TIME')`,
+  ),
 ]);
 
 /**
