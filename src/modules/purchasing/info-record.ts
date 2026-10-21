@@ -1,0 +1,823 @@
+/**
+ * Purchasing info record — SCR-151.
+ *
+ * A default for a supplier and a material. It does not create a requisition,
+ * an order, a goods movement or a journal. The price table is the only price.
+ * ME12 is a change of the same record. The order calls the resolver inside its
+ * own transaction and keeps the price it used.
+ */
+import { and, desc, eq, sql } from 'drizzle-orm';
+
+import { recordChange } from '../../platform/change';
+import { type Tx, withTenant } from '../../platform/db/client';
+import { allocateNumber, NumberRangeError } from '../../platform/numbering';
+import { currency as currencyTable } from '../../platform/tables/reference';
+import { plant, purchasingOrg } from '../foundation/schema';
+import { businessPartner } from '../foundation/business-partner-schema';
+import { requireSupplierPurchasing, SupplierPurchasingError } from '../foundation/supplier-purchasing';
+import { material, materialPlant } from '../inventory/schema';
+import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
+import {
+  purchasingInfoRecord, purchasingInfoRecordOrg, purchasingInfoRecordPrice,
+} from './schema';
+
+export const INFO_RECORD_CAPABILITY = 'PROC.INFO.RECORD.MAINTAIN';
+export const INFO_RECORD_OBJECT = 'INFOREC';
+const OBJECT_CLASS = 'purchasing_info_record';
+const CATEGORY = 'STANDARD';
+const CONDITION = 'NET_PRICE';
+
+export class InfoRecordError extends Error {
+  remedy?: string;
+
+  constructor(message: string, remedy?: string) {
+    super(message);
+    this.name = 'InfoRecordError';
+    this.remedy = remedy;
+  }
+}
+
+export interface InfoRecordPriceInput {
+  amount: number;
+  currency: string;
+  priceUnit: number;
+  priceUnitOfMeasure: string;
+  validFrom: string;
+  validTo: string;
+}
+
+export interface InfoRecordCreateInput {
+  client: string;
+  changedBy: string;
+  partnerNumber: string;
+  materialNumber: string;
+  purchasingOrg: string;
+  plant?: string | null;
+  /** Names the existing record when the request adds a segment. A new record does not send a number. */
+  infoRecordNumber?: string | null;
+  expectedVersion?: number | null;
+  price: InfoRecordPriceInput;
+  plannedDeliveryDays?: number | null;
+  minimumOrderQuantity?: number | null;
+  minimumOrderUnit?: string | null;
+  orderUnit?: string | null;
+  materialGroup?: string | null;
+  category?: string | null;
+  conditionType?: string | null;
+  taxCode?: string | null;
+  incoterms?: string | null;
+  confirmationControl?: string | null;
+  standardQuantity?: number | null;
+  scale?: string | null;
+}
+
+export interface InfoRecordChangeInput {
+  client: string;
+  changedBy: string;
+  reason: string;
+  infoRecordNumber: string;
+  expectedVersion: number;
+  segmentNumber?: number | null;
+  expectedSegmentVersion?: number | null;
+  partnerNumber?: string | null;
+  materialNumber?: string | null;
+  purchasingOrg?: string | null;
+  plant?: string | null;
+  plannedDeliveryDays?: number | null;
+  minimumOrderQuantity?: number | null;
+  minimumOrderUnit?: string | null;
+  orderUnit?: string | null;
+  markRecordDeleted?: boolean;
+  reactivateRecord?: boolean;
+  markSegmentDeleted?: boolean;
+  reactivateSegment?: boolean;
+  markPriceDeleted?: number | null;
+  reactivatePrice?: number | null;
+  newPrice?: InfoRecordPriceInput | null;
+}
+
+export interface InfoRecordResolution {
+  qualified: boolean;
+  warning?: string;
+  infoRecordNumber?: string;
+  priceSequence?: number;
+  amount?: string;
+  currency?: string;
+  priceUnit?: number;
+  priceUnitOfMeasure?: string;
+  orderUnit?: string | null;
+  plannedDeliveryDays?: number | null;
+  minimumOrderQuantity?: string | null;
+  minimumOrderUnit?: string | null;
+}
+
+function blank(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function lockKey(client: string, partner: string, materialNumber: string): string {
+  return `${client}/purchasing_info_record/${partner}/${materialNumber}/${CATEGORY}`;
+}
+
+function addDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function assertDate(value: string, label: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new InfoRecordError(`${label} is not a date.`);
+  }
+}
+
+function decimalScale(amount: number): number {
+  const text = amount.toString().toLowerCase();
+  if (text.includes('e-')) return Number(text.split('e-')[1]);
+  const fraction = text.split('.')[1];
+  return fraction ? fraction.replace(/0+$/, '').length : 0;
+}
+
+function refuseUnimplemented(input: InfoRecordCreateInput): void {
+  if (blank(input.materialGroup)) {
+    throw new InfoRecordError(
+      'A material-group info record is not created.',
+      'Name the material. A group record is a later round.',
+    );
+  }
+  if (blank(input.taxCode) || blank(input.incoterms) || blank(input.confirmationControl)) {
+    throw new InfoRecordError(
+      'Tax, incoterms and confirmation control are not fields of the info record.',
+      'The supplier purchasing view holds incoterms. The order holds its own tax code.',
+    );
+  }
+  if (input.standardQuantity != null || blank(input.scale)) {
+    throw new InfoRecordError('A scale and a standard quantity are not stored. One net price is the price.');
+  }
+  const category = blank(input.category) ?? CATEGORY;
+  if (category !== CATEGORY) {
+    throw new InfoRecordError(
+      `Info record category ${category} is not supported. Only a standard record is created.`,
+    );
+  }
+  const condition = blank(input.conditionType) ?? CONDITION;
+  if (condition !== CONDITION) {
+    throw new InfoRecordError(
+      `Condition type ${condition} is not supported. The price is a net price, and there is no condition-type catalogue.`,
+    );
+  }
+}
+
+async function assertPrice(tx: Tx, client: string, materialNumber: string, price: InfoRecordPriceInput, orderCurrency: string): Promise<void> {
+  if (!Number.isFinite(price.amount) || price.amount < 0) {
+    throw new InfoRecordError('A price cannot be negative. Zero is a price.');
+  }
+  if (!Number.isInteger(price.priceUnit) || price.priceUnit <= 0) {
+    throw new InfoRecordError('The price unit must be a positive whole number.');
+  }
+  assertDate(price.validFrom, 'The validity start');
+  assertDate(price.validTo, 'The validity end');
+  if (price.validTo < price.validFrom) {
+    throw new InfoRecordError(
+      `The validity end ${price.validTo} is before the start ${price.validFrom}.`,
+    );
+  }
+  const code = price.currency.trim().toUpperCase();
+  if (code !== orderCurrency.trim().toUpperCase()) {
+    throw new InfoRecordError(
+      `Price currency ${code} is not the supplier's order currency ${orderCurrency.trim()}. A different currency is not converted.`,
+    );
+  }
+  const [money] = await tx.select().from(currencyTable).where(eq(currencyTable.code, code));
+  if (!money?.isActive) throw new InfoRecordError(`Currency ${code} does not exist or is inactive.`);
+  if (decimalScale(price.amount) > money.decimalPlaces) {
+    throw new InfoRecordError(
+      `The price has more decimal places than ${code} allows (${money.decimalPlaces}).`,
+    );
+  }
+  const unit = price.priceUnitOfMeasure.trim().toUpperCase();
+  try {
+    await toBaseQuantity(tx, client, { materialNumber, quantity: 1, entryUnit: unit });
+  } catch (error) {
+    if (error instanceof UnitConversionError) throw new InfoRecordError(error.message, error.remedy);
+    throw error;
+  }
+}
+
+async function assertQuantityUnit(tx: Tx, client: string, materialNumber: string, unit: string | null, label: string): Promise<void> {
+  if (!unit) return;
+  try {
+    await toBaseQuantity(tx, client, { materialNumber, quantity: 1, entryUnit: unit });
+  } catch (error) {
+    if (error instanceof UnitConversionError) {
+      throw new InfoRecordError(`${label}: ${error.message}`, error.remedy);
+    }
+    throw error;
+  }
+}
+
+async function assertOperational(input: {
+  plannedDeliveryDays?: number | null;
+  minimumOrderQuantity?: number | null;
+  minimumOrderUnit?: string | null;
+}, tx: Tx, client: string, materialNumber: string): Promise<void> {
+  if (input.plannedDeliveryDays != null && (!Number.isInteger(input.plannedDeliveryDays) || input.plannedDeliveryDays < 0)) {
+    throw new InfoRecordError('Planned delivery time is a nonnegative whole number of days, or it is omitted.');
+  }
+  const quantity = input.minimumOrderQuantity;
+  const unit = blank(input.minimumOrderUnit);
+  if ((quantity == null) !== (unit == null)) {
+    throw new InfoRecordError('A minimum order quantity needs its unit, and a unit needs the quantity.');
+  }
+  if (quantity != null && (quantity < 0 || decimalScale(quantity) > 3)) {
+    throw new InfoRecordError('The minimum order quantity is a nonnegative quantity, held to three decimal places.');
+  }
+  await assertQuantityUnit(tx, client, materialNumber, unit, 'The minimum order unit');
+  await assertQuantityUnit(tx, client, materialNumber, blank(input.orderUnit ?? null)?.toUpperCase() ?? null, 'The order unit');
+}
+
+async function judgeMasters(
+  tx: Tx,
+  input: { client: string; partnerNumber: string; materialNumber: string; purchasingOrg: string; plant?: string | null },
+): Promise<{ orderCurrency: string }> {
+  const partnerNumber = input.partnerNumber.trim();
+  const [partner] = await tx.select().from(businessPartner).where(and(
+    eq(businessPartner.client, input.client), eq(businessPartner.partnerNumber, partnerNumber),
+  ));
+  if (!partner) throw new InfoRecordError(`Supplier ${partnerNumber} does not exist.`);
+  if (partner.isBlocked) throw new InfoRecordError(`Supplier ${partnerNumber} is blocked.`);
+  const plantCode = blank(input.plant);
+  let purchasing;
+  try {
+    purchasing = await requireSupplierPurchasing(tx, input.client, partnerNumber, input.purchasingOrg.trim(), plantCode ?? undefined);
+  } catch (error) {
+    if (error instanceof SupplierPurchasingError) throw new InfoRecordError(error.message, error.remedy);
+    throw error;
+  }
+  if (!purchasing.orderCurrency) {
+    throw new InfoRecordError(
+      `Supplier ${partnerNumber} has no order currency for purchasing organisation ${input.purchasingOrg}.`,
+    );
+  }
+  const [mat] = await tx.select().from(material).where(and(
+    eq(material.client, input.client), eq(material.materialNumber, input.materialNumber),
+  ));
+  if (!mat) throw new InfoRecordError(`Material ${input.materialNumber} does not exist.`);
+  if (mat.isBlocked) throw new InfoRecordError(`Material ${input.materialNumber} is blocked.`);
+  if (mat.markedForDeletion) throw new InfoRecordError(`Material ${input.materialNumber} is marked for deletion.`);
+  if (!mat.baseUnit) throw new InfoRecordError(`Material ${input.materialNumber} carries no base unit.`);
+  if (plantCode) {
+    const [site] = await tx.select().from(plant).where(and(eq(plant.client, input.client), eq(plant.plant, plantCode)));
+    const [org] = await tx.select().from(purchasingOrg).where(and(
+      eq(purchasingOrg.client, input.client), eq(purchasingOrg.purchasingOrg, input.purchasingOrg.trim()),
+    ));
+    if (site?.companyCode && org?.companyCode && site.companyCode !== org.companyCode) {
+      throw new InfoRecordError(
+        `Plant ${plantCode} belongs to company code ${site.companyCode}, not purchasing organisation ${input.purchasingOrg}'s company code ${org.companyCode}.`,
+      );
+    }
+    const [ext] = await tx.select().from(materialPlant).where(and(
+      eq(materialPlant.client, input.client),
+      eq(materialPlant.materialNumber, input.materialNumber),
+      eq(materialPlant.plant, plantCode),
+    ));
+    if (!ext) {
+      throw new InfoRecordError(
+        `Material ${input.materialNumber} is not extended to plant ${plantCode}.`,
+        'Extend the material to the plant, or omit the plant for an organisation-level record.',
+      );
+    }
+    if (ext.markedForDeletion) {
+      throw new InfoRecordError(`Material ${input.materialNumber} is marked for deletion at plant ${plantCode}.`);
+    }
+    if (ext.procurementType === 'MAKE') {
+      throw new InfoRecordError(
+        `Material ${input.materialNumber} is procured by production at plant ${plantCode}. A purchasing info record is not created for it.`,
+      );
+    }
+  }
+  return { orderCurrency: purchasing.orderCurrency };
+}
+
+async function existingGeneral(tx: Tx, client: string, partner: string, materialNumber: string) {
+  const [row] = await tx.select().from(purchasingInfoRecord).where(and(
+    eq(purchasingInfoRecord.client, client),
+    eq(purchasingInfoRecord.partnerNumber, partner),
+    eq(purchasingInfoRecord.materialNumber, materialNumber),
+    eq(purchasingInfoRecord.category, CATEGORY),
+  )).for('update');
+  return row ?? null;
+}
+
+/** The same judgement as create, and it writes nothing. */
+export async function previewPurchasingInfoRecord(input: InfoRecordCreateInput): Promise<{
+  infoRecordNumber: string | null;
+  existing: boolean;
+}> {
+  refuseUnimplemented(input);
+  return withTenant(input.client, async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey(input.client, input.partnerNumber.trim(), input.materialNumber)}, 0))`);
+    const { orderCurrency } = await judgeMasters(tx, input);
+    await assertPrice(tx, input.client, input.materialNumber, input.price, orderCurrency);
+    await assertOperational(input, tx, input.client, input.materialNumber);
+    const standing = await existingGeneral(tx, input.client, input.partnerNumber.trim(), input.materialNumber);
+    const named = blank(input.infoRecordNumber);
+    if (standing && !named) {
+      throw new InfoRecordError(
+        `Info record ${standing.infoRecordNumber} already links supplier ${input.partnerNumber.trim()} to material ${input.materialNumber}.`,
+        'Open that record to add a purchasing organisation, or retire it and create another.',
+      );
+    }
+    if (named && (!standing || standing.infoRecordNumber !== named)) {
+      throw new InfoRecordError(`Info record ${named} does not exist for this supplier and material.`);
+    }
+    return { infoRecordNumber: standing?.infoRecordNumber ?? null, existing: standing != null };
+  });
+}
+
+export async function createPurchasingInfoRecord(input: InfoRecordCreateInput): Promise<{
+  infoRecordNumber: string;
+  segmentNumber: number;
+  priceSequence: number;
+  version: number;
+}> {
+  return withTenant(input.client, (tx) => writePurchasingInfoRecord(tx, input));
+}
+
+/** Exported so a test can prove a failure rolls the number back. The public create owns the transaction. */
+export async function writePurchasingInfoRecord(tx: Tx, input: InfoRecordCreateInput): Promise<{
+  infoRecordNumber: string;
+  segmentNumber: number;
+  priceSequence: number;
+  version: number;
+}> {
+  refuseUnimplemented(input);
+  const partner = input.partnerNumber.trim();
+  const materialNumber = input.materialNumber.trim();
+  const org = input.purchasingOrg.trim();
+  const plantCode = blank(input.plant);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey(input.client, partner, materialNumber)}, 0))`);
+  const { orderCurrency } = await judgeMasters(tx, input);
+  await assertPrice(tx, input.client, materialNumber, input.price, orderCurrency);
+  await assertOperational(input, tx, input.client, materialNumber);
+  const standing = await existingGeneral(tx, input.client, partner, materialNumber);
+  const named = blank(input.infoRecordNumber);
+
+  if (standing && !named) {
+    throw new InfoRecordError(
+      `Info record ${standing.infoRecordNumber} already links supplier ${partner} to material ${materialNumber}.`,
+      'Open that record to add a purchasing organisation, or retire it and create another.',
+    );
+  }
+  if (named && (!standing || standing.infoRecordNumber !== named)) {
+    throw new InfoRecordError(`Info record ${named} does not exist. The client does not assign the number.`);
+  }
+  if (standing && input.expectedVersion !== standing.version) {
+    throw new InfoRecordError(
+      `Info record ${standing.infoRecordNumber} stands at version ${standing.version}.`,
+      'Reload the record before adding a purchasing organisation.',
+    );
+  }
+
+  let infoRecordNumber = standing?.infoRecordNumber;
+  let version = standing?.version ?? 1;
+  if (!standing) {
+    let drawn;
+    try {
+      drawn = await allocateNumber(tx, {
+        client: input.client, objectCode: INFO_RECORD_OBJECT, companyCode: '*',
+        subObject: '*', fiscalYear: 0, allocatedBy: input.changedBy,
+      });
+    } catch (error) {
+      if (error instanceof NumberRangeError) {
+        throw new InfoRecordError(
+          `No active internal ${INFO_RECORD_OBJECT} number range stands, so no info record number can be drawn.`,
+          error.remedy,
+        );
+      }
+      throw error;
+    }
+    infoRecordNumber = drawn.display;
+    await tx.insert(purchasingInfoRecord).values({
+      client: input.client,
+      infoRecordNumber,
+      partnerNumber: partner,
+      roleCode: 'SUPPLIER',
+      materialNumber,
+      category: CATEGORY,
+      version: 1,
+      createdBy: input.changedBy,
+    });
+  }
+
+  const number = infoRecordNumber!;
+  const segments = await tx.select().from(purchasingInfoRecordOrg).where(and(
+    eq(purchasingInfoRecordOrg.client, input.client),
+    eq(purchasingInfoRecordOrg.infoRecordNumber, number),
+  ));
+  if (segments.some((row) => row.purchasingOrg === org && row.plant === plantCode)) {
+    throw new InfoRecordError(
+      `Info record ${number} already has a segment for purchasing organisation ${org}${plantCode ? ` and plant ${plantCode}` : ''}.`,
+      'Change that segment, or retire it.',
+    );
+  }
+  const segmentNumber = segments.reduce((max, row) => Math.max(max, row.segmentNumber), 0) + 1;
+  const prices = await tx.select({ priceSequence: purchasingInfoRecordPrice.priceSequence })
+    .from(purchasingInfoRecordPrice)
+    .where(and(
+      eq(purchasingInfoRecordPrice.client, input.client),
+      eq(purchasingInfoRecordPrice.infoRecordNumber, number),
+    ))
+    .orderBy(desc(purchasingInfoRecordPrice.priceSequence))
+    .limit(1);
+  const priceSequence = (prices[0]?.priceSequence ?? 0) + 1;
+  const orderUnit = blank(input.orderUnit)?.toUpperCase() ?? null;
+  const minimumUnit = blank(input.minimumOrderUnit)?.toUpperCase() ?? null;
+  await tx.insert(purchasingInfoRecordOrg).values({
+    client: input.client,
+    infoRecordNumber: number,
+    segmentNumber,
+    purchasingOrg: org,
+    plant: plantCode,
+    plannedDeliveryDays: input.plannedDeliveryDays ?? null,
+    minimumOrderQuantity: input.minimumOrderQuantity == null ? null : input.minimumOrderQuantity.toFixed(3),
+    minimumOrderUnit: minimumUnit,
+    orderUnit,
+    version: 1,
+    createdBy: input.changedBy,
+  });
+  await tx.insert(purchasingInfoRecordPrice).values({
+    client: input.client,
+    infoRecordNumber: number,
+    priceSequence,
+    segmentNumber,
+    conditionType: CONDITION,
+    amount: input.price.amount.toFixed(4),
+    currency: input.price.currency.trim().toUpperCase(),
+    priceUnit: String(input.price.priceUnit),
+    priceUnitOfMeasure: input.price.priceUnitOfMeasure.trim().toUpperCase(),
+    validFrom: input.price.validFrom,
+    validTo: input.price.validTo,
+    createdBy: input.changedBy,
+  });
+  if (standing) {
+    version = standing.version + 1;
+    await tx.update(purchasingInfoRecord).set({
+      version, changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(eq(purchasingInfoRecord.client, input.client), eq(purchasingInfoRecord.infoRecordNumber, number)));
+  }
+  await recordChange(tx, {
+    client: input.client,
+    objectClass: OBJECT_CLASS,
+    objectKey: number,
+    changeType: standing ? 'CHANGE' : 'CREATE',
+    changedBy: input.changedBy,
+    transactionCode: INFO_RECORD_CAPABILITY,
+    after: {
+      supplier: partner,
+      material: materialNumber,
+      purchasingOrg: org,
+      plant: plantCode,
+      segmentNumber,
+      priceSequence,
+      amount: input.price.amount.toFixed(4),
+      currency: input.price.currency.trim().toUpperCase(),
+      validFrom: input.price.validFrom,
+      validTo: input.price.validTo,
+    },
+    securityRelevantFields: ['amount', 'currency'],
+  });
+  return { infoRecordNumber: number, segmentNumber, priceSequence, version };
+}
+
+function assertReason(reason: string): string {
+  const trimmed = reason.trim();
+  if (trimmed.length < 3 || trimmed.length > 500) {
+    throw new InfoRecordError('A change needs a reason of three to five hundred characters.');
+  }
+  return trimmed;
+}
+
+export async function changePurchasingInfoRecord(input: InfoRecordChangeInput): Promise<{
+  infoRecordNumber: string;
+  version: number;
+}> {
+  const reason = assertReason(input.reason);
+  return withTenant(input.client, async (tx) => {
+    const [general] = await tx.select().from(purchasingInfoRecord).where(and(
+      eq(purchasingInfoRecord.client, input.client),
+      eq(purchasingInfoRecord.infoRecordNumber, input.infoRecordNumber),
+    )).for('update');
+    if (!general) throw new InfoRecordError(`Info record ${input.infoRecordNumber} does not exist.`);
+    if (input.expectedVersion !== general.version) {
+      throw new InfoRecordError(
+        `Info record ${general.infoRecordNumber} stands at version ${general.version}.`,
+        'Reload the record before saving.',
+      );
+    }
+    if (blank(input.partnerNumber) && input.partnerNumber!.trim() !== general.partnerNumber) {
+      throw new InfoRecordError('The supplier is part of the record and is not changed. Create another record and retire this one.');
+    }
+    if (blank(input.materialNumber) && input.materialNumber!.trim() !== general.materialNumber) {
+      throw new InfoRecordError('The material is part of the record and is not changed. Create another record and retire this one.');
+    }
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey(input.client, general.partnerNumber, general.materialNumber)}, 0))`);
+
+    let blocked = false;
+    let unblocked = false;
+    if (input.markRecordDeleted && input.reactivateRecord) {
+      throw new InfoRecordError('A record is not deactivated and reactivated in the same change.');
+    }
+    if (input.markRecordDeleted && !general.markedForDeletion) {
+      blocked = true;
+      await tx.update(purchasingInfoRecord).set({ markedForDeletion: true }).where(and(
+        eq(purchasingInfoRecord.client, input.client),
+        eq(purchasingInfoRecord.infoRecordNumber, general.infoRecordNumber),
+      ));
+    }
+    if (input.reactivateRecord && general.markedForDeletion) {
+      unblocked = true;
+      await tx.update(purchasingInfoRecord).set({ markedForDeletion: false }).where(and(
+        eq(purchasingInfoRecord.client, input.client),
+        eq(purchasingInfoRecord.infoRecordNumber, general.infoRecordNumber),
+      ));
+    }
+
+    if (input.segmentNumber != null) {
+      const [segment] = await tx.select().from(purchasingInfoRecordOrg).where(and(
+        eq(purchasingInfoRecordOrg.client, input.client),
+        eq(purchasingInfoRecordOrg.infoRecordNumber, general.infoRecordNumber),
+        eq(purchasingInfoRecordOrg.segmentNumber, input.segmentNumber),
+      )).for('update');
+      if (!segment) {
+        throw new InfoRecordError(`Info record ${general.infoRecordNumber} has no segment ${input.segmentNumber}.`);
+      }
+      if (input.expectedSegmentVersion != null && input.expectedSegmentVersion !== segment.version) {
+        throw new InfoRecordError(
+          `Segment ${segment.segmentNumber} of info record ${general.infoRecordNumber} stands at version ${segment.version}.`,
+          'Reload the record before saving.',
+        );
+      }
+      if (blank(input.purchasingOrg) && input.purchasingOrg!.trim() !== segment.purchasingOrg) {
+        throw new InfoRecordError('The purchasing organisation of a segment is not changed. Add another segment and retire this one.');
+      }
+      if (input.plant !== undefined && blank(input.plant) !== segment.plant) {
+        throw new InfoRecordError('The plant of a segment is not changed. Add another segment and retire this one.');
+      }
+      await assertOperational({
+        plannedDeliveryDays: input.plannedDeliveryDays === undefined ? segment.plannedDeliveryDays : input.plannedDeliveryDays,
+        minimumOrderQuantity: input.minimumOrderQuantity === undefined ? (segment.minimumOrderQuantity == null ? null : Number(segment.minimumOrderQuantity)) : input.minimumOrderQuantity,
+        minimumOrderUnit: input.minimumOrderUnit === undefined ? segment.minimumOrderUnit : input.minimumOrderUnit,
+      }, tx, input.client, general.materialNumber);
+      if (input.orderUnit !== undefined) {
+        await assertQuantityUnit(tx, input.client, general.materialNumber, blank(input.orderUnit)?.toUpperCase() ?? null, 'The order unit');
+      }
+      const next = {
+        plannedDeliveryDays: input.plannedDeliveryDays === undefined ? segment.plannedDeliveryDays : input.plannedDeliveryDays,
+        minimumOrderQuantity: input.minimumOrderQuantity === undefined
+          ? segment.minimumOrderQuantity
+          : (input.minimumOrderQuantity == null ? null : input.minimumOrderQuantity.toFixed(3)),
+        minimumOrderUnit: input.minimumOrderUnit === undefined ? segment.minimumOrderUnit : blank(input.minimumOrderUnit)?.toUpperCase() ?? null,
+        orderUnit: input.orderUnit === undefined ? segment.orderUnit : blank(input.orderUnit)?.toUpperCase() ?? null,
+        markedForDeletion: input.markSegmentDeleted ? true : input.reactivateSegment ? false : segment.markedForDeletion,
+        version: segment.version + 1,
+        changedBy: input.changedBy,
+        changedAt: new Date(),
+      };
+      if (input.markSegmentDeleted) blocked = true;
+      if (input.reactivateSegment && segment.markedForDeletion) unblocked = true;
+      await tx.update(purchasingInfoRecordOrg).set(next).where(and(
+        eq(purchasingInfoRecordOrg.client, input.client),
+        eq(purchasingInfoRecordOrg.infoRecordNumber, general.infoRecordNumber),
+        eq(purchasingInfoRecordOrg.segmentNumber, segment.segmentNumber),
+      ));
+
+      if (input.newPrice) {
+        const { orderCurrency } = await judgeMasters(tx, {
+          client: input.client,
+          partnerNumber: general.partnerNumber,
+          materialNumber: general.materialNumber,
+          purchasingOrg: segment.purchasingOrg,
+          plant: segment.plant,
+        });
+        await assertPrice(tx, input.client, general.materialNumber, input.newPrice, orderCurrency);
+        await insertPrice(tx, input.client, general.infoRecordNumber, segment.segmentNumber, input.newPrice, input.changedBy);
+      }
+      if (input.markPriceDeleted != null || input.reactivatePrice != null) {
+        const sequence = input.markPriceDeleted ?? input.reactivatePrice!;
+        const [price] = await tx.select().from(purchasingInfoRecordPrice).where(and(
+          eq(purchasingInfoRecordPrice.client, input.client),
+          eq(purchasingInfoRecordPrice.infoRecordNumber, general.infoRecordNumber),
+          eq(purchasingInfoRecordPrice.priceSequence, sequence),
+        ));
+        if (!price || price.segmentNumber !== segment.segmentNumber) {
+          throw new InfoRecordError(`Price ${sequence} does not belong to segment ${segment.segmentNumber}.`);
+        }
+        const deleting = input.markPriceDeleted != null;
+        if (deleting) blocked = true;
+        else unblocked = true;
+        await tx.update(purchasingInfoRecordPrice).set({
+          markedForDeletion: deleting,
+          changedBy: input.changedBy,
+          changedAt: new Date(),
+        }).where(and(
+          eq(purchasingInfoRecordPrice.client, input.client),
+          eq(purchasingInfoRecordPrice.infoRecordNumber, general.infoRecordNumber),
+          eq(purchasingInfoRecordPrice.priceSequence, sequence),
+        ));
+      }
+    } else if (input.newPrice || input.markSegmentDeleted || input.reactivateSegment || input.markPriceDeleted != null) {
+      throw new InfoRecordError('Name the segment the change applies to.');
+    }
+
+    const version = general.version + 1;
+    await tx.update(purchasingInfoRecord).set({
+      version, changedBy: input.changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(purchasingInfoRecord.client, input.client),
+      eq(purchasingInfoRecord.infoRecordNumber, general.infoRecordNumber),
+    ));
+    await recordChange(tx, {
+      client: input.client,
+      objectClass: OBJECT_CLASS,
+      objectKey: general.infoRecordNumber,
+      changeType: blocked && !unblocked ? 'BLOCK' : unblocked && !blocked ? 'UNBLOCK' : 'CHANGE',
+      changedBy: input.changedBy,
+      transactionCode: INFO_RECORD_CAPABILITY,
+      reason,
+      before: { version: general.version, markedForDeletion: general.markedForDeletion },
+      after: {
+        version,
+        markedForDeletion: input.markRecordDeleted ? true : input.reactivateRecord ? false : general.markedForDeletion,
+        segmentNumber: input.segmentNumber ?? null,
+        newPriceFrom: input.newPrice?.validFrom ?? null,
+      },
+      securityRelevantFields: ['amount', 'currency'],
+    });
+    return { infoRecordNumber: general.infoRecordNumber, version };
+  });
+}
+
+async function insertPrice(
+  tx: Tx,
+  client: string,
+  infoRecordNumber: string,
+  segmentNumber: number,
+  price: InfoRecordPriceInput,
+  changedBy: string,
+): Promise<number> {
+  const onRecord = await tx.select().from(purchasingInfoRecordPrice).where(and(
+    eq(purchasingInfoRecordPrice.client, client),
+    eq(purchasingInfoRecordPrice.infoRecordNumber, infoRecordNumber),
+  )).for('update');
+  const existing = onRecord.filter((row) => row.segmentNumber === segmentNumber && row.conditionType === CONDITION);
+  if (existing.some((row) => row.validFrom === price.validFrom)) {
+    throw new InfoRecordError(
+      `A price of info record ${infoRecordNumber} already starts on ${price.validFrom}.`,
+      'Choose another start. A written price is not overwritten.',
+    );
+  }
+  const active = existing.filter((row) => !row.markedForDeletion);
+  const overlapping = active.filter((row) => row.validFrom <= price.validTo && row.validTo >= price.validFrom);
+  if (overlapping.length === 1 && overlapping[0].validFrom < price.validFrom) {
+    const close = addDays(price.validFrom, -1);
+    if (close < overlapping[0].validFrom) {
+      throw new InfoRecordError(
+        `The price starting ${overlapping[0].validFrom} cannot be closed before the new price starts.`,
+      );
+    }
+    await tx.update(purchasingInfoRecordPrice).set({
+      validTo: close, changedBy, changedAt: new Date(),
+    }).where(and(
+      eq(purchasingInfoRecordPrice.client, client),
+      eq(purchasingInfoRecordPrice.infoRecordNumber, infoRecordNumber),
+      eq(purchasingInfoRecordPrice.priceSequence, overlapping[0].priceSequence),
+    ));
+  } else if (overlapping.length > 0) {
+    throw new InfoRecordError(
+      `The new price overlaps ${overlapping.map((row) => `${row.validFrom} to ${row.validTo}`).join(' and ')}. A price amount is not rewritten.`,
+      'Close the other intervals first, or choose dates that meet only the open interval.',
+    );
+  }
+  const sequence = onRecord.reduce((max, row) => Math.max(max, row.priceSequence), 0) + 1;
+  await tx.insert(purchasingInfoRecordPrice).values({
+    client,
+    infoRecordNumber,
+    priceSequence: sequence,
+    segmentNumber,
+    conditionType: CONDITION,
+    amount: price.amount.toFixed(4),
+    currency: price.currency.trim().toUpperCase(),
+    priceUnit: String(price.priceUnit),
+    priceUnitOfMeasure: price.priceUnitOfMeasure.trim().toUpperCase(),
+    validFrom: price.validFrom,
+    validTo: price.validTo,
+    createdBy: changedBy,
+  });
+  return sequence;
+}
+
+/**
+ * Reads a default for an order. It does not open a transaction and it does not write.
+ * A plant segment, when one exists, is the only candidate. An inactive plant segment
+ * does not fall through to the organisation price.
+ */
+export async function resolvePurchasingInfoRecord(
+  tx: Tx,
+  input: {
+    client: string;
+    partnerNumber: string;
+    materialNumber: string;
+    purchasingOrg: string;
+    plant: string;
+    pricingDate: string;
+    orderCurrency: string;
+  },
+): Promise<InfoRecordResolution> {
+  const [general] = await tx.select().from(purchasingInfoRecord).where(and(
+    eq(purchasingInfoRecord.client, input.client),
+    eq(purchasingInfoRecord.partnerNumber, input.partnerNumber),
+    eq(purchasingInfoRecord.materialNumber, input.materialNumber),
+    eq(purchasingInfoRecord.category, CATEGORY),
+  ));
+  if (!general) return { qualified: false };
+  if (general.markedForDeletion) {
+    return { qualified: false, warning: `Info record ${general.infoRecordNumber} is inactive.` };
+  }
+  const [ext] = await tx.select().from(materialPlant).where(and(
+    eq(materialPlant.client, input.client),
+    eq(materialPlant.materialNumber, input.materialNumber),
+    eq(materialPlant.plant, input.plant),
+  ));
+  if (ext?.procurementType === 'MAKE') {
+    return {
+      qualified: false,
+      warning: `Material ${input.materialNumber} is procured by production at plant ${input.plant}, so the info record is not applied.`,
+    };
+  }
+  const segments = await tx.select().from(purchasingInfoRecordOrg).where(and(
+    eq(purchasingInfoRecordOrg.client, input.client),
+    eq(purchasingInfoRecordOrg.infoRecordNumber, general.infoRecordNumber),
+    eq(purchasingInfoRecordOrg.purchasingOrg, input.purchasingOrg),
+  ));
+  const plantSegment = segments.find((row) => row.plant === input.plant);
+  const orgSegment = segments.find((row) => row.plant == null);
+  let chosen = plantSegment ?? null;
+  if (plantSegment?.markedForDeletion) {
+    return {
+      qualified: false,
+      warning: `The plant segment of info record ${general.infoRecordNumber} for plant ${input.plant} is inactive, and the organisation price is not used in its place.`,
+    };
+  }
+  if (!plantSegment) {
+    if (!orgSegment || orgSegment.markedForDeletion) {
+      return orgSegment
+        ? { qualified: false, warning: `Info record ${general.infoRecordNumber} is inactive for purchasing organisation ${input.purchasingOrg}.` }
+        : { qualified: false };
+    }
+    chosen = orgSegment;
+  }
+  if (!chosen) return { qualified: false };
+  const prices = await tx.select().from(purchasingInfoRecordPrice).where(and(
+    eq(purchasingInfoRecordPrice.client, input.client),
+    eq(purchasingInfoRecordPrice.infoRecordNumber, general.infoRecordNumber),
+    eq(purchasingInfoRecordPrice.segmentNumber, chosen.segmentNumber),
+    eq(purchasingInfoRecordPrice.conditionType, CONDITION),
+    eq(purchasingInfoRecordPrice.markedForDeletion, false),
+  ));
+  const applicable = prices.filter((row) => row.validFrom <= input.pricingDate && row.validTo >= input.pricingDate);
+  if (applicable.length === 0) {
+    return {
+      qualified: false,
+      warning: `Info record ${general.infoRecordNumber} has no price valid on ${input.pricingDate}.`,
+    };
+  }
+  if (applicable.length > 1) {
+    return {
+      qualified: false,
+      warning: `Info record ${general.infoRecordNumber} has more than one price valid on ${input.pricingDate}.`,
+    };
+  }
+  const price = applicable[0];
+  if (price.currency.trim() !== input.orderCurrency.trim()) {
+    return {
+      qualified: false,
+      warning: `Info record ${general.infoRecordNumber} is priced in ${price.currency.trim()}, not the order currency ${input.orderCurrency.trim()}. It is not applied.`,
+    };
+  }
+  return {
+    qualified: true,
+    infoRecordNumber: general.infoRecordNumber,
+    priceSequence: price.priceSequence,
+    amount: price.amount,
+    currency: price.currency.trim(),
+    priceUnit: Number(price.priceUnit),
+    priceUnitOfMeasure: price.priceUnitOfMeasure,
+    orderUnit: chosen.orderUnit,
+    plannedDeliveryDays: chosen.plannedDeliveryDays,
+    minimumOrderQuantity: chosen.minimumOrderQuantity,
+    minimumOrderUnit: chosen.minimumOrderUnit,
+  };
+}

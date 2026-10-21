@@ -8,7 +8,10 @@
  * requisition item, the ordered total never exceeding the requisitioned
  * quantity. The item net value is the stated baseline — quantity × net
  * price ÷ price unit, currency-rounded; condition-based pricing is a
- * later round. PO creation posts nothing, so neither the FI periods
+ * later round. A purchasing info record, when one qualifies, may fill an
+ * omitted price. It does not replace a price the buyer typed, and a
+ * later change of the record does not rewrite this order. PO creation
+ * posts nothing, so neither the FI periods
  * nor the material period control is consulted on save (R-104).
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -26,6 +29,8 @@ import { businessPartner } from '../foundation/business-partner-schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
+import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
+import { resolvePurchasingInfoRecord } from './info-record';
 import {
   purchaseOrder, purchaseOrderAssignment, purchaseOrderItem, purchaseOrderScheduleLine,
   purchaseRequisitionItem,
@@ -69,8 +74,10 @@ const itemInput = z.object({
   shortText: z.string().trim().max(40).optional().default(''),
   quantity: z.coerce.number().positive(),
   unit: z.string().trim().max(6).optional().default(''),
-  netPrice: z.coerce.number().min(0),
+  netPrice: z.coerce.number().min(0).optional(),
   priceUnit: z.coerce.number().int().positive().optional().default(1),
+  /** Asks for the info-record lead time. A sent delivery date is kept unless this is set. */
+  applyLeadTime: z.boolean().optional().default(false),
   taxCode: z.string().trim().max(4).optional().default(''),
   plant: z.string().trim().min(1).max(10),
   storageLocation: z.string().trim().max(10).optional().default(''),
@@ -113,6 +120,8 @@ export interface OrderItemRow {
   markedForDeletion: boolean;
   requisitionNumber: string | null;
   requisitionItem: number | null;
+  infoRecordNumber: string | null;
+  priceSequence: number | null;
   scheduleLines: Array<{ lineNumber: number; deliveryDate: string; quantity: string }>;
   assignments: Array<{ lineNumber: number; glAccount: string; costCenter: string; distributionPercentage: string }>;
 }
@@ -136,8 +145,48 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function round2(value: number): string {
   return (Math.round(value * 100) / 100).toFixed(2);
+}
+
+async function priceFromRecord(
+  tx: Tx,
+  client: string,
+  materialNumber: string,
+  orderUnit: string,
+  record: { amount?: string; priceUnit?: number; priceUnitOfMeasure?: string },
+): Promise<{ netPrice: number; priceUnit: number; rounded: boolean }> {
+  const amount = Number(record.amount);
+  const recordUnit = Number(record.priceUnit);
+  let perOrderUnit = amount;
+  let storedUnit = recordUnit;
+  if (record.priceUnitOfMeasure !== orderUnit) {
+    try {
+      const oneOrder = await toBaseQuantity(tx, client, { materialNumber, quantity: 1, entryUnit: orderUnit });
+      const onePrice = await toBaseQuantity(tx, client, { materialNumber, quantity: 1, entryUnit: record.priceUnitOfMeasure });
+      if (onePrice.baseQuantity === 0) {
+        throw new PurchaseOrderError(`Material ${materialNumber} has no base quantity for ${record.priceUnitOfMeasure}.`);
+      }
+      perOrderUnit = amount * (oneOrder.baseQuantity / onePrice.baseQuantity) / recordUnit;
+      storedUnit = 1;
+    } catch (error) {
+      if (error instanceof UnitConversionError) throw new PurchaseOrderError(error.message, error.remedy);
+      throw error;
+    }
+  }
+  const rounded = round2(storedUnit === 1 && record.priceUnitOfMeasure !== orderUnit ? perOrderUnit : amount);
+  return {
+    netPrice: Number(rounded),
+    priceUnit: storedUnit,
+    rounded: Math.abs((storedUnit === 1 && record.priceUnitOfMeasure !== orderUnit ? perOrderUnit : amount) - Number(rounded)) > 0.0000001,
+  };
 }
 
 interface JudgedItem {
@@ -149,11 +198,12 @@ interface JudgedItem {
 async function judgeItem(
   tx: Tx,
   client: string,
-  header: { companyCode: string; currency: string },
+  header: { companyCode: string; currency: string; supplierNumber: string; purchasingOrg: string },
   item: z.infer<typeof itemInput>,
   documentDate: string,
   excludeOrder: string | null,
   warnings: string[],
+  applyRecord: boolean,
 ): Promise<JudgedItem> {
   const [company] = await tx.select().from(companyCode)
     .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, header.companyCode)));
@@ -178,6 +228,7 @@ async function judgeItem(
   let shortText = item.shortText;
   let unit = item.unit;
   let group9: string | null = null;
+  let record: Awaited<ReturnType<typeof resolvePurchasingInfoRecord>> | null = null;
   if (item.materialNumber) {
     const [mat] = await tx.select().from(material)
       .where(and(eq(material.client, client), eq(material.materialNumber, item.materialNumber)));
@@ -195,6 +246,19 @@ async function judgeItem(
     if (mat.markedForDeletion || ext.markedForDeletion) {
       warnings.push(`Material ${item.materialNumber} is flagged for deletion (SCR-053) — the flag warns here; it does not block an order.`);
     }
+    if (applyRecord) {
+      record = await resolvePurchasingInfoRecord(tx, {
+        client,
+        partnerNumber: header.supplierNumber,
+        materialNumber: item.materialNumber,
+        purchasingOrg: header.purchasingOrg,
+        plant: item.plant,
+        pricingDate: documentDate,
+        orderCurrency: header.currency,
+      });
+      if (record.warning) warnings.push(record.warning);
+      if (!unit && record.qualified && record.orderUnit) unit = record.orderUnit;
+    }
     if (!shortText) shortText = mat.description;
     if (!unit) unit = mat.baseUnit ?? '';
     if (mat.materialGroup) {
@@ -205,6 +269,65 @@ async function judgeItem(
   }
   if (!shortText) throw new PurchaseOrderError('A short text is required — from the material master or entered for a text item.');
   if (!unit) throw new PurchaseOrderError('An order unit is required.');
+  let netPrice = item.netPrice;
+  let priceUnit = item.priceUnit;
+  let storeReference = Boolean(applyRecord && record?.qualified);
+  if (applyRecord && record?.qualified && item.materialNumber) {
+    if (netPrice === undefined) {
+      const filled = await priceFromRecord(tx, client, item.materialNumber, unit, record);
+      netPrice = filled.netPrice;
+      priceUnit = filled.priceUnit;
+      if (filled.rounded) {
+        warnings.push(
+          `Info record ${record.infoRecordNumber} price ${record.amount} ${record.currency} is stored with more than two decimal places. The order snapshot rounds it to ${filled.netPrice}.`,
+        );
+      }
+    } else if (record.priceUnitOfMeasure !== unit) {
+      try {
+        await toBaseQuantity(tx, client, { materialNumber: item.materialNumber, quantity: 1, entryUnit: unit });
+        await toBaseQuantity(tx, client, { materialNumber: item.materialNumber, quantity: 1, entryUnit: record.priceUnitOfMeasure });
+        warnings.push(
+          `Info record ${record.infoRecordNumber} prices ${record.priceUnitOfMeasure}, and the order is in ${unit}. The order keeps the price that was typed.`,
+        );
+      } catch (error) {
+        if (!(error instanceof UnitConversionError)) throw error;
+        storeReference = false;
+        warnings.push(`${error.message} The info record reference is not stored.`);
+      }
+    } else {
+      const recorded = Number(record.amount) / Number(record.priceUnit);
+      const sent = netPrice / priceUnit;
+      if (Math.abs(recorded - sent) > 0.0001) {
+        warnings.push(
+          `Info record ${record.infoRecordNumber} qualified at ${record.amount} ${record.currency} per ${record.priceUnit} ${record.priceUnitOfMeasure}. The order keeps the price that was typed.`,
+        );
+      }
+    }
+    if (record.minimumOrderQuantity != null && record.minimumOrderUnit) {
+      try {
+        const ordered = await toBaseQuantity(tx, client, { materialNumber: item.materialNumber, quantity: item.quantity, entryUnit: unit });
+        const minimum = await toBaseQuantity(tx, client, {
+          materialNumber: item.materialNumber,
+          quantity: Number(record.minimumOrderQuantity),
+          entryUnit: record.minimumOrderUnit,
+        });
+        if (ordered.baseQuantity + 0.0000001 < minimum.baseQuantity) {
+          warnings.push(
+            `The order quantity is below the info record minimum of ${record.minimumOrderQuantity} ${record.minimumOrderUnit}. The order is not refused.`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof UnitConversionError) warnings.push(error.message);
+        else throw error;
+      }
+    }
+  }
+  if (netPrice === undefined) {
+    throw new PurchaseOrderError(
+      record?.warning ?? 'A net price is required.',
+      'Enter a price, or maintain an info record that applies to this item.',
+    );
+  }
   const [unitRow] = await tx.select().from(unitOfMeasure).where(eq(unitOfMeasure.code, unit));
   if (!unitRow) throw new PurchaseOrderError(`Unit ${unit} is not a standing unit of measure.`);
 
@@ -284,6 +407,15 @@ async function judgeItem(
     throw new PurchaseOrderError('A stock item carries no account assignments.');
   }
 
+  if (
+    applyRecord && item.applyLeadTime && record?.qualified && record.plannedDeliveryDays != null
+    && item.scheduleLines.length !== 1
+  ) {
+    warnings.push(
+      `Info record ${record.infoRecordNumber} lead time was not applied because the item has more than one schedule line. The sent dates stand.`,
+    );
+  }
+
   return {
     values: {
       client,
@@ -295,9 +427,11 @@ async function judgeItem(
       shortText,
       quantity: String(item.quantity),
       unit,
-      netPrice: String(item.netPrice),
-      priceUnit: String(item.priceUnit),
-      netValue: round2((item.quantity * item.netPrice) / item.priceUnit),
+      netPrice: String(netPrice),
+      priceUnit: String(priceUnit),
+      netValue: round2((item.quantity * netPrice) / priceUnit),
+      infoRecordNumber: storeReference ? record?.infoRecordNumber ?? null : null,
+      priceSequence: storeReference ? record?.priceSequence ?? null : null,
       taxCode: item.taxCode || null,
       plant: item.plant,
       storageLocation: item.storageLocation || null,
@@ -307,7 +441,10 @@ async function judgeItem(
       markedForDeletion: item.markedForDeletion,
     },
     scheduleLines: item.scheduleLines.map((line) => ({
-      deliveryDate: line.deliveryDate, quantity: String(line.quantity),
+      deliveryDate: applyRecord && item.applyLeadTime && record?.qualified && record.plannedDeliveryDays != null && item.scheduleLines.length === 1
+        ? addDays(documentDate, record.plannedDeliveryDays)
+        : line.deliveryDate,
+      quantity: String(line.quantity),
     })),
     assignments: item.assignments,
   };
@@ -357,6 +494,8 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       markedForDeletion: item.markedForDeletion,
       requisitionNumber: item.requisitionNumber,
       requisitionItem: item.requisitionItem,
+      infoRecordNumber: item.infoRecordNumber,
+      priceSequence: item.priceSequence,
       scheduleLines: schedules.filter((s) => s.itemNumber === item.itemNumber)
         .map((s) => ({ lineNumber: s.lineNumber, deliveryDate: s.deliveryDate, quantity: s.quantity })),
       assignments: assignments.filter((a) => a.itemNumber === item.itemNumber)
@@ -427,14 +566,20 @@ async function writeItem(
   changedBy: string,
   isNew: boolean,
   documentDate: string,
+  preserveInfoRecordReference: boolean,
 ): Promise<void> {
+  const values = { ...judged.values };
+  if (preserveInfoRecordReference) {
+    delete values.infoRecordNumber;
+    delete values.priceSequence;
+  }
   if (isNew) {
     await tx.insert(purchaseOrderItem).values({
-      ...judged.values, orderNumber, itemNumber, createdBy: changedBy,
+      ...values, orderNumber, itemNumber, createdBy: changedBy,
     });
   } else {
     await tx.update(purchaseOrderItem).set({
-      ...judged.values, orderNumber, itemNumber, changedBy, changedAt: new Date(),
+      ...values, orderNumber, itemNumber, changedBy, changedAt: new Date(),
     }).where(and(
       eq(purchaseOrderItem.client, client), eq(purchaseOrderItem.orderNumber, orderNumber),
       eq(purchaseOrderItem.itemNumber, itemNumber),
@@ -513,8 +658,10 @@ export async function createOrder(
     let itemNumber = 0;
     for (const item of input.items) {
       itemNumber += 10;
-      const judged = await judgeItem(tx, input.client, input, item, documentDate, null, warnings);
-      await writeItem(tx, input.client, number, itemNumber, judged, input.changedBy, true, documentDate);
+      const judged = await judgeItem(tx, input.client, {
+        companyCode: input.companyCode, currency, supplierNumber: input.supplierNumber, purchasingOrg: input.purchasingOrg,
+      }, item, documentDate, null, warnings, true);
+      await writeItem(tx, input.client, number, itemNumber, judged, input.changedBy, true, documentDate, false);
     }
     await recordChange(tx, {
       client: input.client, objectClass: PO_OBJECT_CLASS, objectKey: number,
@@ -567,8 +714,10 @@ export async function changeOrder(
     for (const item of input.items) {
       const isNew = item.itemNumber === undefined || !standingNumbers.has(item.itemNumber);
       const itemNumber = isNew ? (maxItem += 10) : (item.itemNumber as number);
-      const judged = await judgeItem(tx, input.client, input, item, before.documentDate, raw.orderNumber, warnings);
-      await writeItem(tx, input.client, raw.orderNumber, itemNumber, judged, input.changedBy, isNew, before.documentDate);
+      const judged = await judgeItem(tx, input.client, {
+        companyCode: input.companyCode, currency, supplierNumber: input.supplierNumber, purchasingOrg: input.purchasingOrg,
+      }, item, before.documentDate, raw.orderNumber, warnings, isNew);
+      await writeItem(tx, input.client, raw.orderNumber, itemNumber, judged, input.changedBy, isNew, before.documentDate, !isNew);
     }
     await syncDocumentRelease(
       tx, input.client, 'PURCHASE_ORDER', raw.orderNumber,
