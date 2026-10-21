@@ -4500,6 +4500,105 @@ hand-entered counter, drafts and the Validated state, and stable error codes.
 
 Same-stage bookkeeping: B-919 / §26.931 / §30 row 2.749.
 
+## §26.932 — MI04 contracted: counting is not adjusting
+
+**B-920.** MI01 built a document that says what will be counted and blocks the stock while it waits;
+nothing has ever said what was actually found. MI04 is that answer, and the whole round turns on one
+distinction the package repeats: **a count records what a person saw, and posts nothing.** No
+material document, no journal, no stock balance moves. The difference is a number held for MI20 and
+MI07 to act on, and those are other rounds.
+
+**The item gains its stock identity — superseding SCR-142.** SCR-142 made an item a material row,
+reasonably, because batch and special stock were refused and the scope is the header's plant and
+storage location. But stock type is not refused, and `stockAt` — the function MI01 shows as the book
+quantity — **sums only `UNRESTRICTED`**. A material holding unrestricted and quality stock in one
+storage location would be counted as one number that MI07 could not post, and §4's "stock type ·
+relevant stock category" would be decoration. So `physical_inventory_item` gains **`stock_type`**,
+the unique key widens to *(document, material, stock type)*, and MI01 creates one item per stock
+type that actually holds stock, falling back to `UNRESTRICTED` when none does. Part 2 §7 is explicit
+that the existing item model should be extended rather than a competing count table created; a
+`physical_inventory_count_entry` table is **refused by name**.
+
+**Zero is a state, not a number.** `counted_quantity` and `counted_base_quantity` stay **nullable**,
+`zero_count_flag` is its own non-null boolean, and a check constraint says
+`NOT zero_count_flag OR counted_base_quantity = 0`. A null count means nobody has looked; a zero
+count means somebody looked and found nothing; a zero written into the quantity column would make
+the two indistinguishable in the data, which is exactly what §5 forbids. A submission carrying both
+a zero flag and a positive quantity is refused, and the server — not the client — sets the quantity
+to zero when the flag is set.
+
+**The book basis is recorded, not assumed (§11).** MI01 never snapshotted book stock; the item is a
+material number and the screen reads live stock. §11 allows "another explicitly configured and
+auditable basis" but forbids silently replacing the original. The item gains
+**`book_quantity_snapshot`**, **`book_quantity_unit`** and **`book_quantity_basis`**: filled at MI01
+creation going forward (`DOCUMENT_CREATION` — the count freezes the book, as SAP does), captured at
+count time for documents that predate this round (`COUNT_TIME`), and **never overwritten by a
+correction** — a correction recomputes the difference from the stored snapshot. The basis is on the
+row, so every variance states which quantity it was measured against.
+
+**Precision stays the ledger's.** The package warns that not every material uses three decimal
+places; canon uses exactly that everywhere — `numeric(23,3)` is the one definition behind
+`stock_quantity`, `material_document_line` and `material_valuation`. A count at any other scale
+would be a foreign body in the ledger MI07 must write to. The warning is honoured at the door
+instead: conversion is exact rational arithmetic (SCR-144), and a quantity that cannot be
+represented in the base unit is **refused**, not rounded into a number nobody counted.
+
+**Statuses.** Header: `CREATED` → `PARTIALLY_COUNTED` → `COUNTED`, with `CANCELLED` still reachable
+before anything is posted and `POSTED` reserved for MI07 and `DIFFERENCES_REVIEWED` for MI20 — both
+present in the vocabulary, both unreachable this round. Item: `UNCOUNTED` / `COUNTED`, with
+`RECOUNT_REQUIRED` in the vocabulary and **never set by MI04**: formal recount is a conditional
+enhancement (§22) and a state nothing can enter is honest only while it is named. The header is
+recalculated from **all** items in the transaction, never advanced because one item was counted
+(§15).
+
+**One transaction, one lock order (§12/§13).** Header and items are locked in a fixed order, the
+submission carries a request key with a fingerprint over its payload — the SCR-146 discipline, so a
+retry replays and a **reused key with a different payload is refused** — and each item carries a
+`version`. A stale submission is refused and handed the current state rather than silently
+overwriting a colleague's count. A bulk submission either lands whole or not at all: one bad item
+fails the lot, and a failure in the audit write or the status recalculation takes the count with it.
+
+**Audit is the change log, not a second table (§9).** `recordChange` already writes before/after
+snapshots with actor, reason and correlation, and writes nothing when nothing differs. MI04 calls it
+once per changed item inside the transaction. A separate `physical_inventory_count_history` table
+is **refused by name**: two records of one correction is the duplicate-source defect this programme
+has now refused four times.
+
+**Period controls (§17).** The count date is validated as a real ISO date and refused when it lies in
+the future; it is **not** tested against the FI posting period — §17.2 and §17.3 are explicit that
+counting stock and posting an inventory difference are separate business events, and a historical
+count must not be refused because OB52 closed the month. The inventory period is judged where the
+difference posts, which is MI07's round. **The posting block is respected and never released here**;
+cancellation remains MI02's capability.
+
+**Capabilities.** `INV.PHYINV.COUNT` enters counts; `INV.PHYINV.COUNT.CORRECT` corrects or clears
+one. §18 asks for a separation between entry, correction and history display, and canon has kept
+that separation everywhere else — a counter is not necessarily a supervisor. Neither capability
+grants creation or cancellation, and the screen checks each server-side on every mutation.
+
+**API (§19)**, as module functions with a zod schema at the boundary and the authoritative
+judgement in the service: `searchCountDocuments`, `getCountDocument`, `submitCounts`, `correctCount`,
+`clearCount`, `getCountHistory`, `getCountStatus`. **No operation sets document status, book
+quantity or variance**; those are computed. A client-supplied variance is ignored and refused when
+supplied as authoritative.
+
+**Route** `/inventory/physical-inventory-count`, MI04 as a search alias only — a count is its own
+transaction, not a movement on another screen.
+
+**Conditional, refused by name (§22):** multiple independent counters and counter groups, formal
+recount approval, serial-number counting, barcode/mobile capture, blind counting, and
+segregation-of-duties approval for high-value differences. **MI20 and MI07 are not built**; this
+round makes their inputs correct and readable, and §21.10 is satisfied by tests that read the
+count results the way those rounds will.
+
+**Acceptance (stage 5): T846** — count one item positive and one explicitly zero, watch the header
+move `CREATED` → `PARTIALLY_COUNTED` → `COUNTED`, see an uncounted item reported as uncounted rather
+than zero, correct a count and read the history back, clear one, refuse a zero-flag-with-quantity, a
+negative quantity, a stale submission and a reused key with a different payload, and read
+`material_document`, `journal_entry` and `stock_quantity` back unchanged. **T847** follows for MI20.
+
+Same-stage bookkeeping: B-920 / §26.932 / §30 row 2.750.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4880,3 +4979,4 @@ Same-stage bookkeeping: B-919 / §26.931 / §30 row 2.749.
 | 2.747 | 2026-10-21 | **SCR-145 closed — MBRL return delivery accepted (B-917, §26.929).** **A return is not a cancellation**: `return_of_document` / `return_of_document_year` / `return_of_line` are distinct from the reversal pair and a constraint forbids a line being both. **Returnable quantity is derived** from posted returns net of their reversals — a reversal records what it reverses, not what its original returned against, so the returns are found first and the lines reversing them netted off — under an advisory lock per original line and re-read after it, never taken from the caller. **The movement is configuration** (`RETURN_TO_VENDOR`, ISSUE, counter `RETURN_TO_VENDOR_REV`); a row that adds stock or references anything but the purchase order is refused by name. **Accounting mirrors the receipt**: inventory credited, GR/IR debited, price difference where they disagree — no vendor liability, no credit memo. **Two defects fixed on the way**: `receivedQuantities` signed every non-reversal line positive, so a 122 would have *increased* the received quantity — the sign now follows the configured direction and resolves reversals against the line they reverse; and the idempotency key on the return form (and on MIGO, which shared the shape) was fixed per document per day, so a second posting replayed the first — both now move the key once a posting succeeds. T844 green: 40 received, 15 returned with the receipt standing and the receipt screen reporting 25 received, 25 returned to zero, a third attempt refused with its reason, and both returns reversed back to 40/40. Suite 2045/2045 in 274 files; harness 144; migrations 208. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, shipping integration, picking, vendor credit memo. | Agent |\n
 | 2.748 | 2026-10-21 | **SCR-146 contracted — MB1B with the movement catalogue as data (B-918, §26.930).** §3/§9/§10 of the owner's specification require configuration to decide what a transfer is; `transfer-scenarios.ts` had decided it at compile time since SCR-131. Migration 9086 adds `movement_kind`, source and destination stock types, `plant_rule`/`location_rule`, `is_two_step`, four requirement flags, `negative_stock_policy` and `valuation_relevant` to `movement_type`, and 311/301/321 become rows with a test proving identical posting. A movement whose requirement canon cannot meet (batch, serial, special stock, valuation type) is **refused by name**; two-step (303/313/315) is refused per §14 and §19 rather than silently processed. `material_document` gains `external_reference` and `request_fingerprint`; the same idempotency key with a different payload is refused rather than replayed (§16). `validateTransfer` judges without writing. The `direction` value `TRANSFER` is constrained to the four legal values and signs by `line_direction`, closing a trap SCR-145 armed. Deliberate deviation: locks precede unit conversion, contrary to §10's step order, because reading the material before the lock is the defect SCR-143 closed. | Agent |
 | 2.749 | 2026-10-21 | **SCR-146 closed — MB1B with the movement catalogue as data (B-919, §26.931).** Three stages and a browser run that found a real defect. **Migration 9086** gives `movement_type` the content it was missing — `movement_kind`, the two stock types, `plant_rule`/`location_rule`, `is_two_step`, four requirement flags, `negative_stock_policy`, `valuation_relevant` — each in a closed vocabulary, with the delivered rows backfilled; `material_document` gains `external_reference` and `request_fingerprint`. **`resolveScenario` reads the row**, so permitted dimensions, stock types, negative-stock policy and valuation relevance are configuration; the three-digit numbers stay input aliases in one map, and counters and two-step aliases keep their refusals in words. A pre-flight lifted out of the posting serves **`validateTransfer`**, which runs the posting's own judgement and stops before the writer — §16's "validate posts nothing" holds by construction. Idempotency splits into a replay that returns the document and **a reused key with a different payload that is refused** (SHA-256 over the canonical request). The screen gains an external reference, a **Check** that reports the configured movement, base quantity, both sides, stock before and after, value, period and journal, and a request key that moves on after a successful posting. **T845 found the reversal deciding value by `issue.plant !== receipt.plant`** — a hardcoded rule §11/§13 forbid — which crashed on a valueless cross-plant 311 with `material_valuation_values_ck`; the reversal now asks the counter movement's configuration, and a test proves a valueless transfer reverses with every valuation area unchanged. T845 green on the production build: check posted nothing, a reconfigured 311 moved stock between plants carrying `TO-8801`, the same movement inside one plant was refused in the configuration's words, 303/313 and a batch-requiring 321 refused by name, a reused key with a different quantity refused, and the reversal posted `TRANSFER_SLOC_REV` returning stock to 104.000. Neighbours T831 and T841 re-run green. Suite 2064/2064 in 277 files; harness 145; migrations 208. | Agent |
+| 2.750 | 2026-10-21 | **SCR-147 / MI04 contracted — counting is not adjusting (B-920, §26.932).** MI01 said what will be counted and blocked the stock; nothing has ever said what was found. The round turns on the package's own distinction: **a count records what a person saw and posts nothing** — no material document, no journal, no stock move; the difference is held for MI20/MI07. **The item gains its stock identity**, superseding SCR-142's material-level line: `stockAt` sums only `UNRESTRICTED`, so a material holding quality stock too would be counted as one number MI07 could not post — `stock_type` joins the item and the unique key widens to *(document, material, stock type)*, with MI01 seeding one item per stock type holding stock. A `physical_inventory_count_entry` table is refused by name; the existing item model is extended (§7). **Zero is a state, not a number**: nullable quantities plus a non-null `zero_count_flag` with `NOT zero_count_flag OR counted_base_quantity = 0`, because a null count (nobody looked) and a zero count (somebody looked) must stay distinguishable. **The book basis is recorded, not assumed**: `book_quantity_snapshot` / `_unit` / `_basis` filled at MI01 creation (`DOCUMENT_CREATION`), captured at count time for pre-existing documents (`COUNT_TIME`), never overwritten by a correction. **Precision stays `numeric(23,3)`** — the ledger's one definition — with exact conversion and refusal rather than rounding. Header `CREATED → PARTIALLY_COUNTED → COUNTED` with `POSTED`/`DIFFERENCES_REVIEWED` reserved and unreachable; item `UNCOUNTED`/`COUNTED`; `RECOUNT_REQUIRED` named but never set. One transaction in a fixed lock order, per-item `version`, request key with fingerprint (replay vs refusal), bulk all-or-nothing. Audit through `recordChange` only — a second history table is refused by name. Count date validated as a real date and not in the future but **not** against the FI period (§17.2/§17.3); the posting block is respected and never released. Capabilities `INV.PHYINV.COUNT` and `INV.PHYINV.COUNT.CORRECT`, neither granting creation or cancellation. Route `/inventory/physical-inventory-count`. Conditional and refused by name: multiple counters, formal recount approval, serial-level counting, barcode/mobile, blind counting, SoD approval. Acceptance **T846**. | Agent |
