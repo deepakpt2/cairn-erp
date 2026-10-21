@@ -96,6 +96,7 @@ import { scr144CloseTheGaps } from './scr144-close-the-gaps';
 import { scr145ReturnDelivery } from './scr145-return-delivery';
 import { scr146Mb1bConfiguration } from './scr146-mb1b-configuration';
 import { scr147Mi04Count } from './scr147-mi04-count';
+import { scr148Mi20Differences } from './scr148-mi20-differences';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5044,6 +5045,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr145-return-delivery': scr145ReturnDelivery,
   'scr146-mb1b-configuration': scr146Mb1bConfiguration,
   'scr147-mi04-count': scr147Mi04Count,
+  'scr148-mi20-differences': scr148Mi20Differences,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,
