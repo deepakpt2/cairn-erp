@@ -676,6 +676,62 @@ export const physicalInventoryDifferenceAllocation = pgTable('physical_inventory
 ]);
 
 /**
+ * SCR-150 — which original item a recount document was raised for.
+ *
+ * The pair of items is the key, so a cancelled generation stays and a later one is a new row.
+ * One original item has one link that is not cancelled. One recount item has one source, and
+ * that unique index is the reverse read. There is no company code: it is derived from the plant.
+ */
+export const physicalInventoryRecountLink = pgTable('physical_inventory_recount_link', {
+  client: tenant(),
+  originalDocumentNumber: varchar('original_document_number', { length: 24 }).notNull(),
+  originalFiscalYear: integer('original_fiscal_year').notNull(),
+  originalItemNumber: integer('original_item_number').notNull(),
+  recountDocumentNumber: varchar('recount_document_number', { length: 24 }).notNull(),
+  recountFiscalYear: integer('recount_fiscal_year').notNull(),
+  recountItemNumber: integer('recount_item_number').notNull(),
+  reason: varchar('reason', { length: 40 }).notNull(),
+  headerText: varchar('header_text', { length: 40 }),
+  plannedRecountDate: varchar('planned_recount_date', { length: 10 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('SCHEDULED'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [
+    t.client,
+    t.originalDocumentNumber, t.originalFiscalYear, t.originalItemNumber,
+    t.recountDocumentNumber, t.recountFiscalYear, t.recountItemNumber,
+  ] }),
+  foreignKey({
+    columns: [t.client, t.originalDocumentNumber, t.originalFiscalYear, t.originalItemNumber],
+    foreignColumns: [
+      physicalInventoryItem.client,
+      physicalInventoryItem.inventoryDocumentNumber,
+      physicalInventoryItem.fiscalYear,
+      physicalInventoryItem.itemNumber,
+    ],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.recountDocumentNumber, t.recountFiscalYear, t.recountItemNumber],
+    foreignColumns: [
+      physicalInventoryItem.client,
+      physicalInventoryItem.inventoryDocumentNumber,
+      physicalInventoryItem.fiscalYear,
+      physicalInventoryItem.itemNumber,
+    ],
+  }).onDelete('restrict'),
+  uniqueIndex('physical_inventory_recount_link_active_uq')
+    .on(t.client, t.originalDocumentNumber, t.originalFiscalYear, t.originalItemNumber)
+    .where(sql`${t.status} <> 'CANCELLED'`),
+  uniqueIndex('physical_inventory_recount_link_recount_uq')
+    .on(t.client, t.recountDocumentNumber, t.recountFiscalYear, t.recountItemNumber),
+  check('physical_inventory_recount_link_status_ck', sql`${t.status} in ('SCHEDULED', 'COUNTED', 'RESOLVED', 'CANCELLED')`),
+  check('physical_inventory_recount_link_reason_ck', sql`char_length(btrim(${t.reason})) between 1 and 40`),
+  check('physical_inventory_recount_link_header_ck', sql`${t.headerText} is null or char_length(btrim(${t.headerText})) between 1 and 40`),
+  check('physical_inventory_recount_link_date_ck', sql`${t.plannedRecountDate} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
+  check('physical_inventory_recount_link_distinct_document_ck', sql`${t.originalDocumentNumber} <> ${t.recountDocumentNumber} or ${t.originalFiscalYear} <> ${t.recountFiscalYear}`),
+]);
+
+/**
  * SCR-144 / INV.STOCK.UOM — one alternative unit per material per base unit, as an exact
  * ratio, so a conversion is rational arithmetic rather than a float multiplier.
  */
