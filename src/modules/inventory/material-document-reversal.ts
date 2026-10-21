@@ -24,6 +24,7 @@ import { plant as plantTable, storageLocation } from '../foundation/schema';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
+import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
 import {
   materialDocument, materialDocumentLine, materialValuation, movementType, stockQuantity,
 } from './schema';
@@ -522,6 +523,15 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
       eq(materialDocument.client, input.client),
       eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
     ));
+
+    await releaseDifferenceAllocations(tx, input.client, input.changedBy, {
+      reversalDocument: number,
+      lines: wanted.map((line, index) => ({
+        originalDocument: input.materialDocumentNumber,
+        originalLine: line.lineNumber,
+        reversalLine: index + 1,
+      })),
+    });
 
     await recordChange(tx, {
       client: input.client,

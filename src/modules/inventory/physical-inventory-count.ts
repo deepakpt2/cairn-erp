@@ -21,6 +21,7 @@ import { changeHistory, recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { material, physicalInventoryDocument, physicalInventoryItem } from './schema';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
+import { recomputePostingStatus } from './physical-inventory-posting-status';
 
 export const PHYSICAL_INVENTORY_COUNT_CAPABILITY = 'INV.PHYINV.COUNT';
 export const PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY = 'INV.PHYINV.COUNT.CORRECT';
@@ -28,7 +29,7 @@ export const PHYSICAL_INVENTORY_COUNT_ROUTE = '/inventory/physical-inventory-cou
 export const PHYSICAL_INVENTORY_COUNT_ALIASES = ['MI04'] as const;
 
 /** Statuses in which a count may still be entered or corrected (§15/§16). */
-const COUNTABLE_STATUSES = ['CREATED', 'PARTIALLY_COUNTED', 'COUNTED'] as const;
+const COUNTABLE_STATUSES = ['CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'PARTIALLY_POSTED'] as const;
 
 const ITEM_OBJECT_CLASS = 'physical_inventory_item';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -150,6 +151,7 @@ interface ItemRow {
   bookQuantityBasis: string | null;
   differenceQuantity: string | null;
   countStatus: string;
+  postingStatus: string;
   itemText: string | null;
   version: number;
 }
@@ -476,6 +478,12 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
           'Clear the recount requirement, then count the item.',
         );
       }
+      if (item.postingStatus === 'POSTED') {
+        throw new PhysicalInventoryCountError(
+          `Item ${item.itemNumber} has had its difference posted, and a posted count is not edited here.`,
+          'Reverse the posting, then count again. This screen does not post and does not reverse.',
+        );
+      }
       const [master] = await tx.select({ baseUnit: material.baseUnit }).from(material).where(and(
         eq(material.client, input.client), eq(material.materialNumber, item.materialNumber),
       ));
@@ -605,6 +613,9 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
 
     // §15: the header follows all its items, never the one that was just counted.
     const after = await loadItems(tx, input.client, submission.documentNumber, submission.fiscalYear);
+    if (after.some((item) => item.postingStatus === 'POSTED') || header.status === 'PARTIALLY_POSTED' || header.status === 'POSTED') {
+      await recomputePostingStatus(tx, input.client, submission.documentNumber, submission.fiscalYear, input.changedBy);
+    } else {
     const nextStatus = statusOf(after);
     if (nextStatus !== header.status) {
       await tx.update(physicalInventoryDocument).set({
@@ -632,6 +643,7 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
       });
     }
 
+    }
     return (await viewOf(tx, input.client, submission.documentNumber, submission.fiscalYear))!;
   });
 }
@@ -689,6 +701,12 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
         'Only a counted item can be cleared.',
       );
     }
+    if (item.postingStatus === 'POSTED') {
+      throw new PhysicalInventoryCountError(
+        `Item ${item.itemNumber} has had its difference posted, and a posted count is not cleared here.`,
+        'Reverse the posting first. Clearing a posted count would leave the ledger behind.',
+      );
+    }
     if (input.expectedVersion !== undefined && input.expectedVersion !== item.version) {
       throw new PhysicalInventoryCountError(
         `Item ${item.itemNumber} was changed after you read it: it now stands at version ${item.version}.`,
@@ -742,6 +760,9 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
     });
 
     const after = await loadItems(tx, input.client, input.documentNumber, input.fiscalYear);
+    if (after.some((item) => item.postingStatus === 'POSTED') || header.status === 'PARTIALLY_POSTED' || header.status === 'POSTED') {
+      await recomputePostingStatus(tx, input.client, input.documentNumber, input.fiscalYear, input.changedBy);
+    } else {
     const nextStatus = statusOf(after);
     if (nextStatus !== header.status) {
       await tx.update(physicalInventoryDocument).set({
@@ -756,6 +777,7 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
       ));
     }
 
+    }
     return (await viewOf(tx, input.client, input.documentNumber, input.fiscalYear))!;
   });
 }
