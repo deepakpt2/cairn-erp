@@ -49,6 +49,7 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('infoRecord.title')}</h1>
           <div className="flex flex-wrap gap-2">
+            <Link href="/purchasing/source-list" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.title')}</Link>
             <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('infoRecord.toOrders')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>

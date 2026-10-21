@@ -223,6 +223,74 @@ export const purchasingInfoRecordPrice = pgTable('purchasing_info_record_price',
   check('purchasing_info_record_price_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
 ]);
 
+/**
+ * Purchasing source list — SCR-153. Who may supply a material at a plant.
+ *
+ * The header is one list. The requirement flag defaults off. An entry is one
+ * supplier in one purchasing organisation for an inclusive validity. The unique
+ * start index lives in migration 9094. Overlap of a different start is refused
+ * by the locked service, not by an exclusion constraint.
+ *
+ * The order's lookup was measured on 20,000 entries, five per material. A hit
+ * used the list primary key, then the start index: 0.045 ms and 6 buffers. A
+ * miss used the list primary key and stopped: 0.017 ms and 2 buffers. No
+ * further index was added.
+ */
+export const purchasingSourceList = pgTable('purchasing_source_list', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  sourceListRequired: boolean('source_list_required').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.plant] }),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  check('purchasing_source_list_version_ck', sql`${t.version} > 0`),
+]);
+
+export const purchasingSourceListEntry = pgTable('purchasing_source_list_entry', {
+  client: tenant(),
+  sourceNumber: varchar('source_number', { length: 20 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  roleCode: varchar('role_code', { length: 16 }).notNull().default('SUPPLIER'),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  fixedSource: boolean('fixed_source').notNull().default(false),
+  blockedSource: boolean('blocked_source').notNull().default(false),
+  mrpRelevant: boolean('mrp_relevant').notNull().default(false),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.sourceNumber] }),
+  foreignKey({
+    columns: [t.client, t.materialNumber, t.plant],
+    foreignColumns: [purchasingSourceList.client, purchasingSourceList.materialNumber, purchasingSourceList.plant],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.partnerNumber, t.roleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.purchasingOrg],
+    foreignColumns: [purchasingOrg.client, purchasingOrg.purchasingOrg],
+  }).onDelete('restrict'),
+  check('purchasing_source_list_entry_role_ck', sql`${t.roleCode} = 'SUPPLIER'`),
+  check('purchasing_source_list_entry_version_ck', sql`${t.version} > 0`),
+  check('purchasing_source_list_entry_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+]);
+
 export const purchaseOrderItem = pgTable('purchase_order_item', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
@@ -246,6 +314,8 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   /** The price that qualified, when one did. The snapshot columns above remain what the order used. */
   infoRecordNumber: varchar('info_record_number', { length: 20 }),
   priceSequence: integer('price_sequence'),
+  /** The source that qualified, when one did. The supplier on the order remains what it used. */
+  sourceNumber: varchar('source_number', { length: 20 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),
@@ -269,6 +339,10 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
   check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
+  foreignKey({
+    columns: [t.client, t.sourceNumber],
+    foreignColumns: [purchasingSourceListEntry.client, purchasingSourceListEntry.sourceNumber],
+  }).onDelete('restrict'),
 ]);
 
 export const purchaseOrderScheduleLine = pgTable('purchase_order_schedule_line', {

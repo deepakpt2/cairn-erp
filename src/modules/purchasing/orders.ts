@@ -10,7 +10,10 @@
  * price ÷ price unit, currency-rounded; condition-based pricing is a
  * later round. A purchasing info record, when one qualifies, may fill an
  * omitted price. It does not replace a price the buyer typed, and a
- * later change of the record does not rewrite this order. PO creation
+ * later change of the record does not rewrite this order. A source list,
+ * when one requires a source, must qualify the named supplier. The order
+ * stores that source and does not replace the supplier. A later change of
+ * the item keeps the source and the supplier the order used. PO creation
  * posts nothing, so neither the FI periods
  * nor the material period control is consulted on save (R-104).
  */
@@ -31,6 +34,7 @@ import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { resolvePurchasingInfoRecord } from './info-record';
+import { resolveSourceList, SourceListError } from './source-list';
 import {
   purchaseOrder, purchaseOrderAssignment, purchaseOrderItem, purchaseOrderScheduleLine,
   purchaseRequisitionItem,
@@ -122,6 +126,7 @@ export interface OrderItemRow {
   requisitionItem: number | null;
   infoRecordNumber: string | null;
   priceSequence: number | null;
+  sourceNumber: string | null;
   scheduleLines: Array<{ lineNumber: number; deliveryDate: string; quantity: string }>;
   assignments: Array<{ lineNumber: number; glAccount: string; costCenter: string; distributionPercentage: string }>;
 }
@@ -229,6 +234,7 @@ async function judgeItem(
   let unit = item.unit;
   let group9: string | null = null;
   let record: Awaited<ReturnType<typeof resolvePurchasingInfoRecord>> | null = null;
+  let sourceNumber: string | null = null;
   if (item.materialNumber) {
     const [mat] = await tx.select().from(material)
       .where(and(eq(material.client, client), eq(material.materialNumber, item.materialNumber)));
@@ -245,6 +251,22 @@ async function judgeItem(
     }
     if (mat.markedForDeletion || ext.markedForDeletion) {
       warnings.push(`Material ${item.materialNumber} is flagged for deletion (SCR-053) — the flag warns here; it does not block an order.`);
+    }
+    if (applyRecord) {
+      try {
+        const source = await resolveSourceList(tx, {
+          client,
+          materialNumber: item.materialNumber,
+          plant: item.plant,
+          purchasingOrg: header.purchasingOrg,
+          partnerNumber: header.supplierNumber,
+          documentDate,
+        });
+        sourceNumber = source.sourceNumber;
+      } catch (error) {
+        if (error instanceof SourceListError) throw new PurchaseOrderError(error.message, error.remedy);
+        throw error;
+      }
     }
     if (applyRecord) {
       record = await resolvePurchasingInfoRecord(tx, {
@@ -432,6 +454,7 @@ async function judgeItem(
       netValue: round2((item.quantity * netPrice) / priceUnit),
       infoRecordNumber: storeReference ? record?.infoRecordNumber ?? null : null,
       priceSequence: storeReference ? record?.priceSequence ?? null : null,
+      sourceNumber,
       taxCode: item.taxCode || null,
       plant: item.plant,
       storageLocation: item.storageLocation || null,
@@ -496,6 +519,7 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       requisitionItem: item.requisitionItem,
       infoRecordNumber: item.infoRecordNumber,
       priceSequence: item.priceSequence,
+      sourceNumber: item.sourceNumber,
       scheduleLines: schedules.filter((s) => s.itemNumber === item.itemNumber)
         .map((s) => ({ lineNumber: s.lineNumber, deliveryDate: s.deliveryDate, quantity: s.quantity })),
       assignments: assignments.filter((a) => a.itemNumber === item.itemNumber)
@@ -572,6 +596,7 @@ async function writeItem(
   if (preserveInfoRecordReference) {
     delete values.infoRecordNumber;
     delete values.priceSequence;
+    delete values.sourceNumber;
   }
   if (isNew) {
     await tx.insert(purchaseOrderItem).values({
