@@ -117,6 +117,14 @@ export default function PhysicalInventoryShell({
             </tbody>
           </table>
           <p className="mt-2 text-xs text-ink-soft">{t('mi01.countDeferred')}</p>
+          {/* SAP enters counts on MI04, not on the document that raises them: this is the way there. */}
+          <a
+            className="mt-2 inline-block text-xs underline"
+            href={`/inventory/physical-inventory-count?doc=${encodeURIComponent(createState.document.inventoryDocumentNumber)}&year=${createState.document.fiscalYear}`}
+            data-count-entry-link
+          >
+            {t('mi01.countEntry')}
+          </a>
 
           <form action={cancelAction} className="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="inventoryDocumentNumber" value={createState.document.inventoryDocumentNumber} />

@@ -44,6 +44,9 @@ describe('SCR-147 count screen contract', () => {
     expect(shell).toContain('disabled={!canCount || zero}');
     // An untouched row is not submitted at all — a blank quantity is not a count of zero.
     expect(actions).toContain('if (!zeroCount && rawQuantity === \'\') continue;');
+    // And a quantity sent beside a zero flag reaches the service, which refuses the contradiction;
+    // the screen must not normalise it away.
+    expect(actions).toContain("quantity: rawQuantity === '' ? undefined : Number(rawQuantity),");
     expect(actions).toContain("if (lines.length === 0)");
   });
 
@@ -67,8 +70,10 @@ describe('SCR-147 count screen contract', () => {
     expect(shell).not.toContain('const [requestKey] = useState(newRequestKey);');
   });
 
-  it('shows the history and the items still owed a count', () => {
+  it('shows the history — including why a count was corrected — and the items still owed a count', () => {
     expect(shell).toContain('data-count-history');
+    expect(messages).toContain("'mi04.historyReason'");
+    expect(shell).toContain('entry.reason');
     expect(shell).toContain('data-count-remaining');
     expect(shell).toContain('data-count-document-status');
     expect(shell).toContain('data-count-uncounted');

@@ -57,7 +57,9 @@ export async function submitCountsAction(
     if (!zeroCount && rawQuantity === '') continue;
     lines.push({
       itemNumber,
-      quantity: zeroCount ? undefined : Number(rawQuantity),
+      // The quantity is passed through even beside a zero flag: the contradiction is the service's
+      // to refuse in words, not the screen's to quietly normalise away.
+      quantity: rawQuantity === '' ? undefined : Number(rawQuantity),
       zeroCount,
       entryUnit: text(form, `unit-${n}`) || undefined,
       countDate: text(form, `date-${n}`) || undefined,

@@ -262,10 +262,11 @@ export default function CountWorkbench({
                   <th className="py-1">{t('mi04.historyField')}</th>
                   <th className="py-1">{t('mi04.historyFrom')}</th>
                   <th className="py-1">{t('mi04.historyTo')}</th>
+                  <th className="py-1">{t('mi04.historyReason')}</th>
                 </tr>
               </thead>
               <tbody>
-                {history.flatMap((entry) => entry.fields.map((field) => (
+                {history.flatMap((entry) => entry.fields.map((field, index) => (
                   <tr key={`${entry.itemNumber}-${entry.changedAt.toISOString()}-${field.field}`} className="border-t border-line">
                     <td className="py-1">{entry.itemNumber}</td>
                     <td className="py-1">{entry.changedAt.toISOString().slice(0, 16).replace('T', ' ')}</td>
@@ -273,6 +274,8 @@ export default function CountWorkbench({
                     <td className="py-1">{field.fieldLabel}</td>
                     <td className="py-1 tabular-nums">{field.oldValue ?? '—'}</td>
                     <td className="py-1 tabular-nums">{field.newValue ?? '—'}</td>
+                    {/* The reason belongs to the change, not to each field it touched. */}
+                    <td className="py-1">{index === 0 ? (entry.reason ?? '—') : ''}</td>
                   </tr>
                 )))}
               </tbody>

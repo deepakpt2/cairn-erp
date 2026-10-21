@@ -17,8 +17,10 @@ export const dynamic = 'force-dynamic';
  * Physical inventory documents — SCR-142 / INV.PHYINV.CREATE (MI01 as a search alias only).
  *
  * The count is the one inventory document that posts nothing: it names what will be counted
- * and, if asked, blocks the materials against movement until the count is done. Count entry
- * (MI04) and difference posting (MI07) are the rounds that follow.
+ * and, if asked, blocks the materials against movement until the count is done. The count itself is
+ * entered on the count workbench, which this document links to: it records what a counter saw
+ * against the book quantity frozen here and posts nothing. The difference review and the difference
+ * posting are the rounds that follow.
  */
 export default async function PhysicalInventoryPage({ searchParams }: {
   searchParams: Promise<Record<string, string | undefined>>;
