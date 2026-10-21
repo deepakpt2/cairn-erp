@@ -598,6 +598,22 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
     )).orderBy(materialDocumentLine.lineNumber);
     if (originalLines.length === 0) throw new GoodsReceiptError('The document carries no lines.');
 
+    // SCR-143: reversing a receipt moves stock back out, so it answers to the count block too.
+    for (const line of originalLines) {
+      if (!line.materialNumber) continue;
+      try {
+        await assertInventoryCountOpen(tx, input.client, {
+          materialNumber: line.materialNumber, plant: line.plant,
+          storageLocation: line.storageLocation ?? null,
+        });
+      } catch (caught) {
+        if (caught instanceof PhysicalInventoryError) {
+          throw new GoodsReceiptError(caught.message, caught.remedy);
+        }
+        throw caught;
+      }
+    }
+
     // The reversal's own posting date judges the material period.
     const firstPlant = originalLines[0].plant;
     const [plantRow] = await tx.select().from(plantTable).where(and(

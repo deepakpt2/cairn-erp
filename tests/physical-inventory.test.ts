@@ -10,7 +10,10 @@ import {
   cancelPhysicalInventory,
   createPhysicalInventory,
   listPhysicalInventory,
+  lockStockScope,
+  tryLockStockScope,
 } from '../src/modules/inventory/physical-inventory';
+import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { postTransfer, TransferPostingError } from '../src/modules/inventory/transfer-posting';
 import { postGoodsIssue, GoodsIssueError } from '../src/modules/inventory/goods-issue';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -44,7 +47,7 @@ describe('SCR-142 physical inventory document (MI01)', () => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
         select ${client}, v.n, v.d, t.material_type, 'PC', ${ACTOR}
-        from (values ('PI-MAT', 'Counted material'), ('PI-OTHER', 'Not counted')) as v(n, d)
+        from (values ('PI-MAT', 'Counted material'), ('PI-OTHER', 'Not counted'), ('PI-REV', 'Reversal material'), ('PI-LOCK', 'Lock material')) as v(n, d)
         cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
         on conflict do nothing
       `);
@@ -57,7 +60,7 @@ describe('SCR-142 physical inventory document (MI01)', () => {
       await tx.execute(sql`
         insert into material_plant (client, material_number, plant, created_by)
         select ${client}, v.n, ${PLANT}, ${ACTOR}
-        from (values ('PI-MAT'), ('PI-OTHER')) as v(n)
+        from (values ('PI-MAT'), ('PI-OTHER'), ('PI-REV'), ('PI-LOCK')) as v(n)
         on conflict do nothing
       `);
       await tx.execute(sql`
@@ -71,14 +74,14 @@ describe('SCR-142 physical inventory document (MI01)', () => {
                                         standard_price, moving_average_price, price_unit, currency,
                                         total_stock_quantity, stock_value, created_by)
         select ${client}, v.n, ${PLANT}, 'RAW_INVENTORY', 'MOVING_AVERAGE', 10, 10, 1, c.currency, 100, 1000, ${ACTOR}
-        from (values ('PI-MAT'), ('PI-OTHER')) as v(n)
+        from (values ('PI-MAT'), ('PI-OTHER'), ('PI-REV'), ('PI-LOCK')) as v(n)
         cross join (select currency from company_code where client = ${client} limit 1) c
         on conflict do nothing
       `);
       await tx.execute(sql`
         insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         select ${client}, v.n, ${PLANT}, 'SP01', 'UNRESTRICTED', 100, ${ACTOR}
-        from (values ('PI-MAT'), ('PI-OTHER')) as v(n)
+        from (values ('PI-MAT'), ('PI-OTHER'), ('PI-REV'), ('PI-LOCK')) as v(n)
         on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = 100
       `);
       await tx.execute(sql`
@@ -294,5 +297,143 @@ describe('SCR-142 physical inventory document (MI01)', () => {
     await expect(cancelPhysicalInventory({
       client, changedBy: ACTOR, inventoryDocumentNumber: 'PI-9999999', fiscalYear: 2026,
     })).rejects.toBeInstanceOf(PhysicalInventoryError);
+  });
+
+  it('counts several materials in one document', async () => {
+    const view = await create({ materials: ['PI-MAT', 'PI-OTHER'], postingBlock: false });
+    expect(view.items.map((i) => i.materialNumber)).toEqual(['PI-MAT', 'PI-OTHER']);
+    expect(view.items.map((i) => i.itemNumber)).toEqual([10, 20]);
+  });
+
+  it('blocks a reversal of a document that moved the counted material', async () => {
+    // A document posted before the count exists: a 311 of PI-MAT to SP02.
+    const moved = await postTransfer({
+      client, changedBy: ACTOR, movementTypeCode: '311',
+      materialNumber: 'PI-REV', quantity: 4,
+      issuingPlant: PLANT, issuingStorageLocation: 'SP01',
+      receivingPlant: PLANT, receivingStorageLocation: 'SP02',
+      postingDate: '2026-10-20', documentDate: '2026-10-20',
+      requestKey: 'pre-reversal-311',
+    });
+
+    const count = await create({ materials: ['PI-REV'] });
+    const refusal = await reverseMaterialDocument({
+      client, changedBy: ACTOR,
+      materialDocumentNumber: moved.materialDocumentNumber,
+      postingDate: '2026-10-20', documentDate: '2026-10-20',
+      requestKey: 'blocked-reversal',
+    }).catch((e: unknown) => e as Error);
+    expect(refusal.message).toMatch(/blocks postings for material PI-REV/);
+
+    await cancelPhysicalInventory({
+      client, changedBy: ACTOR,
+      inventoryDocumentNumber: count.inventoryDocumentNumber, fiscalYear: count.fiscalYear,
+    });
+    const reversal = await reverseMaterialDocument({
+      client, changedBy: ACTOR,
+      materialDocumentNumber: moved.materialDocumentNumber,
+      postingDate: '2026-10-20', documentDate: '2026-10-20',
+      requestKey: 'allowed-reversal',
+    });
+    expect(reversal.materialDocumentNumber).toMatch(/^MD-/);
+    expect(reversal.reversalOf).toBe(moved.materialDocumentNumber);
+  });
+
+  it('serializes: while a posting holds the scope, a count cannot take it exclusively', async () => {
+    // Two connections, because a session re-enters its own advisory locks — the conflict is
+    // between a posting and a count creation, which are never the same session.
+    let locked!: () => void;
+    const holdsLock = new Promise<void>((resolve) => { locked = resolve; });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+
+    const posting = withTenant(client, async (tx) => {
+      await lockStockScope(tx, client, ['PI-LOCK'], 'SHARED');
+      locked();
+      await gate;
+    });
+    await holdsLock;
+    try {
+      const exclusive = await withTenant(client, (tx) =>
+        tryLockStockScope(tx, client, 'PI-LOCK', 'EXCLUSIVE'));
+      expect(exclusive).toBe(false);
+    } finally {
+      release();
+      await posting;
+    }
+  });
+
+  it('serializes: while a count holds the scope, a posting cannot take it', async () => {
+    let locked!: () => void;
+    const holdsLock = new Promise<void>((resolve) => { locked = resolve; });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+
+    const creating = withTenant(client, async (tx) => {
+      await lockStockScope(tx, client, ['PI-LOCK'], 'EXCLUSIVE');
+      locked();
+      await gate;
+    });
+    await holdsLock;
+    try {
+      const shared = await withTenant(client, (tx) =>
+        tryLockStockScope(tx, client, 'PI-LOCK', 'SHARED'));
+      expect(shared).toBe(false);
+    } finally {
+      release();
+      await creating;
+    }
+  });
+
+  it('lets two postings hold the same scope at once', async () => {
+    expect(await withTenant(client, (tx) => tryLockStockScope(tx, client, 'PI-LOCK', 'SHARED'))).toBe(true);
+    expect(await withTenant(client, (tx) => tryLockStockScope(tx, client, 'PI-LOCK', 'SHARED'))).toBe(true);
+  });
+
+  it('leaves the number range untouched when a create is refused', async () => {
+    const before = await withTenant(client, (tx) => tx.execute(sql`
+      select current_number::text as current from number_range
+       where client = ${client} and object_code = 'PHYINV'
+    `)) as unknown as Array<{ current: string }>;
+    await expect(create({ materials: ['PI-MAT', 'PI-MAT'] })).rejects.toThrow();
+    await expect(create({ plant: 'ZZZZ' })).rejects.toThrow();
+    const after = await withTenant(client, (tx) => tx.execute(sql`
+      select current_number::text as current from number_range
+       where client = ${client} and object_code = 'PHYINV'
+    `)) as unknown as Array<{ current: string }>;
+    expect(after[0].current).toBe(before[0].current);
+  });
+
+  it('keeps one tenant’s counts invisible to another', async () => {
+    const other = await createTenant('scr142-other');
+    try {
+      const listed = await listPhysicalInventory(other.client, {});
+      expect(listed).toEqual([]);
+      await expect(cancelPhysicalInventory({
+        client: other.client, changedBy: ACTOR,
+        inventoryDocumentNumber: 'PI-2026-0000001', fiscalYear: 2026,
+      })).rejects.toThrow(/does not exist/);
+    } finally {
+      await destroyTenant(other.client);
+    }
+  }, 180_000);
+
+  it('bumps the version and records the block release', async () => {
+    const view = await create({ materials: ['PI-MAT'] });
+    expect(view.version).toBe(1);
+    const cancelled = await cancelPhysicalInventory({
+      client, changedBy: ACTOR,
+      inventoryDocumentNumber: view.inventoryDocumentNumber, fiscalYear: view.fiscalYear,
+    });
+    expect(cancelled.version).toBe(2);
+    expect(cancelled.status).toBe('CANCELLED');
+
+    const changes = await withTenant(client, (tx) => tx.execute(sql`
+      select reason from change_document
+       where client = ${client} and object_class = 'physical_inventory_document'
+         and object_key = ${`${view.inventoryDocumentNumber}/${view.fiscalYear}`}
+       order by changed_at desc limit 1
+    `)) as unknown as Array<{ reason: string }>;
+    expect(changes[0].reason).toMatch(/Block released/);
   });
 });

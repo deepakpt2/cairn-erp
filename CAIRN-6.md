@@ -4020,6 +4020,54 @@ and the two indexes were chosen by measurement rather than by the list.
 
 Same-stage bookkeeping: B-911 / §26.923 / §30 row 2.741.
 
+## §26.924 — SCR-143 stage 3: the guard on both reversal paths, and locks instead of hope
+
+**B-912.** Two defects are closed and the protocol that closes the second is small enough to
+state in three sentences.
+
+**The bypass.** `material-document-reversal.ts` now calls `assertInventoryCountOpen` for every
+line it is about to move, and `reverseGoodsReceipt` does the same for the lines of the receipt it
+is undoing. Both translate the refusal into their own error type, so MBST and the goods-receipt
+screen keep their failure vocabulary. The `scr142-pi` fixture proves it: a 311 posted **before**
+the count exists is refused when reversed while the count stands, and reverses normally once the
+document is cancelled.
+
+**The race.** A posting cannot be blocked by a count that commits after the posting has read the
+ledger, so the read and the write have to be ordered against creation:
+
+- `assertInventoryCountOpen` takes a **shared** transaction advisory lock on
+  `client/stock-scope/<material>` **before it reads** — the caller cannot forget it, because the
+  lock lives inside the guard;
+- `createPhysicalInventory` takes the **exclusive** lock on each of its materials **before it
+  writes**, in **sorted order**, as postings do, so two postings over the same pair cannot
+  deadlock.
+
+A posting in flight therefore finishes before a count can be created, and a posting that begins
+after the count commits waits, reads, and sees the block.
+
+**The test that proves it does not rely on timing.** Advisory locks are re-entrant **within a
+session**, which is why the first version of this test passed when it should have failed — a
+single connection happily takes its own exclusive lock while holding the shared one. The test
+now holds the lock on one connection and tries from another, and asserts the three cases that
+matter: **exclusive is refused while a posting holds shared**, **shared is refused while a count
+holds exclusive**, and **two postings both hold shared** (so ordinary traffic does not queue).
+
+**The rest of the package's non-deferred list.** `version` is bumped on every change; the
+cancellation records **`Block released: document PI-… no longer restricts movements`** as its
+reason and `blockReleased` in the change record, so the release is a fact and not an inference;
+multi-material counts are exercised; a refused create is asserted to leave the **`PHYINV`
+number range untouched**; and a second tenant is shown to see **no documents** and to be refused
+cancellation of the first tenant's number.
+
+**Two tenants, one number.** That last test is worth its line: the count number is allocated per
+tenant, so `PI-2026-0000001` exists in both — the isolation has to be proved by the row's client,
+not by the number being unique across the installation.
+
+**22/22 in the count suite, 6/6 in the invariant suite**, and the whole book at **2005/2005 in
+270 files**.
+
+Same-stage bookkeeping: B-912 / §26.924 / §30 row 2.742.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4392,4 +4440,4 @@ Same-stage bookkeeping: B-911 / §26.923 / §30 row 2.741.
 | 2.739 | 2026-10-20 | **SCR-142 stage 5 and closure: T842 passes, MI01 delivers (B-909, §26.921).** Five legs on the production build: **`PI-2026-0000001`** created with the block and the stock it starts from, **`material_document` and `journal_entry` both empty** read back from the database, a **311 refused** by the guard with the document\u2019s number in the sentence, the count **cancelled from the list row**, and the same transfer then **posting (100 \u2192 95)**. **Suite 1991/1991 in 269 files**; harness **142 targets**; **migrations 203**; registry 169/144/166. The round\u2019s lesson: the ledger records what moved, so a record of what has **not** moved yet is a different object, not the duplicate the last three packages were refused for. | Agent |\n
 | 2.740 | 2026-10-20 | **SCR-143 / MI01 hardening contracted — the bypass and the race (B-910, §26.922).** The second MI01 package, measured against the shipped tree, found **two real defects**: **MBST and the goods-receipt reversal write stock without consulting the block**, and creation does not serialize against a posting already in flight. This round makes the guard an **invariant a test enforces** (every module that writes `stock_quantity` must call it), closes the race with **shared advisory locks in sorted order** on `client/stock-scope/<material>` while creation takes them **exclusive**, adds the **`version`** column canon already uses elsewhere, and audits the **block release** as its own fact. Items stay material-level because batch and special stock are refused and the scope is the header\u2019s; selection-driven generation and snapshots are conditional in the package, and plant-level authorization is refused by canon\u2019s capability model. | Agent |\nBoth files are committed now. Standing lesson: stage by path list that names every
 | 2.741 | 2026-10-20 | **SCR-143 stage 2: the version column, and no status index (B-911, §26.923).** **9081** adds `version` to the count header \u2014 the convention finance already keeps \u2014 and nothing else: the block release is a change-record fact and the stock identity needs no column while batch and special stock are refused. **No index added**: §26.918 already measured the guard at 0.060 ms on a hit and 0.046 on a miss, and `status` is a filter on a primary-key row already in hand, so a status index cannot improve it. The package\u2019s seven-column list is satisfied by two measured indexes and two PK prefixes. **Migrations 204.** | Agent |\ndirectory touched, not by the directories the change was *about*.
-
+| 2.742 | 2026-10-20 | **SCR-143 stage 3: both reversal paths guarded, and the race closed with locks (B-912, §26.924).** `material-document-reversal.ts` and `reverseGoodsReceipt` now consult the block and translate it into their own error types, so **MBST and the goods-receipt reversal can no longer move blocked stock**. The guard takes a **shared advisory lock on `client/stock-scope/<material>` before it reads**, creation takes it **exclusive before it writes** in sorted order \u2014 so a count cannot be created under an in-flight posting and a posting after the count waits and then sees the block. **The test does not rely on timing**: advisory locks are re-entrant within a session, which is why the first version passed when it should have failed, so the proof now holds the lock on one connection and tries from another. Plus `version` bumps, **`Block released: …`** as the recorded reason, multi-material counts, the number range untouched by a refused create, and cross-tenant isolation. **28/28 across both suites; book 2005/2005 in 270 files.** | Agent |\n

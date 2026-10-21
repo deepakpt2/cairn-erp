@@ -21,6 +21,7 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { plant as plantTable, storageLocation } from '../foundation/schema';
+import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
@@ -385,6 +386,22 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         'A document line is reversed once; choose a line that still stands open.',
       );
     }
+    // SCR-143: the reversal moves stock like any other posting, so it answers to the count
+    // block. This is the path that let a blocked material move before this round.
+    for (const line of wanted) {
+      try {
+        await assertInventoryCountOpen(tx, input.client, {
+          materialNumber: line.materialNumber, plant: line.plant,
+          storageLocation: line.storageLocation ?? null,
+        });
+      } catch (caught) {
+        if (caught instanceof PhysicalInventoryError) {
+          throw new MaterialReversalError(caught.message, caught.remedy);
+        }
+        throw caught;
+      }
+    }
+
     for (const line of wanted) {
       if (Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0) <= 1e-9) {
         throw new MaterialReversalError(

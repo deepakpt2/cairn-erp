@@ -73,6 +73,7 @@ export interface PhysicalInventoryView {
   plannedCountDate: string;
   postingBlock: boolean;
   status: string;
+  version: number;
   items: PhysicalInventoryItemView[];
 }
 
@@ -144,6 +145,7 @@ async function toView(tx: Tx, client: string, header: {
     plannedCountDate: header.plannedCountDate,
     postingBlock: header.postingBlock,
     status: header.status,
+    version: header.version,
     items: described,
   };
 }
@@ -195,6 +197,9 @@ export async function createPhysicalInventory(
     }
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/physical-inventory`}, 0))`);
+    // Exclusive on the material scope: a posting already in flight finishes first, and every
+    // posting that starts afterwards waits here and then reads the block.
+    await lockStockScope(tx, input.client, materials, 'EXCLUSIVE');
 
     // The plant first: it carries the company code, which carries the fiscal year variant.
     const [plantRow] = await tx.select().from(plantTable).where(and(
@@ -367,6 +372,7 @@ export async function cancelPhysicalInventory(input: {
 
     const [changed] = await tx.update(physicalInventoryDocument).set({
       status: 'CANCELLED',
+      version: header.version + 1,
       changedBy: input.changedBy,
       changedAt: new Date(),
     }).where(and(
@@ -381,8 +387,11 @@ export async function cancelPhysicalInventory(input: {
       objectKey: `${number}/${input.fiscalYear}`,
       changeType: 'CHANGE',
       changedBy: input.changedBy,
-      before: { status: header.status },
-      after: { status: 'CANCELLED' },
+      reason: header.postingBlock
+        ? `Block released: document ${number} for plant ${header.plant} no longer restricts movements`
+        : `Document ${number} cancelled`,
+      before: { status: header.status, version: header.version },
+      after: { status: 'CANCELLED', version: header.version + 1, blockReleased: header.postingBlock },
     });
 
     return toView(tx, input.client, changed);
@@ -408,6 +417,42 @@ export async function listPhysicalInventory(
 }
 
 /**
+ * The scope lock, taken in ONE mode by everything that touches a material's stock.
+ *
+ * A posting takes it **shared**; creating a count takes it **exclusive**. That is what makes
+ * the block race-free: a count cannot be created under a posting that is mid-flight, and a
+ * posting that begins after the count commits waits, reads, and sees the block.
+ *
+ * Materials are locked in **sorted order** so two postings touching the same pair cannot
+ * deadlock against each other.
+ */
+export async function lockStockScope(
+  tx: Tx, client: string, materials: string[], mode: 'SHARED' | 'EXCLUSIVE',
+): Promise<void> {
+  const keys = [...new Set(materials.filter(Boolean))].sort();
+  for (const materialNumber of keys) {
+    const key = `${client}/stock-scope/${materialNumber}`;
+    if (mode === 'EXCLUSIVE') {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+    } else {
+      await tx.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${key}, 0))`);
+    }
+  }
+}
+
+/** The same key, tried rather than awaited — used by tests to prove the protocol without timing. */
+export async function tryLockStockScope(
+  tx: Tx, client: string, materialNumber: string, mode: 'SHARED' | 'EXCLUSIVE',
+): Promise<boolean> {
+  const key = `${client}/stock-scope/${materialNumber}`;
+  const rows = (mode === 'EXCLUSIVE'
+    ? await tx.execute(sql`select pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) as ok`)
+    : await tx.execute(sql`select pg_try_advisory_xact_lock_shared(hashtextextended(${key}, 0)) as ok`)
+  ) as unknown as Array<{ ok: boolean }>;
+  return rows[0]?.ok === true;
+}
+
+/**
  * The posting block, enforced. Called inside every service that moves stock — a receipt, an
  * issue, a transfer, a production receipt — before it reads a balance.
  *
@@ -419,6 +464,10 @@ export async function assertInventoryCountOpen(
   client: string,
   movement: { materialNumber: string; plant: string; storageLocation?: string | null },
 ): Promise<void> {
+  // Shared: this posting may proceed only if no count creation holds the scope exclusively,
+  // and a count created after this point must wait for this posting to finish.
+  await lockStockScope(tx, client, [movement.materialNumber], 'SHARED');
+
   const rows = await tx.execute(sql`
     select d.inventory_document_number, d.planned_count_date
       from physical_inventory_document d
