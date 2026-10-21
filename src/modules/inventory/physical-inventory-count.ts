@@ -22,6 +22,7 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { material, physicalInventoryDocument, physicalInventoryItem } from './schema';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
+import { recountCountRemedy, syncRecountLink } from './physical-inventory-recount';
 
 export const PHYSICAL_INVENTORY_COUNT_CAPABILITY = 'INV.PHYINV.COUNT';
 export const PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY = 'INV.PHYINV.COUNT.CORRECT';
@@ -475,7 +476,7 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
       if (item.countStatus === 'RECOUNT_REQUIRED') {
         throw new PhysicalInventoryCountError(
           `Item ${item.itemNumber} is marked for recount, which this round does not carry.`,
-          'Clear the recount requirement, then count the item.',
+          await recountCountRemedy(tx, input.client, submission.documentNumber, submission.fiscalYear, item.itemNumber),
         );
       }
       if (item.postingStatus === 'POSTED') {
@@ -655,6 +656,7 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
     }
 
     }
+    await syncRecountLink(tx, input.client, submission.documentNumber, submission.fiscalYear, input.changedBy);
     return (await viewOf(tx, input.client, submission.documentNumber, submission.fiscalYear))!;
   });
 }
@@ -789,6 +791,7 @@ export async function clearCount(input: ClearCountInput): Promise<CountDocumentV
     }
 
     }
+    await syncRecountLink(tx, input.client, input.documentNumber, input.fiscalYear, input.changedBy);
     return (await viewOf(tx, input.client, input.documentNumber, input.fiscalYear))!;
   });
 }

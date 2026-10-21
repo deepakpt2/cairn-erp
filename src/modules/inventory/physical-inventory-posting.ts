@@ -14,6 +14,7 @@ import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
+import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
 import {
   material, materialDocument, materialDocumentLine, materialValuation,
   movementType, stockQuantity,
@@ -569,7 +570,8 @@ async function judgeSelection(
   const failures: string[] = [];
   for (const itemNumber of input.itemNumbers) {
     const item = items.find((row) => row.item_number === itemNumber);
-    const reason = itemReason(item, itemNumber, header);
+    const reason = await recountPostingBlock(tx, client, header.inventory_document_number, header.fiscal_year, itemNumber)
+      ?? itemReason(item, itemNumber, header);
     if (reason || !item) {
       failures.push(reason ?? `Item ${itemNumber} does not belong to the document.`);
       continue;
@@ -696,7 +698,8 @@ export async function getDifferencePosting(
     const items = await loadItems(tx, client, keys.documentNumber, keys.fiscalYear);
     const lines = [];
     for (const item of items) {
-      const reason = itemReason(item, item.item_number, header);
+      const reason = await recountPostingBlock(tx, client, header.inventory_document_number, header.fiscal_year, item.item_number)
+        ?? itemReason(item, item.item_number, header);
       const signed = item.difference_quantity === null ? 0 : Number(item.difference_quantity);
       const valuationReason = reason === null && Math.abs(signed) > 0.0005
         ? await missingValuationReason(tx, client, header.plant, item.material_number, signed < 0 ? 'ISSUE' : 'RECEIPT')
@@ -953,6 +956,7 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
     const headerStatus = await recomputePostingStatus(
       tx, input.client, header.inventory_document_number, header.fiscal_year, input.changedBy,
     );
+    await syncRecountLink(tx, input.client, header.inventory_document_number, header.fiscal_year, input.changedBy);
     await recordChange(tx, {
       client: input.client,
       objectClass: MATERIAL_DOCUMENT_CLASS,

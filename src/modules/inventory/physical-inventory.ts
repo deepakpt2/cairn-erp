@@ -192,6 +192,220 @@ async function toView(tx: Tx, client: string, header: {
  *
  * Nothing is written to the ledger, and nothing about stock changes. A test asserts both.
  */
+
+/**
+ * The document writer both creation and recount share.
+ *
+ * Call it inside the caller's transaction. It does not open one, and it does not replay a
+ * request key: creation's replay returns a document without comparing a fingerprint, and a
+ * recount must not inherit that hole. When `lines` is set, those stock identities are the
+ * items. When it is absent, every stock type the material holds is seeded, which is creation's
+ * rule and not a recount's.
+ */
+export async function writeInventoryDocument(
+  tx: Tx,
+  spec: {
+    client: string;
+    createdBy: string;
+    plant: string;
+    storageLocation: string | null;
+    plannedCountDate: string;
+    postingBlock: boolean;
+    requestKey: string | null;
+    materials: string[];
+    lines?: Array<{ materialNumber: string; stockType: string }>;
+  },
+): Promise<{
+  inventoryDocumentNumber: string; fiscalYear: number; plant: string;
+  storageLocation: string | null; plannedCountDate: string; postingBlock: boolean; status: string;
+}> {
+  const plant = spec.plant;
+  const location = spec.storageLocation ?? '';
+  const plannedCountDate = spec.plannedCountDate;
+  const materials = spec.materials;
+
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${spec.client}/physical-inventory`}, 0))`);
+  await lockStockScope(tx, spec.client, materials, 'EXCLUSIVE');
+
+  const [plantRow] = await tx.select().from(plantTable).where(and(
+    eq(plantTable.client, spec.client), eq(plantTable.plant, plant),
+  ));
+  if (!plantRow) {
+    throw new PhysicalInventoryError(
+      `Plant ${plant} does not exist.`,
+      'Count a plant the tenant carries (CFG.PLT.DEFINE).',
+    );
+  }
+  if (plantRow.companyCode === null) {
+    throw new PhysicalInventoryError(
+      `Plant ${plant} carries no company code.`,
+      'Assign the plant to a company code, then create the count.',
+    );
+  }
+  if (!plantRow.isStorageSite) {
+    throw new PhysicalInventoryError(
+      `Plant ${plant} is not a storage site.`,
+      'Count a plant that carries storage locations.',
+    );
+  }
+  if (location) {
+    const [sloc] = await tx.select().from(storageLocation).where(and(
+      eq(storageLocation.client, spec.client),
+      eq(storageLocation.plant, plant),
+      eq(storageLocation.storageLocation, location),
+    ));
+    if (!sloc) {
+      throw new PhysicalInventoryError(
+        `Storage location ${location} does not stand in plant ${plant}.`,
+        'Choose a storage location of the plant being counted, or count the whole plant.',
+      );
+    }
+    if (!sloc.isActive) {
+      throw new PhysicalInventoryError(
+        `Storage location ${location} in plant ${plant} is not active.`,
+        'Choose an active storage location.',
+      );
+    }
+  }
+
+  for (const materialNumber of materials) {
+    const [master] = await tx.select().from(material).where(and(
+      eq(material.client, spec.client), eq(material.materialNumber, materialNumber),
+    ));
+    if (!master) {
+      throw new PhysicalInventoryError(
+        `Material ${materialNumber} does not exist.`,
+        'Count materials the tenant carries (MM01).',
+      );
+    }
+    if (master.markedForDeletion) {
+      throw new PhysicalInventoryError(
+        `Material ${materialNumber} is flagged for deletion.`,
+        'Cancel the deletion flag, then create the count.',
+      );
+    }
+    const [extension] = await tx.execute(sql`
+      select marked_for_deletion from material_plant
+       where client = ${spec.client} and material_number = ${materialNumber} and plant = ${plant}
+    `) as unknown as Array<{ marked_for_deletion: boolean }>;
+    if (!extension) {
+      throw new PhysicalInventoryError(
+        `Material ${materialNumber} is not extended to plant ${plant}.`,
+        'Extend the material to the plant, then create the count.',
+      );
+    }
+    if (extension.marked_for_deletion) {
+      throw new PhysicalInventoryError(
+        `Material ${materialNumber} is flagged for deletion in plant ${plant}.`,
+        'Cancel the plant deletion flag, then create the count.',
+      );
+    }
+  }
+
+  const company = await getCompanyCode(tx, spec.client, plantRow.companyCode);
+  if (!company?.fiscalYearVariant) {
+    throw new PhysicalInventoryError(`Company code ${plantRow.companyCode} is not configured.`);
+  }
+  const position = await derivePosition(tx, spec.client, company.fiscalYearVariant, plannedCountDate);
+  const mmRecord = await getMaterialPeriodControlInTx(tx, spec.client, plantRow.companyCode);
+  if (!materialPeriodAllows(mmRecord, position.fiscalYear, position.period)) {
+    throw new PhysicalInventoryError(
+      `The material posting period ${position.fiscalYear}/${position.period} is closed for company ${plantRow.companyCode}.`,
+      'Plan the count in an open period, or shift the material period first.',
+    );
+  }
+
+  const drawn = await allocateNumber(tx, {
+    client: spec.client,
+    objectCode: NUMBER_OBJECT,
+    fiscalYear: position.fiscalYear,
+    allocatedBy: spec.createdBy,
+  });
+  const inventoryDocumentNumber = drawn.display;
+  const [header] = await tx.insert(physicalInventoryDocument).values({
+    client: spec.client,
+    inventoryDocumentNumber,
+    fiscalYear: position.fiscalYear,
+    plant,
+    storageLocation: location || null,
+    plannedCountDate,
+    postingBlock: spec.postingBlock,
+    status: 'CREATED',
+    requestKey: spec.requestKey,
+    createdBy: spec.createdBy,
+  }).returning();
+
+  const itemRows: Array<typeof physicalInventoryItem.$inferInsert> = [];
+  if (spec.lines) {
+    for (const line of spec.lines) {
+      const held = await stockOfType(tx, spec.client, plant, location || null, line.materialNumber, line.stockType);
+      itemRows.push({
+        client: spec.client,
+        inventoryDocumentNumber,
+        fiscalYear: position.fiscalYear,
+        itemNumber: (itemRows.length + 1) * 10,
+        materialNumber: line.materialNumber,
+        stockType: line.stockType,
+        bookQuantitySnapshot: held.quantity.toFixed(3),
+        bookQuantityUnit: held.unit || null,
+        bookQuantityBasis: 'DOCUMENT_CREATION',
+        createdBy: spec.createdBy,
+      });
+    }
+  } else {
+    for (const materialNumber of materials) {
+      const held = await stockByType(tx, spec.client, plant, location || null, materialNumber);
+      const [_master] = await tx.select({ unit: material.baseUnit }).from(material).where(and(
+        eq(material.client, spec.client), eq(material.materialNumber, materialNumber),
+      ));
+      const types = held.length > 0 ? held : [{ stockType: 'UNRESTRICTED', quantity: 0, unit: _master?.unit ?? '' }];
+      for (const type of types) {
+        itemRows.push({
+          client: spec.client,
+          inventoryDocumentNumber,
+          fiscalYear: position.fiscalYear,
+          itemNumber: (itemRows.length + 1) * 10,
+          materialNumber,
+          stockType: type.stockType,
+          bookQuantitySnapshot: String(type.quantity),
+          bookQuantityUnit: type.unit || _master?.unit || null,
+          bookQuantityBasis: 'DOCUMENT_CREATION',
+          createdBy: spec.createdBy,
+        });
+      }
+    }
+  }
+  await tx.insert(physicalInventoryItem).values(itemRows);
+  await recordChange(tx, {
+    client: spec.client,
+    objectClass: 'physical_inventory_document',
+    objectKey: `${inventoryDocumentNumber}/${position.fiscalYear}`,
+    changeType: 'CREATE',
+    changedBy: spec.createdBy,
+    after: {
+      plant, storageLocation: location || null, plannedCountDate,
+      postingBlock: spec.postingBlock, materials,
+    },
+  });
+  return header;
+}
+
+async function stockOfType(
+  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, stockType: string,
+) {
+  const rows = await tx.execute(sql`
+    select coalesce(sum(s.quantity), 0)::text as quantity, min(m.base_unit) as unit
+      from material m
+      left join stock_quantity s
+        on s.client = m.client and s.material_number = m.material_number
+       and s.plant = ${plant} and s.stock_type = ${stockType}
+       and (${location}::text is null or s.storage_location = ${location})
+     where m.client = ${client} and m.material_number = ${materialNumber}
+     group by m.material_number
+  `) as unknown as Array<{ quantity: string; unit: string | null }>;
+  return { quantity: Number(rows[0]?.quantity ?? 0), unit: rows[0]?.unit ?? '' };
+}
+
 export async function createPhysicalInventory(
   input: CreatePhysicalInventoryInput,
 ): Promise<PhysicalInventoryView> {
@@ -232,163 +446,16 @@ export async function createPhysicalInventory(
       if (replay) return toView(tx, input.client, replay);
     }
 
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/physical-inventory`}, 0))`);
-    // Exclusive on the material scope: a posting already in flight finishes first, and every
-    // posting that starts afterwards waits here and then reads the block.
-    await lockStockScope(tx, input.client, materials, 'EXCLUSIVE');
-
-    // The plant first: it carries the company code, which carries the fiscal year variant.
-    const [plantRow] = await tx.select().from(plantTable).where(and(
-      eq(plantTable.client, input.client), eq(plantTable.plant, plant),
-    ));
-    if (!plantRow) {
-      throw new PhysicalInventoryError(
-        `Plant ${plant} does not exist.`,
-        'Count a plant the tenant carries (CFG.PLT.DEFINE).',
-      );
-    }
-    if (plantRow.companyCode === null) {
-      throw new PhysicalInventoryError(
-        `Plant ${plant} carries no company code.`,
-        'Assign the plant to a company code, then create the count.',
-      );
-    }
-    if (!plantRow.isStorageSite) {
-      throw new PhysicalInventoryError(
-        `Plant ${plant} is not a storage site.`,
-        'Count a plant that carries storage locations.',
-      );
-    }
-
-    if (location) {
-      const [sloc] = await tx.select().from(storageLocation).where(and(
-        eq(storageLocation.client, input.client),
-        eq(storageLocation.plant, plant),
-        eq(storageLocation.storageLocation, location),
-      ));
-      if (!sloc) {
-        throw new PhysicalInventoryError(
-          `Storage location ${location} does not stand in plant ${plant}.`,
-          'Choose a storage location of the plant being counted, or count the whole plant.',
-        );
-      }
-      if (!sloc.isActive) {
-        throw new PhysicalInventoryError(
-          `Storage location ${location} in plant ${plant} is not active.`,
-          'Choose an active storage location.',
-        );
-      }
-    }
-
-    // Every material before the header is drawn, so a refusal writes nothing.
-    for (const materialNumber of materials) {
-      const [master] = await tx.select().from(material).where(and(
-        eq(material.client, input.client), eq(material.materialNumber, materialNumber),
-      ));
-      if (!master) {
-        throw new PhysicalInventoryError(
-          `Material ${materialNumber} does not exist.`,
-          'Count materials the tenant carries (MM01).',
-        );
-      }
-      if (master.markedForDeletion) {
-        throw new PhysicalInventoryError(
-          `Material ${materialNumber} is flagged for deletion.`,
-          'Cancel the deletion flag, then create the count.',
-        );
-      }
-      const [extension] = await tx.execute(sql`
-        select marked_for_deletion from material_plant
-         where client = ${input.client} and material_number = ${materialNumber} and plant = ${plant}
-      `) as unknown as Array<{ marked_for_deletion: boolean }>;
-      if (!extension) {
-        throw new PhysicalInventoryError(
-          `Material ${materialNumber} is not extended to plant ${plant}.`,
-          'Extend the material to the plant, then create the count.',
-        );
-      }
-      if (extension.marked_for_deletion) {
-        throw new PhysicalInventoryError(
-          `Material ${materialNumber} is flagged for deletion in plant ${plant}.`,
-          'Cancel the plant deletion flag, then create the count.',
-        );
-      }
-    }
-
-    // The year and period of the count date must be open for the plant's company.
-    const company = await getCompanyCode(tx, input.client, plantRow.companyCode);
-    if (!company?.fiscalYearVariant) {
-      throw new PhysicalInventoryError(`Company code ${plantRow.companyCode} is not configured.`);
-    }
-    const position = await derivePosition(tx, input.client, company.fiscalYearVariant, plannedCountDate);
-    const mmRecord = await getMaterialPeriodControlInTx(tx, input.client, plantRow.companyCode);
-    if (!materialPeriodAllows(mmRecord, position.fiscalYear, position.period)) {
-      throw new PhysicalInventoryError(
-        `The material posting period ${position.fiscalYear}/${position.period} is closed for company ${plantRow.companyCode}.`,
-        'Plan the count in an open period, or shift the material period first.',
-      );
-    }
-
-    const drawn = await allocateNumber(tx, {
+    const header = await writeInventoryDocument(tx, {
       client: input.client,
-      objectCode: NUMBER_OBJECT,
-      fiscalYear: position.fiscalYear,
-      allocatedBy: input.createdBy,
-    });
-    const inventoryDocumentNumber = drawn.display;
-
-    const [header] = await tx.insert(physicalInventoryDocument).values({
-      client: input.client,
-      inventoryDocumentNumber,
-      fiscalYear: position.fiscalYear,
+      createdBy: input.createdBy,
       plant,
       storageLocation: location || null,
       plannedCountDate,
       postingBlock: input.postingBlock === true,
-      status: 'CREATED',
       requestKey: input.requestKey ?? null,
-      createdBy: input.createdBy,
-    }).returning();
-
-    // One item per material per stock type holding stock — and one for the material itself when
-    // it holds none, so a material that is expected and missing still appears in the count.
-    const itemRows: Array<typeof physicalInventoryItem.$inferInsert> = [];
-    for (const materialNumber of materials) {
-      const held = await stockByType(tx, input.client, plant, location || null, materialNumber);
-      const [_master] = await tx.select({ unit: material.baseUnit }).from(material).where(and(
-        eq(material.client, input.client), eq(material.materialNumber, materialNumber),
-      ));
-      const types = held.length > 0 ? held : [{ stockType: 'UNRESTRICTED', quantity: 0, unit: _master?.unit ?? '' }];
-      for (const type of types) {
-        itemRows.push({
-          client: input.client,
-          inventoryDocumentNumber,
-          fiscalYear: position.fiscalYear,
-          itemNumber: (itemRows.length + 1) * 10,
-          materialNumber,
-          stockType: type.stockType,
-          // §11: the book quantity is frozen when the count is created, with the basis on the row.
-          bookQuantitySnapshot: String(type.quantity),
-          bookQuantityUnit: type.unit || _master?.unit || null,
-          bookQuantityBasis: 'DOCUMENT_CREATION',
-          createdBy: input.createdBy,
-        });
-      }
-    }
-    await tx.insert(physicalInventoryItem).values(itemRows);
-
-    await recordChange(tx, {
-      client: input.client,
-      objectClass: 'physical_inventory_document',
-      objectKey: `${inventoryDocumentNumber}/${position.fiscalYear}`,
-      changeType: 'CREATE',
-      changedBy: input.createdBy,
-      after: {
-        plant, storageLocation: location || null, plannedCountDate,
-        postingBlock: input.postingBlock === true, materials,
-      },
+      materials,
     });
-
     return toView(tx, input.client, header);
   });
 }
