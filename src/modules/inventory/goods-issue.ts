@@ -30,6 +30,7 @@ import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, productionOrder, productionOrderComponent, stockQuantity,
@@ -119,6 +120,8 @@ export interface GoodsIssueLineInput {
   /** The production order a 261 consumes for, and which component item it satisfies. */
   productionOrderNumber?: string;
   productionOrderItem?: number;
+  /** The unit the reader typed in. Absent means the material's base unit. */
+  entryUnit?: string;
   /** Refused by name: canon has no batch master. */
   batch?: string;
 }
@@ -629,9 +632,18 @@ export async function postGoodsIssue(
         reservationOpenAfter = item.openQuantity;
       }
 
+      // SCR-144: the typed unit is converted, or the line is refused by name.
+      const conversion = await toBaseQuantity(tx, input.client, {
+        materialNumber, quantity: line.quantity, entryUnit: line.entryUnit,
+      }).catch((caught: unknown) => {
+        if (caught instanceof UnitConversionError) throw new GoodsIssueError(caught.message, caught.remedy);
+        throw caught;
+      });
+
       prepared.push({
         line, materialNumber, storageLocation: line.storageLocation ?? null,
-        quantity: line.quantity, unit: mat.baseUnit, value, valuation,
+        quantity: conversion.baseQuantity, unit: conversion.baseUnit, value, valuation,
+        entryQuantity: line.quantity, entryUnit: line.entryUnit ?? conversion.baseUnit,
         unitPrice: valuation.priceControl === 'STANDARD' ? valuation.standardPrice : valuation.movingAveragePrice,
         priceUnit: valuation.priceUnit,
         reservationOpenAfter,
@@ -712,7 +724,7 @@ export async function postGoodsIssue(
         materialNumber: p.materialNumber, plant: p.line.plant,
         storageLocation: p.storageLocation, stockType: 'UNRESTRICTED',
         lineDirection: 'ISSUE',
-        entryQuantity: String(p.quantity), entryUnit: p.unit,
+        entryQuantity: String(p.entryQuantity ?? p.quantity), entryUnit: p.entryUnit ?? p.unit,
         baseQuantity: String(p.quantity), baseUnit: p.unit,
         unitPrice: p.unitPrice, priceUnit: p.priceUnit, currency: company.currency,
         value: String(p.value),

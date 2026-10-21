@@ -23,6 +23,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
+import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
@@ -450,6 +451,30 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
     if (mat.markedForDeletion) {
       throw new TransferPostingError(`Material ${materialNumber} is flagged for deletion.`, 'Cancel the deletion flag, then post again.');
     }
+    if (!mat.baseUnit) {
+      throw new TransferPostingError(
+        `Material ${materialNumber} carries no base unit.`,
+        'Complete the material master, then post the transfer.',
+      );
+    }
+
+    // SCR-144: a quantity entered in an alternative unit becomes the base quantity the ledger
+    // records, at the material's own ratio. A unit with no conversion is refused by name.
+    const entryUnit = input.entryUnit ?? mat.baseUnit;
+    let quantity = input.quantity;
+    if (entryUnit !== mat.baseUnit) {
+      try {
+        const conversion = await toBaseQuantity(tx, input.client, {
+          materialNumber, quantity: input.quantity, entryUnit,
+        });
+        quantity = conversion.baseQuantity;
+      } catch (caught) {
+        if (caught instanceof UnitConversionError) {
+          throw new TransferPostingError(caught.message, caught.remedy);
+        }
+        throw caught;
+      }
+    }
 
     // Scenario structure, judged before anything is read for stock.
     const samePlant = input.issuingPlant === input.receivingPlant;
@@ -516,11 +541,11 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
 
     await requireStock(
       tx, input.client, materialNumber, input.issuingPlant, issuingLocation.storageLocation,
-      scenario.fromStockType, input.quantity, issuingLocation.allowNegativeStock, 'issuing',
+      scenario.fromStockType, quantity, issuingLocation.allowNegativeStock, 'issuing',
     );
 
     // Value: a move inside one plant changes none; a move between plants carries it.
-    const q = input.quantity;
+    const q = quantity;
     let movedValue = 0;
     let receivingValue = 0;
     if (scenario.kind === 'PLANT') {
@@ -590,12 +615,6 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
 
     const issuingValue = scenario.kind === 'PLANT' ? movedValue : 0;
     const receivingLineValue = scenario.kind === 'PLANT' ? receivingValue : 0;
-    if (!mat.baseUnit) {
-      throw new TransferPostingError(
-        `Material ${materialNumber} carries no base unit.`,
-        'Complete the material master, then post the transfer.',
-      );
-    }
     const unit = mat.baseUnit;
 
     const issueLine: typeof materialDocumentLine.$inferInsert = {
@@ -603,7 +622,8 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       movementType: scenario.movementType, lineDirection: 'ISSUE',
       materialNumber, plant: input.issuingPlant,
       storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType,
-      entryQuantity: String(q), entryUnit: unit, baseQuantity: String(q), baseUnit: unit,
+      entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
+      baseQuantity: String(q), baseUnit: unit,
       unitPrice: scenario.kind === 'PLANT' ? String(round2(issuingValue / q)) : '0',
       priceUnit: '1', currency: company.currency as string, value: String(issuingValue),
       itemText: `Transfer ${scenario.code}`,
@@ -615,7 +635,8 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       movementType: scenario.movementType, lineDirection: 'RECEIPT',
       materialNumber, plant: input.receivingPlant,
       storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
-      entryQuantity: String(q), entryUnit: unit, baseQuantity: String(q), baseUnit: unit,
+      entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
+      baseQuantity: String(q), baseUnit: unit,
       unitPrice: scenario.kind === 'PLANT' ? String(round2(receivingLineValue / q)) : '0',
       priceUnit: '1', currency: company.currency as string, value: String(receivingLineValue),
       itemText: `Transfer ${scenario.code}`,

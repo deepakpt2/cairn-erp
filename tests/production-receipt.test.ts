@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
@@ -272,5 +273,47 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       update account_determination set gl_account = '590000'
       where client = ${client} and event = 'PRODUCTION_OUTPUT' and valuation_class = 'FINISHED_INVENTORY'
     `));
+  });
+
+  it('converts a receipt entered in an alternative unit into the order\'s base quantity', async () => {
+    await defineUomConversion({
+      client, changedBy: ACTOR, materialNumber: 'GR-FG',
+      alternativeUnit: 'BOX', numerator: 2, denominator: 1,
+    });
+    const draft = await createProductionOrder({
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+
+    // Three boxes are six pieces: the order expects ten, so six is a receipt it can take.
+    const receipt = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 3, entryQuantity: 3, entryUnit: 'BOX' }],
+      requestKey: 'gr-alt-unit',
+    });
+    expect(receipt.lines[0].quantity).toBe('6.000');
+    expect(receipt.lines[0].unit).toBe('PC');
+  });
+
+  it('refuses a receipt in a unit with no conversion, naming the unit', async () => {
+    const draft = await createProductionOrder({
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const error = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 1, entryQuantity: 1, entryUnit: 'GAL' }],
+      requestKey: 'gr-no-unit',
+    }).catch((e: unknown) => e as ProductionReceiptError);
+    expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
+    expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
   });
 });

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
+import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import {
   TransferPostingError,
   postTransfer,
@@ -339,4 +340,27 @@ describe('SCR-131 transfer posting (MB1B)', () => {
       })).rejects.toThrow(/no longer|is 0\.000, short of the 7\.000/);
     });
   });
+  it('converts a transfer entered in an alternative unit into base quantity on both lines', async () => {
+    await defineUomConversion({
+      client, changedBy: ACTOR, materialNumber: 'MAT-TR',
+      alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+    });
+    const before = await stock('MAT-TR', '1000', '0001', 'UNRESTRICTED');
+    const doc = await postTransfer(transfer({ quantity: 2, entryUnit: 'BOX' }));
+
+    // Two boxes are twenty-four pieces: the ledger records the base quantity, not the entry.
+    expect(doc.lines[0].quantity).toBe('24.000');
+    expect(doc.lines[0].unit).toBe('PC');
+    expect(doc.lines[1].quantity).toBe('24.000');
+    expect(await stock('MAT-TR', '1000', '0001', 'UNRESTRICTED')).toBe(before - 24);
+  });
+
+  it('refuses a transfer in a unit the material carries no conversion from, naming it', async () => {
+    const error = await postTransfer(transfer({ quantity: 2, entryUnit: 'GAL' }))
+      .catch((e: unknown) => e as TransferPostingError);
+    expect(error).toBeInstanceOf(TransferPostingError);
+    expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
+    expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
+  });
+
 });

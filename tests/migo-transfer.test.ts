@@ -38,11 +38,13 @@ describe('SCR-141 MIGO A04 transfer posting', () => {
     expect(cell.movements).toEqual(TRANSFER_SCENARIOS.map((s) => s.code));
   });
 
-  it('keeps the other three posting cells exactly as they were', () => {
+  it('keeps the posting cells, which now include the cancellation', () => {
     expect(resolveMigoCell('A07', 'R08')).toMatchObject({ kind: 'POST_HERE', form: 'ISSUE', movement: '261' });
     expect(resolveMigoCell('A01', 'R08')).toMatchObject({ kind: 'POST_HERE', form: 'RECEIPT', movement: '101' });
+    expect(resolveMigoCell('A03', 'R05')).toMatchObject({ kind: 'POST_HERE', form: 'REVERSE' });
     const posting = migoMatrix().filter((c) => c.resolution.kind === 'POST_HERE');
-    expect(posting.map((c) => `${c.action.value}+${c.reference.value}`)).toEqual(['A01+R08', 'A04+R10', 'A07+R08']);
+    expect(posting.map((c) => `${c.action.value}+${c.reference.value}`))
+      .toEqual(['A01+R08', 'A03+R05', 'A04+R10', 'A07+R08']);
   });
 
   it('refuses a transfer against anything but Other, naming Other', () => {
@@ -56,6 +58,6 @@ describe('SCR-141 MIGO A04 transfer posting', () => {
 
   it('leaves the transfer capability where it stands, for the reader who goes there directly', () => {
     expect(resolveMigoCell('A01', 'R01')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.GR.POST' });
-    expect(resolveMigoCell('A03', 'R01')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.REVERSE' });
+    expect(resolveMigoCell('A03', 'R01')).toMatchObject({ kind: 'REFUSED', deliveredBy: 'R05' });
   });
 });

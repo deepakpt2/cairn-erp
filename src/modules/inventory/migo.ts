@@ -49,7 +49,7 @@ export type MigoResolution =
   | {
       kind: 'POST_HERE';
       /** Which form posts it — the three shapes need different fields. */
-      form: 'ISSUE' | 'RECEIPT' | 'TRANSFER';
+      form: 'ISSUE' | 'RECEIPT' | 'TRANSFER' | 'REVERSE';
       movement: string;
       /** Where the movement is chosen per item rather than fixed by the cell. */
       movements?: readonly string[];
@@ -106,6 +106,15 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
     };
   }
 
+  // A cancellation names the document it cancels: the reference IS the original document.
+  if (action === 'A03' && reference === 'R05') {
+    return {
+      kind: 'POST_HERE', form: 'REVERSE', movement: 'REVERSAL',
+      title: 'Cancellation of a material document',
+      capability: MIGO_CAPABILITY,
+    };
+  }
+
   // A transfer posting names no preceding document: SAP's "Other", movement chosen on the item.
   if (action === 'A04' && reference === 'R10') {
     return {
@@ -116,9 +125,13 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
     };
   }
 
-  // A cancellation is the reversal document, whichever document it cancels.
+  // A cancellation of anything else names no document it could cancel.
   if (action === 'A03') {
-    return elsewhere('INV.REVERSE', '/inventory/reversal', 'Cancellation of a material document');
+    return refused(
+      'Cancellation without a material document',
+      'A cancellation reverses a posted material document, and this reference names none, so there is nothing to cancel.',
+      'R05',
+    );
   }
 
   // A transfer posting carries no other reference: there is no document to attach it to.
@@ -130,7 +143,7 @@ export function resolveMigoCell(action: string, reference: string): MigoResoluti
     );
   }
 
-  // The material document as the reference is a display question unless something is cancelled.
+  // The material document as the reference, with no cancellation asked for, is a display question.
   if (reference === 'R05') {
     return elsewhere('INV.DISPLAY', '/inventory/material-documents', 'Display the material document');
   }

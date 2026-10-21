@@ -525,3 +525,20 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
   }).onDelete('cascade'),
   index('physical_inventory_item_material_idx').on(t.client, t.materialNumber),
 ]);
+
+/**
+ * SCR-144 / INV.STOCK.UOM — one alternative unit per material per base unit, as an exact
+ * ratio, so a conversion is rational arithmetic rather than a float multiplier.
+ */
+export const materialUomConversion = pgTable('material_uom_conversion', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  alternativeUnit: varchar('alternative_unit', { length: 6 }).notNull(),
+  baseUnit: varchar('base_unit', { length: 6 }).notNull(),
+  numerator: integer('numerator').notNull(),
+  denominator: integer('denominator').notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.alternativeUnit] }),
+  index('material_uom_conversion_material_idx').on(t.client, t.materialNumber),
+]);

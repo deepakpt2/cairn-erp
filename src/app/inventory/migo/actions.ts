@@ -13,6 +13,9 @@ import {
 import {
   TransferPostingError, postTransfer, type TransferDocumentView,
 } from '@/modules/inventory/transfer-posting';
+import {
+  MaterialReversalError, reverseMaterialDocument, type ReversalDocumentView,
+} from '@/modules/inventory/material-document-reversal';
 
 export interface MigoActionState {
   ok: boolean;
@@ -26,6 +29,13 @@ export interface TransferActionState {
   message: string;
   remedy?: string;
   document?: TransferDocumentView | null;
+}
+
+export interface ReversalActionState {
+  ok: boolean;
+  message: string;
+  remedy?: string;
+  document?: ReversalDocumentView | null;
 }
 
 export interface ReceiptActionState {
@@ -186,5 +196,42 @@ export async function postTransferAction(
       return { ok: false, message: caught.message, remedy: caught.remedy, document: null };
     }
     return { ok: false, message: 'The transfer could not be posted.', document: null };
+  }
+}
+
+/**
+ * A03 + R05 — the cancellation, entered where SAP enters it. The reference is the document
+ * being cancelled, so the form carries the original number and nothing else is invented.
+ */
+export async function postReversalAction(
+  _previous: ReversalActionState,
+  form: FormData,
+): Promise<ReversalActionState> {
+  const session = await requireSession(MIGO_ROUTE);
+  if (!can(session, MIGO_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the goods movement capability.' };
+  }
+  const cell = resolveMigoCell(text(form, 'migoAction'), text(form, 'migoReference'));
+  if (!cell || cell.kind !== 'POST_HERE' || cell.form !== 'REVERSE') {
+    return { ok: false, message: 'This form cancels a material document only.' };
+  }
+
+  try {
+    const document = await reverseMaterialDocument({
+      client: session.user.client,
+      changedBy: session.user.username,
+      materialDocumentNumber: text(form, 'materialDocumentNumber'),
+      postingDate: text(form, 'postingDate'),
+      documentDate: text(form, 'documentDate'),
+      headerText: text(form, 'headerText') || undefined,
+      requestKey: text(form, 'requestKey'),
+    });
+    revalidatePath(MIGO_ROUTE);
+    return { ok: true, message: `Reversed: material document ${document.materialDocumentNumber}.`, document };
+  } catch (caught) {
+    if (caught instanceof MaterialReversalError) {
+      return { ok: false, message: caught.message, remedy: caught.remedy, document: null };
+    }
+    return { ok: false, message: 'The document could not be cancelled.', document: null };
   }
 }

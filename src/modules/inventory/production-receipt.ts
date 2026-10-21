@@ -27,6 +27,7 @@ import { materialPeriodAllows } from './material-period-control';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
+import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
 const JOURNAL_DOCUMENT_TYPE = 'WE';
@@ -231,7 +232,7 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       'Enter the quantity of finished goods this document receives.',
     );
   }
-  const quantity = input.lines.reduce((sum, l) => sum + (l.quantity > 0 ? l.quantity : 0), 0);
+  let quantity = input.lines.reduce((sum, l) => sum + (l.quantity > 0 ? l.quantity : 0), 0);
 
   return withTenant(input.client, async (tx) => {
     const [replay] = await tx.select().from(materialDocument).where(and(
@@ -267,6 +268,23 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
 
     const materialNumber = order.materialNumber;
     const plant = order.plant;
+
+    // SCR-144: the order states its unit; a receipt entered in another unit converts to it
+    // before the order's expectation is measured. A unit with no conversion is refused by name.
+    const entryUnit = input.lines[0]?.entryUnit ?? order.unitOfMeasure;
+    if (entryUnit !== order.unitOfMeasure) {
+      try {
+        const conversion = await toBaseQuantity(tx, input.client, {
+          materialNumber, quantity, entryUnit,
+        });
+        quantity = conversion.baseQuantity;
+      } catch (caught) {
+        if (caught instanceof UnitConversionError) {
+          throw new ProductionReceiptError(caught.message, caught.remedy);
+        }
+        throw caught;
+      }
+    }
     const [mat] = await tx.select().from(material).where(and(
       eq(material.client, input.client), eq(material.materialNumber, materialNumber),
     ));
@@ -430,7 +448,8 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       materialNumber, plant,
       storageLocation: location || null, stockType: 'UNRESTRICTED',
       lineDirection: 'RECEIPT',
-      entryQuantity: String(quantity), entryUnit: order.unitOfMeasure,
+      entryQuantity: String(input.lines[0]?.entryQuantity ?? quantity),
+      entryUnit,
       baseQuantity: String(quantity), baseUnit: order.unitOfMeasure,
       unitPrice, priceUnit: valuation.priceUnit, currency: company.currency,
       value: String(value),

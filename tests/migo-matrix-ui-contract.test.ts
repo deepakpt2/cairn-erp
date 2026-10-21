@@ -39,12 +39,13 @@ describe('SCR-139 MIGO action/reference matrix', () => {
     }
   });
 
-  it('posts exactly three cells — the order’s two movements and the transfer posting', () => {
+  it('posts exactly four cells — the order’s two movements, the transfer and the cancellation', () => {
     const posting = migoMatrix().filter((c) => c.resolution.kind === 'POST_HERE');
-    expect(posting).toHaveLength(3);
-    expect(posting.map((c) => `${c.action.value}+${c.reference.value}`)).toEqual(['A01+R08', 'A04+R10', 'A07+R08']);
+    expect(posting).toHaveLength(4);
+    expect(posting.map((c) => `${c.action.value}+${c.reference.value}`))
+      .toEqual(['A01+R08', 'A03+R05', 'A04+R10', 'A07+R08']);
     expect(posting.map((c) => c.resolution.kind === 'POST_HERE' && c.resolution.form))
-      .toEqual(['RECEIPT', 'TRANSFER', 'ISSUE']);
+      .toEqual(['RECEIPT', 'REVERSE', 'TRANSFER', 'ISSUE']);
     expect(resolveMigoCell('A07', 'R08')).toMatchObject({ kind: 'POST_HERE', movement: '261' });
     expect(resolveMigoCell('A01', 'R08')).toMatchObject({ kind: 'POST_HERE', movement: '101' });
     expect(resolveMigoCell('A04', 'R10')).toMatchObject({ kind: 'POST_HERE', movement: '311/301/321' });
@@ -54,7 +55,7 @@ describe('SCR-139 MIGO action/reference matrix', () => {
     expect(resolveMigoCell('A01', 'R01')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.GR.POST' });
     expect(resolveMigoCell('A07', 'R04')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.GI.POST' });
     expect(resolveMigoCell('A04', 'R05')).toMatchObject({ kind: 'REFUSED', deliveredBy: 'R10' });
-    expect(resolveMigoCell('A03', 'R01')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.REVERSE' });
+    expect(resolveMigoCell('A03', 'R01')).toMatchObject({ kind: 'REFUSED', deliveredBy: 'R05' });
     expect(resolveMigoCell('A07', 'R04')).toMatchObject({ kind: 'ELSEWHERE', capability: 'INV.GI.POST' });
     expect(shell).toContain('href={cell.route}');
   });
