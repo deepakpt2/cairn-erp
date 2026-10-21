@@ -16,6 +16,7 @@
  * value and posts nothing. Posted documents are immutable; correction is a
  * counter movement type.
  */
+import { createHash } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
@@ -31,7 +32,7 @@ import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
 } from './schema';
-import { COUNTER_CODES, DELIVERED_TRANSFER_MOVEMENTS, TRANSFER_SCENARIOS, type TransferScenario } from './transfer-scenarios';
+import { DELIVERED_TRANSFER_MOVEMENTS, type ScenarioKind, type TransferScenario } from './transfer-scenarios';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 
 export { DELIVERED_TRANSFER_MOVEMENTS, TRANSFER_SCENARIOS } from './transfer-scenarios';
@@ -62,20 +63,158 @@ async function ensureMovements(tx: Tx, client: string, changedBy: string) {
   }
 }
 
-async function resolveScenario(code: string): Promise<TransferScenario> {
-  const found = TRANSFER_SCENARIOS.find((s) => s.code === code);
-  if (found) return found;
-  const counter = COUNTER_CODES[code];
+/**
+ * The three-digit numbers are input aliases — what a person types — and stay in one map here. What
+ * the alias *means* is not decided here: the `movement_type` row decides, from SCR-146 onward.
+ * Before this, permitted dimensions, stock types and organizational rules were read out of a
+ * TypeScript array, so a tenant could not change what a transfer was without a deploy.
+ */
+const MOVEMENT_ALIASES: Record<string, string> = {
+  '311': 'TRANSFER_SLOC',
+  '301': 'TRANSFER_PLANT',
+  '321': 'TRANSFER_STYPE',
+};
+
+/** The counters, so a hand-entered counter is refused with its own movement named. */
+const COUNTER_ALIASES: Record<string, [string, string]> = {
+  '312': ['311', 'TRANSFER_SLOC_REV'],
+  '302': ['301', 'TRANSFER_PLANT_REV'],
+  '322': ['321', 'TRANSFER_STYPE_REV'],
+};
+
+/** Two-step movements canon does not carry — §14 requires them refused by name, never run one-step. */
+const TWO_STEP_ALIASES: Record<string, string> = {
+  '303': 'transfer to in-transit stock',
+  '313': 'stock transfer to in-transit storage location',
+  '315': 'in-transit to destination',
+};
+
+function scenarioFromRow(row: typeof movementType.$inferSelect, code: string): TransferScenario {
+  const kind = row.movementKind as ScenarioKind;
+  if (!['STORAGE_LOCATION', 'PLANT', 'STOCK_TYPE'].includes(kind)) {
+    throw new TransferPostingError(
+      `Movement ${row.movementType} is configured as ${row.movementKind}, which is not a one-step transfer.`,
+      'Configure a transfer movement kind, or post the movement it names.',
+    );
+  }
+  return {
+    code,
+    movementType: row.movementType,
+    reversalMovementType: row.reversalMovementType ?? '',
+    kind,
+    description: row.description,
+    fromStockType: row.sourceStockType ?? 'UNRESTRICTED',
+    toStockType: row.destinationStockType ?? 'UNRESTRICTED',
+    plantRule: row.plantRule as 'SAME' | 'DIFFERENT' | 'ANY',
+    locationRule: row.locationRule as 'SAME' | 'DIFFERENT' | 'ANY',
+    isTwoStep: row.isTwoStep,
+    valuationRelevant: row.valuationRelevant,
+    negativeStockPolicy: row.negativeStockPolicy as 'LOCATION' | 'FORBID',
+  };
+}
+
+/**
+ * Resolve the movement from configuration (§9, §10 step 3).
+ *
+ * Every refusal here names what the configuration says, because a rule a person cannot see is a
+ * rule they cannot satisfy: a two-step movement says so, a movement needing a batch says canon has
+ * no batch master, and a movement whose kind is not a transfer says which kinds are.
+ */
+async function resolveScenario(tx: Tx, client: string, code: string): Promise<TransferScenario> {
+  const trimmed = (code ?? '').trim();
+  if (TWO_STEP_ALIASES[trimmed]) {
+    throw new TransferPostingError(
+      `Movement type ${trimmed} is a two-step transfer (${TWO_STEP_ALIASES[trimmed]}), which this canon does not carry.`,
+      'A two-step transfer puts stock in transit, and canon has no in-transit stock dimension. Post a one-step transfer, or leave the goods where they are.',
+    );
+  }
+  const counter = COUNTER_ALIASES[trimmed];
   if (counter) {
     throw new TransferPostingError(
-      `Movement type ${code} is the counter of ${counter[0]} and is posted only by reversing a transfer.`,
+      `Movement type ${trimmed} is the counter of ${counter[0]} and is posted only by reversing a transfer.`,
       `Reverse the transfer document that posted ${counter[0]}; the counter movement is not entered by hand.`,
     );
   }
-  throw new TransferPostingError(
-    `Movement type ${code || '(empty)'} is not a transfer.`,
-    `Transfer postings stand on 311 (storage location to storage location), 301 (plant to plant) or 321 (quality inspection to unrestricted).`,
-  );
+  const movementName = MOVEMENT_ALIASES[trimmed];
+  if (!movementName) {
+    throw new TransferPostingError(
+      `Movement type ${trimmed || '(empty)'} is not a transfer.`,
+      'Transfer postings stand on 311 (storage location to storage location), 301 (plant to plant) or 321 (quality inspection to unrestricted).',
+    );
+  }
+
+  const [row] = await tx.select().from(movementType).where(and(
+    eq(movementType.client, client), eq(movementType.movementType, movementName),
+  ));
+  if (!row) {
+    throw new TransferPostingError(
+      `Movement ${movementName} (${trimmed}) does not stand in this tenant's movement catalogue.`,
+      'Seed or configure the movement, then post the transfer.',
+    );
+  }
+  if (row.isTwoStep) {
+    throw new TransferPostingError(
+      `Movement ${row.movementType} is configured as a two-step transfer, which this canon does not carry.`,
+      'Canon has no in-transit stock dimension; post a one-step transfer instead.',
+    );
+  }
+  // The requirement flags exist so a tenant can state what a movement needs. Where canon carries no
+  // master for it, the movement is refused rather than posted against stock that belongs to no layer.
+  const unmet: string[] = [];
+  if (row.requiresBatch) unmet.push('a batch (canon carries no batch master)');
+  if (row.requiresSerial) unmet.push('serial numbers (canon carries no serial-number master)');
+  if (row.requiresSpecialStock) unmet.push('a special-stock category (canon carries stock as a named stock type)');
+  if (row.requiresValuationType) unmet.push('a valuation type (canon carries no split valuation)');
+  if (unmet.length > 0) {
+    throw new TransferPostingError(
+      `Movement ${row.movementType} requires ${unmet.join(', ')}, which this canon does not carry.`,
+      'Clear the requirement in the movement catalogue, or use a movement that does not need it.',
+    );
+  }
+  return scenarioFromRow(row, trimmed);
+}
+
+/**
+ * What the caller asked for, reduced to one string (§16).
+ *
+ * A replay is the *same* request arriving twice — a retried HTTP call, a double-clicked button.
+ * A reused key with a different quantity is not a replay; it is a second posting wearing the first
+ * one's name, and honouring it would silently drop it. So the key is stored with a fingerprint of
+ * the payload that made it, and a mismatch is refused.
+ */
+function fingerprintOf(input: {
+  movementTypeCode: string; materialNumber: string; quantity: number;
+  issuingPlant: string; issuingStorageLocation: string;
+  receivingPlant: string; receivingStorageLocation: string;
+  postingDate: string; documentDate: string; entryUnit?: string; externalReference?: string;
+}): string {
+  const canonical = [
+    input.movementTypeCode.trim(), input.materialNumber.trim().toUpperCase(),
+    input.quantity.toFixed(6), input.entryUnit ?? '',
+    input.issuingPlant.trim(), input.issuingStorageLocation.trim(),
+    input.receivingPlant.trim(), input.receivingStorageLocation.trim(),
+    input.postingDate, input.documentDate, input.externalReference?.trim() ?? '',
+  ].join('|');
+  // A digest, not the payload: the column is 64 characters and the comparison only needs equality.
+  return createHash('sha256').update(canonical).digest('hex');
+}
+
+/** A replay returns the document; a reused key wearing a different payload is refused by name. */
+async function replayOrRefuse(
+  tx: Tx, client: string, requestKey: string, fingerprint: string,
+): Promise<TransferDocumentView | null> {
+  const existing = await existingByRequestKey(tx, client, requestKey);
+  if (!existing) return null;
+  const [header] = await tx.select().from(materialDocument).where(and(
+    eq(materialDocument.client, client), eq(materialDocument.materialDocumentNumber, existing.materialDocumentNumber),
+  ));
+  if (header?.requestFingerprint && header.requestFingerprint !== fingerprint) {
+    throw new TransferPostingError(
+      `Request key ${requestKey} already posted ${existing.materialDocumentNumber}, and this is a different posting: the stored request does not match this one.`,
+      'Post with a fresh request key, or repeat the original request exactly.',
+    );
+  }
+  return existing;
 }
 
 async function existingByRequestKey(tx: Tx, client: string, requestKey: string) {
@@ -109,6 +248,7 @@ export interface TransferDocumentView {
   documentDate: string;
   postingDate: string;
   headerText: string | null;
+  externalReference: string | null;
   status: string;
   journalDocumentNumber: string | null;
   reversalOf: string | null;
@@ -126,6 +266,7 @@ function transferView(
     documentDate: header.documentDate,
     postingDate: header.postingDate,
     headerText: header.headerText,
+    externalReference: header.externalReference,
     status: header.status,
     journalDocumentNumber: header.journalDocumentNumber,
     reversalOf: header.reversalOf,
@@ -188,6 +329,7 @@ export interface PostTransferInput {
   postingDate: string;
   documentDate: string;
   headerText?: string;
+  externalReference?: string;
   requestKey: string;
 }
 
@@ -424,6 +566,275 @@ function splitJournalKey(key: string): [number, string] {
   return [Number(parts[1]), parts.slice(2).join('/')];
 }
 
+/** What a posting needs to know before it writes one row — and what a dry run answers with. */
+export interface TransferPreflight {
+  scenario: TransferScenario;
+  mat: typeof material.$inferSelect;
+  entryUnit: string;
+  entryQuantity: number;
+  quantity: number;
+  issuing: Awaited<ReturnType<typeof loadPlant>>;
+  receiving: Awaited<ReturnType<typeof loadPlant>>;
+  issuingLocation: Awaited<ReturnType<typeof loadStorageLocation>>;
+  receivingLocation: Awaited<ReturnType<typeof loadStorageLocation>>;
+  company: { companyCode: string; chartOfAccounts: string; currency: string };
+  position: { fiscalYear: number; period: number };
+  q: number;
+  valueMoves: boolean;
+  movedValue: number;
+  receivingValue: number;
+  stockOnHand: number;
+}
+
+/**
+ * Every judgement the posting makes before it writes, in one place (§12, §16).
+ *
+ * The API validates the request shape; this repeats the judgements that depend on live data —
+ * configuration, master data, period, count block, stock — inside the transaction that would post,
+ * so a document can never pass validation in one instant and fail halfway in another. The same
+ * function answers a dry run, which is why it writes nothing: `validateTransfer` has no way to
+ * reach a writer because the writer starts after this returns.
+ */
+async function preflight(
+  tx: Tx, client: string, changedBy: string, input: PostTransferInput, materialNumber: string,
+): Promise<TransferPreflight> {
+  await ensureMovements(tx, client, changedBy);
+  // The advisory lock is taken before the material is read — deliberately earlier than §10's step
+  // order, because a lock taken after the read leaves a window in which two postings both see the
+  // same stock. The lock is on the material, so a transfer and a reversal of it serialise.
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/transfer/${materialNumber}`}, 0))`);
+  const scenario = await resolveScenario(tx, client, input.movementTypeCode);
+
+  const [mat] = await tx.select().from(material).where(and(
+  eq(material.client, input.client), eq(material.materialNumber, materialNumber),
+  ));
+  if (!mat) throw new TransferPostingError(`Material ${materialNumber} does not exist.`);
+  if (mat.markedForDeletion) {
+    throw new TransferPostingError(`Material ${materialNumber} is flagged for deletion.`, 'Cancel the deletion flag, then post again.');
+  }
+  if (!mat.baseUnit) {
+    throw new TransferPostingError(
+    `Material ${materialNumber} carries no base unit.`,
+    'Complete the material master, then post the transfer.',
+    );
+  }
+
+  // SCR-144: a quantity entered in an alternative unit becomes the base quantity the ledger
+  // records, at the material's own ratio. A unit with no conversion is refused by name.
+  const entryUnit = input.entryUnit ?? mat.baseUnit;
+  let quantity = input.quantity;
+  if (entryUnit !== mat.baseUnit) {
+    try {
+      const conversion = await toBaseQuantity(tx, input.client, {
+        materialNumber, quantity: input.quantity, entryUnit,
+      });
+      quantity = conversion.baseQuantity;
+    } catch (caught) {
+      if (caught instanceof UnitConversionError) {
+        throw new TransferPostingError(caught.message, caught.remedy);
+      }
+      throw caught;
+    }
+  }
+
+  // Scenario structure, judged before anything is read for stock — and judged from
+  // configuration (SCR-146): the movement's own plant_rule and location_rule say what may change,
+  // so the rules can differ per tenant without a line of TypeScript changing.
+  const samePlant = input.issuingPlant === input.receivingPlant;
+  if (scenario.plantRule === 'SAME' && !samePlant) {
+    throw new TransferPostingError(
+    `Movement ${scenario.movementType} (${scenario.code}) moves inside one plant, and the configuration says so; but the receiving plant ${input.receivingPlant} differs from ${input.issuingPlant}.`,
+    `Name the same plant on both sides, or post a movement whose plant rule is DIFFERENT.`,
+    );
+  }
+  if (scenario.plantRule === 'DIFFERENT' && samePlant) {
+    throw new TransferPostingError(
+    `Movement ${scenario.movementType} (${scenario.code}) moves between plants, and the configuration says so; but both sides name plant ${input.issuingPlant}.`,
+    'Name a different receiving plant, or post a movement whose plant rule is SAME.',
+    );
+  }
+  const sameLocation = input.issuingStorageLocation === input.receivingStorageLocation;
+  if (scenario.locationRule === 'SAME' && !sameLocation) {
+    throw new TransferPostingError(
+    `Movement ${scenario.movementType} (${scenario.code}) moves inside one storage location, and the configuration says so; but ${input.issuingStorageLocation} and ${input.receivingStorageLocation} differ.`,
+    'Name the same storage location on both sides.',
+    );
+  }
+  if (scenario.locationRule === 'DIFFERENT' && sameLocation) {
+    throw new TransferPostingError(
+    `Movement ${scenario.movementType} (${scenario.code}) moves between storage locations, and the configuration says so; but both sides name ${input.issuingStorageLocation}.`,
+    'Name a different receiving storage location.',
+    );
+  }
+  const namedStockType = (input.stockType ?? '').trim().toUpperCase();
+  if (namedStockType && namedStockType !== scenario.fromStockType) {
+    throw new TransferPostingError(
+    `Movement type ${scenario.code} takes stock from ${scenario.fromStockType}, not ${namedStockType}.`,
+    `Leave the stock type empty, or name ${scenario.fromStockType}.`,
+    );
+  }
+
+  const issuing = await loadPlant(tx, input.client, input.issuingPlant, materialNumber, 'issuing', null);
+  const receiving = await loadPlant(tx, input.client, input.receivingPlant, materialNumber, 'receiving', issuing.companyCode);
+  if (issuing.valuation.currency !== receiving.valuation.currency) {
+    throw new TransferPostingError(
+    'The two valuation areas do not share a currency.',
+    'Post the transfer inside one valuation currency.',
+    );
+  }
+
+  const issuingLocation = await loadStorageLocation(tx, input.client, input.issuingPlant, input.issuingStorageLocation, 'issuing');
+  const receivingLocation = await loadStorageLocation(tx, input.client, input.receivingPlant, input.receivingStorageLocation, 'receiving');
+
+  const { company, position } = await judgePeriod(tx, input.client, input.issuingPlant, input.postingDate);
+
+  // SCR-142: an open count with a posting block refuses the movement for this material here.
+  try {
+    await assertInventoryCountOpen(tx, input.client, {
+      materialNumber, plant: input.issuingPlant, storageLocation: issuingLocation.storageLocation,
+    });
+    await assertInventoryCountOpen(tx, input.client, {
+      materialNumber, plant: input.receivingPlant, storageLocation: receivingLocation.storageLocation,
+    });
+  } catch (caught) {
+    if (caught instanceof PhysicalInventoryError) {
+      throw new TransferPostingError(caught.message, caught.remedy);
+    }
+    throw caught;
+  }
+
+  await requireStock(
+  tx, input.client, materialNumber, input.issuingPlant, issuingLocation.storageLocation,
+  scenario.fromStockType, quantity,
+  scenario.negativeStockPolicy === 'FORBID' ? false : issuingLocation.allowNegativeStock,
+  'issuing',
+  );
+
+  // Value: a move inside one plant changes none; a move between plants carries it — but only
+  // when the movement's configuration says it is valuation-relevant (SCR-146, §11).
+  const valueMoves = scenario.kind === 'PLANT' && scenario.valuationRelevant;
+  const q = quantity;
+  let movedValue = 0;
+  let receivingValue = 0;
+  if (scenario.kind === 'PLANT') {
+    const issuingUnit = issuing.valuation.priceControl === 'STANDARD'
+    ? Number(issuing.valuation.standardPrice) / Number(issuing.valuation.priceUnit)
+    : Number(issuing.valuation.movingAveragePrice) / Number(issuing.valuation.priceUnit);
+    movedValue = round2(q * issuingUnit);
+    receivingValue = receiving.valuation.priceControl === 'STANDARD'
+    ? round2((q * Number(receiving.valuation.standardPrice)) / Number(receiving.valuation.priceUnit))
+    : movedValue;
+  }
+
+  const stockOnHand = (await stockAt(
+  tx, client, materialNumber, input.issuingPlant,
+  issuingLocation.storageLocation, scenario.fromStockType,
+  )) ?? 0;
+
+  return {
+    scenario, mat, entryUnit, entryQuantity: input.quantity, quantity, q,
+    issuing, receiving, issuingLocation, receivingLocation, company, position,
+    valueMoves, movedValue, receivingValue, stockOnHand,
+  };
+}
+
+export interface TransferValidation {
+  accepted: true;
+  movement: {
+    code: string; movementType: string; description: string;
+    twoStep: boolean; valuationRelevant: boolean; negativeStockPolicy: string;
+  };
+  entry: { quantity: number; unit: string };
+  base: { quantity: number; unit: string };
+  from: { plant: string; storageLocation: string; stockType: string };
+  to: { plant: string; storageLocation: string; stockType: string };
+  stock: { onHand: number; after: number };
+  value: { moves: boolean; issuing: number; receiving: number; journalExpected: boolean };
+  period: { fiscalYear: number; period: number; postingDate: string };
+  notes: string[];
+}
+
+/**
+ * Answer what a transfer would do, without doing it (§16: "`validate` posts nothing").
+ *
+ * It runs the same `preflight` the posting runs, then stops — the writer lives past that boundary,
+ * so there is no branch here that could post. A refusal arrives as the same `TransferPostingError`
+ * a posting would raise, with the same words, because a preview that says "fine" and then fails is
+ * worse than no preview.
+ */
+export async function validateTransfer(
+  input: Omit<PostTransferInput, 'requestKey'>,
+): Promise<TransferValidation> {
+  requireDate(input.postingDate, 'The posting date');
+  requireDate(input.documentDate, 'The document date');
+  if ((input.headerText ?? '').length > 25) {
+    throw new TransferPostingError('The header text is longer than 25 characters.', 'Shorten the header text.');
+  }
+  if (!(input.quantity > 0)) {
+    throw new TransferPostingError('The transfer quantity must be positive.', 'Enter a quantity greater than zero.');
+  }
+  const materialNumber = input.materialNumber.trim();
+  if (!materialNumber) throw new TransferPostingError('A material is required.', 'Enter the material being transferred.');
+
+  return withTenant(input.client, async (tx) => {
+    const pre = await preflight(tx, input.client, input.changedBy, { ...input, requestKey: 'validate' }, materialNumber);
+    const journalExpected = pre.valueMoves
+      && round2(pre.receivingValue - pre.movedValue) !== 0;
+
+    const notes: string[] = [];
+    if (pre.valueMoves) {
+      notes.push(
+        journalExpected
+          ? `Value moves and the receiving plant values it differently: a journal posts for ${round2(pre.receivingValue - pre.movedValue).toFixed(2)}.`
+          : 'Value moves with the goods at the same rate; no journal posts.',
+      );
+    } else {
+      notes.push('No valuation change: this move stays inside one valuation area.');
+    }
+    if (pre.scenario.negativeStockPolicy === 'FORBID') {
+      notes.push('The movement forbids a negative balance at the issuing location.');
+    } else if (pre.issuingLocation.allowNegativeStock) {
+      notes.push('The issuing location permits a negative balance.');
+    }
+    if (pre.scenario.reversalMovementType) {
+      notes.push(`A reversal would post ${pre.scenario.reversalMovementType}.`);
+    }
+
+    return {
+      accepted: true as const,
+      movement: {
+        code: pre.scenario.code, movementType: pre.scenario.movementType,
+        description: pre.scenario.description, twoStep: pre.scenario.isTwoStep,
+        valuationRelevant: pre.scenario.valuationRelevant,
+        negativeStockPolicy: pre.scenario.negativeStockPolicy,
+      },
+      entry: { quantity: pre.entryQuantity, unit: pre.entryUnit },
+      base: { quantity: pre.quantity, unit: pre.mat.baseUnit },
+      from: {
+        plant: input.issuingPlant, storageLocation: pre.issuingLocation.storageLocation,
+        stockType: pre.scenario.fromStockType,
+      },
+      to: {
+        plant: input.receivingPlant, storageLocation: pre.receivingLocation.storageLocation,
+        stockType: pre.scenario.toStockType,
+      },
+      stock: {
+        onHand: pre.stockOnHand,
+        after: round2(pre.stockOnHand - pre.quantity),
+      },
+      value: {
+        moves: pre.valueMoves, issuing: pre.movedValue,
+        receiving: pre.receivingValue, journalExpected,
+      },
+      period: {
+        fiscalYear: pre.position.fiscalYear, period: pre.position.period,
+        postingDate: input.postingDate,
+      },
+      notes,
+    };
+  });
+}
+
 export async function postTransfer(input: PostTransferInput): Promise<TransferDocumentView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
@@ -433,140 +844,30 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
   if (!(input.quantity > 0)) {
     throw new TransferPostingError('The transfer quantity must be positive.', 'Enter a quantity greater than zero.');
   }
-  const scenario = await resolveScenario(input.movementTypeCode);
   const materialNumber = input.materialNumber.trim();
   if (!materialNumber) throw new TransferPostingError('A material is required.', 'Enter the material being transferred.');
 
   return withTenant(input.client, async (tx) => {
-    const replay = await existingByRequestKey(tx, input.client, input.requestKey);
+    const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprintOf(input));
     if (replay) return replay;
 
-    await ensureMovements(tx, input.client, input.changedBy);
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/transfer/${materialNumber}`}, 0))`);
-
-    const [mat] = await tx.select().from(material).where(and(
-      eq(material.client, input.client), eq(material.materialNumber, materialNumber),
-    ));
-    if (!mat) throw new TransferPostingError(`Material ${materialNumber} does not exist.`);
-    if (mat.markedForDeletion) {
-      throw new TransferPostingError(`Material ${materialNumber} is flagged for deletion.`, 'Cancel the deletion flag, then post again.');
-    }
-    if (!mat.baseUnit) {
-      throw new TransferPostingError(
-        `Material ${materialNumber} carries no base unit.`,
-        'Complete the material master, then post the transfer.',
-      );
-    }
-
-    // SCR-144: a quantity entered in an alternative unit becomes the base quantity the ledger
-    // records, at the material's own ratio. A unit with no conversion is refused by name.
-    const entryUnit = input.entryUnit ?? mat.baseUnit;
-    let quantity = input.quantity;
-    if (entryUnit !== mat.baseUnit) {
-      try {
-        const conversion = await toBaseQuantity(tx, input.client, {
-          materialNumber, quantity: input.quantity, entryUnit,
-        });
-        quantity = conversion.baseQuantity;
-      } catch (caught) {
-        if (caught instanceof UnitConversionError) {
-          throw new TransferPostingError(caught.message, caught.remedy);
-        }
-        throw caught;
-      }
-    }
-
-    // Scenario structure, judged before anything is read for stock.
-    const samePlant = input.issuingPlant === input.receivingPlant;
-    if (scenario.kind === 'PLANT' && samePlant) {
-      throw new TransferPostingError(
-        `Movement type ${scenario.code} moves between plants, but both sides name plant ${input.issuingPlant}.`,
-        'Name a different receiving plant, or post 311 to move inside one plant.',
-      );
-    }
-    if (scenario.kind !== 'PLANT' && !samePlant) {
-      throw new TransferPostingError(
-        `Movement type ${scenario.code} moves inside one plant, but the receiving plant ${input.receivingPlant} differs from ${input.issuingPlant}.`,
-        'Name the same plant on both sides, or post 301 to move between plants.',
-      );
-    }
-    if (scenario.kind === 'STORAGE_LOCATION' && input.issuingStorageLocation === input.receivingStorageLocation) {
-      throw new TransferPostingError(
-        `Movement type ${scenario.code} moves between storage locations, but both sides name ${input.issuingStorageLocation}.`,
-        'Name a different receiving storage location.',
-      );
-    }
-    if (scenario.kind === 'STOCK_TYPE' && input.issuingStorageLocation !== input.receivingStorageLocation) {
-      throw new TransferPostingError(
-        `Movement type ${scenario.code} moves stock between stock types inside one storage location, but ${input.issuingStorageLocation} and ${input.receivingStorageLocation} differ.`,
-        'Name the same storage location on both sides.',
-      );
-    }
-    const namedStockType = (input.stockType ?? '').trim().toUpperCase();
-    if (namedStockType && namedStockType !== scenario.fromStockType) {
-      throw new TransferPostingError(
-        `Movement type ${scenario.code} takes stock from ${scenario.fromStockType}, not ${namedStockType}.`,
-        `Leave the stock type empty, or name ${scenario.fromStockType}.`,
-      );
-    }
-
-    const issuing = await loadPlant(tx, input.client, input.issuingPlant, materialNumber, 'issuing', null);
-    const receiving = await loadPlant(tx, input.client, input.receivingPlant, materialNumber, 'receiving', issuing.companyCode);
-    if (issuing.valuation.currency !== receiving.valuation.currency) {
-      throw new TransferPostingError(
-        'The two valuation areas do not share a currency.',
-        'Post the transfer inside one valuation currency.',
-      );
-    }
-
-    const issuingLocation = await loadStorageLocation(tx, input.client, input.issuingPlant, input.issuingStorageLocation, 'issuing');
-    const receivingLocation = await loadStorageLocation(tx, input.client, input.receivingPlant, input.receivingStorageLocation, 'receiving');
-
-    const { company, position } = await judgePeriod(tx, input.client, input.issuingPlant, input.postingDate);
-
-    // SCR-142: an open count with a posting block refuses the movement for this material here.
-    try {
-      await assertInventoryCountOpen(tx, input.client, {
-        materialNumber, plant: input.issuingPlant, storageLocation: issuingLocation.storageLocation,
-      });
-      await assertInventoryCountOpen(tx, input.client, {
-        materialNumber, plant: input.receivingPlant, storageLocation: receivingLocation.storageLocation,
-      });
-    } catch (caught) {
-      if (caught instanceof PhysicalInventoryError) {
-        throw new TransferPostingError(caught.message, caught.remedy);
-      }
-      throw caught;
-    }
-
-    await requireStock(
-      tx, input.client, materialNumber, input.issuingPlant, issuingLocation.storageLocation,
-      scenario.fromStockType, quantity, issuingLocation.allowNegativeStock, 'issuing',
-    );
-
-    // Value: a move inside one plant changes none; a move between plants carries it.
-    const q = quantity;
-    let movedValue = 0;
-    let receivingValue = 0;
-    if (scenario.kind === 'PLANT') {
-      const issuingUnit = issuing.valuation.priceControl === 'STANDARD'
-        ? Number(issuing.valuation.standardPrice) / Number(issuing.valuation.priceUnit)
-        : Number(issuing.valuation.movingAveragePrice) / Number(issuing.valuation.priceUnit);
-      movedValue = round2(q * issuingUnit);
-      receivingValue = receiving.valuation.priceControl === 'STANDARD'
-        ? round2((q * Number(receiving.valuation.standardPrice)) / Number(receiving.valuation.priceUnit))
-        : movedValue;
-    }
+    const pre = await preflight(tx, input.client, input.changedBy, input, materialNumber);
+    const {
+      scenario, mat, entryUnit, quantity, issuing, receiving,
+      issuingLocation, receivingLocation, company, position,
+      valueMoves, movedValue, receivingValue, q,
+    } = pre;
 
     const allocated = await allocateNumber(tx, {
       client: input.client, objectCode: 'MATDOC', allocatedBy: input.changedBy,
     });
     const number = allocated.display;
 
-    // A price difference stands only when a standard-priced receiving plant values the
-    // stock differently from what was transferred — SAP posts no journal otherwise.
+    // A price difference stands only when the movement's configuration says value moves and a
+    // standard-priced receiving plant values the stock differently from what was transferred —
+    // SAP posts no journal otherwise. §11: never assume cross-plant means a valuation change.
     let journalNumber: string | null = null;
-    if (scenario.kind === 'PLANT' && round2(receivingValue - movedValue) !== 0) {
+    if (valueMoves && round2(receivingValue - movedValue) !== 0) {
       const chart = company.chartOfAccounts as string;
       const receivingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', receiving.valuation.valuationClass!);
       const issuingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', issuing.valuation.valuationClass!);
@@ -609,12 +910,14 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       client: input.client, materialDocumentNumber: number, documentYear: position.fiscalYear,
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: input.headerText ?? null, status: 'POSTED',
+      externalReference: input.externalReference?.trim() || null,
       journalDocumentNumber: journalNumber, requestKey: input.requestKey,
+      requestFingerprint: fingerprintOf(input),
       createdBy: input.changedBy,
     });
 
-    const issuingValue = scenario.kind === 'PLANT' ? movedValue : 0;
-    const receivingLineValue = scenario.kind === 'PLANT' ? receivingValue : 0;
+    const issuingValue = movedValue;
+    const receivingLineValue = receivingValue;
     const unit = mat.baseUnit;
 
     const issueLine: typeof materialDocumentLine.$inferInsert = {
@@ -653,7 +956,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
     }, q);
 
-    if (scenario.kind === 'PLANT') {
+    if (valueMoves) {
       await moveValuation(tx, input.client, input.changedBy, issuing, -q, -movedValue);
       await moveValuation(tx, input.client, input.changedBy, receiving, q, receivingValue);
     }

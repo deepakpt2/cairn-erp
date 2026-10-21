@@ -68,10 +68,11 @@ describe('SCR-131 transfer posting UI contract', () => {
 
   it('carries the refusals the package names, in the service', () => {
     expect(service).toContain('is not a transfer');
-    expect(service).toContain('moves between plants');
-    expect(service).toContain('moves inside one plant');
-    expect(service).toContain('moves between storage locations');
-    expect(service).toContain('moves stock between stock types inside one storage location');
+    // SCR-146: the organizational refusals now quote the configuration that decided them.
+    expect(service).toContain('moves between plants, and the configuration says so');
+    expect(service).toContain('moves inside one plant, and the configuration says so');
+    expect(service).toContain('moves between storage locations, and the configuration says so');
+    expect(service).toContain('moves inside one storage location, and the configuration says so');
     expect(service).toContain('blocked for postings');
     expect(service).toContain('cross-company stock transfer needs intercompany clearing');
     expect(service).toContain('The material posting period');
