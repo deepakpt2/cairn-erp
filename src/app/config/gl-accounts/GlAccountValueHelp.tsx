@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { t } from '@/platform/i18n';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 export interface AccountChoice {
   code: string;
@@ -96,7 +97,7 @@ export function GlAccountValueHelp({
             onClick={openLookup}
             disabled={disabled || readOnly || choices.length === 0}
           >
-            F4
+            <SearchIcon />
           </button>
         </div>
         <p className="mt-1 text-xs text-ink-faint">{rule}</p>

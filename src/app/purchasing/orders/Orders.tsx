@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import type { OrderChoices, OrderDocument } from '@/modules/purchasing/orders';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import {
   cancelOrderReleaseAction,
@@ -273,19 +274,13 @@ export default function Orders({ documents, choices, selected, canCreate, releas
           <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Supplier</span>
-              <input
-                className="input w-full"
-                list="po-suppliers"
+              <ConstrainedField
+                kind="supplier-purchasing"
+                className="input min-w-0 flex-1"
                 value={header.supplierNumber}
-                onChange={(event) => setHeader({ ...header, supplierNumber: event.target.value })}
+                context={{ purchasingOrg: header.purchasingOrg }}
+                onChange={(supplierNumber) => setHeader({ ...header, supplierNumber })}
               />
-              <datalist id="po-suppliers">
-                {choices.suppliers.map((s) => (
-                  <option key={`${s.partnerNumber}-${s.purchasingOrg}`} value={s.partnerNumber}>
-                    {s.name} · org {s.purchasingOrg}
-                  </option>
-                ))}
-              </datalist>
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Purchasing organization</span>
@@ -328,11 +323,10 @@ export default function Orders({ documents, choices, selected, canCreate, releas
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-              <input
-                className="input w-full"
+              <ConstrainedField
+                kind="currency"
                 value={header.currency}
-                placeholder="From supplier / company"
-                onChange={(event) => setHeader({ ...header, currency: event.target.value })}
+                onChange={(currency) => setHeader({ ...header, currency })}
               />
             </label>
           </div>
@@ -359,11 +353,37 @@ export default function Orders({ documents, choices, selected, canCreate, releas
                       <td className="px-2 py-2 text-ink-faint">{String(item.itemNumber ?? (index + 1) * 10).padStart(5, '0')}</td>
                       {itemFields.map((field) => (
                         <td key={field.key} className="px-1 py-1">
-                          <input
-                            className={`input ${field.width}`}
-                            value={item[field.key]}
-                            onChange={(event) => patch(index, { [field.key]: event.target.value })}
-                          />
+                          {field.key === 'material' ? (
+                            <ConstrainedField
+                              kind="material-order"
+                              className={`input ${field.width}`}
+                              value={item.material}
+                              context={{ plant: item.plant }}
+                              onChange={(material) => patch(index, { material })}
+                            />
+                          ) : field.key === 'unit' ? (
+                            <ConstrainedField
+                              kind="unit"
+                              uppercase
+                              className={`input ${field.width}`}
+                              value={item.unit}
+                              onChange={(unit) => patch(index, { unit })}
+                            />
+                          ) : field.key === 'taxCode' ? (
+                            <ConstrainedField
+                              kind="tax"
+                              className={`input ${field.width}`}
+                              value={item.taxCode}
+                              context={{ companyCode: header.companyCode }}
+                              onChange={(taxCode) => patch(index, { taxCode })}
+                            />
+                          ) : (
+                            <input
+                              className={`input ${field.width}`}
+                              value={item[field.key]}
+                              onChange={(event) => patch(index, { [field.key]: event.target.value })}
+                            />
+                          )}
                         </td>
                       ))}
                       <td className="px-1 py-1">

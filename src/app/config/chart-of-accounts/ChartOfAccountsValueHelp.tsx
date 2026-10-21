@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { t } from '@/platform/i18n';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 export interface ChartOfAccountsChoice {
   code: string;
@@ -82,7 +83,7 @@ export function ChartOfAccountsValueHelp({
             title={`${t('chartOfAccounts.openGroupLookup')} (F4)`}
             onClick={openLookup}
             disabled={disabled || choices.length === 0}
-          >F4</button>
+          ><SearchIcon /></button>
         </div>
         <p className="mt-1 text-xs text-ink-faint">{rule}</p>
       </div>
@@ -166,7 +167,7 @@ export function ChartLanguageField({
             title={`${t('chartOfAccounts.openLanguageLookup')} (F4)`}
             onClick={() => setOpen(true)}
             disabled={disabled || choices.length === 0}
-          >F4</button>
+          ><SearchIcon /></button>
         </div>
         <p className="mt-1 text-xs text-ink-faint">{t('chartOfAccounts.languageRule')}</p>
       </div>

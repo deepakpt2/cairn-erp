@@ -100,6 +100,7 @@ import { scr148Mi20Differences } from './scr148-mi20-differences';
 import { scr149Mi07Posting } from './scr149-mi07-posting';
 import { scr150Mi11Recount } from './scr150-mi11-recount';
 import { scr151InfoRecord } from './scr151-info-record';
+import { scr152InfoRecordChange } from './scr152-info-record-change';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5052,6 +5053,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr149-mi07-posting': scr149Mi07Posting,
   'scr150-mi11-recount': scr150Mi11Recount,
   'scr151-info-record': scr151InfoRecord,
+  'scr152-info-record-change': scr152InfoRecordChange,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

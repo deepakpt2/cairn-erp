@@ -21,6 +21,8 @@ import {
   changePurchasingInfoRecord,
   createPurchasingInfoRecord,
   previewPurchasingInfoRecord,
+  previewPurchasingInfoRecordChange,
+  type InfoRecordChangePreview,
   type InfoRecordCreateInput,
 } from '@/modules/purchasing/info-record';
 
@@ -31,6 +33,8 @@ export interface InfoRecordActionState {
   infoRecordNumber?: string | null;
   existing?: boolean;
   wrote?: boolean;
+  changes?: InfoRecordChangePreview['changes'];
+  closedInterval?: InfoRecordChangePreview['closedInterval'];
 }
 
 function text(form: FormData, name: string): string {
@@ -156,6 +160,91 @@ export async function checkInfoRecordAction(
   }
 }
 
+function changeInput(form: FormData, client: string, changedBy: string, intent: string) {
+  const amount = text(form, 'amount');
+  return {
+    client,
+    changedBy,
+    reason: raw(form, 'reason'),
+    infoRecordNumber: text(form, 'infoRecordNumber'),
+    expectedVersion: Number(text(form, 'expectedVersion')),
+    segmentNumber: text(form, 'segmentNumber') === '' ? null : Number(text(form, 'segmentNumber')),
+    expectedSegmentVersion: text(form, 'expectedSegmentVersion') === '' ? null : Number(text(form, 'expectedSegmentVersion')),
+    partnerNumber: text(form, 'partnerNumber') || null,
+    materialNumber: text(form, 'materialNumber') || null,
+    purchasingOrg: text(form, 'purchasingOrg') || null,
+    plant: form.has('plant') ? text(form, 'plant') || null : undefined,
+    plannedDeliveryDays: form.has('plannedDeliveryDays') ? optionalCount(form, 'plannedDeliveryDays') : undefined,
+    minimumOrderQuantity: form.has('minimumOrderQuantity') ? optionalCount(form, 'minimumOrderQuantity') : undefined,
+    minimumOrderUnit: form.has('minimumOrderUnit') ? text(form, 'minimumOrderUnit') || null : undefined,
+    orderUnit: form.has('orderUnit') ? text(form, 'orderUnit') || null : undefined,
+    markRecordDeleted: intent === 'deactivate-record',
+    reactivateRecord: intent === 'reactivate-record',
+    markSegmentDeleted: intent === 'deactivate-segment',
+    reactivateSegment: intent === 'reactivate-segment',
+    markPriceDeleted: intent === 'deactivate-price' ? Number(text(form, 'priceSequence')) : null,
+    reactivatePrice: intent === 'reactivate-price' ? Number(text(form, 'priceSequence')) : null,
+    newPrice: intent === 'change' && amount !== '' ? {
+      amount: Number(amount),
+      currency: text(form, 'currency'),
+      priceUnit: Number(text(form, 'priceUnit') || '1'),
+      priceUnitOfMeasure: text(form, 'priceUnitOfMeasure'),
+      validFrom: text(form, 'validFrom'),
+      validTo: text(form, 'validTo'),
+    } : null,
+  };
+}
+
+function refusedNamed(form: FormData): InfoRecordActionState | null {
+  if (text(form, 'materialGroup')) {
+    return {
+      ok: false,
+      message: 'A material-group info record is not created.',
+      remedy: 'Name the material. A group record is a later round.',
+    };
+  }
+  if (text(form, 'category') && text(form, 'category') !== 'STANDARD') {
+    return { ok: false, message: `Info record category ${text(form, 'category')} is not supported. Only a standard record is created.` };
+  }
+  if (text(form, 'taxCode') || text(form, 'incoterms') || text(form, 'confirmationControl')) {
+    return { ok: false, message: 'Tax, incoterms and confirmation control are not fields of the info record.' };
+  }
+  if (text(form, 'scale') || text(form, 'standardQuantity')) {
+    return { ok: false, message: 'A scale and a standard quantity are not stored. One net price is the price.' };
+  }
+  if (text(form, 'conditionType') && text(form, 'conditionType') !== 'NET_PRICE') {
+    return { ok: false, message: `Condition type ${text(form, 'conditionType')} is not supported. The price is a net price, and there is no condition-type catalogue.` };
+  }
+  return null;
+}
+
+export async function checkChangeInfoRecordAction(
+  _previous: InfoRecordActionState,
+  form: FormData,
+): Promise<InfoRecordActionState> {
+  const session = await requireSession(INFO_RECORD_ROUTE);
+  if (!can(session, INFO_RECORD_CAPABILITY)) return missing();
+  const stop = blocked(form) ?? refusedNamed(form);
+  if (stop) return stop;
+  try {
+    const preview = await previewPurchasingInfoRecordChange(
+      changeInput(form, session.user.client, session.user.username, 'change'),
+    );
+    return {
+      ok: true,
+      wrote: false,
+      infoRecordNumber: preview.infoRecordNumber,
+      changes: preview.changes,
+      closedInterval: preview.closedInterval,
+      message: preview.changes.length === 0
+        ? `Nothing on segment ${text(form, 'segmentNumber')} would change. Nothing was written.`
+        : `Segment ${text(form, 'segmentNumber')} can be saved. Nothing was written.`,
+    };
+  } catch (caught) {
+    return refused(caught) ?? (() => { throw caught; })();
+  }
+}
+
 export async function createInfoRecordAction(
   _previous: InfoRecordActionState,
   form: FormData,
@@ -187,61 +276,13 @@ export async function changeInfoRecordAction(
 ): Promise<InfoRecordActionState> {
   const session = await requireSession(INFO_RECORD_ROUTE);
   if (!can(session, INFO_RECORD_CAPABILITY)) return missing();
-  const stop = blocked(form);
+  const stop = blocked(form) ?? refusedNamed(form);
   if (stop) return stop;
-  if (text(form, 'materialGroup')) {
-    return {
-      ok: false,
-      message: 'A material-group info record is not created.',
-      remedy: 'Name the material. A group record is a later round.',
-    };
-  }
-  if (text(form, 'category') && text(form, 'category') !== 'STANDARD') {
-    return { ok: false, message: `Info record category ${text(form, 'category')} is not supported. Only a standard record is created.` };
-  }
-  if (text(form, 'taxCode') || text(form, 'incoterms') || text(form, 'confirmationControl')) {
-    return { ok: false, message: 'Tax, incoterms and confirmation control are not fields of the info record.' };
-  }
-  if (text(form, 'scale') || text(form, 'standardQuantity')) {
-    return { ok: false, message: 'A scale and a standard quantity are not stored. One net price is the price.' };
-  }
-  if (text(form, 'conditionType') && text(form, 'conditionType') !== 'NET_PRICE') {
-    return { ok: false, message: `Condition type ${text(form, 'conditionType')} is not supported. The price is a net price, and there is no condition-type catalogue.` };
-  }
   const intent = text(form, 'intent') || 'change';
-  const amount = text(form, 'amount');
   try {
-    const changed = await changePurchasingInfoRecord({
-      client: session.user.client,
-      changedBy: session.user.username,
-      reason: raw(form, 'reason'),
-      infoRecordNumber: text(form, 'infoRecordNumber'),
-      expectedVersion: Number(text(form, 'expectedVersion')),
-      segmentNumber: text(form, 'segmentNumber') === '' ? null : Number(text(form, 'segmentNumber')),
-      expectedSegmentVersion: text(form, 'expectedSegmentVersion') === '' ? null : Number(text(form, 'expectedSegmentVersion')),
-      partnerNumber: text(form, 'partnerNumber') || null,
-      materialNumber: text(form, 'materialNumber') || null,
-      purchasingOrg: text(form, 'purchasingOrg') || null,
-      plant: form.has('plant') ? text(form, 'plant') || null : undefined,
-      plannedDeliveryDays: form.has('plannedDeliveryDays') ? optionalCount(form, 'plannedDeliveryDays') : undefined,
-      minimumOrderQuantity: form.has('minimumOrderQuantity') ? optionalCount(form, 'minimumOrderQuantity') : undefined,
-      minimumOrderUnit: form.has('minimumOrderUnit') ? text(form, 'minimumOrderUnit') || null : undefined,
-      orderUnit: form.has('orderUnit') ? text(form, 'orderUnit') || null : undefined,
-      markRecordDeleted: intent === 'deactivate-record',
-      reactivateRecord: intent === 'reactivate-record',
-      markSegmentDeleted: intent === 'deactivate-segment',
-      reactivateSegment: intent === 'reactivate-segment',
-      markPriceDeleted: intent === 'deactivate-price' ? Number(text(form, 'priceSequence')) : null,
-      reactivatePrice: intent === 'reactivate-price' ? Number(text(form, 'priceSequence')) : null,
-      newPrice: intent === 'change' && amount !== '' ? {
-        amount: Number(amount),
-        currency: text(form, 'currency'),
-        priceUnit: Number(text(form, 'priceUnit') || '1'),
-        priceUnitOfMeasure: text(form, 'priceUnitOfMeasure'),
-        validFrom: text(form, 'validFrom'),
-        validTo: text(form, 'validTo'),
-      } : null,
-    });
+    const changed = await changePurchasingInfoRecord(
+      changeInput(form, session.user.client, session.user.username, intent),
+    );
     revalidatePath(INFO_RECORD_ROUTE);
     return {
       ok: true,

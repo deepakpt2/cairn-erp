@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, type ReactNode } from 'react';
+import { useActionState, useState, type ReactNode } from 'react';
 
 import { t } from '@/platform/i18n';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { InfoRecordChoiceLists, InfoRecordDocument } from '@/modules/purchasing/info-record';
 import {
   changeInfoRecordAction,
+  checkChangeInfoRecordAction,
   checkInfoRecordAction,
   createInfoRecordAction,
   type InfoRecordActionState,
@@ -21,6 +23,53 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</span>
       {children}
     </label>
+  );
+}
+
+function fieldLabel(field: string): string {
+  switch (field) {
+    case 'plannedDeliveryDays': return t('infoRecord.leadTime');
+    case 'minimumOrderQuantity': return t('infoRecord.minimum');
+    case 'minimumOrderUnit': return t('infoRecord.minimumUnit');
+    case 'orderUnit': return t('infoRecord.orderUnit');
+    case 'amount': return t('infoRecord.amount');
+    case 'currency': return t('infoRecord.currency');
+    case 'priceUnit': return t('infoRecord.priceUnit');
+    case 'priceUnitOfMeasure': return t('infoRecord.priceUnitOfMeasure');
+    case 'validFrom': return t('infoRecord.validFrom');
+    case 'validTo': return t('infoRecord.validTo');
+    case 'closedValidTo': return t('infoRecord.validity');
+    default: return t('infoRecord.status');
+  }
+}
+
+function ChangePreview({ state }: { state: InfoRecordActionState }) {
+  if (!state.ok || state.wrote !== false || !state.changes) return null;
+  return (
+    <div data-info-record-change-preview className="mt-3 text-sm">
+      <p>{state.message}</p>
+      <p className="mt-1">{t('infoRecord.changePreviewNote')}</p>
+      {state.changes.length === 0 ? (
+        <p className="mt-1">{t('infoRecord.nothingChanged')}</p>
+      ) : (
+        <ul className="mt-2 space-y-1">
+          {state.changes.map((change) => (
+            <li key={change.field}>
+              {fieldLabel(change.field)}: {change.before ?? '—'} → {change.after ?? '—'}
+            </li>
+          ))}
+        </ul>
+      )}
+      {state.closedInterval && (
+        <p className="mt-2" data-info-record-closed-interval>
+          {t('infoRecord.closedInterval', {
+            sequence: state.closedInterval.priceSequence,
+            from: state.closedInterval.previousValidTo,
+            to: state.closedInterval.validTo,
+          })}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -47,14 +96,16 @@ function Notice({ state }: { state: InfoRecordActionState }) {
 }
 
 /**
- * One screen. The category is Standard, shown as text. Check writes nothing. A change of the
- * same record is not another transaction. The search aliases are not identifiers on this form.
+ * One screen. The category is Standard, shown as text. A create check and a change check write
+ * nothing. Organisation and plant select a standing segment; they are not retarget inputs.
  */
 export default function InfoRecordWorkbench({
   record,
   requestedNumber,
   requestedSupplier,
   requestedMaterial,
+  requestedOrg,
+  requestedPlant,
   namedExisting,
   choices,
   canMaintain,
@@ -63,13 +114,24 @@ export default function InfoRecordWorkbench({
   requestedNumber: string;
   requestedSupplier: string;
   requestedMaterial: string;
+  requestedOrg: string;
+  requestedPlant: string;
   namedExisting: string | null;
   choices: InfoRecordChoiceLists;
   canMaintain: boolean;
 }) {
+  const [createOrg, setCreateOrg] = useState('');
+  const [lookupOrg, setLookupOrg] = useState(requestedOrg);
   const [checkState, checkAction, checking] = useActionState(checkInfoRecordAction, INITIAL);
   const [createState, createAction, creating] = useActionState(createInfoRecordAction, INITIAL);
   const [changeState, changeAction, changing] = useActionState(changeInfoRecordAction, INITIAL);
+  const [changeCheckState, changeCheckAction, changeChecking] = useActionState(checkChangeInfoRecordAction, INITIAL);
+  const scopedSegments = !record
+    ? []
+    : requestedOrg
+      ? record.segments.filter((segment) => segment.purchasingOrg === requestedOrg && (requestedPlant ? segment.plant === requestedPlant : segment.plant == null))
+      : record.segments;
+  const scopeMissing = Boolean(record && requestedOrg && scopedSegments.length === 0);
 
   return (
     <>
@@ -80,10 +142,16 @@ export default function InfoRecordWorkbench({
             <input name="record" className="input w-full" defaultValue={record?.infoRecordNumber ?? requestedNumber} />
           </Field>
           <Field label={t('infoRecord.supplier')}>
-            <input name="supplier" className="input w-full" list="info-record-suppliers" defaultValue={requestedSupplier} />
+            <ConstrainedField kind="supplier-purchasing" name="supplier" defaultValue={requestedSupplier} />
           </Field>
           <Field label={t('infoRecord.material')}>
-            <input name="material" className="input w-full" list="info-record-materials" defaultValue={requestedMaterial} />
+            <ConstrainedField kind="material-info" name="material" defaultValue={requestedMaterial} />
+          </Field>
+          <Field label={t('infoRecord.purchasingOrg')}>
+            <ConstrainedField kind="purchasing-org" name="org" value={lookupOrg} onChange={setLookupOrg} />
+          </Field>
+          <Field label={t('infoRecord.plant')}>
+            <ConstrainedField kind="plant" name="plant" defaultValue={requestedPlant} context={{ purchasingOrg: lookupOrg }} />
           </Field>
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('infoRecord.load')}</button>
           <Link href={ROUTE} className="btn btn-default min-h-11 sm:min-h-8">{t('infoRecord.newRecord')}</Link>
@@ -94,6 +162,7 @@ export default function InfoRecordWorkbench({
         {namedExisting && record && (
           <p className="mt-2 text-sm text-ink-soft">{t('infoRecord.namedExisting', { number: record.infoRecordNumber })}</p>
         )}
+        <p className="mt-2 text-xs text-ink-soft">{t('infoRecord.scopeHint')}</p>
         {choices.records.length > 0 && (
           <ul className="mt-3 flex flex-wrap gap-2 text-sm">
             {choices.records.map((row) => (
@@ -136,8 +205,15 @@ export default function InfoRecordWorkbench({
             )}
           </form>
 
+          {scopeMissing && (
+            <p role="status" className="mt-3 text-sm text-red-700" data-info-record-scope-missing>
+              {requestedPlant
+                ? t('infoRecord.segmentMissingPlant', { number: record.infoRecordNumber, org: requestedOrg, plant: requestedPlant })
+                : t('infoRecord.segmentMissing', { number: record.infoRecordNumber, org: requestedOrg })}
+            </p>
+          )}
           <div className="mt-4 space-y-4">
-            {record.segments.map((segment) => (
+            {scopedSegments.map((segment) => (
               <article key={segment.segmentNumber} data-info-record-segment={segment.segmentNumber} className="border-t border-line pt-3">
                 <h3 className="text-sm font-semibold">
                   {t('infoRecord.segment', { segment: segment.segmentNumber })} · {segment.purchasingOrg}
@@ -183,10 +259,10 @@ export default function InfoRecordWorkbench({
                       <input name="minimumOrderQuantity" className="input w-full" inputMode="decimal" defaultValue={segment.minimumOrderQuantity ?? ''} />
                     </Field>
                     <Field label={t('infoRecord.minimumUnit')}>
-                      <input name="minimumOrderUnit" className="input w-full" list="info-record-units" defaultValue={segment.minimumOrderUnit ?? ''} />
+                      <ConstrainedField kind="unit" name="minimumOrderUnit" defaultValue={segment.minimumOrderUnit ?? ''} uppercase />
                     </Field>
                     <Field label={t('infoRecord.orderUnit')}>
-                      <input name="orderUnit" className="input w-full" list="info-record-units" defaultValue={segment.orderUnit ?? ''} />
+                      <ConstrainedField kind="unit" name="orderUnit" defaultValue={segment.orderUnit ?? ''} uppercase />
                     </Field>
                   </div>
                   <p className="text-xs text-ink-soft">{t('infoRecord.newPriceHint')}</p>
@@ -195,13 +271,13 @@ export default function InfoRecordWorkbench({
                       <input name="amount" className="input w-full" inputMode="decimal" />
                     </Field>
                     <Field label={t('infoRecord.currency')}>
-                      <input name="currency" className="input w-full" list="info-record-currencies" defaultValue={segment.prices.at(-1)?.currency ?? ''} />
+                      <ConstrainedField kind="currency" name="currency" defaultValue={segment.prices.at(-1)?.currency ?? ''} />
                     </Field>
                     <Field label={t('infoRecord.priceUnit')}>
                       <input name="priceUnit" className="input w-full" inputMode="numeric" defaultValue="1" />
                     </Field>
                     <Field label={t('infoRecord.priceUnitOfMeasure')}>
-                      <input name="priceUnitOfMeasure" className="input w-full" list="info-record-units" defaultValue={segment.prices.at(-1)?.priceUnitOfMeasure ?? ''} />
+                      <ConstrainedField kind="unit" name="priceUnitOfMeasure" defaultValue={segment.prices.at(-1)?.priceUnitOfMeasure ?? ''} uppercase />
                     </Field>
                     <Field label={t('infoRecord.validFrom')}>
                       <input type="date" name="validFrom" className="input w-full" />
@@ -214,6 +290,9 @@ export default function InfoRecordWorkbench({
                     <input name="reason" className="input w-full" required minLength={3} maxLength={500} />
                   </Field>
                   <div className="flex flex-wrap gap-2">
+                    <button type="submit" formAction={changeCheckAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!canMaintain || changeChecking} data-info-record-change-check>
+                      {changeChecking ? t('infoRecord.changeChecking') : t('infoRecord.changeCheck')}
+                    </button>
                     <button type="submit" name="intent" value="change" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canMaintain || changing} data-info-record-change>
                       {t('infoRecord.saveChange')}
                     </button>
@@ -250,6 +329,8 @@ export default function InfoRecordWorkbench({
             ))}
           </div>
           <Notice state={changeState} />
+          {!changeCheckState.ok && <Notice state={changeCheckState} />}
+          <ChangePreview state={changeCheckState} />
         </section>
       )}
 
@@ -268,16 +349,16 @@ export default function InfoRecordWorkbench({
           )}
           <div className="flex flex-wrap gap-3">
             <Field label={t('infoRecord.supplier')}>
-              <input name="partnerNumber" className="input w-full" list="info-record-suppliers" required defaultValue={record?.partnerNumber ?? requestedSupplier} readOnly={Boolean(record)} />
+              <ConstrainedField kind="supplier-purchasing" name="partnerNumber" required defaultValue={record?.partnerNumber ?? requestedSupplier} readOnly={Boolean(record)} context={{ purchasingOrg: createOrg }} />
             </Field>
             <Field label={t('infoRecord.material')}>
-              <input name="materialNumber" className="input w-full" list="info-record-materials" required defaultValue={record?.materialNumber ?? requestedMaterial} readOnly={Boolean(record)} />
+              <ConstrainedField kind="material-info" name="materialNumber" required defaultValue={record?.materialNumber ?? requestedMaterial} readOnly={Boolean(record)} />
             </Field>
             <Field label={t('infoRecord.purchasingOrg')}>
-              <input name="purchasingOrg" className="input w-full" list="info-record-orgs" required />
+              <ConstrainedField kind="purchasing-org" name="purchasingOrg" required value={createOrg} onChange={setCreateOrg} />
             </Field>
             <Field label={t('infoRecord.plant')}>
-              <input name="plant" className="input w-full" list="info-record-plants" />
+              <ConstrainedField kind="plant" name="plant" context={{ purchasingOrg: createOrg }} />
             </Field>
           </div>
           <p className="text-xs text-ink-soft">{t('infoRecord.plantHint')}</p>
@@ -286,13 +367,13 @@ export default function InfoRecordWorkbench({
               <input name="amount" className="input w-full" inputMode="decimal" required />
             </Field>
             <Field label={t('infoRecord.currency')}>
-              <input name="currency" className="input w-full" list="info-record-currencies" required />
+              <ConstrainedField kind="currency" name="currency" required />
             </Field>
             <Field label={t('infoRecord.priceUnit')}>
               <input name="priceUnit" className="input w-full" inputMode="numeric" defaultValue="1" required />
             </Field>
             <Field label={t('infoRecord.priceUnitOfMeasure')}>
-              <input name="priceUnitOfMeasure" className="input w-full" list="info-record-units" required />
+              <ConstrainedField kind="unit" name="priceUnitOfMeasure" required uppercase />
             </Field>
             <Field label={t('infoRecord.validFrom')}>
               <input type="date" name="validFrom" className="input w-full" required />
@@ -309,10 +390,10 @@ export default function InfoRecordWorkbench({
               <input name="minimumOrderQuantity" className="input w-full" inputMode="decimal" />
             </Field>
             <Field label={t('infoRecord.minimumUnit')}>
-              <input name="minimumOrderUnit" className="input w-full" list="info-record-units" />
+              <ConstrainedField kind="unit" name="minimumOrderUnit" uppercase />
             </Field>
             <Field label={t('infoRecord.orderUnit')}>
-              <input name="orderUnit" className="input w-full" list="info-record-units" />
+              <ConstrainedField kind="unit" name="orderUnit" uppercase />
             </Field>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -329,26 +410,6 @@ export default function InfoRecordWorkbench({
         {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('infoRecord.capabilityMissing')}</p>}
       </section>
 
-      <datalist id="info-record-suppliers">
-        {choices.suppliers.map((row) => (
-          <option key={`${row.partnerNumber}-${row.purchasingOrg}`} value={row.partnerNumber}>{row.name} · {row.purchasingOrg} · {row.orderCurrency ?? ''}</option>
-        ))}
-      </datalist>
-      <datalist id="info-record-materials">
-        {choices.materials.map((row) => <option key={row.materialNumber} value={row.materialNumber}>{row.description}</option>)}
-      </datalist>
-      <datalist id="info-record-orgs">
-        {choices.purchasingOrgs.map((row) => <option key={row.purchasingOrg} value={row.purchasingOrg}>{row.name}</option>)}
-      </datalist>
-      <datalist id="info-record-plants">
-        {choices.plants.map((row) => <option key={`${row.purchasingOrg}-${row.plant}`} value={row.plant}>{row.name} · {row.purchasingOrg}</option>)}
-      </datalist>
-      <datalist id="info-record-currencies">
-        {choices.currencies.map((code) => <option key={code} value={code} />)}
-      </datalist>
-      <datalist id="info-record-units">
-        {choices.units.map((code) => <option key={code} value={code} />)}
-      </datalist>
     </>
   );
 }

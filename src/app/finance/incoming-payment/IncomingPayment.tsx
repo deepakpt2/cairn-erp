@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 
 import type { IncomingPaymentView } from '@/modules/finance/incoming-payment';
 import { postPaymentAction, type IncomingPaymentActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: IncomingPaymentActionState = { ok: false, message: '' };
 
@@ -26,6 +27,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
   today: string;
 }) {
   const [state, action, posting] = useActionState(postPaymentAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amount, setAmount] = useState('');
   const [applied, setApplied] = useState<Record<string, string>>({});
@@ -55,11 +57,11 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
         <form method="get" action="/finance/incoming-payment" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-            <input name="companyCode" className="input w-28" placeholder="1000" defaultValue={view?.companyCode ?? ''} required />
+            <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Customer</span>
-            <input name="customer" className="input" placeholder="C10000" defaultValue={view?.customer ?? ''} required />
+            <ConstrainedField kind="customer-company" name="customer" required placeholder="C10000" defaultValue={view?.customer ?? ''} context={{ companyCode }} />
           </label>
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Load open items</button>
         </form>
@@ -106,7 +108,7 @@ export default function IncomingPayment({ view, loadError, canEnter, today }: {
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-                  <input name="currency" className="input w-full" placeholder="USD" required />
+                  <ConstrainedField kind="currency" name="currency" required />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>

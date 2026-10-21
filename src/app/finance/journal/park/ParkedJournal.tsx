@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
 import type { ParkedJournalView } from '@/modules/finance/parked-journal';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import {
   completeAction, deleteAction, parkAction, postAction,
   type ParkedJournalActionState,
@@ -45,6 +46,8 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
   const [completeState, complete, completing] = useActionState(completeAction, INITIAL);
   const [postState, post, postingDoc] = useActionState(postAction, INITIAL);
   const [deleteState, remove, deleting] = useActionState(deleteAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState(editing?.companyCode ?? '');
+  const [postingDate, setPostingDate] = useState(editing?.postingDate ?? today);
   const [lines, setLines] = useState<LineRow[]>(editing
     ? editing.lines.map((l) => ({
       glAccount: l.glAccount, debitCredit: l.debitCredit, amount: String(l.amount),
@@ -78,7 +81,7 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-              <input name="companyCode" className="input w-full" placeholder="1000" defaultValue={editing?.companyCode ?? ''} required />
+              <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document date</span>
@@ -86,7 +89,7 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Posting date</span>
-              <input type="date" name="postingDate" className="input w-full" defaultValue={editing?.postingDate ?? today} required />
+              <input type="date" name="postingDate" className="input w-full" value={postingDate} onChange={(event) => setPostingDate(event.target.value)} required />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document type</span>
@@ -94,7 +97,7 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-              <input name="currency" className="input w-full" placeholder="USD" defaultValue={editing?.currency ?? ''} required />
+              <ConstrainedField kind="currency" name="currency" required defaultValue={editing?.currency ?? ''} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>
@@ -112,8 +115,8 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
               <div key={index} className="flex flex-wrap items-end gap-2">
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">G/L account</span>
-                  <input aria-label="G/L account" className="input w-28" value={line.glAccount}
-                    onChange={(e) => setLine(index, { glAccount: e.target.value })} />
+                  <ConstrainedField kind="gl" className="input w-28" value={line.glAccount} context={{ companyCode }}
+                    onChange={(glAccount) => setLine(index, { glAccount })} />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">D/C</span>
@@ -130,18 +133,18 @@ export default function ParkedJournal({ parked, editing, canPark, today }: {
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Cost centre</span>
-                  <input aria-label="Cost centre" className="input w-28" value={line.costCenter}
-                    onChange={(e) => setLine(index, { costCenter: e.target.value })} />
+                  <ConstrainedField kind="cost-center" className="input w-28" value={line.costCenter} context={{ companyCode, postingDate }}
+                    onChange={(costCenter) => setLine(index, { costCenter })} />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Profit centre</span>
-                  <input aria-label="Profit centre" className="input w-28" value={line.profitCenter}
-                    onChange={(e) => setLine(index, { profitCenter: e.target.value })} />
+                  <ConstrainedField kind="profit-center" className="input w-28" value={line.profitCenter} context={{ postingDate }}
+                    onChange={(profitCenter) => setLine(index, { profitCenter })} />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Tax code</span>
-                  <input aria-label="Tax code" className="input w-20" value={line.taxCode}
-                    onChange={(e) => setLine(index, { taxCode: e.target.value })} />
+                  <ConstrainedField kind="tax" className="input w-20" value={line.taxCode} context={{ companyCode }}
+                    onChange={(taxCode) => setLine(index, { taxCode })} />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Line text</span>

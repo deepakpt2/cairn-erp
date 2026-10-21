@@ -6,6 +6,7 @@ import type {
   RequisitionChoices,
   RequisitionDocument,
 } from '@/modules/purchasing/requisitions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { DocumentReleaseState } from '@/modules/purchasing/release';
 import {
   cancelRequisitionReleaseAction,
@@ -294,12 +295,18 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
                     </td>
                     {textFields.map((field) => (
                       <td key={field.key} className="px-1 py-1">
-                        <input
-                          className={`input ${field.width}`}
-                          type={field.type ?? 'text'}
-                          value={item[field.key]}
-                          onChange={(event) => patch(index, { [field.key]: event.target.value })}
-                        />
+                        {field.key === 'material' ? (
+                          <ConstrainedField kind="material-order" className={`input ${field.width}`} value={item.material} context={{ plant: item.plant }} onChange={(material) => patch(index, { material })} />
+                        ) : field.key === 'unit' ? (
+                          <ConstrainedField kind="unit" uppercase className={`input ${field.width}`} value={item.unit} onChange={(unit) => patch(index, { unit })} />
+                        ) : (
+                          <input
+                            className={`input ${field.width}`}
+                            type={field.type ?? 'text'}
+                            value={item[field.key]}
+                            onChange={(event) => patch(index, { [field.key]: event.target.value })}
+                          />
+                        )}
                       </td>
                     ))}
                     <td className="px-1 py-1">

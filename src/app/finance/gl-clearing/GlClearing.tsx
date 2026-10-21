@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import type { GlClearingView } from '@/modules/finance/gl-clearing';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { clearAction, type GlClearingActionState } from './actions';
 
 const INITIAL: GlClearingActionState = { ok: false, message: '' };
@@ -21,6 +22,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   today: string;
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [method, setMethod] = useState<'STANDARD' | 'PARTIAL' | 'RESIDUAL'>('STANDARD');
   const [settlements, setSettlements] = useState<Record<string, string>>({});
@@ -71,11 +73,11 @@ export default function GlClearing({ view, loadError, canClear, today }: {
         <form method="get" action="/finance/gl-clearing" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-            <input name="companyCode" className="input w-28" placeholder="1000" defaultValue={view?.companyCode ?? ''} required />
+            <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">G/L account</span>
-            <input name="glAccount" className="input w-36" placeholder="110100" defaultValue={view?.glAccount ?? ''} required />
+            <ConstrainedField kind="gl" name="glAccount" required placeholder="110100" defaultValue={view?.glAccount ?? ''} context={{ companyCode }} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document number</span>

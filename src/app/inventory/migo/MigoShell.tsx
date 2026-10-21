@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import {
   MIGO_ACTIONS, MIGO_REFERENCES, resolveMigoCell,
 } from '@/modules/inventory/migo';
@@ -23,7 +24,30 @@ const TRANSFER_MEANINGS: Record<string, string> = {
 };
 const LINES = [1, 2, 3, 4];
 
+function StockLine({ n }: { n: number }) {
+  const [plant, setPlant] = useState('');
+  return (
+    <tr className="border-t border-line" data-migo-line={n}>
+      <td className="py-1">{n}</td>
+      <td className="py-1"><ConstrainedField kind="material-stock" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
+      <td className="py-1"><ConstrainedField kind="plant" name={`plant-${n}`} value={plant} onChange={setPlant} /></td>
+      <td className="py-1"><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
+      <td className="py-1">
+        <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
+      </td>
+      <td className="py-1">
+        <ConstrainedField kind="unit" name={`unit-${n}`} uppercase maxLength={6} />
+      </td>
+      <td className="py-1">
+        <input name={`orderItem-${n}`} className="input w-20" placeholder="10" aria-label={`${t('migo.columnItem')} ${n}`} />
+      </td>
+    </tr>
+  );
+}
+
 export default function MigoShell({ canPost, today }: { canPost: boolean; today: string }) {
+  const [issuingPlant, setIssuingPlant] = useState('');
+  const [receivingPlant, setReceivingPlant] = useState('');
   const [state, action, posting] = useActionState(postMigoAction, INITIAL);
   const [receipt, receiptAction, receiving] = useActionState(postReceiptAction, INITIAL_RECEIPT);
   const [transfer, transferAction, transferring] = useActionState(postTransferAction, INITIAL_TRANSFER);
@@ -179,7 +203,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.columnMaterial')}</span>
-                <input name="materialNumber" className="input w-full" placeholder="MAT-…" required />
+                <ConstrainedField kind="material-stock" name="materialNumber" required placeholder="MAT-…" context={{ plant: issuingPlant }} />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.transferQuantity')}</span>
@@ -187,7 +211,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.entryUnit')}</span>
-                <input name="unit" className="input w-full uppercase" placeholder="PC" maxLength="6" data-entry-unit />
+                <ConstrainedField kind="unit" name="unit" uppercase maxLength={6} placeholder="PC" />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.headerText')}</span>
@@ -195,19 +219,19 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.issuingPlant')}</span>
-                <input name="issuingPlant" className="input w-full" placeholder="1000" required />
+                <ConstrainedField kind="plant" name="issuingPlant" required value={issuingPlant} onChange={setIssuingPlant} />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.issuingLocation')}</span>
-                <input name="issuingStorageLocation" className="input w-full" placeholder="0001" required />
+                <ConstrainedField kind="storage-location" name="issuingStorageLocation" required context={{ plant: issuingPlant }} />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.receivingPlant')}</span>
-                <input name="receivingPlant" className="input w-full" placeholder="1000" required />
+                <ConstrainedField kind="plant" name="receivingPlant" required value={receivingPlant} onChange={setReceivingPlant} />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.receivingLocation')}</span>
-                <input name="receivingStorageLocation" className="input w-full" placeholder="0002" required />
+                <ConstrainedField kind="storage-location" name="receivingStorageLocation" required context={{ plant: receivingPlant }} />
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.postingDate')}</span>
@@ -318,7 +342,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
               </label>
               <label className="block">
                 <span className="field-label">{t('migo.entryUnit')}</span>
-                <input name="unit" className="input w-full uppercase" placeholder="PC" maxLength="6" data-entry-unit />
+                <ConstrainedField kind="unit" name="unit" uppercase maxLength={6} placeholder="PC" />
               </label>
             </div>
 
@@ -428,24 +452,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 </tr>
               </thead>
               <tbody>
-                {LINES.map((n) => (
-                  <tr key={n} className="border-t border-line" data-migo-line={n}>
-                    <td className="py-1">{n}</td>
-                    <td className="py-1"><input name={`material-${n}`} className="input w-full" placeholder="MAT-…" /></td>
-                    <td className="py-1"><input name={`plant-${n}`} className="input w-24" placeholder="1000" /></td>
-                    <td className="py-1"><input name={`sloc-${n}`} className="input w-24" placeholder="0001" /></td>
-                    <td className="py-1">
-                      <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
-                    </td>
-                    <td className="py-1">
-                      <input name={`unit-${n}`} className="input w-20 uppercase" maxLength="6"
-                             aria-label={`${t('migo.entryUnit')} ${n}`} data-entry-unit />
-                    </td>
-                    <td className="py-1">
-                      <input name={`orderItem-${n}`} className="input w-20" placeholder="10" aria-label={`${t('migo.columnItem')} ${n}`} />
-                    </td>
-                  </tr>
-                ))}
+                {LINES.map((n) => <StockLine key={n} n={n} />)}
               </tbody>
             </table>
 

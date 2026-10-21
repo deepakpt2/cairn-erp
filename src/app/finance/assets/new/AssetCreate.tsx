@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import type { AssetActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { createAction } from './actions';
 
 const INITIAL: AssetActionState = { ok: false, message: '' };
@@ -15,6 +16,7 @@ const labelCls = 'mb-1 block text-xs font-medium uppercase tracking-wide text-in
 export default function AssetCreate({ canCreate, today }: { canCreate: boolean; today: string }) {
   const [state, create, creating] = useActionState(createAction, INITIAL);
   const [tab, setTab] = useState<'general' | 'assignments' | 'depreciation'>('general');
+  const [companyCode, setCompanyCode] = useState('');
   const [areas, setAreas] = useState<AreaRow[]>([
     { areaCode: '01', depreciationKey: '', usefulLifeYears: '', usefulLifePeriods: '0', depreciationStartDate: '' },
   ]);
@@ -49,7 +51,7 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
           <div role="tabpanel" hidden={tab !== 'general'}>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <label className="block"><span className={labelCls}>Company code</span>
-              <input name="companyCode" className={inputCls} placeholder="1000" required /></label>
+              <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} /></label>
             <label className="block"><span className={labelCls}>Asset class</span>
               <input name="assetClass" className={inputCls} placeholder="1000" required /></label>
             <label className="block"><span className={labelCls}>Number of similar assets</span>
@@ -69,7 +71,7 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
             <label className="block"><span className={labelCls}>Quantity</span>
               <input name="quantity" className={inputCls} /></label>
             <label className="block"><span className={labelCls}>Unit of measure</span>
-              <input name="unitOfMeasure" className={inputCls} placeholder="EA" /></label>
+              <ConstrainedField kind="unit" name="unitOfMeasure" uppercase placeholder="EA" /></label>
             <label className="block"><span className={labelCls}>Capitalization date</span>
               <input type="date" name="capitalizationDate" className={inputCls} /></label>
             </div>
@@ -82,11 +84,11 @@ export default function AssetCreate({ canCreate, today }: { canCreate: boolean; 
             <label className="block"><span className={labelCls}>Valid from</span>
               <input type="date" name="validFrom" className={inputCls} defaultValue={today} required /></label>
             <label className="block"><span className={labelCls}>Cost centre</span>
-              <input name="costCenter" className={inputCls} /></label>
+              <ConstrainedField kind="cost-center" name="costCenter" context={{ companyCode }} /></label>
             <label className="block"><span className={labelCls}>Profit centre</span>
               <input name="profitCenter" className={inputCls} /></label>
             <label className="block"><span className={labelCls}>Plant</span>
-              <input name="plant" className={inputCls} /></label>
+              <ConstrainedField kind="plant" name="plant" context={{ companyCode }} /></label>
             <label className="block"><span className={labelCls}>Location</span>
               <input name="location" className={inputCls} /></label>
             <p className="text-sm text-ink-soft sm:col-span-2 lg:col-span-3">

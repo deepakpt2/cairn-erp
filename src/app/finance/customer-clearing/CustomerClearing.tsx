@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 
 import type { CustomerClearingView } from '@/modules/finance/customer-clearing';
 import { clearAction, type CustomerClearingActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: CustomerClearingActionState = { ok: false, message: '' };
 
@@ -26,6 +27,7 @@ export default function CustomerClearing({ view, loadError, canClear, today }: {
   today: string;
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clearingDate, setClearingDate] = useState(today);
   const [postingDate, setPostingDate] = useState(today);
@@ -53,11 +55,11 @@ export default function CustomerClearing({ view, loadError, canClear, today }: {
         <form method="get" action="/finance/customer-clearing" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Customer account</span>
-            <input name="customer" className="input" placeholder="C10000" defaultValue={view?.customer ?? ''} required />
+            <ConstrainedField kind="customer-company" name="customer" required placeholder="C10000" defaultValue={view?.customer ?? ''} context={{ companyCode }} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-            <input name="companyCode" className="input w-28" placeholder="1000" defaultValue={view?.companyCode ?? ''} required />
+            <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
           </label>
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Load open items</button>
         </form>

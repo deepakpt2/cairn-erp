@@ -3,6 +3,8 @@
 import { useActionState, useState } from 'react';
 
 import type { TaxCodeChoice, VendorInvoiceView } from '@/modules/finance/vendor-invoice';
+import type { ConstrainedValue } from '@/modules/foundation/constrained-values';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import {
   cancelInvoiceAction, postInvoiceAction, type VendorInvoiceActionState,
 } from './actions';
@@ -30,8 +32,10 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
   const [postState, postAction, posting] = useActionState(postInvoiceAction, INITIAL);
   const [cancelState, cancelAction, cancelling] = useActionState(cancelInvoiceAction, INITIAL);
   const [lines, setLines] = useState<LineState[]>([{ ...EMPTY }]);
+  const [companyCode, setCompanyCode] = useState('');
+  const [taxRows, setTaxRows] = useState<ConstrainedValue[]>([]);
 
-  const rateOf = (code: string) => Number(taxes.find((t) => t.code === code)?.ratePercent ?? 0);
+  const rateOf = (code: string) => Number(taxRows.find((row) => row.code === code)?.meta ?? taxes.find((row) => row.code === code)?.ratePercent ?? 0);
   const netTotal = lines.reduce((s, l) => s + (Number(l.net) || 0), 0);
   const taxTotal = lines.reduce((s, l) => s + ((Number(l.net) || 0) * rateOf(l.tax)) / 100, 0);
 
@@ -61,15 +65,15 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Vendor</span>
-              <input name="vendor" className="input w-full" placeholder="V10000" required />
+              <ConstrainedField kind="supplier-company" name="vendor" required placeholder="V10000" context={{ companyCode }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-              <input name="companyCode" className="input w-full" placeholder="1000" required />
+              <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-              <input name="currency" className="input w-full" placeholder="USD" required />
+              <ConstrainedField kind="currency" name="currency" required />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>
@@ -105,29 +109,24 @@ export default function VendorInvoice({ invoice, taxes, canPost, today }: {
                 {lines.map((line, i) => (
                   <tr key={i} className="border-t border-line">
                     <td className="px-2 py-2">
-                      <input name={`gl-${i + 1}`} className="input w-full" placeholder="400000"
-                        value={line.gl} onChange={(e) => setLine(i, { gl: e.target.value })} />
+                      <ConstrainedField kind="gl" name={`gl-${i + 1}`} placeholder="400000" context={{ companyCode }}
+                        value={line.gl} onChange={(gl) => setLine(i, { gl })} />
                     </td>
                     <td className="px-2 py-2">
                       <input name={`net-${i + 1}`} className="input w-full" placeholder="0.00"
                         value={line.net} onChange={(e) => setLine(i, { net: e.target.value })} />
                     </td>
                     <td className="px-2 py-2">
-                      <select name={`tax-${i + 1}`} className="input w-full"
-                        value={line.tax} onChange={(e) => setLine(i, { tax: e.target.value })}>
-                        <option value="">No tax</option>
-                        {taxes.map((t) => (
-                          <option key={t.code} value={t.code}>{t.code} · {t.ratePercent}%</option>
-                        ))}
-                      </select>
+                      <ConstrainedField kind="tax" name={`tax-${i + 1}`} context={{ companyCode }} onLoaded={setTaxRows}
+                        value={line.tax} onChange={(tax) => setLine(i, { tax })} />
                     </td>
                     <td className="px-2 py-2">
-                      <input name={`cc-${i + 1}`} className="input w-full"
-                        value={line.cc} onChange={(e) => setLine(i, { cc: e.target.value })} />
+                      <ConstrainedField kind="cost-center" name={`cc-${i + 1}`} context={{ companyCode }}
+                        value={line.cc} onChange={(cc) => setLine(i, { cc })} />
                     </td>
                     <td className="px-2 py-2">
-                      <input name={`pc-${i + 1}`} className="input w-full"
-                        value={line.pc} onChange={(e) => setLine(i, { pc: e.target.value })} />
+                      <ConstrainedField kind="profit-center" name={`pc-${i + 1}`}
+                        value={line.pc} onChange={(pc) => setLine(i, { pc })} />
                     </td>
                     <td className="px-2 py-2">
                       <input name={`text-${i + 1}`} className="input w-full"

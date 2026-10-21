@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { saveSalesAreaAction, salesAreaValueHelpAction } from './actions';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 interface Choice {
   code: string;
@@ -151,7 +152,7 @@ export function SalesAreaForm({ salesOrganizations }: { salesOrganizations: Choi
                   title={t('salesArea.openSalesOrgHelp')}
                   onClick={() => openHelp('salesOrg')}
                   disabled={pending || salesOrganizations.length === 0}
-                >F4</button>
+                ><SearchIcon /></button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesArea.salesOrgRule')}</p>
             </div>
@@ -185,7 +186,7 @@ export function SalesAreaForm({ salesOrganizations }: { salesOrganizations: Choi
                   title={t('salesArea.openDistributionChannelHelp')}
                   onClick={() => openHelp('distributionChannel')}
                   disabled={pending || lookupPending || channelChoices.length === 0}
-                >F4</button>
+                ><SearchIcon /></button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesArea.distributionChannelRule')}</p>
             </div>
@@ -219,7 +220,7 @@ export function SalesAreaForm({ salesOrganizations }: { salesOrganizations: Choi
                   title={t('salesArea.openDivisionHelp')}
                   onClick={() => openHelp('division')}
                   disabled={pending || lookupPending || divisionChoices.length === 0}
-                >F4</button>
+                ><SearchIcon /></button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesArea.divisionRule')}</p>
             </div>

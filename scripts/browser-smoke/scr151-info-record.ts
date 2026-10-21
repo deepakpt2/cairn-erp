@@ -118,6 +118,11 @@ export async function scr151InfoRecord(ctx: Context) {
     };
     for (const [name, value] of Object.entries(fields)) {
       const input = form.locator(`[name="${name}"]`);
+      if ((await input.evaluate((el) => el.tagName)) === 'SELECT') {
+        await input.locator(`option[value="${value}"]`).waitFor();
+        await input.selectOption(value);
+        continue;
+      }
       if (await input.getAttribute('readonly') !== null && (await input.inputValue()) === value) continue;
       await input.fill(value);
     }
@@ -380,7 +385,7 @@ export async function scr151InfoRecord(ctx: Context) {
   const beforeOverlap = await tallies();
   const spanning = page.locator('[data-info-record-segment="1"] form').filter({ has: page.getByRole('button', { name: 'Save change', exact: true }) });
   await spanning.locator('input[name="amount"]').fill('99');
-  await spanning.locator('input[name="currency"]').fill('KWD');
+  await spanning.locator('select[name="currency"]').selectOption('KWD');
   await spanning.locator('input[name="priceUnitOfMeasure"]').fill('PC');
   await spanning.locator('input[name="validFrom"]').fill('2026-01-01');
   await spanning.locator('input[name="validTo"]').fill('2099-06-01');

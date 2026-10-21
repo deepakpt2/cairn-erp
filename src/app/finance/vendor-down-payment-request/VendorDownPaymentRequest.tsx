@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 
 import type { VendorDownPaymentRequestView } from '@/modules/finance/vendor-down-payment-request';
 import { postVendorRequestAction, type VendorRequestActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: VendorRequestActionState = { ok: false, message: '' };
 
@@ -22,6 +23,7 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
   today: string;
 }) {
   const [state, action, posting] = useActionState(postVendorRequestAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState('');
 
   return (
     <>
@@ -32,11 +34,11 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-              <input name="companyCode" className="input w-full" placeholder="1000" required />
+              <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Vendor</span>
-              <input name="vendor" className="input w-full" placeholder="V10000" required />
+              <ConstrainedField kind="supplier-company" name="vendor" required placeholder="V10000" context={{ companyCode }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document date</span>
@@ -56,7 +58,7 @@ export default function VendorDownPaymentRequest({ requests, canEnter, today }: 
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-              <input name="currency" className="input w-full" placeholder="USD" required />
+              <ConstrainedField kind="currency" name="currency" required />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Request indicator</span>

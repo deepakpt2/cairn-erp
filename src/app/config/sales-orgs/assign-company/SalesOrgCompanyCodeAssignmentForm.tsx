@@ -7,6 +7,7 @@ import {
   assignSalesOrgCompanyCodeAction,
   type SalesOrgCompanyCodeAssignmentState,
 } from './actions';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 interface SalesOrgChoice {
   code: string;
@@ -129,7 +130,7 @@ export function SalesOrgCompanyCodeAssignmentForm({
                   onClick={() => openHelp('salesOrg')}
                   disabled={pending || salesOrganisations.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrg.salesOrgValueHelpRule')}</p>
@@ -170,7 +171,7 @@ export function SalesOrgCompanyCodeAssignmentForm({
                   onClick={() => openHelp('companyCode')}
                   disabled={pending || companyCodes.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrg.companyCodeValueHelpRule')}</p>

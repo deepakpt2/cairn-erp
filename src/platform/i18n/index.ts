@@ -2637,6 +2637,14 @@ const en: Catalogue = {
   'infoRecord.save': 'Save',
   'infoRecord.saving': 'Saving…',
   'infoRecord.previewNote': 'Nothing has been written. The number was not drawn.',
+  'infoRecord.changeCheck': 'Check change',
+  'infoRecord.changeChecking': 'Checking…',
+  'infoRecord.changePreviewNote': 'Nothing has been written.',
+  'infoRecord.nothingChanged': 'Nothing on this segment would change.',
+  'infoRecord.closedInterval': 'Price {sequence} would end on {to}. It now ends on {from}.',
+  'infoRecord.segmentMissing': 'Info record {number} has no segment for purchasing organisation {org}. A change does not create it.',
+  'infoRecord.segmentMissingPlant': 'Info record {number} has no segment for purchasing organisation {org} and plant {plant}. A change does not create it.',
+  'infoRecord.scopeHint': 'The organisation and plant select the standing segment. They do not retarget it, and a missing segment is not created.',
   'infoRecord.openStanding': 'Open {number}',
   'infoRecord.capabilityMissing': 'You do not hold the info record capability. A purchase-order permission does not maintain an info record.',
 
@@ -4010,6 +4018,12 @@ const en: Catalogue = {
   'common.optional': 'Optional',
   'common.error': 'Error',
   'common.success': 'Done',
+  'constrained.choose': '—',
+  'constrained.search': 'Search',
+  'constrained.searching': 'Searching…',
+  'constrained.none': 'No value matches. The save would refuse one that does not stand.',
+  'constrained.searchHint': 'Code or name',
+  'constrained.typeToSearch': 'Type a code or a name. The list is the same cut the save uses.',
 
   // ── Status bar ────────────────────────────────────────────────────────────
   'status.ready': 'Ready',

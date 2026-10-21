@@ -6,6 +6,7 @@ import {
   assignSalesOrgDistributionChannelAction,
   type SalesOrgDistributionChannelAssignmentState,
 } from './actions';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 interface Choice {
   code: string;
@@ -110,7 +111,7 @@ export function SalesOrgDistributionChannelAssignmentForm({
                   onClick={() => openHelp('salesOrg')}
                   disabled={pending || salesOrganizations.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrgChannel.salesOrgValueHelpRule')}</p>
@@ -151,7 +152,7 @@ export function SalesOrgDistributionChannelAssignmentForm({
                   onClick={() => openHelp('distributionChannel')}
                   disabled={pending || distributionChannels.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrgChannel.distributionChannelValueHelpRule')}</p>

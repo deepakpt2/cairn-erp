@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 
 import type { CustomerDownPaymentClearingView } from '@/modules/finance/customer-down-payment-clearing';
 import { postCustomerClearingAction, type CustomerClearingActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: CustomerClearingActionState = { ok: false, message: '' };
 
@@ -32,6 +33,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
   today: string;
 }) {
   const [state, action, posting] = useActionState(postCustomerClearingAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [rows, setRows] = useState<AllocationRow[]>([]);
 
   const downPayments = view?.downPayments ?? [];
@@ -62,11 +64,11 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
         <form method="get" action="/finance/customer-down-payment-clearing" className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-            <input name="companyCode" className="input w-28" placeholder="1000" defaultValue={view?.companyCode ?? ''} required />
+            <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Customer</span>
-            <input name="customer" className="input" placeholder="C10000" defaultValue={view?.customer ?? ''} required />
+            <ConstrainedField kind="customer-company" name="customer" required placeholder="C10000" defaultValue={view?.customer ?? ''} context={{ companyCode }} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Special G/L indicator</span>
@@ -109,7 +111,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-                <input name="currency" className="input w-full" placeholder="USD" required />
+                <ConstrainedField kind="currency" name="currency" required />
               </label>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reference</span>

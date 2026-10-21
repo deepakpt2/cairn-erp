@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { TransferDocumentView, TransferStockRow } from '@/modules/inventory/transfer-posting';
 import { MOVEMENT_CHOICES } from '@/modules/inventory/transfer-scenarios';
 import {
@@ -27,6 +28,8 @@ export default function TransferPosting({ document, stock, canPost, today }: {
   // The key identifies one request. It must move on after a posting, or the next legitimate
   // transfer on the same page would be read as a replay of the first (SCR-145's defect, kept out).
   const [postKey, setPostKey] = useState(newRequestKey);
+  const [issuingPlant, setIssuingPlant] = useState('');
+  const [receivingPlant, setReceivingPlant] = useState('');
   const [reverseKey, setReverseKey] = useState(newRequestKey);
   useEffect(() => {
     if (postState.ok) setPostKey(newRequestKey());
@@ -95,7 +98,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.material')}</span>
-              <input name="materialNumber" className="input w-full" defaultValue={stock.length ? document?.lines[0]?.materialNumber ?? '' : ''} required />
+              <ConstrainedField kind="material-stock" name="materialNumber" required context={{ plant: issuingPlant }} defaultValue={stock.length ? document?.lines[0]?.materialNumber ?? '' : ''} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.quantity')}</span>
@@ -107,19 +110,19 @@ export default function TransferPosting({ document, stock, canPost, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.issuingPlant')}</span>
-              <input name="issuingPlant" className="input w-full" placeholder="1000" required />
+              <ConstrainedField kind="plant" name="issuingPlant" required value={issuingPlant} onChange={setIssuingPlant} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.issuingLocation')}</span>
-              <input name="issuingStorageLocation" className="input w-full" placeholder="0001" required />
+              <ConstrainedField kind="storage-location" name="issuingStorageLocation" required context={{ plant: issuingPlant }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.receivingPlant')}</span>
-              <input name="receivingPlant" className="input w-full" placeholder="1000" required />
+              <ConstrainedField kind="plant" name="receivingPlant" required value={receivingPlant} onChange={setReceivingPlant} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.receivingLocation')}</span>
-              <input name="receivingStorageLocation" className="input w-full" placeholder="0002" required />
+              <ConstrainedField kind="storage-location" name="receivingStorageLocation" required context={{ plant: receivingPlant }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.postingDate')}</span>

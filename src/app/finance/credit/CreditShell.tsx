@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
 import type { CreditAuditView, CreditConfigView, CustomerCreditView } from '@/modules/finance/credit';
 import { loadCreditAction, saveCreditAction, type CreditState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: CreditState = { ok: true };
 

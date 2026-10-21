@@ -5,8 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import {
   changePurchasingInfoRecord, createPurchasingInfoRecord, findPurchasingInfoRecord,
-  getPurchasingInfoRecord, previewPurchasingInfoRecord, resolvePurchasingInfoRecord,
-  writePurchasingInfoRecord,
+  getPurchasingInfoRecord, previewPurchasingInfoRecord, previewPurchasingInfoRecordChange,
+  resolvePurchasingInfoRecord, writePurchasingInfoRecord, writePurchasingInfoRecordChange,
 } from '../src/modules/purchasing/info-record';
 import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
 import { createTenant, destroyTenant } from './helpers';
@@ -429,5 +429,185 @@ describe('SCR-151 purchasing info record', () => {
       plant: '1000', pricingDate: '2026-10-21', orderCurrency: 'USD',
     }));
     expect(hidden.qualified).toBe(false);
+  });
+
+  it('records the change, a check writes nothing, and a failed change rolls the audit back', async () => {
+    const c = await standing();
+    await withTenant(c, async (tx) => {
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        select ${c}, 'MAT-ME12', 'Change', material_type, 'EA', ${ACTOR}
+        from material_type where client = ${c} order by material_type limit 1
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, procurement_type, created_by)
+        values (${c}, 'MAT-ME12', '1000', 'BUY', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into plant (client, plant, name, company_code, country, created_by)
+        values (${c}, '2000', 'Second plant', '1000', 'KW', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchasing_org_plant (client, purchasing_org, plant, created_by)
+        values (${c}, '1000', '2000', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, procurement_type, created_by)
+        values (${c}, 'MAT-ME12', '2000', 'BUY', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+    const created = await createPurchasingInfoRecord({
+      client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-ME12',
+      purchasingOrg: '1000', plannedDeliveryDays: 7, minimumOrderQuantity: 1, minimumOrderUnit: 'EA', price,
+    });
+    const otherPlant = await createPurchasingInfoRecord({
+      client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-ME12',
+      purchasingOrg: '1000', plant: '2000', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: created.version, plannedDeliveryDays: 3, price: { ...price, amount: 8 },
+    });
+
+    const before = await withTenant(c, (tx) => tx.execute(sql`
+      select
+        (select count(*) from change_document where client = ${c} and object_key = ${created.infoRecordNumber}) as audits,
+        (select count(*) from purchasing_info_record_price where client = ${c} and info_record_number = ${created.infoRecordNumber}) as prices,
+        (select quantity from purchase_requisition_item where client = ${c} and requisition_number = 'PR-IR') as requisition
+    `)) as unknown as Array<{ audits: string; prices: string; requisition: string }>;
+
+    const preview = await previewPurchasingInfoRecordChange({
+      client: c, changedBy: ACTOR, reason: 'Lead time only', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: otherPlant.version, segmentNumber: created.segmentNumber,
+      plannedDeliveryDays: 9, minimumOrderQuantity: 2, minimumOrderUnit: 'EA',
+    });
+    expect(preview.changes).toEqual(expect.arrayContaining([
+      { field: 'plannedDeliveryDays', before: '7', after: '9' },
+      { field: 'minimumOrderQuantity', before: '1.000', after: '2.000' },
+    ]));
+    expect(preview.closedInterval).toBeNull();
+    const afterPreview = await withTenant(c, (tx) => tx.execute(sql`
+      select count(*) as audits from change_document where client = ${c} and object_key = ${created.infoRecordNumber}
+    `)) as unknown as Array<{ audits: string }>;
+    expect(afterPreview[0].audits).toBe(before[0].audits);
+
+    await expect(changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Nothing moved', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: otherPlant.version, segmentNumber: created.segmentNumber,
+      plannedDeliveryDays: 7, minimumOrderQuantity: 1, minimumOrderUnit: 'EA',
+    })).rejects.toThrow('Nothing on the info record is changed');
+    const still = await getPurchasingInfoRecord(c, created.infoRecordNumber);
+    expect(still?.version).toBe(otherPlant.version);
+
+    const changed = await changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Lead time only', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: otherPlant.version, segmentNumber: created.segmentNumber,
+      plannedDeliveryDays: 9, minimumOrderQuantity: 2, minimumOrderUnit: 'EA',
+    });
+    const prices = await withTenant(c, (tx) => tx.execute(sql`
+      select amount, currency, price_unit, price_unit_of_measure from purchasing_info_record_price
+       where client = ${c} and info_record_number = ${created.infoRecordNumber} and segment_number = ${created.segmentNumber}
+    `)) as unknown as Array<{ amount: string; currency: string; price_unit: string; price_unit_of_measure: string }>;
+    expect(prices.map((row) => ({
+      amount: row.amount,
+      currency: row.currency.trim(),
+      price_unit: String(Number(row.price_unit)),
+      price_unit_of_measure: row.price_unit_of_measure.trim(),
+    }))).toEqual([{ amount: '10.0000', currency: 'USD', price_unit: '1', price_unit_of_measure: 'EA' }]);
+    const otherLead = await withTenant(c, (tx) => tx.execute(sql`
+      select planned_delivery_days from purchasing_info_record_org
+       where client = ${c} and info_record_number = ${created.infoRecordNumber} and segment_number = ${otherPlant.segmentNumber}
+    `)) as unknown as Array<{ planned_delivery_days: number }>;
+    expect(otherLead[0].planned_delivery_days).toBe(3);
+    const audit = await withTenant(c, (tx) => tx.execute(sql`
+      select i.field_name, i.old_value, i.new_value
+        from change_document d
+        join change_document_item i on i.change_document_id = d.id
+       where d.client = ${c} and d.object_key = ${created.infoRecordNumber} and d.reason = 'Lead time only'
+       order by i.field_name
+    `)) as unknown as Array<{ field_name: string; old_value: string | null; new_value: string | null }>;
+    expect(audit).toEqual(expect.arrayContaining([
+      { field_name: 'plannedDeliveryDays', old_value: '7', new_value: '9' },
+      { field_name: 'minimumOrderQuantity', old_value: '1.000', new_value: '2.000' },
+      { field_name: 'version', old_value: String(otherPlant.version), new_value: String(changed.version) },
+    ]));
+
+    const pricePreview = await previewPurchasingInfoRecordChange({
+      client: c, changedBy: ACTOR, reason: 'Future price', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version, segmentNumber: created.segmentNumber,
+      newPrice: { ...price, amount: 15, validFrom: '2026-06-01', validTo: '2026-12-31' },
+    });
+    expect(pricePreview.closedInterval).toMatchObject({ previousValidTo: '2099-12-31', validTo: '2026-05-31' });
+    await changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Future price', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version, segmentNumber: created.segmentNumber,
+      newPrice: { ...price, amount: 15, validFrom: '2026-06-01', validTo: '2026-12-31' },
+    });
+    const kept = await withTenant(c, (tx) => tx.execute(sql`
+      select price_sequence, amount, valid_to from purchasing_info_record_price
+       where client = ${c} and info_record_number = ${created.infoRecordNumber} and segment_number = ${created.segmentNumber}
+       order by price_sequence
+    `)) as unknown as Array<{ price_sequence: number; amount: string; valid_to: string }>;
+    expect(kept[0]).toMatchObject({ amount: '10.0000', valid_to: '2026-05-31' });
+    expect(kept[1].amount).toBe('15.0000');
+    const priceAudit = await withTenant(c, (tx) => tx.execute(sql`
+      select i.field_name, i.old_value, i.new_value
+        from change_document d
+        join change_document_item i on i.change_document_id = d.id
+       where d.client = ${c} and d.object_key = ${created.infoRecordNumber} and d.reason = 'Future price'
+    `)) as unknown as Array<{ field_name: string; old_value: string | null; new_value: string | null }>;
+    expect(priceAudit).toEqual(expect.arrayContaining([
+      { field_name: 'amount', old_value: null, new_value: '15.0000' },
+      { field_name: 'closedValidTo', old_value: '2099-12-31', new_value: '2026-05-31' },
+    ]));
+
+    await expect(changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Bad dates', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version + 1, segmentNumber: created.segmentNumber,
+      newPrice: { ...price, validFrom: '2028-02-01', validTo: '2028-01-01' },
+    })).rejects.toThrow('before the start');
+    await expect(changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Foreign money', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version + 1, segmentNumber: created.segmentNumber,
+      newPrice: { ...price, currency: 'EUR', validFrom: '2028-01-01', validTo: '2028-12-31' },
+    })).rejects.toThrow('not converted');
+    await expect(changePurchasingInfoRecord({
+      client: c, changedBy: ACTOR, reason: 'Zero unit', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version + 1, segmentNumber: created.segmentNumber,
+      newPrice: { ...price, priceUnit: 0, validFrom: '2028-01-01', validTo: '2028-12-31' },
+    })).rejects.toThrow('positive whole number');
+    const untouched = await withTenant(c, (tx) => tx.execute(sql`
+      select count(*) as n from purchasing_info_record_price
+       where client = ${c} and info_record_number = ${created.infoRecordNumber}
+    `)) as unknown as Array<{ n: string }>;
+    expect(Number(untouched[0].n)).toBe(3);
+
+    const auditsBeforeFail = await withTenant(c, (tx) => tx.execute(sql`
+      select count(*) as n from change_document where client = ${c} and object_key = ${created.infoRecordNumber}
+    `)) as unknown as Array<{ n: string }>;
+    await expect(withTenant(c, async (tx) => {
+      await writePurchasingInfoRecordChange(tx, {
+        client: c, changedBy: ACTOR, reason: 'Rolled back', infoRecordNumber: created.infoRecordNumber,
+        expectedVersion: changed.version + 1, segmentNumber: created.segmentNumber, plannedDeliveryDays: 11,
+      });
+      throw new Error('fail the change');
+    })).rejects.toThrow('fail the change');
+    const auditsAfterFail = await withTenant(c, (tx) => tx.execute(sql`
+      select
+        (select count(*) from change_document where client = ${c} and object_key = ${created.infoRecordNumber}) as audits,
+        (select version from purchasing_info_record where client = ${c} and info_record_number = ${created.infoRecordNumber}) as version,
+        (select quantity from purchase_requisition_item where client = ${c} and requisition_number = 'PR-IR') as requisition
+    `)) as unknown as Array<{ audits: string; version: number; requisition: string }>;
+    expect(auditsAfterFail[0].audits).toBe(auditsBeforeFail[0].n);
+    expect(auditsAfterFail[0].version).toBe(changed.version + 1);
+    expect(auditsAfterFail[0].requisition).toBe(before[0].requisition);
+
+    if (!other) other = (await createTenant('scr152-info-other')).client;
+    await expect(changePurchasingInfoRecord({
+      client: other, changedBy: ACTOR, reason: 'Other tenant', infoRecordNumber: created.infoRecordNumber,
+      expectedVersion: changed.version + 1, segmentNumber: created.segmentNumber, plannedDeliveryDays: 12,
+    })).rejects.toThrow('does not exist');
   });
 });

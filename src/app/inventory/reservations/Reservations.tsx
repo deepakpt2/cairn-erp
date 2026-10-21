@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import type { ReservationView } from '@/modules/inventory/reservations';
 import {
   completeItemAction, createReservationAction, withdrawReservationAction,
@@ -10,6 +11,39 @@ import {
 } from './actions';
 
 const INITIAL: ReservationActionState = { ok: false, message: '' };
+
+function ReservationLine({ line, onCompany }: { line: number; onCompany: (company: string) => void }) {
+  const [plant, setPlant] = useState('');
+  return (
+    <tr className="border-t border-line">
+      <td className="py-1">{line}</td>
+      <td className="py-1">
+        <ConstrainedField kind="material-issue" name={`material-${line}`} context={{ plant }} placeholder="MAT-…" />
+      </td>
+      <td className="py-1">
+        <ConstrainedField
+          kind="plant"
+          name={`plant-${line}`}
+          value={plant}
+          onChange={setPlant}
+          onLoaded={(rows) => {
+            const company = rows.find((row) => row.code === plant)?.meta;
+            if (company) onCompany(company);
+          }}
+        />
+      </td>
+      <td className="py-1">
+        <input name={`quantity-${line}`} type="number" step="0.001" min="0.001" className="input w-full text-right" />
+      </td>
+      <td className="py-1">
+        <ConstrainedField kind="storage-location" name={`sloc-${line}`} context={{ plant }} />
+      </td>
+      <td className="py-1 text-center">
+        <input type="checkbox" name={`allowed-${line}`} defaultChecked aria-label={`${t('mb21.columnAllowed')} ${line}`} />
+      </td>
+    </tr>
+  );
+}
 
 function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -25,6 +59,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
   const [withdrawState, withdrawAction, withdrawing] = useActionState(withdrawReservationAction, INITIAL);
   const [completeState, completeAction, completing] = useActionState(completeItemAction, INITIAL);
   const [requestKey] = useState(newRequestKey);
+  const [companyCode, setCompanyCode] = useState('');
 
   return (
     <>
@@ -63,7 +98,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb21.costCenter')}</span>
-              <input name="costCenter" className="input w-full" placeholder="CC1000" />
+              <ConstrainedField kind="cost-center" name="costCenter" placeholder="CC1000" context={{ companyCode }} />
             </label>
           </div>
 
@@ -80,24 +115,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
             </thead>
             <tbody>
               {[1, 2, 3].map((line) => (
-                <tr key={line} className="border-t border-line">
-                  <td className="py-1">{line}</td>
-                  <td className="py-1">
-                    <input name={`material-${line}`} className="input w-full" placeholder="MAT-…" />
-                  </td>
-                  <td className="py-1">
-                    <input name={`plant-${line}`} className="input w-full" placeholder="1000" />
-                  </td>
-                  <td className="py-1">
-                    <input name={`quantity-${line}`} type="number" step="0.001" min="0.001" className="input w-full text-right" />
-                  </td>
-                  <td className="py-1">
-                    <input name={`sloc-${line}`} className="input w-full" placeholder="0001" />
-                  </td>
-                  <td className="py-1 text-center">
-                    <input type="checkbox" name={`allowed-${line}`} defaultChecked aria-label={`${t('mb21.columnAllowed')} ${line}`} />
-                  </td>
-                </tr>
+                <ReservationLine key={line} line={line} onCompany={setCompanyCode} />
               ))}
             </tbody>
           </table>

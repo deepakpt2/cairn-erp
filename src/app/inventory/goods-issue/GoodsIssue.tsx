@@ -4,9 +4,46 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { postGoodsIssueAction, type IssueActionState } from './actions';
 
 const INITIAL: IssueActionState = { ok: false, message: '' };
+
+function IssueLine({ n, chargesCostCentre }: { n: number; chargesCostCentre: boolean }) {
+  const [plant, setPlant] = useState('');
+  const [company, setCompany] = useState('');
+  return (
+    <tr className="border-t border-line">
+      <td className="py-1">{n}</td>
+      <td className="py-1"><ConstrainedField kind="material-issue" name={`material-${n}`} context={{ plant }} placeholder="MAT-…" /></td>
+      <td className="py-1">
+        <ConstrainedField
+          kind="plant"
+          name={`plant-${n}`}
+          value={plant}
+          onChange={setPlant}
+          onLoaded={(rows) => {
+            const match = rows.find((row) => row.code === plant);
+            setCompany(match?.meta ?? '');
+          }}
+        />
+      </td>
+      <td className="py-1"><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
+      <td className="py-1">
+        <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
+      </td>
+      <td className="py-1">
+        <ConstrainedField kind="cost-center" name={`costCenter-${n}`} context={{ companyCode: company }} disabled={!chargesCostCentre} placeholder={chargesCostCentre ? 'CC1100' : '—'} />
+      </td>
+      <td className="py-1">
+        <div className="flex gap-1">
+          <input name={`reservation-${n}`} className="input w-28" placeholder="RSV-…" />
+          <input name={`reservationItem-${n}`} className="input w-14" placeholder="10" aria-label={`${t('mb1a.columnReservation')} ${t('mb1a.columnLine')} ${n}`} />
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 export default function GoodsIssue({ scenarios, canPost, today }: {
   scenarios: Array<{ code: string; description: string; accountAssignment: string }>;
@@ -69,29 +106,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
             </thead>
             <tbody>
               {[1, 2, 3, 4].map((n) => (
-                <tr key={n} className="border-t border-line">
-                  <td className="py-1">{n}</td>
-                  <td className="py-1"><input name={`material-${n}`} className="input w-full" placeholder="MAT-…" /></td>
-                  <td className="py-1"><input name={`plant-${n}`} className="input w-20" placeholder="1000" /></td>
-                  <td className="py-1"><input name={`sloc-${n}`} className="input w-20" placeholder="0001" /></td>
-                  <td className="py-1">
-                    <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
-                  </td>
-                  <td className="py-1">
-                    <input
-                      name={`costCenter-${n}`}
-                      className="input w-24"
-                      placeholder={chargesCostCentre ? 'CC1100' : '—'}
-                      disabled={!chargesCostCentre}
-                    />
-                  </td>
-                  <td className="py-1">
-                    <div className="flex gap-1">
-                      <input name={`reservation-${n}`} className="input w-28" placeholder="RSV-…" />
-                      <input name={`reservationItem-${n}`} className="input w-14" placeholder="10" aria-label={`${t('mb1a.columnReservation')} ${t('mb1a.columnLine')} ${n}`} />
-                    </div>
-                  </td>
-                </tr>
+                <IssueLine key={n} n={n} chargesCostCentre={chargesCostCentre} />
               ))}
             </tbody>
           </table>

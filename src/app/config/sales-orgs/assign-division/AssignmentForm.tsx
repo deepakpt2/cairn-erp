@@ -6,6 +6,7 @@ import {
   assignSalesOrgDivisionAction,
   type SalesOrgDivisionAssignmentState,
 } from './actions';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 interface Choice {
   code: string;
@@ -111,7 +112,7 @@ export function SalesOrgDivisionAssignmentForm({
                   onClick={() => openHelp('salesOrg')}
                   disabled={pending || salesOrganizations.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrgDivision.salesOrgValueHelpRule')}</p>
@@ -152,7 +153,7 @@ export function SalesOrgDivisionAssignmentForm({
                   onClick={() => openHelp('division')}
                   disabled={pending || divisions.length === 0}
                 >
-                  F4
+                  <SearchIcon />
                 </button>
               </div>
               <p className="mt-1 text-xs text-ink-faint">{t('salesOrgDivision.divisionValueHelpRule')}</p>

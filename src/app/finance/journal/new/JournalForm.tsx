@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useActionState, useEffect, useMemo, useState } from 'react';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { t } from '@/platform/i18n';
 import { toScaled, fromScaled } from '@/platform/posting/decimal';
 import { postJournalAction, type PostState } from './actions';
@@ -197,8 +198,7 @@ export function JournalForm({ companies, types, accounts }: {
                 <tr key={line.key}>
                   <td className="tabular text-ink-faint">{index + 1}</td>
                   <td>
-                    <input name={`line_${index}_account`} value={line.account} onChange={(e) => updateLine(line.key, { account: e.target.value })} className="field-input code w-28" placeholder="400000" list="gl-account-value-help" aria-invalid={Boolean(lineErrors[index])} />
-                    {accounts.length > 0 && <datalist id="gl-account-value-help">{accounts.map((a) => <option key={a.accountNumber} value={a.accountNumber}>{a.name}</option>)}</datalist>}
+                    <ConstrainedField kind="gl" name={`line_${index}_account`} value={line.account} onChange={(account) => updateLine(line.key, { account })} className="field-input code w-28" placeholder="400000" context={{ companyCode: companyKey }} />
                     {lineErrors[index] && <p className="mt-1 text-2xs text-signal-error">{lineErrors[index]}</p>}
                   </td>
                   <td>
@@ -210,8 +210,8 @@ export function JournalForm({ companies, types, accounts }: {
                   <td>
                     <input name={`line_${index}_amount`} value={line.amount} onChange={(e) => updateLine(line.key, { amount: e.target.value })} inputMode="decimal" className="field-input tabular w-32 text-end" placeholder="0.00" aria-invalid={Boolean(lineErrors[index])} />
                   </td>
-                  <td><input name={`line_${index}_costCenter`} value={line.costCenter} onChange={(e) => updateLine(line.key, { costCenter: e.target.value })} className="field-input code w-28" placeholder="CC100" /></td>
-                  <td><input name={`line_${index}_profitCenter`} value={line.profitCenter} onChange={(e) => updateLine(line.key, { profitCenter: e.target.value })} className="field-input code w-28" placeholder="PC100" /></td>
+                  <td><ConstrainedField kind="cost-center" name={`line_${index}_costCenter`} value={line.costCenter} onChange={(costCenter) => updateLine(line.key, { costCenter })} className="field-input code w-28" placeholder="CC100" context={{ companyCode: companyKey, postingDate }} /></td>
+                  <td><ConstrainedField kind="profit-center" name={`line_${index}_profitCenter`} value={line.profitCenter} onChange={(profitCenter) => updateLine(line.key, { profitCenter })} className="field-input code w-28" placeholder="PC100" context={{ postingDate }} /></td>
                   <td><input name={`line_${index}_assignment`} value={line.assignment} onChange={(e) => updateLine(line.key, { assignment: e.target.value })} maxLength={18} className="field-input code w-32" placeholder="ASSIGN-01" /></td>
                   <td><input name={`line_${index}_text`} value={line.text} onChange={(e) => updateLine(line.key, { text: e.target.value })} maxLength={50} className="field-input" placeholder="Office expense" /></td>
                   <td className="text-end whitespace-nowrap">

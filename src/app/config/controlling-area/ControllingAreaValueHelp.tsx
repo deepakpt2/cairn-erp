@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { t } from '@/platform/i18n';
+import { SearchIcon } from '@/ui/fields/SearchIcon';
 
 export interface ControllingAreaChoice {
   code: string;
@@ -106,7 +107,7 @@ export function ControllingAreaValueHelp({
             title={openLabel}
             onClick={openDialog}
             disabled={!canOpen}
-          >F4</button>
+          ><SearchIcon /></button>
         </div>
         <p className="mt-1 text-xs text-ink-faint">{rule}</p>
       </div>

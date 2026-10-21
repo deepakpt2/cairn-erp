@@ -49,7 +49,22 @@ describe('SCR-151 info record screen contract', () => {
   it('checks without writing, and creates and changes through the service', () => {
     expect(shell).toContain('data-info-record-check');
     expect(shell).toContain('formAction={checkAction}');
+    expect(shell).toContain('data-info-record-change-check');
+    expect(shell).toContain('formAction={changeCheckAction}');
+    expect(shell).toContain('data-info-record-change-preview');
+    expect(shell).toContain('data-info-record-scope-missing');
     expect(actions).toContain('previewPurchasingInfoRecord(');
+    expect(actions).toContain('previewPurchasingInfoRecordChange(');
+    const changeCheck = actions.slice(
+      actions.indexOf('export async function checkChangeInfoRecordAction'),
+      actions.indexOf('export async function createInfoRecordAction'),
+    );
+    expect(changeCheck).toContain('previewPurchasingInfoRecordChange(');
+    expect(changeCheck).not.toContain('changePurchasingInfoRecord(');
+    expect(changeCheck).not.toContain('revalidatePath');
+    const maintained = shell.slice(shell.indexOf('data-info-record-segment'), shell.indexOf('info-record-create'));
+    expect(maintained).not.toContain('name="purchasingOrg"');
+    expect(maintained).not.toContain('name="plant"');
     expect(actions).toContain('createPurchasingInfoRecord(');
     expect(actions).toContain('changePurchasingInfoRecord(');
     expect(actions).not.toContain('allocateNumber');

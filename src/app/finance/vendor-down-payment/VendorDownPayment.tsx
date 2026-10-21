@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 
 import { postDownPaymentAction, type VendorDownPaymentActionState } from './actions';
+import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 
 const INITIAL: VendorDownPaymentActionState = { ok: false, message: '' };
 
@@ -20,6 +21,7 @@ export default function VendorDownPayment({ canEnter, today }: {
   today: string;
 }) {
   const [state, action, posting] = useActionState(postDownPaymentAction, INITIAL);
+  const [companyCode, setCompanyCode] = useState('');
 
   return (
     <>
@@ -30,11 +32,11 @@ export default function VendorDownPayment({ canEnter, today }: {
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Company code</span>
-              <input name="companyCode" className="input w-full" placeholder="1000" required />
+              <ConstrainedField kind="company" name="companyCode" required value={companyCode} onChange={setCompanyCode} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Vendor</span>
-              <input name="vendor" className="input w-full" placeholder="V10000" required />
+              <ConstrainedField kind="supplier-company" name="vendor" required placeholder="V10000" context={{ companyCode }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document date</span>
@@ -46,7 +48,7 @@ export default function VendorDownPayment({ canEnter, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Bank G/L account</span>
-              <input name="bankAccount" className="input w-full" placeholder="113100" required />
+              <ConstrainedField kind="gl" name="bankAccount" required placeholder="113100" context={{ companyCode }} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Down payment amount</span>
@@ -54,7 +56,7 @@ export default function VendorDownPayment({ canEnter, today }: {
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Currency</span>
-              <input name="currency" className="input w-full" placeholder="USD" required />
+              <ConstrainedField kind="currency" name="currency" required />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Special G/L indicator</span>

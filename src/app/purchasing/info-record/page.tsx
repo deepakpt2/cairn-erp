@@ -22,7 +22,8 @@ function last(value: string | string[] | undefined): string {
  * Purchasing info record — SCR-151.
  *
  * One screen creates the record and changes it. The search aliases stay in the catalogue.
- * Check writes nothing. The category is Standard, not a list.
+ * A named organisation, and a plant when one is named, select the standing segment.
+ * A missing segment is named, not created. Check writes nothing.
  */
 export default async function PurchasingInfoRecordPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -32,6 +33,8 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
   const requestedNumber = last(params.record).toUpperCase();
   const supplier = last(params.supplier).toUpperCase();
   const materialNumber = last(params.material).toUpperCase();
+  const requestedOrg = last(params.org).toUpperCase();
+  const requestedPlant = last(params.plant).toUpperCase();
   const found = !requestedNumber && supplier && materialNumber
     ? await findPurchasingInfoRecord(session.user.client, supplier, materialNumber)
     : null;
@@ -54,10 +57,13 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
       </header>
 
       <InfoRecordWorkbench
+        key={`${requestedNumber}|${supplier}|${materialNumber}|${requestedOrg}|${requestedPlant}`}
         record={record}
         requestedNumber={requestedNumber}
         requestedSupplier={supplier}
         requestedMaterial={materialNumber}
+        requestedOrg={requestedOrg}
+        requestedPlant={requestedPlant}
         namedExisting={found}
         choices={choices}
         canMaintain={can(session, INFO_RECORD_CAPABILITY)}
