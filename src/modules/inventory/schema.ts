@@ -232,6 +232,19 @@ export const movementType = pgTable('movement_type', {
   direction: varchar('direction', { length: 10 }).notNull(),
   referenceCategory: varchar('reference_category', { length: 20 }).notNull(),
   reversalMovementType: varchar('reversal_movement_type', { length: 20 }),
+  /** SCR-146: what makes a movement what it is, as data rather than as a constant array. */
+  movementKind: varchar('movement_kind', { length: 20 }).notNull().default('MATERIAL'),
+  sourceStockType: varchar('source_stock_type', { length: 16 }),
+  destinationStockType: varchar('destination_stock_type', { length: 16 }),
+  plantRule: varchar('plant_rule', { length: 12 }).notNull().default('ANY'),
+  locationRule: varchar('location_rule', { length: 12 }).notNull().default('ANY'),
+  isTwoStep: boolean('is_two_step').notNull().default(false),
+  requiresBatch: boolean('requires_batch').notNull().default(false),
+  requiresSerial: boolean('requires_serial').notNull().default(false),
+  requiresSpecialStock: boolean('requires_special_stock').notNull().default(false),
+  requiresValuationType: boolean('requires_valuation_type').notNull().default(false),
+  negativeStockPolicy: varchar('negative_stock_policy', { length: 12 }).notNull().default('LOCATION'),
+  valuationRelevant: boolean('valuation_relevant').notNull().default(true),
   /** What a withdrawal under this movement must be charged to — the T156 fact (SCR-133). */
   accountAssignment: varchar('account_assignment', { length: 16 }).notNull().default('NONE'),
   ...auditColumns,
@@ -239,6 +252,10 @@ export const movementType = pgTable('movement_type', {
   primaryKey({ columns: [t.client, t.movementType] }),
   /** A transfer is a movement serving both of its lines (SCR-131); a reservation's future issue is an ISSUE (SCR-133). */
   check('movement_type_direction_ck', sql`${t.direction} in ('RECEIPT', 'REVERSAL', 'TRANSFER', 'ISSUE')`),
+  // SCR-146: the rules a movement carries now carry vocabulary of their own.
+  check('movement_type_plant_rule_ck', sql`${t.plantRule} in ('SAME', 'DIFFERENT', 'ANY')`),
+  check('movement_type_location_rule_ck', sql`${t.locationRule} in ('SAME', 'DIFFERENT', 'ANY')`),
+  check('movement_type_negative_stock_ck', sql`${t.negativeStockPolicy} in ('LOCATION', 'FORBID')`),
   check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION', 'PRODUCTION_ORDER')`),
   check('movement_type_account_assignment_ck', sql`${t.accountAssignment} in ('NONE', 'COST_CENTER', 'ORDER')`),
 ]);
@@ -255,6 +272,10 @@ export const materialDocument = pgTable('material_document', {
   reversalOf: varchar('reversal_of', { length: 20 }),
   reversedBy: varchar('reversed_by', { length: 20 }),
   requestKey: varchar('request_key', { length: 64 }),
+  /** SCR-146 §8.1: the external document number the movement was posted against. */
+  externalReference: varchar('external_reference', { length: 40 }),
+  /** SCR-146 §16: a fingerprint of the posting's content, so a reused key is compared, not trusted. */
+  requestFingerprint: varchar('request_fingerprint', { length: 64 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialDocumentNumber] }),
