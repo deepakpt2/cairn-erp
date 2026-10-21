@@ -3911,6 +3911,39 @@ itself belongs to stage 5.
 
 Same-stage bookkeeping: B-908 / §26.920 / §30 row 2.738.
 
+## §26.921 — SCR-142 stage 5 and closure: T842 passes, MI01 delivers the count and its block
+
+**B-909.** T842 (`physical-inventory`, `cairn_b210:5432`, fixture `T842`) runs on the production
+build and proves the round end to end, on one tenant, in one story:
+
+1. **`PI-2026-0000001`** created through the screen — plant `QP02`, location `SQ01`, planned
+   count date `2026-10-20`, the posting block checked, one material. The result confirms
+   `data-posting-block="true"` and states the stock the count starts from: **100.000 PC**.
+2. **Nothing moved.** Read back from the database, not from the screen: `material_document`
+   **0**, `journal_entry` **0**, stock still **100**. This is the assertion that separates a
+   count from a posting, and it is the reason the table was allowed to exist.
+3. **The block refuses a real movement.** A **311 transfer** of the counted material entered in
+   MIGO is refused with **`Physical inventory document PI-2026-0000001 blocks postings for
+   material MPI-COUNT in plant QP02 …`** — the guard doing its work on the posting path, not a
+   flag being displayed.
+4. **Cancelled from the list row**, which is how a block is released after the page has been
+   left: the row's status becomes `CANCELLED` and the database agrees.
+5. **The same transfer then posts** — source **100 → 95**, destination **0 → 5** — proving the
+   block was scoped to the open document and lifted with it rather than being a wall.
+
+**Suite 1991/1991 in 269 files**; **harness 142 targets**; **migrations 203** (two tables, two
+measured indexes, one width correction); registry **169 capabilities / 144 terms / 166 aliases**.
+
+**What the round says about package tables, since it is the fifth in a row to face one.** The
+goods issue, the production order and the production receipt each lost their table because the
+ledger already held the fact. This one kept its table for the opposite reason, and the
+distinction is worth naming plainly: **the ledger records what moved, so anything that records
+what has not moved yet is a different object, not a duplicate.** The test that proves it —
+`material_document` and `journal_entry` both empty after a count — is the same test that would
+have failed had the table been the duplicate the earlier rounds refused.
+
+Same-stage bookkeeping: B-909 / §26.921 / §30 row 2.739.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4280,7 +4313,7 @@ Same-stage bookkeeping: B-908 / §26.920 / §30 row 2.738.
 | 2.736 | 2026-10-20 | **SCR-142 stage 2: two tables, two measured indexes (B-906, §26.918).** 9078 adds `physical_inventory_document` (+ items) with **no company code, no `is_counted`, no batch, no special stock**, status limited to what this round can reach, and a unique key making one-material-once a database fact. 9079 adds the two indexes the planner chose: the **posting-block guard** \u2014 which runs inside every stock movement \u2014 falls from **15.228 ms on a miss** (the normal path) to **0.046 ms**, and the plant list from 10.137 to 0.898. The package\u2019s own index was **built, analyzed and measured and not chosen** (9.365 ms, still a seq scan and a sort), so it is not carried. **Migrations 200 \u2192 202.** | Agent |\nruns read the working tree, so nothing was falsely reported as passing — but the
 | 2.737 | 2026-10-20 | **SCR-142 stage 3: the count service and an enforced block (B-907, §26.919).** `createPhysicalInventory` draws `PI-2026-0000001` under its fiscal year, writes header and items, and leaves **`material_document` and `journal_entry` empty** \u2014 the test reads the ledger. `assertInventoryCountOpen` is called by **receipt, issue, transfer and production receipt**, each translating it into its own error type so no screen learns a new failure mode; the proof is a **311 and a 551 refused** while a **second material in the same location posts**, and the same transfer passing once the count is cancelled. **9080** widens the number column: 9078 sized it from SAP\u2019s bare IBLNR instead of canon\u2019s year-bearing display. **14/14 tests; suite 1984/1984 in 268 files.** | Agent |\npushed tree lacked the label, which would have shown a reservation as a
 | 2.738 | 2026-10-20 | **SCR-142 stage 4: the count screen (B-908, §26.920).** `/inventory/physical-inventory` under **`INV.PHYINV.CREATE`** and **`INV.PHYINV.CANCEL`**: the package\u2019s fields in full and **none of the refused ones**, the company code and fiscal year shown as derived, and the stock each material starts from. Cancellation is reachable from the result panel **and from the list row** \u2014 a block that could only be lifted in the session that created it would be half a control \u2014 and the row\u2019s action re-checks the capability server-side. **6/6 UI-contract tests; harness 142 targets (T842).** | Agent |\nsafety-stock line for anyone who cloned it.
-
+| 2.739 | 2026-10-20 | **SCR-142 stage 5 and closure: T842 passes, MI01 delivers (B-909, §26.921).** Five legs on the production build: **`PI-2026-0000001`** created with the block and the stock it starts from, **`material_document` and `journal_entry` both empty** read back from the database, a **311 refused** by the guard with the document\u2019s number in the sentence, the count **cancelled from the list row**, and the same transfer then **posting (100 \u2192 95)**. **Suite 1991/1991 in 269 files**; harness **142 targets**; **migrations 203**; registry 169/144/166. The round\u2019s lesson: the ledger records what moved, so a record of what has **not** moved yet is a different object, not the duplicate the last three packages were refused for. | Agent |\n
 Both files are committed now. Standing lesson: stage by path list that names every
 directory touched, not by the directories the change was *about*.
 
