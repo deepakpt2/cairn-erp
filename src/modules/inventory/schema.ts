@@ -474,3 +474,52 @@ export const productionOrderComponent = pgTable('production_order_component', {
   check('production_order_component_quantity_ck', sql`${t.requiredQuantity} > 0`),
 ]);
 
+
+/**
+ * The physical inventory document (SCR-142 / MI01) — the count in progress.
+ *
+ * Unlike the issue and the receipt, which live in the material document, a count has no
+ * ledger row to live in: nothing in `material_document` records "these materials are being
+ * counted here". The header carries no company code (the plant's) and no `is_counted`
+ * (the status is the answer).
+ */
+export const physicalInventoryDocument = pgTable('physical_inventory_document', {
+  client: tenant(),
+  inventoryDocumentNumber: varchar('inventory_document_number', { length: 24 }).notNull(),
+  /** The document's own identity and the scope of its number interval. */
+  fiscalYear: integer('fiscal_year').notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  plannedCountDate: varchar('planned_count_date', { length: 10 }).notNull(),
+  postingBlock: boolean('posting_block').notNull().default(false),
+  /** CREATED, or CANCELLED before anything is counted. COUNTED and ADJUSTED arrive with MI04/MI07. */
+  status: varchar('status', { length: 16 }).notNull().default('CREATED'),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear] }),
+  foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
+  check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'CANCELLED')`),
+  index('physical_inventory_document_plant_idx').on(t.client, t.plant, t.plannedCountDate),
+]);
+
+/** The materials a count covers. One material, once, per document. */
+export const physicalInventoryItem = pgTable('physical_inventory_item', {
+  client: tenant(),
+  inventoryDocumentNumber: varchar('inventory_document_number', { length: 24 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  itemNumber: integer('item_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear],
+    foreignColumns: [
+      physicalInventoryDocument.client,
+      physicalInventoryDocument.inventoryDocumentNumber,
+      physicalInventoryDocument.fiscalYear,
+    ],
+  }).onDelete('cascade'),
+  index('physical_inventory_item_material_idx').on(t.client, t.materialNumber),
+]);

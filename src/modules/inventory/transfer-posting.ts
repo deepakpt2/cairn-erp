@@ -31,6 +31,7 @@ import {
   movementType, stockQuantity,
 } from './schema';
 import { COUNTER_CODES, DELIVERED_TRANSFER_MOVEMENTS, TRANSFER_SCENARIOS, type TransferScenario } from './transfer-scenarios';
+import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 
 export { DELIVERED_TRANSFER_MOVEMENTS, TRANSFER_SCENARIOS } from './transfer-scenarios';
 
@@ -497,6 +498,21 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
     const receivingLocation = await loadStorageLocation(tx, input.client, input.receivingPlant, input.receivingStorageLocation, 'receiving');
 
     const { company, position } = await judgePeriod(tx, input.client, input.issuingPlant, input.postingDate);
+
+    // SCR-142: an open count with a posting block refuses the movement for this material here.
+    try {
+      await assertInventoryCountOpen(tx, input.client, {
+        materialNumber, plant: input.issuingPlant, storageLocation: issuingLocation.storageLocation,
+      });
+      await assertInventoryCountOpen(tx, input.client, {
+        materialNumber, plant: input.receivingPlant, storageLocation: receivingLocation.storageLocation,
+      });
+    } catch (caught) {
+      if (caught instanceof PhysicalInventoryError) {
+        throw new TransferPostingError(caught.message, caught.remedy);
+      }
+      throw caught;
+    }
 
     await requireStock(
       tx, input.client, materialNumber, input.issuingPlant, issuingLocation.storageLocation,

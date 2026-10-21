@@ -29,6 +29,7 @@ import { accountDetermination, plant as plantTable, storageLocation } from '../f
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
+import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, productionOrder, productionOrderComponent, stockQuantity,
@@ -435,6 +436,18 @@ export async function postGoodsIssue(
           );
         }
         location = found;
+      }
+
+      // SCR-142: an open count with a posting block refuses the movement for this material here.
+      try {
+        await assertInventoryCountOpen(tx, input.client, {
+          materialNumber, plant: line.plant, storageLocation: line.storageLocation ?? null,
+        });
+      } catch (caught) {
+        if (caught instanceof PhysicalInventoryError) {
+          throw new GoodsIssueError(caught.message, caught.remedy);
+        }
+        throw caught;
       }
 
       // SCR-139: a 261 consumes for a released order, and no more than the component still needs.

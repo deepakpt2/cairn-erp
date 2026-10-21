@@ -24,6 +24,7 @@ import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
@@ -294,6 +295,18 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       );
     }
     const companyCode = plantRow.companyCode;
+
+    // SCR-142: an open count with a posting block refuses the receipt for this material here.
+    try {
+      await assertInventoryCountOpen(tx, input.client, {
+        materialNumber, plant, storageLocation: input.lines[0]?.storageLocation ?? null,
+      });
+    } catch (caught) {
+      if (caught instanceof PhysicalInventoryError) {
+        throw new ProductionReceiptError(caught.message, caught.remedy);
+      }
+      throw caught;
+    }
 
     // The order states how much it will make; a receipt beyond that is a receipt with no plan.
     const orderQuantity = Number(order.orderQuantity);

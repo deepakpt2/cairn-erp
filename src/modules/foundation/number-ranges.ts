@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -47,6 +47,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'PARKDOC', description: 'Parked journal documents', numberLength: 10, yearRelevant: false, subobjectHint: null },
   { objectCode: 'ASSETNR', description: 'Fixed asset master numbers', numberLength: 10, yearRelevant: false, subobjectHint: null },
   { objectCode: 'BUSPARTNR', description: 'Business partners', numberLength: 10, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PHYINV', description: 'Physical inventory documents', numberLength: 10, yearRelevant: true, subobjectHint: null },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */

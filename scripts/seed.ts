@@ -271,6 +271,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'INV.MIGO.POST', module: 'INV', action: 'POST', posting: true, description: 'Post a goods movement from the action/reference matrix' },
   { code: 'PROD.ORDER.GR', module: 'PROD', action: 'POST', posting: true, description: 'Receive finished goods from a production order' },
   { code: 'PROD.ORDER.SETTLE', module: 'PROD', action: 'SETTLE', posting: true, description: 'Settle a production order' },
+  { code: 'INV.PHYINV.CREATE', module: 'INV', action: 'CREATE', posting: false, description: 'Create a physical inventory document: name the plant, storage location, planned count date and the materials to be counted, with an optional posting block that refuses stock movements for those materials until the count is done' },
+  { code: 'INV.PHYINV.CANCEL', module: 'INV', action: 'CANCEL', posting: false, description: 'Cancel a physical inventory document before anything is counted, releasing any posting block it holds' },
   { code: 'PROD.MRP.RUN', module: 'PROD', action: 'EXECUTE', posting: false, description: 'Run material requirements planning' },
   { code: 'PROD.CONFIRM.ENTER', module: 'PROD', action: 'CREATE', posting: true, description: 'Enter a production confirmation' },
   { code: 'SALES.ORDER.CREATE', module: 'SALES', action: 'CREATE', posting: false, description: 'Create a sales order' },

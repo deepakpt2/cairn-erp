@@ -21,6 +21,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
@@ -363,6 +364,19 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       const stockValue = valuation.priceControl === 'STANDARD'
         ? round2((line.quantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
         : poValue;
+      // SCR-142: an open count with a posting block refuses the receipt for this material here.
+      try {
+        await assertInventoryCountOpen(tx, input.client, {
+          materialNumber: item.materialNumber, plant: item.plant,
+          storageLocation: line.storageLocation ?? item.storageLocation ?? null,
+        });
+      } catch (caught) {
+        if (caught instanceof PhysicalInventoryError) {
+          throw new GoodsReceiptError(caught.message, caught.remedy);
+        }
+        throw caught;
+      }
+
       prepared.push({
         item, quantity: line.quantity,
         storageLocation: line.storageLocation ?? item.storageLocation ?? '',

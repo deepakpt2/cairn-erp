@@ -3841,6 +3841,45 @@ key. **It is not carried** — an index no plan selects is weight with a mainten
 
 Same-stage bookkeeping: B-906 / §26.918 / §30 row 2.736.
 
+## §26.919 — SCR-142 stage 3: the count service, and a block that refuses real postings
+
+**B-907.** `createPhysicalInventory` draws a document, writes its items and changes nothing
+else; `cancelPhysicalInventory` lifts a block before anything is counted; and
+`assertInventoryCountOpen` is the guard the movement services now call.
+
+**Nothing moves, and the test reads the ledger rather than trusting the sentence.** After a
+count is created, `material_document` holds **0** rows and `journal_entry` holds **0**. A count
+reads the stock it will be measured against (100.000 PC in the fixture) and writes no quantity.
+
+**The judgement order is the contract's, and every refusal writes nothing** — plant, its
+company code, that it is a storage site, the location inside that plant and active, at least one
+material, each material existing and extended to the plant, no material twice, then the
+**material period** for the count date, then the number.
+
+**The block is proven against real postings, not against the flag.** With the count open, a
+**311 transfer** of the counted material is refused by `postTransfer` and a **551 goods issue**
+by `postGoodsIssue`, each naming the document — while a **second material in the same plant and
+location posts normally**, which is the half of the test that proves the block is scoped rather
+than global. Cancelling the document lets the same transfer through.
+
+Each service **keeps its own error type**: the guard raises `PhysicalInventoryError`, and the
+four callers translate it, so a screen that already catches `TransferPostingError` did not have
+to learn a new failure mode to keep working.
+
+**One correction the build forced, recorded rather than tidied away.** 9078 sized the document
+number at 12 characters before the display was drawn; the number is allocated with its fiscal
+year, which the formatter renders between prefix and digits (`PI-2026-0000001`), so **9080**
+widens the column to what the formatter actually produces. Sizing a column from SAP's bare IBLNR
+rather than from canon's own readable display was the mistake.
+
+**14/14 tests.** The touched posting suites stay green (**60/60** across issue, transfer,
+production receipt and the matrix), and the whole suite is **1984/1984 in 268 files** — the block
+now runs inside every movement without costing any of them.
+
+**migrations 202 → 203.**
+
+Same-stage bookkeeping: B-907 / §26.919 / §30 row 2.737.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4208,7 +4247,7 @@ Same-stage bookkeeping: B-906 / §26.918 / §30 row 2.736.
 | 2.734 | 2026-10-20 | **SCR-141 stage 5 and closure: T841 passes, A04 delivers (B-904, §26.916).** Four legs on the production build: a **311** moving ten units inside a plant with **no journal** and a two-line document, a **301** across plants valuing the arrival at its own standard price (120 for ten) and posting **the difference on its own account**, a **321** taking five from quality inspection to unrestricted, and a **311 whose plants differ refused** with both plants named and 301 offered as the remedy. The first run failed on a **camel-case SQL alias the driver lower-cased** \u2014 the assertion was wrong, not the posting. **Suite 1970/1970 in 267 files**; harness **141 targets**; migrations 200. | Agent |\nbut **were never staged**: the stage-4 commit listed directories, and
 | 2.735 | 2026-10-20 | **SCR-142 / MI01 contracted — the physical inventory document (B-905, §26.917).** Every recent package table was refused because the ledger already held the fact; **a count in progress is not in the ledger**, so this one earns its two tables. The package is judged field by field: `tenant_id` becomes **`client`**, **`company_code` is refused** (derived from the plant, the standing ruling), **`is_counted` refused** as a second answer to the status question, **batch / special stock / cycle-count indicator refused by name**, SAP's `ikpf`/`iseq` names kept as aliases only, and the package index **measured before it is believed**. `fiscal_year` is kept because it is the document's own identity, not a plant fact. **The posting block is enforced** through one guard called by every service that moves stock, and **cancellation joins the round** because a block that cannot be lifted is a trap. Capabilities `INV.PHYINV.CREATE` (MI01) and `INV.PHYINV.CANCEL` (MI02); number object `PHYINV`. | Agent |\n`src/app/production` was not among them. The green suite and the passing browser
 | 2.736 | 2026-10-20 | **SCR-142 stage 2: two tables, two measured indexes (B-906, §26.918).** 9078 adds `physical_inventory_document` (+ items) with **no company code, no `is_counted`, no batch, no special stock**, status limited to what this round can reach, and a unique key making one-material-once a database fact. 9079 adds the two indexes the planner chose: the **posting-block guard** \u2014 which runs inside every stock movement \u2014 falls from **15.228 ms on a miss** (the normal path) to **0.046 ms**, and the plant list from 10.137 to 0.898. The package\u2019s own index was **built, analyzed and measured and not chosen** (9.365 ms, still a seq scan and a sort), so it is not carried. **Migrations 200 \u2192 202.** | Agent |\nruns read the working tree, so nothing was falsely reported as passing — but the
-pushed tree lacked the label, which would have shown a reservation as a
+| 2.737 | 2026-10-20 | **SCR-142 stage 3: the count service and an enforced block (B-907, §26.919).** `createPhysicalInventory` draws `PI-2026-0000001` under its fiscal year, writes header and items, and leaves **`material_document` and `journal_entry` empty** \u2014 the test reads the ledger. `assertInventoryCountOpen` is called by **receipt, issue, transfer and production receipt**, each translating it into its own error type so no screen learns a new failure mode; the proof is a **311 and a 551 refused** while a **second material in the same location posts**, and the same transfer passing once the count is cancelled. **9080** widens the number column: 9078 sized it from SAP\u2019s bare IBLNR instead of canon\u2019s year-bearing display. **14/14 tests; suite 1984/1984 in 268 files.** | Agent |\npushed tree lacked the label, which would have shown a reservation as a
 safety-stock line for anyone who cloned it.
 
 Both files are committed now. Standing lesson: stage by path list that names every
