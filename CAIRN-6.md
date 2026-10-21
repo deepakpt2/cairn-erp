@@ -3802,6 +3802,45 @@ transfer then posting, and the database read back to prove the count itself move
 
 Same-stage bookkeeping: B-905 / §26.917 / §30 row 2.735.
 
+## §26.918 — SCR-142 stage 2: two tables, and two indexes the planner actually chose
+
+**B-906.** Migration **9078** creates `physical_inventory_document` and
+`physical_inventory_item`; **9079** adds the two indexes, each behind a measurement. The
+package's own index was built, analyzed and measured, and **refused**.
+
+**What the tables carry.** The header: the document number, the fiscal year, the plant, an
+optional storage location, the planned count date, the posting-block flag, a status of
+`CREATED` or `CANCELLED` only, and the request key that makes a resubmitted create find the
+count it already made. The item: the document key, an item number and a material. **No company
+code** (the plant's), **no `is_counted`** (the status is the answer), **no batch, no special
+stock, no cycle-count indicator** — each refused by name in §26.917.
+
+The unique index on `(client, document, year, material)` makes the grid's one-material-once rule
+a database fact rather than a service habit.
+
+**The measurement, over 20,000 documents and 80,000 items.**
+
+| Read | Unindexed | Indexed | Chosen index |
+|---|---|---|---|
+| the posting-block guard, **hit** | 10.068 ms | **0.060 ms** | `physical_inventory_item (client, material_number)` |
+| the posting-block guard, **miss** — the normal path | **15.228 ms** | **0.046 ms** | same |
+| the screen's plant list | 10.137 ms | **0.898 ms** | `physical_inventory_document (client, plant, planned_count_date desc)` |
+| the package's `(client, plant, document_number)` | 9.365 ms | not chosen | **refused** |
+
+The miss being slower than the hit is the finding worth keeping: the guard runs inside **every**
+stock movement, and for the overwhelming majority of materials no count exists, so the ordinary
+posting was paying the worst case. A guard that costs 15 ms per movement to say "nothing blocks
+this" would have been a control paid for on every document in the book.
+
+The package's index was not dismissed by argument: it was created, analyzed and measured.
+The planner still chose a sequential scan and a sort, because the index does not carry the
+ordering the screen asks for and the point lookups it would serve already stand on the primary
+key. **It is not carried** — an index no plan selects is weight with a maintenance cost.
+
+**migrations 200 → 202.**
+
+Same-stage bookkeeping: B-906 / §26.918 / §30 row 2.736.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4168,7 +4207,7 @@ Same-stage bookkeeping: B-905 / §26.917 / §30 row 2.735.
 | 2.733 | 2026-10-20 | **SCR-141 stage 4: the third form (B-903, §26.915).** `MigoShell` renders **by `cell.form`**, not by matching a movement code \u2014 the matrix stays the only place that decides what a cell is. The transfer form offers movement, material, quantity, both locations and both plants; the result states **\u201cno journal\u201d** where 311/321 moved quantity only and links MB03, adding FB03 where 301 carried value. `postTransferAction` re-resolves the cell and checks the movement against `cell.movements`, and calls the **standing `postTransfer`** \u2014 two doors, one engine. **12/12 matrix contract, 7/7 transfer.** | Agent |\nmovement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 | 2.734 | 2026-10-20 | **SCR-141 stage 5 and closure: T841 passes, A04 delivers (B-904, §26.916).** Four legs on the production build: a **311** moving ten units inside a plant with **no journal** and a two-line document, a **301** across plants valuing the arrival at its own standard price (120 for ten) and posting **the difference on its own account**, a **321** taking five from quality inspection to unrestricted, and a **311 whose plants differ refused** with both plants named and 301 offered as the remedy. The first run failed on a **camel-case SQL alias the driver lower-cased** \u2014 the assertion was wrong, not the posting. **Suite 1970/1970 in 267 files**; harness **141 targets**; migrations 200. | Agent |\nbut **were never staged**: the stage-4 commit listed directories, and
 | 2.735 | 2026-10-20 | **SCR-142 / MI01 contracted — the physical inventory document (B-905, §26.917).** Every recent package table was refused because the ledger already held the fact; **a count in progress is not in the ledger**, so this one earns its two tables. The package is judged field by field: `tenant_id` becomes **`client`**, **`company_code` is refused** (derived from the plant, the standing ruling), **`is_counted` refused** as a second answer to the status question, **batch / special stock / cycle-count indicator refused by name**, SAP's `ikpf`/`iseq` names kept as aliases only, and the package index **measured before it is believed**. `fiscal_year` is kept because it is the document's own identity, not a plant fact. **The posting block is enforced** through one guard called by every service that moves stock, and **cancellation joins the round** because a block that cannot be lifted is a trap. Capabilities `INV.PHYINV.CREATE` (MI01) and `INV.PHYINV.CANCEL` (MI02); number object `PHYINV`. | Agent |\n`src/app/production` was not among them. The green suite and the passing browser
-runs read the working tree, so nothing was falsely reported as passing — but the
+| 2.736 | 2026-10-20 | **SCR-142 stage 2: two tables, two measured indexes (B-906, §26.918).** 9078 adds `physical_inventory_document` (+ items) with **no company code, no `is_counted`, no batch, no special stock**, status limited to what this round can reach, and a unique key making one-material-once a database fact. 9079 adds the two indexes the planner chose: the **posting-block guard** \u2014 which runs inside every stock movement \u2014 falls from **15.228 ms on a miss** (the normal path) to **0.046 ms**, and the plant list from 10.137 to 0.898. The package\u2019s own index was **built, analyzed and measured and not chosen** (9.365 ms, still a seq scan and a sort), so it is not carried. **Migrations 200 \u2192 202.** | Agent |\nruns read the working tree, so nothing was falsely reported as passing — but the
 pushed tree lacked the label, which would have shown a reservation as a
 safety-stock line for anyone who cloned it.
 
