@@ -1,5 +1,5 @@
 /** Material master — CAIRN.md §8.4/§9.1, SCR-048. Own domain keys and views. */
-import { pgTable, varchar, text, boolean, integer, numeric, char, timestamp, primaryKey, foreignKey, check, index } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, boolean, integer, numeric, char, timestamp, primaryKey, foreignKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
@@ -245,6 +245,13 @@ export const movementType = pgTable('movement_type', {
   requiresValuationType: boolean('requires_valuation_type').notNull().default(false),
   negativeStockPolicy: varchar('negative_stock_policy', { length: 12 }).notNull().default('LOCATION'),
   valuationRelevant: boolean('valuation_relevant').notNull().default(true),
+  /**
+   * SCR-149: the account-determination events a difference movement names, and the modifier on
+   * the offset. Empty on every other kind. The poster reads them; it does not contain a G/L account.
+   */
+  inventoryEvent: varchar('inventory_event', { length: 24 }),
+  offsetEvent: varchar('offset_event', { length: 24 }),
+  offsetModifier: varchar('offset_modifier', { length: 4 }),
   /** What a withdrawal under this movement must be charged to — the T156 fact (SCR-133). */
   accountAssignment: varchar('account_assignment', { length: 16 }).notNull().default('NONE'),
   ...auditColumns,
@@ -256,8 +263,12 @@ export const movementType = pgTable('movement_type', {
   check('movement_type_plant_rule_ck', sql`${t.plantRule} in ('SAME', 'DIFFERENT', 'ANY')`),
   check('movement_type_location_rule_ck', sql`${t.locationRule} in ('SAME', 'DIFFERENT', 'ANY')`),
   check('movement_type_negative_stock_ck', sql`${t.negativeStockPolicy} in ('LOCATION', 'FORBID')`),
-  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION', 'PRODUCTION_ORDER')`),
+  check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION', 'PRODUCTION_ORDER', 'PHYSICAL_INVENTORY')`),
   check('movement_type_account_assignment_ck', sql`${t.accountAssignment} in ('NONE', 'COST_CENTER', 'ORDER')`),
+  check('movement_type_inventory_event_ck', sql`${t.inventoryEvent} is null or ${t.inventoryEvent} ~ '^[A-Z][A-Z0-9_]{2,23}$'`),
+  check('movement_type_offset_event_ck', sql`${t.offsetEvent} is null or ${t.offsetEvent} ~ '^[A-Z][A-Z0-9_]{2,23}$'`),
+  check('movement_type_offset_modifier_ck', sql`${t.offsetModifier} is null or ${t.offsetModifier} ~ '^[A-Z0-9]{1,4}$'`),
+  check('movement_type_difference_shape_ck', sql`${t.movementKind} <> 'INVENTORY_DIFFERENCE' or (${t.direction} in ('RECEIPT', 'ISSUE') and ${t.referenceCategory} = 'PHYSICAL_INVENTORY' and (not ${t.valuationRelevant} or (${t.inventoryEvent} is not null and ${t.offsetEvent} is not null and ${t.offsetModifier} is not null)))`),
 ]);
 
 export const materialDocument = pgTable('material_document', {
@@ -530,8 +541,8 @@ export const physicalInventoryDocument = pgTable('physical_inventory_document', 
 }, (t) => [
   primaryKey({ columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear] }),
   foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
-  /** SCR-147: the count's progress. POSTED belongs to MI07 and DIFFERENCES_REVIEWED to MI20. */
-  check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'DIFFERENCES_REVIEWED', 'POSTED', 'CANCELLED')`),
+  /** SCR-149: PARTIALLY_POSTED is a header with something posted and something unresolved. DIFFERENCES_REVIEWED stays in the vocabulary and is not set. */
+  check('physical_inventory_document_status_ck', sql`${t.status} in ('CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'DIFFERENCES_REVIEWED', 'PARTIALLY_POSTED', 'POSTED', 'CANCELLED')`),
   index('physical_inventory_document_plant_idx').on(t.client, t.plant, t.plannedCountDate),
   /** SCR-148: plant + fiscal year, the difference list's required predicate. Measured; a plan selects it. */
   index('physical_inventory_document_plant_year_idx').on(t.client, t.plant, t.fiscalYear, t.inventoryDocumentNumber),
@@ -564,6 +575,8 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
   bookQuantityBasis: varchar('book_quantity_basis', { length: 20 }),
   differenceQuantity: quantity('difference_quantity'),
   countStatus: varchar('count_status', { length: 24 }).notNull().default('UNCOUNTED'),
+  /** SCR-149: whether this item's difference has been posted. A count status is not a posting status. */
+  postingStatus: varchar('posting_status', { length: 16 }).notNull().default('UNPOSTED'),
   itemText: varchar('item_text', { length: 60 }),
   version: integer('version').notNull().default(1),
   ...auditColumns,
@@ -579,6 +592,7 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
   }).onDelete('cascade'),
   index('physical_inventory_item_material_idx').on(t.client, t.materialNumber),
   check('physical_inventory_item_count_status_ck', sql`${t.countStatus} in ('UNCOUNTED', 'COUNTED', 'RECOUNT_REQUIRED')`),
+  check('physical_inventory_item_posting_status_ck', sql`${t.postingStatus} in ('UNPOSTED', 'POSTED')`),
   check(
     'physical_inventory_item_zero_ck',
     sql`not ${t.zeroCountFlag} or ${t.countedBaseQuantity} is not distinct from 0`,
@@ -601,6 +615,63 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
   check(
     'physical_inventory_item_book_basis_ck',
     sql`${t.bookQuantityBasis} is null or ${t.bookQuantityBasis} in ('DOCUMENT_CREATION', 'COUNT_TIME')`,
+  ),
+]);
+
+/**
+ * SCR-149 — which physical-inventory item a material-document line posted.
+ *
+ * The material document is the batch. This row is the link the line does not have. It is unique
+ * on the material-document line, not on the inventory document, because one count may be posted
+ * in more than one material document. The reversed quantity releases that link without deleting
+ * it. The journal number is read from the material document, not stored here.
+ */
+export const physicalInventoryDifferenceAllocation = pgTable('physical_inventory_difference_allocation', {
+  client: tenant(),
+  inventoryDocumentNumber: varchar('inventory_document_number', { length: 24 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  itemNumber: integer('item_number').notNull(),
+  countVersion: integer('count_version').notNull(),
+  postedDifference: quantity('posted_difference').notNull(),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  reversedQuantity: quantity('reversed_quantity').notNull().default('0'),
+  reversalDocumentNumber: varchar('reversal_document_number', { length: 20 }),
+  reversalLine: integer('reversal_line'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialDocumentNumber, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.inventoryDocumentNumber, t.fiscalYear, t.itemNumber],
+    foreignColumns: [
+      physicalInventoryItem.client,
+      physicalInventoryItem.inventoryDocumentNumber,
+      physicalInventoryItem.fiscalYear,
+      physicalInventoryItem.itemNumber,
+    ],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialDocumentNumber, t.lineNumber],
+    foreignColumns: [
+      materialDocumentLine.client,
+      materialDocumentLine.materialDocumentNumber,
+      materialDocumentLine.lineNumber,
+    ],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.reversalDocumentNumber, t.reversalLine],
+    foreignColumns: [
+      materialDocumentLine.client,
+      materialDocumentLine.materialDocumentNumber,
+      materialDocumentLine.lineNumber,
+    ],
+  }).onDelete('restrict'),
+  check('physical_inventory_difference_allocation_version_ck', sql`${t.countVersion} > 0`),
+  check('physical_inventory_difference_allocation_posted_ck', sql`${t.postedDifference} <> 0`),
+  check('physical_inventory_difference_allocation_reversed_ck', sql`${t.reversedQuantity} >= 0 and ${t.reversedQuantity} <= abs(${t.postedDifference})`),
+  check('physical_inventory_difference_allocation_reversal_lineage_ck', sql`(${t.reversedQuantity} = 0 and ${t.reversalDocumentNumber} is null and ${t.reversalLine} is null) or (${t.reversedQuantity} > 0 and ${t.reversalDocumentNumber} is not null and ${t.reversalLine} is not null)`),
+  uniqueIndex('physical_inventory_difference_allocation_item_uq').on(
+    t.client, t.inventoryDocumentNumber, t.fiscalYear, t.itemNumber, t.materialDocumentNumber,
   ),
 ]);
 
