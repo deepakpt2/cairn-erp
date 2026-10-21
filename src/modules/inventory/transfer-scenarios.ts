@@ -56,6 +56,27 @@ export const TRANSFER_SCENARIOS: readonly TransferScenario[] = [
   },
 ] as const;
 
+/**
+ * What the movement field offers, and what it offers honestly.
+ *
+ * The three one-step transfers are posted. The three two-step transfers are offered so that
+ * choosing one gets an answer rather than a missing row: canon carries no in-transit stock, so the
+ * service refuses them by name (§14 — never silently posted as a one-step move). The counters are
+ * not offered at all: a counter is what a reversal posts, not something a person enters.
+ */
+export interface MovementChoice {
+  code: string;
+  description: string;
+  available: boolean;
+}
+
+export const MOVEMENT_CHOICES: readonly MovementChoice[] = [
+  ...TRANSFER_SCENARIOS.map((s) => ({ code: s.code, description: s.description, available: true })),
+  { code: '303', description: 'Transfer to in-transit stock (two-step, not carried)', available: false },
+  { code: '313', description: 'Stock transfer to in-transit storage location (two-step, not carried)', available: false },
+  { code: '315', description: 'In-transit to destination (two-step, not carried)', available: false },
+];
+
 export const COUNTER_CODES: Record<string, [string, string]> = {
   '312': ['311', 'TRANSFER_SLOC'],
   '302': ['301', 'TRANSFER_PLANT'],

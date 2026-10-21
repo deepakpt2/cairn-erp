@@ -1115,7 +1115,12 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
       }, line.direction === 'ISSUE' ? -Number(line.from.baseQuantity) : Number(line.from.baseQuantity));
     }
 
-    if (issue.plant !== receipt.plant) {
+    // Whether a reversal carries value is the counter movement's own configuration, never the
+    // accident that the two plants differ (§13, §11). The forward posting asked the same question
+    // of the movement that posted it; a reversal that decided differently would either move value
+    // the transfer never moved, or leave value behind that it did.
+    const reversalMovesValue = Boolean(movement.valuationRelevant) && Boolean(counter.valuationRelevant);
+    if (reversalMovesValue) {
       for (const [plant, quantityDelta, valueDelta] of [
         [receipt.plant, -quantity, -Number(receipt.value)],
         [issue.plant, quantity, Number(issue.value)],

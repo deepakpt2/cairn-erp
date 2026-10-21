@@ -6,6 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import {
   TransferPostingError,
   postTransfer,
+  reverseTransfer,
   validateTransfer,
   type PostTransferInput,
 } from '../src/modules/inventory/transfer-posting';
@@ -175,6 +176,7 @@ describe('SCR-146 movement configuration decides the transfer', () => {
     // and the service follows the table, which no hardcoded rule could do.
     await configure('TRANSFER_SLOC', { plant_rule: 'DIFFERENT', location_rule: 'ANY' });
     try {
+      const heldBefore = await stock('2000', '0001');
       const posted = await postTransfer(transfer({
         movementTypeCode: '311',
         issuingPlant: '1000', issuingStorageLocation: '0001',
@@ -276,6 +278,48 @@ describe('SCR-146 movement configuration decides the transfer', () => {
       movementTypeCode: '311', quantity: 1, externalReference: 'TO-4471',
     }));
     expect(posted.externalReference).toBe('TO-4471');
+  });
+
+  it('reverses a valueless transfer without moving any value', async () => {
+    // 311 configured as DIFFERENT carries stock between plants but no value (its row is not
+    // valuation-relevant). The reversal must not decide otherwise because the plants differ —
+    // that was the defect the browser run found.
+    await configure('TRANSFER_SLOC', { plant_rule: 'DIFFERENT', location_rule: 'ANY' });
+    try {
+      const heldBefore = await stock('2000', '0001');
+      const posted = await postTransfer(transfer({
+        movementTypeCode: '311',
+        issuingPlant: '1000', issuingStorageLocation: '0001',
+        receivingPlant: '2000', receivingStorageLocation: '0001',
+        quantity: 7,
+      }));
+      expect(Number(posted.lines[0].value)).toBe(0);
+      const before = await withTenant(client, async (tx) => {
+        const rows = await tx.execute(sql`
+          select valuation_area, total_stock_quantity, stock_value from material_valuation
+          where client = ${client} and material_number = 'MAT-CFG' order by valuation_area
+        `) as unknown as Array<{ valuation_area: string; total_stock_quantity: string; stock_value: string }>;
+        return rows.map((r) => `${r.valuation_area}:${r.total_stock_quantity}:${r.stock_value}`).join('|');
+      });
+
+      const reversal = await reverseTransfer({
+        client, changedBy: ACTOR, materialDocumentNumber: posted.materialDocumentNumber,
+        postingDate: DAY, documentDate: DAY, requestKey: nextKey(),
+      });
+      expect(reversal.reversalOf).toBe(posted.materialDocumentNumber);
+
+      const after = await withTenant(client, async (tx) => {
+        const rows = await tx.execute(sql`
+          select valuation_area, total_stock_quantity, stock_value from material_valuation
+          where client = ${client} and material_number = 'MAT-CFG' order by valuation_area
+        `) as unknown as Array<{ valuation_area: string; total_stock_quantity: string; stock_value: string }>;
+        return rows.map((r) => `${r.valuation_area}:${r.total_stock_quantity}:${r.stock_value}`).join('|');
+      });
+      expect(after, 'a valueless transfer reverses without touching a valuation area').toBe(before);
+      expect(await stock('2000', '0001'), 'and the stock came back').toBe(heldBefore);
+    } finally {
+      await configure('TRANSFER_SLOC', { plant_rule: 'SAME', location_rule: 'DIFFERENT' });
+    }
   });
 
   it('validates without posting, and refuses exactly what a posting would refuse', async () => {

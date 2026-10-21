@@ -107,6 +107,7 @@ export const TARGETS = [
   { id: 'po-account-assignment', client: 'T829', label: 'SCR-129 ME2K purchase orders by account assignment' },
   { id: 'stock-requirements', client: 'T830', label: 'SCR-130 MD04 stock/requirements list' },
   { id: 'transfer-posting', client: 'T831', label: 'SCR-131 MB1B transfer posting' },
+  { id: 'scr146-mb1b-configuration', client: 'T845', label: 'SCR-146 MB1B movement configuration: a check that posts nothing, the plant rule read from the movement row, a same-plant 311 refused once configured DIFFERENT, two-step and a batch requirement refused by name, a reused key with a different payload refused, and the configured counter movement reversing' },
   { id: 'goods-issue', client: 'T836', label: 'SCR-136 MB1A goods issue: post a 201, issue against a reservation, watch MD04 fall' },
   { id: 'migo-component-issue', client: 'T839', label: 'SCR-139 MIGO 261 goods issue to a production order: matrix, posting, ledger naming the order' },
   { id: 'migo-production-receipt', client: 'T840', label: 'SCR-140 MIGO 101 finished good from a production order: value at the material price, over-receipt refusal' },

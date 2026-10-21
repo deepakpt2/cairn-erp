@@ -31,7 +31,9 @@ describe('SCR-131 transfer posting UI contract', () => {
     expect(service).toContain("code: '311'");
     expect(service).toContain("code: '301'");
     expect(service).toContain("code: '321'");
-    expect(shell).toContain('TRANSFER_SCENARIOS.map');
+    // SCR-146: the field offers the catalogue's choices, which now include the two-step
+    // movements canon refuses by name — the one-step three are still the ones that post.
+    expect(shell).toContain('MOVEMENT_CHOICES.map');
     expect(shell).toContain('{s.code} · {s.description}');
   });
 

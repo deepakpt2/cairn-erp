@@ -4410,6 +4410,96 @@ transfer without posting it, proving no document, stock or journal was created.
 
 Same-stage bookkeeping: B-918 / §26.930 / §30 row 2.748.
 
+## §26.931 — SCR-146 closed: MB1B, and the movement catalogue is now the only place a transfer is defined
+
+**B-919.** The round is closed and T845 is green. Three stages changed the tree, one of them
+because the browser run found a defect the tests had not.
+
+**Stage 2 — the catalogue carries its own rules (migration 9086, `be416e4`).**
+`movement_type` gains `movement_kind`, `source_stock_type`, `destination_stock_type`, `plant_rule`,
+`location_rule`, `is_two_step`, the four requirement flags, `negative_stock_policy` and
+`valuation_relevant`, each constrained to a closed vocabulary, and the delivered 311/301/321 rows
+with their counters are backfilled so an existing tenant describes itself without a reseed.
+`material_document` gains `external_reference` and `request_fingerprint`. Three contract tests
+pin the vocabularies; the first two failures were the test's own — a check-violation poisons the
+transaction, so it surfaces at the `withTenant` boundary rather than inside the awaited statement,
+and the assertions were rewritten to expect that.
+
+**Stage 3 — the engine reads the movement, it no longer remembers it (`24056b3`).**
+`resolveScenario` takes a transaction and a client and reads the `movement_type` row. The
+three-digit numbers remain what a person types — one map, `311 → TRANSFER_SLOC`, `301 →
+TRANSFER_PLANT`, `321 → TRANSFER_STYPE` — and the counters and the two-step aliases stay named in
+the same place so their refusals keep their words. What the alias *means* is now data:
+`plant_rule` decides whether the plant may change, `location_rule` the storage location,
+`source_stock_type`/`destination_stock_type` the stock, `negative_stock_policy` whether the
+location's own flag is honoured, and `valuation_relevant` whether value and a journal follow the
+goods. The pre-flight was lifted into one `preflight` function, and `validateTransfer` runs it and
+stops — pointing at the reason §16's "validate posts nothing" holds by construction rather than by
+promise: the writer lives past the boundary, and a dry run has no path to it.
+
+Idempotency became two answers instead of one. A replay returns the document. A reused key
+carrying a different payload is refused, comparing a SHA-256 digest of the canonical request
+against `request_fingerprint` — a digest rather than the payload because the column is 64
+characters and equality is all it is asked for. The external reference travels to the document and
+back. Seven tests change rows and watch the service obey them; the whole suite went to
+**2055/2055 in 276 files**.
+
+**Stage 4 — the screen says what the movement will do before it does it (`930c664`).**
+An external-reference field, a **Check** button that calls `validateTransfer` through a separate
+action, and a panel that reports the configured movement, the entered and the base quantity, both
+sides with their stock types, the stock before and after, whether value moves, the period and
+whether a journal follows, with the notes the service returns. The movement hint stopped reciting
+what 311/301/321 mean — a tenant can change those rows, so a screen that asserts them would be
+lying after the first configuration change. The movement field now offers the three two-step
+aliases too, labelled as not carried: §14 wants them refused explicitly, and a value that cannot
+be chosen cannot be refused in words a person reads.
+
+The request key was still fixed for the life of the page. That was harmless while a replay
+silently returned the first document; under stage 3 it means the second legitimate transfer on one
+page is *refused* as a different posting. It now moves on after a successful posting and a
+successful reversal, as MBRL and MIGO already do.
+
+**Stage 5 — the browser run found the reversal deciding value by accident.**
+First T845 run: every leg through the reused-key refusal passed, then reversing a 311 that had
+carried **no value** between two plants crashed the page with
+`material_valuation_values_ck`. The cause was a rule SCR-131 wrote and nothing had asked about
+since: `reverseTransfer` moved valuation whenever `issue.plant !== receipt.plant` — the plants
+differing is not a valuation change, exactly what §11 and §13 forbid. The reversal now asks the
+same question the posting asked, of the same configuration: `movement.valuation_relevant &&
+counter.valuation_relevant`. A test posts a valueless cross-plant transfer, reverses it, and reads
+every valuation area back unchanged. **This is the second round running in which the browser leg
+found what the unit tests did not**, and the reason is the same: the tests exercised the paths they
+were written for, and the reversal of a *reconfigured* 311 was a path no test drew.
+
+**T845 output** (production build, `cairn_b210`):
+
+> SCR-146: a check answered without posting, the movement row decided where 311 could go, a
+> same-plant move was refused in the configuration's words, two-step and a batch requirement were
+> refused by name, a reused key with a different payload was refused, and the reversal posted the
+> configured counter
+
+Six legs: **Check** showed `100.000 → 75.000`, no valuation change, no journal, and the document
+count did not move; with 311 reconfigured `plant_rule = DIFFERENT`, a 25-unit move from `QK01` to
+`QK02` posted as `MD-00000001` carrying external reference `TO-8801`, and the same movement inside
+one plant was then refused with *"moves between plants, and the configuration says so"*; **303 and
+313** were refused as two-step transfers with the document count unchanged; **321** with
+`requires_batch` set was refused naming the master canon lacks, then posted once the flag was
+cleared; a **reused request key with a different quantity** was refused while the identical retry
+replays; and the reversal posted **`TRANSFER_SLOC_REV`** with the stock returning to 104.000.
+
+**Neighbours re-run green:** `transfer-posting` (T831, SCR-131) and `migo-transfer-posting` (T841,
+SCR-141) — both entry points reach the same engine, which now reads configuration.
+
+**Counts.** Suite **2064/2064 in 277 files**; harness **145 targets** (T845 added); migrations
+**208**; registry 169 capabilities / 144 terms / 166 aliases.
+
+**What the round leaves refused by name**, so no later round mistakes refusal for absence: two-step
+303/313/315 (no in-transit stock dimension), batch, serial numbers, special stock and valuation
+type (no master), cross-company-code transfer (intercompany clearing is its own round), a
+hand-entered counter, drafts and the Validated state, and stable error codes.
+
+Same-stage bookkeeping: B-919 / §26.931 / §30 row 2.749.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4789,3 +4879,4 @@ Same-stage bookkeeping: B-918 / §26.930 / §30 row 2.748.
 | 2.746 | 2026-10-21 | **SCR-145 contracted — MBRL return delivery against the corrected specification (B-916, §26.928).** Four corrections shape the round: the return movement is **resolved from `movement_type` configuration** (`RETURN_TO_VENDOR` = 122, direction ISSUE, reversal 123) rather than hardcoded, and a movement that adds stock cannot post as a return; the return posts through the **canonical material-document engine and numbering service**, never a separate subsystem — §15's `return_delivery_posting` is refused by name; the accounting link stays **nullable and mirror-shaped** (credit inventory, debit GR/IR, price difference where it differs), touching no vendor liability and creating no credit memo, because that is invoice verification's work; and **shipping delivery is a separate logistics workflow** that does not exist, so the flag is hidden and invocation rejected. Lineage gains its own columns (`return_of_document`, `return_of_document_year`, `return_of_line`) distinct from the reversal pair, so a commercial return and a cancellation stay distinguishable. Remaining returnable is derived from posted returns net of their reversals, under an advisory lock on the original item, revalidated after the lock. `receivedQuantities` is corrected to sign by the movement's actual stock direction — a latent defect that would have made a 122 inflate received quantity. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, picking, goods issue for delivery, vendor credit memo. | Agent |
 | 2.747 | 2026-10-21 | **SCR-145 closed — MBRL return delivery accepted (B-917, §26.929).** **A return is not a cancellation**: `return_of_document` / `return_of_document_year` / `return_of_line` are distinct from the reversal pair and a constraint forbids a line being both. **Returnable quantity is derived** from posted returns net of their reversals — a reversal records what it reverses, not what its original returned against, so the returns are found first and the lines reversing them netted off — under an advisory lock per original line and re-read after it, never taken from the caller. **The movement is configuration** (`RETURN_TO_VENDOR`, ISSUE, counter `RETURN_TO_VENDOR_REV`); a row that adds stock or references anything but the purchase order is refused by name. **Accounting mirrors the receipt**: inventory credited, GR/IR debited, price difference where they disagree — no vendor liability, no credit memo. **Two defects fixed on the way**: `receivedQuantities` signed every non-reversal line positive, so a 122 would have *increased* the received quantity — the sign now follows the configured direction and resolves reversals against the line they reverse; and the idempotency key on the return form (and on MIGO, which shared the shape) was fixed per document per day, so a second posting replayed the first — both now move the key once a posting succeeds. T844 green: 40 received, 15 returned with the receipt standing and the receipt screen reporting 25 received, 25 returned to zero, a third attempt refused with its reason, and both returns reversed back to 40/40. Suite 2045/2045 in 274 files; harness 144; migrations 208. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, shipping integration, picking, vendor credit memo. | Agent |\n
 | 2.748 | 2026-10-21 | **SCR-146 contracted — MB1B with the movement catalogue as data (B-918, §26.930).** §3/§9/§10 of the owner's specification require configuration to decide what a transfer is; `transfer-scenarios.ts` had decided it at compile time since SCR-131. Migration 9086 adds `movement_kind`, source and destination stock types, `plant_rule`/`location_rule`, `is_two_step`, four requirement flags, `negative_stock_policy` and `valuation_relevant` to `movement_type`, and 311/301/321 become rows with a test proving identical posting. A movement whose requirement canon cannot meet (batch, serial, special stock, valuation type) is **refused by name**; two-step (303/313/315) is refused per §14 and §19 rather than silently processed. `material_document` gains `external_reference` and `request_fingerprint`; the same idempotency key with a different payload is refused rather than replayed (§16). `validateTransfer` judges without writing. The `direction` value `TRANSFER` is constrained to the four legal values and signs by `line_direction`, closing a trap SCR-145 armed. Deliberate deviation: locks precede unit conversion, contrary to §10's step order, because reading the material before the lock is the defect SCR-143 closed. | Agent |
+| 2.749 | 2026-10-21 | **SCR-146 closed — MB1B with the movement catalogue as data (B-919, §26.931).** Three stages and a browser run that found a real defect. **Migration 9086** gives `movement_type` the content it was missing — `movement_kind`, the two stock types, `plant_rule`/`location_rule`, `is_two_step`, four requirement flags, `negative_stock_policy`, `valuation_relevant` — each in a closed vocabulary, with the delivered rows backfilled; `material_document` gains `external_reference` and `request_fingerprint`. **`resolveScenario` reads the row**, so permitted dimensions, stock types, negative-stock policy and valuation relevance are configuration; the three-digit numbers stay input aliases in one map, and counters and two-step aliases keep their refusals in words. A pre-flight lifted out of the posting serves **`validateTransfer`**, which runs the posting's own judgement and stops before the writer — §16's "validate posts nothing" holds by construction. Idempotency splits into a replay that returns the document and **a reused key with a different payload that is refused** (SHA-256 over the canonical request). The screen gains an external reference, a **Check** that reports the configured movement, base quantity, both sides, stock before and after, value, period and journal, and a request key that moves on after a successful posting. **T845 found the reversal deciding value by `issue.plant !== receipt.plant`** — a hardcoded rule §11/§13 forbid — which crashed on a valueless cross-plant 311 with `material_valuation_values_ck`; the reversal now asks the counter movement's configuration, and a test proves a valueless transfer reverses with every valuation area unchanged. T845 green on the production build: check posted nothing, a reconfigured 311 moved stock between plants carrying `TO-8801`, the same movement inside one plant was refused in the configuration's words, 303/313 and a batch-requiring 321 refused by name, a reused key with a different quantity refused, and the reversal posted `TRANSFER_SLOC_REV` returning stock to 104.000. Neighbours T831 and T841 re-run green. Suite 2064/2064 in 277 files; harness 145; migrations 208. | Agent |

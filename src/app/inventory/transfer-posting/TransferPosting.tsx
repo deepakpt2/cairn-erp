@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type { TransferDocumentView, TransferStockRow } from '@/modules/inventory/transfer-posting';
-import { TRANSFER_SCENARIOS } from '@/modules/inventory/transfer-scenarios';
+import { MOVEMENT_CHOICES } from '@/modules/inventory/transfer-scenarios';
 import {
   checkTransferAction, postTransferAction, reverseTransferAction, type TransferActionState,
 } from './actions';
@@ -43,7 +43,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.movementType')}</span>
             <select name="movementTypeCode" className="input w-full" defaultValue="311">
-              {TRANSFER_SCENARIOS.map((s) => (
+              {MOVEMENT_CHOICES.map((s) => (
                 <option key={s.code} value={s.code}>{s.code} · {s.description}</option>
               ))}
             </select>
@@ -88,7 +88,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
             <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.movementType')}</span>
               <select name="movementTypeCode" className="input w-full" defaultValue="311" required>
-                {TRANSFER_SCENARIOS.map((s) => (
+                {MOVEMENT_CHOICES.map((s) => (
                   <option key={s.code} value={s.code}>{s.code} · {s.description}</option>
                 ))}
               </select>
@@ -253,6 +253,7 @@ export default function TransferPosting({ document, stock, canPost, today }: {
           <p className="mt-1 text-sm text-ink-soft">
             {document.postingDate} · {document.status}
             {document.journalDocumentNumber ? ` · journal ${document.journalDocumentNumber}` : ` · ${t('mb1b.noJournal')}`}
+            {document.externalReference ? ` · ${t('mb1b.externalReference')} ${document.externalReference}` : ''}
             {document.reversalOf ? ` · ${t('mb1b.reversalOf')} ${document.reversalOf}` : ''}
           </p>
           <table className="mt-2 w-full text-sm">

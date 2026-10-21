@@ -18,6 +18,17 @@ describe('SCR-146 transfer screen contract', () => {
   const actions = read('src/app/inventory/transfer-posting/actions.ts');
   const messages = read('src/platform/i18n/index.ts');
 
+  it('offers the two-step movements so choosing one is answered, not hidden', () => {
+    expect(shell).toContain('MOVEMENT_CHOICES');
+    const catalogue = read('src/modules/inventory/transfer-scenarios.ts');
+    for (const code of ["'303'", "'313'", "'315'"]) {
+      expect(catalogue).toContain(`code: ${code}`);
+    }
+    expect(catalogue).toContain('not carried');
+    // The counters are posted by a reversal, so they are never offered for entry.
+    expect(catalogue).not.toMatch(/code: '312'/);
+  });
+
   it('offers a check that posts nothing, beside the posting', () => {
     expect(shell).toContain('checkTransferAction');
     expect(shell).toContain('formAction={checkAction}');
@@ -47,6 +58,8 @@ describe('SCR-146 transfer screen contract', () => {
     expect(shell).toContain('name="externalReference"');
     expect(actions).toContain("externalReference: text(form, 'externalReference') || undefined");
     expect(messages).toContain("'mb1b.externalReference'");
+    // And the document shows it back, so the reference a person typed is visible on the posting.
+    expect(shell).toContain('{document.externalReference ?');
   });
 
   it('moves the request key on after a posting, so the next transfer is not a replay', () => {
