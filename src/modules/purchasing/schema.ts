@@ -2,7 +2,9 @@
 import { pgTable, varchar, char, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
-import { plant, purchasingGroup, storageLocation } from '../foundation/schema';
+import { currency, unitOfMeasure } from '../../platform/tables/reference';
+import { plant, purchasingGroup, purchasingOrg, storageLocation } from '../foundation/schema';
+import { bpRole } from '../foundation/business-partner-schema';
 import { material, materialGroup } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
@@ -110,6 +112,117 @@ export const purchaseOrder = pgTable('purchase_order', {
   check('po_release_status_ck', sql`${t.releaseStatus} in ('UNRELEASED', 'RELEASED')`),
 ]);
 
+/**
+ * Purchasing info record — SCR-151. A default, not an order.
+ *
+ * The general row is the supplier and the material. The segment is the
+ * purchasing organisation and, when named, the plant. A blank plant is
+ * null. The price row is the only price; the segment does not carry one.
+ * The unique index that treats a null plant as a value lives in migration
+ * 9093, because this drizzle version cannot say NULLS NOT DISTINCT.
+ */
+export const purchasingInfoRecord = pgTable('purchasing_info_record', {
+  client: tenant(),
+  infoRecordNumber: varchar('info_record_number', { length: 20 }).notNull(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  roleCode: varchar('role_code', { length: 16 }).notNull().default('SUPPLIER'),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  category: varchar('category', { length: 16 }).notNull().default('STANDARD'),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.infoRecordNumber] }),
+  foreignKey({
+    columns: [t.client, t.partnerNumber, t.roleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  check('purchasing_info_record_role_ck', sql`${t.roleCode} = 'SUPPLIER'`),
+  check('purchasing_info_record_category_ck', sql`${t.category} = 'STANDARD'`),
+  check('purchasing_info_record_version_ck', sql`${t.version} > 0`),
+]);
+
+export const purchasingInfoRecordOrg = pgTable('purchasing_info_record_org', {
+  client: tenant(),
+  infoRecordNumber: varchar('info_record_number', { length: 20 }).notNull(),
+  segmentNumber: integer('segment_number').notNull(),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  plant: varchar('plant', { length: 10 }),
+  plannedDeliveryDays: integer('planned_delivery_days'),
+  minimumOrderQuantity: numeric('minimum_order_quantity', { precision: 13, scale: 3 }),
+  minimumOrderUnit: varchar('minimum_order_unit', { length: 6 }),
+  orderUnit: varchar('order_unit', { length: 6 }),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.infoRecordNumber, t.segmentNumber] }),
+  foreignKey({
+    columns: [t.client, t.infoRecordNumber],
+    foreignColumns: [purchasingInfoRecord.client, purchasingInfoRecord.infoRecordNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.purchasingOrg],
+    foreignColumns: [purchasingOrg.client, purchasingOrg.purchasingOrg],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.minimumOrderUnit],
+    foreignColumns: [unitOfMeasure.code],
+  }),
+  foreignKey({
+    columns: [t.orderUnit],
+    foreignColumns: [unitOfMeasure.code],
+  }),
+  check('purchasing_info_record_org_segment_ck', sql`${t.segmentNumber} > 0`),
+  check('purchasing_info_record_org_version_ck', sql`${t.version} > 0`),
+  check('purchasing_info_record_org_lead_ck', sql`${t.plannedDeliveryDays} is null or ${t.plannedDeliveryDays} >= 0`),
+  check('purchasing_info_record_org_minimum_ck', sql`${t.minimumOrderQuantity} is null or ${t.minimumOrderQuantity} >= 0`),
+  check('purchasing_info_record_org_minimum_pair_ck', sql`(${t.minimumOrderQuantity} is null) = (${t.minimumOrderUnit} is null)`),
+]);
+
+export const purchasingInfoRecordPrice = pgTable('purchasing_info_record_price', {
+  client: tenant(),
+  infoRecordNumber: varchar('info_record_number', { length: 20 }).notNull(),
+  priceSequence: integer('price_sequence').notNull(),
+  segmentNumber: integer('segment_number').notNull(),
+  conditionType: varchar('condition_type', { length: 16 }).notNull().default('NET_PRICE'),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  priceUnit: numeric('price_unit', { precision: 5, scale: 0 }).notNull(),
+  priceUnitOfMeasure: varchar('price_unit_of_measure', { length: 6 }).notNull(),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.infoRecordNumber, t.priceSequence] }),
+  foreignKey({
+    columns: [t.client, t.infoRecordNumber, t.segmentNumber],
+    foreignColumns: [purchasingInfoRecordOrg.client, purchasingInfoRecordOrg.infoRecordNumber, purchasingInfoRecordOrg.segmentNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.currency],
+    foreignColumns: [currency.code],
+  }),
+  foreignKey({
+    columns: [t.priceUnitOfMeasure],
+    foreignColumns: [unitOfMeasure.code],
+  }),
+  check('purchasing_info_record_price_sequence_ck', sql`${t.priceSequence} > 0`),
+  check('purchasing_info_record_price_type_ck', sql`${t.conditionType} = 'NET_PRICE'`),
+  check('purchasing_info_record_price_amount_ck', sql`${t.amount} >= 0`),
+  check('purchasing_info_record_price_unit_ck', sql`${t.priceUnit} > 0`),
+  check('purchasing_info_record_price_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+]);
+
 export const purchaseOrderItem = pgTable('purchase_order_item', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),
@@ -130,9 +243,16 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   requisitionNumber: varchar('requisition_number', { length: 10 }),
   requisitionItem: integer('requisition_item'),
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  /** The price that qualified, when one did. The snapshot columns above remain what the order used. */
+  infoRecordNumber: varchar('info_record_number', { length: 20 }),
+  priceSequence: integer('price_sequence'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.infoRecordNumber, t.priceSequence],
+    foreignColumns: [purchasingInfoRecordPrice.client, purchasingInfoRecordPrice.infoRecordNumber, purchasingInfoRecordPrice.priceSequence],
+  }).onDelete('restrict'),
   foreignKey({
     columns: [t.client, t.orderNumber],
     foreignColumns: [purchaseOrder.client, purchaseOrder.orderNumber],
@@ -148,6 +268,7 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_category_ck', sql`${t.itemCategory} in ('STANDARD')`),
   check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
+  check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
 ]);
 
 export const purchaseOrderScheduleLine = pgTable('purchase_order_schedule_line', {
