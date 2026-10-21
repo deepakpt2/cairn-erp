@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -50,6 +50,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'PHYINV', description: 'Physical inventory documents', numberLength: 10, yearRelevant: true, subobjectHint: null },
   { objectCode: 'INFOREC', description: 'Purchasing info records', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'SOURCELIST', description: 'Purchasing source lists', numberLength: 7, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'QUOTAARR', description: 'Purchasing quota arrangements', numberLength: 7, yearRelevant: false, subobjectHint: null },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */

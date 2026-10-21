@@ -214,6 +214,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'scr151-info-record') return '/purchasing/info-record';
   if (target.id === 'scr152-info-record-change') return '/purchasing/info-record';
   if (target.id === 'scr153-source-list') return '/purchasing/source-list';
+  if (target.id === 'scr154-quota-arrangement') return '/purchasing/quota-arrangement';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
   if (target.id === 'release-strategies') return '/config/release-strategies';

@@ -102,6 +102,7 @@ import { scr150Mi11Recount } from './scr150-mi11-recount';
 import { scr151InfoRecord } from './scr151-info-record';
 import { scr152InfoRecordChange } from './scr152-info-record-change';
 import { scr153SourceList } from './scr153-source-list';
+import { scr154QuotaArrangement } from './scr154-quota-arrangement';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5056,6 +5057,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr151-info-record': scr151InfoRecord,
   'scr152-info-record-change': scr152InfoRecordChange,
   'scr153-source-list': scr153SourceList,
+  'scr154-quota-arrangement': scr154QuotaArrangement,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

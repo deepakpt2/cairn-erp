@@ -52,6 +52,7 @@ export default async function PurchasingSourceListPage({ searchParams }: {
           <h1 className="text-xl font-semibold tracking-tight">{t('sourceList.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/purchasing/info-record" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toInfoRecord')}</Link>
+            <Link href="/purchasing/quota-arrangement" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toQuota')}</Link>
             <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('sourceList.toOrders')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>

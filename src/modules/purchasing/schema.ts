@@ -291,6 +291,72 @@ export const purchasingSourceListEntry = pgTable('purchasing_source_list_entry',
   check('purchasing_source_list_entry_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
 ]);
 
+/**
+ * Purchasing quota arrangement — SCR-154. Who shares a requirement for one
+ * material at one plant, by relative weight, over an inclusive validity.
+ *
+ * The header key is the drawn number. The lookup index is the material and the
+ * plant. A standing arrangement holds its start; a different start may overlap
+ * in the database, and the locked service refuses that. Deactivation does not
+ * delete the row and does not hold the start. There is no allocated quantity,
+ * no minimum split, no maximum lot, no supplying plant, and no status. The
+ * order is not given a quota column.
+ */
+export const purchasingQuotaArrangement = pgTable('purchasing_quota_arrangement', {
+  client: tenant(),
+  quotaNumber: varchar('quota_number', { length: 20 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotaNumber] }),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  check('purchasing_quota_arrangement_version_ck', sql`${t.version} > 0`),
+  check('purchasing_quota_arrangement_validity_ck', sql`${t.validTo} >= ${t.validFrom}`),
+]);
+
+export const purchasingQuotaArrangementItem = pgTable('purchasing_quota_arrangement_item', {
+  client: tenant(),
+  quotaNumber: varchar('quota_number', { length: 20 }).notNull(),
+  itemNumber: varchar('item_number', { length: 3 }).notNull(),
+  partnerNumber: varchar('partner_number', { length: 40 }).notNull(),
+  roleCode: varchar('role_code', { length: 16 }).notNull().default('SUPPLIER'),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  quota: integer('quota').notNull(),
+  quotaBaseQuantity: numeric('quota_base_quantity', { precision: 23, scale: 3 }).notNull().default('0'),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotaNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.quotaNumber],
+    foreignColumns: [purchasingQuotaArrangement.client, purchasingQuotaArrangement.quotaNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.partnerNumber, t.roleCode],
+    foreignColumns: [bpRole.client, bpRole.partnerNumber, bpRole.roleCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.purchasingOrg],
+    foreignColumns: [purchasingOrg.client, purchasingOrg.purchasingOrg],
+  }).onDelete('restrict'),
+  check('purchasing_quota_arrangement_item_role_ck', sql`${t.roleCode} = 'SUPPLIER'`),
+  check('purchasing_quota_arrangement_item_number_ck', sql`${t.itemNumber} ~ '^[0-9]{3}$'`),
+  check('purchasing_quota_arrangement_item_quota_ck', sql`${t.quota} > 0`),
+  check('purchasing_quota_arrangement_item_base_ck', sql`${t.quotaBaseQuantity} >= 0`),
+]);
+
 export const purchaseOrderItem = pgTable('purchase_order_item', {
   client: tenant(),
   orderNumber: varchar('order_number', { length: 20 }).notNull(),

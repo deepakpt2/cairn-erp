@@ -125,6 +125,7 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'PHYINV', subObject: '*', prefix: 'PI', length: 7 },
   { objectCode: 'INFOREC', subObject: '*', prefix: 'IR', length: 7 },
   { objectCode: 'SOURCELIST', subObject: '*', prefix: 'SL', length: 7 },
+  { objectCode: 'QUOTAARR', subObject: '*', prefix: 'QA', length: 7 },
 ];
 
 export interface CreateTenantInput {
