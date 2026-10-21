@@ -155,6 +155,13 @@ export default function DifferenceList({
             {t('mi20.displayTitle')} {document.documentNumber} · {document.fiscalYear}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">{t('mi20.displayHint')}</p>
+          <Link
+            href={`/inventory/physical-inventory-posting?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
+            className="btn btn-default mt-3 inline-flex min-h-11 sm:min-h-8"
+            data-difference-posting-link
+          >
+            {t('mi20.toPosting')}
+          </Link>
           <dl className="mt-2 grid gap-x-6 text-sm sm:grid-cols-4">
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.plantFrom')}</dt><dd>{document.plant}</dd></div>
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.storageFrom')}</dt><dd>{document.storageLocation ?? '—'}</dd></div>

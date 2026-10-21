@@ -38,16 +38,20 @@ describe('SCR-148 difference screen contract', () => {
     expect(shell).toContain("t('mi20.unavailable')");
   });
 
-  it('offers document display and does not offer posting or recount', () => {
+  it('offers document display, links to posting, and does not post or recount', () => {
     expect(shell).toContain('data-difference-document');
     expect(shell).toContain("t('mi20.displayHint')");
     expect(shell).toContain("t('mi20.notPosted')");
-    expect(shell).not.toContain('Post differences');
+    expect(shell).toContain('data-difference-posting-link');
+    expect(shell).toContain('/inventory/physical-inventory-posting?');
+    expect(shell).not.toContain('postDifferences');
     expect(shell).not.toContain('>Recount<');
     expect(shell).not.toContain("t('mi20.recount')");
     expect(page).toContain('openDifferenceWorkflow(');
+    expect(page).toContain('data-difference-posting-link');
     expect(actions).toContain("workflow !== 'DISPLAY' && workflow !== 'POST' && workflow !== 'RECOUNT'");
     expect(actions).not.toContain('postJournalEntry');
+    expect(actions).not.toContain('postDifferences');
     expect(service).toContain('A list does not post');
     expect(service).toContain('does not create a recount');
   });

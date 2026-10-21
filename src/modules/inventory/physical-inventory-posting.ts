@@ -103,6 +103,8 @@ export interface DifferencePostingPreview {
   status: string;
   postingDate: string | null;
   documentDate: string | null;
+  /** The material period the posting date fell in, once a date has been judged. */
+  materialPeriod: string | null;
   journalRequired: boolean;
   lines: PostingLineView[];
 }
@@ -527,7 +529,7 @@ function lineView(judged: JudgedLine, eligible: boolean, reason: string | null):
 
 async function judgeSelection(
   tx: Tx, client: string, input: PostDifferencesInput, header: HeaderRow, items: ItemRow[],
-): Promise<{ companyCode: string; judged: JudgedLine[] }> {
+): Promise<{ companyCode: string; judged: JudgedLine[]; materialPeriod: string }> {
   const [plantRow] = await tx.select().from(plantTable).where(and(
     eq(plantTable.client, client), eq(plantTable.plant, header.plant),
   ));
@@ -582,7 +584,11 @@ async function judgeSelection(
   if (failures.length > 0) {
     throw new PhysicalInventoryPostingError(failures.join(' '), 'Correct the selection and post it again. Nothing selected was skipped.');
   }
-  return { companyCode: plantRow.companyCode, judged };
+  return {
+    companyCode: plantRow.companyCode,
+    judged,
+    materialPeriod: `${position.fiscalYear}/${position.period}`,
+  };
 }
 
 async function replayOrRefuse(tx: Tx, client: string, requestKey: string, fingerprint: string): Promise<PostedDifferences | null> {
@@ -606,15 +612,17 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
   ));
   const lines = await tx.execute(sql`
     select a.item_number, a.posted_difference::text as difference, l.movement_type, l.base_quantity::text as quantity,
-           l.value::text as value, l.currency, l.stock_type, l.material_number, l.line_direction
+           l.value::text as value, l.currency, c.decimal_places, l.stock_type, l.material_number, l.line_direction
       from physical_inventory_difference_allocation a
       join material_document_line l
         on l.client = a.client and l.material_document_number = a.material_document_number and l.line_number = a.line_number
+      left join currency c on c.code = l.currency
      where a.client = ${client} and a.material_document_number = ${materialDocumentNumber}
      order by a.item_number
   `) as unknown as Array<{
     item_number: number; difference: string; movement_type: string; quantity: string;
-    value: string; currency: string | null; stock_type: string; material_number: string; line_direction: string;
+    value: string; currency: string | null; decimal_places: number | null;
+    stock_type: string; material_number: string; line_direction: string;
   }>;
   const allocation = lines[0];
   const inventory = allocation
@@ -639,8 +647,8 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
       direction: line.line_direction === 'ISSUE' ? 'SHORTAGE' as const : 'SURPLUS' as const,
       movementType: line.movement_type,
       quantity: Number(line.quantity).toFixed(3),
-      postingValue: line.currency ? Number(line.value).toFixed(2) : null,
-      estimate: line.currency ? Number(line.value).toFixed(2) : null,
+      postingValue: line.currency ? Number(line.value).toFixed(line.decimal_places ?? 2) : null,
+      estimate: null,
       currency: line.currency,
       inventoryAccount: null,
       offsetAccount: null,
@@ -675,6 +683,7 @@ export async function getDifferencePosting(
       status: header.status,
       postingDate: null,
       documentDate: null,
+      materialPeriod: null,
       journalRequired: false,
       lines: items.map((item) => {
         const reason = itemReason(item, item.item_number, header);
@@ -714,7 +723,7 @@ export async function validateDifferencePosting(
       );
     }
     const items = await loadItems(tx, input.client, input.documentNumber, input.fiscalYear);
-    const { companyCode, judged } = await judgeSelection(tx, input.client, full, header, items);
+    const { companyCode, judged, materialPeriod } = await judgeSelection(tx, input.client, full, header, items);
     return {
       documentNumber: header.inventory_document_number,
       fiscalYear: header.fiscal_year,
@@ -724,6 +733,7 @@ export async function validateDifferencePosting(
       status: header.status,
       postingDate: input.postingDate,
       documentDate: input.documentDate,
+      materialPeriod,
       journalRequired: judged.some((line) => line.movement.valuation_relevant),
       lines: judged.map((line) => lineView(line, true, null)),
     };
@@ -979,6 +989,8 @@ export async function reverseDifferencePosting(input: {
   postingDate: string;
   documentDate: string;
   headerText?: string;
+  /** Forwarded so the canonical reversal can refuse a reason. This screen does not invent a table. */
+  reason?: string;
   requestKey: string;
 }) {
   return reverseMaterialDocument({
@@ -988,6 +1000,7 @@ export async function reverseDifferencePosting(input: {
     postingDate: input.postingDate,
     documentDate: input.documentDate,
     headerText: input.headerText,
+    reason: input.reason,
     requestKey: input.requestKey,
   });
 }
