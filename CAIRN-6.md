@@ -4001,6 +4001,25 @@ creation, the number range left untouched by a refused create, and cross-tenant 
 
 Same-stage bookkeeping: B-910 / §26.922 / §30 row 2.740.
 
+## §26.923 — SCR-143 stage 2: one column, and the index question answered by the plan
+
+**B-911.** **9081** adds `version integer not null default 1` to the count header. Nothing else
+is stored: the block release is a change-record fact, not a column, and the stock identity the
+package lists (material × plant × location × batch × special stock) needs no new column because
+batch and special stock are refused and the scope is the header's.
+
+**No index is added, and the reason is a plan already measured.** §26.918 measured the guard at
+**0.060 ms** on a hit and **0.046 ms** on a miss after `(client, material_number)`: the item index
+finds the candidate, and the document row is then reached by primary key, where `status` and
+`posting_block` are filters on a single row already in hand. A status index cannot improve a
+lookup that no longer scans. The package's list — tenant, plant, storage location, fiscal year,
+document number, material, status — is satisfied by **two indexes and two primary-key prefixes**,
+and the two indexes were chosen by measurement rather than by the list.
+
+**Migrations 203 → 204.**
+
+Same-stage bookkeeping: B-911 / §26.923 / §30 row 2.741.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4372,5 +4391,5 @@ Same-stage bookkeeping: B-910 / §26.922 / §30 row 2.740.
 | 2.738 | 2026-10-20 | **SCR-142 stage 4: the count screen (B-908, §26.920).** `/inventory/physical-inventory` under **`INV.PHYINV.CREATE`** and **`INV.PHYINV.CANCEL`**: the package\u2019s fields in full and **none of the refused ones**, the company code and fiscal year shown as derived, and the stock each material starts from. Cancellation is reachable from the result panel **and from the list row** \u2014 a block that could only be lifted in the session that created it would be half a control \u2014 and the row\u2019s action re-checks the capability server-side. **6/6 UI-contract tests; harness 142 targets (T842).** | Agent |\nsafety-stock line for anyone who cloned it.
 | 2.739 | 2026-10-20 | **SCR-142 stage 5 and closure: T842 passes, MI01 delivers (B-909, §26.921).** Five legs on the production build: **`PI-2026-0000001`** created with the block and the stock it starts from, **`material_document` and `journal_entry` both empty** read back from the database, a **311 refused** by the guard with the document\u2019s number in the sentence, the count **cancelled from the list row**, and the same transfer then **posting (100 \u2192 95)**. **Suite 1991/1991 in 269 files**; harness **142 targets**; **migrations 203**; registry 169/144/166. The round\u2019s lesson: the ledger records what moved, so a record of what has **not** moved yet is a different object, not the duplicate the last three packages were refused for. | Agent |\n
 | 2.740 | 2026-10-20 | **SCR-143 / MI01 hardening contracted — the bypass and the race (B-910, §26.922).** The second MI01 package, measured against the shipped tree, found **two real defects**: **MBST and the goods-receipt reversal write stock without consulting the block**, and creation does not serialize against a posting already in flight. This round makes the guard an **invariant a test enforces** (every module that writes `stock_quantity` must call it), closes the race with **shared advisory locks in sorted order** on `client/stock-scope/<material>` while creation takes them **exclusive**, adds the **`version`** column canon already uses elsewhere, and audits the **block release** as its own fact. Items stay material-level because batch and special stock are refused and the scope is the header\u2019s; selection-driven generation and snapshots are conditional in the package, and plant-level authorization is refused by canon\u2019s capability model. | Agent |\nBoth files are committed now. Standing lesson: stage by path list that names every
-directory touched, not by the directories the change was *about*.
+| 2.741 | 2026-10-20 | **SCR-143 stage 2: the version column, and no status index (B-911, §26.923).** **9081** adds `version` to the count header \u2014 the convention finance already keeps \u2014 and nothing else: the block release is a change-record fact and the stock identity needs no column while batch and special stock are refused. **No index added**: §26.918 already measured the guard at 0.060 ms on a hit and 0.046 on a miss, and `status` is a filter on a primary-key row already in hand, so a status index cannot improve it. The package\u2019s seven-column list is satisfied by two measured indexes and two PK prefixes. **Migrations 204.** | Agent |\ndirectory touched, not by the directories the change was *about*.
 

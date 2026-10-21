@@ -494,6 +494,8 @@ export const physicalInventoryDocument = pgTable('physical_inventory_document', 
   postingBlock: boolean('posting_block').notNull().default(false),
   /** CREATED, or CANCELLED before anything is counted. COUNTED and ADJUSTED arrive with MI04/MI07. */
   status: varchar('status', { length: 16 }).notNull().default('CREATED'),
+  /** Bumped on every change, so two states of one document are distinguishable without timestamps. */
+  version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
