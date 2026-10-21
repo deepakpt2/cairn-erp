@@ -116,6 +116,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'goods-issue': { database: 'cairn_b210', port: '5432', batch: 'SCR-136 local loopback' },
   'migo-component-issue': { database: 'cairn_b210', port: '5432', batch: 'SCR-139 local loopback' },
   'migo-production-receipt': { database: 'cairn_b210', port: '5432', batch: 'SCR-140 local loopback' },
+  'migo-transfer-posting': { database: 'cairn_b210', port: '5432', batch: 'SCR-141 local loopback' },
   'production-order-create': { database: 'cairn_b210', port: '5432', batch: 'SCR-138 local loopback' },
   'journal-document-display': { database: 'cairn_b210', port: '5432', batch: 'SCR-137 local loopback' },
   'material-document-output': { database: 'cairn_b210', port: '5432', batch: 'SCR-135 local loopback' },

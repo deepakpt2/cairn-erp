@@ -3715,6 +3715,35 @@ calls — so MB1B and MIGO are two doors into one implementation. That is the se
 
 Same-stage bookkeeping: B-903 / §26.915 / §30 row 2.733.
 
+## §26.916 — SCR-141 stage 5 and closure: T841 passes, the transfer posts where SAP posts it
+
+**B-904.** T841 (`migo-transfer-posting`, `cairn_b210:5432`, fixture `T841`) runs on the
+production build and proves three movements and one refusal on one screen:
+
+1. **311** with 10 units from `QG03/SG03` to `QG03/SG04`: source **100 → 90**, destination
+   **0 → 10**, the document stands as **two lines**, and `journal_document_number` is **null** —
+   the result panel says "no journal — the transfer moves quantity only" and the check reads the
+   column, not the sentence.
+2. **301** with 10 units from `QG03` to `QG04`: the far plant receives **10** valued at its own
+   standard price (**120**), the origin falls to **900**, and the journal carries **the valuation
+   difference on its own account** beside the two inventory lines.
+3. **321** with 5 units inside `QG03/SG03`: quality inspection **20 → 15**, unrestricted
+   **90 → 85**.
+4. A **311 whose plants differ** refused in the screen's own words — `QG04 differs from QG03` —
+   with the remedy naming 301.
+
+One defect came out of the run and is worth recording: the first version read the destination
+valuation through a camel-case SQL alias, and the driver returned it lower-cased, so the
+assertion compared `NaN` with 120. The assertion, not the posting, was wrong — a reminder that a
+read-back is only evidence if the column name you read is the column name the database returns.
+
+**Suite 1970/1970 in 267 files**; **harness 141 targets**; **migrations 200** (no table, no
+column, no index — §26.913). The matrix finishes this round with **25 cells, three of them
+posting**, and MIGO is now the entry point for **261, 101 and the three transfers** in one
+screen, which is the parity the owner asked for at §26.902 and again at §26.912.
+
+Same-stage bookkeeping: B-904 / §26.916 / §30 row 2.734.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4079,7 +4108,7 @@ Same-stage bookkeeping: B-903 / §26.915 / §30 row 2.733.
 | 2.731 | 2026-10-20 | **SCR-141 stage 2: no migration, and nothing to store (B-901, §26.913).** The transfer is a two-line material document that already exists, `A04 + R10` carries **no reference document**, and 311/301/321 with their counters are **per-tenant catalogue rows the service writes** — the live constraints already accept `TRANSFER` and `MATERIAL_DOCUMENT`. The two looks land on `stock_quantity_pkey` and the valuation primary key, the shape SCR-131 measured, so **no index**. **Migrations stay 200.** | Agent |
 | 2.732 | 2026-10-20 | **SCR-141 stage 3: 25 cells, three of them posting (B-902, §26.914).** `R10 \u00b7 Other` joins the reference list; **`POST_HERE` gains a `form` discriminator** (ISSUE / RECEIPT / TRANSFER) so the screen renders by shape rather than by matching a movement string, and the transfer cell carries **`movements: 311/301/321`** drawn from the catalogue. `A04` with any other reference **refuses by name and names R10**. The coherence rules are SCR-131\u2019s, reached from a second caller \u2014 no judgement of its own. **7 new tests, matrix contract reworked to 25 cells / three posting cells, 35/35 across the four MIGO suites.** | Agent |
 | 2.733 | 2026-10-20 | **SCR-141 stage 4: the third form (B-903, §26.915).** `MigoShell` renders **by `cell.form`**, not by matching a movement code \u2014 the matrix stays the only place that decides what a cell is. The transfer form offers movement, material, quantity, both locations and both plants; the result states **\u201cno journal\u201d** where 311/321 moved quantity only and links MB03, adding FB03 where 301 carried value. `postTransferAction` re-resolves the cell and checks the movement against `cell.movements`, and calls the **standing `postTransfer`** \u2014 two doors, one engine. **12/12 matrix contract, 7/7 transfer.** | Agent |\nmovement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
-but **were never staged**: the stage-4 commit listed directories, and
+| 2.734 | 2026-10-20 | **SCR-141 stage 5 and closure: T841 passes, A04 delivers (B-904, §26.916).** Four legs on the production build: a **311** moving ten units inside a plant with **no journal** and a two-line document, a **301** across plants valuing the arrival at its own standard price (120 for ten) and posting **the difference on its own account**, a **321** taking five from quality inspection to unrestricted, and a **311 whose plants differ refused** with both plants named and 301 offered as the remedy. The first run failed on a **camel-case SQL alias the driver lower-cased** \u2014 the assertion was wrong, not the posting. **Suite 1970/1970 in 267 files**; harness **141 targets**; migrations 200. | Agent |\nbut **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
 runs read the working tree, so nothing was falsely reported as passing — but the
 pushed tree lacked the label, which would have shown a reservation as a

@@ -90,6 +90,7 @@ import { journalDocumentDisplay } from './journal-document-display';
 import { productionOrderCreate } from './production-order-create';
 import { migoComponentIssue } from './migo-component-issue';
 import { migoProductionReceipt } from './migo-production-receipt';
+import { migoTransferPosting } from './migo-transfer-posting';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5032,6 +5033,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'production-order-create': productionOrderCreate,
   'migo-component-issue': migoComponentIssue,
   'migo-production-receipt': migoProductionReceipt,
+  'migo-transfer-posting': migoTransferPosting,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,
