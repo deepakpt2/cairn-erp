@@ -8,16 +8,24 @@ import {
   MIGO_ACTIONS, MIGO_REFERENCES, resolveMigoCell,
 } from '@/modules/inventory/migo';
 import {
-  postMigoAction, postReceiptAction, type MigoActionState, type ReceiptActionState,
+  postMigoAction, postReceiptAction, postTransferAction,
+  type MigoActionState, type ReceiptActionState, type TransferActionState,
 } from './actions';
 
 const INITIAL: MigoActionState = { ok: false, message: '' };
 const INITIAL_RECEIPT: ReceiptActionState = { ok: false, message: '' };
+const INITIAL_TRANSFER: TransferActionState = { ok: false, message: '' };
+const TRANSFER_MEANINGS: Record<string, string> = {
+  '311': 'storage location to storage location',
+  '301': 'plant to plant',
+  '321': 'quality inspection to unrestricted',
+};
 const LINES = [1, 2, 3, 4];
 
 export default function MigoShell({ canPost, today }: { canPost: boolean; today: string }) {
   const [state, action, posting] = useActionState(postMigoAction, INITIAL);
   const [receipt, receiptAction, receiving] = useActionState(postReceiptAction, INITIAL_RECEIPT);
+  const [transfer, transferAction, transferring] = useActionState(postTransferAction, INITIAL_TRANSFER);
   const [migoAction, setAction] = useState('A07');
   const [reference, setReference] = useState('R08');
   const [requestKey] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
@@ -83,7 +91,126 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         )}
       </section>
 
-      {cell?.kind === 'POST_HERE' && cell.movement === '101' && (
+      {cell?.kind === 'POST_HERE' && cell.form === 'TRANSFER' && (
+        <section aria-labelledby="movement-transfer" className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="movement-transfer" className="text-sm font-semibold">{t('migo.transferHeader')}</h2>
+          <p className="mt-1 text-sm text-ink-soft">{t('migo.transferHint')}</p>
+          <p role="status" className={`mt-2 text-sm ${transfer.ok ? 'text-ink' : 'text-red-700'}`}>
+            {transfer.message}{transfer.remedy ? ` ${transfer.remedy}` : ''}
+          </p>
+          <form action={transferAction}>
+            <input type="hidden" name="requestKey" value={requestKey} />
+            <input type="hidden" name="migoAction" value={migoAction} />
+            <input type="hidden" name="migoReference" value={reference} />
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <label className="block">
+                <span className="field-label">{t('migo.transferMovement')}</span>
+                <select name="movementTypeCode" className="input w-full" defaultValue={cell.movements?.[0]}>
+                  {(cell.movements ?? []).map((code) => (
+                    <option key={code} value={code}>{code} — {TRANSFER_MEANINGS[code] ?? ''}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.columnMaterial')}</span>
+                <input name="materialNumber" className="input w-full" placeholder="MAT-…" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.transferQuantity')}</span>
+                <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full text-right" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.headerText')}</span>
+                <input name="headerText" className="input w-full" maxLength={25} />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.issuingPlant')}</span>
+                <input name="issuingPlant" className="input w-full" placeholder="1000" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.issuingLocation')}</span>
+                <input name="issuingStorageLocation" className="input w-full" placeholder="0001" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.receivingPlant')}</span>
+                <input name="receivingPlant" className="input w-full" placeholder="1000" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.receivingLocation')}</span>
+                <input name="receivingStorageLocation" className="input w-full" placeholder="0002" required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.postingDate')}</span>
+                <input type="date" name="postingDate" className="input w-full" defaultValue={today} required />
+              </label>
+              <label className="block">
+                <span className="field-label">{t('migo.documentDate')}</span>
+                <input type="date" name="documentDate" className="input w-full" defaultValue={today} required />
+              </label>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || transferring}>
+                {transferring ? t('migo.posting') : t('migo.transferPost')}
+              </button>
+              {!canPost && <p className="text-sm text-ink-soft">{t('migo.noPost')}</p>}
+            </div>
+          </form>
+
+          {transfer.document && (
+            <section aria-labelledby="movement-transfer-result" className="mt-3 rounded-card border border-line bg-surface p-3">
+              <h3 id="movement-transfer-result" className="text-sm font-semibold">
+                {t('migo.document')}{' '}
+                <span className="code" data-transfer-document={transfer.document.materialDocumentNumber}>{transfer.document.materialDocumentNumber}</span>
+              </h3>
+              <p className="mt-1 text-sm text-ink-soft">
+                {t('migo.journal')}{' '}
+                {transfer.document.journalDocumentNumber ? (
+                  <Link
+                    className="code text-accent hover:underline"
+                    href={`/finance/journal/document?document=${encodeURIComponent(transfer.document.journalDocumentNumber)}`}
+                  >
+                    {transfer.document.journalDocumentNumber}
+                  </Link>
+                ) : t('migo.transferNoJournal')}
+                {' · '}
+                <Link
+                  className="text-accent hover:underline"
+                  href={`/inventory/material-documents?document=${encodeURIComponent(transfer.document.materialDocumentNumber)}&fiscalYear=${transfer.document.documentYear}`}
+                >
+                  {t('migo.openDocument')}
+                </Link>
+              </p>
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="py-1">{t('migo.columnLine')}</th>
+                    <th className="py-1">{t('migo.columnMaterial')}</th>
+                    <th className="py-1">{t('migo.columnPlant')}</th>
+                    <th className="py-1">{t('migo.columnLocation')}</th>
+                    <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
+                    <th className="py-1 text-right">{t('migo.columnValue')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transfer.document.lines.map((line) => (
+                    <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
+                      <td className="py-1">{line.lineNumber}</td>
+                      <td className="py-1">{line.materialNumber}</td>
+                      <td className="py-1">{line.plant}</td>
+                      <td className="py-1">{line.storageLocation ?? '—'}</td>
+                      <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
+                      <td className="py-1 text-right tabular">{line.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+        </section>
+      )}
+
+      {cell?.kind === 'POST_HERE' && cell.form === 'RECEIPT' && (
         <section aria-labelledby="movement-receipt" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="movement-receipt" className="text-sm font-semibold">{t('migo.receiptHeader')}</h2>
           <p className="mt-1 text-sm text-ink-soft">{t('migo.receiptHint')}</p>
@@ -185,7 +312,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
         </section>
       )}
 
-      {cell?.kind === 'POST_HERE' && cell.movement === '261' && (
+      {cell?.kind === 'POST_HERE' && cell.form === 'ISSUE' && (
         <section aria-labelledby="movement-items" className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 id="movement-items" className="text-sm font-semibold">{t('migo.itemsHeader')}</h2>
           <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>

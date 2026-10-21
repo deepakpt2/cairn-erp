@@ -3688,6 +3688,33 @@ posting cells** (11). Combined with the two order suites: **35/35**.
 
 Same-stage bookkeeping: B-902 / §26.914 / §30 row 2.732.
 
+## §26.915 — SCR-141 stage 4: the third form, and a screen that renders by shape
+
+**B-903.** `MigoShell` now renders **three forms and only ever one at a time**, chosen by the
+cell's `form` rather than by comparing a movement string. That change is small in the file and
+large in the design: the screen no longer knows that 101 is a receipt or that 311 is a transfer —
+it knows a cell says `RECEIPT`, `TRANSFER` or `ISSUE`, and the matrix remains the single place
+that decides.
+
+**The transfer form** carries movement (a select drawn from `cell.movements`, so the screen offers
+exactly the three the catalogue defines and nothing else), material, quantity, issuing plant and
+location, receiving plant and location, both dates and header text. Its result panel names the
+document, states **"no journal — the transfer moves quantity only"** where 311 or 321 posted none,
+links **FB03** where a journal exists (301 carrying value between plants) and always links **MB03**.
+
+**`postTransferAction`** re-resolves the cell on the server, refuses anything that is not
+`POST_HERE` with `form === 'TRANSFER'`, and then checks the posted movement against
+**`cell.movements`** — so a tampered form cannot post a 309 the matrix does not offer, and cannot
+reach the transfer engine from the receipt or issue cell.
+
+**One engine.** The action calls `postTransfer` — the same function `/inventory/transfer-posting`
+calls — so MB1B and MIGO are two doors into one implementation. That is the sentence the matrix's
+`ELSEWHERE` reason had been promising since §26.905.
+
+**12/12 matrix contract tests** (a new one for the transfer form), **7/7 transfer tests**.
+
+Same-stage bookkeeping: B-903 / §26.915 / §30 row 2.733.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4051,7 +4078,7 @@ Same-stage bookkeeping: B-902 / §26.914 / §30 row 2.732.
 | 2.730 | 2026-10-20 | **SCR-141 / MIGO A04 contracted — the transfer posts from the same screen (B-900, §26.912).** SAP enters a transfer posting in MIGO against reference **\u201cOther\u201d** with the movement on the item, so the reference list gains **`R10 · Other`** and the matrix becomes **25 cells**. **`A04 + R10` becomes `POST_HERE`** with **311 / 301 / 321** chosen per item, the pair of locations judging coherence (same plant for 311, different plant and one company code for 301, same plant and location for 321). **One engine, two entry points**: the form calls the standing `postTransfer`, so MB1B and MIGO share one implementation, and the server re-resolves the cell. `A04` with any other reference **refuses by name**, naming `R10`. Deferred by name: delivery references, 309, 305, two-step 303/313, cross-company transfer, batch, special stock. | Agent |
 | 2.731 | 2026-10-20 | **SCR-141 stage 2: no migration, and nothing to store (B-901, §26.913).** The transfer is a two-line material document that already exists, `A04 + R10` carries **no reference document**, and 311/301/321 with their counters are **per-tenant catalogue rows the service writes** — the live constraints already accept `TRANSFER` and `MATERIAL_DOCUMENT`. The two looks land on `stock_quantity_pkey` and the valuation primary key, the shape SCR-131 measured, so **no index**. **Migrations stay 200.** | Agent |
 | 2.732 | 2026-10-20 | **SCR-141 stage 3: 25 cells, three of them posting (B-902, §26.914).** `R10 \u00b7 Other` joins the reference list; **`POST_HERE` gains a `form` discriminator** (ISSUE / RECEIPT / TRANSFER) so the screen renders by shape rather than by matching a movement string, and the transfer cell carries **`movements: 311/301/321`** drawn from the catalogue. `A04` with any other reference **refuses by name and names R10**. The coherence rules are SCR-131\u2019s, reached from a second caller \u2014 no judgement of its own. **7 new tests, matrix contract reworked to 25 cells / three posting cells, 35/35 across the four MIGO suites.** | Agent |
-movement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
+| 2.733 | 2026-10-20 | **SCR-141 stage 4: the third form (B-903, §26.915).** `MigoShell` renders **by `cell.form`**, not by matching a movement code \u2014 the matrix stays the only place that decides what a cell is. The transfer form offers movement, material, quantity, both locations and both plants; the result states **\u201cno journal\u201d** where 311/321 moved quantity only and links MB03, adding FB03 where 301 carried value. `postTransferAction` re-resolves the cell and checks the movement against `cell.movements`, and calls the **standing `postTransfer`** \u2014 two doors, one engine. **12/12 matrix contract, 7/7 transfer.** | Agent |\nmovement-key renames in `scripts/plan-mb21.mts` were made during SCR-133 stage 4
 but **were never staged**: the stage-4 commit listed directories, and
 `src/app/production` was not among them. The green suite and the passing browser
 runs read the working tree, so nothing was falsely reported as passing — but the

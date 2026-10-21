@@ -10,12 +10,22 @@ import { MIGO_CAPABILITY, MIGO_ROUTE, resolveMigoCell } from '@/modules/inventor
 import {
   ProductionReceiptError, postProductionReceipt, type ProductionReceiptView,
 } from '@/modules/inventory/production-receipt';
+import {
+  TransferPostingError, postTransfer, type TransferDocumentView,
+} from '@/modules/inventory/transfer-posting';
 
 export interface MigoActionState {
   ok: boolean;
   message: string;
   remedy?: string;
   document?: GoodsIssueView | null;
+}
+
+export interface TransferActionState {
+  ok: boolean;
+  message: string;
+  remedy?: string;
+  document?: TransferDocumentView | null;
 }
 
 export interface ReceiptActionState {
@@ -127,5 +137,54 @@ export async function postReceiptAction(
       return { ok: false, message: caught.message, remedy: caught.remedy, document: null };
     }
     return { ok: false, message: 'The receipt could not be posted.', document: null };
+  }
+}
+
+/**
+ * A04 + R10 — the transfer posting, entered where SAP enters it: on the movement screen,
+ * against "Other", with the movement chosen on the item. The cell is re-resolved here for the
+ * same reason the other two are, and the movement is checked against the cell's own list.
+ */
+export async function postTransferAction(
+  _previous: TransferActionState,
+  form: FormData,
+): Promise<TransferActionState> {
+  const session = await requireSession(MIGO_ROUTE);
+  if (!can(session, MIGO_CAPABILITY)) {
+    return { ok: false, message: 'You do not hold the goods movement capability.' };
+  }
+  const cell = resolveMigoCell(text(form, 'migoAction'), text(form, 'migoReference'));
+  if (!cell || cell.kind !== 'POST_HERE' || cell.form !== 'TRANSFER') {
+    return { ok: false, message: 'This form posts a transfer posting only.' };
+  }
+  const movement = text(form, 'movementTypeCode');
+  if (!cell.movements?.includes(movement)) {
+    return { ok: false, message: `Movement ${movement || '(none)'} is not posted from this cell.` };
+  }
+
+  try {
+    const document = await postTransfer({
+      client: session.user.client,
+      changedBy: session.user.username,
+      movementTypeCode: movement,
+      materialNumber: text(form, 'materialNumber'),
+      quantity: Number(text(form, 'quantity') || '0'),
+      issuingPlant: text(form, 'issuingPlant'),
+      issuingStorageLocation: text(form, 'issuingStorageLocation'),
+      receivingPlant: text(form, 'receivingPlant'),
+      receivingStorageLocation: text(form, 'receivingStorageLocation'),
+      stockType: text(form, 'stockType') || undefined,
+      postingDate: text(form, 'postingDate'),
+      documentDate: text(form, 'documentDate'),
+      headerText: text(form, 'headerText') || undefined,
+      requestKey: text(form, 'requestKey'),
+    });
+    revalidatePath(MIGO_ROUTE);
+    return { ok: true, message: `Posted: material document ${document.materialDocumentNumber}.`, document };
+  } catch (caught) {
+    if (caught instanceof TransferPostingError) {
+      return { ok: false, message: caught.message, remedy: caught.remedy, document: null };
+    }
+    return { ok: false, message: 'The transfer could not be posted.', document: null };
   }
 }

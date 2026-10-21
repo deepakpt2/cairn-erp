@@ -93,14 +93,26 @@ describe('SCR-139 MIGO action/reference matrix', () => {
   });
 
   it('carries a receipt form of its own for A01 + R08, and posts through the receipt service', () => {
-    expect(shell).toContain("cell.movement === '101'");
-    expect(shell).toContain("cell.movement === '261'");
+    expect(shell).toContain("cell.form === 'RECEIPT'");
+    expect(shell).toContain("cell.form === 'ISSUE'");
     expect(shell).toContain('data-receipt-document');
     expect(shell).toContain('name="storageLocation"');
     expect(shell).toContain("name=\"quantity\"");
     expect(actions).toContain('postProductionReceipt');
     expect(actions).toContain("cell.movement !== '101'");
     expect(messages).toContain("'migo.receiptHeader'");
+  });
+
+  it('carries a transfer form of its own for A04 + R10, and posts through the transfer service', () => {
+    expect(shell).toContain("cell.form === 'TRANSFER'");
+    expect(shell).toContain('data-transfer-document');
+    expect(shell).toContain('name="movementTypeCode"');
+    expect(shell).toContain('name="issuingStorageLocation"');
+    expect(shell).toContain('name="receivingStorageLocation"');
+    expect(shell).toContain('cell.movements');
+    expect(actions).toContain('postTransfer(');
+    expect(actions).toContain("cell.form !== 'TRANSFER'");
+    expect(messages).toContain("'migo.transferHeader'");
   });
 
   it('registers INV.MIGO.POST on its route with MIGO as the alias', () => {
