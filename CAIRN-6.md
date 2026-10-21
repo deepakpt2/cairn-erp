@@ -3944,6 +3944,63 @@ have failed had the table been the duplicate the earlier rounds refused.
 
 Same-stage bookkeeping: B-909 / §26.921 / §30 row 2.739.
 
+## §26.922 — SCR-143 / MI01 hardening: the block reaches every path, and the race is closed
+
+**B-910.** SCR-142 delivered the count and a block that refuses **transfers and issues**. The
+owner's second MI01 package asks for every stock-changing path and for creation to be serialized
+against movements already in flight, and measuring the shipped tree against that package found
+**two real defects**: `material-document-reversal.ts` (MBST) writes stock without consulting the
+guard, and `reverseGoodsReceipt` does the same. **A control with a known bypass is worse than no
+control**, because the book then claims a block it cannot always enforce. This round closes the
+bypass and the race, and adds the package's remaining non-deferred items.
+
+**Every stock-writing path is guarded.** The rule is made an invariant a test enforces rather
+than a fact about today's files: `assertInventoryCountOpen` must be called by **every module that
+writes `stock_quantity`**. Five modules write stock; four were guarded; the reversal engine now
+joins them, which covers MBST and the goods-receipt reversal in one place.
+
+**The race is closed with advisory locks, not with hope.** A posting is not blocked by a count
+that commits after the posting has already read the ledger. So:
+
+- every stock-moving service takes a **shared** transaction advisory lock on
+  `client/stock-scope/<material>` for each material it moves, in **sorted order** so two postings
+  cannot deadlock against each other;
+- creating a count takes the **exclusive** lock on each of its materials, in the same order.
+
+The consequence is exactly the property the package asks for: a count cannot be created under a
+posting that is mid-flight (the exclusive lock waits), and a posting that starts after the count
+commits waits, then reads, and then sees the block. Existing fixtures and behaviour are
+unchanged — the lock is taken only where the guard already runs.
+
+**`version` on the header**, because canon already carries that convention in the finance schema
+and MI01 simply did not use it: every change increments it, so a reader can tell two states of
+one document apart without diffing timestamps.
+
+**The block release is audited as its own fact**, not as a status change the reader has to infer:
+the cancellation records `blockReleased` with the document number in the change reason.
+
+**Items stay material-level, and that is a ruling rather than an omission.** The package's stock
+identity is material × plant × storage location × batch × special stock; **batch and special
+stock are refused by name**, and plant and storage location stand on the header because a count
+document *is* a scope. With the refused dimensions removed, material is the whole identity, so
+the existing unique index already forbids duplicate stock identities. Adding plant and location
+to each item would store the header's scope a second time.
+
+**Not items of this round, and why:** the two remaining ❌ marks in the package — **selection-
+driven item generation** and **stock snapshots** — are both written as conditional
+("depending on the supported UI workflow", "if a stock snapshot is required"). Manual entry on a
+six-line grid is the supported workflow, and the screen shows live stock at creation. **Plant-
+level inventory authorization** is refused by canon's architecture: authorization is by
+capability, tenant-wide, in every module — a plant-scoped role model is a different system, not
+a gap in this screen.
+
+**Acceptance:** T842 is extended — a **posted 311 is reversed after a count blocks the material
+and the reversal is refused**, the count is cancelled, and the reversal then posts. Vitest adds
+the invariant test, the lock-protocol test (two connections, try-lock, no timing), multi-material
+creation, the number range left untouched by a refused create, and cross-tenant isolation.
+
+Same-stage bookkeeping: B-910 / §26.922 / §30 row 2.740.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4314,6 +4371,6 @@ Same-stage bookkeeping: B-909 / §26.921 / §30 row 2.739.
 | 2.737 | 2026-10-20 | **SCR-142 stage 3: the count service and an enforced block (B-907, §26.919).** `createPhysicalInventory` draws `PI-2026-0000001` under its fiscal year, writes header and items, and leaves **`material_document` and `journal_entry` empty** \u2014 the test reads the ledger. `assertInventoryCountOpen` is called by **receipt, issue, transfer and production receipt**, each translating it into its own error type so no screen learns a new failure mode; the proof is a **311 and a 551 refused** while a **second material in the same location posts**, and the same transfer passing once the count is cancelled. **9080** widens the number column: 9078 sized it from SAP\u2019s bare IBLNR instead of canon\u2019s year-bearing display. **14/14 tests; suite 1984/1984 in 268 files.** | Agent |\npushed tree lacked the label, which would have shown a reservation as a
 | 2.738 | 2026-10-20 | **SCR-142 stage 4: the count screen (B-908, §26.920).** `/inventory/physical-inventory` under **`INV.PHYINV.CREATE`** and **`INV.PHYINV.CANCEL`**: the package\u2019s fields in full and **none of the refused ones**, the company code and fiscal year shown as derived, and the stock each material starts from. Cancellation is reachable from the result panel **and from the list row** \u2014 a block that could only be lifted in the session that created it would be half a control \u2014 and the row\u2019s action re-checks the capability server-side. **6/6 UI-contract tests; harness 142 targets (T842).** | Agent |\nsafety-stock line for anyone who cloned it.
 | 2.739 | 2026-10-20 | **SCR-142 stage 5 and closure: T842 passes, MI01 delivers (B-909, §26.921).** Five legs on the production build: **`PI-2026-0000001`** created with the block and the stock it starts from, **`material_document` and `journal_entry` both empty** read back from the database, a **311 refused** by the guard with the document\u2019s number in the sentence, the count **cancelled from the list row**, and the same transfer then **posting (100 \u2192 95)**. **Suite 1991/1991 in 269 files**; harness **142 targets**; **migrations 203**; registry 169/144/166. The round\u2019s lesson: the ledger records what moved, so a record of what has **not** moved yet is a different object, not the duplicate the last three packages were refused for. | Agent |\n
-Both files are committed now. Standing lesson: stage by path list that names every
+| 2.740 | 2026-10-20 | **SCR-143 / MI01 hardening contracted — the bypass and the race (B-910, §26.922).** The second MI01 package, measured against the shipped tree, found **two real defects**: **MBST and the goods-receipt reversal write stock without consulting the block**, and creation does not serialize against a posting already in flight. This round makes the guard an **invariant a test enforces** (every module that writes `stock_quantity` must call it), closes the race with **shared advisory locks in sorted order** on `client/stock-scope/<material>` while creation takes them **exclusive**, adds the **`version`** column canon already uses elsewhere, and audits the **block release** as its own fact. Items stay material-level because batch and special stock are refused and the scope is the header\u2019s; selection-driven generation and snapshots are conditional in the package, and plant-level authorization is refused by canon\u2019s capability model. | Agent |\nBoth files are committed now. Standing lesson: stage by path list that names every
 directory touched, not by the directories the change was *about*.
 
