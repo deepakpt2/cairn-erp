@@ -175,6 +175,10 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full text-right" required />
               </label>
               <label className="block">
+                <span className="field-label">{t('migo.entryUnit')}</span>
+                <input name="unit" className="input w-full uppercase" placeholder="PC" maxLength="6" data-entry-unit />
+              </label>
+              <label className="block">
                 <span className="field-label">{t('migo.headerText')}</span>
                 <input name="headerText" className="input w-full" maxLength={25} />
               </label>
@@ -301,6 +305,10 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 <span className="field-label">{t('migo.receiptQuantity')}</span>
                 <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full text-right" required />
               </label>
+              <label className="block">
+                <span className="field-label">{t('migo.entryUnit')}</span>
+                <input name="unit" className="input w-full uppercase" placeholder="PC" maxLength="6" data-entry-unit />
+              </label>
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -404,6 +412,7 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                   <th className="py-1">{t('migo.columnPlant')}</th>
                   <th className="py-1">{t('migo.columnLocation')}</th>
                   <th className="py-1 text-right">{t('migo.columnQuantity')}</th>
+                  <th className="py-1">{t('migo.entryUnit')}</th>
                   <th className="py-1">{t('migo.columnItem')}</th>
                 </tr>
               </thead>
@@ -416,6 +425,10 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                     <td className="py-1"><input name={`sloc-${n}`} className="input w-24" placeholder="0001" /></td>
                     <td className="py-1">
                       <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
+                    </td>
+                    <td className="py-1">
+                      <input name={`unit-${n}`} className="input w-20 uppercase" maxLength="6"
+                             aria-label={`${t('migo.entryUnit')} ${n}`} data-entry-unit />
                     </td>
                     <td className="py-1">
                       <input name={`orderItem-${n}`} className="input w-20" placeholder="10" aria-label={`${t('migo.columnItem')} ${n}`} />

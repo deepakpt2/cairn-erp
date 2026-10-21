@@ -7,6 +7,7 @@
  */
 import { and, eq } from 'drizzle-orm';
 
+import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { materialUomConversion, material } from './schema';
@@ -59,7 +60,8 @@ export async function toBaseQuantity(
     );
   }
   const baseUnit = master.baseUnit;
-  const entryUnit = (input.entryUnit ?? '').trim() || baseUnit;
+  // Unit codes are uppercase in the catalogue; a form may submit them in any case.
+  const entryUnit = (input.entryUnit ?? '').trim().toUpperCase() || baseUnit;
 
   if (entryUnit === baseUnit) {
     return { baseQuantity: input.quantity, baseUnit, factor: '1/1' };
@@ -149,6 +151,102 @@ export async function defineUomConversion(input: {
         changedBy: input.changedBy,
         changedAt: new Date(),
       },
+    });
+  });
+}
+
+export interface UomConversionRow {
+  materialNumber: string;
+  materialDescription: string;
+  baseUnit: string;
+  alternativeUnit: string;
+  numerator: number;
+  denominator: number;
+  factor: string;
+}
+
+/**
+ * The conversions a material carries, for the maintenance screen. Read-only: one select,
+ * ordered so a reader sees a material's units together.
+ */
+export async function listUomConversions(
+  client: string,
+  filter: { materialNumber?: string } = {},
+): Promise<UomConversionRow[]> {
+  return withTenant(client, async (tx) => {
+    const where = filter.materialNumber
+      ? and(eq(materialUomConversion.client, client),
+        eq(materialUomConversion.materialNumber, filter.materialNumber))
+      : eq(materialUomConversion.client, client);
+    const rows = await tx.select({
+      materialNumber: materialUomConversion.materialNumber,
+      materialDescription: material.description,
+      baseUnit: material.baseUnit,
+      alternativeUnit: materialUomConversion.alternativeUnit,
+      numerator: materialUomConversion.numerator,
+      denominator: materialUomConversion.denominator,
+    })
+      .from(materialUomConversion)
+      .innerJoin(material, and(
+        eq(material.client, materialUomConversion.client),
+        eq(material.materialNumber, materialUomConversion.materialNumber),
+      ))
+      .where(where)
+      .orderBy(materialUomConversion.materialNumber, materialUomConversion.alternativeUnit);
+
+    return rows.map((row) => ({
+      materialNumber: row.materialNumber,
+      materialDescription: row.materialDescription ?? '',
+      baseUnit: row.baseUnit ?? '',
+      alternativeUnit: row.alternativeUnit,
+      numerator: row.numerator,
+      denominator: row.denominator,
+      factor: `${row.numerator}/${row.denominator}`,
+    }));
+  });
+}
+
+/** The units the catalogue knows, so the form refuses a typo before the service does. */
+export async function listUnitsOfMeasure(client: string): Promise<Array<{ code: string; name: string; decimals: number }>> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.select({
+      code: unitOfMeasure.code, name: unitOfMeasure.name, decimals: unitOfMeasure.decimalPlaces,
+    }).from(unitOfMeasure).orderBy(unitOfMeasure.code);
+    return rows.map((row) => ({ code: row.code, name: row.name, decimals: row.decimals }));
+  });
+}
+
+/**
+ * Remove one alternative unit. The material then accepts its base unit only, and any posting
+ * that names the removed unit is refused by name — which is why this returns what it removed.
+ */
+export async function removeUomConversion(input: {
+  client: string;
+  changedBy: string;
+  materialNumber: string;
+  alternativeUnit: string;
+}): Promise<void> {
+  const alternativeUnit = input.alternativeUnit.trim().toUpperCase();
+  await withTenant(input.client, async (tx) => {
+    const removed = await tx.delete(materialUomConversion).where(and(
+      eq(materialUomConversion.client, input.client),
+      eq(materialUomConversion.materialNumber, input.materialNumber.trim()),
+      eq(materialUomConversion.alternativeUnit, alternativeUnit),
+    )).returning({ alternativeUnit: materialUomConversion.alternativeUnit });
+    if (removed.length === 0) {
+      throw new UnitConversionError(
+        `Material ${input.materialNumber} carries no conversion from ${alternativeUnit}.`,
+        'Reload the list; the conversion may already have been removed.',
+      );
+    }
+    await recordChange(tx, {
+      client: input.client,
+      objectClass: 'MATERIAL_UOM_CONVERSION',
+      objectKey: `${input.materialNumber.trim()}/${alternativeUnit}`,
+      changeType: 'DELETE',
+      changedBy: input.changedBy,
+      transactionCode: UOM_CAPABILITY,
+      before: { alternativeUnit },
     });
   });
 }

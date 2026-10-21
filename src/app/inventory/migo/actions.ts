@@ -73,7 +73,7 @@ export async function postMigoAction(
 
   const lines: Array<{
     materialNumber: string; plant: string; storageLocation?: string; quantity: number;
-    productionOrderNumber?: string; productionOrderItem?: number;
+    entryUnit?: string; productionOrderNumber?: string; productionOrderItem?: number;
   }> = [];
   for (let n = 1; n <= LINE_COUNT; n += 1) {
     const materialNumber = text(form, `material-${n}`);
@@ -83,6 +83,7 @@ export async function postMigoAction(
       plant: text(form, `plant-${n}`),
       storageLocation: text(form, `sloc-${n}`) || undefined,
       quantity: Number(text(form, `quantity-${n}`) || '0'),
+      entryUnit: text(form, `unit-${n}`) || undefined,
       productionOrderNumber: text(form, `order-${n}`) || text(form, 'orderNumber') || undefined,
       productionOrderItem: Number(text(form, `orderItem-${n}`) || text(form, 'orderItem') || '0') || undefined,
     });
@@ -137,6 +138,7 @@ export async function postReceiptAction(
       lines: [{
         storageLocation: text(form, 'storageLocation'),
         quantity: Number(text(form, 'quantity') || '0'),
+        entryUnit: text(form, 'unit') || undefined,
       }],
       requestKey: text(form, 'requestKey'),
     });
@@ -179,6 +181,7 @@ export async function postTransferAction(
       movementTypeCode: movement,
       materialNumber: text(form, 'materialNumber'),
       quantity: Number(text(form, 'quantity') || '0'),
+      entryUnit: text(form, 'unit') || undefined,
       issuingPlant: text(form, 'issuingPlant'),
       issuingStorageLocation: text(form, 'issuingStorageLocation'),
       receivingPlant: text(form, 'receivingPlant'),
