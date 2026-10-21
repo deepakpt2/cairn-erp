@@ -4,8 +4,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import {
-  changePurchasingInfoRecord, createPurchasingInfoRecord, previewPurchasingInfoRecord,
-  resolvePurchasingInfoRecord, writePurchasingInfoRecord,
+  changePurchasingInfoRecord, createPurchasingInfoRecord, findPurchasingInfoRecord,
+  getPurchasingInfoRecord, previewPurchasingInfoRecord, resolvePurchasingInfoRecord,
+  writePurchasingInfoRecord,
 } from '../src/modules/purchasing/info-record';
 import { changeOrder, createOrder, getOrder } from '../src/modules/purchasing/orders';
 import { createTenant, destroyTenant } from './helpers';
@@ -102,6 +103,13 @@ describe('SCR-151 purchasing info record', () => {
     });
     expect(created.infoRecordNumber).toMatch(/^IR-\d{7}$/);
     expect(created.segmentNumber).toBe(1);
+    expect(await findPurchasingInfoRecord(c, 'V-IR', 'MAT-IR')).toBe(created.infoRecordNumber);
+    const opened = await getPurchasingInfoRecord(c, created.infoRecordNumber);
+    expect(opened).toMatchObject({
+      partnerNumber: 'V-IR', materialNumber: 'MAT-IR', category: 'STANDARD', version: 1,
+    });
+    expect(opened?.segments[0]).toMatchObject({ purchasingOrg: '1000', plant: null, plannedDeliveryDays: 7 });
+    expect(opened?.segments[0].prices[0]).toMatchObject({ amount: '10.0000', currency: 'USD', priceUnitOfMeasure: 'EA' });
 
     await expect(createPurchasingInfoRecord({
       client: c, changedBy: ACTOR, partnerNumber: 'V-IR', materialNumber: 'MAT-IR',

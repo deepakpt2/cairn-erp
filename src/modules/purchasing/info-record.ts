@@ -6,13 +6,14 @@
  * ME12 is a change of the same record. The order calls the resolver inside its
  * own transaction and keeps the price it used.
  */
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
-import { currency as currencyTable } from '../../platform/tables/reference';
-import { plant, purchasingOrg } from '../foundation/schema';
+import { currency as currencyTable, unitOfMeasure } from '../../platform/tables/reference';
+import { plant, purchasingOrg, purchasingOrgPlant } from '../foundation/schema';
+import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { businessPartner } from '../foundation/business-partner-schema';
 import { requireSupplierPurchasing, SupplierPurchasingError } from '../foundation/supplier-purchasing';
 import { material, materialPlant } from '../inventory/schema';
@@ -23,6 +24,7 @@ import {
 
 export const INFO_RECORD_CAPABILITY = 'PROC.INFO.RECORD.MAINTAIN';
 export const INFO_RECORD_OBJECT = 'INFOREC';
+export const INFO_RECORD_ROUTE = '/purchasing/info-record';
 const OBJECT_CLASS = 'purchasing_info_record';
 const CATEGORY = 'STANDARD';
 const CONDITION = 'NET_PRICE';
@@ -331,7 +333,26 @@ export async function previewPurchasingInfoRecord(input: InfoRecordCreateInput):
       );
     }
     if (named && (!standing || standing.infoRecordNumber !== named)) {
-      throw new InfoRecordError(`Info record ${named} does not exist for this supplier and material.`);
+      throw new InfoRecordError(`Info record ${named} does not exist. The client does not assign the number.`);
+    }
+    if (standing && input.expectedVersion != null && input.expectedVersion !== standing.version) {
+      throw new InfoRecordError(
+        `Info record ${standing.infoRecordNumber} stands at version ${standing.version}.`,
+        'Reload the record before adding a purchasing organisation.',
+      );
+    }
+    if (standing) {
+      const plantCode = blank(input.plant);
+      const segments = await tx.select().from(purchasingInfoRecordOrg).where(and(
+        eq(purchasingInfoRecordOrg.client, input.client),
+        eq(purchasingInfoRecordOrg.infoRecordNumber, standing.infoRecordNumber),
+      ));
+      if (segments.some((row) => row.purchasingOrg === input.purchasingOrg.trim() && row.plant === plantCode)) {
+        throw new InfoRecordError(
+          `Info record ${standing.infoRecordNumber} already has a segment for purchasing organisation ${input.purchasingOrg.trim()}${plantCode ? ` and plant ${plantCode}` : ''}.`,
+          'Change that segment, or retire it.',
+        );
+      }
     }
     return { infoRecordNumber: standing?.infoRecordNumber ?? null, existing: standing != null };
   });
@@ -820,4 +841,172 @@ export async function resolvePurchasingInfoRecord(
     minimumOrderQuantity: chosen.minimumOrderQuantity,
     minimumOrderUnit: chosen.minimumOrderUnit,
   };
+}
+
+export interface InfoRecordPriceView {
+  priceSequence: number;
+  amount: string;
+  currency: string;
+  priceUnit: string;
+  priceUnitOfMeasure: string;
+  validFrom: string;
+  validTo: string;
+  markedForDeletion: boolean;
+}
+
+export interface InfoRecordSegmentView {
+  segmentNumber: number;
+  purchasingOrg: string;
+  plant: string | null;
+  plannedDeliveryDays: number | null;
+  minimumOrderQuantity: string | null;
+  minimumOrderUnit: string | null;
+  orderUnit: string | null;
+  markedForDeletion: boolean;
+  version: number;
+  prices: InfoRecordPriceView[];
+}
+
+export interface InfoRecordDocument {
+  infoRecordNumber: string;
+  partnerNumber: string;
+  partnerName: string;
+  materialNumber: string;
+  materialDescription: string;
+  category: string;
+  markedForDeletion: boolean;
+  version: number;
+  segments: InfoRecordSegmentView[];
+}
+
+export interface InfoRecordChoiceLists {
+  suppliers: Array<{ partnerNumber: string; name: string; purchasingOrg: string; orderCurrency: string | null }>;
+  materials: Array<{ materialNumber: string; description: string }>;
+  purchasingOrgs: Array<{ purchasingOrg: string; name: string }>;
+  plants: Array<{ plant: string; name: string; purchasingOrg: string }>;
+  currencies: string[];
+  units: string[];
+  records: Array<{ infoRecordNumber: string; partnerNumber: string; materialNumber: string; markedForDeletion: boolean }>;
+}
+
+/** The standing number for a supplier and material, or none. It writes nothing. */
+export async function findPurchasingInfoRecord(
+  client: string,
+  partnerNumber: string,
+  materialNumber: string,
+): Promise<string | null> {
+  const partner = partnerNumber.trim();
+  const materialCode = materialNumber.trim();
+  if (!partner || !materialCode) return null;
+  return withTenant(client, async (tx) => {
+    const [row] = await tx.select({ infoRecordNumber: purchasingInfoRecord.infoRecordNumber })
+      .from(purchasingInfoRecord)
+      .where(and(
+        eq(purchasingInfoRecord.client, client),
+        eq(purchasingInfoRecord.partnerNumber, partner),
+        eq(purchasingInfoRecord.materialNumber, materialCode),
+        eq(purchasingInfoRecord.category, CATEGORY),
+      ));
+    return row?.infoRecordNumber ?? null;
+  });
+}
+
+/** The record the screen opens. It writes nothing. */
+export async function getPurchasingInfoRecord(client: string, infoRecordNumber: string): Promise<InfoRecordDocument | null> {
+  const number = infoRecordNumber.trim();
+  if (!number) return null;
+  return withTenant(client, async (tx) => {
+    const [general] = await tx.select().from(purchasingInfoRecord).where(and(
+      eq(purchasingInfoRecord.client, client),
+      eq(purchasingInfoRecord.infoRecordNumber, number),
+    ));
+    if (!general) return null;
+    const [partner] = await tx.select({ name: businessPartner.name }).from(businessPartner).where(and(
+      eq(businessPartner.client, client), eq(businessPartner.partnerNumber, general.partnerNumber),
+    ));
+    const [mat] = await tx.select({ description: material.description }).from(material).where(and(
+      eq(material.client, client), eq(material.materialNumber, general.materialNumber),
+    ));
+    const segments = await tx.select().from(purchasingInfoRecordOrg).where(and(
+      eq(purchasingInfoRecordOrg.client, client),
+      eq(purchasingInfoRecordOrg.infoRecordNumber, number),
+    )).orderBy(asc(purchasingInfoRecordOrg.segmentNumber));
+    const prices = await tx.select().from(purchasingInfoRecordPrice).where(and(
+      eq(purchasingInfoRecordPrice.client, client),
+      eq(purchasingInfoRecordPrice.infoRecordNumber, number),
+    )).orderBy(asc(purchasingInfoRecordPrice.priceSequence));
+    return {
+      infoRecordNumber: general.infoRecordNumber,
+      partnerNumber: general.partnerNumber,
+      partnerName: partner?.name ?? '',
+      materialNumber: general.materialNumber,
+      materialDescription: mat?.description ?? '',
+      category: general.category,
+      markedForDeletion: general.markedForDeletion,
+      version: general.version,
+      segments: segments.map((segment) => ({
+        segmentNumber: segment.segmentNumber,
+        purchasingOrg: segment.purchasingOrg,
+        plant: segment.plant,
+        plannedDeliveryDays: segment.plannedDeliveryDays,
+        minimumOrderQuantity: segment.minimumOrderQuantity,
+        minimumOrderUnit: segment.minimumOrderUnit,
+        orderUnit: segment.orderUnit,
+        markedForDeletion: segment.markedForDeletion,
+        version: segment.version,
+        prices: prices.filter((price) => price.segmentNumber === segment.segmentNumber).map((price) => ({
+          priceSequence: price.priceSequence,
+          amount: price.amount,
+          currency: price.currency.trim(),
+          priceUnit: price.priceUnit,
+          priceUnitOfMeasure: price.priceUnitOfMeasure,
+          validFrom: price.validFrom,
+          validTo: price.validTo,
+          markedForDeletion: price.markedForDeletion,
+        })),
+      })),
+    };
+  });
+}
+
+/** Lists for the screen. A typed value that is not in the list is still sent, and the service refuses it by name. */
+export async function infoRecordChoices(client: string): Promise<InfoRecordChoiceLists> {
+  return withTenant(client, async (tx) => {
+    const suppliers = await tx.select().from(supplierPurchasing).where(eq(supplierPurchasing.client, client));
+    const partners = await tx.select({ partnerNumber: businessPartner.partnerNumber, name: businessPartner.name })
+      .from(businessPartner).where(eq(businessPartner.client, client));
+    const orgs = await tx.select().from(purchasingOrg).where(eq(purchasingOrg.client, client));
+    const assignments = await tx.select().from(purchasingOrgPlant).where(eq(purchasingOrgPlant.client, client));
+    const sites = await tx.select().from(plant).where(eq(plant.client, client));
+    const materials = await tx.select({ materialNumber: material.materialNumber, description: material.description })
+      .from(material).where(eq(material.client, client)).orderBy(asc(material.materialNumber)).limit(200);
+    const currencies = await tx.select({ code: currencyTable.code }).from(currencyTable)
+      .where(eq(currencyTable.isActive, true)).orderBy(asc(currencyTable.code));
+    const units = await tx.select({ code: unitOfMeasure.code }).from(unitOfMeasure).orderBy(asc(unitOfMeasure.code));
+    const records = await tx.select({
+      infoRecordNumber: purchasingInfoRecord.infoRecordNumber,
+      partnerNumber: purchasingInfoRecord.partnerNumber,
+      materialNumber: purchasingInfoRecord.materialNumber,
+      markedForDeletion: purchasingInfoRecord.markedForDeletion,
+    }).from(purchasingInfoRecord).where(eq(purchasingInfoRecord.client, client))
+      .orderBy(desc(purchasingInfoRecord.infoRecordNumber)).limit(40);
+    return {
+      suppliers: suppliers.filter((row) => !row.isBlocked).map((row) => ({
+        partnerNumber: row.partnerNumber,
+        name: partners.find((partner) => partner.partnerNumber === row.partnerNumber)?.name ?? '',
+        purchasingOrg: row.purchasingOrg,
+        orderCurrency: row.orderCurrency?.trim() ?? null,
+      })),
+      materials,
+      purchasingOrgs: orgs.filter((row) => row.isActive).map((row) => ({ purchasingOrg: row.purchasingOrg, name: row.name })),
+      plants: assignments.map((row) => ({
+        plant: row.plant,
+        name: sites.find((site) => site.plant === row.plant)?.name ?? '',
+        purchasingOrg: row.purchasingOrg,
+      })),
+      currencies: currencies.map((row) => row.code.trim()),
+      units: units.map((row) => row.code),
+      records,
+    };
+  });
 }
