@@ -79,10 +79,27 @@ async function resolveMovement(tx: Tx, client: string, direction: string, refere
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * What has been received against each order item — signed by what each line *did*, not by what it
+ * is called.
+ *
+ * SCR-145: this used to sign every non-reversal line positive, which was true only while the only
+ * movement carrying a purchase-order reference was a receipt. A return delivery carries the same
+ * reference and takes stock out; under the old rule a return would have *increased* the received
+ * quantity, and the order would have shown more received after goods went back. The sign now
+ * follows the movement's configured direction (receipt adds, issue subtracts), and a reversal takes
+ * the opposite sign of the line it reverses — so cancelling a receipt removes it, and cancelling a
+ * return puts it back. Receipts show the number they always did; a test pins that.
+ */
 async function receivedQuantities(tx: Tx, client: string, orderNumber: string): Promise<Map<number, number>> {
   const rows = await tx.select({
+    number: materialDocumentLine.materialDocumentNumber,
+    line: materialDocumentLine.lineNumber,
     item: materialDocumentLine.purchaseOrderItem,
     movement: materialDocumentLine.movementType,
+    direction: materialDocumentLine.lineDirection,
+    reversalOfDocument: materialDocumentLine.reversalOfDocument,
+    reversalOfLine: materialDocumentLine.reversalOfLine,
     qty: materialDocumentLine.baseQuantity,
   }).from(materialDocumentLine).where(and(
     eq(materialDocumentLine.client, client),
@@ -92,11 +109,24 @@ async function receivedQuantities(tx: Tx, client: string, orderNumber: string): 
   for (const m of await tx.select().from(movementType).where(eq(movementType.client, client))) {
     directions.set(m.movementType, m.direction);
   }
+
+  const sign = new Map<string, number>();
+  for (const row of rows) {
+    const configured = directions.get(row.movement) ?? row.direction;
+    if (configured === 'REVERSAL') continue;
+    sign.set(`${row.number}/${row.line}`, configured === 'ISSUE' ? -1 : 1);
+  }
+  for (const row of rows) {
+    const configured = directions.get(row.movement) ?? row.direction;
+    if (configured !== 'REVERSAL' || !row.reversalOfDocument || row.reversalOfLine == null) continue;
+    sign.set(`${row.number}/${row.line}`, -(sign.get(`${row.reversalOfDocument}/${row.reversalOfLine}`) ?? 1));
+  }
+
   const map = new Map<number, number>();
   for (const row of rows) {
     if (row.item == null) continue;
-    const sign = directions.get(row.movement) === 'REVERSAL' ? -1 : 1;
-    map.set(row.item, (map.get(row.item) ?? 0) + sign * Number(row.qty));
+    const rowSign = sign.get(`${row.number}/${row.line}`) ?? 1;
+    map.set(row.item, (map.get(row.item) ?? 0) + rowSign * Number(row.qty));
   }
   return map;
 }
