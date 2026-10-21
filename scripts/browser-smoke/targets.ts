@@ -111,6 +111,7 @@ export const TARGETS = [
   { id: 'migo-component-issue', client: 'T839', label: 'SCR-139 MIGO 261 goods issue to a production order: matrix, posting, ledger naming the order' },
   { id: 'migo-production-receipt', client: 'T840', label: 'SCR-140 MIGO 101 finished good from a production order: value at the material price, over-receipt refusal' },
   { id: 'physical-inventory', client: 'T842', label: 'SCR-142 MI01 physical inventory: blocked count, a transfer refused by it, cancelled, then posted' },
+  { id: 'scr144-close-the-gaps', client: 'T843', label: 'SCR-144 reconcile, unit conversion and reversal in MIGO: a conversion maintained, a posting converted to base, an unconverted unit refused, a plant reconciled balanced and A03 + R05 reversing in place' },
   { id: 'migo-transfer-posting', client: 'T841', label: 'SCR-141 MIGO A04 transfer posting against Other: 311, 301 across plants, 321, and a wrong pair refused' },
   { id: 'production-order-create', client: 'T838', label: 'SCR-138 CO01 production order: create with components, derived company, release, nothing posted' },
   { id: 'journal-document-display', client: 'T837', label: 'SCR-137 FB03 display accounting document: derived KOART, company cross-check, the anchors that drill here' },

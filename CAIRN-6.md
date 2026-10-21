@@ -4147,6 +4147,70 @@ name, reconcile a plant and see it balanced, and reverse a document from MIGO's 
 
 Same-stage bookkeeping: B-914 / §26.926 / §30 row 2.744.
 
+## §26.927 — SCR-144 closed: the three gaps are shut, and the fourth was found while closing them
+
+**B-915.** The contract at §26.926 named three gaps. All three are closed, and closing them
+produced a fourth that the contract did not know about — found not by review but by a test written
+two rounds earlier for a different purpose.
+
+**1. `INV.STOCK.UOM` — the entry unit now means something.** `material_uom_conversion` holds one
+alternative unit per material with an **integer numerator and denominator**, so a conversion is
+exact rational arithmetic rounded to the base unit's decimals, never a float multiplier. The
+important part is where it runs: **goods issue, transfer posting and production receipt all convert
+before they judge anything**. The sufficiency check, the valuation and the stock move therefore see
+the base quantity, while `entry_quantity` and `entry_unit` keep what the person typed. Two boxes of
+a twelve-to-one material move twenty-four pieces; the ledger says 24, the line says 2 BOX. A unit
+with no row is refused **by name**, naming the missing conversion and `INV.STOCK.UOM`.
+
+Three of the five original test failures were the fixture's fault, not the engine's: it seeded
+`stock_quantity` directly, and reconcile correctly called that a ghost. The fixture now posts an
+opening document, because seeded stock with nothing behind it *is* drift.
+
+**2. `INV.STOCK.RECONCILE` — the projection can be rebuilt and is now guarded.** `reconcileStock`
+reads the ledger and compares it with `stock_quantity` per material × plant × storage location ×
+stock type, reporting only disagreement; `rebuildStockDimension` recomputes a dimension from the
+documents and deletes one the ledger no longer knows. The hand query's **0 rows of drift** still
+stands, and now something can prove it on demand.
+
+**3. `A03 + R05` posts the reversal inside MIGO.** The fourth posting cell, through the standing
+`reverseMaterialDocument`, against the original document `R05` names. `A03` against any other
+reference still refuses by name, because there is no document to cancel. The MIGO matrix is now
+four posting cells of twenty-five: `A01+R08`, `A03+R05`, `A04+R10`, `A07+R08`.
+
+**4. The gap the contract did not name: the rebuild was itself a bypass.** `tests/inventory-block-
+invariant.test.ts` enumerates every module that writes stock and demands each consult the posting
+block. It failed on `stock-reconcile.ts` — a module written eight hours after the test that caught it.
+It was right to fail: rebuilding a dimension under an open count would overwrite the book quantity
+that count is about to compare against, which is the one number a count must be able to trust. The
+rebuild now consults `assertInventoryCountOpen` and refuses naming the count document. **The
+invariant was not weakened to let the new module through; the module was changed to satisfy it.**
+
+**Screens.** Three surfaces, because the engine was unreachable without them: a **unit field on all
+three MIGO forms** (a column per issue line, one field each on the receipt and the transfer),
+`/inventory/uom-conversion` (`CUNI`) which states the ratio as maintained and can remove it, and
+`/inventory/stock-reconcile` (`MB5L`) which lists only the dimensions that drift and rebuilds one.
+Both routes were placed by the owner's decision of 2026-10-21: reconcile keeps its own route rather
+than joining MB52 or MB5B, because it is the only one of the three that **writes**, and both stock
+list screens are documented as read-only.
+
+**Acceptance — T843, green.** A conversion maintained on its own screen; a transfer posted as
+**2 BOX** and read back from the database as **24.000 PC** on the line and **36 / 24** in the two
+storage locations; **GAL refused by name** with stock untouched; the plant reconciled
+**BALANCED** across both dimensions; the document then **reversed from MIGO's own `A03 + R05`** cell
+with the original marked `REVERSED` and stock returned to 60; and `A03` against `R10` offering no
+cancellation form at all.
+
+**Delivered:** suite **2027/2027 in 272 files**, harness **143 targets**, migrations **206**,
+production build green.
+
+**Still deferred, by name:** display driven from MIGO (`R05` alone still links to `INV.DISPLAY`),
+**return deliveries `A02`**, two-step transfers, batch, serial numbers, special stock, split
+valuation, **drafts and the `Validated` state**, **stable error codes and field-level pointers**,
+**external reference and version columns** on the material document, the **description snapshot**,
+and **plant-scoped authorization**.
+
+Same-stage bookkeeping: B-915 / §26.927 / §30 row 2.745.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4522,3 +4586,4 @@ Same-stage bookkeeping: B-914 / §26.926 / §30 row 2.744.
 | 2.742 | 2026-10-20 | **SCR-143 stage 3: both reversal paths guarded, and the race closed with locks (B-912, §26.924).** `material-document-reversal.ts` and `reverseGoodsReceipt` now consult the block and translate it into their own error types, so **MBST and the goods-receipt reversal can no longer move blocked stock**. The guard takes a **shared advisory lock on `client/stock-scope/<material>` before it reads**, creation takes it **exclusive before it writes** in sorted order \u2014 so a count cannot be created under an in-flight posting and a posting after the count waits and then sees the block. **The test does not rely on timing**: advisory locks are re-entrant within a session, which is why the first version passed when it should have failed, so the proof now holds the lock on one connection and tries from another. Plus `version` bumps, **`Block released: …`** as the recorded reason, multi-material counts, the number range untouched by a refused create, and cross-tenant isolation. **28/28 across both suites; book 2005/2005 in 270 files.** | Agent |\n
 | 2.743 | 2026-10-20 | **SCR-143 stage 4 and closure: T842 proves the reversal path, MI01 parity closes (B-913, §26.925).** The browser run now moves `MPI-FREE` with a **311 before any count exists**, creates **`PI-2026-0000002`** over it with the block, and has the **reversal refused** by the document\u2019s number \u2014 the leg that would have caught the original bypass \u2014 then cancels the count to release the material. The parity list closes: every non-deferred item of the second package is delivered; MI04/MI20/MI07, batch, special stock and the cycle indicator stay deferred by name; selection-driven generation and snapshots are conditional and satisfied by the supported workflow; plant-scoped authorization is refused by canon\u2019s capability model. **Suite 2005/2005 in 270 files; harness 142 targets; migrations 204.** | Agent |\n
 | 2.744 | 2026-10-20 | **SCR-144 contracted — the three structural gaps against the MIGO specification (B-914, §26.926).** **`INV.STOCK.RECONCILE`** makes the stock projection rebuildable and guarded: a hand-query showed **0 drift**, but nothing rebuilt or guarded it. **`INV.STOCK.UOM`** adds `material_uom_conversion` — one alternative unit per material with numerator and denominator, so conversion is exact rational arithmetic rounded to the base unit's decimals, and an unconverted unit is **refused by name** rather than silently mis-posted. **`A03 + R05` becomes a fourth posting cell**: reversal entered where the specification puts it, through the standing `reverseMaterialDocument`. Named deferrals: display from MIGO, return deliveries, two-step transfers, batch/serial/special stock, split valuation, drafts and the Validated state, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |\n
+| 2.745 | 2026-10-21 | **SCR-144 closed — the three structural gaps against the MIGO specification are shut (B-915, §26.927).** **`INV.STOCK.UOM`**: `material_uom_conversion` states one alternative unit per material with an integer numerator and denominator, and **every writer converts or refuses** — goods issue, transfer posting and production receipt all convert before judging sufficiency or value, so two boxes move twenty-four pieces while the line keeps 2 BOX; a unit with no row is refused by name naming the missing conversion. **`INV.STOCK.RECONCILE`**: the projection is compared with the ledger per material × plant × storage location × stock type, only disagreement is listed, and a drifted dimension rebuilds from the documents — refusing while a physical count holds it open, a bypass the SCR-143 block invariant caught in this round's own new module. **`A03 + R05`** posts reversal inside MIGO through the standing engine: four posting cells of twenty-five. Screens: a unit on all three MIGO forms, `/inventory/uom-conversion` (CUNI) and `/inventory/stock-reconcile` (MB5L, own route by owner decision because it is the only writer). T843 green — conversion maintained, 2 BOX posted and read back as 24.000 PC, GAL refused by name, plant balanced, document reversed in place. Suite 2027/2027 in 272 files; harness 143; migrations 206. Still deferred: display from MIGO, returns, two-step transfers, batch/serial/special stock, split valuation, drafts and Validated, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |
