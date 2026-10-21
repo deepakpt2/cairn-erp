@@ -287,6 +287,10 @@ export const materialDocumentLine = pgTable('material_document_line', {
   productionOrderItem: integer('production_order_item'),
   reversalOfDocument: varchar('reversal_of_document', { length: 20 }),
   reversalOfLine: integer('reversal_of_line'),
+  /** SCR-145: the receipt item a commercial return came from — never the reversal pair. */
+  returnOfDocument: varchar('return_of_document', { length: 20 }),
+  returnOfDocumentYear: integer('return_of_document_year'),
+  returnOfLine: integer('return_of_line'),
   itemText: varchar('item_text', { length: 100 }),
   ...auditColumns,
 }, (t) => [
@@ -295,6 +299,10 @@ export const materialDocumentLine = pgTable('material_document_line', {
   foreignKey({ columns: [t.client, t.movementType], foreignColumns: [movementType.client, movementType.movementType] }).onDelete('restrict'),
   check('material_document_line_qty_ck', sql`${t.entryQuantity} > 0 and ${t.baseQuantity} > 0`),
   check('material_document_line_direction_ck', sql`${t.lineDirection} in ('ISSUE', 'RECEIPT')`),
+  // SCR-145: a return names a whole lineage or none, and it is never also a reversal.
+  check('material_document_line_return_lineage_check', sql`(${t.returnOfDocument} is null and ${t.returnOfDocumentYear} is null and ${t.returnOfLine} is null) or (${t.returnOfDocument} is not null and ${t.returnOfDocumentYear} is not null and ${t.returnOfLine} is not null)`),
+  check('material_document_line_reversal_not_return_check', sql`${t.reversalOfDocument} is null or ${t.returnOfDocument} is null`),
+  index('material_document_line_return_of_idx').on(t.client, t.returnOfDocument, t.returnOfDocumentYear, t.returnOfLine),
 ]);
 
 export const stockQuantity = pgTable('stock_quantity', {
