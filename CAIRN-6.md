@@ -4347,6 +4347,69 @@ verification.
 
 Same-stage bookkeeping: B-917 / §26.929 / §30 row 2.747.
 
+## §26.930 — SCR-146 contracted: MB1B, with the movement catalogue moved out of TypeScript
+
+**B-918.** MB1B is mostly standing — SCR-131 built `postTransfer`, SCR-141 put it in MIGO, SCR-144
+taught it units. What the owner's specification adds is the one thing twice deferred: **§3, §9 and
+§10 say the movement-type configuration must decide what a transfer is, and today a TypeScript
+constant array decides.** `transfer-scenarios.ts` is `TRANSFER_SCENARIOS.find((s) => s.code === code)`
+— which dimensions may move, which stock types are legal, whether the plant may change and what the
+reversal maps to are all compile-time. This round makes them rows.
+
+**The configuration becomes columns.** `movement_type` carries six content columns today
+(`direction`, `reference_category`, `reversal_movement_type`, `account_assignment`, description,
+key). Migration 9086 adds what §9 lists and the table cannot yet say: `movement_kind`,
+`source_stock_type` and `destination_stock_type`, `plant_rule` and `location_rule` (`SAME`,
+`DIFFERENT`, `ANY`), `is_two_step`, the four requirement flags (`requires_batch`,
+`requires_serial`, `requires_special_stock`, `requires_valuation_type`), `negative_stock_policy`
+(`LOCATION` honours the storage location's own setting, `FORBID` refuses regardless) and
+`valuation_relevant`. **311, 301 and 321 become rows**, seeded as data; a test proves all three post
+exactly as they do today once they are rows.
+
+**A requirement canon cannot meet is refused by name, not ignored.** The four requirement flags
+exist so a tenant can *state* that a movement needs a batch or a serial number — and since canon
+carries no batch master, serial master, special-stock category or valuation type, a movement that
+sets any of them is refused with the reason, rather than posting stock that silently belongs to no
+layer. That is the honest reading of §9: the configuration is authoritative, including when it says
+something the engine cannot do.
+
+**Two-step is refused by name, per §14 and §19.** 303, 313 and 315 are conditional enhancements, so
+they are not built — and §14 is explicit that they must not be silently processed as one-step. A
+two-step movement, or any movement configured `is_two_step`, is refused naming the transit stock
+dimension canon does not carry.
+
+**Idempotency gains a payload check (§16).** `existingByRequestKey` returns the earlier document for
+any request carrying the same key. §16 requires the opposite for a *different* payload: same key
+with materially different content is an error, not a replay. The header gains a `request_fingerprint`
+over the posting's content, and a mismatch refuses naming both documents.
+
+**External reference (§8.1)** gets its column: `material_document.external_reference`, optional,
+carried from the form and returned with the document.
+
+**A validation that posts nothing (§16).** `validateTransfer` runs the same judgement as the posting
+— configuration, dimensions, stock, periods, units, valuation — and returns what would happen
+without writing anything. §6.1's rule that preparation changes nothing holds by construction: it is
+the posting path with the writes removed, not a second opinion that could disagree.
+
+**The `TRANSFER` direction wart is fixed.** `DELIVERED_TRANSFER_MOVEMENTS` stores
+`direction: 'TRANSFER'`, a value the rest of the ledger does not know. Harmless until SCR-145, which
+made `receivedQuantities` sign by direction — a transfer carrying a purchase-order reference would
+now be read as *adding* received quantity. `direction` gains a check constraint over the four legal
+values, and a transfer line signs by its own `line_direction`, which nets to zero across the pair.
+
+**One deviation from §10's ordering, stated deliberately.** §10 converts units at step 6 and locks
+at step 7; this engine locks first and converts after. Reading the material before the lock is the
+class of bug SCR-143 spent a round closing. The order is one step out and the reason is on the
+record.
+
+**Acceptance (stage 5): T845** — post 311, 301 and 321 against configuration-driven rules and read
+the stock back; change a movement's `plant_rule` in the database and watch a 301 be refused by name
+without touching a line of TypeScript; attempt a two-step 303 and see it refused; reuse a request
+key with a different quantity and see it refused while the identical retry replays; and validate a
+transfer without posting it, proving no document, stock or journal was created.
+
+Same-stage bookkeeping: B-918 / §26.930 / §30 row 2.748.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4725,3 +4788,4 @@ Same-stage bookkeeping: B-917 / §26.929 / §30 row 2.747.
 | 2.745 | 2026-10-21 | **SCR-144 closed — the three structural gaps against the MIGO specification are shut (B-915, §26.927).** **`INV.STOCK.UOM`**: `material_uom_conversion` states one alternative unit per material with an integer numerator and denominator, and **every writer converts or refuses** — goods issue, transfer posting and production receipt all convert before judging sufficiency or value, so two boxes move twenty-four pieces while the line keeps 2 BOX; a unit with no row is refused by name naming the missing conversion. **`INV.STOCK.RECONCILE`**: the projection is compared with the ledger per material × plant × storage location × stock type, only disagreement is listed, and a drifted dimension rebuilds from the documents — refusing while a physical count holds it open, a bypass the SCR-143 block invariant caught in this round's own new module. **`A03 + R05`** posts reversal inside MIGO through the standing engine: four posting cells of twenty-five. Screens: a unit on all three MIGO forms, `/inventory/uom-conversion` (CUNI) and `/inventory/stock-reconcile` (MB5L, own route by owner decision because it is the only writer). T843 green — conversion maintained, 2 BOX posted and read back as 24.000 PC, GAL refused by name, plant balanced, document reversed in place. Suite 2027/2027 in 272 files; harness 143; migrations 206. Still deferred: display from MIGO, returns, two-step transfers, batch/serial/special stock, split valuation, drafts and Validated, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |
 | 2.746 | 2026-10-21 | **SCR-145 contracted — MBRL return delivery against the corrected specification (B-916, §26.928).** Four corrections shape the round: the return movement is **resolved from `movement_type` configuration** (`RETURN_TO_VENDOR` = 122, direction ISSUE, reversal 123) rather than hardcoded, and a movement that adds stock cannot post as a return; the return posts through the **canonical material-document engine and numbering service**, never a separate subsystem — §15's `return_delivery_posting` is refused by name; the accounting link stays **nullable and mirror-shaped** (credit inventory, debit GR/IR, price difference where it differs), touching no vendor liability and creating no credit memo, because that is invoice verification's work; and **shipping delivery is a separate logistics workflow** that does not exist, so the flag is hidden and invocation rejected. Lineage gains its own columns (`return_of_document`, `return_of_document_year`, `return_of_line`) distinct from the reversal pair, so a commercial return and a cancellation stay distinguishable. Remaining returnable is derived from posted returns net of their reversals, under an advisory lock on the original item, revalidated after the lock. `receivedQuantities` is corrected to sign by the movement's actual stock direction — a latent defect that would have made a 122 inflate received quantity. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, picking, goods issue for delivery, vendor credit memo. | Agent |
 | 2.747 | 2026-10-21 | **SCR-145 closed — MBRL return delivery accepted (B-917, §26.929).** **A return is not a cancellation**: `return_of_document` / `return_of_document_year` / `return_of_line` are distinct from the reversal pair and a constraint forbids a line being both. **Returnable quantity is derived** from posted returns net of their reversals — a reversal records what it reverses, not what its original returned against, so the returns are found first and the lines reversing them netted off — under an advisory lock per original line and re-read after it, never taken from the caller. **The movement is configuration** (`RETURN_TO_VENDOR`, ISSUE, counter `RETURN_TO_VENDOR_REV`); a row that adds stock or references anything but the purchase order is refused by name. **Accounting mirrors the receipt**: inventory credited, GR/IR debited, price difference where they disagree — no vendor liability, no credit memo. **Two defects fixed on the way**: `receivedQuantities` signed every non-reversal line positive, so a 122 would have *increased* the received quantity — the sign now follows the configured direction and resolves reversals against the line they reverse; and the idempotency key on the return form (and on MIGO, which shared the shape) was fixed per document per day, so a second posting replayed the first — both now move the key once a posting succeeds. T844 green: 40 received, 15 returned with the receipt standing and the receipt screen reporting 25 received, 25 returned to zero, a third attempt refused with its reason, and both returns reversed back to 40/40. Suite 2045/2045 in 274 files; harness 144; migrations 208. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, shipping integration, picking, vendor credit memo. | Agent |\n
+| 2.748 | 2026-10-21 | **SCR-146 contracted — MB1B with the movement catalogue as data (B-918, §26.930).** §3/§9/§10 of the owner's specification require configuration to decide what a transfer is; `transfer-scenarios.ts` had decided it at compile time since SCR-131. Migration 9086 adds `movement_kind`, source and destination stock types, `plant_rule`/`location_rule`, `is_two_step`, four requirement flags, `negative_stock_policy` and `valuation_relevant` to `movement_type`, and 311/301/321 become rows with a test proving identical posting. A movement whose requirement canon cannot meet (batch, serial, special stock, valuation type) is **refused by name**; two-step (303/313/315) is refused per §14 and §19 rather than silently processed. `material_document` gains `external_reference` and `request_fingerprint`; the same idempotency key with a different payload is refused rather than replayed (§16). `validateTransfer` judges without writing. The `direction` value `TRANSFER` is constrained to the four legal values and signs by `line_direction`, closing a trap SCR-145 armed. Deliberate deviation: locks precede unit conversion, contrary to §10's step order, because reading the material before the lock is the defect SCR-143 closed. | Agent |
