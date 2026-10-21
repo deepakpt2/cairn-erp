@@ -177,5 +177,55 @@ export async function physicalInventoryCount(ctx: Context) {
   assert.equal(Number(moved[0].source), 95, 'the transfer posted once the count was cancelled');
   assert.equal(Number(moved[0].destination), 5);
 
-  console.log(`SCR-142: ${documentNumber} blocked the transfer of MPI-COUNT, and cancelling it released the movement`);
+  // ── SCR-143: the reversal path, which used to bypass the block ──────────────────────
+  // Post a 311 before any count exists, then block the material and try to reverse it.
+  await page.goto(`${base}${MIGO}`, { waitUntil: 'domcontentloaded' });
+  await page.selectOption('select[name="migoAction"]', 'A04');
+  await page.selectOption('select[name="migoReference"]', 'R10');
+  await page.selectOption('select[name="movementTypeCode"]', '311');
+  await page.fill('input[name="materialNumber"]', 'MPI-FREE');
+  await page.fill('input[name="quantity"]', '3');
+  await page.fill('input[name="issuingPlant"]', 'QP02');
+  await page.fill('input[name="issuingStorageLocation"]', 'SQ01');
+  await page.fill('input[name="receivingPlant"]', 'QP02');
+  await page.fill('input[name="receivingStorageLocation"]', 'SQ02');
+  await page.fill('input[name="postingDate"]', '2026-10-20');
+  await page.fill('input[name="documentDate"]', '2026-10-20');
+  await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();
+  await page.locator('p[role="status"]').filter({ hasText: 'Posted: material document' }).waitFor();
+  const toReverse = /Posted: material document ([^\s.]+)\./
+    .exec(await page.locator('p[role="status"]').first().innerText())![1];
+
+  await page.goto(`${base}${PHYSICAL}`, { waitUntil: 'domcontentloaded' });
+  await page.fill('input[name="plant"]', 'QP02');
+  await page.fill('input[name="storageLocation"]', 'SQ01');
+  await page.fill('input[name="plannedCountDate"]', '2026-10-20');
+  await page.check('input[name="postingBlock"]');
+  await page.fill('input[name="material-1"]', 'MPI-FREE');
+  await page.getByRole('button', { name: 'Create the count document', exact: true }).click();
+  await page.locator('p[role="status"]').filter({ hasText: 'Created: physical inventory document' }).waitFor();
+  const blocking = await page.locator('[data-inventory-document]').last().innerText();
+
+  const reversal = await withTenant(client, async (tx) => {
+    try {
+      const { reverseMaterialDocument } = await import('../../src/modules/inventory/material-document-reversal');
+      await reverseMaterialDocument({
+        client, changedBy: 'browser.admin', materialDocumentNumber: toReverse,
+        postingDate: '2026-10-20', documentDate: '2026-10-20',
+        requestKey: `rev-${Date.now()}`,
+      });
+      return 'posted';
+    } catch (caught) {
+      void tx;
+      return (caught as Error).message;
+    }
+  });
+  assert.match(reversal, /blocks postings for material MPI-FREE/,
+    'the reversal answers to the count block like every other movement');
+
+  await page.goto(`${base}${PHYSICAL}`, { waitUntil: 'domcontentloaded' });
+  await page.locator(`[data-cancel="${blocking}"]`).click();
+  await page.locator(`[data-document="${blocking}"] [data-status="CANCELLED"]`).waitFor();
+
+  console.log(`SCR-142/143: ${documentNumber} blocked a transfer, and ${blocking} blocked a reversal until cancelled`);
 }

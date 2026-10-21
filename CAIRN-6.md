@@ -4068,6 +4068,35 @@ not by the number being unique across the installation.
 
 Same-stage bookkeeping: B-912 / §26.924 / §30 row 2.742.
 
+## §26.925 — SCR-143 stage 4 and closure: T842 proves the reversal path, and the parity list closes
+
+**B-913.** T842 now carries the leg that would have caught the original defect. On the
+production build, in one run:
+
+1. `PI-2026-0000001` created with the block; `material_document` and `journal_entry` read back
+   **empty**; stock untouched;
+2. a **311 refused** with the document's number in the sentence;
+3. the count **cancelled from the list row**, and the same transfer then posting 100 → 95;
+4. **`MPI-FREE` moved by a 311 before any count exists**, then a second count
+   **`PI-2026-0000002`** created over it with the block, and the **reversal of that 311 refused** —
+   `Physical inventory document PI-2026-0000002 blocks postings for material MPI-FREE …`;
+5. the second count cancelled, releasing the material.
+
+**Where the MI01 parity list now stands.** Everything the second package asks for that is not
+deferred is delivered: every stock-writing path guarded, creation serialized against in-flight
+postings, `version`, the block release audited as its own fact, multi-material counts,
+tenant isolation, duplicate-submission protection, atomic rollback including the number, and the
+lifecycle limited to the states this round can honestly reach. **Deferred by name and unchanged
+by this round:** count entry (MI04), the difference list (MI20), difference posting (MI07),
+batch, special stock and the cycle-count indicator. **Conditional in the package and satisfied
+by the supported workflow:** selection-driven item generation, stock snapshots. **Refused by
+canon's architecture:** plant-scoped authorization, which is capability-based tenant-wide in
+every module of this book.
+
+**Suite 2005/2005 in 270 files**; **harness 142 targets**, T842 green; **migrations 204**.
+
+Same-stage bookkeeping: B-913 / §26.925 / §30 row 2.743.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4441,3 +4470,4 @@ Same-stage bookkeeping: B-912 / §26.924 / §30 row 2.742.
 | 2.740 | 2026-10-20 | **SCR-143 / MI01 hardening contracted — the bypass and the race (B-910, §26.922).** The second MI01 package, measured against the shipped tree, found **two real defects**: **MBST and the goods-receipt reversal write stock without consulting the block**, and creation does not serialize against a posting already in flight. This round makes the guard an **invariant a test enforces** (every module that writes `stock_quantity` must call it), closes the race with **shared advisory locks in sorted order** on `client/stock-scope/<material>` while creation takes them **exclusive**, adds the **`version`** column canon already uses elsewhere, and audits the **block release** as its own fact. Items stay material-level because batch and special stock are refused and the scope is the header\u2019s; selection-driven generation and snapshots are conditional in the package, and plant-level authorization is refused by canon\u2019s capability model. | Agent |\nBoth files are committed now. Standing lesson: stage by path list that names every
 | 2.741 | 2026-10-20 | **SCR-143 stage 2: the version column, and no status index (B-911, §26.923).** **9081** adds `version` to the count header \u2014 the convention finance already keeps \u2014 and nothing else: the block release is a change-record fact and the stock identity needs no column while batch and special stock are refused. **No index added**: §26.918 already measured the guard at 0.060 ms on a hit and 0.046 on a miss, and `status` is a filter on a primary-key row already in hand, so a status index cannot improve it. The package\u2019s seven-column list is satisfied by two measured indexes and two PK prefixes. **Migrations 204.** | Agent |\ndirectory touched, not by the directories the change was *about*.
 | 2.742 | 2026-10-20 | **SCR-143 stage 3: both reversal paths guarded, and the race closed with locks (B-912, §26.924).** `material-document-reversal.ts` and `reverseGoodsReceipt` now consult the block and translate it into their own error types, so **MBST and the goods-receipt reversal can no longer move blocked stock**. The guard takes a **shared advisory lock on `client/stock-scope/<material>` before it reads**, creation takes it **exclusive before it writes** in sorted order \u2014 so a count cannot be created under an in-flight posting and a posting after the count waits and then sees the block. **The test does not rely on timing**: advisory locks are re-entrant within a session, which is why the first version passed when it should have failed, so the proof now holds the lock on one connection and tries from another. Plus `version` bumps, **`Block released: …`** as the recorded reason, multi-material counts, the number range untouched by a refused create, and cross-tenant isolation. **28/28 across both suites; book 2005/2005 in 270 files.** | Agent |\n
+| 2.743 | 2026-10-20 | **SCR-143 stage 4 and closure: T842 proves the reversal path, MI01 parity closes (B-913, §26.925).** The browser run now moves `MPI-FREE` with a **311 before any count exists**, creates **`PI-2026-0000002`** over it with the block, and has the **reversal refused** by the document\u2019s number \u2014 the leg that would have caught the original bypass \u2014 then cancels the count to release the material. The parity list closes: every non-deferred item of the second package is delivered; MI04/MI20/MI07, batch, special stock and the cycle indicator stay deferred by name; selection-driven generation and snapshots are conditional and satisfied by the supported workflow; plant-scoped authorization is refused by canon\u2019s capability model. **Suite 2005/2005 in 270 files; harness 142 targets; migrations 204.** | Agent |\n
