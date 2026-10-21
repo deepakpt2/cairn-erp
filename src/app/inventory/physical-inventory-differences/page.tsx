@@ -15,6 +15,7 @@ import {
   type DifferenceRow,
   type DifferenceSelection,
 } from '@/modules/inventory/physical-inventory-differences';
+import { getRecountComparison, type RecountComparison } from '@/modules/inventory/physical-inventory-recount';
 import DifferenceList from './DifferenceList';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,7 @@ function flag(value: string | string[] | undefined, fallback: boolean): boolean 
  * Difference list — SCR-148 / MI20 (as a search alias only).
  *
  * A reading of what was counted. The page posts nothing. A request that names posting or
- * recount is answered with the refusal, and no control on the page offers either.
+ * recount is answered with the refusal. A link to either screen is navigation, not the action.
  */
 export default async function PhysicalInventoryDifferencesPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -116,6 +117,13 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
     });
   }
 
+  const comparison: RecountComparison[] = document
+    ? await getRecountComparison(session.user.client, {
+      documentNumber: document.documentNumber,
+      fiscalYear: document.fiscalYear,
+    })
+    : [];
+
   return (
     <div className="mx-auto max-w-[120rem] space-y-4 p-3 sm:p-4 lg:p-6">
       <header className="border-b border-line pb-4">
@@ -124,6 +132,7 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
           <h1 className="text-xl font-semibold tracking-tight">{t('mi20.title')}</h1>
           <div className="flex gap-2">
             <Link href="/inventory/physical-inventory-posting" className="btn btn-default min-h-11 sm:min-h-8" data-difference-posting-link>{t('mi20.toPosting')}</Link>
+            <Link href="/inventory/physical-inventory-recount" className="btn btn-default min-h-11 sm:min-h-8" data-difference-recount-link>{t('mi20.toRecount')}</Link>
             <Link href="/inventory/physical-inventory-count" className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.toCounts')}</Link>
             <Link href="/inventory/physical-inventory" className="btn btn-default min-h-11 sm:min-h-8">{t('mi20.toDocuments')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
@@ -143,6 +152,7 @@ export default async function PhysicalInventoryDifferencesPage({ searchParams }:
           excludedUnvalued={excludedUnvalued}
           listError={listError}
           document={document}
+          comparison={comparison}
           workflowMessage={workflowMessage}
         />
       )}

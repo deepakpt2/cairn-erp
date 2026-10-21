@@ -14,6 +14,7 @@ import {
   PhysicalInventoryRecountError,
   cancelRecount,
   createRecount,
+  getRecountComparison,
   validateRecount,
 } from '../src/modules/inventory/physical-inventory-recount';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
@@ -477,5 +478,34 @@ describe('SCR-150 physical inventory recount', () => {
     expect(Number(header.counted)).toBe(8);
     expect((await linkOf(source.inventoryDocumentNumber, 10)).at(-1)?.status).toBe('CANCELLED');
     expect((await sourceItem(source.inventoryDocumentNumber, 10)).count_status).toBe('COUNTED');
+  });
+
+  it('shows both results and does not add them', async () => {
+    const source = await open(['RC-Z']);
+    await submitCounts({
+      client, changedBy: ACTOR, documentNumber: source.inventoryDocumentNumber, fiscalYear: source.fiscalYear,
+      countDate: DAY, counterName: 'A. Counter', requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 8 }],
+    });
+    const raised = await recount(source.inventoryDocumentNumber, source.fiscalYear, [10], { reason: 'Compare' });
+    await submitCounts({
+      client, changedBy: ACTOR, documentNumber: raised.recountDocumentNumber, fiscalYear: raised.recountFiscalYear,
+      countDate: DAY, counterName: 'B. Counter', requestKey: nextKey(),
+      lines: [{ itemNumber: raised.items[0].recountItemNumber, quantity: 7 }],
+    });
+    const comparison = await getRecountComparison(client, {
+      documentNumber: source.inventoryDocumentNumber, fiscalYear: source.fiscalYear,
+    });
+    expect(comparison).toHaveLength(1);
+    const item = comparison[0].items[0];
+    expect(Number(item.originalBook)).toBe(9);
+    expect(Number(item.originalCounted)).toBe(8);
+    expect(Number(item.originalDifference)).toBe(-1);
+    expect(Number(item.recountBook)).toBe(9);
+    expect(Number(item.recountCounted)).toBe(7);
+    expect(Number(item.recountDifference)).toBe(-2);
+    expect(item.recountCounter).toBe('B. Counter');
+    expect(item.materialDocumentNumber).toBe('');
+    expect(comparison[0].reason).toBe('Compare');
+    expect('combined' in item).toBe(false);
   });
 });

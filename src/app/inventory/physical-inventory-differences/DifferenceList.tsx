@@ -9,6 +9,7 @@ import type {
   DifferenceSelection,
 } from '@/modules/inventory/physical-inventory-differences';
 import { PHYSICAL_INVENTORY_DIFF_LIST_ROUTE } from '@/modules/inventory/physical-inventory-differences';
+import type { RecountComparison } from '@/modules/inventory/physical-inventory-recount';
 
 const ROUTE = PHYSICAL_INVENTORY_DIFF_LIST_ROUTE;
 
@@ -57,7 +58,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 /**
  * The selection and the grid. A shortage and a surplus are words on the row, not colours.
- * Posting and recount are absent: this screen has no control that names either.
+ * A link to posting or recount is navigation. Neither action is performed here.
  */
 export default function DifferenceList({
   selection,
@@ -67,6 +68,7 @@ export default function DifferenceList({
   excludedUnvalued,
   listError,
   document,
+  comparison = [],
   workflowMessage,
 }: {
   selection: DifferenceSelection;
@@ -76,6 +78,7 @@ export default function DifferenceList({
   excludedUnvalued: number;
   listError: string | null;
   document: DifferenceDocumentView | null;
+  comparison?: RecountComparison[];
   workflowMessage: string | null;
 }) {
   const pages = Math.max(1, Math.ceil(total / (selection.pageSize ?? 50)));
@@ -155,19 +158,78 @@ export default function DifferenceList({
             {t('mi20.displayTitle')} {document.documentNumber} · {document.fiscalYear}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">{t('mi20.displayHint')}</p>
-          <Link
-            href={`/inventory/physical-inventory-posting?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
-            className="btn btn-default mt-3 inline-flex min-h-11 sm:min-h-8"
-            data-difference-posting-link
-          >
-            {t('mi20.toPosting')}
-          </Link>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={`/inventory/physical-inventory-posting?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
+              className="btn btn-default inline-flex min-h-11 sm:min-h-8"
+              data-difference-posting-link
+            >
+              {t('mi20.toPosting')}
+            </Link>
+            <Link
+              href={`/inventory/physical-inventory-recount?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
+              className="btn btn-default inline-flex min-h-11 sm:min-h-8"
+              data-difference-recount-link
+            >
+              {t('mi20.toRecount')}
+            </Link>
+          </div>
           <dl className="mt-2 grid gap-x-6 text-sm sm:grid-cols-4">
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.plantFrom')}</dt><dd>{document.plant}</dd></div>
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.storageFrom')}</dt><dd>{document.storageLocation ?? '—'}</dd></div>
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.columnPlannedDate')}</dt><dd>{document.plannedCountDate}</dd></div>
             <div className="flex justify-between gap-3 border-b border-line/60 py-1"><dt className="text-ink-soft">{t('mi20.columnStatus')}</dt><dd data-difference-document-status>{document.status}</dd></div>
           </dl>
+        </section>
+      )}
+
+      {comparison.length > 0 && (
+        <section aria-labelledby="difference-comparison" data-recount-comparison className="rounded-card border border-line bg-surface p-4 shadow-card">
+          <h2 id="difference-comparison" className="text-sm font-semibold">{t('mi20.comparisonTitle')}</h2>
+          <p className="mt-1 text-sm text-ink-soft">{t('mi20.comparisonHint')}</p>
+          {comparison.map((group) => (
+            <div key={`${group.recountDocumentNumber}/${group.recountFiscalYear}`} className="mt-3">
+              <p className="text-sm">
+                {group.originalDocumentNumber}/{group.originalFiscalYear}
+                {' → '}
+                {group.recountDocumentNumber}/{group.recountFiscalYear}
+                {' · '}{group.status}
+                {' · '}{group.reason}
+              </p>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                      <th className="py-1 pr-2">{t('mi20.columnItem')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnMaterial')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnStockType')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnOriginal')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnRecount')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnCounter')}</th>
+                      <th className="py-1 pr-2">{t('mi20.columnMaterialDocument')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((item) => (
+                      <tr key={item.recountItemNumber} data-recount-comparison-line={item.originalItemNumber} className="border-b border-line/60">
+                        <td className="py-1 pr-2">{item.originalItemNumber}</td>
+                        <td className="py-1 pr-2">{item.materialNumber}</td>
+                        <td className="py-1 pr-2">{item.stockType}</td>
+                        <td className="py-1 pr-2 tabular-nums" data-recount-original>
+                          {item.originalBook || '—'} / {item.originalCounted || '—'} / {item.originalDifference || '—'}
+                        </td>
+                        <td className="py-1 pr-2 tabular-nums" data-recount-side>
+                          {item.recountBook || '—'} / {item.recountCounted || '—'} / {item.recountDifference || '—'}
+                        </td>
+                        <td className="py-1 pr-2">{item.recountCounter || '—'} {item.recountCountDate}</td>
+                        <td className="py-1 pr-2">{item.materialDocumentNumber || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </section>
       )}
 

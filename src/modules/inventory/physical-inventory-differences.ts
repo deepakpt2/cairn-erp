@@ -593,7 +593,7 @@ export async function openDifferenceWorkflow(
   if (input.workflow === 'RECOUNT') {
     throw new PhysicalInventoryDifferenceError(
       'Recount is not carried. Opening the list does not create a recount and does not change the count.',
-      'Recount is a later workflow. Nothing was written.',
+      'Open the recount screen. That is navigation. This list still does not recount.',
     );
   }
   return getDifferenceDocument(client, input);

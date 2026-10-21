@@ -52,13 +52,22 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
               {t('mi04.toDocuments')}
             </Link>
             {document && (
-              <Link
-                href={`/inventory/physical-inventory-differences?executed=1&plantFrom=${encodeURIComponent(document.plant)}&fiscalYear=${document.fiscalYear}&documentFrom=${encodeURIComponent(document.documentNumber)}&documentTo=${encodeURIComponent(document.documentNumber)}&differenceExists=1`}
-                className="btn btn-default min-h-11 sm:min-h-8"
-                data-count-differences-link
-              >
-                {t('mi04.toDifferences')}
-              </Link>
+              <>
+                <Link
+                  href={`/inventory/physical-inventory-differences?executed=1&plantFrom=${encodeURIComponent(document.plant)}&fiscalYear=${document.fiscalYear}&documentFrom=${encodeURIComponent(document.documentNumber)}&documentTo=${encodeURIComponent(document.documentNumber)}&differenceExists=1`}
+                  className="btn btn-default min-h-11 sm:min-h-8"
+                  data-count-differences-link
+                >
+                  {t('mi04.toDifferences')}
+                </Link>
+                <Link
+                  href={`/inventory/physical-inventory-recount?doc=${encodeURIComponent(document.documentNumber)}&year=${document.fiscalYear}`}
+                  className="btn btn-default min-h-11 sm:min-h-8"
+                  data-count-recount-link
+                >
+                  {t('mi20.toRecount')}
+                </Link>
+              </>
             )}
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>

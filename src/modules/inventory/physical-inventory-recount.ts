@@ -687,3 +687,230 @@ export async function syncRecountLink(
        and status <> ${next}
   `);
 }
+
+function shown(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed.toFixed(3) : value;
+}
+
+export interface RecountSourceItem {
+  itemNumber: number;
+  materialNumber: string;
+  stockType: string;
+  countStatus: string;
+  bookQuantity: string;
+  countedQuantity: string;
+  difference: string;
+  bookQuantityNow: string;
+  eligible: boolean;
+  reason: string | null;
+  recountDocumentNumber: string | null;
+  recountFiscalYear: number | null;
+}
+
+export interface RecountSourceView {
+  documentNumber: string;
+  fiscalYear: number;
+  plant: string;
+  storageLocation: string | null;
+  status: string;
+  plannedCountDate: string;
+  items: RecountSourceItem[];
+}
+
+/** The document a person is about to recount. A read. It writes nothing. */
+export async function getRecountSource(
+  client: string,
+  keys: { documentNumber: string; fiscalYear: number },
+): Promise<RecountSourceView | null> {
+  return withTenant(client, async (tx) => {
+    const headers = await tx.execute(sql`
+      select inventory_document_number, fiscal_year, plant, storage_location, status, planned_count_date
+        from physical_inventory_document
+       where client = ${client}
+         and inventory_document_number = ${keys.documentNumber}
+         and fiscal_year = ${keys.fiscalYear}
+    `) as unknown as Array<SourceHeader & { planned_count_date: string }>;
+    const header = headers[0];
+    if (!header) return null;
+    const items = await tx.execute(sql`
+      select item_number, material_number, stock_type, count_status,
+             counted_quantity::text, difference_quantity::text, book_quantity_snapshot::text, posting_status
+        from physical_inventory_item
+       where client = ${client}
+         and inventory_document_number = ${header.inventory_document_number}
+         and fiscal_year = ${header.fiscal_year}
+       order by item_number
+    `) as unknown as SourceItem[];
+    const view: RecountSourceItem[] = [];
+    for (const item of items) {
+      const reason = await judgeItem(tx, client, header, item, item.item_number);
+      const link = await activeLink(tx, client, header.inventory_document_number, header.fiscal_year, item.item_number);
+      view.push({
+        itemNumber: item.item_number,
+        materialNumber: item.material_number,
+        stockType: item.stock_type,
+        countStatus: item.count_status,
+        bookQuantity: shown(item.book_quantity_snapshot),
+        countedQuantity: shown(item.counted_quantity),
+        difference: shown(item.difference_quantity),
+        bookQuantityNow: await booksNow(tx, client, header.plant, header.storage_location, item.material_number, item.stock_type),
+        eligible: reason === null,
+        reason,
+        recountDocumentNumber: link?.recount_document_number ?? null,
+        recountFiscalYear: link?.recount_fiscal_year ?? null,
+      });
+    }
+    return {
+      documentNumber: header.inventory_document_number,
+      fiscalYear: header.fiscal_year,
+      plant: header.plant,
+      storageLocation: header.storage_location,
+      status: header.status,
+      plannedCountDate: header.planned_count_date,
+      items: view,
+    };
+  });
+}
+
+export interface RecountComparisonItem {
+  originalItemNumber: number;
+  recountItemNumber: number;
+  materialNumber: string;
+  stockType: string;
+  originalBook: string;
+  originalCounted: string;
+  originalDifference: string;
+  originalCounter: string;
+  originalCountDate: string;
+  recountBook: string;
+  recountCounted: string;
+  recountDifference: string;
+  recountCounter: string;
+  recountCountDate: string;
+  materialDocumentNumber: string;
+  status: string;
+  reason: string;
+}
+
+export interface RecountComparison {
+  originalDocumentNumber: string;
+  originalFiscalYear: number;
+  recountDocumentNumber: string;
+  recountFiscalYear: number;
+  plannedRecountDate: string;
+  status: string;
+  reason: string;
+  headerText: string;
+  items: RecountComparisonItem[];
+}
+
+/**
+ * Both documents, side by side. The quantities are not added. A missing recount count stays
+ * blank; it is not treated as zero and it is not folded into the original.
+ */
+export async function getRecountComparison(
+  client: string,
+  keys: { documentNumber: string; fiscalYear: number },
+): Promise<RecountComparison[]> {
+  return withTenant(client, async (tx) => {
+    const rows = await tx.execute(sql`
+      select l.original_document_number, l.original_fiscal_year, l.original_item_number,
+             l.recount_document_number, l.recount_fiscal_year, l.recount_item_number,
+             l.reason, l.header_text, l.planned_recount_date, l.status,
+             oi.material_number, oi.stock_type,
+             oi.book_quantity_snapshot::text as original_book,
+             oi.counted_quantity::text as original_counted,
+             oi.difference_quantity::text as original_difference,
+             oi.counter_name as original_counter,
+             oi.count_date as original_count_date,
+             ri.book_quantity_snapshot::text as recount_book,
+             ri.counted_quantity::text as recount_counted,
+             ri.difference_quantity::text as recount_difference,
+             ri.counter_name as recount_counter,
+             ri.count_date as recount_count_date,
+             a.material_document_number
+        from physical_inventory_recount_link l
+        join physical_inventory_item oi
+          on oi.client = l.client
+         and oi.inventory_document_number = l.original_document_number
+         and oi.fiscal_year = l.original_fiscal_year
+         and oi.item_number = l.original_item_number
+        join physical_inventory_item ri
+          on ri.client = l.client
+         and ri.inventory_document_number = l.recount_document_number
+         and ri.fiscal_year = l.recount_fiscal_year
+         and ri.item_number = l.recount_item_number
+        left join physical_inventory_difference_allocation a
+          on a.client = l.client
+         and a.inventory_document_number = l.recount_document_number
+         and a.fiscal_year = l.recount_fiscal_year
+         and a.item_number = l.recount_item_number
+       where l.client = ${client}
+         and (
+           (l.original_document_number = ${keys.documentNumber} and l.original_fiscal_year = ${keys.fiscalYear})
+           or (l.recount_document_number = ${keys.documentNumber} and l.recount_fiscal_year = ${keys.fiscalYear})
+         )
+       order by l.recount_document_number, l.original_item_number, a.material_document_number
+    `) as unknown as Array<{
+      original_document_number: string; original_fiscal_year: number; original_item_number: number;
+      recount_document_number: string; recount_fiscal_year: number; recount_item_number: number;
+      reason: string; header_text: string | null; planned_recount_date: string; status: string;
+      material_number: string; stock_type: string;
+      original_book: string | null; original_counted: string | null; original_difference: string | null;
+      original_counter: string | null; original_count_date: string | null;
+      recount_book: string | null; recount_counted: string | null; recount_difference: string | null;
+      recount_counter: string | null; recount_count_date: string | null;
+      material_document_number: string | null;
+    }>;
+    const groups = new Map<string, RecountComparison>();
+    for (const row of rows) {
+      const key = `${row.recount_document_number}/${row.recount_fiscal_year}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          originalDocumentNumber: row.original_document_number,
+          originalFiscalYear: row.original_fiscal_year,
+          recountDocumentNumber: row.recount_document_number,
+          recountFiscalYear: row.recount_fiscal_year,
+          plannedRecountDate: row.planned_recount_date,
+          status: row.status,
+          reason: row.reason,
+          headerText: row.header_text ?? '',
+          items: [],
+        };
+        groups.set(key, group);
+      }
+      let item = group.items.find((entry) => entry.recountItemNumber === row.recount_item_number);
+      if (!item) {
+        item = {
+          originalItemNumber: row.original_item_number,
+          recountItemNumber: row.recount_item_number,
+          materialNumber: row.material_number,
+          stockType: row.stock_type,
+          originalBook: shown(row.original_book),
+          originalCounted: shown(row.original_counted),
+          originalDifference: shown(row.original_difference),
+          originalCounter: row.original_counter ?? '',
+          originalCountDate: row.original_count_date ?? '',
+          recountBook: shown(row.recount_book),
+          recountCounted: shown(row.recount_counted),
+          recountDifference: shown(row.recount_difference),
+          recountCounter: row.recount_counter ?? '',
+          recountCountDate: row.recount_count_date ?? '',
+          materialDocumentNumber: '',
+          status: row.status,
+          reason: row.reason,
+        };
+        group.items.push(item);
+      }
+      if (row.material_document_number && !item.materialDocumentNumber.split(', ').includes(row.material_document_number)) {
+        item.materialDocumentNumber = item.materialDocumentNumber
+          ? `${item.materialDocumentNumber}, ${row.material_document_number}`
+          : row.material_document_number;
+      }
+    }
+    return [...groups.values()];
+  });
+}
