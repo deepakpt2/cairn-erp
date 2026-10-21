@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import {
@@ -30,7 +30,18 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
   const [reversal, reversalAction, reversing] = useActionState(postReversalAction, INITIAL_REVERSAL);
   const [migoAction, setAction] = useState('A07');
   const [reference, setReference] = useState('R08');
-  const [requestKey] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
+  /**
+   * SCR-145: the idempotency key moves once a posting succeeds. A key fixed for the life of the
+   * page made a second posting from the same page — a second transfer, a second issue — replay
+   * the first and post nothing, which is exactly what a retry guard must not do to a new request.
+   */
+  const [seed] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const [round, setRound] = useState(0);
+  const anyPosted = state.ok || receipt.ok || transfer.ok || reversal.ok;
+  useEffect(() => {
+    if (anyPosted) setRound((r) => r + 1);
+  }, [anyPosted]);
+  const requestKey = `${seed}-${round}`;
   const cell = resolveMigoCell(migoAction, reference);
 
   return (

@@ -4287,6 +4287,66 @@ would test against do not exist.
 
 Same-stage bookkeeping: B-916 / §26.928 / §30 row 2.746.
 
+## §26.929 — SCR-145 closed: MBRL, and a defect found on the way
+
+**B-917.** The return delivery stands accepted, and the round produced a fix that had nothing to do
+with returns until it did.
+
+**A return is not a cancellation.** Cancelling a wrong receipt is the reversal workflow — "that
+document never should have stood". A return says the document stood, the goods arrived, and some
+have gone back. §7 of the owner's specification insists on the distinction, so the data carries it:
+`return_of_document`, `return_of_document_year` and `return_of_line` never share a line with
+`reversal_of_*`, and a check constraint refuses a line that tries to be both.
+
+**The returnable quantity is derived, under a lock.** Original receipt, less posted returns, net of
+those returns' own reversals — and the second half of that was not obvious: a reversal line records
+what it reverses, not what its original returned against, so `returnedAgainst` finds the returns
+first and then nets off every line that reverses one of them. Nothing is read from the client. The
+count is taken under an advisory lock per original line and re-read after it.
+
+**The movement is configuration.** `RETURN_TO_VENDOR`, direction ISSUE, counter
+`RETURN_TO_VENDOR_REV`. A row configured as a receipt, or referencing anything but the purchase
+order, is refused by name rather than reinterpreted as a return. That is the owner's correction
+taken literally: 122 is the code this engine seeds, not a number the engine assumes.
+
+**Accounting mirrors the receipt.** Inventory credited, `GR_IR_CLEARING` debited, price difference
+where the order price and the stock value disagree — which reopens exactly the clearing position a
+credit memo later closes. No vendor liability is touched, no credit memo is created, and the journal
+link stays nullable on the header, as it is for 311 and 321.
+
+**The defect this round found.** `receivedQuantities` — written in SCR-061 — signed every
+non-reversal line positive. That was true only while the sole movement carrying a purchase-order
+reference was a receipt. A 122 carries the same reference and takes stock **out**, so under the old
+rule a return would have *increased* the received quantity: goods go back to the vendor and the
+order reports more received. The sign now follows the movement's configured direction, and a
+reversal takes the opposite sign of the line it reverses. Receipts show the number they always did,
+and a test pins it.
+
+**A defect the browser target found, in the screen I had just written.** The idempotency key on the
+return form was derived from the document number and the day, so a **second** return of the same
+receipt silently replayed the first and posted nothing — the retry guard doing to a new request what
+it should only do to a retry. The key now moves once a posting succeeds. **MIGO had the same shape**
+— one key for the life of the page, so a second posting without a reload would have replayed the
+first — and was corrected with it. T843 and T842 were re-run after that change and stayed green.
+
+**Acceptance — T844, green.** A purchase order for forty, received on the goods receipt screen; MBRL
+reads it and states forty returnable; fifteen go back with a return reference, the receipt stays
+`POSTED`, and **the receipt screen itself reports twenty-five received**; the remaining twenty-five
+go back, a third attempt finds the line ineligible with its reason and no quantity field; the second
+return is reversed from MIGO's own `A03 + R05`, restoring the store to 25 and the order to 25
+received; the first return is reversed too, and both return to 40. The receipt's status and journal
+are checked at the end and are untouched.
+
+**Delivered:** suite **2045/2045 in 274 files**, harness **144 targets**, migrations **208**,
+production build green.
+
+**Refused by name:** batch, serial numbers, split valuation, special stock, **outbound delivery and
+shipping integration** (no logistics module — the flag is hidden and the service rejects the
+request), picking and goods issue for delivery, and **vendor credit memo**, which stays with invoice
+verification.
+
+Same-stage bookkeeping: B-917 / §26.929 / §30 row 2.747.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4664,3 +4724,4 @@ Same-stage bookkeeping: B-916 / §26.928 / §30 row 2.746.
 | 2.744 | 2026-10-20 | **SCR-144 contracted — the three structural gaps against the MIGO specification (B-914, §26.926).** **`INV.STOCK.RECONCILE`** makes the stock projection rebuildable and guarded: a hand-query showed **0 drift**, but nothing rebuilt or guarded it. **`INV.STOCK.UOM`** adds `material_uom_conversion` — one alternative unit per material with numerator and denominator, so conversion is exact rational arithmetic rounded to the base unit's decimals, and an unconverted unit is **refused by name** rather than silently mis-posted. **`A03 + R05` becomes a fourth posting cell**: reversal entered where the specification puts it, through the standing `reverseMaterialDocument`. Named deferrals: display from MIGO, return deliveries, two-step transfers, batch/serial/special stock, split valuation, drafts and the Validated state, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |\n
 | 2.745 | 2026-10-21 | **SCR-144 closed — the three structural gaps against the MIGO specification are shut (B-915, §26.927).** **`INV.STOCK.UOM`**: `material_uom_conversion` states one alternative unit per material with an integer numerator and denominator, and **every writer converts or refuses** — goods issue, transfer posting and production receipt all convert before judging sufficiency or value, so two boxes move twenty-four pieces while the line keeps 2 BOX; a unit with no row is refused by name naming the missing conversion. **`INV.STOCK.RECONCILE`**: the projection is compared with the ledger per material × plant × storage location × stock type, only disagreement is listed, and a drifted dimension rebuilds from the documents — refusing while a physical count holds it open, a bypass the SCR-143 block invariant caught in this round's own new module. **`A03 + R05`** posts reversal inside MIGO through the standing engine: four posting cells of twenty-five. Screens: a unit on all three MIGO forms, `/inventory/uom-conversion` (CUNI) and `/inventory/stock-reconcile` (MB5L, own route by owner decision because it is the only writer). T843 green — conversion maintained, 2 BOX posted and read back as 24.000 PC, GAL refused by name, plant balanced, document reversed in place. Suite 2027/2027 in 272 files; harness 143; migrations 206. Still deferred: display from MIGO, returns, two-step transfers, batch/serial/special stock, split valuation, drafts and Validated, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |
 | 2.746 | 2026-10-21 | **SCR-145 contracted — MBRL return delivery against the corrected specification (B-916, §26.928).** Four corrections shape the round: the return movement is **resolved from `movement_type` configuration** (`RETURN_TO_VENDOR` = 122, direction ISSUE, reversal 123) rather than hardcoded, and a movement that adds stock cannot post as a return; the return posts through the **canonical material-document engine and numbering service**, never a separate subsystem — §15's `return_delivery_posting` is refused by name; the accounting link stays **nullable and mirror-shaped** (credit inventory, debit GR/IR, price difference where it differs), touching no vendor liability and creating no credit memo, because that is invoice verification's work; and **shipping delivery is a separate logistics workflow** that does not exist, so the flag is hidden and invocation rejected. Lineage gains its own columns (`return_of_document`, `return_of_document_year`, `return_of_line`) distinct from the reversal pair, so a commercial return and a cancellation stay distinguishable. Remaining returnable is derived from posted returns net of their reversals, under an advisory lock on the original item, revalidated after the lock. `receivedQuantities` is corrected to sign by the movement's actual stock direction — a latent defect that would have made a 122 inflate received quantity. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, picking, goods issue for delivery, vendor credit memo. | Agent |
+| 2.747 | 2026-10-21 | **SCR-145 closed — MBRL return delivery accepted (B-917, §26.929).** **A return is not a cancellation**: `return_of_document` / `return_of_document_year` / `return_of_line` are distinct from the reversal pair and a constraint forbids a line being both. **Returnable quantity is derived** from posted returns net of their reversals — a reversal records what it reverses, not what its original returned against, so the returns are found first and the lines reversing them netted off — under an advisory lock per original line and re-read after it, never taken from the caller. **The movement is configuration** (`RETURN_TO_VENDOR`, ISSUE, counter `RETURN_TO_VENDOR_REV`); a row that adds stock or references anything but the purchase order is refused by name. **Accounting mirrors the receipt**: inventory credited, GR/IR debited, price difference where they disagree — no vendor liability, no credit memo. **Two defects fixed on the way**: `receivedQuantities` signed every non-reversal line positive, so a 122 would have *increased* the received quantity — the sign now follows the configured direction and resolves reversals against the line they reverse; and the idempotency key on the return form (and on MIGO, which shared the shape) was fixed per document per day, so a second posting replayed the first — both now move the key once a posting succeeds. T844 green: 40 received, 15 returned with the receipt standing and the receipt screen reporting 25 received, 25 returned to zero, a third attempt refused with its reason, and both returns reversed back to 40/40. Suite 2045/2045 in 274 files; harness 144; migrations 208. Refused by name: batch, serial numbers, split valuation, special stock, outbound delivery, shipping integration, picking, vendor credit memo. | Agent |\n

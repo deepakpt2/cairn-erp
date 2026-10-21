@@ -9,7 +9,7 @@
  * return of anything. A reference that cannot be returned is shown with its reason, never hidden.
  */
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
 import type { ReturnDocumentView, ReturnableDocument } from '@/modules/inventory/return-delivery';
@@ -31,7 +31,20 @@ export default function ReturnDeliveryShell({
   const [reference, loadReference, loading] = useActionState(loadReferenceAction, INITIAL_REFERENCE);
   const [posted, post, posting] = useActionState(postReturnAction, INITIAL_POST);
   const document: ReturnableDocument | null = reference.document;
-  const requestKey = `${document?.documentNumber ?? 'none'}-${today}`;
+
+  /**
+   * The idempotency key belongs to *this* submission, not to the document and the day. Two
+   * returns of the same receipt on the same day are two returns; keying them alike made the
+   * second one replay the first and post nothing — a defect the browser target caught. The seed
+   * keeps a genuine retry of one submission replaying correctly, and the round moves the key on
+   * only once a posting has succeeded.
+   */
+  const [seed] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const [round, setRound] = useState(0);
+  useEffect(() => {
+    if (posted.ok) setRound((r) => r + 1);
+  }, [posted.ok, posted.posted]);
+  const requestKey = `${seed}-${round}`;
 
   return (
     <>

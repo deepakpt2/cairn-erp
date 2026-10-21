@@ -51,7 +51,11 @@ describe('SCR-145 the return screen', () => {
     expect(actions).toContain('postReturnDelivery');
     expect(actions).toContain('can(session, RETURN_CAPABILITY)');
     expect(actions).toContain('getReturnableDocument');
-    // The idempotency key travels with the form, not generated per click.
-    expect(read(SHELL)).toContain('name="requestKey"');
+    // The idempotency key travels with the form, and moves once a posting succeeds: a key fixed
+    // for the life of the page made a second return replay the first and post nothing.
+    const shell = read(SHELL);
+    expect(shell).toContain('name="requestKey"');
+    expect(shell).toContain('setRound');
+    expect(shell).toMatch(/requestKey = `\$\{seed\}-\$\{round\}`/);
   });
 });

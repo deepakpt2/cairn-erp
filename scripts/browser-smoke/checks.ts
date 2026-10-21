@@ -93,6 +93,7 @@ import { migoProductionReceipt } from './migo-production-receipt';
 import { migoTransferPosting } from './migo-transfer-posting';
 import { physicalInventoryCount } from './physical-inventory';
 import { scr144CloseTheGaps } from './scr144-close-the-gaps';
+import { scr145ReturnDelivery } from './scr145-return-delivery';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5038,6 +5039,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'migo-transfer-posting': migoTransferPosting,
   'physical-inventory': physicalInventoryCount,
   'scr144-close-the-gaps': scr144CloseTheGaps,
+  'scr145-return-delivery': scr145ReturnDelivery,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,
