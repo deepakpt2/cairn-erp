@@ -4097,6 +4097,56 @@ every module of this book.
 
 Same-stage bookkeeping: B-913 / §26.925 / §30 row 2.743.
 
+## §26.926 — SCR-144 / MIGO against the production specification: the three structural gaps
+
+**B-914.** The owner's MIGO architectural specification was checked against the shipped tree and
+returned three findings this book would not wave through: **the stock projection cannot be
+rebuilt**, **the entry unit is decorative**, and **MIGO delegates reversal** instead of being the
+workbench. This round closes those three; the rest are named at the end.
+
+**1. The stock projection becomes rebuildable and guarded. `INV.STOCK.RECONCILE`.**
+`stock_quantity` is a projection of `material_document_line`, and a hand-query showed **0 rows of
+drift** — but nothing rebuilt it and nothing guarded it. A balance nobody can reconstruct is a
+balance nobody can trust when it drifts at 3 a.m.
+
+`reconcileStock(client, scope)` reads the ledger (`line_direction` per line, signed) and compares
+it with the projection for every stock dimension: material x plant x location x stock type. It
+returns the drift rows, the totals and a **balanced** flag; `rebuildStock` recomputes a dimension
+from the ledger, for when the projection is the thing that is wrong.
+
+**2. The entry unit converts, or is refused. `INV.STOCK.UOM`.**
+Canon carries `unit_of_measure` with a `dimension` and `decimal_places`, and `material.base_unit`
+— and nothing between them. A new `material_uom_conversion` table states **one alternative unit
+per material per base unit with its numerator and denominator**, so conversion is exact rational
+arithmetic rather than a float multiplier:
+
+    base_quantity = entry_quantity x numerator / denominator
+
+rounded to the **base unit's** decimal places. A material with no conversion row accepts only its
+base unit and **refuses any other by name**, naming the conversion that is missing and the
+capability that maintains it. Entry quantity and entry unit are still stored as entered — the
+specification asks for both — and the base quantity is what the ledger and the projection carry.
+
+**3. Reversal is entered where the specification puts it: MIGO. `A03`.**
+`A03` currently links away to `/inventory/reversal`. It becomes a **fourth posting cell**: the
+reference is the **original material document** (which is what `R05` already means), and it posts
+through the standing `reverseMaterialDocument`. The matrix rule does not move — the reference
+says *which* document, the action says *what to do* with it. `A03 + R05` posts; `A03` against
+anything else refuses by name, because there is no document to cancel.
+
+**Deferred by name, and honestly:** display driven from MIGO (`R05` alone still links to
+`INV.DISPLAY`), **return deliveries** (`A02`, no returns chain in canon), two-step transfers,
+batch, serial numbers, special stock, split valuation, **drafts and the `Validated` state**,
+**stable error codes and field-level error pointers**, **external reference and version columns**
+on the material document, the **description snapshot**, and **plant-scoped authorization** (the
+capability model is tenant-wide by architecture). Each is a round of its own; none is hidden.
+
+**Acceptance (stage 5):** T843 — create a conversion, post in an alternative unit and read the
+base quantity and stock back from the database, post in an unconverted unit and see it refused by
+name, reconcile a plant and see it balanced, and reverse a document from MIGO's own `A03 + R05`.
+
+Same-stage bookkeeping: B-914 / §26.926 / §30 row 2.744.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -4471,3 +4521,4 @@ Same-stage bookkeeping: B-913 / §26.925 / §30 row 2.743.
 | 2.741 | 2026-10-20 | **SCR-143 stage 2: the version column, and no status index (B-911, §26.923).** **9081** adds `version` to the count header \u2014 the convention finance already keeps \u2014 and nothing else: the block release is a change-record fact and the stock identity needs no column while batch and special stock are refused. **No index added**: §26.918 already measured the guard at 0.060 ms on a hit and 0.046 on a miss, and `status` is a filter on a primary-key row already in hand, so a status index cannot improve it. The package\u2019s seven-column list is satisfied by two measured indexes and two PK prefixes. **Migrations 204.** | Agent |\ndirectory touched, not by the directories the change was *about*.
 | 2.742 | 2026-10-20 | **SCR-143 stage 3: both reversal paths guarded, and the race closed with locks (B-912, §26.924).** `material-document-reversal.ts` and `reverseGoodsReceipt` now consult the block and translate it into their own error types, so **MBST and the goods-receipt reversal can no longer move blocked stock**. The guard takes a **shared advisory lock on `client/stock-scope/<material>` before it reads**, creation takes it **exclusive before it writes** in sorted order \u2014 so a count cannot be created under an in-flight posting and a posting after the count waits and then sees the block. **The test does not rely on timing**: advisory locks are re-entrant within a session, which is why the first version passed when it should have failed, so the proof now holds the lock on one connection and tries from another. Plus `version` bumps, **`Block released: …`** as the recorded reason, multi-material counts, the number range untouched by a refused create, and cross-tenant isolation. **28/28 across both suites; book 2005/2005 in 270 files.** | Agent |\n
 | 2.743 | 2026-10-20 | **SCR-143 stage 4 and closure: T842 proves the reversal path, MI01 parity closes (B-913, §26.925).** The browser run now moves `MPI-FREE` with a **311 before any count exists**, creates **`PI-2026-0000002`** over it with the block, and has the **reversal refused** by the document\u2019s number \u2014 the leg that would have caught the original bypass \u2014 then cancels the count to release the material. The parity list closes: every non-deferred item of the second package is delivered; MI04/MI20/MI07, batch, special stock and the cycle indicator stay deferred by name; selection-driven generation and snapshots are conditional and satisfied by the supported workflow; plant-scoped authorization is refused by canon\u2019s capability model. **Suite 2005/2005 in 270 files; harness 142 targets; migrations 204.** | Agent |\n
+| 2.744 | 2026-10-20 | **SCR-144 contracted — the three structural gaps against the MIGO specification (B-914, §26.926).** **`INV.STOCK.RECONCILE`** makes the stock projection rebuildable and guarded: a hand-query showed **0 drift**, but nothing rebuilt or guarded it. **`INV.STOCK.UOM`** adds `material_uom_conversion` — one alternative unit per material with numerator and denominator, so conversion is exact rational arithmetic rounded to the base unit's decimals, and an unconverted unit is **refused by name** rather than silently mis-posted. **`A03 + R05` becomes a fourth posting cell**: reversal entered where the specification puts it, through the standing `reverseMaterialDocument`. Named deferrals: display from MIGO, return deliveries, two-step transfers, batch/serial/special stock, split valuation, drafts and the Validated state, stable error codes, external reference and version columns, description snapshot, plant-scoped authorization. | Agent |\n
