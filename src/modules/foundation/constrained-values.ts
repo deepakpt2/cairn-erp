@@ -197,6 +197,23 @@ async function search(
          order by parked_number
          limit ${cap}
       `);
+    case 'supplier-invoice':
+      return rows(tx, sql`
+        select document_number as code, reference as label, purchase_order_number as meta
+          from (
+            select invoice_number as document_number, supplier_reference as reference, purchase_order_number
+              from supplier_invoice
+             where client = ${client}
+            union all
+            select parked_number, supplier_reference, purchase_order_number
+              from parked_supplier_invoice
+             where client = ${client}
+          ) documents
+         where document_number ilike ${pattern} escape '\\'
+            or reference ilike ${pattern} escape '\\'
+         order by document_number
+         limit ${cap}
+      `);
     case 'quotation-request':
       return rows(tx, sql`
         select r.rfq_number as code, r.partner_number as label, e.quotation_deadline as meta

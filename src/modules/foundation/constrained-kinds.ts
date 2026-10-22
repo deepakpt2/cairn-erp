@@ -21,6 +21,7 @@ export const CONSTRAINED_KINDS = [
   'quotation-event',
   'purchase-order',
   'parked-invoice',
+  'supplier-invoice',
   'supplier-purchasing',
   'supplier-company',
   'customer-company',

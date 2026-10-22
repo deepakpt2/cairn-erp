@@ -109,6 +109,7 @@ import { scr157Quotation } from './scr157-quotation';
 import { scr158QuotationDisplay } from './scr158-quotation-display';
 import { scr159QuotationComparison } from './scr159-quotation-comparison';
 import { scr160ParkedInvoice } from './scr160-parked-invoice';
+import { scr161InvoiceOverview } from './scr161-invoice-overview';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5070,6 +5071,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr158-quotation-display': scr158QuotationDisplay,
   'scr159-quotation-comparison': scr159QuotationComparison,
   'scr160-parked-invoice': scr160ParkedInvoice,
+  'scr161-invoice-overview': scr161InvoiceOverview,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

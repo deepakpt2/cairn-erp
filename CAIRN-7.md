@@ -83,6 +83,24 @@ A credit memo, an approval, a post from the park, MIR4 and MIR6 were not started
 
 Same-stage bookkeeping: B-975 / §26.987 / §30 row 2.805.
 
+## §26.988 — MIR6 contracted: the list is not a posting
+
+**B-976.** SCR-161. The owner's package (2026-10-22) is the contract. MIR6 lists the logistics invoices that already stand. It introduces no invoice table, no status, and no accounting source of truth. A parked invoice is a parked row. A posted invoice is a supplier invoice. A cancelled invoice stays cancelled, and the cancellation document stays posted and names the invoice it cancels. A credit memo is a category, not a reversal. A draft, a payment block, a saved layout, an export, an invoice without a purchase order, a company-code authorization object, and a purchasing-organisation authorization object are not this list, and each is refused by name. The fiscal year is the year stored on the invoice. It is not derived from the posting date. A closed period is not read, so it cannot hide a historical invoice. A company-currency amount is the journal line's stored amount, or it is absent. It is not converted. Viewing writes nothing. MIR4, a payment-block release, and an export stay later. T849 through T859 were not rerun. Migration `9098` was not edited.
+
+## §26.989 — MIR6 read: one row per invoice, and the park has no journal
+
+**B-977.** SCR-161 stage 2. No schema. `src/modules/purchasing/invoice-overview.ts` reads `supplier_invoice` and `parked_supplier_invoice`. It does not insert, update, or delete. It does not draw a number. It does not read a posting period.
+
+The service proof. A park of quantity 8 and gross 800 stood with no journal, no category, no company-currency amount, and payment state not applicable. Its posting date was blank. A posted invoice was cancelled. The original stood cancelled and named the cancellation. The cancellation stood posted, category invoice, and named the original. It was not a credit memo. The posted journal link named the stored document, and the payment state was open from the uncleared supplier line. A company-currency amount stood only where that line stored one. A document stored as fiscal year 2025, with posting date 2026-04-01 and two items, was absent from year 2026 and stood once in year 2025 at gross 40.0000. The items did not duplicate it. A posting-date filter left the park out and said why. Another tenant's read was the same miss. The parked count, the posted count, the journal count and the change count were unchanged. A draft, a payment block, a reversal, an export, an invoice without an order, a company authorization, a purchasing authorization, an exchange rate, a post, company 1099, a missing year and lifecycle DRAFT were refused by name. Category credit memo returned an empty list and did not include the park. Year 1999 returned an empty list. Service test 2/2. The screen was not the acceptance of this stage. T860 was not run. T849 through T859 were not rerun.
+
+## §26.990 — MIR6 screen: one route, and it does not post
+
+**B-978.** SCR-161 stage 3. Route `/purchasing/invoice-overview`. Capability `PROC.INV.OVERVIEW`, posting false. Alias `MIR6` in the catalogue only. It is not an identifier on the page. Company code and purchasing organisation are dropdowns. Vendor, purchase order, and invoice document suggest as the user types, five at a time. An empty query returns nothing. The fiscal year is required and is not taken from the calendar date. The list shows parked, posted, and cancelled. A parked posting date is blank. A parked invoice has no accounting-document link. A posted invoice links to the accounting document that stands, and the destination rechecks its own capability. Totals stay in their currency and lifecycle. There is no post button, no export, and no payment-block field. A link to the park and a link to invoice verification are navigation. Live seed was not re-run. Screen contract 2/2. Service test was not the browser acceptance. T860 was not run. T849 through T859 were not rerun.
+
+An export, a payment block, and MIR4 were not started.
+
+Same-stage bookkeeping: B-978 / §26.990 / §30 row 2.808.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -95,3 +113,6 @@ Same-stage bookkeeping: B-975 / §26.987 / §30 row 2.805.
 | 2.803 | 2026-10-22 | **SCR-160 stage 2 — the park stands, and the receipt still posts (B-973, §26.985).** Migration `9098`. Number `PARKINV` / `PV`. A check writes nothing. A parked quantity is not invoiced quantity. A shared reference is refused by name. | Agent |
 | 2.804 | 2026-10-22 | **SCR-160 stage 3 — one screen (B-974, §26.986).** Route `/purchasing/parked-invoice`. Alias only in the catalogue. Capability `PROC.INV.PARK`, posting false. Screen contract 2/2. Service test 5/5. T859 not run. T849 through T858 not rerun. | Agent |
 | 2.805 | 2026-10-22 | **SCR-160 stage 5 — T859 parks one invoice, and it does not post (B-975, §26.987).** Production build. MIR7 opened the one screen. The check named the missing receipt and wrote nothing. PV-0000001 stood. The change stood in the history. The order was not invoiced. T849 through T858 not rerun. | Agent |
+| 2.806 | 2026-10-22 | **SCR-161 / MIR6 contracted (B-976, §26.988).** The list is not a posting. No new invoice table. The fiscal year is the stored year. A closed period is not read. | Agent |
+| 2.807 | 2026-10-22 | **SCR-161 stage 2 — one row per invoice (B-977, §26.989).** A park has no journal. A cancellation names the original and is not a credit memo. Fiscal year 2025 stayed out of 2026. Two items did not duplicate the row. Service test 2/2. | Agent |
+| 2.808 | 2026-10-22 | **SCR-161 stage 3 — one screen (B-978, §26.990).** Route `/purchasing/invoice-overview`. Alias only in the catalogue. Capability `PROC.INV.OVERVIEW`, posting false. T860 not run. T849 through T859 not rerun. | Agent |

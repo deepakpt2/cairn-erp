@@ -48,6 +48,7 @@ export default async function ParkedInvoicePage({ searchParams }: {
           <h1 className="text-xl font-semibold tracking-tight">{t('parkedInvoice.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/purchasing/invoice-verification" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.toPost')}</Link>
+            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>
         </div>

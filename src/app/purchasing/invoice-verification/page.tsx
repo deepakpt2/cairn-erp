@@ -33,6 +33,7 @@ export default async function InvoiceVerificationPage({ searchParams }: {
           <h1 className="text-xl font-semibold tracking-tight">{t('invoiceVerification.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/purchasing/parked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.title')}</Link>
+            <Link href="/purchasing/invoice-overview" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.title')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
               {t('nav.launchpad')}
             </Link>
