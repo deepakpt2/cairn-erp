@@ -34,7 +34,8 @@ RUN if id node >/dev/null 2>&1; then \
     fi \
     && echo 'cairn ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cairn \
     && chmod 440 /etc/sudoers.d/cairn \
-    && install -d -o cairn -g cairn /work /var/run/sshd
+    && install -d -o cairn -g cairn /work \
+    && install -d -o root -g root -m 755 /run/sshd
 
 COPY docker/sshd_config /etc/ssh/sshd_config.build-box
 COPY docker/bootstrap-db.mjs /usr/local/bin/bootstrap-db.mjs

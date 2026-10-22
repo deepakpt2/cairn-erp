@@ -13,7 +13,8 @@ case "$BUILD_BOX_PASSWORD" in
 esac
 
 echo "cairn:${BUILD_BOX_PASSWORD}" | chpasswd
-install -d -o postgres -g postgres /var/run/postgresql /var/run/sshd
+install -d -o postgres -g postgres -m 755 /var/run/postgresql
+install -d -o root -g root -m 755 /run/sshd
 if [ ! -d /var/lib/postgresql/17/main ]; then
   pg_createcluster 17 main -- --auth-local=peer --auth-host=scram-sha-256
 fi
