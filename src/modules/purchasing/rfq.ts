@@ -20,7 +20,11 @@ import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { businessPartner, bpRole } from '../foundation/business-partner-schema';
 import {
-  companyCode, plant, purchasingGroup, purchasingOrg, purchasingOrgPlant, storageLocation,
+  assertPurchasingOrgForPlant,
+  PurchasingOrgPlantAuthorizationError,
+} from '../foundation/purchasing-org-plant';
+import {
+  companyCode, plant, purchasingGroup, purchasingOrg, storageLocation,
 } from '../foundation/schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialPlant, materialUomConversion } from '../inventory/schema';
@@ -37,11 +41,13 @@ const REQUEST_CLASS = 'purchasing_rfq';
 
 export class RfqError extends Error {
   remedy?: string;
+  code?: string;
 
-  constructor(message: string, remedy?: string) {
+  constructor(message: string, remedy?: string, code?: string) {
     super(message);
     this.name = 'RfqError';
     this.remedy = remedy;
+    this.code = code;
   }
 }
 
@@ -289,12 +295,14 @@ async function prepareCreate(tx: Tx, input: RfqCreateInput): Promise<PreparedReq
       throw new RfqError(`Plant ${plantCode} belongs to no company code, so its currency cannot be judged.`);
     }
     companies.add(plantRow.companyCode);
-    const [assigned] = await tx.select().from(purchasingOrgPlant).where(and(
-      eq(purchasingOrgPlant.client, input.client),
-      eq(purchasingOrgPlant.purchasingOrg, org),
-      eq(purchasingOrgPlant.plant, plantCode),
-    ));
-    if (!assigned) throw new RfqError(`Plant ${plantCode} is not assigned to purchasing organisation ${org}.`);
+    try {
+      await assertPurchasingOrgForPlant(tx, {
+        client: input.client, purchasingOrg: org, plant: plantCode, documentType: 'REQUEST_FOR_QUOTATION',
+      });
+    } catch (error) {
+      if (error instanceof PurchasingOrgPlantAuthorizationError) throw new RfqError(error.message, error.remedy, error.code);
+      throw error;
+    }
 
     const storage = blank(line.storageLocation);
     if (storage) {
@@ -929,12 +937,14 @@ async function judgeChangedLine(
     if (!plantRow.companyCode) {
       throw new RfqError(`Plant ${proposed.plant} belongs to no company code, so its currency cannot be judged.`);
     }
-    const [assigned] = await tx.select().from(purchasingOrgPlant).where(and(
-      eq(purchasingOrgPlant.client, client),
-      eq(purchasingOrgPlant.purchasingOrg, event.purchasingOrg),
-      eq(purchasingOrgPlant.plant, proposed.plant),
-    ));
-    if (!assigned) throw new RfqError(`Plant ${proposed.plant} is not assigned to purchasing organisation ${event.purchasingOrg}.`);
+    try {
+      await assertPurchasingOrgForPlant(tx, {
+        client, purchasingOrg: event.purchasingOrg, plant: proposed.plant, documentType: 'REQUEST_FOR_QUOTATION',
+      });
+    } catch (error) {
+      if (error instanceof PurchasingOrgPlantAuthorizationError) throw new RfqError(error.message, error.remedy, error.code);
+      throw error;
+    }
     const eventCompany = await companyOfEvent(tx, client, event.eventNumber);
     if (plantRow.companyCode !== eventCompany) {
       throw new RfqError(`Plant ${proposed.plant} belongs to company ${plantRow.companyCode}, not the event's company ${eventCompany}.`);

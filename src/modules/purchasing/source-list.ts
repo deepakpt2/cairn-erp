@@ -12,7 +12,11 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
-import { plant, purchasingOrg, purchasingOrgPlant } from '../foundation/schema';
+import {
+  assertPurchasingOrgForPlant,
+  PurchasingOrgPlantAuthorizationError,
+} from '../foundation/purchasing-org-plant';
+import { plant, purchasingOrg } from '../foundation/schema';
 import { businessPartner, bpRole } from '../foundation/business-partner-schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialPlant } from '../inventory/schema';
@@ -230,13 +234,13 @@ async function judgeMasters(
   if (!organisation?.isActive) {
     throw new SourceListError(`Purchasing organisation ${org} does not exist or is inactive.`);
   }
-  const [assigned] = await tx.select().from(purchasingOrgPlant).where(and(
-    eq(purchasingOrgPlant.client, client),
-    eq(purchasingOrgPlant.purchasingOrg, org),
-    eq(purchasingOrgPlant.plant, plantCode),
-  ));
-  if (!assigned) {
-    throw new SourceListError(`Plant ${plantCode} is not assigned to purchasing organisation ${org}.`);
+  try {
+    await assertPurchasingOrgForPlant(tx, {
+      client, purchasingOrg: org, plant: plantCode, documentType: 'SOURCE_LIST',
+    });
+  } catch (error) {
+    if (error instanceof PurchasingOrgPlantAuthorizationError) throw new SourceListError(error.message, error.remedy);
+    throw error;
   }
   const [partnerRow] = await tx.select().from(businessPartner).where(and(
     eq(businessPartner.client, client), eq(businessPartner.partnerNumber, partner),

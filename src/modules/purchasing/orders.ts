@@ -29,6 +29,10 @@ import {
   storageLocation, taxCode,
 } from '../foundation/schema';
 import { businessPartner } from '../foundation/business-partner-schema';
+import {
+  assertPurchasingOrgForPlant,
+  PurchasingOrgPlantAuthorizationError,
+} from '../foundation/purchasing-org-plant';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { glAccount } from '../finance/schema';
 import { material, materialGroup, materialPlant } from '../inventory/schema';
@@ -53,11 +57,13 @@ export const ORDER_TYPES = [
 
 export class PurchaseOrderError extends Error {
   remedy?: string;
+  code?: string;
 
-  constructor(message: string, remedy?: string) {
+  constructor(message: string, remedy?: string, code?: string) {
     super(message);
     this.name = 'PurchaseOrderError';
     this.remedy = remedy;
+    this.code = code;
   }
 }
 
@@ -221,6 +227,19 @@ async function judgeItem(
       `Plant ${item.plant} belongs to company code ${plantRow.companyCode ?? 'none'}, not the order's company code ${header.companyCode}.`,
       'Order for the plant under its own company code, or choose a plant of this company.',
     );
+  }
+  try {
+    await assertPurchasingOrgForPlant(tx, {
+      client,
+      purchasingOrg: header.purchasingOrg,
+      plant: item.plant,
+      documentType: 'PURCHASE_ORDER',
+    });
+  } catch (error) {
+    if (error instanceof PurchasingOrgPlantAuthorizationError) {
+      throw new PurchaseOrderError(error.message, error.remedy, error.code);
+    }
+    throw error;
   }
   if (item.storageLocation) {
     const [sl] = await tx.select().from(storageLocation).where(and(

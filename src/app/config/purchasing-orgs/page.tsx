@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
 
 const PURCHASING_ORG_DEFINE = 'CFG.PROC.PURORG.DEFINE';
 const PURCHASING_ORG_ASSIGN_COMPANY = 'CFG.PROC.PURORG.ASSIGN_COMPANY';
+const PURCHASING_ORG_ASSIGN_PLANT = 'CFG.PROC.PURORG.ASSIGN_PLANT';
 
 type PageParams = {
   new?: string;
@@ -41,6 +42,7 @@ export default async function PurchasingOrgsPage({
   const client = session.user.client;
   const canMaintain = can(session, PURCHASING_ORG_DEFINE);
   const canAssignCompany = can(session, PURCHASING_ORG_ASSIGN_COMPANY);
+  const canAssignPlant = can(session, PURCHASING_ORG_ASSIGN_PLANT);
 
   const organisations = await withTenant(client, async (tx) =>
     tx
@@ -96,6 +98,11 @@ export default async function PurchasingOrgsPage({
             {canAssignCompany && (
               <Link href="/config/purchasing-orgs/assign-company" className="btn btn-default">
                 {t('purchasingOrg.assignCompanyCode')}
+              </Link>
+            )}
+            {canAssignPlant && (
+              <Link href="/config/purchasing-orgs/assign-plant" className="btn btn-default">
+                {t('purchasingOrg.assignPlant')}
               </Link>
             )}
             {canMaintain && (

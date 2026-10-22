@@ -4,7 +4,8 @@ import { and,eq,asc,sql } from 'drizzle-orm';
 import { withTenant,type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { currency } from '../../platform/tables/reference';
-import { companyCode,purchasingOrg,purchasingGroup,purchasingOrgPlant,plant as plantTable } from './schema';
+import { assertPurchasingOrgForPlant,PurchasingOrgPlantAuthorizationError } from './purchasing-org-plant';
+import { companyCode,purchasingOrg,purchasingGroup,plant as plantTable } from './schema';
 import { businessPartner,bpRole } from './business-partner-schema';
 import { paymentTerms } from './payment-terms-schema';
 import { supplierPurchasing } from './supplier-purchasing-schema';
@@ -59,7 +60,7 @@ export async function requireSupplierPurchasing(tx:Tx,client:string,partner:stri
   const [segment]=await tx.select().from(supplierPurchasing).where(key(client,partner,org));
   if(!segment||segment.purchasingStatus==='INCOMPLETE'||segment.isBlocked)throw new SupplierPurchasingError('Supplier purchasing defaults are missing, incomplete or blocked.');
   await validateAssignments(tx,client,org,segment.orderCurrency,segment.purchasingGroup,segment.paymentTermsCode);
-  if(plant){const [site]=await tx.select().from(plantTable).where(and(eq(plantTable.client,client),eq(plantTable.plant,plant),eq(plantTable.isActive,true)));if(!site)throw new SupplierPurchasingError('Plant is missing or inactive.');if(!site.companyCode)throw new SupplierPurchasingError('Plant has no assigned Company Code.','Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before using it for purchasing.');const [assignment]=await tx.select().from(purchasingOrgPlant).where(and(eq(purchasingOrgPlant.client,client),eq(purchasingOrgPlant.purchasingOrg,org),eq(purchasingOrgPlant.plant,plant)));if(!assignment)throw new SupplierPurchasingError('The purchasing organisation is not assigned to this plant.');}
+  if(plant){const [site]=await tx.select().from(plantTable).where(and(eq(plantTable.client,client),eq(plantTable.plant,plant),eq(plantTable.isActive,true)));if(!site)throw new SupplierPurchasingError('Plant is missing or inactive.');if(!site.companyCode)throw new SupplierPurchasingError('Plant has no assigned Company Code.','Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before using it for purchasing.');try{await assertPurchasingOrgForPlant(tx,{client,purchasingOrg:org,plant,documentType:'SUPPLIER_PURCHASING'});}catch(error){if(error instanceof PurchasingOrgPlantAuthorizationError)throw new SupplierPurchasingError(error.message,error.remedy);throw error;}}
   return segment;
 }
 

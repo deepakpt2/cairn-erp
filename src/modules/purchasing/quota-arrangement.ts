@@ -12,7 +12,11 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber, NumberRangeError } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
-import { plant, purchasingOrg, purchasingOrgPlant } from '../foundation/schema';
+import {
+  assertPurchasingOrgForPlant,
+  PurchasingOrgPlantAuthorizationError,
+} from '../foundation/purchasing-org-plant';
+import { plant, purchasingOrg } from '../foundation/schema';
 import { businessPartner, bpRole } from '../foundation/business-partner-schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialPlant } from '../inventory/schema';
@@ -286,12 +290,14 @@ async function judgeMasters(
     eq(purchasingOrg.client, client), eq(purchasingOrg.purchasingOrg, org),
   ));
   if (!organisation?.isActive) throw new QuotaError(`Purchasing organisation ${org} does not exist or is inactive.`);
-  const [assigned] = await tx.select().from(purchasingOrgPlant).where(and(
-    eq(purchasingOrgPlant.client, client),
-    eq(purchasingOrgPlant.purchasingOrg, org),
-    eq(purchasingOrgPlant.plant, plantCode),
-  ));
-  if (!assigned) throw new QuotaError(`Plant ${plantCode} is not assigned to purchasing organisation ${org}.`);
+  try {
+    await assertPurchasingOrgForPlant(tx, {
+      client, purchasingOrg: org, plant: plantCode, documentType: 'QUOTA_ARRANGEMENT',
+    });
+  } catch (error) {
+    if (error instanceof PurchasingOrgPlantAuthorizationError) throw new QuotaError(error.message, error.remedy);
+    throw error;
+  }
   const [partnerRow] = await tx.select().from(businessPartner).where(and(
     eq(businessPartner.client, client), eq(businessPartner.partnerNumber, partner),
   ));

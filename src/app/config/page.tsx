@@ -107,6 +107,7 @@ export default async function WorkbenchPage({
     '/config/sales-orgs/assign-division',
     '/config/purchasing-orgs',
     '/config/purchasing-orgs/assign-company',
+    '/config/purchasing-orgs/assign-plant',
     '/config/purchasing-groups',
     '/config/number-ranges',
     '/config/number-range-objects',

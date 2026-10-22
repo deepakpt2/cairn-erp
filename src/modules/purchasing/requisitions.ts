@@ -19,6 +19,10 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import {
+  assertPurchasingOrgForPlant,
+  PurchasingOrgPlantAuthorizationError,
+} from '../foundation/purchasing-org-plant';
+import {
   companyCode, controllingAreaCompany, costCenter, plant, purchasingGroup, storageLocation,
 } from '../foundation/schema';
 import { glAccount } from '../finance/schema';
@@ -38,11 +42,13 @@ export const REQUISITION_TYPES = [
 
 export class PurchaseRequisitionError extends Error {
   remedy?: string;
+  code?: string;
 
-  constructor(message: string, remedy?: string) {
+  constructor(message: string, remedy?: string, code?: string) {
     super(message);
     this.name = 'PurchaseRequisitionError';
     this.remedy = remedy;
+    this.code = code;
   }
 }
 
@@ -62,6 +68,8 @@ const itemInput = z.object({
   plant: z.string().trim().min(1).max(10),
   storageLocation: z.string().trim().max(10).optional().default(''),
   purchasingGroup: z.string().trim().min(1).max(3),
+  /** Not stored. When a caller names an organisation, the pair is judged and then discarded. */
+  purchasingOrg: z.string().trim().max(10).optional().default(''),
   estimatedPrice: z.coerce.number().min(0).optional(),
   priceUnit: z.coerce.number().int().positive().optional().default(1),
   currency: z.string().trim().max(5).optional().default(''),
@@ -125,6 +133,21 @@ async function judgeItem(
 }> {
   const [plantRow] = await tx.select().from(plant).where(and(eq(plant.client, client), eq(plant.plant, item.plant)));
   if (!plantRow) throw new PurchaseRequisitionError(`Plant ${item.plant} does not exist.`, 'Pick a standing plant; plants are maintained on the plants screen.');
+  if (item.purchasingOrg) {
+    try {
+      await assertPurchasingOrgForPlant(tx, {
+        client,
+        purchasingOrg: item.purchasingOrg,
+        plant: item.plant,
+        documentType: 'PURCHASE_REQUISITION',
+      });
+    } catch (error) {
+      if (error instanceof PurchasingOrgPlantAuthorizationError) {
+        throw new PurchaseRequisitionError(error.message, error.remedy, error.code);
+      }
+      throw error;
+    }
+  }
   if (!plantRow.companyCode) {
     throw new PurchaseRequisitionError(
       `Plant ${item.plant} belongs to no company code, so its assignments cannot be judged.`,
