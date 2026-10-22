@@ -137,6 +137,30 @@ Same-stage bookkeeping: B-982 / §26.994 / §30 row 2.812.
 
 Same-stage bookkeeping: B-983 / §26.995 / §30 row 2.813.
 
+## §26.996 — MR11 contracted: a clearing is a journal, and it is not a goods movement
+
+**B-984.** SCR-163. The owner's package (2026-10-22) is the contract. MR11 clears a GR/IR residual on a posted logistics purchase-order item. It does not create a material document, and it does not change stock. A check writes nothing. The amount is the posted difference, not a quantity multiplied by today's order price. A closed period refuses a posting. A reversal is a compensating journal. The original is not deleted.
+
+**What already stands, and this round does not rebuild.** A goods receipt credits GR/IR at the price on that receipt. Invoice verification debits GR/IR at the expected amount and posts a price variance to price difference. A return debits GR/IR and reduces the received quantity. F.19 remains the period-end accrual. It is not this write. Account determination already names GR/IR clearing and price difference. The journal writer is the canonical posting service. There is no delivery-cost clearing, no consignment, and no service item category.
+
+**The residual that can stand.** The receipt credit, net of returns and reversals, less the invoice expected debit, less a clearing that still stands. A price variance that already left GR/IR is not cleared again. A delivery cost, consignment, a service item, and an account assignment are refused by name. A missing account is a refusal, not a guessed account. A further receipt or invoice that can still match the difference is not cleared automatically.
+
+Same-stage bookkeeping: B-984 / §26.996 / §30 row 2.814.
+
+## §26.997 — MR11 service: the residual is the posted difference
+
+**B-985.** SCR-163 stage 2. Migration `9100`. Table `gr_ir_maintenance_link`. The link names the journal and the purchase-order item. It is not a second ledger. A check writes nothing. A post writes one balanced journal, document type SA, offset to the configured price-difference account. The same request key returns the standing document. A stale fingerprint is refused. A closed financial period is refused. A reversal marks the link and posts a compensating journal. Stock and the material-document count do not change.
+
+The service proof. A receipt of five and an invoice of three left 200 on GR/IR. A matched quantity with a price variance was not a residual. A delivery cost, consignment, and a stock movement were refused by name. A check wrote nothing. An unconfirmed clearing was refused because a further invoice can still be posted. A closed period was refused. The confirmed clearing posted one balanced journal. A replay did not post again. The stock quantity and the material-document count were unchanged. The reversal restored the residual, and the original journal stayed reversed. Service test 2/2. The screen was not the acceptance of this stage. T862 was not run. T849 through T861 were not rerun.
+
+Same-stage bookkeeping: B-985 / §26.997 / §30 row 2.815.
+
+## §26.998 — MR11 screen: one route, and a check writes nothing
+
+**B-986.** SCR-163 stage 3. Route `/purchasing/grir-clearing`. Capabilities `PROC.GRIR.MAINTAIN`, posting false, `PROC.GRIR.MAINTAIN.POST`, posting true, and `PROC.GRIR.MAINTAIN.REVERSE`, posting true. Alias `MR11` in the catalogue only, on the display capability. It is not an identifier on the page. Company code and plant are dropdowns. The purchasing document suggests as the user types. The key date is not the posting date. The surplus is a dropdown: delivery, invoice, or both. The list shows the residual, the accounts, and whether a further receipt or invoice can still match it. A check writes nothing. Post and reverse are separate actions. A link to the invoice overview, the source history, and the accounting document are navigation. Live seed was not re-run. Screen contract 1/1. Service test was not the browser acceptance. T862 was not run. T849 through T861 were not rerun.
+
+Same-stage bookkeeping: B-986 / §26.998 / §30 row 2.816.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -157,3 +181,6 @@ Same-stage bookkeeping: B-983 / §26.995 / §30 row 2.813.
 | 2.811 | 2026-10-22 | **SCR-162 stage 2 — the hold is the row the payment run reads (B-981, §26.993).** Migration `9099`. A closed period did not refuse the release. The journal amount did not change. A paid item and a proposal item were refused. Service test 3/3. | Agent |
 | 2.812 | 2026-10-22 | **SCR-162 stage 3 — one screen (B-982, §26.994).** Route `/purchasing/blocked-invoice`. Alias only in the catalogue. Capabilities `PROC.INV.BLOCK` and `PROC.INV.BLOCK.RELEASE`, posting false. T861 not run. T849 through T860 not rerun. | Agent |
 | 2.813 | 2026-10-22 | **SCR-162 stage 5 — T861 releases one hold, and it does not post (B-983, §26.995).** Production build. MRBR opened the one screen. VI-0000001 was held, then released. The journal amount did not change. T849 through T860 not rerun. | Agent |
+| 2.814 | 2026-10-22 | **SCR-163 / MR11 contracted (B-984, §26.996).** A clearing is a journal. It is not a goods movement. The residual is the posted difference. A price variance that already left GR/IR is not cleared again. | Agent |
+| 2.815 | 2026-10-22 | **SCR-163 stage 2 — the residual is the posted difference (B-985, §26.997).** Migration `9100`. A closed period refused the posting. Stock did not move. Service test 2/2. T862 not run. | Agent |
+| 2.816 | 2026-10-22 | **SCR-163 stage 3 — one screen (B-986, §26.998).** Route `/purchasing/grir-clearing`. Alias only in the catalogue. A check writes nothing. T862 not run. T849 through T861 not rerun. | Agent |

@@ -887,3 +887,40 @@ export const supplierInvoicePaymentBlockEvent = pgTable('supplier_invoice_paymen
     foreignColumns: [supplierInvoicePaymentBlock.client, supplierInvoicePaymentBlock.invoiceNumber, supplierInvoicePaymentBlock.reason],
   }).onDelete('restrict'),
 ]);
+
+/**
+ * A posted GR/IR maintenance document for one purchase-order item.
+ * The journal is the accounting document. This row is the link.
+ * A reversal sets reversed_by. It does not delete the journal.
+ */
+export const grIrMaintenanceLink = pgTable('gr_ir_maintenance_link', {
+  client: tenant(),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  keyDate: date('key_date', { mode: 'string' }).notNull(),
+  surplus: varchar('surplus', { length: 16 }).notNull(),
+  allocatedAmount: numeric('allocated_amount', { precision: 23, scale: 4 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  allocatedQuantity: numeric('allocated_quantity', { precision: 13, scale: 3 }).notNull(),
+  quantityUnit: varchar('quantity_unit', { length: 6 }).notNull(),
+  grIrAccount: varchar('gr_ir_account', { length: 10 }).notNull(),
+  offsetAccount: varchar('offset_account', { length: 10 }).notNull(),
+  fingerprint: varchar('fingerprint', { length: 80 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  comment: varchar('comment', { length: 100 }).notNull(),
+  reversedBy: varchar('reversed_by', { length: 40 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear] }),
+  unique('gr_ir_maintenance_link_request_uq').on(t.client, t.requestKey),
+  foreignKey({
+    columns: [t.client, t.orderNumber, t.itemNumber],
+    foreignColumns: [purchaseOrderItem.client, purchaseOrderItem.orderNumber, purchaseOrderItem.itemNumber],
+  }).onDelete('restrict'),
+  check('gr_ir_maintenance_link_surplus_ck', sql`${t.surplus} in ('DELIVERY', 'INVOICE')`),
+  check('gr_ir_maintenance_link_amount_ck', sql`${t.allocatedAmount} <> 0`),
+]);
