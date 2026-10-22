@@ -173,6 +173,8 @@ export async function scr162BlockedInvoice(ctx: Context) {
   assert.deepEqual(await standing(), before);
   console.log('  ✓ a check names the hold and writes nothing');
 
+  await place.locator('[name="invoiceNumber"]').fill(posted.invoiceNumber);
+  await place.locator('[name="comment"]').fill('hold for acceptance');
   await place.locator('[data-blocked-invoice-place-save]').click();
   await page.locator(`[data-blocked-invoice-row="${posted.invoiceNumber}"]`).waitFor();
   assert.match(await page.locator('[data-blocked-invoice-notice]').first().innerText(), /journal was not changed/i);
@@ -195,6 +197,7 @@ export async function scr162BlockedInvoice(ctx: Context) {
   assert.equal((await standing()).events, 1);
   console.log('  ✓ a release check writes nothing');
 
+  await row.locator('[name="comment"]').fill('reviewed');
   await row.locator('[data-blocked-invoice-release-save]').click();
   await page.getByText(/was released/).waitFor();
   await page.locator('[data-blocked-invoice-events]').waitFor();
