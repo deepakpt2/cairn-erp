@@ -3,6 +3,7 @@
 /** Capability-protected OVXG Sales Area maintenance actions. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   deactivateSalesArea,
   reactivateSalesArea,
@@ -30,6 +31,10 @@ export interface SalesAreaValueHelpState {
 
 function readCode(form: FormData, key: string) {
   return String(form.get(key) ?? '').trim().toUpperCase();
+}
+
+function salesAreaArgument(form: FormData) {
+  return [readCode(form, 'salesOrg'), readCode(form, 'distributionChannel'), readCode(form, 'division')].join('/');
 }
 
 function expectedVersion(form: FormData) {
@@ -62,6 +67,9 @@ export async function saveSalesAreaAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'SALES_AREA', argument: salesAreaArgument(form) });
+    }
     const result = await saveSalesArea({
       client: session.user.client,
       changedBy: session.user.username,
@@ -88,6 +96,9 @@ export async function saveSalesAreaAction(
       message: result.changed ? t('salesArea.nameChanged') : t('salesArea.unchanged'),
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy };
+    }
     if (error instanceof SalesAreaMaintenanceError || error instanceof AuthzError) {
       return failure(error, 'salesArea.saveFailed');
     }
@@ -102,6 +113,7 @@ export async function deactivateSalesAreaAction(
   const session = await requireSession(ROUTE);
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'SALES_AREA', argument: salesAreaArgument(form) });
     const result = await deactivateSalesArea({
       client: session.user.client,
       changedBy: session.user.username,
@@ -115,6 +127,9 @@ export async function deactivateSalesAreaAction(
     revalidatePath('/foundation/partners');
     return { ok: true, message: result.changed ? t('salesArea.deactivated') : t('salesArea.alreadyInactive') };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy };
+    }
     if (error instanceof SalesAreaMaintenanceError || error instanceof AuthzError) {
       return failure(error, 'salesArea.deactivateFailed');
     }
@@ -129,6 +144,7 @@ export async function reactivateSalesAreaAction(
   const session = await requireSession(ROUTE);
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'SALES_AREA', argument: salesAreaArgument(form) });
     const result = await reactivateSalesArea({
       client: session.user.client,
       changedBy: session.user.username,
@@ -142,6 +158,9 @@ export async function reactivateSalesAreaAction(
     revalidatePath('/foundation/partners');
     return { ok: true, message: result.changed ? t('salesArea.reactivated') : t('salesArea.alreadyActive') };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy };
+    }
     if (error instanceof SalesAreaMaintenanceError || error instanceof AuthzError) {
       return failure(error, 'salesArea.reactivateFailed');
     }

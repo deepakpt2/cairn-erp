@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type { IntercompanyPairConfig } from '@/modules/finance/intercompany';
@@ -10,6 +11,7 @@ import {
 } from './actions';
 
 const INITIAL: IntercompanyConfigActionState = { ok: false, message: '' };
+const ACTIVITY = 'CFG.FIN.IC.DEFINE';
 
 export function IntercompanyClearing({ pairs, companies, canMaintain }: {
   pairs: IntercompanyPairConfig[];
@@ -53,16 +55,7 @@ export function IntercompanyClearing({ pairs, companies, canMaintain }: {
                     <td className="px-2 py-2">{pair.receivingClearingGl ?? t('icCfg.companyAccount')}</td>
                     <td className="px-2 py-2">{pair.defaultCurrency ?? t('icCfg.companyCurrency')}</td>
                     <td className="px-2 py-2">
-                      <form action={deleteAction}>
-                        <input type="hidden" name="sendingCompanyCode" value={pair.sendingCompanyCode} />
-                        <input type="hidden" name="receivingCompanyCode" value={pair.receivingCompanyCode} />
-                        <button
-                          type="submit" className="btn btn-default min-h-11 sm:min-h-8"
-                          disabled={!canMaintain || deleting}
-                        >
-                          {t('icCfg.delete')}
-                        </button>
-                      </form>
+                      <DeletePair pair={pair} action={deleteAction} canMaintain={canMaintain} deleting={deleting} />
                     </td>
                   </tr>
                 ))}
@@ -73,41 +66,99 @@ export function IntercompanyClearing({ pairs, companies, canMaintain }: {
       </section>
 
       {canMaintain && (
-        <section aria-labelledby="icc-new" className="rounded-card border border-line bg-surface p-4 shadow-card">
-          <h2 id="icc-new" className="text-sm font-semibold">{t('icCfg.define')}</h2>
-          <form action={saveAction} className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.sending')}</span>
-              <select name="sendingCompanyCode" className="input w-32" defaultValue="" required>
-                <option value="" disabled>—</option>
-                {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.receiving')}</span>
-              <select name="receivingCompanyCode" className="input w-32" defaultValue="" required>
-                <option value="" disabled>—</option>
-                {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.sendingGl')}</span>
-              <input name="sendingClearingGl" className="input w-32" maxLength={10} placeholder={t('icCfg.optional')} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.receivingGl')}</span>
-              <input name="receivingClearingGl" className="input w-32" maxLength={10} placeholder={t('icCfg.optional')} />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.currency')}</span>
-              <input name="defaultCurrency" className="input w-24" maxLength={3} placeholder={t('icCfg.optional')} />
-            </label>
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving}>
-              {t('icCfg.save')}
-            </button>
-          </form>
-        </section>
+        <DefinePair pairs={pairs} companies={companies} action={saveAction} saving={saving} />
       )}
     </>
+  );
+}
+
+function DeletePair({
+  pair,
+  action,
+  canMaintain,
+  deleting,
+}: {
+  pair: IntercompanyPairConfig;
+  action: (payload: FormData) => void;
+  canMaintain: boolean;
+  deleting: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const argument = `${pair.sendingCompanyCode}/${pair.receivingCompanyCode}`;
+  const lock = useChangeLock('INTERCOMPANY_PAIR', argument, ACTIVITY, open && canMaintain);
+  return (
+    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-8">
+        {t('icCfg.delete')}
+      </summary>
+      <form action={action} className="mt-2 space-y-2">
+        <input type="hidden" name="sendingCompanyCode" value={pair.sendingCompanyCode} />
+        <input type="hidden" name="receivingCompanyCode" value={pair.receivingCompanyCode} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button
+          type="submit"
+          className="btn btn-default min-h-11 sm:min-h-8"
+          disabled={!canMaintain || deleting || lock?.mode !== 'CHANGE'}
+        >
+          {t('icCfg.delete')}
+        </button>
+      </form>
+    </details>
+  );
+}
+
+function DefinePair({
+  pairs,
+  companies,
+  action,
+  saving,
+}: {
+  pairs: IntercompanyPairConfig[];
+  companies: Array<{ companyCode: string; name: string; currency: string }>;
+  action: (payload: FormData) => void;
+  saving: boolean;
+}) {
+  const [sending, setSending] = useState('');
+  const [receiving, setReceiving] = useState('');
+  const [engaged, setEngaged] = useState(false);
+  const existing = pairs.some((pair) => pair.sendingCompanyCode === sending && pair.receivingCompanyCode === receiving);
+  const lock = useChangeLock('INTERCOMPANY_PAIR', `${sending}/${receiving}`, ACTIVITY, engaged && existing);
+  const blocked = existing && lock?.mode === 'DISPLAY';
+  return (
+    <section aria-labelledby="icc-new" className="rounded-card border border-line bg-surface p-4 shadow-card">
+      <h2 id="icc-new" className="text-sm font-semibold">{t('icCfg.define')}</h2>
+      <form action={action} className="mt-3 flex flex-wrap items-end gap-3" onFocus={() => setEngaged(true)} onSubmit={(event) => { if (existing && lock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.sending')}</span>
+          <select name="sendingCompanyCode" className="input w-32" value={sending} required onChange={(event) => setSending(event.target.value)}>
+            <option value="" disabled>—</option>
+            {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.receiving')}</span>
+          <select name="receivingCompanyCode" className="input w-32" value={receiving} required onChange={(event) => setReceiving(event.target.value)}>
+            <option value="" disabled>—</option>
+            {companies.map((c) => <option key={c.companyCode} value={c.companyCode}>{c.companyCode}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.sendingGl')}</span>
+          <input name="sendingClearingGl" className="input w-32" maxLength={10} placeholder={t('icCfg.optional')} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.receivingGl')}</span>
+          <input name="receivingClearingGl" className="input w-32" maxLength={10} placeholder={t('icCfg.optional')} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.currency')}</span>
+          <input name="defaultCurrency" className="input w-24" maxLength={3} placeholder={t('icCfg.optional')} />
+        </label>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || blocked}>
+          {t('icCfg.save')}
+        </button>
+      </form>
+    </section>
   );
 }

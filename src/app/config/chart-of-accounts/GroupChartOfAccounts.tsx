@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   saveGroupChartOfAccountsAction,
   setGroupChartOfAccountsActiveAction,
@@ -59,11 +60,13 @@ export function GroupChartOfAccountsForm({
   initial,
   languages,
   canMaintain,
+  submitDisabled = false,
 }: {
   mode: 'CREATE' | 'CHANGE';
   initial?: GroupChartOfAccountsRecord;
   languages: LanguageChoice[];
   canMaintain: boolean;
+  submitDisabled?: boolean;
 }) {
   const [state, action, pending] = useActionState<ChartOfAccountsActionState, FormData>(
     saveGroupChartOfAccountsAction,
@@ -191,7 +194,7 @@ export function GroupChartOfAccountsForm({
           <button
             type="submit"
             className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
-            disabled={pending || !canMaintain || languages.length === 0}
+            disabled={pending || !canMaintain || languages.length === 0 || submitDisabled}
           >
             {pending ? t('common.saving') : t(editing ? 'chartOfAccounts.saveButton' : 'chartOfAccounts.groupCreateButton')}
           </button>
@@ -249,45 +252,7 @@ export function GroupChartOfAccountsList({
                   {canMaintain && (
                     <td>
                       <div className="flex flex-col gap-2">
-                        <details className="min-w-44">
-                          <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
-                            {t('chartOfAccounts.changeSettings')}
-                          </summary>
-                          <div
-                            role="dialog"
-                            aria-modal="true"
-                            aria-label={`${t('chartOfAccounts.groupChangeTitle')} ${entry.groupChartOfAccounts}`}
-                            className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
-                          >
-                            <div className="mx-auto max-w-3xl">
-                              <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
-                                <div>
-                                  <span className="code text-xs text-ink-faint">OB13 · {entry.groupChartOfAccounts}</span>
-                                  <p className="font-semibold">{t('chartOfAccounts.groupChangeTitle')}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  className="btn btn-default min-h-11 sm:min-h-9"
-                                  onClick={(event) => {
-                                    const details = event.currentTarget.closest('details');
-                                    if (details) details.open = false;
-                                  }}
-                                >
-                                  {t('common.close')}
-                                </button>
-                              </div>
-                              <section className="panel overflow-hidden">
-                                <GroupChartOfAccountsForm
-                                  key={entry.groupChartOfAccounts}
-                                  mode="CHANGE"
-                                  initial={entry}
-                                  languages={languages}
-                                  canMaintain={canMaintain}
-                                />
-                              </section>
-                            </div>
-                          </div>
-                        </details>
+                        <GroupChangeDialog entry={entry} languages={languages} canMaintain={canMaintain} />
 
                         <ChartLifecycleControl
                           action={setGroupChartOfAccountsActiveAction}
@@ -308,5 +273,61 @@ export function GroupChartOfAccountsList({
         </div>
       )}
     </section>
+  );
+}
+
+function GroupChangeDialog({
+  entry,
+  languages,
+  canMaintain,
+}: {
+  entry: GroupChartOfAccountsRecord;
+  languages: LanguageChoice[];
+  canMaintain: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('GROUP_CHART', entry.groupChartOfAccounts.trim(), 'CFG.FIN.COA.DEFINE', open);
+  return (
+    <details className="min-w-44" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        {t('chartOfAccounts.changeSettings')}
+      </summary>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${t('chartOfAccounts.groupChangeTitle')} ${entry.groupChartOfAccounts}`}
+        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+      >
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
+            <div>
+              <span className="code text-xs text-ink-faint">OB13 · {entry.groupChartOfAccounts}</span>
+              <p className="font-semibold">{t('chartOfAccounts.groupChangeTitle')}</p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-default min-h-11 sm:min-h-9"
+              onClick={(event) => {
+                const details = event.currentTarget.closest('details');
+                if (details) details.open = false;
+              }}
+            >
+              {t('common.close')}
+            </button>
+          </div>
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <section className="panel overflow-hidden">
+            <GroupChartOfAccountsForm
+              key={entry.groupChartOfAccounts}
+              mode="CHANGE"
+              initial={entry}
+              languages={languages}
+              canMaintain={canMaintain}
+              submitDisabled={lock?.mode !== 'CHANGE'}
+            />
+          </section>
+        </div>
+      </div>
+    </details>
   );
 }

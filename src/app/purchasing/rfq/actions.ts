@@ -13,6 +13,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   RFQ_CAPABILITY,
   RFQ_ROUTE,
@@ -60,7 +61,7 @@ function missing(): RfqActionState {
 }
 
 function refused(caught: unknown): RfqActionState | null {
-  if (caught instanceof RfqError) return { ok: false, message: caught.message, remedy: caught.remedy };
+  if (caught instanceof RfqError || caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   return null;
 }
 
@@ -306,6 +307,10 @@ export async function changeRfqAction(
   const stop = blocked(form);
   if (stop) return stop;
   try {
+    const eventNumber = text(form, 'eventNumber');
+    if (eventNumber) {
+      await assertChangeForSession(session, { lockObject: 'RFQ_EVENT', argument: eventNumber });
+    }
     const changed = await changeRequestForQuotation(changeInput(form, session.user.client, session.user.username));
     revalidatePath(RFQ_ROUTE);
     return {

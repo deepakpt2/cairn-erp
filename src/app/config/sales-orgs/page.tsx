@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { requireSession, can } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { country as countryReference, currency as currencyReference } from '@/platform/tables/reference';
@@ -73,7 +75,14 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
   const copying = canMaintain && !selectionRequested && Boolean(params.copy);
   const copySource = copying ? organisations.find((item) => item.salesOrg === params.copy?.trim().toUpperCase() && item.isActive) : undefined;
   const creating = canMaintain && !selectionRequested && (params.new === '1' || copying);
-  const editing = Boolean(params.edit && selected?.isActive && canMaintain);
+  const changeLock = selected && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'SALES_ORG',
+        argument: selected.salesOrg,
+        transactionCode: 'CFG.ORG.SALESORG.DEFINE',
+      })
+    : null;
+  const editing = Boolean(params.edit && selected?.isActive && canMaintain && changeLock?.mode === 'CHANGE');
   const version = canMaintain && selected ? await getSalesOrgDefinitionVersion(client, selected.salesOrg) : 0;
 
   const emptyDraft: SalesOrgDefinitionDraft = {
@@ -253,6 +262,10 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
         </div>
       </section>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="SALES_ORG" argument={selected.salesOrg} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       {creating && <SalesOrgDefinitionForm key="CREATE:new" mode="CREATE" initial={initial} version={0} languageKey={languageKey} currencies={currencies} countries={countries} purchasingOrganizations={purchasingOrganizationChoices} referenceSalesOrganizations={referenceSalesOrganizationChoices} factoryCalendars={factoryCalendarChoices} customers={customerChoices} vendors={vendorChoices} />}
       {editing && selected && <SalesOrgDefinitionForm key={`CHANGE:${selected.salesOrg}`} mode="CHANGE" initial={initial} version={version} languageKey={languageKey} currencies={currencies} countries={countries} purchasingOrganizations={purchasingOrganizationChoices} referenceSalesOrganizations={referenceSalesOrganizationChoices} factoryCalendars={factoryCalendarChoices} customers={customerChoices} vendors={vendorChoices} />}
 
@@ -306,7 +319,7 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
         </section>
       )}
 
-      {selected && !editing && canMaintain && <DeactivateSalesOrgForm salesOrg={selected.salesOrg.trim()} name={selected.displayName} version={version} isActive={selected.isActive} />}
+      {selected && !editing && canMaintain && changeLock?.mode === 'CHANGE' && <DeactivateSalesOrgForm salesOrg={selected.salesOrg.trim()} name={selected.displayName} version={version} isActive={selected.isActive} />}
       {selected && params.history === '1' && (
         <section className="panel overflow-x-auto">
           <div className="panel-header"><h2 className="panel-title">{t('salesOrg.history')} · <span className="code">{selected.salesOrg.trim()}</span></h2></div>

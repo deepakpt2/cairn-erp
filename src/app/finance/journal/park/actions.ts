@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PARKED_JOURNAL_CAPABILITY,
   ParkedJournalError,
@@ -29,7 +30,7 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): ParkedJournalActionState {
-  if (error instanceof ParkedJournalError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof ParkedJournalError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -74,6 +75,7 @@ export async function parkAction(
   try {
     const parkedNumber = text(form, 'parkedNumber');
     if (parkedNumber) {
+      await assertChangeForSession(session, { lockObject: 'PARKED_JOURNAL', argument: parkedNumber });
       const result = await editParkedJournal({
         client: session.user.client, changedBy: session.user.username,
         parkedNumber, expectedVersion: Number(text(form, 'version')),
@@ -106,6 +108,8 @@ export async function completeAction(
     return { ok: false, message: 'You do not hold the journal parking capability.' };
   }
   try {
+    const parkedNumber = text(form, 'parkedNumber');
+    await assertChangeForSession(session, { lockObject: 'PARKED_JOURNAL', argument: parkedNumber });
     const result = await completeParkedJournal({
       client: session.user.client, changedBy: session.user.username,
       parkedNumber: text(form, 'parkedNumber'),
@@ -129,6 +133,8 @@ export async function postAction(
     return { ok: false, message: 'Posting a parked document takes the journal posting capability, apart from parking.' };
   }
   try {
+    const parkedNumber = text(form, 'parkedNumber');
+    await assertChangeForSession(session, { lockObject: 'PARKED_JOURNAL', argument: parkedNumber });
     const result = await postParkedJournal({
       client: session.user.client, changedBy: session.user.username,
       parkedNumber: text(form, 'parkedNumber'),
@@ -149,6 +155,8 @@ export async function deleteAction(
     return { ok: false, message: 'You do not hold the journal parking capability.' };
   }
   try {
+    const parkedNumber = text(form, 'parkedNumber');
+    await assertChangeForSession(session, { lockObject: 'PARKED_JOURNAL', argument: parkedNumber });
     const result = await deleteParkedJournal({
       client: session.user.client, changedBy: session.user.username,
       parkedNumber: text(form, 'parkedNumber'),

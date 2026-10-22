@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   BankMasterError,
   CAPABILITY,
@@ -35,6 +36,7 @@ function mapBankError(error: unknown): BankActionState {
   if (error instanceof BankMasterError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -62,6 +64,12 @@ export async function saveBankAction(
     await requireCapability(CAPABILITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'BANK',
+        argument: `${read(form, 'bankCountry')}/${read(form, 'bankKey')}`,
+      });
+    }
     const result = await saveBank({
       client: session.user.client,
       changedBy: session.user.username,
@@ -108,6 +116,7 @@ export async function deleteBankAction(
 
     const bankCountry = read(form, 'bankCountry');
     const bankKey = read(form, 'bankKey');
+    await assertChangeForSession(session, { lockObject: 'BANK', argument: `${bankCountry}/${bankKey}` });
 
     await deleteBank({
       client: session.user.client,

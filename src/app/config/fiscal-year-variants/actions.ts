@@ -15,6 +15,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   FiscalYearVariantError,
   saveFiscalYearPeriods,
@@ -44,6 +45,7 @@ function mapVariantError(error: unknown): FiscalYearVariantActionState {
   if (error instanceof FiscalYearVariantError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -70,6 +72,9 @@ export async function saveFiscalYearVariantAction(
   try {
     await requireCapability(ACTIVITY, session);
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'FISCAL_YEAR_VARIANT', argument: read(form, 'variant') });
+    }
     const result = await saveFiscalYearVariant({
       client: session.user.client,
       changedBy: session.user.username,
@@ -115,6 +120,7 @@ export async function setFiscalYearVariantActiveAction(
   const session = await requireSession(ROUTE);
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'FISCAL_YEAR_VARIANT', argument: read(form, 'variant') });
     const result = await setFiscalYearVariantActive({
       client: session.user.client,
       changedBy: session.user.username,
@@ -147,6 +153,7 @@ export async function saveFiscalYearPeriodsAction(
   const session = await requireSession(ROUTE);
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'FISCAL_YEAR_VARIANT', argument: read(form, 'variant') });
 
     // Repeated fields arrive in row order, so the grid cannot pair one period's number with
     // another period's end.

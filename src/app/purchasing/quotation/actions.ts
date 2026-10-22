@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   QUOTATION_CAPABILITY,
   QUOTATION_ROUTE,
@@ -52,7 +53,7 @@ function missing(): QuotationActionState {
 }
 
 function refused(caught: unknown): QuotationActionState | null {
-  if (caught instanceof QuotationError) return { ok: false, message: caught.message, remedy: caught.remedy };
+  if (caught instanceof QuotationError || caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   return null;
 }
 
@@ -183,6 +184,9 @@ export async function saveQuotationAction(
   if (stop) return stop;
   try {
     const input = inputOf(form, session.user.client, session.user.username);
+    if (input.rfqNumber) {
+      await assertChangeForSession(session, { lockObject: 'SUPPLIER_QUOTATION', argument: input.rfqNumber });
+    }
     const saved = form.has('expectedChangedAt')
       ? await changeQuotation(input)
       : await createQuotation(input);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { BankChoice, PaymentRunView } from '@/modules/finance/payment-run';
 import {
@@ -31,6 +32,13 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
   const [executeState, executeActionState, executing] = useActionState(executeAction, INITIAL);
   const [cancelState, cancelActionState, cancelling] = useActionState(cancelRunAction, INITIAL);
   const editable = run && run.status !== 'EXECUTED' && run.status !== 'CANCELLED';
+  const runLock = useChangeLock(
+    'PAYMENT_RUN',
+    run ? `${run.runDate}/${run.runId}` : '',
+    'FIN.AP.PAYMENTRUN.EXECUTE',
+    Boolean(run && editable && canExecute),
+  );
+  const runHeld = runLock?.mode === 'CHANGE';
 
   return (
     <>
@@ -62,11 +70,12 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
           <p className="mt-2 text-sm text-ink-soft">No payment run stands selected.</p>
         )}
         <Message state={cancelState} />
+        <LockNotice message={runLock?.mode === 'DISPLAY' ? runLock.message : null} />
         {editable && (
           <form action={cancelActionState} className="mt-2">
             <input type="hidden" name="runDate" value={run.runDate} />
             <input type="hidden" name="runId" value={run.runId} />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || cancelling}>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || cancelling || !runHeld}>
               Cancel run
             </button>
           </form>
@@ -121,7 +130,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
           <form action={proposalActionState} className="mt-2">
             <input type="hidden" name="runDate" value={run.runDate} />
             <input type="hidden" name="runId" value={run.runId} />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || proposing}>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canExecute || proposing || !runHeld}>
               Create proposal
             </button>
           </form>
@@ -185,7 +194,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Account ID</span>
                 <input name="bankAccountId" className="input w-24" placeholder="MAIN" required />
               </label>
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing}>
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canExecute || executing || !runHeld}>
                 Execute payments
               </button>
             </form>

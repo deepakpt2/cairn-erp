@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState, type ReactNode } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import {
   checkBlockedInvoiceAction,
@@ -63,6 +64,8 @@ export function PlaceHoldForm({ invoiceNumber, invoiceLabel, commentLabel, check
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [placeState, placeAction, placing] = useActionState(placeBlockedInvoiceAction, blockedInvoiceIdle);
+  const lock = useChangeLock('SUPPLIER_INVOICE', invoice.trim() || null, 'PROC.INV.BLOCK', Boolean(invoice.trim()));
+  const held = lock?.mode === 'CHANGE';
   useRemember(placeState);
   const notice = placeState.message ? placeState : checkState;
   return (
@@ -77,8 +80,9 @@ export function PlaceHoldForm({ invoiceNumber, invoiceLabel, commentLabel, check
         <Field label={commentLabel}>
           <input name="comment" className="input w-full" value={comment} onChange={(event) => setComment(event.target.value)} required maxLength={100} />
         </Field>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
         <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || placing} data-blocked-invoice-place-check>{checking ? checkingLabel : checkLabel}</button>
-        <button type="submit" formAction={placeAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || placing} data-blocked-invoice-place-save>{placing ? placingLabel : placeLabel}</button>
+        <button type="submit" formAction={placeAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || placing || !held} data-blocked-invoice-place-save>{placing ? placingLabel : placeLabel}</button>
       </div>
       <Notice state={notice} />
     </form>
@@ -100,6 +104,8 @@ export function ReleaseHoldForm({ invoiceNumber, version, commentLabel, checkLab
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [releaseState, releaseAction, releasing] = useActionState(releaseBlockedInvoiceAction, blockedInvoiceIdle);
+  const lock = useChangeLock('SUPPLIER_INVOICE', invoiceNumber.trim(), 'PROC.INV.BLOCK.RELEASE', Boolean(comment.trim()));
+  const held = lock?.mode === 'CHANGE';
   useRemember(releaseState);
   const notice = releaseState.message ? releaseState : checkState;
   return (
@@ -111,8 +117,9 @@ export function ReleaseHoldForm({ invoiceNumber, version, commentLabel, checkLab
       {Object.entries(selection).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
       <div className="flex flex-wrap items-end gap-2">
         <input name="comment" className="input min-w-48 flex-1" value={comment} onChange={(event) => setComment(event.target.value)} required maxLength={100} aria-label={commentLabel} placeholder={commentLabel} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
         <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || releasing} data-blocked-invoice-release-check>{checking ? checkingLabel : checkLabel}</button>
-        <button type="submit" formAction={releaseAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || releasing} data-blocked-invoice-release-save>{releasing ? releasingLabel : releaseLabel}</button>
+        <button type="submit" formAction={releaseAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || releasing || !held} data-blocked-invoice-release-save>{releasing ? releasingLabel : releaseLabel}</button>
       </div>
       <Notice state={notice} />
     </form>

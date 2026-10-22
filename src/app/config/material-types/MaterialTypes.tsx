@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type {
   AccountCategoryReferenceRow,
@@ -109,6 +110,14 @@ export default function MaterialTypes({
     | { kind: 'deleteReference'; row: AccountCategoryReferenceRow }
     | null
   >(null);
+  const typeLock = useChangeLock('MATERIAL_TYPE', selected?.materialType ?? '', 'CFG.INV.MATERIALTYPE.DEFINE', Boolean(selected));
+  const referenceLock = useChangeLock('ACCOUNT_CATEGORY_REFERENCE', selectedReference?.reference ?? '', 'CFG.INV.MATERIALTYPE.DEFINE', Boolean(selectedReference));
+  const dialogLock = useChangeLock(
+    dialog?.kind === 'deleteReference' ? 'ACCOUNT_CATEGORY_REFERENCE' : 'MATERIAL_TYPE',
+    dialog?.kind === 'deleteReference' ? dialog.row.reference : dialog?.row.materialType ?? '',
+    'CFG.INV.MATERIALTYPE.DEFINE',
+    Boolean(dialog),
+  );
 
   const [typeState, typeAction, typePending] = useActionState<
     MaterialTypeActionState,
@@ -423,7 +432,8 @@ export default function MaterialTypes({
               number ranges screen, internal against internal and external against external.
             </p>
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={typePending}>
+              <LockNotice message={typeLock?.mode === 'DISPLAY' ? typeLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={typePending || (Boolean(selected) && typeLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define material type'}
               </button>
               {selected && (
@@ -537,7 +547,8 @@ export default function MaterialTypes({
               <ReasonInput id="ref-reason" />
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={referencePending}>
+              <LockNotice message={referenceLock?.mode === 'DISPLAY' ? referenceLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={referencePending || (Boolean(selectedReference) && referenceLock?.mode !== 'CHANGE')}>
                 {selectedReference ? 'Save changes' : 'Define reference'}
               </button>
               {selectedReference && (
@@ -570,51 +581,7 @@ export default function MaterialTypes({
         ) : (
           <div className="space-y-2">
             {valuation.map((row) => (
-              <form
-                key={`${row.materialType}-${row.plant}`}
-                action={valuationAction}
-                className="flex flex-wrap items-end gap-3 border border-line bg-white p-3"
-              >
-                <input type="hidden" name="materialType" value={row.materialType} />
-                <input type="hidden" name="plant" value={row.plant} />
-                <span className="text-sm font-medium">
-                  {row.materialType} at {row.plant}
-                  <span className="block text-xs font-normal text-ink-soft">
-                    {row.plantName} · {row.materialCount} materials standing
-                    {row.stands ? '' : ' · updating stands as the default until saved'}
-                  </span>
-                </span>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="quantityUpdating"
-                    defaultChecked={row.quantityUpdating}
-                    disabled={!canMaintain}
-                    className="h-4 w-4"
-                  />
-                  Quantity updating
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="valueUpdating"
-                    defaultChecked={row.valueUpdating}
-                    disabled={!canMaintain}
-                    className="h-4 w-4"
-                  />
-                  Value updating
-                </label>
-                {canMaintain && (
-                  <>
-                    <div className="min-w-48 flex-1">
-                      <ReasonInput id={`val-reason-${row.materialType}-${row.plant}`} />
-                    </div>
-                    <button type="submit" className="btn btn-default">
-                      Save updating
-                    </button>
-                  </>
-                )}
-              </form>
+              <ValuationRow key={`${row.materialType}-${row.plant}`} row={row} action={valuationAction} canMaintain={canMaintain} />
             ))}
             <Message state={valuationState} />
           </div>
@@ -635,7 +602,8 @@ export default function MaterialTypes({
                 : 'The type becomes available to new materials again.'}
             </p>
             <ReasonInput id="dlg-active-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               {dialog.row.isActive ? 'Deactivate' : 'Reactivate'}
             </button>
             <Message state={activeState} />
@@ -655,7 +623,8 @@ export default function MaterialTypes({
               references and materials stand.
             </p>
             <ReasonInput id="dlg-delete-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
             <Message state={deleteState} />
@@ -674,7 +643,8 @@ export default function MaterialTypes({
               {dialog.row.typeCount} name it now.
             </p>
             <ReasonInput id="dlg-delete-ref-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
             <Message state={deleteRefState} />
@@ -682,5 +652,72 @@ export default function MaterialTypes({
         </DialogShell>
       )}
     </div>
+  );
+}
+
+function ValuationRow({
+  row,
+  action,
+  canMaintain,
+}: {
+  row: TypeValuationRow;
+  action: (payload: FormData) => void;
+  canMaintain: boolean;
+}) {
+  const [engaged, setEngaged] = useState(false);
+  const lock = useChangeLock(
+    'MATERIAL_TYPE_VALUATION',
+    `${row.materialType.trim()}/${row.plant.trim()}`,
+    'CFG.INV.MATERIALTYPE.DEFINE',
+    engaged && canMaintain,
+  );
+  const held = !engaged || lock?.mode === 'CHANGE';
+  return (
+    <form
+      action={action}
+      className="flex flex-wrap items-end gap-3 border border-line bg-white p-3"
+      onFocus={() => setEngaged(true)}
+    >
+      <input type="hidden" name="materialType" value={row.materialType} />
+      <input type="hidden" name="plant" value={row.plant} />
+      <span className="text-sm font-medium">
+        {row.materialType} at {row.plant}
+        <span className="block text-xs font-normal text-ink-soft">
+          {row.plantName} · {row.materialCount} materials standing
+          {row.stands ? '' : ' · updating stands as the default until saved'}
+        </span>
+      </span>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="quantityUpdating"
+          defaultChecked={row.quantityUpdating}
+          disabled={!canMaintain || (engaged && !held)}
+          className="h-4 w-4"
+        />
+        Quantity updating
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="valueUpdating"
+          defaultChecked={row.valueUpdating}
+          disabled={!canMaintain || (engaged && !held)}
+          className="h-4 w-4"
+        />
+        Value updating
+      </label>
+      {canMaintain && (
+        <>
+          <div className="min-w-48 flex-1">
+            <ReasonInput id={`val-reason-${row.materialType}-${row.plant}`} />
+          </div>
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <button type="submit" className="btn btn-default" disabled={!held}>
+            Save updating
+          </button>
+        </>
+      )}
+    </form>
   );
 }

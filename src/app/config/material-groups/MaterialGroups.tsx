@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { MaterialGroupRow } from '@/modules/inventory/material-group-definition';
 import {
@@ -90,6 +91,8 @@ export default function MaterialGroups({
     deleteMaterialGroupAction,
     { ok: true },
   );
+  const changeLock = useChangeLock('MATERIAL_GROUP', selected?.materialGroup ?? '', 'CFG.INV.MATERIALGROUP.DEFINE', Boolean(selected));
+  const dialogLock = useChangeLock('MATERIAL_GROUP', dialog?.row.materialGroup ?? '', 'CFG.INV.MATERIALGROUP.DEFINE', Boolean(dialog));
 
   return (
     <div className="space-y-6">
@@ -209,7 +212,8 @@ export default function MaterialGroups({
               </div>
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={savePending}>
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={savePending || (Boolean(selected) && changeLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define material group'}
               </button>
               {selected && (
@@ -241,7 +245,8 @@ export default function MaterialGroups({
                 : 'The group becomes available to new materials again.'}
             </p>
             <ReasonInput id="dlg-group-active-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               {dialog.row.isActive ? 'Deactivate' : 'Reactivate'}
             </button>
             <Message state={activeState} />
@@ -260,7 +265,8 @@ export default function MaterialGroups({
               {dialog.row.materialCount} stand against it now.
             </p>
             <ReasonInput id="dlg-group-delete-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
             <Message state={deleteState} />

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MaterialReversalError,
   REVERSE_CAPABILITY,
@@ -36,6 +37,10 @@ export async function reverseMaterialDocumentAction(
     .filter((value) => Number.isInteger(value) && value > 0);
   const fiscalYear = text(form, 'fiscalYear');
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'MATERIAL_DOCUMENT',
+      argument: text(form, 'materialDocumentNumber'),
+    });
     const doc = await reverseMaterialDocument({
       client: session.user.client,
       changedBy: session.user.username,
@@ -55,7 +60,7 @@ export async function reverseMaterialDocumentAction(
       documentNumber: doc.materialDocumentNumber,
     };
   } catch (error) {
-    if (error instanceof MaterialReversalError) {
+    if (error instanceof MaterialReversalError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

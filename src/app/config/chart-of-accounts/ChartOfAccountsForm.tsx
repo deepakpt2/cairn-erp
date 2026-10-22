@@ -28,9 +28,10 @@ interface ChartOfAccountsFormProps {
   languages: LanguageChoice[];
   groupCharts: ChartOfAccountsChoice[];
   canMaintain: boolean;
+  submitDisabled?: boolean;
 }
 
-export function ChartOfAccountsForm({ mode, initial, languages, groupCharts, canMaintain }: ChartOfAccountsFormProps) {
+export function ChartOfAccountsForm({ mode, initial, languages, groupCharts, canMaintain, submitDisabled = false }: ChartOfAccountsFormProps) {
   const [state, action, pending] = useActionState<ChartOfAccountsActionState, FormData>(
     saveChartOfAccountsAction,
     { ok: true },
@@ -216,7 +217,7 @@ export function ChartOfAccountsForm({ mode, initial, languages, groupCharts, can
 
         <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="max-w-3xl text-xs text-ink-soft">{t('chartOfAccounts.creationRule')}</p>
-          <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending || !canMaintain || languages.length === 0}>
+          <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending || !canMaintain || languages.length === 0 || submitDisabled}>
             {pending ? t('common.saving') : t(editing ? 'chartOfAccounts.saveButton' : 'chartOfAccounts.createButton')}
           </button>
         </div>

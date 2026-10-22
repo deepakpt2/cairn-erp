@@ -26,16 +26,20 @@ function newRequestKey() {
 export default function CountWorkbench({
   document,
   history,
-  canCount,
-  canCorrect,
+  canCount: canCountProp,
+  canCorrect: canCorrectProp,
+  displayOnly = false,
   today,
 }: {
   document: CountDocumentView;
   history: CountHistoryEntry[];
   canCount: boolean;
   canCorrect: boolean;
+  displayOnly?: boolean;
   today: string;
 }) {
+  const canCount = canCountProp && !displayOnly;
+  const canCorrect = canCorrectProp && !displayOnly;
   const [state, action, saving] = useActionState(submitCountsAction, INITIAL);
   const [clearState, clearAction, clearing] = useActionState(clearCountAction, INITIAL);
   const [requestKey, setRequestKey] = useState(newRequestKey);

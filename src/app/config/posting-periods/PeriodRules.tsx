@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 export interface PeriodRuleRow {
   accountType: string;
@@ -98,87 +99,17 @@ export function PeriodRules({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.accountType}>
-              <td className="font-medium">{row.accountTypeLabel}</td>
-              <td>
-                <input
-                  type="number"
-                  disabled={!canEdit}
-                  min={1}
-                  max={totalPeriods}
-                  value={row.periodFrom}
-                  onChange={(e) =>
-                    update(row.accountType, { periodFrom: Number(e.target.value) })
-                  }
-                  className="field-input tabular w-20"
-                />
-              </td>
-              <td>
-                <input
-                  type="number"
-                  disabled={!canEdit}
-                  min={1}
-                  max={totalPeriods}
-                  value={row.periodTo}
-                  onChange={(e) =>
-                    update(row.accountType, { periodTo: Number(e.target.value) })
-                  }
-                  className="field-input tabular w-20"
-                />
-              </td>
-              <td>
-                {/* A visual of the period grid: open periods filled, closed periods
-                    empty. Reading a bar of squares is faster than reading two
-                    numbers, and a mistake is visible before saving. */}
-                <div className="flex gap-px" role="img" aria-label={`Open periods ${row.periodFrom} to ${row.periodTo}`}>
-                  {Array.from({ length: totalPeriods }, (_, index) => {
-                    const period = index + 1;
-                    const isSpecial = period > regularPeriods;
-                    const isOpen =
-                      period >= row.periodFrom &&
-                      period <= row.periodTo &&
-                      (!isSpecial || row.allowSpecialPeriods);
-                    return (
-                      <span
-                        key={period}
-                        title={`Period ${period}${isSpecial ? ' (special)' : ''}`}
-                        className={`h-4 w-4 border ${
-                          isOpen
-                            ? 'border-accent bg-accent'
-                            : 'border-line-strong bg-sunken'
-                        } ${isSpecial ? 'border-dashed' : ''}`}
-                      />
-                    );
-                  })}
-                </div>
-              </td>
-              <td>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    disabled={!canEdit}
-                    checked={row.allowSpecialPeriods}
-                    onChange={(e) =>
-                      update(row.accountType, { allowSpecialPeriods: e.target.checked })
-                    }
-                    className="accent-accent"
-                  />
-                  <span className="text-ink-soft">
-                    {regularPeriods + 1}–{totalPeriods}
-                  </span>
-                </label>
-              </td>
-              <td className="text-end">
-                <button
-                  type="button"
-                  onClick={() => apply(row.accountType)}
-                  disabled={pending || !canEdit}
-                  className="btn btn-default"
-                >
-                  {t('pp.save')}
-                </button>
-              </td>
-            </tr>
+            <PeriodRuleEditor
+              key={row.accountType}
+              row={row}
+              canEdit={canEdit}
+              variant={variant}
+              pending={pending}
+              totalPeriods={totalPeriods}
+              regularPeriods={regularPeriods}
+              onUpdate={update}
+              onApply={apply}
+            />
           ))}
         </tbody>
       </table>
@@ -187,5 +118,114 @@ export function PeriodRules({
         {t('pp.note')}
       </p>
     </div>
+  );
+}
+
+function PeriodRuleEditor({
+  row,
+  canEdit,
+  variant,
+  pending,
+  totalPeriods,
+  regularPeriods,
+  onUpdate,
+  onApply,
+}: {
+  row: PeriodRuleRow;
+  canEdit: boolean;
+  variant: string;
+  pending: boolean;
+  totalPeriods: number;
+  regularPeriods: number;
+  onUpdate: (accountType: string, patch: Partial<PeriodRuleRow>) => void;
+  onApply: (accountType: string) => void;
+}) {
+  const [engaged, setEngaged] = useState(false);
+  const lock = useChangeLock(
+    'POSTING_PERIOD',
+    `${variant}/${row.accountType}`,
+    'FIN.CLOSE.PERIOD',
+    engaged && canEdit,
+  );
+  const held = !engaged || lock?.mode === 'CHANGE';
+  return (
+    <tr onFocus={() => setEngaged(true)}>
+      <td className="font-medium">{row.accountTypeLabel}</td>
+      <td>
+        <input
+          type="number"
+          disabled={!canEdit || !held}
+          min={1}
+          max={totalPeriods}
+          value={row.periodFrom}
+          onChange={(e) => onUpdate(row.accountType, { periodFrom: Number(e.target.value) })}
+          className="field-input tabular w-20"
+        />
+      </td>
+      <td>
+        <input
+          type="number"
+          disabled={!canEdit || !held}
+          min={1}
+          max={totalPeriods}
+          value={row.periodTo}
+          onChange={(e) => onUpdate(row.accountType, { periodTo: Number(e.target.value) })}
+          className="field-input tabular w-20"
+        />
+      </td>
+      <td>
+        <div className="flex gap-px" role="img" aria-label={`Open periods ${row.periodFrom} to ${row.periodTo}`}>
+          {Array.from({ length: totalPeriods }, (_, index) => {
+            const period = index + 1;
+            const isSpecial = period > regularPeriods;
+            const isOpen =
+              period >= row.periodFrom &&
+              period <= row.periodTo &&
+              (!isSpecial || row.allowSpecialPeriods);
+            return (
+              <span
+                key={period}
+                title={`Period ${period}${isSpecial ? ' (special)' : ''}`}
+                className={`h-4 w-4 border ${
+                  isOpen ? 'border-accent bg-accent' : 'border-line-strong bg-sunken'
+                } ${isSpecial ? 'border-dashed' : ''}`}
+              />
+            );
+          })}
+        </div>
+      </td>
+      <td>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            disabled={!canEdit || !held}
+            checked={row.allowSpecialPeriods}
+            onChange={(e) => onUpdate(row.accountType, { allowSpecialPeriods: e.target.checked })}
+            className="accent-accent"
+          />
+          <span className="text-ink-soft">
+            {regularPeriods + 1}–{totalPeriods}
+          </span>
+        </label>
+      </td>
+      <td className="text-end">
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button
+          type="button"
+          onMouseDown={() => setEngaged(true)}
+          onClick={() => {
+            if (lock?.mode !== 'CHANGE') {
+              setEngaged(true);
+              return;
+            }
+            onApply(row.accountType);
+          }}
+          disabled={pending || !canEdit || lock?.mode === 'DISPLAY'}
+          className="btn btn-default"
+        >
+          {t('pp.save')}
+        </button>
+      </td>
+    </tr>
   );
 }

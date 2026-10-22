@@ -9,6 +9,7 @@
  * quietly dropping it. This action does not post.
  */
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   VENDOR_EVALUATION_CAPABILITY,
   VENDOR_EVALUATION_ROUTE,
@@ -67,6 +68,10 @@ export async function saveManualScoreAction(
   if (!can(session, VENDOR_EVALUATION_CAPABILITY)) return missing();
   const versionText = text(form, 'expectedVersion');
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'VENDOR_EVALUATION',
+      argument: `${text(form, 'supplier')}/${text(form, 'purchasingOrg')}/${text(form, 'periodFrom')}/${text(form, 'periodTo')}`,
+    });
     const saved = await saveManualScore({
       client: session.user.client,
       changedBy: session.user.username,
@@ -92,7 +97,7 @@ export async function saveManualScoreAction(
         : `${saved.criterionCode} already stood at ${saved.score}. Nothing was written.`,
     };
   } catch (caught) {
-    if (caught instanceof VendorEvaluationError) {
+    if (caught instanceof VendorEvaluationError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy };
     }
     throw caught;

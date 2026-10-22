@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   chartOfAccountsF4Choices,
@@ -207,6 +209,15 @@ export async function GlAccountModeScreen({
 
   // Only a stored record can seed the form; Create mode starts from the contract
   // defaults plus the number carried over from the initial screen.
+  const accountArgument = existing ? `${chart.chartOfAccounts.trim()}/${existing.accountNumber.trim()}` : '';
+  const changeLock = mode === 'CHANGE' && existing && canWrite
+    ? await openChangeForSession(session, {
+        lockObject: 'GL_ACCOUNT',
+        argument: accountArgument,
+        transactionCode: 'CFG.FIN.GLACCOUNT.CHANGE',
+      })
+    : null;
+
   const stored: GlAccountValues | null = existing
     ? {
         accountNumber: existing.accountNumber,
@@ -228,6 +239,9 @@ export async function GlAccountModeScreen({
     : null;
 
   return shell(
+    <>
+      {changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="GL_ACCOUNT" argument={accountArgument} />}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
     <GlAccountFields
       mode={mode}
       chartOfAccounts={chart.chartOfAccounts}
@@ -240,8 +254,9 @@ export async function GlAccountModeScreen({
       groupMatrices={groupMatrices}
       groupAccounts={groupAccounts}
       languages={choices.languages}
-      canSave={canWrite}
+      canSave={canWrite && changeLock?.mode !== 'DISPLAY'}
       version={version}
-    />,
+    />
+    </>,
   );
 }

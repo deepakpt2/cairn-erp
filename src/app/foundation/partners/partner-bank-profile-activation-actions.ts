@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { activatePartnerBankProfile } from '@/modules/foundation/partner-bank-profile-activation';
 import {
   PARTNER_BANK_PROFILE_ACTIVATE_CAPABILITY,
@@ -32,6 +33,17 @@ export async function activatePartnerBankProfileAction(
   form: FormData,
 ): Promise<PartnerBankProfileActivationActionState> {
   const session = await requireSession('/foundation/partners');
+  try {
+    await assertChangeForSession(session, {
+      lockObject: 'PARTNER_BANK_PROFILE',
+      argument: readString(form, 'country') ?? '',
+    });
+  } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy };
+    }
+    throw error;
+  }
   const result = await activatePartnerBankProfile(session, {
     country: readString(form, 'country'),
     expectedPolicyRevision: readString(form, 'expectedPolicyRevision'),

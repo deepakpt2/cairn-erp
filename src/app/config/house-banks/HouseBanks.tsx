@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type {
@@ -197,10 +198,15 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
   const idKey = `${row.companyCode}-${row.houseBankKey}`;
   const changeLabel = `${t('houseBank.change')} ${row.houseBankKey}`;
   const blocked = row.accounts.length > 0;
+  const argument = `${row.companyCode.trim()}/${row.houseBankKey.trim()}`;
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('HOUSE_BANK', argument, 'CFG.FIN.HOUSEBANK.DEFINE', changeOpen);
+  const deleteLock = useChangeLock('HOUSE_BANK', argument, 'CFG.FIN.HOUSEBANK.DEFINE', deleteOpen);
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('houseBank.change')}
         </summary>
@@ -224,7 +230,8 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
                 </div>
                 <ReasonField id={`house-bank-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <HouseMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('houseBank.save')}
                 </button>
               </form>
@@ -233,7 +240,7 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('houseBank.delete')}
         </summary>
@@ -253,7 +260,8 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
                 )}
                 <ReasonField id={`house-bank-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <HouseMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || blocked || !deleteReason.trim()}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || blocked || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('houseBank.delete')}
                 </button>
               </form>
@@ -294,6 +302,11 @@ function AccountDialogs({
   const keyText = `${row.houseBankKey} · ${account.accountId}`;
   const idKey = `${row.companyCode}-${row.houseBankKey}-${account.accountId}`;
   const changeLabel = `${t('houseBank.change')} ${account.accountId}`;
+  const argument = `${row.companyCode.trim()}/${row.houseBankKey.trim()}/${account.accountId.trim()}`;
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('HOUSE_BANK_ACCOUNT', argument, 'CFG.FIN.HOUSEBANK.DEFINE', changeOpen);
+  const deleteLock = useChangeLock('HOUSE_BANK_ACCOUNT', argument, 'CFG.FIN.HOUSEBANK.DEFINE', deleteOpen);
 
   const accountFields = (suffix: string, defaults: BankAccountRow | null) => (
     <>
@@ -341,7 +354,7 @@ function AccountDialogs({
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('houseBank.change')}
         </summary>
@@ -357,7 +370,8 @@ function AccountDialogs({
                 {accountFields(idKey, account)}
                 <ReasonField id={`bank-account-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <HouseMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('houseBank.saveAccount')}
                 </button>
               </form>
@@ -366,7 +380,7 @@ function AccountDialogs({
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('houseBank.delete')}
         </summary>
@@ -381,7 +395,8 @@ function AccountDialogs({
                 <p className="text-sm text-ink-soft">{t('houseBank.deleteAccountNote')}</p>
                 <ReasonField id={`bank-account-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <HouseMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim()}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('houseBank.delete')}
                 </button>
               </form>

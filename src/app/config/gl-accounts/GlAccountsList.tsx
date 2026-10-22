@@ -8,6 +8,7 @@ import {
   setGlAccountBlocksAction,
   type GlAccountActionState,
 } from './actions';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { GlAccountDialog, ReasonField } from './GlAccountDialog';
 
 /** One G/L account as the list renders it. */
@@ -66,6 +67,13 @@ function BlockDialog({
     { ok: true },
   );
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock(
+    'GL_ACCOUNT',
+    `${chartOfAccounts.trim()}/${account.trim()}`,
+    'CFG.FIN.GLACCOUNT.CHANGE',
+    open,
+  );
   const idPrefix = `gl-master-block-${chartOfAccounts}-${account}`;
 
   return (
@@ -78,9 +86,12 @@ function BlockDialog({
       formAction={formAction}
       pending={pending}
       submitLabel={t('glAccount.blockButton')}
+      onToggle={setOpen}
+      submitDisabled={lock?.mode !== 'CHANGE'}
     >
       <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
       <input type="hidden" name="accountNumber" value={account} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
 
       <label
         htmlFor={`${idPrefix}-posting`}
@@ -142,6 +153,13 @@ function DeleteDialog({
     { ok: true },
   );
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock(
+    'GL_ACCOUNT',
+    `${chartOfAccounts.trim()}/${account.trim()}`,
+    'CFG.FIN.GLACCOUNT.CHANGE',
+    open,
+  );
   const idPrefix = `gl-master-delete-${chartOfAccounts}-${account}`;
 
   return (
@@ -154,9 +172,12 @@ function DeleteDialog({
       formAction={formAction}
       pending={pending}
       submitLabel={t('glAccount.deleteButton')}
+      onToggle={setOpen}
+      submitDisabled={lock?.mode !== 'CHANGE'}
     >
       <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
       <input type="hidden" name="accountNumber" value={account} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
       <ReasonField
         id={`${idPrefix}-reason`}
         hint={t('glAccount.reasonRequired')}

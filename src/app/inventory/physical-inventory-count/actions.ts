@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PHYSICAL_INVENTORY_COUNT_CAPABILITY,
   PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY,
@@ -103,6 +104,10 @@ export async function submitCountsAction(
   }
 
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'PHYSICAL_INVENTORY',
+      argument: `${text(form, 'documentNumber')}/${text(form, 'fiscalYear')}`,
+    });
     const document = await submitCounts({
       client: session.user.client,
       changedBy: session.user.username,
@@ -122,7 +127,7 @@ export async function submitCountsAction(
       document,
     };
   } catch (caught) {
-    if (caught instanceof PhysicalInventoryCountError) {
+    if (caught instanceof PhysicalInventoryCountError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy };
     }
     throw caught;
@@ -143,6 +148,10 @@ export async function clearCountAction(
     };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'PHYSICAL_INVENTORY',
+      argument: `${text(form, 'documentNumber')}/${text(form, 'fiscalYear')}`,
+    });
     const document = await clearCount({
       client: session.user.client,
       changedBy: session.user.username,
@@ -157,7 +166,7 @@ export async function clearCountAction(
     revalidatePath(PHYSICAL_INVENTORY_COUNT_ROUTE);
     return { ok: true, message: `The count of item ${text(form, 'itemNumber')} was cleared; the item stands uncounted.`, document };
   } catch (caught) {
-    if (caught instanceof PhysicalInventoryCountError) {
+    if (caught instanceof PhysicalInventoryCountError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy };
     }
     throw caught;

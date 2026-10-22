@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { NumberRangeError } from '@/platform/numbering';
 import { PeriodError } from '@/platform/periods';
 import { PhysicalInventoryError } from '@/modules/inventory/physical-inventory';
@@ -87,6 +88,7 @@ function refused(caught: unknown): RecountActionState | null {
     || caught instanceof PhysicalInventoryError
     || caught instanceof PeriodError
     || caught instanceof NumberRangeError
+    || caught instanceof EnqueueError
   ) {
     const remedy = 'remedy' in caught && typeof caught.remedy === 'string' ? caught.remedy : undefined;
     return { ok: false, message: caught.message, remedy };
@@ -134,6 +136,10 @@ export async function createRecountAction(
   const supplied = clientSupplied(form);
   if (supplied) return { ok: false, message: supplied };
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'PHYSICAL_INVENTORY',
+      argument: `${text(form, 'documentNumber')}/${text(form, 'fiscalYear')}`,
+    });
     const recount = await createRecount({
       client: session.user.client,
       changedBy: session.user.username,
@@ -161,6 +167,10 @@ export async function cancelRecountAction(
     return { ok: false, message: 'Cancellation is not a reversal, and it is not a posting.' };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'PHYSICAL_INVENTORY',
+      argument: `${text(form, 'recountDocumentNumber')}/${text(form, 'recountFiscalYear')}`,
+    });
     const recount = await cancelRecount({
       client: session.user.client,
       changedBy: session.user.username,

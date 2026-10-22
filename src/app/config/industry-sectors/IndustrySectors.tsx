@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { IndustrySectorRow } from '@/modules/inventory/industry-sector-definition';
 import {
@@ -90,6 +91,8 @@ export default function IndustrySectors({
     deleteIndustrySectorAction,
     { ok: true },
   );
+  const changeLock = useChangeLock('INDUSTRY_SECTOR', selected?.sector ?? '', 'CFG.INV.INDUSTRYSECTOR.DEFINE', Boolean(selected));
+  const dialogLock = useChangeLock('INDUSTRY_SECTOR', dialog?.row.sector ?? '', 'CFG.INV.INDUSTRYSECTOR.DEFINE', Boolean(dialog));
 
   return (
     <div className="space-y-6">
@@ -195,7 +198,8 @@ export default function IndustrySectors({
               </div>
             </div>
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={savePending}>
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={savePending || (Boolean(selected) && changeLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define industry sector'}
               </button>
               {selected && (
@@ -227,7 +231,8 @@ export default function IndustrySectors({
                 : 'The sector becomes available to new materials again.'}
             </p>
             <ReasonInput id="dlg-sector-active-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               {dialog.row.isActive ? 'Deactivate' : 'Reactivate'}
             </button>
             <Message state={activeState} />
@@ -246,7 +251,8 @@ export default function IndustrySectors({
               {dialog.row.materialCount} stand against it now.
             </p>
             <ReasonInput id="dlg-sector-delete-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
             <Message state={deleteState} />

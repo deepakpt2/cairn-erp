@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { and, asc, eq } from 'drizzle-orm';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { t } from '@/platform/i18n';
@@ -37,7 +39,14 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
     ? entries.find((entry) => entry.division === params.copy?.trim().toUpperCase() && entry.isActive)
     : undefined;
   const creating = canMaintain && !selectionRequested && (params.new === '1' || Boolean(copySource));
-  const editing = Boolean(params.edit && selected && canMaintain);
+  const changeLock = selected && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'DIVISION',
+        argument: selected.division,
+        transactionCode: 'CFG.ORG.DIVISION.DEFINE',
+      })
+    : null;
+  const editing = Boolean(params.edit && selected && canMaintain && changeLock?.mode === 'CHANGE');
   const version = canMaintain && selected
     ? await getDivisionDefinitionVersion(client, selected.division)
     : 0;
@@ -124,6 +133,10 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
         </div>
       </section>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="DIVISION" argument={selected.division} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       {creating && <DivisionDefinitionForm key={`CREATE:${copySource?.division ?? 'new'}`} mode="CREATE" initial={initial} version={0} />}
       {editing && selected && <DivisionDefinitionForm key={`CHANGE:${selected.division}`} mode="CHANGE" initial={initial} version={version} />}
 
@@ -154,7 +167,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
           {!selected.isActive && !canMaintain && <p className="mt-3 text-xs text-ink-soft">{t('orgDefinition.inactiveRetained')}</p>}
         </section>
       )}
-      {selected && !editing && canMaintain && <DeactivateDivisionForm division={selected.division} name={selected.name} version={version} isActive={selected.isActive} />}
+      {selected && !editing && canMaintain && changeLock?.mode === 'CHANGE' && <DeactivateDivisionForm division={selected.division} name={selected.name} version={version} isActive={selected.isActive} />}
       {selected && params.history === '1' && (
         <section className="panel overflow-x-auto">
           <div className="panel-header"><h2 className="panel-title">{t('orgDefinition.history')} · <span className="code">{selected.division}</span></h2></div>

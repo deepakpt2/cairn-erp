@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { CustomerDownPaymentClearingView } from '@/modules/finance/customer-down-payment-clearing';
 import { postCustomerClearingAction, type CustomerClearingActionState } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: CustomerClearingActionState = { ok: false, message: '' };
 
@@ -33,6 +34,12 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
   today: string;
 }) {
   const [state, action, posting] = useActionState(postCustomerClearingAction, INITIAL);
+  const accountLock = useChangeLock(
+    'CUSTOMER_DOWN_PAYMENT',
+    view ? `${view.customer}/${view.companyCode}/${view.indicator}` : '',
+    'FIN.AR.DOWNPAYMENT.CLEAR',
+    Boolean(view && canEnter),
+  );
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [rows, setRows] = useState<AllocationRow[]>([]);
 
@@ -254,10 +261,11 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
                 An allocation stands above an item's remaining amount, or not above zero.
               </p>
             )}
+            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                disabled={!canEnter || posting || !ready}
+                disabled={!canEnter || posting || !ready || accountLock?.mode !== 'CHANGE'}
               >
                 Post clearing
               </button>

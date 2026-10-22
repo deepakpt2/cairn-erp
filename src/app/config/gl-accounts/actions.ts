@@ -17,6 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ConfigError,
   deleteGlAccount,
@@ -53,6 +54,7 @@ function mapGlAccountError(error: unknown): GlAccountActionState {
   if (error instanceof ConfigError || error instanceof GlAccountGroupMaintenanceError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -98,6 +100,9 @@ export async function saveGlAccountAction(
 
   try {
     await requireCapability(activity, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'GL_ACCOUNT', argument: `${chartOfAccounts}/${accountNumber}` });
+    }
 
     // The group's matrix is authoritative on the server: it decides which posted fields
     // count and which were suppressed and must keep their stored value.
@@ -156,6 +161,10 @@ export async function setGlAccountBlocksAction(
 
   try {
     await requireCapability(CHANGE_ACTIVITY, session);
+    await assertChangeForSession(session, {
+      lockObject: 'GL_ACCOUNT',
+      argument: `${read('chartOfAccounts')}/${accountNumber}`,
+    });
     const result = await setGlAccountBlocks({
       client: session.user.client,
       changedBy: session.user.username,
@@ -190,6 +199,10 @@ export async function deleteGlAccountAction(
 
   try {
     await requireCapability(CHANGE_ACTIVITY, session);
+    await assertChangeForSession(session, {
+      lockObject: 'GL_ACCOUNT',
+      argument: `${read('chartOfAccounts')}/${accountNumber}`,
+    });
     await deleteGlAccount({
       client: session.user.client,
       changedBy: session.user.username,

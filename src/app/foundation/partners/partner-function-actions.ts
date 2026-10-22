@@ -1,6 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { AuthzError, can, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { listSupplierPartnerFunctions, listSupplierPurchasingPartners } from '@/modules/foundation/supplier-purchasing-partners';
 import {
   removeSupplierPurchasingPartner,
@@ -53,6 +54,10 @@ export async function saveSupplierPurchasingPartnerAction(
   const session = await requireSession('/foundation/partners');
   try {
     await requireCapability('PROC.SUPPLIER.PURCHASING.MAINTAIN', session);
+    await assertChangeForSession(session, {
+      lockObject: 'SUPPLIER_PURCHASING',
+      argument: `${read(form, 'partnerNumber')}/${read(form, 'purchasingOrg')}`,
+    });
     const replaceAssignedPartnerNumber = read(form, 'replaceAssignedPartnerNumber');
     const input: SupplierPurchasingPartnerInput = {
       client: session.user.client,
@@ -70,7 +75,7 @@ export async function saveSupplierPurchasingPartnerAction(
     revalidatePath('/foundation/partners');
     return { ok: true, changed: result.changed, version: result.version, isDefault: result.isDefault };
   } catch (error) {
-    if (error instanceof SupplierPurchasingPartnerError || error instanceof AuthzError) {
+    if (error instanceof SupplierPurchasingPartnerError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;
@@ -84,6 +89,10 @@ export async function removeSupplierPurchasingPartnerAction(
   const session = await requireSession('/foundation/partners');
   try {
     await requireCapability('PROC.SUPPLIER.PURCHASING.MAINTAIN', session);
+    await assertChangeForSession(session, {
+      lockObject: 'SUPPLIER_PURCHASING',
+      argument: `${read(form, 'partnerNumber')}/${read(form, 'purchasingOrg')}`,
+    });
     const result = await removeSupplierPurchasingPartner({
       client: session.user.client,
       changedBy: session.user.username,
@@ -97,7 +106,7 @@ export async function removeSupplierPurchasingPartnerAction(
     revalidatePath('/foundation/partners');
     return { ok: true, changed: result.changed, removedVersion: result.removedVersion };
   } catch (error) {
-    if (error instanceof SupplierPurchasingPartnerError || error instanceof AuthzError) {
+    if (error instanceof SupplierPurchasingPartnerError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

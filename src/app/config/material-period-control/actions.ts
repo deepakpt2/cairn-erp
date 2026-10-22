@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MaterialPeriodError,
   initializeMaterialPeriodControl,
@@ -24,7 +25,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): MaterialPeriodActionState {
-  if (error instanceof MaterialPeriodError) {
+  if (error instanceof MaterialPeriodError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -37,6 +38,7 @@ export async function initializeMaterialPeriodAction(
   const session = await requireSession(ROUTE);
   const companyCode = read(form, 'companyCode');
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_PERIOD', argument: companyCode });
     await initializeMaterialPeriodControl({
       client: session.user.client,
       changedBy: session.user.username,
@@ -62,6 +64,7 @@ export async function setMaterialPeriodIndicatorsAction(
   const session = await requireSession(ROUTE);
   const companyCode = read(form, 'companyCode');
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_PERIOD', argument: companyCode });
     const result = await setMaterialPeriodIndicators({
       client: session.user.client,
       changedBy: session.user.username,
@@ -86,6 +89,7 @@ export async function shiftMaterialPeriodAction(
   const session = await requireSession(ROUTE);
   const companyCode = read(form, 'companyCode');
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_PERIOD', argument: companyCode });
     const result = await shiftMaterialPeriod({
       client: session.user.client,
       changedBy: session.user.username,

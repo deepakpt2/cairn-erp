@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MaterialRangeGroupError,
   deleteMaterialNumberRangeGroup,
@@ -23,7 +24,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): MaterialRangeGroupActionState {
-  if (error instanceof MaterialRangeGroupError) {
+  if (error instanceof MaterialRangeGroupError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -35,6 +36,12 @@ export async function saveMaterialRangeGroupAction(
 ): Promise<MaterialRangeGroupActionState> {
   const session = await requireSession(ROUTE);
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'MATERIAL_RANGE_GROUP',
+        argument: `${read(form, 'internalRangeKey')}/${read(form, 'externalRangeKey')}`,
+      });
+    }
     const result = await saveMaterialNumberRangeGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -65,6 +72,10 @@ export async function deleteMaterialRangeGroupAction(
 ): Promise<MaterialRangeGroupActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'MATERIAL_RANGE_GROUP',
+      argument: `${read(form, 'internalRangeKey')}/${read(form, 'externalRangeKey')}`,
+    });
     const result = await deleteMaterialNumberRangeGroup({
       client: session.user.client,
       changedBy: session.user.username,

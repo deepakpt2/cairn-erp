@@ -15,7 +15,7 @@ import CloseCockpitShell from './CloseCockpitShell';
 export const metadata: Metadata = { title: 'Close Cockpit' };
 
 export default async function Page({ searchParams }: {
-  searchParams: Promise<{ company?: string; list?: string; fy?: string; period?: string }>;
+  searchParams: Promise<{ company?: string; list?: string; fy?: string; period?: string; error?: string }>;
 }) {
   const session = await requireSession('/finance/close-cockpit');
   const params = await searchParams;
@@ -70,6 +70,7 @@ export default async function Page({ searchParams }: {
         tasks={tasks}
         executions={executions}
         events={events}
+        notice={params.error ?? null}
       />
     </main>
   );

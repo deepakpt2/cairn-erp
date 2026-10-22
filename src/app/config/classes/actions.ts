@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ClassError,
   deleteClass,
@@ -24,7 +25,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): ClassActionState {
-  if (error instanceof ClassError) {
+  if (error instanceof ClassError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -37,6 +38,12 @@ export async function saveClassAction(
   const session = await requireSession(ROUTE);
   const payload = JSON.parse(read(form, 'payload') || '{}') as Record<string, unknown>;
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'CLASS',
+        argument: `${String(payload.classType ?? '')}/${String(payload.className ?? '')}`,
+      });
+    }
     const result = await saveClass({
       client: session.user.client,
       changedBy: session.user.username,
@@ -66,6 +73,10 @@ export async function setClassStatusAction(
   const session = await requireSession(ROUTE);
   const status = read(form, 'status') === 'BLOCKED' ? 'BLOCKED' : 'ACTIVE';
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'CLASS',
+      argument: `${read(form, 'classType')}/${read(form, 'className')}`,
+    });
     const result = await setClassStatus({
       client: session.user.client,
       changedBy: session.user.username,
@@ -89,6 +100,10 @@ export async function deleteClassAction(
 ): Promise<ClassActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'CLASS',
+      argument: `${read(form, 'classType')}/${read(form, 'className')}`,
+    });
     const result = await deleteClass({
       client: session.user.client,
       changedBy: session.user.username,

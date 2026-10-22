@@ -11,6 +11,7 @@ import {
   overrideAction, processScheduledAction, releaseListAction, reopenAction, signoffAction,
   type CloseState,
 } from './actions';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: CloseState = { ok: true };
 
@@ -20,7 +21,7 @@ const INITIAL: CloseState = { ok: true };
  * through the registered handlers, satisfy evidence/sign-off
  * gates, and finalize — which never closes or locks the period.
  */
-export default function CloseCockpitShell({ canUse, companies, templates, lists, selected, tasks, executions, events }: {
+export default function CloseCockpitShell({ canUse, companies, templates, lists, selected, tasks, executions, events, notice }: {
   canUse: boolean;
   companies: Array<{ companyCode: string; name: string }>;
   templates: string[];
@@ -29,8 +30,16 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
   tasks: TaskView[];
   executions: ExecutionLogView[];
   events: CloseEventView[];
+  notice?: string | null;
 }) {
   const [state, createAction, creating] = useActionState(createListAction, INITIAL);
+  const cycleLock = useChangeLock(
+    'CLOSE_CYCLE',
+    selected ? `${selected.companyCode}/${selected.taskListId}/${selected.fiscalYear}/${selected.postingPeriod}` : '',
+    'FIN.CLOSE.COCKPIT',
+    Boolean(selected),
+  );
+  const cycleHeld = cycleLock?.mode === 'CHANGE';
 
   if (!canUse) {
     return (
@@ -51,6 +60,10 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
 
   return (
     <div className="space-y-4">
+      {notice && (
+        <p role="alert" className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">{notice}</p>
+      )}
+
       {state.message && !state.ok && (
         <div className="border border-signal-error/30 bg-signal-error-soft p-3">
           <p className="text-sm font-semibold text-signal-error">{state.message}</p>
@@ -140,13 +153,14 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
                 {selected.list.criticalPathOpen ? ` · ${t('close.criticalOpen')}` : ''}
               </span>
             </div>
+            <LockNotice message={cycleLock?.mode === 'DISPLAY' ? cycleLock.message : null} />
             <div className="flex flex-wrap gap-2">
               {selected.list.status === 'INITIAL' && (
-                <form action={releaseListAction}>{cycleFields}<button className="btn btn-primary min-h-8" type="submit">{t('close.release')}</button></form>
+                <form action={releaseListAction}>{cycleFields}<button className="btn btn-primary min-h-8" type="submit" disabled={!cycleHeld}>{t('close.release')}</button></form>
               )}
-              <form action={processScheduledAction}>{cycleFields}<button className="btn btn-default min-h-8" type="submit">{t('close.runScheduled')}</button></form>
+              <form action={processScheduledAction}>{cycleFields}<button className="btn btn-default min-h-8" type="submit" disabled={!cycleHeld}>{t('close.runScheduled')}</button></form>
               {selected.list.status === 'RELEASED' && (
-                <form action={finalizeListAction}>{cycleFields}<button className="btn btn-default min-h-8" type="submit">{t('close.finalize')}</button></form>
+                <form action={finalizeListAction}>{cycleFields}<button className="btn btn-default min-h-8" type="submit" disabled={!cycleHeld}>{t('close.finalize')}</button></form>
               )}
             </div>
           </section>
@@ -181,11 +195,11 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
                       <div className="flex gap-1">
                         <form action={executeTaskAction}>
                           {cycleFields}<input type="hidden" name="taskId" value={task.taskId} /><input type="hidden" name="mode" value="FOREGROUND" />
-                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={task.status === 'COMPLETED' || task.status === 'RUNNING'}>{t('close.run')}</button>
+                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld || task.status === 'COMPLETED' || task.status === 'RUNNING'}>{t('close.run')}</button>
                         </form>
                         <form action={executeTaskAction}>
                           {cycleFields}<input type="hidden" name="taskId" value={task.taskId} /><input type="hidden" name="mode" value="BACKGROUND" />
-                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={task.status === 'COMPLETED' || task.status === 'RUNNING'}>{t('close.schedule')}</button>
+                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld || task.status === 'COMPLETED' || task.status === 'RUNNING'}>{t('close.schedule')}</button>
                         </form>
                       </div>
                     </td>
@@ -194,11 +208,11 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
                         <form action={evidenceAction} className="flex gap-1">
                           {cycleFields}<input type="hidden" name="taskId" value={task.taskId} />
                           <input name="evidenceRef" className="field-input min-h-8 w-28 px-2 text-2xs" placeholder={t('close.evidenceRef')} />
-                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs">{t('close.attach')}</button>
+                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld}>{t('close.attach')}</button>
                         </form>
                         <form action={signoffAction}>
                           {cycleFields}<input type="hidden" name="taskId" value={task.taskId} />
-                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs">{t('close.signOff')}</button>
+                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld}>{t('close.signOff')}</button>
                         </form>
                       </div>
                     </td>
@@ -210,13 +224,13 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
                             {['RELEASED', 'COMPLETED', 'ERROR', 'BLOCKED'].map((s) => <option key={s} value={s}>{s}</option>)}
                           </select>
                           <input name="reason" required className="field-input min-h-8 w-28 px-2 text-2xs" placeholder={t('close.reason')} />
-                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs">{t('close.setStatus')}</button>
+                          <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld}>{t('close.setStatus')}</button>
                         </form>
                         {task.status === 'COMPLETED' && (
                           <form action={reopenAction} className="flex gap-1">
                             {cycleFields}<input type="hidden" name="taskId" value={task.taskId} />
                             <input name="reason" required className="field-input min-h-8 w-28 px-2 text-2xs" placeholder={t('close.reason')} />
-                            <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs">{t('close.reopen')}</button>
+                            <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={!cycleHeld}>{t('close.reopen')}</button>
                           </form>
                         )}
                       </div>

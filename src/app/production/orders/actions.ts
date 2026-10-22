@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PRODUCTION_ORDER_CAPABILITY,
   PRODUCTION_ORDER_RELEASE_CAPABILITY,
@@ -77,6 +78,7 @@ export async function releaseOrderAction(
     return { ok: false, message: 'You do not hold the production order release capability.' };
   }
   try {
+    await assertChangeForSession(session, { lockObject: 'PRODUCTION_ORDER', argument: text(form, 'orderNumber') });
     const order = await releaseProductionOrder({
       client: session.user.client,
       orderNumber: text(form, 'orderNumber'),
@@ -85,7 +87,7 @@ export async function releaseOrderAction(
     revalidatePath(PRODUCTION_ORDER_ROUTE);
     return { ok: true, message: `Order ${order.orderNumber} released.`, order };
   } catch (caught) {
-    if (caught instanceof ProductionOrderError) {
+    if (caught instanceof ProductionOrderError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy, order: null };
     }
     return { ok: false, message: 'The order could not be released.', order: null };

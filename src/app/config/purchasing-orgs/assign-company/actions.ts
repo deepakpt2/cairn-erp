@@ -3,6 +3,7 @@
 /** Capability-protected SCR-018 initial Purchasing Organisation -> Company Code assignment. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   assignPurchasingOrgCompanyCode,
   PurchasingOrgCompanyCodeAssignmentError,
@@ -35,6 +36,7 @@ export async function assignPurchasingOrgCompanyCodeAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'PURCHASING_ORG_COMPANY', argument: purchasingOrgCode });
     const result = await assignPurchasingOrgCompanyCode({
       client: session.user.client,
       changedBy: session.user.username,
@@ -60,6 +62,9 @@ export async function assignPurchasingOrgCompanyCodeAction(
       companyCode: result.companyCode,
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: purchasingOrgCode };
+    }
     if (error instanceof PurchasingOrgCompanyCodeAssignmentError || error instanceof AuthzError) {
       return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: purchasingOrgCode };
     }

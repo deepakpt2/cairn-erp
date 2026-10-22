@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ProfitCenterHierarchyError,
   addGroupLeaf,
@@ -43,7 +44,7 @@ async function finish(run: () => Promise<HierarchyActionState>): Promise<Hierarc
     revalidatePath(ROUTE);
     return state;
   } catch (error) {
-    if (error instanceof ProfitCenterHierarchyError) {
+    if (error instanceof ProfitCenterHierarchyError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return unexpected('The hierarchy entry could not be saved.');
@@ -57,6 +58,9 @@ export async function saveHierarchyHeaderAction(
   const session = await requireSession(ROUTE);
   const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
   return finish(async () => {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_HIERARCHY', argument: read(form, 'controllingArea') });
+    }
     const result = await saveHierarchyHeader({
       client: session.user.client,
       changedBy: session.user.username,
@@ -84,6 +88,9 @@ export async function saveHierarchyNodeAction(
   const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
   const node = read(form, 'node');
   return finish(async () => {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_NODE', argument: `${read(form, 'controllingArea')}/${node}` });
+    }
     const result = await saveHierarchyNode({
       client: session.user.client,
       changedBy: session.user.username,
@@ -113,6 +120,7 @@ export async function deleteHierarchyNodeAction(
   const session = await requireSession(ROUTE);
   const node = read(form, 'node');
   return finish(async () => {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_NODE', argument: `${read(form, 'controllingArea')}/${node}` });
     await deleteHierarchyNode({
       client: session.user.client,
       changedBy: session.user.username,
@@ -132,6 +140,7 @@ export async function placePeriodAction(
   const [profitCenter = '', validFrom = ''] = read(form, 'period').split(':');
   const node = read(form, 'node');
   return finish(async () => {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_PLACEMENT', argument: `${read(form, 'controllingArea')}/${profitCenter}/${validFrom}` });
     await placeProfitCenterPeriod({
       client: session.user.client,
       changedBy: session.user.username,
@@ -157,6 +166,7 @@ export async function unplacePeriodAction(
   const profitCenter = read(form, 'profitCenter');
   const validFrom = read(form, 'validFrom');
   return finish(async () => {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_PLACEMENT', argument: `${read(form, 'controllingArea')}/${profitCenter}/${validFrom}` });
     await unplaceProfitCenterPeriod({
       client: session.user.client,
       changedBy: session.user.username,
@@ -181,6 +191,9 @@ export async function saveGroupAction(
   const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
   const groupName = read(form, 'groupName');
   return finish(async () => {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_GROUP', argument: `${read(form, 'controllingArea')}/${groupName}` });
+    }
     const result = await saveProfitCenterGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -208,6 +221,7 @@ export async function deleteGroupAction(
   const session = await requireSession(ROUTE);
   const groupName = read(form, 'groupName');
   return finish(async () => {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_GROUP', argument: `${read(form, 'controllingArea')}/${groupName}` });
     const result = await deleteProfitCenterGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -243,6 +257,7 @@ export async function addLeafAction(
 ): Promise<HierarchyActionState> {
   const session = await requireSession(ROUTE);
   return finish(async () => {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER_GROUP', argument: `${read(form, 'controllingArea')}/${read(form, 'groupName')}` });
     await addGroupLeaf(leafFromForm(form, session));
     return { ok: true, message: 'The leaf stands in the group.' };
   });
@@ -254,7 +269,12 @@ export async function removeLeafAction(
 ): Promise<HierarchyActionState> {
   const session = await requireSession(ROUTE);
   return finish(async () => {
-    await removeGroupLeaf(leafFromForm(form, session));
+    const leaf = leafFromForm(form, session);
+    await assertChangeForSession(session, {
+      lockObject: 'PROFIT_CENTER_GROUP_LEAF',
+      argument: `${leaf.controllingArea}/${leaf.groupName}/${leaf.valSign}/${leaf.valOption}/${leaf.valFrom}/${leaf.valTo}`,
+    });
+    await removeGroupLeaf(leaf);
     return { ok: true, message: 'The leaf is removed; the profit centres it named stand.' };
   });
 }

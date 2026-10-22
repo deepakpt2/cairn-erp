@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   unassignSalesOrgDistributionChannelAction,
   type SalesOrgDistributionChannelAssignmentState,
@@ -28,6 +29,12 @@ export function SalesOrgDistributionChannelAssignmentsList({
     { ok: true },
   );
   const [confirmationFor, setConfirmationFor] = useState<string | null>(null);
+  const removeLock = useChangeLock(
+    'SALES_ORG_CHANNEL',
+    confirmationFor ?? '',
+    'CFG.ORG.SALESORG.ASSIGN_DISTCHANNEL',
+    Boolean(confirmationFor) && canRemove,
+  );
 
   return (
     <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="ovxk-assignment-list-title">
@@ -100,11 +107,12 @@ export function SalesOrgDistributionChannelAssignmentsList({
                                 distributionChannel: item.distributionChannel,
                               })}
                             </p>
+                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} />
                             <div className="flex flex-wrap gap-2 sm:justify-end">
                               <button
                                 type="submit"
                                 className="btn btn-danger min-h-11 sm:min-h-9"
-                                disabled={pending}
+                                disabled={pending || removeLock?.mode !== 'CHANGE'}
                               >
                                 {pending ? t('common.saving') : t('salesOrgChannel.confirmRemove')}
                               </button>

@@ -11,6 +11,8 @@
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+
 import { t } from '@/platform/i18n';
 import type { ReturnDocumentView, ReturnableDocument } from '@/modules/inventory/return-delivery';
 import {
@@ -31,6 +33,12 @@ export default function ReturnDeliveryShell({
   const [reference, loadReference, loading] = useActionState(loadReferenceAction, INITIAL_REFERENCE);
   const [posted, post, posting] = useActionState(postReturnAction, INITIAL_POST);
   const document: ReturnableDocument | null = reference.document;
+  const returnLock = useChangeLock(
+    'MATERIAL_DOCUMENT',
+    document ? document.documentNumber.trim() : null,
+    'INV.RETURN.POST',
+    Boolean(document) && canPost,
+  );
 
   /**
    * The idempotency key belongs to *this* submission, not to the document and the day. Two
@@ -174,7 +182,8 @@ export default function ReturnDeliveryShell({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting}>
+              <LockNotice message={returnLock?.mode === 'DISPLAY' ? returnLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting || returnLock?.mode !== 'CHANGE'}>
                 {posting ? t('mbrl.posting') : t('mbrl.post')}
               </button>
               {!canPost && <p className="text-sm text-ink-soft">{t('mbrl.noPost')}</p>}

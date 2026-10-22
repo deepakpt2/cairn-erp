@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { requireSession, can } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { listNumberRanges, rangeKey, rangeAllocations, NUMBER_OBJECTS, NUMBER_RANGE_ACTIVITY } from '@/modules/foundation/number-ranges';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
@@ -23,6 +25,11 @@ export default async function NumberRangesPage({ searchParams }: {
   const allocations = historical ? await rangeAllocations(client, historical) : [];
   const shown = params.object ? ranges.filter((r) => r.objectCode === params.object) : ranges;
   const legacy = selected?.objectCode === 'RF_BELEG' && selected.companyCode === '*';
+  const rangeArgument = selected ? rangeKey(selected) : '';
+  const changeLock = selected && editable && !legacy
+    ? await openChangeForSession(session, { lockObject: 'NUMBER_RANGE', argument: rangeArgument, transactionCode: NUMBER_RANGE_ACTIVITY })
+    : null;
+  const held = !selected || changeLock?.mode === 'CHANGE';
 
   return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
     <header className="border-b border-line pb-4">
@@ -41,10 +48,12 @@ export default async function NumberRangesPage({ searchParams }: {
       {readiness.ready && <Link href="/finance/journal/new" className="mt-2 inline-block text-sm text-accent underline">{t('journal.postTitle')}</Link>}
     </section>
 
-    {(params.new === '1' || selected) && editable && !legacy && <RangeForm key={selected ? rangeKey(selected) : 'new'}
+    {selected && changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="NUMBER_RANGE" argument={rangeArgument} />}
+    <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+    {(params.new === '1' || (selected && held)) && editable && !legacy && <RangeForm key={selected ? rangeKey(selected) : 'new'}
       initial={selected ?? { objectCode: 'RF_BELEG', companyCode: companies[0]?.companyCode ?? '', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, currentNumber: 0, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE' }}
       companies={companies.filter((c) => c.isActive).map(({ companyCode, name }) => ({ companyCode, name }))} objects={NUMBER_OBJECTS} editing={!!selected} />}
-    {selected && editable && !legacy && (
+    {selected && held && editable && !legacy && (
       <AdjustCurrentForm
         key={`adjust-${rangeKey(selected)}`}
         initial={selected}

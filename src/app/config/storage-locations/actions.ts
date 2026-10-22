@@ -10,6 +10,7 @@ import {
   type StorageLocationMaintenanceMode,
 } from '@/modules/foundation/storage-location-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.ORG.STORAGELOC.DEFINE';
 const ROUTE = '/config/storage-locations';
@@ -65,6 +66,9 @@ export async function saveStorageLocationAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'STORAGE_LOCATION', argument: `${plantCode}/${storageLocationCode}` });
+    }
     const result = await saveStorageLocation({
       client: session.user.client,
       changedBy: session.user.username,
@@ -96,7 +100,7 @@ export async function saveStorageLocationAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof StorageLocationMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof StorageLocationMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return {
         ok: false,
         message: error.message,
@@ -120,6 +124,7 @@ export async function deactivateStorageLocationAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'STORAGE_LOCATION', argument: `${plantCode}/${storageLocationCode}` });
     const result = await deactivateStorageLocation({
       client: session.user.client,
       changedBy: session.user.username,
@@ -142,7 +147,7 @@ export async function deactivateStorageLocationAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof StorageLocationMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof StorageLocationMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return {
         ok: false,
         message: error.message,

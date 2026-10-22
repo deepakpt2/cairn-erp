@@ -10,6 +10,7 @@ import {
   type SalesOrgMaintenanceMode,
 } from '@/modules/foundation/sales-organization-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.ORG.SALESORG.DEFINE';
 const ROUTE = '/config/sales-orgs';
@@ -46,6 +47,9 @@ export async function saveSalesOrgDefinitionAction(
   const code = read(form, 'salesOrg').toUpperCase();
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'SALES_ORG', argument: code });
+    }
     const result = await saveSalesOrgDefinition({
       client: session.user.client,
       changedBy: session.user.username,
@@ -101,7 +105,7 @@ export async function saveSalesOrgDefinitionAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof SalesOrgMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof SalesOrgMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, salesOrg: code };
     }
     throw error;
@@ -117,6 +121,7 @@ export async function deactivateSalesOrgAction(
   const code = read(form, 'salesOrg').toUpperCase();
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'SALES_ORG', argument: code });
     if (form.get('confirmDeactivation') !== 'on') {
       return { ok: false, message: t('salesOrg.confirmationRequired'), salesOrg: code };
     }
@@ -137,7 +142,7 @@ export async function deactivateSalesOrgAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof SalesOrgMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof SalesOrgMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, salesOrg: code };
     }
     throw error;

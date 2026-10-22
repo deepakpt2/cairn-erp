@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { PurchasingOrgPlantRow } from '@/modules/purchasing/purchasing-org-plant-assignment';
 import {
@@ -46,6 +47,12 @@ export default function AssignPlant({
   const [checkState, checkAction, checkPending] = useActionState(checkPurchasingOrgPlantAction, empty);
   const [removeState, removeAction, removePending] = useActionState(removePurchasingOrgPlantAction, empty);
   const row = assignments.find((item) => `${item.purchasingOrg}/${item.plant}` === selected) ?? null;
+  const assignmentLock = useChangeLock(
+    'PURCHASING_ORG_PLANT',
+    row ? `${row.purchasingOrg}/${row.plant}` : '',
+    'CFG.PROC.PURORG.ASSIGN_PLANT',
+    Boolean(row) && canAssign,
+  );
 
   useEffect(() => {
     setRequestKey((current) => current || crypto.randomUUID());
@@ -154,7 +161,13 @@ export default function AssignPlant({
             <input type="hidden" name="plant" value={row.plant} />
             <button type="submit" className="btn btn-default min-h-11" disabled={checkPending}>Check</button>
           </form>
-          <form action={removeAction} className="flex flex-wrap items-end gap-2">
+          <form
+            action={removeAction}
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              if (assignmentLock?.mode !== 'CHANGE') event.preventDefault();
+            }}
+          >
             <input type="hidden" name="purchasingOrg" value={row.purchasingOrg} />
             <input type="hidden" name="plant" value={row.plant} />
             <input type="hidden" name="requestKey" value={removeKey} />
@@ -164,7 +177,8 @@ export default function AssignPlant({
               </label>
               <input id="assign-plant-remove-reason" name="reason" required className="input mt-1" />
             </div>
-            <button type="submit" className="btn btn-default min-h-11" disabled={removePending}>Remove</button>
+            <LockNotice message={assignmentLock?.mode === 'DISPLAY' ? assignmentLock.message : null} />
+            <button type="submit" className="btn btn-default min-h-11" disabled={removePending || assignmentLock?.mode !== 'CHANGE'}>Remove</button>
           </form>
         </div>
       )}

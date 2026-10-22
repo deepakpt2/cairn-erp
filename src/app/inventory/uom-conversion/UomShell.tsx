@@ -7,7 +7,8 @@
  * carries. The screen therefore shows the ratio it imported, never a decimal it computed —
  * 1/3 stays 1/3 — and the delete button removes exactly the row it sits on.
  */
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type { UomConversionRow } from '@/modules/inventory/unit-conversion';
@@ -32,6 +33,12 @@ export default function UomShell({
 }) {
   const [state, action, saving] = useActionState(defineConversionAction, INITIAL);
   const [removal, removeAction, removing] = useActionState(deleteConversionAction, INITIAL_DELETE);
+  const [material, setMaterial] = useState('');
+  const [unit, setUnit] = useState('');
+  const [engaged, setEngaged] = useState(false);
+  const pair = `${material.trim().toUpperCase()}/${unit.trim().toUpperCase()}`;
+  const changing = Boolean(material.trim() && unit.trim()) && rows.some((row) => `${row.materialNumber}/${row.alternativeUnit}`.toUpperCase() === pair);
+  const defineLock = useChangeLock('UOM_CONVERSION', pair, 'INV.STOCK.UOM', engaged && changing && canMaintain);
 
   return (
     <>
@@ -41,15 +48,21 @@ export default function UomShell({
         <p role="status" className={`mt-2 text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
         </p>
-        <form action={action}>
+        <form
+          action={action}
+          onFocus={() => setEngaged(true)}
+          onSubmit={(event) => {
+            if (changing && defineLock?.mode !== 'CHANGE') event.preventDefault();
+          }}
+        >
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block">
               <span className="field-label">{t('uom.material')}</span>
-              <input name="materialNumber" className="input w-full" placeholder="MAT-…" required />
+              <input name="materialNumber" className="input w-full" placeholder="MAT-…" required value={material} onChange={(event) => setMaterial(event.target.value)} />
             </label>
             <label className="block">
               <span className="field-label">{t('uom.alternativeUnit')}</span>
-              <select name="alternativeUnit" className="input w-full" defaultValue="" required>
+              <select name="alternativeUnit" className="input w-full" value={unit} required onChange={(event) => setUnit(event.target.value)}>
                 <option value="" disabled>{t('uom.chooseUnit')}</option>
                 {units.map((unit) => (
                   <option key={unit.code} value={unit.code}>{unit.code} — {unit.name}</option>
@@ -66,7 +79,8 @@ export default function UomShell({
             </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canMaintain || saving}>
+            <LockNotice message={changing && defineLock?.mode === 'DISPLAY' ? defineLock.message : null} />
+            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canMaintain || saving || (changing && defineLock?.mode === 'DISPLAY')}>
               {saving ? t('uom.saving') : t('uom.save')}
             </button>
             {!canMaintain && <p className="text-sm text-ink-soft">{t('uom.noMaintain')}</p>}
@@ -108,18 +122,7 @@ export default function UomShell({
                     1 {row.alternativeUnit} = {row.numerator}/{row.denominator} {row.baseUnit}
                   </td>
                   <td className="py-1 text-right">
-                    <form action={removeAction}>
-                      <input type="hidden" name="materialNumber" value={row.materialNumber} />
-                      <input type="hidden" name="alternativeUnit" value={row.alternativeUnit} />
-                      <button
-                        type="submit"
-                        className="btn min-h-11 sm:min-h-8"
-                        disabled={!canMaintain || removing}
-                        data-remove-conversion
-                      >
-                        {t('uom.remove')}
-                      </button>
-                    </form>
+                    <RemoveConversion row={row} action={removeAction} canMaintain={canMaintain} pending={removing} />
                   </td>
                 </tr>
               ))}
@@ -128,5 +131,46 @@ export default function UomShell({
         )}
       </section>
     </>
+  );
+}
+
+function RemoveConversion({
+  row,
+  action,
+  canMaintain,
+  pending,
+}: {
+  row: UomConversionRow;
+  action: (form: FormData) => void;
+  canMaintain: boolean;
+  pending: boolean;
+}) {
+  const [engaged, setEngaged] = useState(false);
+  const lock = useChangeLock(
+    'UOM_CONVERSION',
+    `${row.materialNumber}/${row.alternativeUnit}`,
+    'INV.STOCK.UOM',
+    engaged && canMaintain,
+  );
+  return (
+    <form
+      action={action}
+      onFocus={() => setEngaged(true)}
+      onSubmit={(event) => {
+        if (lock?.mode !== 'CHANGE') event.preventDefault();
+      }}
+    >
+      <input type="hidden" name="materialNumber" value={row.materialNumber} />
+      <input type="hidden" name="alternativeUnit" value={row.alternativeUnit} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <button
+        type="submit"
+        className="btn min-h-11 sm:min-h-8"
+        disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}
+        data-remove-conversion
+      >
+        {t('uom.remove')}
+      </button>
+    </form>
   );
 }

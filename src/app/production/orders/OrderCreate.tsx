@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState, useState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { createOrderAction, releaseOrderAction, type OrderActionState } from './actions';
 
 const INITIAL: OrderActionState = { ok: false, message: '' };
@@ -14,7 +15,17 @@ export default function OrderCreate({
   const [created, createAction, creating] = useActionState(createOrderAction, INITIAL);
   const [released, releaseAction, releasing] = useActionState(releaseOrderAction, INITIAL);
   const [requestKey] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const [releaseNumber, setReleaseNumber] = useState('');
   const order = released.order ?? created.order ?? null;
+  useEffect(() => {
+    if (created.order?.orderNumber) setReleaseNumber(created.order.orderNumber);
+  }, [created.order?.orderNumber]);
+  const releaseLock = useChangeLock(
+    'PRODUCTION_ORDER',
+    releaseNumber.trim() || null,
+    'PROD.ORDER.RELEASE',
+    Boolean(releaseNumber.trim()) && canRelease,
+  );
 
   return (
     <>
@@ -93,12 +104,19 @@ export default function OrderCreate({
           <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-red-700'}`}>
             {released.message}{released.remedy ? ` ${released.remedy}` : ''}
           </p>
+          <LockNotice message={releaseLock?.mode === 'DISPLAY' ? releaseLock.message : null} />
           <form action={releaseAction} className="mt-2 flex flex-wrap items-end gap-3">
             <label className="block">
               <span className="field-label">{t('co01.orderNumber')}</span>
-              <input name="orderNumber" className="input w-48" defaultValue={created.order.orderNumber} required />
+              <input
+                name="orderNumber"
+                className="input w-48"
+                value={releaseNumber}
+                onChange={(event) => setReleaseNumber(event.target.value)}
+                required
+              />
             </label>
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRelease || releasing}>
+            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRelease || releasing || releaseLock?.mode !== 'CHANGE'}>
               {t('co01.release')}
             </button>
             {!canRelease && <p className="text-sm text-ink-soft">{t('co01.noRelease')}</p>}

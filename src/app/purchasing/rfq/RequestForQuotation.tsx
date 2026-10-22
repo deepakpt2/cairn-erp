@@ -161,10 +161,12 @@ function ChangeRequest({
   return (
     <section aria-labelledby="rfq-change" data-rfq-change className="rounded-card border border-line bg-surface p-4 shadow-card">
       <h2 id="rfq-change" className="text-sm font-semibold">{t('requestForQuotation.changeTitle')}</h2>
+      {lockMessage && <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>}
       <p className="mt-1 text-xs text-ink-soft">{t('requestForQuotation.changeHint')}</p>
       <p className="mt-1 text-xs text-ink-soft" data-rfq-header-note>{t('requestForQuotation.headerIsTheEvents')}</p>
       <form key={formKey} action={changeAction} className="mt-3 space-y-3">
         <input type="hidden" name="rfqNumber" value={request.rfqNumber} />
+        <input type="hidden" name="eventNumber" value={opened.eventNumber} />
         <input type="hidden" name="expectedEventChangedAt" value={opened.changedAt ?? ''} />
         <input type="hidden" name="expectedRequestChangedAt" value={request.changedAt ?? ''} />
         <input type="hidden" name="lineCount" value={request.lines.length} />
@@ -244,12 +246,14 @@ export default function RequestForQuotation({
   selectedRequest,
   recent,
   canMaintain,
+  lockMessage = null,
 }: {
   opened: StandingRfqEvent | null;
   requestedEvent: string;
   selectedRequest: string;
   recent: Array<{ eventNumber: string; purchasingOrg: string; quotationDeadline: string; collectiveNumber: string | null }>;
   canMaintain: boolean;
+  lockMessage?: string | null;
 }) {
   const [org, setOrg] = useState('');
   const [suppliers, setSuppliers] = useState([0]);

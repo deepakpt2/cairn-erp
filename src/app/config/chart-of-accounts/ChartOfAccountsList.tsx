@@ -1,10 +1,12 @@
 'use client';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { setChartOfAccountsActiveAction } from './actions';
 import { ChartOfAccountsForm, type ChartOfAccountsRecord } from './ChartOfAccountsForm';
 import { ChartLifecycleControl } from './ChartLifecycleControl';
 import type { ChartOfAccountsChoice, LanguageChoice } from './ChartOfAccountsValueHelp';
+import { useState } from 'react';
 
 export function ChartOfAccountsList({
   charts,
@@ -64,18 +66,7 @@ export function ChartOfAccountsList({
                     <td>
                       <div className="flex flex-col gap-2">
                       {chart.isActive ? (
-                        <details className="min-w-44">
-                          <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">{t('chartOfAccounts.changeSettings')}</summary>
-                          <div role="dialog" aria-modal="true" aria-label={`${t('chartOfAccounts.changeTitle')} ${chart.chartOfAccounts}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
-                            <div className="mx-auto max-w-5xl">
-                              <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
-                                <div><span className="code text-xs text-ink-faint">OB13 · {chart.chartOfAccounts}</span><p className="font-semibold">{t('chartOfAccounts.changeTitle')}</p></div>
-                                <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; }}>{t('common.close')}</button>
-                              </div>
-                              <ChartOfAccountsForm key={chart.chartOfAccounts} mode="CHANGE" initial={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} />
-                            </div>
-                          </div>
-                        </details>
+                        <ChartChangeDialog chart={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} />
                       ) : (
                         <span className="text-xs text-ink-faint">{t('chartOfAccounts.inactiveRetained')}</span>
                       )}
@@ -98,5 +89,35 @@ export function ChartOfAccountsList({
         </div>
       )}
     </section>
+  );
+}
+
+function ChartChangeDialog({
+  chart,
+  languages,
+  groupCharts,
+  canMaintain,
+}: {
+  chart: ChartOfAccountsRecord;
+  languages: LanguageChoice[];
+  groupCharts: ChartOfAccountsChoice[];
+  canMaintain: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('CHART_OF_ACCOUNTS', chart.chartOfAccounts.trim(), 'CFG.FIN.COA.DEFINE', open);
+  return (
+    <details className="min-w-44" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">{t('chartOfAccounts.changeSettings')}</summary>
+      <div role="dialog" aria-modal="true" aria-label={`${t('chartOfAccounts.changeTitle')} ${chart.chartOfAccounts}`} className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-3 flex items-center justify-between gap-3 border border-line bg-white p-3">
+            <div><span className="code text-xs text-ink-faint">OB13 · {chart.chartOfAccounts}</span><p className="font-semibold">{t('chartOfAccounts.changeTitle')}</p></div>
+            <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; }}>{t('common.close')}</button>
+          </div>
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <ChartOfAccountsForm key={chart.chartOfAccounts} mode="CHANGE" initial={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} submitDisabled={lock?.mode !== 'CHANGE'} />
+        </div>
+      </div>
+    </details>
   );
 }

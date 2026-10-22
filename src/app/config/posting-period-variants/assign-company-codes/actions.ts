@@ -11,6 +11,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import {
   ACTIVITY,
@@ -38,6 +39,9 @@ function revalidateAssignmentRoutes() {
 }
 
 function mapAssignmentError(error: unknown): PpvAssignmentActionState {
+  if (error instanceof EnqueueError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
   if (error instanceof PostingPeriodVariantAssignmentError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
@@ -67,6 +71,7 @@ export async function assignPostingPeriodVariantAction(
   try {
     await requireCapability(ACTIVITY, session);
     await requireCapability(COMPANY_CODE_DEFINE, session);
+    await assertChangeForSession(session, { lockObject: 'PPV_COMPANY', argument: read(form, 'companyCode') });
 
     const result = await assignPostingPeriodVariant({
       client: session.user.client,

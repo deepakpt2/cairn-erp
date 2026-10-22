@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { requireSession, can } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { listMaterials, materialChoices, getMaterialDetail } from '@/modules/inventory/materials';
 import { listTypeValuation } from '@/modules/inventory/material-type-definition';
 import { MATERIAL_VIEWS, MATERIAL_VIEW_CAPABILITY } from '@/modules/inventory/constants';
@@ -28,7 +30,16 @@ export default async function MaterialsPage({ searchParams }: {
   const org = detail?.plants.find((p) => p.plant === plant);
   const valuation = detail?.valuations.find((v) => v.valuationArea === plant);
   const company = choices.companies.find((c) => c.companyCode === site?.companyCode);
-  const editable = can(session, MATERIAL_VIEW_CAPABILITY[view]);
+  const canEditView = can(session, MATERIAL_VIEW_CAPABILITY[view]);
+  const canDelete = can(session, MATERIAL_VIEW_CAPABILITY.BASIC);
+  const changeLock = detail && !creating && (canEditView || canDelete)
+    ? await openChangeForSession(session, {
+        lockObject: 'MATERIAL',
+        argument: detail.base.materialNumber,
+        transactionCode: 'MM02',
+      })
+    : null;
+  const editable = canEditView && (!detail || creating || changeLock?.mode === 'CHANGE');
   const valuationReadable = can(session, 'FIN.MATERIAL.VALUATION.DISPLAY') || can(session, MATERIAL_VIEW_CAPABILITY.ACCOUNTING) || can(session, 'AUDIT.WORKSPACE');
   const typeValuation = view === 'ACCOUNTING' && detail ? await listTypeValuation(client) : [];
   const nonValuated = view === 'ACCOUNTING'
@@ -57,11 +68,13 @@ export default async function MaterialsPage({ searchParams }: {
         <div className="flex gap-2"><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link><Link href="/inventory/materials" className="btn btn-default">{t('material.list')}</Link>{can(session, MATERIAL_VIEW_CAPABILITY.BASIC) && !creating && <Link href="/inventory/materials?new=1" className="btn btn-primary">{t('material.create')}</Link>}</div>
       </div><p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('material.subtitle')}</p>
     </header>
+    {changeLock?.mode === 'CHANGE' && detail && <ChangeLock lockObject="MATERIAL" argument={detail.base.materialNumber} />}
+    {changeLock?.mode === 'DISPLAY' && <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{displayOnlyMessage(changeLock)}</p>}
     {params.material && !detail && <div className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">{t('material.notFound', { number: params.material })}</div>}
     {source && <p className="border border-accent-line bg-accent-soft p-3 text-sm">{t('material.copyNote', { number: source.base.materialNumber })}</p>}
     {detail && <>
       <section className="panel grid gap-3 p-3 sm:grid-cols-4"><Summary label={t('material.number')} value={detail.base.materialNumber} /><Summary label={t('material.description')} value={detail.base.description || '—'} /><Summary label={t('material.type')} value={`${detail.base.materialType} / ${detail.base.baseUnit ?? '—'}`} /><Summary label={t('material.status')} value={t(`material.state.${detail.base.isBlocked ? 'BLOCKED' : detail.base.basicStatus}`)} /></section>
-      <DeletionFlags materialNumber={detail.base.materialNumber} clientFlagged={detail.base.markedForDeletion} clientStock={detail.valuations.reduce((sum, v) => sum + Number(v.totalStockQuantity), 0).toString()} plants={detail.plants.map((p) => ({ plant: p.plant, flagged: p.markedForDeletion, stock: detail.valuations.find((v) => v.valuationArea === p.plant)?.totalStockQuantity ?? '0' }))} canMaintain={can(session, MATERIAL_VIEW_CAPABILITY.BASIC)} />
+      <DeletionFlags materialNumber={detail.base.materialNumber} clientFlagged={detail.base.markedForDeletion} clientStock={detail.valuations.reduce((sum, v) => sum + Number(v.totalStockQuantity), 0).toString()} plants={detail.plants.map((p) => ({ plant: p.plant, flagged: p.markedForDeletion, stock: detail.valuations.find((v) => v.valuationArea === p.plant)?.totalStockQuantity ?? '0' }))} canMaintain={canDelete && changeLock?.mode === 'CHANGE'} />
       <div className="flex flex-wrap items-end justify-between gap-3"><form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('plant.code')}</span><select name="plant" defaultValue={plant} className="field-input code">{choices.plants.map((p) => <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>)}</select></label><button className="btn btn-default">{t('material.choosePlant')}</button></form><Link href={`${url(view)}&history=1`} className="text-sm text-accent underline">{t('material.history')}</Link></div>
       <nav aria-label={t('material.views')} className="flex flex-wrap gap-1 border-b border-line pb-3">{MATERIAL_VIEWS.map((v) => <Link key={v} href={url(v)} className={`border px-3 py-2 text-sm ${v === view ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}>{t(`material.view.${v}`)}<span className="ms-2 text-2xs">{t(`material.state.${statuses[v]}`)}</span></Link>)}{['PRODUCTION', 'SALES', 'SALES_GENERAL', 'STORAGE', 'FORECASTING', 'QUALITY', 'WAREHOUSE'].map((v) => <span key={v} aria-disabled="true" className="border border-dashed border-line px-3 py-2 text-sm text-ink-faint">{t(`material.view.${v}`)} · {t('material.pending')}</span>)}</nav>
     </>}

@@ -10,6 +10,7 @@ import {
   type DivisionMaintenanceInput,
 } from '@/modules/foundation/distribution-channel-division-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
 const ROUTE = '/config/divisions';
@@ -45,6 +46,9 @@ export async function saveDivisionAction(
   const code = read(form, 'division');
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'DIVISION', argument: code });
+    }
     const result = await saveDivisionDefinition({
       client: session.user.client,
       changedBy: session.user.username,
@@ -66,7 +70,7 @@ export async function saveDivisionAction(
       version: result.version, changed: result.changed, isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, division: code };
     }
     throw error;
@@ -81,6 +85,7 @@ export async function deactivateDivisionAction(
   const code = read(form, 'division');
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'DIVISION', argument: code });
     const result = await deactivateDivision({
       client: session.user.client,
       changedBy: session.user.username,
@@ -97,7 +102,7 @@ export async function deactivateDivisionAction(
       version: result.version, changed: result.changed, isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, division: code };
     }
     throw error;

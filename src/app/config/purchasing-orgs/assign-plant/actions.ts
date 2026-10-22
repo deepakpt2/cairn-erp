@@ -1,6 +1,7 @@
 'use server';
 
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PurchasingOrgPlantAssignmentError,
   assignPurchasingOrgPlant,
@@ -25,7 +26,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): PurchasingOrgPlantActionState {
-  if (error instanceof PurchasingOrgPlantAssignmentError || error instanceof AuthzError) {
+  if (error instanceof PurchasingOrgPlantAssignmentError || error instanceof AuthzError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -96,6 +97,10 @@ export async function removePurchasingOrgPlantAction(
 ): Promise<PurchasingOrgPlantActionState> {
   try {
     const session = await authorised();
+    await assertChangeForSession(session, {
+      lockObject: 'PURCHASING_ORG_PLANT',
+      argument: `${read(form, 'purchasingOrg')}/${read(form, 'plant')}`,
+    });
     const result = await removePurchasingOrgPlant({
       client: session.user.client,
       changedBy: session.user.username,

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type {
   ActivityRateRow,
@@ -44,9 +45,13 @@ function Message({ state }: { state: ActivityRateActionState }) {
 function DeleteDialog({
   selection,
   period,
+  blocked,
+  lockMessage,
 }: {
   selection: RateSelection;
   period: number;
+  blocked: boolean;
+  lockMessage: string | null;
 }) {
   const [state, formAction, pending] = useActionState<ActivityRateActionState, FormData>(
     deleteActivityRateAction,
@@ -108,7 +113,8 @@ function DeleteDialog({
                 />
               </div>
               <Message state={state} />
-              <button type="submit" className="btn-primary" disabled={pending}>
+              <LockNotice message={lockMessage} />
+              <button type="submit" className="btn-primary" disabled={pending || blocked}>
                 Delete activity rate
               </button>
             </form>
@@ -142,6 +148,11 @@ export default function ActivityRates({
     { ok: true },
   );
   const [reason, setReason] = useState('');
+  const ready =
+    context !== null && selection.center !== '' && selection.type !== '' && selection.version !== '';
+  const planArgument = [selection.area, selection.version, selection.year, selection.center, selection.type].join('/');
+  const planLock = useChangeLock('ACTIVITY_RATE', planArgument, 'CFG.COST.ACTIVITYRATE.CONFIRM', ready && canMaintain);
+  const planBlocked = ready && canMaintain && planLock?.mode !== 'CHANGE';
   const push = (next: Partial<RateSelection>) => {
     const merged = { ...selection, ...next };
     const query = new URLSearchParams(
@@ -150,8 +161,6 @@ export default function ActivityRates({
     router.push(`/config/activity-rates?${query.toString()}`);
   };
   const byPeriod = new Map(rates.map((row) => [row.period, row]));
-  const ready =
-    context !== null && selection.center !== '' && selection.type !== '' && selection.version !== '';
 
   return (
     <div className="space-y-4">
@@ -281,7 +290,7 @@ export default function ActivityRates({
                         <input
                           form="act-rate-form"
                           name={`p${period.period}Quantity`}
-                          disabled={!canMaintain}
+                          disabled={!canMaintain || planBlocked}
                           inputMode="decimal"
                           placeholder="0.000"
                           defaultValue={rate?.plannedQuantity ?? ''}
@@ -293,7 +302,7 @@ export default function ActivityRates({
                         <input
                           form="act-rate-form"
                           name={`p${period.period}FixedPrice`}
-                          disabled={!canMaintain}
+                          disabled={!canMaintain || planBlocked}
                           inputMode="decimal"
                           placeholder="0.00"
                           defaultValue={rate?.fixedPrice ?? ''}
@@ -305,7 +314,7 @@ export default function ActivityRates({
                         <input
                           form="act-rate-form"
                           name={`p${period.period}VariablePrice`}
-                          disabled={!canMaintain}
+                          disabled={!canMaintain || planBlocked}
                           inputMode="decimal"
                           placeholder="0.00"
                           defaultValue={rate?.variablePrice ?? ''}
@@ -317,7 +326,7 @@ export default function ActivityRates({
                         <input
                           form="act-rate-form"
                           name={`p${period.period}PriceUnit`}
-                          disabled={!canMaintain}
+                          disabled={!canMaintain || planBlocked}
                           inputMode="numeric"
                           defaultValue={rate?.priceUnit ?? 1}
                           className="w-16 rounded-none border border-line bg-paper px-2 py-1 text-sm text-ink"
@@ -326,7 +335,12 @@ export default function ActivityRates({
                       </td>
                       <td>
                         {canMaintain && rate ? (
-                          <DeleteDialog selection={selection} period={period.period} />
+                          <DeleteDialog
+                            selection={selection}
+                            period={period.period}
+                            blocked={planBlocked}
+                            lockMessage={planLock?.mode === 'DISPLAY' ? planLock.message : null}
+                          />
                         ) : (
                           '—'
                         )}
@@ -355,7 +369,8 @@ export default function ActivityRates({
               />
             </div>
             <Message state={state} />
-            <button type="submit" form="act-rate-form" className="btn-primary" disabled={pending}>
+            <LockNotice message={planLock?.mode === 'DISPLAY' ? planLock.message : null} />
+            <button type="submit" form="act-rate-form" className="btn-primary" disabled={pending || planBlocked}>
               Save plan
             </button>
             <p className="text-xs text-ink-soft">

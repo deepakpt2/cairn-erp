@@ -3,6 +3,8 @@
 import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+
 import type { CostCenterArea } from '../../../modules/foundation/cost-center-definition';
 import type {
   ProfitCenterRow,
@@ -59,15 +61,17 @@ function DialogShell({
   summary,
   title,
   code,
+  onToggle,
   children,
 }: {
   summary: string;
   title: string;
   code: string;
+  onToggle?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
   return (
-    <details className="min-w-16">
+    <details className="min-w-16" onToggle={(event) => onToggle?.(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {summary}
       </summary>
@@ -255,6 +259,20 @@ function CreatePanel({
   );
 }
 
+function periodArgument(row: { controllingArea: string; profitCenter: string; validFrom: string }) {
+  return `${row.controllingArea.trim()}/${row.profitCenter.trim()}/${row.validFrom.trim()}`;
+}
+
+function usePeriodLock(argument: string) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('PROFIT_CENTER', argument, 'CFG.COST.PROFITCENTER.DEFINE', open);
+  return {
+    setOpen,
+    held: lock?.mode === 'CHANGE',
+    notice: lock?.mode === 'DISPLAY' ? lock.message : null,
+  };
+}
+
 function ChangeDialog({ row, users }: { row: ProfitCenterRow; users: ResponsibleUserChoice[] }) {
   const [state, formAction, pending] = useActionState<ProfitCenterActionState, FormData>(
     saveProfitCenterAction,
@@ -262,8 +280,10 @@ function ChangeDialog({ row, users }: { row: ProfitCenterRow; users: Responsible
   );
   const suffix = `${row.profitCenter}-${row.validFrom}`;
   const label = `${row.profitCenter} · from ${row.validFrom}`;
+  const period = usePeriodLock(periodArgument(row));
   return (
-    <DialogShell summary="Change" title={`Change ${label}`} code={label}>
+    <DialogShell summary="Change" title={`Change ${label}`} code={label} onToggle={period.setOpen}>
+      <LockNotice message={period.notice} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="mode" value="CHANGE" />
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
@@ -272,7 +292,7 @@ function ChangeDialog({ row, users }: { row: ProfitCenterRow; users: Responsible
         <CentreFields idPrefix={`pc-${suffix}`} row={row} users={users} />
         <ReasonField id={`pc-change-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <button type="submit" className="btn-primary" disabled={pending || !period.held}>
           Save changes
         </button>
       </form>
@@ -288,8 +308,10 @@ function LockDialog({ row }: { row: ProfitCenterRow }) {
   const suffix = `${row.profitCenter}-${row.validFrom}`;
   const label = `${row.profitCenter} · from ${row.validFrom}`;
   const verb = row.isPostingLocked ? 'Unlock' : 'Lock';
+  const period = usePeriodLock(periodArgument(row));
   return (
-    <DialogShell summary={verb} title={`${verb} ${label}`} code={label}>
+    <DialogShell summary={verb} title={`${verb} ${label}`} code={label} onToggle={period.setOpen}>
+      <LockNotice message={period.notice} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="profitCenter" value={row.profitCenter} />
@@ -302,7 +324,7 @@ function LockDialog({ row }: { row: ProfitCenterRow }) {
         </p>
         <ReasonField id={`pc-lock-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <button type="submit" className="btn-primary" disabled={pending || !period.held}>
           {verb} profit centre
         </button>
       </form>
@@ -317,8 +339,10 @@ function DeleteDialog({ row }: { row: ProfitCenterRow }) {
   );
   const suffix = `${row.profitCenter}-${row.validFrom}`;
   const label = `${row.profitCenter} · from ${row.validFrom}`;
+  const period = usePeriodLock(periodArgument(row));
   return (
-    <DialogShell summary="Delete" title={`Delete ${label}`} code={label}>
+    <DialogShell summary="Delete" title={`Delete ${label}`} code={label} onToggle={period.setOpen}>
+      <LockNotice message={period.notice} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="profitCenter" value={row.profitCenter} />
@@ -330,7 +354,7 @@ function DeleteDialog({ row }: { row: ProfitCenterRow }) {
         </p>
         <ReasonField id={`pc-delete-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <button type="submit" className="btn-primary" disabled={pending || !period.held}>
           Delete profit centre period
         </button>
       </form>

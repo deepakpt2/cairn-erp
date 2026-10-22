@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ASSET_CHANGE_CAPABILITY, AssetMasterError, changeAsset,
   changeAssetAssignment, changeAssetDepreciation, deactivateAsset,
@@ -17,13 +18,20 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): AssetActionState {
-  if (error instanceof AssetMasterError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof AssetMasterError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
 async function guard(form: FormData) {
   const session = await requireSession(ROUTE);
   if (!can(session, ASSET_CHANGE_CAPABILITY)) return null;
+  const companyCode = text(form, 'companyCode');
+  const assetNumber = text(form, 'assetNumber');
+  const subNumber = text(form, 'subNumber') || '0000';
+  await assertChangeForSession(session, {
+    lockObject: 'ASSET',
+    argument: `${companyCode}/${assetNumber}/${subNumber}`,
+  });
   return {
     client: session.user.client, changedBy: session.user.username,
     companyCode: text(form, 'companyCode'), assetNumber: text(form, 'assetNumber'),
@@ -33,9 +41,9 @@ async function guard(form: FormData) {
 }
 
 export async function changeAction(_previous: AssetActionState, form: FormData): Promise<AssetActionState> {
-  const base = await guard(form);
-  if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
   try {
+    const base = await guard(form);
+    if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
     const result = await changeAsset({
       ...base,
       description1: text(form, 'description1'),
@@ -52,9 +60,9 @@ export async function changeAction(_previous: AssetActionState, form: FormData):
 }
 
 export async function assignmentAction(_previous: AssetActionState, form: FormData): Promise<AssetActionState> {
-  const base = await guard(form);
-  if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
   try {
+    const base = await guard(form);
+    if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
     const result = await changeAssetAssignment({
       ...base,
       assignment: {
@@ -73,9 +81,9 @@ export async function assignmentAction(_previous: AssetActionState, form: FormDa
 }
 
 export async function depreciationAction(_previous: AssetActionState, form: FormData): Promise<AssetActionState> {
-  const base = await guard(form);
-  if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
   try {
+    const base = await guard(form);
+    if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
     const result = await changeAssetDepreciation({
       ...base,
       depreciation: {
@@ -93,9 +101,9 @@ export async function depreciationAction(_previous: AssetActionState, form: Form
 }
 
 export async function deactivateAction(_previous: AssetActionState, form: FormData): Promise<AssetActionState> {
-  const base = await guard(form);
-  if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
   try {
+    const base = await guard(form);
+    if (!base) return { ok: false, message: 'You do not hold the asset change capability.' };
     const result = await deactivateAsset({
       ...base,
       deactivationDate: text(form, 'deactivationDate'),

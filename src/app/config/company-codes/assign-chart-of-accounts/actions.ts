@@ -15,6 +15,7 @@ import {
   CompanyCodeCoaAssignmentError,
 } from '@/modules/foundation/company-code-coa-assignment';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ROUTE = '/config/company-codes/assign-chart-of-accounts';
 const COMPANY_CODE_ASSIGN_COA = 'CFG.ORG.COMPANYCODE.ASSIGN_COA';
@@ -34,6 +35,7 @@ export async function assignCoaAction(
 
   try {
     await requireCapability(COMPANY_CODE_ASSIGN_COA, session);
+    await assertChangeForSession(session, { lockObject: 'COMPANY_CODE', argument: read('companyCode') });
     const reason = read('reason');
     if (!reason) {
       return {
@@ -62,7 +64,7 @@ export async function assignCoaAction(
         : t('cc.coaAlreadyAssigned', { code: result.companyCode, chart: result.chartOfAccounts }),
     };
   } catch (error) {
-    if (error instanceof CompanyCodeCoaAssignmentError || error instanceof AuthzError) {
+    if (error instanceof CompanyCodeCoaAssignmentError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

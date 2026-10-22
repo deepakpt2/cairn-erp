@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import { listInvoiceTaxCodes } from '@/modules/purchasing/invoice-verification';
 import {
@@ -39,6 +41,14 @@ export default async function ParkedInvoicePage({ searchParams }: {
   const taxCodes = opened ? await listInvoiceTaxCodes(session.user.client, opened.companyCode) : [];
   const recent = await listRecentParkedInvoices(session.user.client);
   const today = new Date().toISOString().slice(0, 10);
+  const canPark = can(session, PARKED_INVOICE_CAPABILITY);
+  const changeLock = standing && canPark
+    ? await openChangeForSession(session, {
+        lockObject: 'PARKED_INVOICE',
+        argument: standing.parkedNumber,
+        transactionCode: 'PROC.INV.PARK',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -55,6 +65,10 @@ export default async function ParkedInvoicePage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('parkedInvoice.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && standing && (
+        <ChangeLock lockObject="PARKED_INVOICE" argument={standing.parkedNumber} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <ParkedInvoice
         key={`${orderNumber}:${requestedPark}`}
         opened={opened}
@@ -64,7 +78,7 @@ export default async function ParkedInvoicePage({ searchParams }: {
         recent={recent}
         taxCodes={taxCodes}
         today={today}
-        canPark={can(session, PARKED_INVOICE_CAPABILITY)}
+        canPark={canPark && changeLock?.mode !== 'DISPLAY'}
       />
     </div>
   );

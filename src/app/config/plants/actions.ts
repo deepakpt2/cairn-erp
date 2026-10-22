@@ -13,6 +13,7 @@ import {
   PlantCompanyCodeAssignmentError,
 } from '@/modules/foundation/plant-company-code-assignment';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.ORG.PLANT.DEFINE';
 const PLANT_ASSIGNMENT = 'CFG.ORG.PLANT.ASSIGN_COMPANY';
@@ -63,6 +64,9 @@ export async function savePlantDefinitionAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PLANT', argument: plantCode });
+    }
     const result = await savePlantDefinition({
       client: session.user.client,
       changedBy: session.user.username,
@@ -101,7 +105,7 @@ export async function savePlantDefinitionAction(
       changed: result.changed,
     };
   } catch (error) {
-    if (error instanceof PlantMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof PlantMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, plant: plantCode };
     }
     throw error;

@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PARKED_INVOICE_CAPABILITY,
   PARKED_INVOICE_ROUTE,
@@ -51,7 +52,7 @@ function missing(): ParkedInvoiceActionState {
 }
 
 function refused(caught: unknown): ParkedInvoiceActionState | null {
-  if (caught instanceof ParkedInvoiceError) return { ok: false, message: caught.message, remedy: caught.remedy };
+  if (caught instanceof ParkedInvoiceError || caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   return null;
 }
 
@@ -157,6 +158,9 @@ export async function saveParkedInvoiceAction(
   if (blockedState) return blockedState;
   const parkedNumber = text(form, 'parkedNumber');
   try {
+    if (parkedNumber) {
+      await assertChangeForSession(session, { lockObject: 'PARKED_INVOICE', argument: parkedNumber });
+    }
     const saved = parkedNumber
       ? await changeParkedInvoice({
         ...input(session.user.client, session.user.username, form),

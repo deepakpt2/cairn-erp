@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { ReactNode } from 'react';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import {
@@ -30,7 +32,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function EvaluationView({ evaluation }: { evaluation: VendorEvaluation }) {
+function EvaluationView({ evaluation, canScore }: { evaluation: VendorEvaluation; canScore: boolean }) {
   return (
     <section aria-labelledby="ve-result" className="space-y-4" data-ve-evaluation>
       <div className="rounded-card border border-line bg-surface p-4 shadow-card">
@@ -83,7 +85,7 @@ function EvaluationView({ evaluation }: { evaluation: VendorEvaluation }) {
         {evaluation.criteria.filter((row) => row.method === 'AUTOMATIC').map((row) => (
           <p key={row.criterionCode} className="mt-2 text-xs text-ink-soft" data-ve-no-save={row.criterionCode}>{t('vendorEvaluation.noSave')}</p>
         ))}
-        {!evaluation.blocked && evaluation.criteria.filter((row) => row.method === 'MANUAL').map((row) => (
+        {canScore && !evaluation.blocked && evaluation.criteria.filter((row) => row.method === 'MANUAL').map((row) => (
           <ManualScoreForm
             key={`${row.criterionCode}-${row.version ?? 0}`}
             supplier={evaluation.supplierNumber}
@@ -127,6 +129,16 @@ export default async function VendorEvaluationPage({ searchParams }: {
         : t('vendorEvaluation.title');
     }
   }
+  const evaluationKey = evaluation
+    ? `${evaluation.supplierNumber.trim()}/${evaluation.purchasingOrg.trim()}/${evaluation.periodFrom.trim()}/${evaluation.periodTo.trim()}`
+    : '';
+  const changeLock = evaluation && canEvaluate
+    ? await openChangeForSession(session, {
+        lockObject: 'VENDOR_EVALUATION',
+        argument: evaluationKey,
+        transactionCode: 'PROC.VENDOR.EVALUATE',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -164,7 +176,11 @@ export default async function VendorEvaluationPage({ searchParams }: {
         {refusal && <p className="mt-3 text-sm text-red-700" role="alert" data-ve-refused>{refusal}</p>}
       </section>
 
-      {evaluation && <EvaluationView evaluation={evaluation} />}
+      {changeLock?.mode === 'CHANGE' && evaluationKey && (
+        <ChangeLock lockObject="VENDOR_EVALUATION" argument={evaluationKey} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      {evaluation && <EvaluationView evaluation={evaluation} canScore={changeLock?.mode === 'CHANGE'} />}
     </div>
   );
 }

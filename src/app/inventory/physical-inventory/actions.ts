@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PHYSICAL_INVENTORY_CANCEL_CAPABILITY,
   PHYSICAL_INVENTORY_CREATE_CAPABILITY,
@@ -23,6 +24,10 @@ export interface PhysicalInventoryActionState {
 function text(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function documentArgument(form: FormData): string {
+  return `${text(form, 'inventoryDocumentNumber')}/${text(form, 'fiscalYear')}`;
 }
 
 const LINE_COUNT = 6;
@@ -77,6 +82,7 @@ export async function cancelPhysicalInventoryAction(
   }
 
   try {
+    await assertChangeForSession(session, { lockObject: 'PHYSICAL_INVENTORY', argument: documentArgument(form) });
     const document = await cancelPhysicalInventory({
       client: session.user.client,
       changedBy: session.user.username,
@@ -90,7 +96,7 @@ export async function cancelPhysicalInventoryAction(
       document,
     };
   } catch (caught) {
-    if (caught instanceof PhysicalInventoryError) {
+    if (caught instanceof PhysicalInventoryError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy, document: null };
     }
     return { ok: false, message: 'The count document could not be cancelled.', document: null };
@@ -102,6 +108,7 @@ export async function cancelListedAction(form: FormData): Promise<void> {
   const session = await requireSession(PHYSICAL_INVENTORY_ROUTE);
   if (!can(session, PHYSICAL_INVENTORY_CANCEL_CAPABILITY)) return;
   try {
+    await assertChangeForSession(session, { lockObject: 'PHYSICAL_INVENTORY', argument: documentArgument(form) });
     await cancelPhysicalInventory({
       client: session.user.client,
       changedBy: session.user.username,
@@ -109,7 +116,7 @@ export async function cancelListedAction(form: FormData): Promise<void> {
       fiscalYear: Number(text(form, 'fiscalYear') || '0'),
     });
   } catch (caught) {
-    if (!(caught instanceof PhysicalInventoryError)) throw caught;
+    if (!(caught instanceof PhysicalInventoryError || caught instanceof EnqueueError)) throw caught;
   }
   revalidatePath(PHYSICAL_INVENTORY_ROUTE);
 }

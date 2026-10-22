@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { CharacteristicRow } from '@/modules/foundation/characteristic-definition';
 import {
@@ -106,6 +107,9 @@ export default function Characteristics({ rows, canMaintain }: {
     | { kind: 'delete'; row: CharacteristicRow }
     | null
   >(null);
+  const changing = editor.mode === 'CHANGE';
+  const changeLock = useChangeLock('CHARACTERISTIC', editor.characteristicName.trim(), 'CFG.PROC.CHARACTERISTIC.DEFINE', changing);
+  const dialogLock = useChangeLock('CHARACTERISTIC', dialog?.row.characteristicName.trim() ?? '', 'CFG.PROC.CHARACTERISTIC.DEFINE', Boolean(dialog));
 
   const state = deleteState.message ? deleteState : statusState.message ? statusState : saveState;
 
@@ -295,7 +299,8 @@ export default function Characteristics({ rows, canMaintain }: {
                 <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
                   onClick={() => setEditor(EMPTY_EDITOR)}>New characteristic</button>
               )}
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving}>
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || (changing && changeLock?.mode !== 'CHANGE')}>
                 Save characteristic
               </button>
             </div>
@@ -316,7 +321,8 @@ export default function Characteristics({ rows, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>
                 {dialog.status === 'ACTIVE' ? 'Activate' : 'Block'}
               </button>
             </div>
@@ -333,7 +339,8 @@ export default function Characteristics({ rows, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Delete</button>
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>Delete</button>
             </div>
           </form>
         </DialogShell>

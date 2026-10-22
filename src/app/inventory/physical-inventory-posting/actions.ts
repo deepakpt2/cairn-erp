@@ -13,6 +13,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { NumberRangeError } from '@/platform/numbering';
 import { PeriodError } from '@/platform/periods';
 import { PostingError } from '@/platform/posting';
@@ -102,6 +103,7 @@ function refused(caught: unknown): PostingActionState | null {
     || caught instanceof PeriodError
     || caught instanceof NumberRangeError
     || caught instanceof MaterialReversalError
+    || caught instanceof EnqueueError
   ) {
     const remedy = 'remedy' in caught && typeof caught.remedy === 'string' ? caught.remedy : undefined;
     return { ok: false, message: caught.message, remedy };
@@ -148,6 +150,10 @@ export async function postDifferencesAction(
   const supplied = clientSupplied(form);
   if (supplied) return { ok: false, message: supplied };
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'PHYSICAL_INVENTORY',
+      argument: `${text(form, 'documentNumber')}/${text(form, 'fiscalYear')}`,
+    });
     const posted = await postDifferences({
       client: session.user.client,
       changedBy: session.user.username,
@@ -181,6 +187,10 @@ export async function reversePostingAction(
     };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'MATERIAL_DOCUMENT',
+      argument: text(form, 'materialDocumentNumber'),
+    });
     const reversed = await reverseDifferencePosting({
       client: session.user.client,
       changedBy: session.user.username,

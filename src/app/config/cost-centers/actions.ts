@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   CostCenterError,
   deleteCostCenter,
@@ -24,6 +25,12 @@ const ROUTE = '/config/cost-centers';
 function read(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value : '';
+}
+
+function periodArgument(form: FormData): string {
+  return [read(form, 'controllingArea'), read(form, 'costCenter'), read(form, 'validFrom')]
+    .map((part) => part.trim())
+    .join('/');
 }
 
 export async function saveCostCenterAction(
@@ -49,6 +56,9 @@ export async function saveCostCenterAction(
   };
 
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'COST_CENTER', argument: periodArgument(form) });
+    }
     const result = await saveCostCenter(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -65,7 +75,7 @@ export async function saveCostCenterAction(
           : `Cost Centre ${result.costCenter} changed for the period from ${result.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof CostCenterError) {
+    if (error instanceof EnqueueError || error instanceof CostCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -94,6 +104,7 @@ export async function lockCostCenterAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'COST_CENTER', argument: periodArgument(form) });
     const result = await setCostCenterPostingLock(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -109,7 +120,7 @@ export async function lockCostCenterAction(
         : `Cost Centre ${input.costCenter} open for posting again from ${input.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof CostCenterError) {
+    if (error instanceof EnqueueError || error instanceof CostCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -136,6 +147,7 @@ export async function deleteCostCenterAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'COST_CENTER', argument: periodArgument(form) });
     await deleteCostCenter(input);
     revalidatePath(ROUTE);
     return {
@@ -143,7 +155,7 @@ export async function deleteCostCenterAction(
       message: `Cost Centre ${input.costCenter} period from ${input.validFrom} deleted.`,
     };
   } catch (error) {
-    if (error instanceof CostCenterError) {
+    if (error instanceof EnqueueError || error instanceof CostCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {

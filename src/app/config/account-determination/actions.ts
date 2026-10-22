@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   AccountDeterminationError,
   deleteAccountDetermination,
@@ -29,6 +30,10 @@ function words(input: { chartOfAccounts: string; event: string }) {
   return { chart: input.chartOfAccounts, event: t(`acctDet.event.${input.event}`) };
 }
 
+function determinationArgument(form: FormData): string {
+  return [read(form, 'chartOfAccounts'), read(form, 'event'), read(form, 'valuationClass'), read(form, 'generalModifier')].join('/');
+}
+
 export async function saveDeterminationAction(
   _previous: AccountDeterminationActionState,
   form: FormData,
@@ -49,6 +54,9 @@ export async function saveDeterminationAction(
   };
 
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'ACCOUNT_DETERMINATION', argument: determinationArgument(form) });
+    }
     const result = await saveAccountDetermination(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -59,7 +67,7 @@ export async function saveDeterminationAction(
       message: mode === 'CREATE' ? t('acctDet.created', words(result)) : t('acctDet.changed', words(result)),
     };
   } catch (error) {
-    if (error instanceof AccountDeterminationError) {
+    if (error instanceof AccountDeterminationError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return { ok: false, message: t('acctDet.unexpected'), remedy: t('acctDet.unexpectedRemedy') };
@@ -83,11 +91,12 @@ export async function deleteDeterminationAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'ACCOUNT_DETERMINATION', argument: determinationArgument(form) });
     await deleteAccountDetermination(input);
     revalidatePath(ROUTE);
     return { ok: true, message: t('acctDet.deleted', words(input)) };
   } catch (error) {
-    if (error instanceof AccountDeterminationError) {
+    if (error instanceof AccountDeterminationError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return { ok: false, message: t('acctDet.unexpected'), remedy: t('acctDet.unexpectedRemedy') };

@@ -10,6 +10,7 @@ import {
   type DistributionChannelMaintenanceInput,
 } from '@/modules/foundation/distribution-channel-division-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
 const ROUTE = '/config/distribution-channels';
@@ -45,6 +46,9 @@ export async function saveDistributionChannelAction(
   const code = read(form, 'distributionChannel');
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'DISTRIBUTION_CHANNEL', argument: code });
+    }
     const result = await saveDistributionChannelDefinition({
       client: session.user.client,
       changedBy: session.user.username,
@@ -66,7 +70,7 @@ export async function saveDistributionChannelAction(
       version: result.version, changed: result.changed, isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, distributionChannel: code };
     }
     throw error;
@@ -81,6 +85,7 @@ export async function deactivateDistributionChannelAction(
   const code = read(form, 'distributionChannel');
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'DISTRIBUTION_CHANNEL', argument: code });
     const result = await deactivateDistributionChannel({
       client: session.user.client,
       changedBy: session.user.username,
@@ -97,7 +102,7 @@ export async function deactivateDistributionChannelAction(
       version: result.version, changed: result.changed, isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof DistributionDimensionMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, distributionChannel: code };
     }
     throw error;

@@ -7,8 +7,10 @@ import {
   SPECIAL_GL_ACTIVITY,
   SpecialGlError,
   deleteSpecialGlConfig,
+  listSpecialGlConfigs,
   maintainSpecialGlConfig,
 } from '@/modules/foundation/special-gl';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface SpecialGlActionState {
   ok: boolean;
@@ -24,8 +26,12 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): SpecialGlActionState {
-  if (error instanceof SpecialGlError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof SpecialGlError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
+}
+
+function indicatorArgument(company: string, accountType: string, indicator: string) {
+  return `${company.trim() || '*'}/${accountType.trim()}/${indicator.trim()}`;
 }
 
 export async function maintainAction(
@@ -37,6 +43,16 @@ export async function maintainAction(
     return { ok: false, message: 'You do not hold the special G/L configuration activity.' };
   }
   try {
+    const companyCode = text(form, 'companyCode');
+    const accountType = text(form, 'accountType').toUpperCase();
+    const indicator = text(form, 'indicator').toUpperCase();
+    const standing = await listSpecialGlConfigs(session.user.client);
+    if (standing.some((row) => indicatorArgument(row.companyCode, row.accountType, row.indicator).toUpperCase() === indicatorArgument(companyCode, accountType, indicator).toUpperCase())) {
+      await assertChangeForSession(session, {
+        lockObject: 'SPECIAL_GL',
+        argument: indicatorArgument(companyCode, accountType, indicator),
+      });
+    }
     const row = await maintainSpecialGlConfig({
       client: session.user.client, changedBy: session.user.username,
       companyCode: text(form, 'companyCode'),
@@ -68,11 +84,18 @@ export async function deleteAction(
     return { ok: false, message: 'You do not hold the special G/L configuration activity.' };
   }
   try {
+    const companyCode = text(form, 'companyCode');
+    const accountType = text(form, 'accountType').toUpperCase();
+    const indicator = text(form, 'indicator').toUpperCase();
+    await assertChangeForSession(session, {
+      lockObject: 'SPECIAL_GL',
+      argument: indicatorArgument(companyCode, accountType, indicator),
+    });
     await deleteSpecialGlConfig({
       client: session.user.client, changedBy: session.user.username,
-      companyCode: text(form, 'companyCode'),
-      accountType: text(form, 'accountType').toUpperCase(),
-      indicator: text(form, 'indicator').toUpperCase(),
+      companyCode,
+      accountType,
+      indicator,
       reason: text(form, 'reason') || undefined,
     });
     revalidatePath(ROUTE);

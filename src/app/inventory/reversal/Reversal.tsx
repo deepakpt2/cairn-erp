@@ -12,9 +12,10 @@ function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export default function Reversal({ document, canPost, today }: {
+export default function Reversal({ document, canPost, displayOnly = false, today }: {
   document: ReversalDocumentView | null;
   canPost: boolean;
+  displayOnly?: boolean;
   today: string;
 }) {
   const [state, action, working] = useActionState(reverseMaterialDocumentAction, INITIAL);
@@ -127,7 +128,7 @@ export default function Reversal({ document, canPost, today }: {
                   <input name="headerText" maxLength={25} className="input w-full" />
                 </label>
                 <div className="flex items-end">
-                  <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-8" disabled={!canPost || working}>
+                  <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-8" disabled={!canPost || displayOnly || working}>
                     {working ? t('mbst.reversing') : t('mbst.reverse')}
                   </button>
                 </div>

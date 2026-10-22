@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type {
   MaterialRangeGroupRow,
@@ -81,6 +82,14 @@ export default function MaterialNumberRanges({
 }) {
   const [selected, setSelected] = useState<MaterialRangeGroupRow | null>(null);
   const [deleting, setDeleting] = useState<MaterialRangeGroupRow | null>(null);
+  const groupArgument = selected ? `${selected.internalKey.trim()}/${selected.externalKey.trim()}` : '';
+  const groupLock = useChangeLock('MATERIAL_RANGE_GROUP', groupArgument, 'CFG.INV.MATERIALRANGE.DEFINE', Boolean(selected));
+  const deleteLock = useChangeLock(
+    'MATERIAL_RANGE_GROUP',
+    deleting ? `${deleting.internalKey.trim()}/${deleting.externalKey.trim()}` : '',
+    'CFG.INV.MATERIALRANGE.DEFINE',
+    Boolean(deleting),
+  );
 
   const [saveState, saveAction, savePending] = useActionState<
     MaterialRangeGroupActionState,
@@ -231,7 +240,8 @@ export default function MaterialNumberRanges({
               </p>
             )}
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={savePending}>
+              <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={savePending || (Boolean(selected) && groupLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define number range group'}
               </button>
               {selected && (
@@ -302,7 +312,8 @@ export default function MaterialNumberRanges({
                 : `${deleting.assignedTypes.join(', ')} carr${deleting.assignedTypes.length === 1 ? 'ies' : 'y'} it now.`}
             </p>
             <ReasonInput id="dlg-range-group-delete-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={deleteLock?.mode !== 'CHANGE'}>
               Delete
             </button>
             <Message state={deleteState} />

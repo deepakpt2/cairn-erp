@@ -12,6 +12,7 @@ export function PartnerForm({initial,version,creating,countries}:{initial:Partne
     {state.message&&<div role="status" className={`mb-3 border p-3 text-sm ${state.ok?'border-signal-ok/30 bg-signal-ok-soft text-signal-ok':'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}><p>{state.message}</p>{state.remedy&&<p>{state.remedy}</p>}{state.ok&&state.number&&<Link className="mt-2 inline-block underline" href={`/foundation/partners?partner=${encodeURIComponent(state.number)}`}>{t('bp.open')}</Link>}</div>}
     <form key={version} action={action} className="space-y-4">
       <input type="hidden" name="expectedVersion" value={creating?0:state.version??version}/>
+      {!creating && <input type="hidden" name="changing" value="1" />}
       <div className="grid gap-3 sm:grid-cols-3"><label><span className="field-label">{t('bp.number')}</span><input name="partnerNumber" defaultValue={initial.partnerNumber} readOnly={!creating} required maxLength={40} pattern="[A-Z0-9][A-Z0-9_.-]*" onInput={(e)=>{e.currentTarget.value=e.currentTarget.value.toUpperCase();}} className="field-input code" /></label>
         <label><span className="field-label">{t('bp.category')}</span>{creating?<select name="category" defaultValue={initial.category} className="field-input"><option value="ORGANIZATION">{t('bp.category.ORGANIZATION')}</option><option value="PERSON">{t('bp.category.PERSON')}</option></select>:<input name="category" value={initial.category} readOnly className="field-input code bg-sunken"/>}</label>
         {field('searchTerm','bp.searchTerm',40)}

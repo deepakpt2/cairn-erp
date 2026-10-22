@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type { ChartOfAccountsActionState } from './actions';
 import { ActionMessage } from './ChartOfAccountsForm';
 
@@ -36,6 +37,9 @@ export function ChartLifecycleControl({
 }) {
   const [state, formAction, pending] = useActionState<ChartOfAccountsActionState, FormData>(action, { ok: true });
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const lockObject = codeField === 'groupChartOfAccounts' ? 'GROUP_CHART' : 'CHART_OF_ACCOUNTS';
+  const lock = useChangeLock(lockObject, code.trim(), 'CFG.FIN.COA.DEFINE', open && canMaintain);
   const dialogLabel = `${isActive ? t('chartOfAccounts.deactivate') : t('chartOfAccounts.reactivate')} ${code}`;
   const isGroupEntry = codeField === 'groupChartOfAccounts';
   const submitLabel = isActive
@@ -45,7 +49,7 @@ export function ChartLifecycleControl({
   if (!canMaintain) return null;
 
   return (
-    <details className="min-w-44">
+    <details className="min-w-44" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {isActive ? t('chartOfAccounts.deactivate') : t('chartOfAccounts.reactivate')}
       </summary>
@@ -78,6 +82,7 @@ export function ChartLifecycleControl({
               <h3 className="font-semibold">{t('chartOfAccounts.lifecycleRule')}</h3>
             </div>
             {state.message && <ActionMessage state={state} />}
+            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
             <form action={formAction} className="space-y-4 p-3 sm:p-5">
               <input type="hidden" name={codeField} value={code} />
               <input type="hidden" name="isActive" value={isActive ? 'false' : 'true'} />
@@ -108,7 +113,7 @@ export function ChartLifecycleControl({
                     ? t('chartOfAccounts.inactiveRetained')
                     : t('chartOfAccounts.lifecycleRule')}
                 </p>
-                <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending}>
+                <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending || lock?.mode !== 'CHANGE'}>
                   {pending ? t('common.saving') : submitLabel}
                 </button>
               </div>

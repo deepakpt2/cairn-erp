@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { asc, eq } from 'drizzle-orm';
 import { changeHistory } from '@/platform/change';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { getStorageLocationVersion } from '@/modules/foundation/storage-location-maintenance';
@@ -54,7 +56,15 @@ export default async function StorageLocationsPage({
   const selected = selectionRequested
     ? locations.find((item) => item.plant === requestedPlant && item.storageLocation === requestedCode)
     : undefined;
-  const editing = Boolean(params.edit && selected && canMaintain);
+  const locationKey = selected ? `${selected.plant.trim()}/${selected.storageLocation.trim()}` : '';
+  const changeLock = selected && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'STORAGE_LOCATION',
+        argument: locationKey,
+        transactionCode: 'CFG.ORG.STORAGELOC.DEFINE',
+      })
+    : null;
+  const editing = Boolean(params.edit && selected && canMaintain && changeLock?.mode === 'CHANGE');
   const activePlantChoices = creating ? plants.filter((item) => item.isActive) : [];
 
   const version = canMaintain && selected
@@ -114,6 +124,10 @@ export default async function StorageLocationsPage({
           version={0}
         />
       )}
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="STORAGE_LOCATION" argument={locationKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       {editing && selectedDraft && (
         <StorageLocationForm mode="CHANGE" plants={[]} initial={selectedDraft} version={version} />
       )}
@@ -166,7 +180,7 @@ export default async function StorageLocationsPage({
         </section>
       )}
 
-      {selected && !editing && canMaintain && (
+      {selected && !editing && canMaintain && changeLock?.mode === 'CHANGE' && (
         <DeactivateStorageLocationForm
           plant={selected.plant}
           storageLocation={selected.storageLocation}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type {
@@ -195,6 +196,10 @@ function CreatePanel({
 function RowDialogs({ row }: { row: ExchangeRateRow }) {
   const [changeReason, setChangeReason] = useState('');
   const [deleteReason, setDeleteReason] = useState('');
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const rateArgument = `${row.rateType}/${row.fromCurrency}/${row.toCurrency}/${row.validFrom}`;
+  const rateLock = useChangeLock('EXCHANGE_RATE', rateArgument, 'CFG.FIN.EXRATE.MAINTAIN', changeOpen || deleteOpen);
   const [changeState, changeAction, changePending] = useActionState<ExchangeRateActionState, FormData>(
     saveExchangeRateAction,
     { ok: true },
@@ -209,7 +214,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('exRate.change')}
         </summary>
@@ -260,7 +265,8 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                   />
                 </div>
                 <RateMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || rateLock?.mode !== 'CHANGE'}>
                   {t('exRate.save')}
                 </button>
               </form>
@@ -269,7 +275,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('exRate.delete')}
         </summary>
@@ -304,7 +310,8 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                   />
                 </div>
                 <RateMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim()}>
+                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim() || rateLock?.mode !== 'CHANGE'}>
                   {t('exRate.delete')}
                 </button>
               </form>

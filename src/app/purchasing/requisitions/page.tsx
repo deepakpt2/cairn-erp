@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   PR_CREATE_CAPABILITY,
@@ -38,6 +40,14 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_REQUISITION', selected.requisitionNumber)
     : null;
+  const canChange = can(session, PR_CREATE_CAPABILITY);
+  const changeLock = selected && canChange
+    ? await openChangeForSession(session, {
+        lockObject: 'PURCHASE_REQUISITION',
+        argument: selected.requisitionNumber,
+        transactionCode: 'ME52N',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -52,11 +62,16 @@ export default async function PurchaseRequisitionsPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseRequisition.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="PURCHASE_REQUISITION" argument={selected.requisitionNumber} />
+      )}
       <Requisitions
         documents={documents}
         choices={choices}
         selected={selected}
-        canCreate={can(session, PR_CREATE_CAPABILITY)}
+        canCreate={canChange}
+        viewOnly={changeLock?.mode === 'DISPLAY'}
+        lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
         releases={Object.fromEntries(releases)}
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_REQUISITION)}

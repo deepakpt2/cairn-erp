@@ -8,8 +8,8 @@ import {
   PHYSICAL_INVENTORY_ROUTE,
   listPhysicalInventory,
 } from '@/modules/inventory/physical-inventory';
+import { CancelListed } from './CancelListed';
 import PhysicalInventoryShell from './PhysicalInventoryShell';
-import { cancelListedAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,13 +79,7 @@ export default async function PhysicalInventoryPage({ searchParams }: {
                   <td className="py-1" data-status={document.status}>{document.status}</td>
                   <td className="py-1">
                     {document.status === 'CREATED' && can(session, PHYSICAL_INVENTORY_CANCEL_CAPABILITY) && (
-                      <form action={cancelListedAction}>
-                        <input type="hidden" name="inventoryDocumentNumber" value={document.inventoryDocumentNumber} />
-                        <input type="hidden" name="fiscalYear" value={document.fiscalYear} />
-                        <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" data-cancel={document.inventoryDocumentNumber}>
-                          {t('mi01.cancel')}
-                        </button>
-                      </form>
+                      <CancelListed number={document.inventoryDocumentNumber} year={document.fiscalYear} />
                     )}
                   </td>
                 </tr>

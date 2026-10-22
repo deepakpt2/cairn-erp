@@ -2,7 +2,11 @@
 
 /** Capability-protected SCR-021 initial Sales Organization -> Company Code assignment. */
 import { revalidatePath } from 'next/cache';
+import { and, eq } from 'drizzle-orm';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { salesOrg } from '@/modules/foundation/schema';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   assignSalesOrgCompanyCode,
   SalesOrgCompanyCodeAssignmentError,
@@ -35,6 +39,13 @@ export async function assignSalesOrgCompanyCodeAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    const [standing] = await withTenant(session.user.client, (tx) => tx
+      .select({ companyCode: salesOrg.companyCode })
+      .from(salesOrg)
+      .where(and(eq(salesOrg.client, session.user.client), eq(salesOrg.salesOrg, salesOrgCode))));
+    if (standing?.companyCode) {
+      await assertChangeForSession(session, { lockObject: 'SALES_ORG_COMPANY', argument: salesOrgCode });
+    }
     const result = await assignSalesOrgCompanyCode({
       client: session.user.client,
       changedBy: session.user.username,
@@ -65,6 +76,9 @@ export async function assignSalesOrgCompanyCodeAction(
       companyCode: result.companyCode,
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy, salesOrg: salesOrgCode };
+    }
     if (error instanceof SalesOrgCompanyCodeAssignmentError || error instanceof AuthzError) {
       return { ok: false, message: error.message, remedy: error.remedy, salesOrg: salesOrgCode };
     }

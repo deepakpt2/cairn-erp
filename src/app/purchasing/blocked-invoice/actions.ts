@@ -9,6 +9,7 @@
  * through, so the service refuses them by name. This screen does not post.
  */
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   BLOCKED_INVOICE_CAPABILITY,
   BLOCKED_INVOICE_HOLD_CAPABILITY,
@@ -64,7 +65,7 @@ function inputOf(form: FormData, changedBy: string, client: string): BlockedInvo
 }
 
 function refused(caught: unknown): BlockedInvoiceActionState | null {
-  if (caught instanceof BlockedInvoiceError) return { ok: false, message: caught.message, remedy: caught.remedy };
+  if (caught instanceof BlockedInvoiceError || caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   return null;
 }
 
@@ -100,6 +101,7 @@ export async function placeBlockedInvoiceAction(
   if (!can(session, BLOCKED_INVOICE_HOLD_CAPABILITY)) return missing('place');
   let result;
   try {
+    await assertChangeForSession(session, { lockObject: 'SUPPLIER_INVOICE', argument: text(form, 'invoiceNumber') });
     result = await placePaymentBlock(inputOf(form, session.user.username, session.user.client));
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be placed.' };
@@ -123,6 +125,7 @@ export async function releaseBlockedInvoiceAction(
   if (!can(session, BLOCKED_INVOICE_CAPABILITY)) return missing('release');
   let result;
   try {
+    await assertChangeForSession(session, { lockObject: 'SUPPLIER_INVOICE', argument: text(form, 'invoiceNumber') });
     result = await releasePaymentBlock(inputOf(form, session.user.username, session.user.client));
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be released.' };

@@ -10,6 +10,7 @@ import {
   type PurchasingGroupChangeSetInput,
 } from '@/modules/foundation/purchasing-group-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.PROC.PURGROUP.DEFINE';
 const ROUTE = '/config/purchasing-groups';
@@ -52,6 +53,16 @@ export async function savePurchasingGroupChangesAction(
       );
     }
 
+    if (Array.isArray(changes)) {
+      for (const change of changes) {
+        if (!change || typeof change !== 'object') continue;
+        const row = change as { mode?: unknown; purchasingGroup?: unknown };
+        if ((row.mode === 'CHANGE' || row.mode === 'DELETE') && typeof row.purchasingGroup === 'string') {
+          await assertChangeForSession(session, { lockObject: 'PURCHASING_GROUP', argument: row.purchasingGroup });
+        }
+      }
+    }
+
     const result = await savePurchasingGroupChanges({
       client: session.user.client,
       changedBy: session.user.username,
@@ -71,7 +82,7 @@ export async function savePurchasingGroupChangesAction(
       outcomes: result.outcomes,
     };
   } catch (error) {
-    if (error instanceof PurchasingGroupMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof PurchasingGroupMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

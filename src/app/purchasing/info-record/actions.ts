@@ -64,6 +64,7 @@ function refused(caught: unknown): InfoRecordActionState | null {
     || caught instanceof SupplierPurchasingError
     || caught instanceof PartnerError
     || caught instanceof UnitConversionError
+    || caught instanceof EnqueueError
   ) {
     const remedy = 'remedy' in caught && typeof caught.remedy === 'string' ? caught.remedy : undefined;
     return { ok: false, message: caught.message, remedy };
@@ -280,6 +281,7 @@ export async function changeInfoRecordAction(
   if (stop) return stop;
   const intent = text(form, 'intent') || 'change';
   try {
+    await assertChangeForSession(session, { lockObject: 'INFO_RECORD', argument: text(form, 'infoRecordNumber') });
     const changed = await changePurchasingInfoRecord(
       changeInput(form, session.user.client, session.user.username, intent),
     );

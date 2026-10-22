@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { MaterialPeriodRow } from '@/modules/inventory/material-period-control';
 import {
@@ -82,6 +83,12 @@ export default function MaterialPeriodControl({
     | { kind: 'shift'; row: MaterialPeriodRow }
     | null
   >(null);
+  const periodLock = useChangeLock(
+    'MATERIAL_PERIOD',
+    dialog?.row.companyCode ?? '',
+    'CFG.INV.MATPERIOD.DEFINE',
+    Boolean(dialog),
+  );
 
   const [initState, initAction] = useActionState<MaterialPeriodActionState, FormData>(
     initializeMaterialPeriodAction,
@@ -225,7 +232,8 @@ export default function MaterialPeriodControl({
               </div>
             </div>
             <ReasonInput id="mp-init-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Initialize
             </button>
             <Message state={initState} />
@@ -275,7 +283,8 @@ export default function MaterialPeriodControl({
             </label>
             <input type="hidden" name="disallowBackpostingAfterChange" value="" />
             <ReasonInput id="mp-ind-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Save indicators
             </button>
             <Message state={indState} />
@@ -298,7 +307,8 @@ export default function MaterialPeriodControl({
                 ' Backposting is disallowed after a change, so this shift also closes the previous period for good.'}
             </p>
             <ReasonInput id="mp-shift-reason" />
-            <button type="submit" className="btn btn-primary">
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Shift period
             </button>
             <Message state={shiftState} />

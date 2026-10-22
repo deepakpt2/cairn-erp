@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   CUSTOMER_DOWN_PAYMENT_CLEARING_CAPABILITY,
   CustomerDownPaymentClearingError,
@@ -51,6 +52,10 @@ export async function postCustomerClearingAction(
     return { ok: false, message: 'You do not hold the customer down payment clearing capability.' };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'CUSTOMER_DOWN_PAYMENT',
+      argument: `${text(form, 'customer')}/${text(form, 'companyCode')}/${text(form, 'indicator')}`,
+    });
     const result = await clearCustomerDownPayments({
       client: session.user.client, changedBy: session.user.username,
       customerNumber: text(form, 'customer').toUpperCase(),
@@ -69,7 +74,7 @@ export async function postCustomerClearingAction(
       message: `Clearing posted as document ${result.journalDocumentNumber}: ${Number(result.totalApplied).toFixed(2)} applied on ${result.clearingDate}, ${result.itemsCleared} items cleared in full.`,
     };
   } catch (error) {
-    if (error instanceof CustomerDownPaymentClearingError) {
+    if (error instanceof EnqueueError || error instanceof CustomerDownPaymentClearingError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

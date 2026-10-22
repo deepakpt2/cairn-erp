@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { REVERSE_CAPABILITY, getReversalDocument } from '@/modules/inventory/material-document-reversal';
 import Reversal from './Reversal';
 
@@ -24,6 +26,15 @@ export default async function ReversalPage({ searchParams }: {
   const params = await searchParams;
   const document = params.doc ? await getReversalDocument(session.user.client, params.doc) : null;
   const today = new Date().toISOString().slice(0, 10);
+  const canReverse = can(session, REVERSE_CAPABILITY);
+  const reversalKey = document?.materialDocumentNumber.trim() ?? '';
+  const changeLock = document && canReverse
+    ? await openChangeForSession(session, {
+        lockObject: 'MATERIAL_DOCUMENT',
+        argument: reversalKey,
+        transactionCode: 'INV.REVERSE',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -38,7 +49,11 @@ export default async function ReversalPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mbst.subtitle')}</p>
       </header>
 
-      <Reversal document={document} canPost={can(session, REVERSE_CAPABILITY)} today={today} />
+      {document && changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="MATERIAL_DOCUMENT" argument={reversalKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <Reversal document={document} canPost={canReverse} displayOnly={changeLock?.mode === 'DISPLAY'} today={today} />
     </div>
   );
 }

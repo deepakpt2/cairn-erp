@@ -10,6 +10,7 @@ import {
   type PurchasingOrgMaintenanceMode,
 } from '@/modules/foundation/purchasing-org-maintenance';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const ACTIVITY = 'CFG.PROC.PURORG.DEFINE';
 const ROUTE = '/config/purchasing-orgs';
@@ -49,6 +50,9 @@ export async function savePurchasingOrgDefinitionAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PURCHASING_ORG', argument: code });
+    }
     const result = await savePurchasingOrgDefinition({
       client: session.user.client,
       changedBy: session.user.username,
@@ -77,7 +81,7 @@ export async function savePurchasingOrgDefinitionAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof PurchasingOrgMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof PurchasingOrgMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: code };
     }
     throw error;
@@ -94,6 +98,7 @@ export async function deactivatePurchasingOrgAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'PURCHASING_ORG', argument: code });
     const result = await deactivatePurchasingOrg({
       client: session.user.client,
       changedBy: session.user.username,
@@ -114,7 +119,7 @@ export async function deactivatePurchasingOrgAction(
       isActive: result.isActive,
     };
   } catch (error) {
-    if (error instanceof PurchasingOrgMaintenanceError || error instanceof AuthzError) {
+    if (error instanceof PurchasingOrgMaintenanceError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: code };
     }
     throw error;

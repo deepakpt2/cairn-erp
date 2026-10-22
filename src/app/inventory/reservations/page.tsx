@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import {
   RESERVATION_CREATE_CAPABILITY,
   RESERVATION_SCENARIOS,
@@ -29,6 +31,15 @@ export default async function ReservationsPage({ searchParams }: {
   const reservation = params.reservation
     ? await getReservation(session.user.client, params.reservation)
     : null;
+  const canPost = can(session, RESERVATION_CREATE_CAPABILITY);
+  const reservationKey = reservation?.reservationNumber.trim() ?? '';
+  const changeLock = reservation && canPost
+    ? await openChangeForSession(session, {
+        lockObject: 'RESERVATION',
+        argument: reservationKey,
+        transactionCode: 'INV.RESERVATION.CREATE',
+      })
+    : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -44,10 +55,15 @@ export default async function ReservationsPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('mb21.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && reservationKey && (
+        <ChangeLock lockObject="RESERVATION" argument={reservationKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       <Reservations
         reservation={reservation}
         scenarios={RESERVATION_SCENARIOS.map((s) => ({ code: s.code, description: s.description }))}
-        canPost={can(session, RESERVATION_CREATE_CAPABILITY)}
+        canPost={canPost}
+        canChange={changeLock?.mode === 'CHANGE'}
         today={today}
       />
     </div>

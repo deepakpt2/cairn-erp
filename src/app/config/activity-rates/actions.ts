@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ActivityRateError,
   deleteActivityRate,
@@ -54,6 +55,10 @@ export async function saveActivityRatesAction(
   };
 
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'ACTIVITY_RATE',
+      argument: [input.controllingArea, input.planVersion, String(input.fiscalYear), input.costCenter, input.activityType].join('/'),
+    });
     const result = await saveActivityRates(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -67,7 +72,7 @@ export async function saveActivityRatesAction(
       message: `Plan saved for ${input.costCenter} / ${input.activityType}: ${result.periods} period${result.periods === 1 ? '' : 's'} written.`,
     };
   } catch (error) {
-    if (error instanceof ActivityRateError) {
+    if (error instanceof ActivityRateError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -97,6 +102,10 @@ export async function deleteActivityRateAction(
   };
 
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'ACTIVITY_RATE',
+      argument: [input.controllingArea, input.planVersion, String(input.fiscalYear), input.costCenter, input.activityType].join('/'),
+    });
     await deleteActivityRate(input);
     revalidatePath(ROUTE);
     return {
@@ -104,7 +113,7 @@ export async function deleteActivityRateAction(
       message: `Activity rate for ${input.costCenter} / ${input.activityType} in period ${input.period} deleted.`,
     };
   } catch (error) {
-    if (error instanceof ActivityRateError) {
+    if (error instanceof ActivityRateError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {

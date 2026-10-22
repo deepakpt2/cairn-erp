@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type {
@@ -174,10 +175,15 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
   const idKey = `${row.country}-${row.taxCode}`;
   const changeLabel = `${t('taxCode.change')} ${row.taxCode}`;
   const used = row.usedByLines > 0;
+  const argument = `${row.country.trim()}/${row.taxCode.trim()}`;
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('TAX_CODE', argument, 'CFG.FIN.TAXCODE.DEFINE', changeOpen);
+  const deleteLock = useChangeLock('TAX_CODE', argument, 'CFG.FIN.TAXCODE.DEFINE', deleteOpen);
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('taxCode.change')}
         </summary>
@@ -225,7 +231,8 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                 )}
                 <ReasonField id={`tax-code-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <TaxMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('taxCode.save')}
                 </button>
               </form>
@@ -234,7 +241,7 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('taxCode.delete')}
         </summary>
@@ -254,7 +261,8 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                 )}
                 <ReasonField id={`tax-code-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <TaxMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim()}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('taxCode.delete')}
                 </button>
               </form>

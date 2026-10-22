@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { GlClearingView } from '@/modules/finance/gl-clearing';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
 import { clearAction, type GlClearingActionState } from './actions';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: GlClearingActionState = { ok: false, message: '' };
 
@@ -22,6 +23,12 @@ export default function GlClearing({ view, loadError, canClear, today }: {
   today: string;
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
+  const accountLock = useChangeLock(
+    'GL_ACCOUNT',
+    view ? `${view.companyCode}/${view.glAccount}` : '',
+    'FIN.GL.CLEAR',
+    Boolean(view && canClear),
+  );
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [method, setMethod] = useState<'STANDARD' | 'PARTIAL' | 'RESIDUAL'>('STANDARD');
@@ -242,13 +249,14 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                     </label>
                   </>
                 )}
+                <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
                 <label className="flex items-end gap-2">
                   <input type="checkbox" name="confirmed" value="yes" required className="size-4" />
                   <span className="text-sm">I confirm this clearing</span>
                 </label>
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled={!canClear || clearing || chosen.length === 0 || !postable}
+                  disabled={!canClear || clearing || chosen.length === 0 || !postable || accountLock?.mode !== 'CHANGE'}
                 >
                   Post clearing
                 </button>

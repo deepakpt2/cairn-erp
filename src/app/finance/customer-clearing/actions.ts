@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   CUSTOMER_CLEARING_CAPABILITY,
   CustomerClearingError,
@@ -23,7 +24,7 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): CustomerClearingActionState {
-  if (error instanceof CustomerClearingError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof CustomerClearingError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -36,6 +37,10 @@ export async function clearAction(
     return { ok: false, message: 'You do not hold the customer clearing capability.' };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'CUSTOMER_ACCOUNT',
+      argument: `${text(form, 'customer')}/${text(form, 'companyCode')}`,
+    });
     const items = form.getAll('item').map((value) => {
       const [documentNumber, fiscalYear, lineNumber] = String(value).split('|');
       return { documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber) };

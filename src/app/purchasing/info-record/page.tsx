@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   INFO_RECORD_CAPABILITY,
@@ -41,6 +43,14 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
   const number = requestedNumber || found || '';
   const record = number ? await getPurchasingInfoRecord(session.user.client, number) : null;
   const choices = await infoRecordChoices(session.user.client);
+  const canMaintain = can(session, INFO_RECORD_CAPABILITY);
+  const changeLock = record && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'INFO_RECORD',
+        argument: record.infoRecordNumber,
+        transactionCode: 'PROC.INFO.RECORD.MAINTAIN',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -57,6 +67,10 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('infoRecord.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && record && (
+        <ChangeLock lockObject="INFO_RECORD" argument={record.infoRecordNumber} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <InfoRecordWorkbench
         key={`${requestedNumber}|${supplier}|${materialNumber}|${requestedOrg}|${requestedPlant}`}
         record={record}
@@ -67,7 +81,7 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
         requestedPlant={requestedPlant}
         namedExisting={found}
         choices={choices}
-        canMaintain={can(session, INFO_RECORD_CAPABILITY)}
+        canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
     </div>
   );

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { saveNumberRangeObject } from '@/modules/foundation/number-ranges';
 import { ConfigError } from '@/modules/foundation/services';
 
@@ -25,6 +26,7 @@ export async function saveNumberRangeObjectAction(
 ): Promise<NumberRangeObjectActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'NUMBER_RANGE_OBJECT', argument: read(form, 'objectCode') });
     const result = await saveNumberRangeObject({
       client: session.user.client,
       changedBy: session.user.username,
@@ -41,7 +43,7 @@ export async function saveNumberRangeObjectAction(
       ? { ok: true, message: `Number range object ${result.objectCode} saved.` }
       : { ok: true, message: `Number range object ${result.objectCode} already holds these facts; nothing was changed.` };
   } catch (error) {
-    if (error instanceof ConfigError) {
+    if (error instanceof ConfigError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

@@ -17,6 +17,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PostingPeriodVariantError,
   deletePostingPeriodVariant,
@@ -44,6 +45,7 @@ function mapVariantError(error: unknown): PostingPeriodVariantActionState {
   if (error instanceof PostingPeriodVariantError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -81,6 +83,9 @@ export async function savePostingPeriodVariantAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'POSTING_PERIOD_VARIANT', argument: read(form, 'variant') });
+    }
 
     const result = await savePostingPeriodVariant({
       client: session.user.client,
@@ -127,6 +132,7 @@ export async function deletePostingPeriodVariantAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'POSTING_PERIOD_VARIANT', argument: read(form, 'variant') });
 
     const result = await deletePostingPeriodVariant({
       client: session.user.client,

@@ -5,8 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { can, requireSession } from '@/platform/auth/current';
 import {
   RETAINED_EARNINGS_ACTIVITY, RetainedEarningsError,
-  deleteRetainedEarnings, maintainRetainedEarnings,
+  deleteRetainedEarnings, listRetainedEarnings, maintainRetainedEarnings,
 } from '@/modules/foundation/retained-earnings';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface RetainedEarningsActionState {
   ok: boolean;
@@ -22,8 +23,12 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): RetainedEarningsActionState {
-  if (error instanceof RetainedEarningsError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof RetainedEarningsError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
+}
+
+function determinationArgument(chart: string, indicator: string) {
+  return `${chart.trim()}/${indicator.trim()}`;
 }
 
 export async function maintainAction(
@@ -35,10 +40,19 @@ export async function maintainAction(
     return { ok: false, message: 'You do not hold the retained earnings definition activity.' };
   }
   try {
+    const chartOfAccounts = text(form, 'chartOfAccounts');
+    const indicator = text(form, 'indicator');
+    const standing = await listRetainedEarnings(session.user.client);
+    if (standing.some((row) => determinationArgument(row.chartOfAccounts, row.indicator).toUpperCase() === determinationArgument(chartOfAccounts, indicator).toUpperCase())) {
+      await assertChangeForSession(session, {
+        lockObject: 'RETAINED_EARNINGS',
+        argument: determinationArgument(chartOfAccounts, indicator),
+      });
+    }
     const row = await maintainRetainedEarnings({
       client: session.user.client, changedBy: session.user.username,
-      chartOfAccounts: text(form, 'chartOfAccounts'),
-      indicator: text(form, 'indicator'),
+      chartOfAccounts,
+      indicator,
       glAccount: text(form, 'glAccount'),
       reason: text(form, 'reason') || undefined,
     });
@@ -58,10 +72,16 @@ export async function deleteAction(
     return { ok: false, message: 'You do not hold the retained earnings definition activity.' };
   }
   try {
+    const chartOfAccounts = text(form, 'chartOfAccounts');
+    const indicator = text(form, 'indicator');
+    await assertChangeForSession(session, {
+      lockObject: 'RETAINED_EARNINGS',
+      argument: determinationArgument(chartOfAccounts, indicator),
+    });
     await deleteRetainedEarnings({
       client: session.user.client, changedBy: session.user.username,
-      chartOfAccounts: text(form, 'chartOfAccounts'),
-      indicator: text(form, 'indicator'),
+      chartOfAccounts,
+      indicator,
       reason: text(form, 'reason') || undefined,
     });
     revalidatePath(ROUTE);

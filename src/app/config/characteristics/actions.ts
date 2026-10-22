@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ACTIVITY,
   CharacteristicError,
@@ -25,7 +26,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): CharacteristicActionState {
-  if (error instanceof CharacteristicError) {
+  if (error instanceof CharacteristicError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -38,6 +39,9 @@ export async function saveCharacteristicAction(
   const session = await requireSession(ROUTE);
   const payload = JSON.parse(read(form, 'payload') || '{}') as Record<string, unknown>;
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'CHARACTERISTIC', argument: String(payload.characteristicName ?? '') });
+    }
     const result = await saveCharacteristic({
       client: session.user.client,
       changedBy: session.user.username,
@@ -72,6 +76,7 @@ export async function setCharacteristicStatusAction(
   const session = await requireSession(ROUTE);
   const status = read(form, 'status') === 'BLOCKED' ? 'BLOCKED' : 'ACTIVE';
   try {
+    await assertChangeForSession(session, { lockObject: 'CHARACTERISTIC', argument: read(form, 'characteristicName') });
     const result = await setCharacteristicStatus({
       client: session.user.client,
       changedBy: session.user.username,
@@ -94,6 +99,7 @@ export async function deleteCharacteristicAction(
 ): Promise<CharacteristicActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'CHARACTERISTIC', argument: read(form, 'characteristicName') });
     const result = await deleteCharacteristic({
       client: session.user.client,
       changedBy: session.user.username,

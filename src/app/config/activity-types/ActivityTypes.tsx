@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { useRouter } from 'next/navigation';
 
 import type { CostCenterArea, CostCenterCategory } from '../../../modules/foundation/cost-center-definition';
@@ -65,14 +66,16 @@ function DialogShell({
   title,
   code,
   children,
+  onOpen,
 }: {
   summary: string;
   title: string;
   code: string;
   children: React.ReactNode;
+  onOpen?: (open: boolean) => void;
 }) {
   return (
-    <details className="min-w-16">
+    <details className="min-w-16" onToggle={(event) => onOpen?.(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {summary}
       </summary>
@@ -312,8 +315,10 @@ function ChangeDialog({
   );
   const suffix = `${row.activityType}-${row.validFrom}`;
   const label = `${row.activityType} · from ${row.validFrom}`;
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('ACTIVITY_TYPE', `${row.controllingArea}/${row.activityType}/${row.validFrom}`, 'CFG.COST.ACTIVITYTYPE.DEFINE', open);
   return (
-    <DialogShell summary="Change" title={`Change ${label}`} code={label}>
+    <DialogShell summary="Change" title={`Change ${label}`} code={label} onOpen={setOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="mode" value="CHANGE" />
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
@@ -329,7 +334,8 @@ function ChangeDialog({
         />
         <ReasonField id={`act-type-change-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Save changes
         </button>
       </form>
@@ -345,8 +351,10 @@ function LockDialog({ row }: { row: ActivityTypeRow }) {
   const suffix = `${row.activityType}-${row.validFrom}`;
   const label = `${row.activityType} · from ${row.validFrom}`;
   const verb = row.isPostingLocked ? 'Unlock' : 'Lock';
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('ACTIVITY_TYPE', `${row.controllingArea}/${row.activityType}/${row.validFrom}`, 'CFG.COST.ACTIVITYTYPE.DEFINE', open);
   return (
-    <DialogShell summary={verb} title={`${verb} ${label}`} code={label}>
+    <DialogShell summary={verb} title={`${verb} ${label}`} code={label} onOpen={setOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="activityType" value={row.activityType} />
@@ -359,7 +367,8 @@ function LockDialog({ row }: { row: ActivityTypeRow }) {
         </p>
         <ReasonField id={`act-type-lock-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           {verb} activity type
         </button>
       </form>
@@ -374,8 +383,10 @@ function DeleteDialog({ row }: { row: ActivityTypeRow }) {
   );
   const suffix = `${row.activityType}-${row.validFrom}`;
   const label = `${row.activityType} · from ${row.validFrom}`;
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('ACTIVITY_TYPE', `${row.controllingArea}/${row.activityType}/${row.validFrom}`, 'CFG.COST.ACTIVITYTYPE.DEFINE', open);
   return (
-    <DialogShell summary="Delete" title={`Delete ${label}`} code={label}>
+    <DialogShell summary="Delete" title={`Delete ${label}`} code={label} onOpen={setOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="activityType" value={row.activityType} />
@@ -387,7 +398,8 @@ function DeleteDialog({ row }: { row: ActivityTypeRow }) {
         </p>
         <ReasonField id={`act-type-delete-reason-${suffix}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Delete activity type period
         </button>
       </form>

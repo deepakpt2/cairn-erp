@@ -14,6 +14,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import {
   FiscalYearVariantAssignmentError,
@@ -42,6 +43,9 @@ function revalidateAssignmentRoutes() {
 }
 
 function mapAssignmentError(error: unknown): FyvAssignmentActionState {
+  if (error instanceof EnqueueError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
   if (error instanceof FiscalYearVariantAssignmentError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
@@ -71,6 +75,7 @@ export async function assignFiscalYearVariantAction(
   try {
     await requireCapability(ACTIVITY, session);
     await requireCapability(COMPANY_CODE_DEFINE, session);
+    await assertChangeForSession(session, { lockObject: 'FYV_COMPANY', argument: read(form, 'companyCode') });
 
     const result = await assignFiscalYearVariant({
       client: session.user.client,

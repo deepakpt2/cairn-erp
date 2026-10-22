@@ -4,6 +4,8 @@ import { t } from '@/platform/i18n';
 import { listPlants } from '@/modules/foundation/services';
 import { getPlantDefinitionVersion } from '@/modules/foundation/plant-maintenance';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { country as countryReference } from '@/platform/tables/reference';
 import { companyCode as companyCodeTable } from '@/modules/foundation/schema';
@@ -61,7 +63,14 @@ export default async function PlantsPage({
   const creating = !editCode && params.new === '1';
   const selected = editCode ? plants.find((item) => item.plant === editCode) : undefined;
   const editing = Boolean(editCode);
-  const showForm = canDefine && (creating || Boolean(selected));
+  const changeLock = canDefine && selected
+    ? await openChangeForSession(session, {
+        lockObject: 'PLANT',
+        argument: selected.plant,
+        transactionCode: 'OX10',
+      })
+    : null;
+  const showForm = canDefine && (creating || (Boolean(selected) && changeLock?.mode === 'CHANGE'));
 
   // Do not disclose global reference choices to read-only users or unrelated page views.
   const countries = showForm
@@ -109,6 +118,14 @@ export default async function PlantsPage({
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('plant.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="PLANT" argument={selected.plant} />
+      )}
+      {changeLock?.mode === 'DISPLAY' && (
+        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">
+          {displayOnlyMessage(changeLock)}
+        </p>
+      )}
       {showForm && (
         <PlantDefinitionForm
           key={`${creating ? 'CREATE' : 'CHANGE'}:${initial.plant}`}

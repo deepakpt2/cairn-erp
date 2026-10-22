@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   assignPurchasingOrgCompanyCodeAction,
   type PurchasingOrgCompanyCodeAssignmentState,
@@ -24,6 +25,8 @@ export function PurchasingOrgCompanyCodeAssignmentForm({
     assignPurchasingOrgCompanyCodeAction,
     { ok: true },
   );
+  const [engaged, setEngaged] = useState(false);
+  const orgLock = useChangeLock('PURCHASING_ORG_COMPANY', purchasingOrg, 'CFG.PROC.PURORG.ASSIGN_COMPANY', engaged);
 
   if (state.ok && state.message) {
     return (
@@ -47,7 +50,14 @@ export function PurchasingOrgCompanyCodeAssignmentForm({
           {state.remedy && <p className="mt-1">{state.remedy}</p>}
         </div>
       )}
-      <form action={action} className="flex flex-wrap items-end gap-2">
+      <form
+        action={action}
+        className="flex flex-wrap items-end gap-2"
+        onFocus={() => setEngaged(true)}
+        onSubmit={(event) => {
+          if (orgLock?.mode !== 'CHANGE') event.preventDefault();
+        }}
+      >
         <input type="hidden" name="purchasingOrg" value={purchasingOrg} />
         <label className="min-w-64 flex-1">
           <span className="sr-only">{t('purchasingOrg.companyCodeForOrg', { code: purchasingOrg })}</span>
@@ -66,7 +76,8 @@ export function PurchasingOrgCompanyCodeAssignmentForm({
             ))}
           </select>
         </label>
-        <button className="btn btn-primary" disabled={pending || companyCodes.length === 0}>
+        <LockNotice message={orgLock?.mode === 'DISPLAY' ? orgLock.message : null} />
+        <button className="btn btn-primary" disabled={pending || companyCodes.length === 0 || orgLock?.mode === 'DISPLAY'}>
           {pending ? t('common.saving') : t('purchasingOrg.assignCompanyCode')}
         </button>
       </form>

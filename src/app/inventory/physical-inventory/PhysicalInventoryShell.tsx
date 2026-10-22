@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   cancelPhysicalInventoryAction,
   createPhysicalInventoryAction,
@@ -19,6 +20,15 @@ export default function PhysicalInventoryShell({
   const [createState, createAction, creating] = useActionState(createPhysicalInventoryAction, INITIAL);
   const [cancelState, cancelAction, cancelling] = useActionState(cancelPhysicalInventoryAction, INITIAL);
   const [requestKey] = useState(() => Math.random().toString(36).slice(2) + Date.now().toString(36));
+  const cancelArgument = createState.document
+    ? `${createState.document.inventoryDocumentNumber.trim()}/${createState.document.fiscalYear}`
+    : null;
+  const cancelLock = useChangeLock(
+    'PHYSICAL_INVENTORY',
+    cancelArgument,
+    'INV.PHYINV.CANCEL',
+    Boolean(cancelArgument) && canCancel,
+  );
 
   return (
     <>
@@ -126,13 +136,14 @@ export default function PhysicalInventoryShell({
             {t('mi01.countEntry')}
           </a>
 
+          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} />
           <form action={cancelAction} className="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="inventoryDocumentNumber" value={createState.document.inventoryDocumentNumber} />
             <input type="hidden" name="fiscalYear" value={createState.document.fiscalYear} />
             <button
               type="submit"
               className="btn btn-default min-h-11 sm:min-h-8"
-              disabled={!canCancel || cancelling || createState.document.status !== 'CREATED'}
+              disabled={!canCancel || cancelling || createState.document.status !== 'CREATED' || cancelLock?.mode !== 'CHANGE'}
             >
               {cancelling ? t('mi01.cancelling') : t('mi01.cancel')}
             </button>

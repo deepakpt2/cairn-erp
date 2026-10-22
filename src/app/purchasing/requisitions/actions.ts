@@ -16,6 +16,7 @@ import {
   releaseDocument,
 } from '@/modules/purchasing/release';
 import { can } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface RequisitionActionState {
   ok: boolean;
@@ -109,7 +110,11 @@ export async function saveRequisitionAction(
       documentType: input.documentType ?? 'STANDARD',
       items: (input.items ?? []) as never[],
     };
-    const result = typeof requisitionNumber === 'string' && requisitionNumber
+    const editing = typeof requisitionNumber === 'string' && requisitionNumber;
+    if (editing) {
+      await assertChangeForSession(session, { lockObject: 'PURCHASE_REQUISITION', argument: requisitionNumber });
+    }
+    const result = editing
       ? await changeRequisition({ ...base, requisitionNumber })
       : await createRequisition(base);
     revalidatePath(ROUTE);
@@ -122,7 +127,7 @@ export async function saveRequisitionAction(
         : `Requisition ${result.requisitionNumber} created.`,
     };
   } catch (error) {
-    if (error instanceof PurchaseRequisitionError) {
+    if (error instanceof PurchaseRequisitionError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

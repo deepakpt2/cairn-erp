@@ -92,11 +92,13 @@ function itemFromDocument(item: RequisitionDocument['items'][number]): ItemRow {
 
 const INITIAL: RequisitionActionState = { ok: false };
 
-export default function Requisitions({ documents, choices, selected, canCreate, releases, selectedRelease, canRelease }: {
+export default function Requisitions({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease }: {
   documents: RequisitionDocument[];
   choices: RequisitionChoices;
   selected: RequisitionDocument | null;
   canCreate: boolean;
+  viewOnly?: boolean;
+  lockMessage?: string | null;
   releases: Record<string, DocumentReleaseState>;
   selectedRelease: DocumentReleaseState | null;
   canRelease: boolean;
@@ -269,9 +271,13 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
           </label>
         </div>
 
+        {lockMessage && (
+          <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>
+        )}
         <form action={formAction}>
           <input type="hidden" name="payload" value={payload()} />
           <input type="hidden" name="requisitionNumber" value={selected?.requisitionNumber ?? ''} />
+          <fieldset disabled={viewOnly} className="min-w-0">
 
           <div className="mt-3 overflow-x-auto">
             <table className="w-full min-w-[68.75rem] text-sm">
@@ -460,10 +466,11 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
           ))}
 
           <div className="mt-4 flex justify-end">
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canCreate || pending}>
+            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canCreate || pending || viewOnly}>
               {selected ? 'Save changes' : 'Save requisition'}
             </button>
           </div>
+          </fieldset>
         </form>
       </section>
     </div>

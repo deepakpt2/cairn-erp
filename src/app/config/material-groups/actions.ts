@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MaterialGroupError,
   deleteMaterialGroup,
@@ -24,7 +25,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): MaterialGroupActionState {
-  if (error instanceof MaterialGroupError) {
+  if (error instanceof MaterialGroupError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -36,6 +37,9 @@ export async function saveMaterialGroupAction(
 ): Promise<MaterialGroupActionState> {
   const session = await requireSession(ROUTE);
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'MATERIAL_GROUP', argument: read(form, 'materialGroup') });
+    }
     const result = await saveMaterialGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -61,6 +65,7 @@ export async function setMaterialGroupActiveAction(
   const session = await requireSession(ROUTE);
   const active = read(form, 'active') === 'true';
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_GROUP', argument: read(form, 'materialGroup') });
     const result = await setMaterialGroupActive({
       client: session.user.client,
       changedBy: session.user.username,
@@ -83,6 +88,7 @@ export async function deleteMaterialGroupAction(
 ): Promise<MaterialGroupActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_GROUP', argument: read(form, 'materialGroup') });
     const result = await deleteMaterialGroup({
       client: session.user.client,
       changedBy: session.user.username,

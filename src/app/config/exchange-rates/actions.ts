@@ -10,6 +10,7 @@
  */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import {
   ACTIVITY,
@@ -36,6 +37,9 @@ function revalidateRateRoutes() {
 
 function mapRateError(error: unknown): ExchangeRateActionState {
   if (error instanceof ExchangeRateError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
+  if (error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   if (error instanceof AuthzError) {
@@ -67,6 +71,12 @@ export async function saveExchangeRateAction(
     await requireCapability(ACTIVITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'EXCHANGE_RATE',
+        argument: [read(form, 'rateType'), read(form, 'fromCurrency'), read(form, 'toCurrency'), read(form, 'validFrom')].join('/'),
+      });
+    }
     const result = await saveExchangeRate({
       client: session.user.client,
       changedBy: session.user.username,
@@ -131,6 +141,10 @@ export async function deleteExchangeRateAction(
     const toCurrency = read(form, 'toCurrency');
     const validFrom = read(form, 'validFrom');
 
+    await assertChangeForSession(session, {
+      lockObject: 'EXCHANGE_RATE',
+      argument: [rateType, fromCurrency, toCurrency, validFrom].join('/'),
+    });
     await deleteExchangeRate({
       client: session.user.client,
       changedBy: session.user.username,

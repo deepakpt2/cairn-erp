@@ -32,6 +32,7 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
     </div>}
     {/* Commit a new default snapshot after save; action resets must not restore old select defaults. */}
     <form key={Number(initial.version ?? 0)} action={action} className="space-y-4">
+      <input type="hidden" name="existing" value={creating ? '' : '1'} />
       <input type="hidden" name="view" value={view} />
       <input type="hidden" name="expectedVersion" value={state.version ?? Number(initial.version ?? 0)} />
       {view !== 'BASIC' && <><input type="hidden" name="materialNumber" value={number} /><input type="hidden" name="plant" value={plant} /></>}

@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ACTIVITY,
   HouseBankError,
@@ -38,6 +39,7 @@ function mapHouseBankError(error: unknown): HouseBankActionState {
   if (error instanceof HouseBankError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -71,6 +73,12 @@ export async function saveHouseBankAction(
     await requireCapability(ACTIVITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'HOUSE_BANK',
+        argument: `${read(form, 'companyCode')}/${read(form, 'houseBankKey')}`,
+      });
+    }
     const result = await saveHouseBank({
       client: session.user.client,
       changedBy: session.user.username,
@@ -119,6 +127,7 @@ export async function deleteHouseBankAction(
 
     const companyCode = read(form, 'companyCode');
     const houseBankKey = read(form, 'houseBankKey');
+    await assertChangeForSession(session, { lockObject: 'HOUSE_BANK', argument: `${companyCode}/${houseBankKey}` });
 
     await deleteHouseBank({
       client: session.user.client,
@@ -150,6 +159,12 @@ export async function saveBankAccountAction(
     await requireCapability(ACTIVITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'HOUSE_BANK_ACCOUNT',
+        argument: `${read(form, 'companyCode')}/${read(form, 'houseBankKey')}/${read(form, 'accountId')}`,
+      });
+    }
     const result = await saveBankAccount({
       client: session.user.client,
       changedBy: session.user.username,
@@ -199,6 +214,10 @@ export async function deleteBankAccountAction(
 
     const houseBankKey = read(form, 'houseBankKey');
     const accountId = read(form, 'accountId');
+    await assertChangeForSession(session, {
+      lockObject: 'HOUSE_BANK_ACCOUNT',
+      argument: `${read(form, 'companyCode')}/${houseBankKey}/${accountId}`,
+    });
 
     await deleteBankAccount({
       client: session.user.client,

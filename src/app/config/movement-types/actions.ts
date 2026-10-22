@@ -1,6 +1,7 @@
 'use server';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MovementTypeConfigError,
   checkMovementType,
@@ -63,10 +64,14 @@ export async function saveMovementTypeAction(
 ): Promise<MovementTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'MOVEMENT_TYPE', argument: read(form, 'movementType') });
+    }
     const result = await saveMovementType({
       client: session.user.client,
       changedBy: session.user.username,
-      mode: read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE',
+      mode,
       movementType: read(form, 'movementType'),
       description: read(form, 'description'),
       direction: read(form, 'direction'),
@@ -120,6 +125,7 @@ export async function deleteMovementTypeAction(
 ): Promise<MovementTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'MOVEMENT_TYPE', argument: read(form, 'movementType') });
     const result = await deleteMovementType({
       client: session.user.client,
       changedBy: session.user.username,

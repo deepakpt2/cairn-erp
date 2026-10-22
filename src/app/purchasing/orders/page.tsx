@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import { PO_CREATE_CAPABILITY, getOrder, listOrders, orderChoices } from '@/modules/purchasing/orders';
 import {
@@ -9,6 +10,7 @@ import {
   listDocumentReleases,
 } from '@/modules/purchasing/release';
 import Orders from './Orders';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +35,14 @@ export default async function PurchaseOrdersPage({ searchParams }: {
   const selectedRelease = selected
     ? await getDocumentRelease(client, 'PURCHASE_ORDER', selected.orderNumber)
     : null;
+  const canChange = can(session, PO_CREATE_CAPABILITY);
+  const changeLock = selected && canChange
+    ? await openChangeForSession(session, {
+        lockObject: 'PURCHASE_ORDER',
+        argument: selected.orderNumber,
+        transactionCode: 'ME22N',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -47,11 +57,16 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('purchaseOrder.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="PURCHASE_ORDER" argument={selected.orderNumber} />
+      )}
       <Orders
         documents={documents}
         choices={choices}
         selected={selected}
-        canCreate={can(session, PO_CREATE_CAPABILITY)}
+        canCreate={canChange}
+        viewOnly={changeLock?.mode === 'DISPLAY'}
+        lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
         releases={Object.fromEntries(releases)}
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_ORDER)}

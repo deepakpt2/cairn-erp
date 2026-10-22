@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   assignFiscalYearVariantAction,
   type FyvAssignmentActionState,
@@ -138,6 +139,8 @@ function CompanyCodeRow({
 }) {
   const [variant, setVariant] = useState(row.fiscalYearVariant ?? '');
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const companyLock = useChangeLock('FYV_COMPANY', row.code, 'CFG.FIN.FYV.ASSIGN', open && canMaintain);
   const [state, formAction, pending] = useActionState<FyvAssignmentActionState, FormData>(
     assignFiscalYearVariantAction,
     { ok: true },
@@ -184,7 +187,7 @@ function CompanyCodeRow({
   }
   if (!reason.trim()) problems.push(t('fyvAssignment.reasonRequired'));
 
-  const canSubmit = canMaintain && !pending && problems.length === 0;
+  const canSubmit = canMaintain && !pending && problems.length === 0 && companyLock?.mode === 'CHANGE';
   const label = `${t('fyvAssignment.assign')} ${row.code}`;
 
   return (
@@ -239,7 +242,7 @@ function CompanyCodeRow({
       </td>
       {canMaintain && (
         <td>
-          <details className="min-w-32">
+          <details className="min-w-32" onToggle={(event) => setOpen(event.currentTarget.open)}>
             <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
               {t('fyvAssignment.assign')}
             </summary>
@@ -323,6 +326,7 @@ function CompanyCodeRow({
 
                     <div className="space-y-2">
                       <AssignmentMessage state={state} />
+                      <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
                       {notices.map((notice) => (
                         <p key={notice} role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
                           {notice}

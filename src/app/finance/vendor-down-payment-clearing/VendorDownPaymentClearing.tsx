@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { DownPaymentClearingView } from '@/modules/finance/vendor-down-payment-clearing';
 import { postClearingAction, type DownPaymentClearingActionState } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: DownPaymentClearingActionState = { ok: false, message: '' };
 
@@ -27,6 +28,12 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
   today: string;
 }) {
   const [state, action, posting] = useActionState(postClearingAction, INITIAL);
+  const accountLock = useChangeLock(
+    'VENDOR_DOWN_PAYMENT',
+    view ? `${view.vendor}/${view.companyCode}/${view.indicator}` : '',
+    'FIN.AP.DOWNPAYMENT.CLEAR',
+    Boolean(view && canEnter),
+  );
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [dpSelected, setDpSelected] = useState<Set<string>>(new Set());
   const [invSelected, setInvSelected] = useState<Set<string>>(new Set());
@@ -208,10 +215,11 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
               The applied totals of both sides must agree — a clearing transfers, it never creates or
               destroys value. Items applied in full clear in place; remainders stand open by the partial model.
             </p>
+            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                disabled={!canEnter || posting || !balanced}
+                disabled={!canEnter || posting || !balanced || accountLock?.mode !== 'CHANGE'}
               >
                 Post clearing
               </button>

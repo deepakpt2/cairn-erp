@@ -12,6 +12,7 @@ import {
   CompanyCodeCoaAssignmentError,
 } from '@/modules/foundation/company-code-coa-assignment';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface CompanyCodeState {
   ok: boolean;
@@ -75,6 +76,7 @@ export async function assignCompanyCodeCoaAction(
 
   try {
     await requireCapability('CFG.ORG.COMPANYCODE.ASSIGN_COA', session);
+    await assertChangeForSession(session, { lockObject: 'COMPANY_CODE', argument: read('companyCode') });
     const result = await assignCompanyCodeCoa({
       client: session.user.client,
       changedBy: session.user.username,
@@ -101,7 +103,7 @@ export async function assignCompanyCodeCoaAction(
       chartOfAccounts: result.chartOfAccounts,
     };
   } catch (error) {
-    if (error instanceof CompanyCodeCoaAssignmentError || error instanceof AuthzError) {
+    if (error instanceof CompanyCodeCoaAssignmentError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

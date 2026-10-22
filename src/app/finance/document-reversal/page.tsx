@@ -9,7 +9,9 @@ import {
   reverseDocument,
 } from '@/modules/finance/document-reversal';
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession, displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +78,10 @@ export default async function DocumentReversalPage({
     });
     if (!parsed.success) return;
     try {
+      await assertChangeForSession(s, {
+        lockObject: 'ACCOUNTING_DOCUMENT',
+        argument: `${parsed.data.companyCode}/${parsed.data.documentNumber}/${parsed.data.fiscalYear}`,
+      });
       const r = await reverseDocument({
         client: s.user.client,
         changedBy: s.user.username,
@@ -98,7 +104,7 @@ export default async function DocumentReversalPage({
       });
       redirect(`${ROUTE}?${q}`);
     } catch (e) {
-      if (e instanceof DocumentReversalError) {
+      if (e instanceof DocumentReversalError || e instanceof EnqueueError) {
         const q = new URLSearchParams({
           companyCode: parsed.data.companyCode, documentNumber: parsed.data.documentNumber,
           fiscalYear: String(parsed.data.fiscalYear), postingDate: parsed.data.postingDate,
@@ -117,6 +123,14 @@ export default async function DocumentReversalPage({
   const today = new Date().toISOString().slice(0, 10);
   const documentDateDefault = typeof sp.documentDate === 'string' ? sp.documentDate : today;
   const postingDateDefault = requestedPostingDate ?? today;
+  const reversalKey = view ? `${view.companyCode.trim()}/${view.documentNumber.trim()}/${view.fiscalYear}` : '';
+  const changeLock = view && grant && view.canReverse
+    ? await openChangeForSession(session, {
+        lockObject: 'ACCOUNTING_DOCUMENT',
+        argument: reversalKey,
+        transactionCode: 'FIN.DOCUMENT.REVERSE',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -130,6 +144,11 @@ export default async function DocumentReversalPage({
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('documentReversal.subtitle')}</p>
       </header>
+
+      {view && changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="ACCOUNTING_DOCUMENT" argument={reversalKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
 
       {!grant && (
         <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft" role="note">
@@ -272,7 +291,7 @@ export default async function DocumentReversalPage({
                     <span className="text-sm">I confirm the reversal of this document</span>
                   </label>
                   <div className="flex items-end">
-                    <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Reverse document</button>
+                    <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={changeLock?.mode !== 'CHANGE'}>Reverse document</button>
                   </div>
                 </form>
               )}

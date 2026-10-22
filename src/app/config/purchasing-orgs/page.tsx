@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { and, asc, eq } from 'drizzle-orm';
 import { changeHistory } from '@/platform/change';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { t } from '@/platform/i18n';
 import { getPurchasingOrgDefinitionVersion } from '@/modules/foundation/purchasing-org-maintenance';
@@ -58,7 +60,14 @@ export default async function PurchasingOrgsPage({
     ? organisations.find((item) => item.purchasingOrg === requestedCode)
     : undefined;
   const creating = params.new === '1' && !selectionRequested && canMaintain;
-  const editing = Boolean(params.edit && selected && canMaintain);
+  const changeLock = selected && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'PURCHASING_ORG',
+        argument: selected.purchasingOrg,
+        transactionCode: 'OX08',
+      })
+    : null;
+  const editing = Boolean(params.edit && selected && canMaintain && changeLock?.mode === 'CHANGE');
 
   const version = canMaintain && selected
     ? await getPurchasingOrgDefinitionVersion(client, selected.purchasingOrg)
@@ -130,6 +139,14 @@ export default async function PurchasingOrgsPage({
           version={0}
         />
       )}
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="PURCHASING_ORG" argument={selected.purchasingOrg} />
+      )}
+      {changeLock?.mode === 'DISPLAY' && (
+        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">
+          {displayOnlyMessage(changeLock)}
+        </p>
+      )}
       {editing && selectedDraft && (
         <PurchasingOrgDefinitionForm
           key={`CHANGE:${selectedDraft.purchasingOrg}`}
@@ -200,7 +217,7 @@ export default async function PurchasingOrgsPage({
         </section>
       )}
 
-      {selected && !editing && canMaintain && (
+      {selected && !editing && canMaintain && changeLock?.mode === 'CHANGE' && (
         <DeactivatePurchasingOrgForm
           purchasingOrg={selected.purchasingOrg.trim()}
           name={selected.name}

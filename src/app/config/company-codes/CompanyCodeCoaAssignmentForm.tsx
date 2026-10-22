@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { assignCompanyCodeCoaAction, type CompanyCodeCoaAssignmentState } from './actions';
 
 export interface ChartOfAccountsChoice {
@@ -20,9 +21,13 @@ export function CompanyCodeCoaAssignmentForm({
   charts: ChartOfAccountsChoice[];
 }) {
   const [state, action, pending] = useActionState(assignCompanyCodeCoaAction, INITIAL);
+  const [chosen, setChosen] = useState(false);
+  const lock = useChangeLock('COMPANY_CODE', companyCode.trim(), 'CFG.ORG.COMPANYCODE.ASSIGN_COA', chosen);
+  const held = lock?.mode === 'CHANGE';
 
   return (
     <div className="min-w-72 space-y-2">
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
       <form action={action} className="flex items-end gap-2">
         <input type="hidden" name="companyCode" value={companyCode} />
         <label className="min-w-0 flex-1">
@@ -33,6 +38,7 @@ export function CompanyCodeCoaAssignmentForm({
             defaultValue=""
             className="field-input code"
             disabled={pending || charts.length === 0}
+            onChange={(event) => setChosen(Boolean(event.target.value))}
           >
             <option value="">{t('cc.chooseChart')}</option>
             {charts.map((chart) => (
@@ -42,7 +48,7 @@ export function CompanyCodeCoaAssignmentForm({
             ))}
           </select>
         </label>
-        <button className="btn btn-primary" disabled={pending || charts.length === 0}>
+        <button className="btn btn-primary" disabled={pending || charts.length === 0 || !held}>
           {pending ? t('common.saving') : t('cc.assign')}
         </button>
       </form>

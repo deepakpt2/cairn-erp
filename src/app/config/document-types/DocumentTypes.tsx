@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { t } from '@/platform/i18n';
 import type {
@@ -258,10 +259,17 @@ function RowDialogs({
   );
   const used = row.usedByEntries > 0;
   const toggleLabel = row.isActive ? t('docType.deactivate') : t('docType.reactivate');
+  const argument = row.documentType.trim();
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [toggleOpen, setToggleOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('DOCUMENT_TYPE', argument, 'CFG.FIN.DOCTYPE.DEFINE', changeOpen);
+  const toggleLock = useChangeLock('DOCUMENT_TYPE', argument, 'CFG.FIN.DOCTYPE.DEFINE', toggleOpen);
+  const deleteLock = useChangeLock('DOCUMENT_TYPE', argument, 'CFG.FIN.DOCTYPE.DEFINE', deleteOpen);
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('docType.change')}
         </summary>
@@ -281,7 +289,8 @@ function RowDialogs({
                 <TypeFields idPrefix={`doc-type-${row.documentType}`} intervals={intervals} types={rows} row={row} />
                 <ReasonField id={`doc-type-change-reason-${row.documentType}`} value={changeReason} onChange={setChangeReason} />
                 <DocMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('docType.save')}
                 </button>
               </form>
@@ -290,7 +299,7 @@ function RowDialogs({
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setToggleOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {toggleLabel}
         </summary>
@@ -306,7 +315,8 @@ function RowDialogs({
                 </p>
                 <ReasonField id={`doc-type-toggle-reason-${row.documentType}`} value={toggleReason} onChange={setToggleReason} />
                 <DocMessage state={toggleState} />
-                <button type="submit" className="btn-primary" disabled={togglePending || !toggleReason.trim()}>
+                <LockNotice message={toggleLock?.mode === 'DISPLAY' ? toggleLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={togglePending || !toggleReason.trim() || toggleLock?.mode !== 'CHANGE'}>
                   {toggleLabel}
                 </button>
               </form>
@@ -315,7 +325,7 @@ function RowDialogs({
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('docType.delete')}
         </summary>
@@ -334,7 +344,8 @@ function RowDialogs({
                 )}
                 <ReasonField id={`doc-type-delete-reason-${row.documentType}`} value={deleteReason} onChange={setDeleteReason} />
                 <DocMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim()}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('docType.delete')}
                 </button>
               </form>

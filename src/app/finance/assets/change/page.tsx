@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import { ASSET_CHANGE_CAPABILITY, getAsset } from '@/modules/finance/asset-master';
 import AssetChange from './AssetChange';
@@ -20,6 +22,14 @@ export default async function ChangeAssetPage({ searchParams }: {
   const canChange = can(session, ASSET_CHANGE_CAPABILITY);
   const asset = params.company && params.asset && canChange
     ? await getAsset(session.user.client, params.company, params.asset, params.sub ?? '0000')
+    : null;
+  const assetKey = asset ? `${asset.companyCode.trim()}/${asset.assetNumber.trim()}/${asset.subNumber.trim()}` : '';
+  const changeLock = asset
+    ? await openChangeForSession(session, {
+        lockObject: 'ASSET',
+        argument: assetKey,
+        transactionCode: 'FIN.ASSET.CHANGE',
+      })
     : null;
   const today = new Date().toISOString().slice(0, 10);
 
@@ -44,8 +54,13 @@ export default async function ChangeAssetPage({ searchParams }: {
         <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft shadow-card">
           No asset stands under this key. Choose one from the asset list.
         </p>
+      ) : changeLock?.mode === 'DISPLAY' ? (
+        <LockNotice message={displayOnlyMessage(changeLock)} />
       ) : (
-        <AssetChange key={`${asset.companyCode}-${asset.assetNumber}-${asset.subNumber}`} asset={asset} today={today} />
+        <>
+          <ChangeLock lockObject="ASSET" argument={assetKey} />
+          <AssetChange key={`${asset.companyCode}-${asset.assetNumber}-${asset.subNumber}`} asset={asset} today={today} />
+        </>
       )}
     </div>
   );

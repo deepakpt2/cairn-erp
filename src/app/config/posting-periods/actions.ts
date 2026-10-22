@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { updatePeriodRule, ConfigError } from '@/modules/foundation/services';
 import { requireCapability, requireSession, AuthzError } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 
 export async function savePeriodRule(formData: FormData): Promise<{ ok: boolean; message?: string }> {
@@ -11,6 +12,10 @@ export async function savePeriodRule(formData: FormData): Promise<{ ok: boolean;
   const read = (name: string) => String(formData.get(name) ?? '').trim();
   try {
     await requireCapability('FIN.CLOSE.PERIOD', session);
+    await assertChangeForSession(session, {
+      lockObject: 'POSTING_PERIOD',
+      argument: `${read('variant')}/${read('accountType')}`,
+    });
     await updatePeriodRule({
       client: session.user.client,
       variant: read('variant'),
@@ -23,8 +28,8 @@ export async function savePeriodRule(formData: FormData): Promise<{ ok: boolean;
     revalidatePath('/config/posting-periods');
     return { ok: true, message: t('pp.saved') };
   } catch (error) {
-    if (error instanceof ConfigError || error instanceof AuthzError) {
-      return { ok: false, message: `${error.message} ${error.remedy}` };
+    if (error instanceof ConfigError || error instanceof AuthzError || error instanceof EnqueueError) {
+      return { ok: false, message: `${error.message} ${error.remedy ?? ''}`.trim() };
     }
     throw error;
   }

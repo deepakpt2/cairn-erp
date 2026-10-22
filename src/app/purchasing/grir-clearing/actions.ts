@@ -8,6 +8,7 @@
  * an export are passed through, so the service refuses them by name.
  */
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   GRIR_CLEARING_POST_CAPABILITY,
   GRIR_CLEARING_REVERSE_CAPABILITY,
@@ -41,6 +42,7 @@ function named(form: FormData): Record<string, string> {
 }
 
 function refused(caught: unknown): GrIrClearingActionState | null {
+  if (caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   if (!(caught instanceof GrIrClearingError)) return null;
   return { ok: false, message: caught.message, remedy: caught.remedy };
 }
@@ -81,6 +83,10 @@ export async function postGrIrClearingAction(_state: GrIrClearingActionState, fo
     return { ok: false, message: 'That clearing category is not supported this round.' };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'GRIR_RESIDUAL',
+      argument: `${text(form, 'orderNumber')}/${text(form, 'itemNumber')}`,
+    });
     const result = await postGrIrClearing({
       client: session.user.client,
       changedBy: session.user.username,
@@ -111,6 +117,10 @@ export async function reverseGrIrClearingAction(_state: GrIrClearingActionState,
   const session = await requireSession(GRIR_CLEARING_ROUTE);
   if (!can(session, GRIR_CLEARING_REVERSE_CAPABILITY)) return missing('reverse');
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'GRIR_DOCUMENT',
+      argument: `${text(form, 'documentNumber')}/${text(form, 'fiscalYear')}`,
+    });
     const result = await reverseGrIrClearing({
       client: session.user.client,
       changedBy: session.user.username,

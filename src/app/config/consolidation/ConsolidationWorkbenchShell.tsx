@@ -1,6 +1,7 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import {
   CONSOLIDATION_FOLDERS, METHOD_KINDS, TASK_TYPES,
@@ -23,19 +24,50 @@ const FOLDER_LABELS: Record<ConsolidationFolder, string> = {
 
 const INITIAL: ConsolidationActionState = { ok: false, message: '' };
 
-function SaveForm({ action, children, label }: {
+function fieldValue(form: HTMLFormElement, name: string) {
+  const value = new FormData(form).get(name);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function SaveForm({ action, children, label, record }: {
   action: (state: ConsolidationActionState, form: FormData) => Promise<ConsolidationActionState>;
   children: React.ReactNode;
   label: string;
+  record?: (form: HTMLFormElement) => { lockObject: string; argument: string; existing: boolean } | null;
 }) {
   const [state, dispatch, pending] = useActionState(action, INITIAL);
+  const [engaged, setEngaged] = useState(false);
+  const [lockObject, setLockObject] = useState('CONSOLIDATION_AREA');
+  const [argument, setArgument] = useState('');
+  const [existing, setExisting] = useState(false);
+  const sync = (form: HTMLFormElement) => {
+    const next = record?.(form) ?? null;
+    setLockObject(next?.lockObject ?? 'CONSOLIDATION_AREA');
+    setArgument(next?.argument ?? '');
+    setExisting(Boolean(next?.existing));
+  };
+  const lock = useChangeLock(lockObject, argument, 'FIN.RPT.CONSOLIDATE', engaged && existing && argument !== '');
+  const blocked = existing && lock?.mode === 'DISPLAY';
   return (
-    <form action={dispatch} className="mt-4 space-y-3 border-t border-line pt-3">
+    <form
+      action={dispatch}
+      className="mt-4 space-y-3 border-t border-line pt-3"
+      onFocus={(event) => { setEngaged(true); sync(event.currentTarget); }}
+      onChange={(event) => sync(event.currentTarget)}
+      onSubmit={(event) => {
+        if (existing && lock?.mode !== 'CHANGE') {
+          event.preventDefault();
+          setEngaged(true);
+          sync(event.currentTarget);
+        }
+      }}
+    >
       <div className="flex flex-wrap items-end gap-3">{children}</div>
       <div className="flex flex-wrap items-end gap-3">
         <F label="Change reason"><input name="reason" className="field-input w-72" required /></F>
-        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending}>{label}</button>
+        <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || blocked}>{label}</button>
       </div>
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
       {state.message && (
         <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}
@@ -74,6 +106,7 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
     );
   }
   const current = view?.area;
+  const same = (left: string, right: string) => left.trim().toUpperCase() === right.trim().toUpperCase();
   return (
     <div className="space-y-4">
       <form method="get" className="panel space-y-3 p-4" aria-label="Consolidation area">
@@ -135,12 +168,24 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
               </p>
               {canConfigure && (
                 <>
-                  <SaveForm action={saveBasisAction} label="Save data basis">
+                  <SaveForm action={saveBasisAction} label="Save data basis" record={(form) => {
+                    const basis = fieldValue(form, 'basis');
+                    if (!basis) return null;
+                    return {
+                      lockObject: 'CONSOLIDATION_BASIS',
+                      argument: basis,
+                      existing: areas.some((entry) => same(entry.dataBasis, basis)) || same(current?.dataBasis ?? '', basis),
+                    };
+                  }}>
                     <F label="Basis"><input name="basis" className="field-input code w-44" required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                     <F label="Dimensions (comma-separated)"><input name="dimensions" className="field-input w-80" placeholder="COMPANY_CODE, GL_ACCOUNT" /></F>
                   </SaveForm>
-                  <SaveForm action={saveAreaAction} label="Save consolidation area">
+                  <SaveForm action={saveAreaAction} label="Save consolidation area" record={(form) => {
+                    const areaCode = fieldValue(form, 'area');
+                    if (!areaCode) return null;
+                    return { lockObject: 'CONSOLIDATION_AREA', argument: areaCode, existing: areas.some((entry) => same(entry.area, areaCode)) };
+                  }}>
                     <F label="Area (4)"><input name="area" className="field-input code w-28" maxLength={4} required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                     <F label="Data basis"><input name="dataBasis" className="field-input code w-44" required /></F>
@@ -148,7 +193,7 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
                     <F label="Fiscal year variant (2)"><input name="fiscalYearVariant" className="field-input code w-32" maxLength={2} required /></F>
                   </SaveForm>
                   {current && current.status !== 'ACTIVE' && (
-                    <SaveForm action={activateAreaAction} label="Activate area">
+                    <SaveForm action={activateAreaAction} label="Activate area" record={() => ({ lockObject: 'CONSOLIDATION_AREA', argument: current.area, existing: true })}>
                       <input type="hidden" name="area" value={current.area} />
                       <span className="text-sm text-ink-soft">Activation judges completeness; incomplete configuration never affects a run.</span>
                     </SaveForm>
@@ -179,19 +224,37 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
               </table>
               {canConfigure && current && (
                 <>
-                  <SaveForm action={saveUnitAction} label="Save unit">
+                  <SaveForm action={saveUnitAction} label="Save unit" record={(form) => {
+                    const unit = fieldValue(form, 'unit');
+                    if (!unit) return null;
+                    return { lockObject: 'CONSOLIDATION_UNIT', argument: `${current.area}/${unit}`, existing: (view?.units ?? []).some((row) => same(row.unit, unit)) };
+                  }}>
                     <input type="hidden" name="area" value={current.area} />
                     <F label="Unit"><input name="unit" className="field-input code w-36" required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                     <F label="Company code"><input name="companyCode" className="field-input code w-32" required /></F>
                   </SaveForm>
-                  <SaveForm action={saveGroupAction} label="Save group">
+                  <SaveForm action={saveGroupAction} label="Save group" record={(form) => {
+                    const group = fieldValue(form, 'group');
+                    if (!group) return null;
+                    return { lockObject: 'CONSOLIDATION_GROUP', argument: `${current.area}/${group}`, existing: (view?.groups ?? []).some((row) => same(row.group, group)) };
+                  }}>
                     <input type="hidden" name="area" value={current.area} />
                     <F label="Group"><input name="group" className="field-input code w-44" required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                     <F label="Parent group"><input name="parentGroup" className="field-input code w-44" /></F>
                   </SaveForm>
-                  <SaveForm action={assignUnitAction} label="Assign unit">
+                  <SaveForm action={assignUnitAction} label="Assign unit" record={(form) => {
+                    const group = fieldValue(form, 'group');
+                    const unit = fieldValue(form, 'unit');
+                    const validFrom = fieldValue(form, 'validFrom');
+                    if (!group || !unit || !validFrom) return null;
+                    return {
+                      lockObject: 'CONSOLIDATION_ASSIGNMENT',
+                      argument: `${current.area}/${group}/${unit}/${validFrom}`,
+                      existing: (view?.assignments ?? []).some((row) => same(row.group, group) && same(row.unit, unit) && row.validFrom === validFrom),
+                    };
+                  }}>
                     <input type="hidden" name="area" value={current.area} />
                     <F label="Group"><input name="group" className="field-input code w-44" required /></F>
                     <F label="Unit"><input name="unit" className="field-input code w-36" required /></F>
@@ -222,12 +285,31 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
               </table>
               {canConfigure && current && (
                 <>
-                  <SaveForm action={saveGroupAccountAction} label="Save group account">
+                  <SaveForm action={saveGroupAccountAction} label="Save group account" record={(form) => {
+                    const consChart = fieldValue(form, 'consChart');
+                    const account = fieldValue(form, 'account');
+                    if (!consChart || !account) return null;
+                    return {
+                      lockObject: 'CONSOLIDATION_GROUP_ACCOUNT',
+                      argument: `${consChart}/${account}`,
+                      existing: (view?.groupAccounts ?? []).some((row) => same(row.consChart, consChart) && same(row.account, account)),
+                    };
+                  }}>
                     <F label="Consolidation chart"><input name="consChart" className="field-input code w-36" defaultValue={current.consChart} required /></F>
                     <F label="Group account"><input name="account" className="field-input code w-36" required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                   </SaveForm>
-                  <SaveForm action={saveMappingAction} label="Save mapping">
+                  <SaveForm action={saveMappingAction} label="Save mapping" record={(form) => {
+                    const sourceChart = fieldValue(form, 'sourceChart');
+                    const sourceFrom = fieldValue(form, 'sourceFrom');
+                    const sourceTo = fieldValue(form, 'sourceTo');
+                    if (!sourceChart || !sourceFrom || !sourceTo) return null;
+                    return {
+                      lockObject: 'CONSOLIDATION_MAPPING',
+                      argument: `${sourceChart}/${sourceFrom}/${sourceTo}`,
+                      existing: (view?.mappings ?? []).some((row) => same(row.sourceChart, sourceChart) && same(row.sourceAccountFrom, sourceFrom) && same(row.sourceAccountTo, sourceTo)),
+                    };
+                  }}>
                     <F label="Consolidation chart"><input name="consChart" className="field-input code w-36" defaultValue={current.consChart} required /></F>
                     <F label="Source chart"><input name="sourceChart" className="field-input code w-32" required /></F>
                     <F label="Source from"><input name="sourceFrom" className="field-input code w-36" required /></F>
@@ -253,7 +335,11 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
                 </tbody>
               </table>
               {canConfigure && current && (
-                <SaveForm action={saveMethodAction} label="Save method">
+                <SaveForm action={saveMethodAction} label="Save method" record={(form) => {
+                  const method = fieldValue(form, 'method');
+                  if (!method) return null;
+                  return { lockObject: 'CONSOLIDATION_METHOD', argument: `${current.area}/${method}`, existing: (view?.methods ?? []).some((row) => same(row.method, method)) };
+                }}>
                   <input type="hidden" name="area" value={current.area} />
                   <F label="Method"><input name="method" className="field-input code w-36" required /></F>
                   <F label="Kind">
@@ -286,12 +372,21 @@ export default function ConsolidationWorkbenchShell({ canUse, canConfigure, area
               </table>
               {canConfigure && current && (
                 <>
-                  <SaveForm action={saveVersionAction} label="Save version">
+                  <SaveForm action={saveVersionAction} label="Save version" record={(form) => {
+                    const version = fieldValue(form, 'version');
+                    if (!version) return null;
+                    return { lockObject: 'CONSOLIDATION_VERSION', argument: `${current.area}/${version}`, existing: (view?.versions ?? []).some((row) => same(row.version, version)) };
+                  }}>
                     <input type="hidden" name="area" value={current.area} />
                     <F label="Version (1–3)"><input name="version" className="field-input code w-32" maxLength={3} required /></F>
                     <F label="Title"><input name="title" className="field-input w-64" required /></F>
                   </SaveForm>
-                  <SaveForm action={saveTaskAction} label="Save task">
+                  <SaveForm action={saveTaskAction} label="Save task" record={(form) => {
+                    const task = fieldValue(form, 'task');
+                    const version = fieldValue(form, 'version');
+                    if (!task || !version) return null;
+                    return { lockObject: 'CONSOLIDATION_TASK', argument: `${current.area}/${version}/${task}`, existing: (view?.tasks ?? []).some((row) => same(row.task, task)) };
+                  }}>
                     <input type="hidden" name="area" value={current.area} />
                     <F label="Version"><input name="version" className="field-input code w-28" required /></F>
                     <F label="Task"><input name="task" className="field-input code w-40" required /></F>

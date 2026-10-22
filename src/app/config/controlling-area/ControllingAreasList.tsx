@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { saveControllingAreaAction, type ControllingAreaActionState } from './actions';
 import { ActionMessage } from './ControllingAreaForm';
 import { AssignmentControlField } from './AssignmentControlField';
@@ -74,6 +75,13 @@ function ControllingAreaItem({
     saveControllingAreaAction,
     { ok: true },
   );
+  const [changeOpen, setChangeOpen] = useState(false);
+  const areaLock = useChangeLock(
+    'CONTROLLING_AREA',
+    area.controllingArea,
+    'CFG.COST.CONTROLLINGAREA.DEFINE',
+    changeOpen && canMaintain,
+  );
   const [values, setValues] = useState({
     name: area.name,
     organizationName: area.organizationName ?? '',
@@ -131,7 +139,7 @@ function ControllingAreaItem({
         </div>
 
         {canMaintain && area.isActive && (
-          <details className="border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+          <details className="border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
             <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">{t('controllingArea.changeSettings')}</summary>
             <form action={action} className="mt-3 space-y-4">
               <input type="hidden" name="mode" value="CHANGE" />
@@ -221,8 +229,9 @@ function ControllingAreaItem({
               </div>
 
               <p className="text-xs text-ink-soft">{t('controllingArea.changeHistoryNote')}</p>
+              <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} />
               {state.message && <ActionMessage state={state} />}
-              <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending}>
+              <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending || areaLock?.mode !== 'CHANGE'}>
                 {pending ? t('common.saving') : t('controllingArea.saveButton')}
               </button>
             </form>

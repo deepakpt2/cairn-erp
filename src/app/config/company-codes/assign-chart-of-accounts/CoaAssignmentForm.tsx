@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { assignCoaAction, type CoaAssignmentActionState } from './actions';
 
 export interface CoaAssignableCompany {
@@ -30,16 +31,20 @@ export function CoaAssignmentForm({
   charts: CoaChartChoice[];
 }) {
   const [state, action, pending] = useActionState(assignCoaAction, INITIAL);
+  const [company, setCompany] = useState('');
+  const lock = useChangeLock('COMPANY_CODE', company.trim() || null, 'CFG.ORG.COMPANYCODE.ASSIGN_COA', Boolean(company.trim()));
+  const held = !company.trim() || lock?.mode === 'CHANGE';
   const unassigned = companies.filter((c) => !c.chartOfAccounts);
 
   return (
     <div className="space-y-4">
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
       <form action={action} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">
             {t('coaAssign.company')}
           </span>
-          <select name="companyCode" required defaultValue="" className="field-input code w-full" disabled={pending}>
+          <select name="companyCode" required defaultValue="" className="field-input code w-full" disabled={pending} onChange={(event) => setCompany(event.target.value)}>
             <option value="">{t('coaAssign.chooseCompany')}</option>
             {companies.map((c) => (
               <option key={c.code} value={c.code}>
@@ -69,7 +74,7 @@ export function CoaAssignmentForm({
           <input name="reason" required maxLength={500} className="field-input w-full" disabled={pending} />
         </label>
         <div className="flex items-end">
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending || charts.length === 0}>
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-9" disabled={pending || charts.length === 0 || !held}>
             {pending ? t('common.saving') : t('cc.assign')}
           </button>
         </div>

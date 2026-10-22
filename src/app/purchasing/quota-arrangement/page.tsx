@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   QUOTA_CAPABILITY,
@@ -42,6 +44,14 @@ export default async function PurchasingQuotaPage({ searchParams }: {
     ? await listQuotaArrangements(session.user.client, materialNumber, plantCode)
     : [];
   const recent = await listRecentQuotaArrangements(session.user.client);
+  const canMaintain = can(session, QUOTA_CAPABILITY);
+  const changeLock = opened && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'QUOTA_ARRANGEMENT',
+        argument: opened.quotaNumber,
+        transactionCode: 'PROC.QUOTA.MAINTAIN',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -59,6 +69,10 @@ export default async function PurchasingQuotaPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotaArrangement.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && opened && (
+        <ChangeLock lockObject="QUOTA_ARRANGEMENT" argument={opened.quotaNumber} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <QuotaWorkbench
         key={`${requestedQuota}|${requestedMaterial}|${requestedPlant}`}
         opened={opened}
@@ -67,7 +81,7 @@ export default async function PurchasingQuotaPage({ searchParams }: {
         requestedMaterial={requestedMaterial}
         requestedPlant={requestedPlant}
         recent={recent}
-        canMaintain={can(session, QUOTA_CAPABILITY)}
+        canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
     </div>
   );

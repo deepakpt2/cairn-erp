@@ -9,6 +9,7 @@ import {
   reverseGrIrClearingAction,
   type GrIrClearingActionState,
 } from './actions';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const idle: GrIrClearingActionState = { ok: false, message: '' };
 const ROUTE = '/purchasing/grir-clearing';
@@ -59,10 +60,27 @@ export function ClearResidualForm({
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkGrIrClearingAction, idle);
   const [postState, postAction, posting] = useActionState(postGrIrClearingAction, idle);
+  const [engaged, setEngaged] = useState(false);
+  const residualLock = useChangeLock(
+    'GRIR_RESIDUAL',
+    `${orderNumber}/${itemNumber}`,
+    'PROC.GRIR.MAINTAIN.POST',
+    engaged,
+  );
   useRemember(postState);
   const notice = postState.message ? postState : checkState;
   return (
-    <form className="space-y-2" data-grir-clear={orderNumber}>
+    <form
+      className="space-y-2"
+      data-grir-clear={orderNumber}
+      onFocus={() => setEngaged(true)}
+      onSubmit={(event) => {
+        const submitter = event.nativeEvent.submitter;
+        if (submitter instanceof HTMLButtonElement && submitter.dataset.grirPost && residualLock?.mode !== 'CHANGE') {
+          event.preventDefault();
+        }
+      }}
+    >
       <input type="hidden" name="orderNumber" value={orderNumber} />
       <input type="hidden" name="itemNumber" value={itemNumber} />
       <input type="hidden" name="keyDate" value={keyDate} />
@@ -83,8 +101,9 @@ export function ClearResidualForm({
           {acknowledgeLabel}
         </label>
         <button type="submit" formAction={checkAction} formNoValidate className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-check>{checking ? checkingLabel : checkLabel}</button>
-        <button type="submit" formAction={postAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-post>{posting ? postingLabel : postLabel}</button>
+        <button type="submit" formAction={postAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || posting || residualLock?.mode === 'DISPLAY'} data-grir-post>{posting ? postingLabel : postLabel}</button>
       </div>
+      <LockNotice message={residualLock?.mode === 'DISPLAY' ? residualLock.message : null} />
       <Notice state={notice} />
     </form>
   );
@@ -105,9 +124,23 @@ export function ReverseClearingForm({
   const [comment, setComment] = useState('');
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [state, action, reversing] = useActionState(reverseGrIrClearingAction, idle);
+  const [engaged, setEngaged] = useState(false);
+  const documentLock = useChangeLock(
+    'GRIR_DOCUMENT',
+    `${documentNumber}/${fiscalYear}`,
+    'PROC.GRIR.MAINTAIN.REVERSE',
+    engaged,
+  );
   useRemember(state);
   return (
-    <form className="flex flex-wrap items-end gap-2" data-grir-reverse={documentNumber}>
+    <form
+      className="flex flex-wrap items-end gap-2"
+      data-grir-reverse={documentNumber}
+      onFocus={() => setEngaged(true)}
+      onSubmit={(event) => {
+        if (documentLock?.mode !== 'CHANGE') event.preventDefault();
+      }}
+    >
       <input type="hidden" name="documentNumber" value={documentNumber} />
       <input type="hidden" name="fiscalYear" value={fiscalYear} />
       <input type="hidden" name="requestKey" value={key} />
@@ -119,7 +152,8 @@ export function ReverseClearingForm({
         <span className="mb-1 block text-ink-soft">{reasonLabel}</span>
         <input name="comment" className="input w-full" value={comment} onChange={(event) => setComment(event.target.value)} required maxLength={100} />
       </label>
-      <button type="submit" formAction={action} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || reversing} data-grir-reverse-save>{reversing ? reversingLabel : reverseLabel}</button>
+      <button type="submit" formAction={action} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || reversing || documentLock?.mode === 'DISPLAY'} data-grir-reverse-save>{reversing ? reversingLabel : reverseLabel}</button>
+      <LockNotice message={documentLock?.mode === 'DISPLAY' ? documentLock.message : null} />
       <Notice state={state} />
     </form>
   );

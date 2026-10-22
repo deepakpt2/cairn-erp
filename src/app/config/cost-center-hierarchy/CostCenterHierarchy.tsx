@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { CostCenterArea } from '../../../modules/foundation/cost-center-definition';
 import type {
@@ -67,14 +68,16 @@ function DialogShell({
   title,
   code,
   children,
+  onOpen,
 }: {
   summary: string;
   title: string;
   code: string;
   children: React.ReactNode;
+  onOpen?: (open: boolean) => void;
 }) {
   return (
-    <details className="min-w-16">
+    <details className="min-w-16" onToggle={(event) => onOpen?.(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {summary}
       </summary>
@@ -245,15 +248,21 @@ function ChangeNodeDialog({
   row,
   nodes,
   selectedArea,
+  onOpen,
+  held,
+  notice,
 }: {
   row: HierarchyNodeRow;
   nodes: HierarchyNodeRow[];
   selectedArea: string;
+  onOpen: (open: boolean) => void;
+  held: boolean;
+  notice: string | null;
 }) {
   const [state, formAction, pending] = useAction(saveHierarchyNodeAction as never);
   const label = `Node ${row.node}`;
   return (
-    <DialogShell summary="Change" title={`Change ${label}`} code={row.node}>
+    <DialogShell summary="Change" title={`Change ${label}`} code={row.node} onOpen={onOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="mode" value="CHANGE" />
         <input type="hidden" name="controllingArea" value={selectedArea} />
@@ -261,7 +270,8 @@ function ChangeNodeDialog({
         <NodeFields idPrefix={`hier-node-${row.node}`} row={row} nodes={nodes} />
         <ReasonField id={`hier-node-change-reason-${row.node}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={notice} />
+        <button type="submit" className="btn-primary" disabled={pending || !held}>
           Save changes
         </button>
       </form>
@@ -273,16 +283,22 @@ function DeleteNodeDialog({
   row,
   childCount,
   selectedArea,
+  onOpen,
+  held,
+  notice,
 }: {
   row: HierarchyNodeRow;
   childCount: number;
   selectedArea: string;
+  onOpen: (open: boolean) => void;
+  held: boolean;
+  notice: string | null;
 }) {
   const [state, formAction, pending] = useAction(deleteHierarchyNodeAction as never);
   const label = `Node ${row.node}`;
   const blocked = childCount > 0 || row.assignedPeriods > 0;
   return (
-    <DialogShell summary="Delete" title={`Delete ${label}`} code={row.node}>
+    <DialogShell summary="Delete" title={`Delete ${label}`} code={row.node} onOpen={onOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <input type="hidden" name="node" value={row.node} />
@@ -297,7 +313,8 @@ function DeleteNodeDialog({
         ) : null}
         <ReasonField id={`hier-node-delete-reason-${row.node}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending || blocked}>
+        <LockNotice message={notice} />
+        <button type="submit" className="btn-primary" disabled={pending || blocked || !held}>
           Delete node
         </button>
       </form>
@@ -315,6 +332,16 @@ function PlacementPanel({
   view: HierarchyView;
 }) {
   const [state, formAction, pending] = useAction(placePeriodAction as never);
+  const [periodKey, setPeriodKey] = useState('');
+  const [engaged, setEngaged] = useState(false);
+  const [costCenter = '', validFrom = ''] = periodKey.split(':');
+  const placementLock = useChangeLock(
+    'COST_CENTER_PLACEMENT',
+    periodKey ? `${selectedArea}/${costCenter}/${validFrom}` : '',
+    'CFG.COST.COSTCENTERHIER.DEFINE',
+    engaged && periodKey !== '',
+  );
+  const placementHeld = !engaged || periodKey === '' || placementLock?.mode === 'CHANGE';
   const allPeriods = [
     ...view.unplacedPeriods.map((period) => ({ ...period, node: '' })),
     ...view.placements,
@@ -333,14 +360,14 @@ function PlacementPanel({
       ) : (
         <p className="p-4 pb-0 text-sm text-ink-soft">Every period standing is placed.</p>
       )}
-      <form className="space-y-3 p-4" action={formAction}>
+      <form className="space-y-3 p-4" action={formAction} onFocus={() => setEngaged(true)} onSubmit={(event) => { if (periodKey !== '' && placementLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="place-period" className="field-label">
               Cost centre period<RequiredMark />
             </label>
-            <select id="place-period" name="period" required className="field-input" defaultValue="">
+            <select id="place-period" name="period" required className="field-input" value={periodKey} onChange={(event) => setPeriodKey(event.target.value)}>
               <option value="">Choose a period</option>
               {allPeriods.map((period) => (
                 <option
@@ -369,7 +396,8 @@ function PlacementPanel({
         </div>
         <ReasonField id="place-reason" />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={placementLock?.mode === 'DISPLAY' ? placementLock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || !placementHeld}>
           Place period
         </button>
       </form>
@@ -411,9 +439,16 @@ function UnassignDialog({
   selectedArea: string;
 }) {
   const [state, formAction, pending] = useAction(unplacePeriodAction as never);
+  const [open, setOpen] = useState(false);
   const label = `${placement.costCenter} from ${placement.validFrom}`;
+  const lock = useChangeLock(
+    'COST_CENTER_PLACEMENT',
+    `${selectedArea}/${placement.costCenter}/${placement.validFrom}`,
+    'CFG.COST.COSTCENTERHIER.DEFINE',
+    open,
+  );
   return (
-    <DialogShell summary="Unassign" title={`Unassign ${label}`} code={label}>
+    <DialogShell summary="Unassign" title={`Unassign ${label}`} code={label} onOpen={setOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <input type="hidden" name="node" value={placement.node} />
@@ -424,7 +459,8 @@ function UnassignDialog({
         </p>
         <ReasonField id={`unplace-reason-${placement.costCenter}-${placement.validFrom}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Unassign period
         </button>
       </form>
@@ -471,6 +507,14 @@ function CreateGroupPanel({ selectedArea }: { selectedArea: string }) {
 function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: string }) {
   const [leafState, leafAction, leafPending] = useAction(addLeafAction as never);
   const [deleteState, deleteAction, deletePending] = useAction(deleteGroupAction as never);
+  const [engaged, setEngaged] = useState(false);
+  const groupLock = useChangeLock(
+    'COST_CENTER_GROUP',
+    `${selectedArea}/${group.groupName}`,
+    'CFG.COST.COSTCENTERHIER.DEFINE',
+    engaged,
+  );
+  const groupHeld = !engaged || groupLock?.mode === 'CHANGE';
   return (
     <section className="panel overflow-hidden" aria-labelledby={`group-${group.groupName}`}>
       <div className="panel-header flex flex-wrap items-center justify-between gap-3">
@@ -513,7 +557,7 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
       ) : (
         <p className="p-4 text-sm text-ink-soft">No leaves stand in this group yet.</p>
       )}
-      <form className="space-y-3 border-t border-line p-4" action={leafAction}>
+      <form className="space-y-3 border-t border-line p-4" action={leafAction} onFocus={() => setEngaged(true)} onSubmit={(event) => { if (groupLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <input type="hidden" name="groupName" value={group.groupName} />
         <div className="grid gap-3 sm:grid-cols-3">
@@ -548,11 +592,12 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
         </div>
         <ReasonField id={`leaf-${group.groupName}-reason`} />
         <Message state={leafState} />
-        <button type="submit" className="btn-primary" disabled={leafPending}>
+        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+        <button type="submit" className="btn-primary" disabled={leafPending || !groupHeld}>
           Add leaf
         </button>
       </form>
-      <form className="space-y-3 border-t border-line p-4" action={deleteAction}>
+      <form className="space-y-3 border-t border-line p-4" action={deleteAction} onFocus={() => setEngaged(true)} onSubmit={(event) => { if (groupLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <input type="hidden" name="groupName" value={group.groupName} />
         <p className="text-sm text-ink-soft">
@@ -560,7 +605,8 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
         </p>
         <ReasonField id={`group-delete-reason-${group.groupName}`} />
         <Message state={deleteState} />
-        <button type="submit" className="btn-primary" disabled={deletePending}>
+        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+        <button type="submit" className="btn-primary" disabled={deletePending || !groupHeld}>
           Delete group
         </button>
       </form>
@@ -578,9 +624,16 @@ function RemoveLeafDialog({
   selectedArea: string;
 }) {
   const [state, formAction, pending] = useAction(removeLeafAction as never);
+  const [open, setOpen] = useState(false);
   const label = `${leaf.valSign === 'I' ? 'Include' : 'Exclude'} ${leaf.valFrom}${leaf.valTo ? `..${leaf.valTo}` : ''}`;
+  const lock = useChangeLock(
+    'COST_CENTER_GROUP_LEAF',
+    `${selectedArea}/${group.groupName}/${leaf.valSign}/${leaf.valOption}/${leaf.valFrom}/${leaf.valTo}`,
+    'CFG.COST.COSTCENTERHIER.DEFINE',
+    open,
+  );
   return (
-    <DialogShell summary="Remove" title={`Remove leaf ${label}`} code={group.groupName}>
+    <DialogShell summary="Remove" title={`Remove leaf ${label}`} code={group.groupName} onOpen={setOpen}>
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={selectedArea} />
         <input type="hidden" name="groupName" value={group.groupName} />
@@ -594,11 +647,41 @@ function RemoveLeafDialog({
         </p>
         <ReasonField id={`leaf-remove-reason-${group.groupName}-${leaf.valFrom}`} />
         <Message state={state} />
-        <button type="submit" className="btn-primary" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Remove leaf
         </button>
       </form>
     </DialogShell>
+  );
+}
+
+function NodeActions({
+  row,
+  nodes,
+  selectedArea,
+  childCount,
+}: {
+  row: HierarchyNodeRow;
+  nodes: HierarchyNodeRow[];
+  selectedArea: string;
+  childCount: number;
+}) {
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const lock = useChangeLock(
+    'COST_CENTER_NODE',
+    `${selectedArea}/${row.node}`,
+    'CFG.COST.COSTCENTERHIER.DEFINE',
+    changeOpen || deleteOpen,
+  );
+  const held = lock?.mode === 'CHANGE';
+  const notice = lock?.mode === 'DISPLAY' ? lock.message : null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      <ChangeNodeDialog row={row} nodes={nodes} selectedArea={selectedArea} onOpen={setChangeOpen} held={held} notice={notice} />
+      <DeleteNodeDialog row={row} childCount={childCount} selectedArea={selectedArea} onOpen={setDeleteOpen} held={held} notice={notice} />
+    </div>
   );
 }
 
@@ -688,14 +771,12 @@ export default function CostCenterHierarchy({
                     <td>{node.assignedPeriods}</td>
                     <td>
                       {canMaintain ? (
-                        <div className="flex flex-wrap gap-1">
-                          <ChangeNodeDialog row={node} nodes={view.nodes} selectedArea={selectedArea} />
-                          <DeleteNodeDialog
-                            row={node}
-                            childCount={childCount(node.node)}
-                            selectedArea={selectedArea}
-                          />
-                        </div>
+                        <NodeActions
+                          row={node}
+                          nodes={view.nodes}
+                          selectedArea={selectedArea}
+                          childCount={childCount(node.node)}
+                        />
                       ) : (
                         '—'
                       )}

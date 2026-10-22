@@ -3,6 +3,7 @@
 /** Capability-protected OKKP Controlling Area definition action. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ControllingAreaMaintenanceError,
   saveControllingArea,
@@ -31,6 +32,9 @@ export async function saveControllingAreaAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'CONTROLLING_AREA', argument: readKey('controllingArea') });
+    }
     const result = await saveControllingArea({
       client: session.user.client,
       changedBy: session.user.username,
@@ -63,7 +67,7 @@ export async function saveControllingAreaAction(
         : t('controllingArea.unchanged'),
     };
   } catch (error) {
-    if (error instanceof ControllingAreaMaintenanceError) {
+    if (error instanceof ControllingAreaMaintenanceError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     if (error instanceof AuthzError) {

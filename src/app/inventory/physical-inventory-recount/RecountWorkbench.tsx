@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+
 import { t } from '@/platform/i18n';
 import {
   cancelRecountAction,
@@ -52,12 +54,14 @@ export default function RecountWorkbench({
   requestedNumber,
   requestedYear,
   canRecount,
+  displayOnly = false,
   today,
 }: {
   document: RecountDocumentView | null;
   requestedNumber: string;
   requestedYear: string;
   canRecount: boolean;
+  displayOnly?: boolean;
   today: string;
 }) {
   const [checkState, checkAction, checking] = useActionState(checkRecountAction, INITIAL);
@@ -65,6 +69,9 @@ export default function RecountWorkbench({
   const [cancelState, cancelAction, cancelling] = useActionState(cancelRecountAction, INITIAL);
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const [selected, setSelected] = useState<number[]>([]);
+  const [cancelNumber, setCancelNumber] = useState('');
+  const [cancelYear, setCancelYear] = useState(requestedYear);
+  const writable = canRecount && !displayOnly;
 
   useEffect(() => {
     if (createState.ok) setRequestKey(newRequestKey());
@@ -75,6 +82,17 @@ export default function RecountWorkbench({
 
   const eligible = document?.items.filter((line) => line.eligible) ?? [];
   const raised = createState.recount;
+  useEffect(() => {
+    if (!raised) return;
+    setCancelNumber(raised.recountDocumentNumber);
+    setCancelYear(String(raised.recountFiscalYear));
+  }, [raised]);
+  const cancelLock = useChangeLock(
+    'PHYSICAL_INVENTORY',
+    cancelNumber.trim() ? `${cancelNumber.trim()}/${cancelYear.trim()}` : null,
+    'INV.PHYINV.RECOUNT',
+    canRecount && Boolean(cancelNumber.trim()),
+  );
 
   return (
     <>
@@ -141,7 +159,7 @@ export default function RecountWorkbench({
                           name="item"
                           value={line.itemNumber}
                           checked={selected.includes(line.itemNumber)}
-                          disabled={!canRecount || !line.eligible}
+                          disabled={!writable || !line.eligible}
                           onChange={(event) => {
                             setSelected((current) => event.target.checked
                               ? [...current, line.itemNumber]
@@ -178,7 +196,7 @@ export default function RecountWorkbench({
               <button
                 type="button"
                 className="btn btn-default min-h-11 sm:min-h-8"
-                disabled={!canRecount || eligible.length === 0}
+                disabled={!writable || eligible.length === 0}
                 onClick={() => setSelected(eligible.map((line) => line.itemNumber))}
               >
                 {t('recount.selectEligible')}
@@ -207,7 +225,7 @@ export default function RecountWorkbench({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canRecount || creating || selected.length === 0}>
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!writable || creating || selected.length === 0}>
                 {creating ? t('recount.creating') : t('recount.create')}
               </button>
               <button
@@ -215,7 +233,7 @@ export default function RecountWorkbench({
                 formAction={checkAction}
                 data-recount-check
                 className="btn btn-default min-h-11 sm:min-h-8"
-                disabled={!canRecount || checking || selected.length === 0}
+                disabled={!writable || checking || selected.length === 0}
               >
                 {checking ? t('recount.checking') : t('recount.check')}
               </button>
@@ -285,17 +303,18 @@ export default function RecountWorkbench({
         <form action={cancelAction} className="mt-3 flex flex-wrap items-end gap-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('recount.recountDocument')}</span>
-            <input name="recountDocumentNumber" className="input" defaultValue={raised?.recountDocumentNumber ?? ''} required />
+            <input name="recountDocumentNumber" className="input" value={cancelNumber} onChange={(event) => setCancelNumber(event.target.value)} required />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('recount.fiscalYear')}</span>
-            <input name="recountFiscalYear" className="input w-28" inputMode="numeric" defaultValue={raised?.recountFiscalYear ?? requestedYear} required />
+            <input name="recountFiscalYear" className="input w-28" inputMode="numeric" value={cancelYear} onChange={(event) => setCancelYear(event.target.value)} required />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('recount.reason')}</span>
             <input name="reason" className="input" required />
           </label>
-          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRecount || cancelling}>
+          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} />
+          <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRecount || cancelling || cancelLock?.mode !== 'CHANGE'}>
             {cancelling ? t('recount.cancelling') : t('recount.cancel')}
           </button>
         </form>

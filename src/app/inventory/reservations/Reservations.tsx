@@ -49,10 +49,11 @@ function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export default function Reservations({ reservation, scenarios, canPost, today }: {
+export default function Reservations({ reservation, scenarios, canPost, canChange, today }: {
   reservation: ReservationView | null;
   scenarios: Array<{ code: string; description: string }>;
   canPost: boolean;
+  canChange: boolean;
   today: string;
 }) {
   const [createState, createAction, creating] = useActionState(createReservationAction, INITIAL);
@@ -181,6 +182,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
                   </td>
                   <td className="py-1">
                     {!item.isCompleted && (
+                      canChange ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <form action={withdrawAction} className="flex items-center gap-1">
                           <input type="hidden" name="reservationNumber" value={reservation.reservationNumber} />
@@ -203,6 +205,7 @@ export default function Reservations({ reservation, scenarios, canPost, today }:
                           </button>
                         </form>
                       </div>
+                      ) : null
                     )}
                   </td>
                 </tr>

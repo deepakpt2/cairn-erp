@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ChartOfAccountsMaintenanceError,
   saveChartOfAccounts,
@@ -34,6 +35,9 @@ export async function saveChartOfAccountsAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'CHART_OF_ACCOUNTS', argument: readKey('chartOfAccounts') });
+    }
     const result = await saveChartOfAccounts({
       client: session.user.client,
       changedBy: session.user.username,
@@ -95,6 +99,9 @@ function mapChartError(error: unknown): ChartOfAccountsActionState {
   if (error instanceof ChartOfAccountsMaintenanceError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -116,6 +123,7 @@ export async function setChartOfAccountsActiveAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'CHART_OF_ACCOUNTS', argument: read('chartOfAccounts') });
     const result = await setChartOfAccountsActive({
       client: session.user.client,
       changedBy: session.user.username,
@@ -156,6 +164,9 @@ export async function saveGroupChartOfAccountsAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'GROUP_CHART', argument: readKey('groupChartOfAccounts') });
+    }
     const result = await saveGroupChartOfAccounts({
       client: session.user.client,
       changedBy: session.user.username,
@@ -200,6 +211,7 @@ export async function setGroupChartOfAccountsActiveAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'GROUP_CHART', argument: read('groupChartOfAccounts') });
     const result = await setGroupChartOfAccountsActive({
       client: session.user.client,
       changedBy: session.user.username,

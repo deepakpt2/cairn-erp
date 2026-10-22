@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { PaymentMethodError, retirePaymentMethod, savePaymentMethod } from '@/modules/foundation/payment-methods';
 import type { PaymentMethodDirection } from '@/modules/foundation/payment-method-schema';
 import { t } from '@/platform/i18n';
@@ -39,6 +40,9 @@ export async function savePaymentMethodAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    if (form.has('changing')) {
+      await assertChangeForSession(session, { lockObject: 'PAYMENT_METHOD', argument: `${country}/${methodCode}` });
+    }
     const result = await savePaymentMethod({
       client: session.user.client,
       country: read(form, 'country'),
@@ -63,7 +67,7 @@ export async function savePaymentMethodAction(
       changed: result.changed,
     };
   } catch (error) {
-    if (error instanceof PaymentMethodError || error instanceof AuthzError) {
+    if (error instanceof PaymentMethodError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, country, methodCode };
     }
     throw error;
@@ -81,6 +85,7 @@ export async function retirePaymentMethodAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'PAYMENT_METHOD', argument: `${country}/${methodCode}` });
     const result = await retirePaymentMethod({
       client: session.user.client,
       country: read(form, 'country'),
@@ -100,7 +105,7 @@ export async function retirePaymentMethodAction(
       changed: result.changed,
     };
   } catch (error) {
-    if (error instanceof PaymentMethodError || error instanceof AuthzError) {
+    if (error instanceof PaymentMethodError || error instanceof AuthzError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy, country, methodCode };
     }
     throw error;

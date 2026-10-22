@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   QUOTATION_CAPABILITY,
@@ -33,6 +35,14 @@ export default async function PurchasingQuotationPage({ searchParams }: {
   const requested = last(params.request).toUpperCase();
   const opened = requested ? await openQuotation(session.user.client, requested) : null;
   const recent = await listRecentQuotationRequests(session.user.client);
+  const canMaintain = can(session, QUOTATION_CAPABILITY);
+  const changeLock = opened && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'SUPPLIER_QUOTATION',
+        argument: requested,
+        transactionCode: 'PROC.RFQ.QUOTATION',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -48,12 +58,16 @@ export default async function PurchasingQuotationPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('quotation.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="SUPPLIER_QUOTATION" argument={requested} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <Quotation
         key={requested}
         opened={opened}
         requested={requested}
         recent={recent}
-        canMaintain={can(session, QUOTATION_CAPABILITY)}
+        canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
     </div>
   );

@@ -12,6 +12,7 @@ export function TermsForm({initial,version,creating}:{initial:PaymentTermValues;
     {state.message&&<div role="status" className={`mb-3 border p-3 text-sm ${state.ok?'border-signal-ok/30 bg-signal-ok-soft text-signal-ok':'border-signal-error/30 bg-signal-error-soft text-signal-error'}`}><p>{state.message}</p>{state.remedy&&<p>{state.remedy}</p>}{state.ok&&state.code&&<Link className="mt-2 inline-block underline" href={`/config/payment-terms?code=${encodeURIComponent(state.code)}`}>{t('pt.open')}</Link>}</div>}
     <form key={version} action={action} className="space-y-4">
       <input type="hidden" name="expectedVersion" value={creating?0:state.version??version} />
+      {!creating&&<input type="hidden" name="changing" value="1" />}
       <div className="grid gap-3 sm:grid-cols-3"><label><span className="field-label">{t('pt.code')}</span><input name="termsCode" defaultValue={initial.termsCode} readOnly={!creating} required maxLength={12} pattern="[A-Z0-9][A-Z0-9_-]*" onInput={(e)=>{e.currentTarget.value=e.currentTarget.value.toUpperCase();}} className="field-input code" /></label>
         <label><span className="field-label">{t('pt.baseline')}</span><select name="baselineSource" defaultValue={initial.baselineSource} className="field-input">{BASELINE_SOURCES.map((key)=><option key={key} value={key}>{t(`pt.baseline.${key}`)}</option>)}</select></label>
         {input('netDays','pt.netDays','number')}

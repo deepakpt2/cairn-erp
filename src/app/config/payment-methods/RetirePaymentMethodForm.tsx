@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { retirePaymentMethodAction } from './actions';
 import type { PaymentMethodActionState } from './actions';
 
@@ -18,6 +19,8 @@ export function RetirePaymentMethodForm({ country, methodCode, version, active }
   );
   const savedCountry = state.country ?? country;
   const savedCode = state.methodCode ?? methodCode;
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('PAYMENT_METHOD', `${country.trim()}/${methodCode.trim()}`, 'CFG.FIN.PAYMENTMETHOD.DEFINE', (open || Boolean(state.message)) && active);
 
   if (state.ok && state.message) {
     return (
@@ -34,7 +37,7 @@ export function RetirePaymentMethodForm({ country, methodCode, version, active }
   if (!active) return null;
 
   return (
-    <details open={!!state.message} className="panel p-4">
+    <details open={!!state.message} className="panel p-4" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer font-semibold text-signal-warn">{t('pm.retire')}</summary>
       <p className="mt-3 text-sm text-ink-soft">{t('pm.retireHint')}</p>
       {state.message && <div role="alert" className="mt-3 border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">
@@ -53,7 +56,8 @@ export function RetirePaymentMethodForm({ country, methodCode, version, active }
           <input type="checkbox" name="confirmRetirement" required className="mt-0.5 accent-accent" />
           <span>{t('pm.retireAcknowledge')}</span>
         </label>
-        <button className="btn border border-signal-error/40 text-signal-error hover:bg-signal-error-soft" disabled={pending}>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button className="btn border border-signal-error/40 text-signal-error hover:bg-signal-error-soft" disabled={pending || lock?.mode !== 'CHANGE'}>
           {pending ? t('common.saving') : t('pm.retireAction')}
         </button>
       </form>

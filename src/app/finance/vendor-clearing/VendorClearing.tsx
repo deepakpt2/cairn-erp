@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { VendorClearingView } from '@/modules/finance/vendor-clearing';
 import { clearAction, type VendorClearingActionState } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: VendorClearingActionState = { ok: false, message: '' };
 
@@ -27,6 +28,12 @@ export default function VendorClearing({ view, loadError, canClear, today }: {
   today: string;
 }) {
   const [state, action, clearing] = useActionState(clearAction, INITIAL);
+  const accountLock = useChangeLock(
+    'VENDOR_ACCOUNT',
+    view ? `${view.supplier}/${view.companyCode}` : '',
+    'FIN.AP.CLEAR',
+    Boolean(view && canClear),
+  );
   const [companyCode, setCompanyCode] = useState(view?.companyCode ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [clearingDate, setClearingDate] = useState(today);
@@ -114,6 +121,7 @@ export default function VendorClearing({ view, loadError, canClear, today }: {
                 Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
                 difference {difference.toFixed(2)}. The difference must stand at zero before posting.
               </p>
+              <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Clearing date</span>
@@ -129,7 +137,7 @@ export default function VendorClearing({ view, loadError, canClear, today }: {
                 </label>
                 <button
                   type="submit" className="btn btn-primary min-h-11 sm:min-h-8"
-                  disabled={!canClear || clearing || chosen.length === 0 || difference !== 0}
+                  disabled={!canClear || clearing || chosen.length === 0 || difference !== 0 || accountLock?.mode !== 'CHANGE'}
                 >
                   Post clearing
                 </button>

@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type { PostingPeriodVariantAssignmentRow } from '@/modules/foundation/posting-period-variant-assignment';
 import {
   assignPostingPeriodVariantAction,
@@ -73,6 +74,8 @@ function AssignmentControl({
 }) {
   const [variant, setVariant] = useState(row.postingPeriodVariant ?? '');
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const companyLock = useChangeLock('PPV_COMPANY', row.companyCode, 'CFG.FIN.PPV.ASSIGN', open);
   const [state, formAction, pending] = useActionState<PpvAssignmentActionState, FormData>(
     assignPostingPeriodVariantAction,
     { ok: true },
@@ -81,10 +84,10 @@ function AssignmentControl({
   const clearing = variant === '' && row.postingPeriodVariant !== null;
   const unchanged = variant === (row.postingPeriodVariant ?? '');
   const clearingBlocked = clearing && row.postedDocuments > 0;
-  const canSave = !pending && Boolean(reason.trim()) && !unchanged && !clearingBlocked;
+  const canSave = !pending && Boolean(reason.trim()) && !unchanged && !clearingBlocked && companyLock?.mode === 'CHANGE';
 
   return (
-    <details className="min-w-28">
+    <details className="min-w-28" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {row.postingPeriodVariant ? t('ppvAssign.change') : t('ppvAssign.assign')}
       </summary>
@@ -153,6 +156,7 @@ function AssignmentControl({
               </div>
 
               <AssignmentMessage state={state} />
+              <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
 
               <button type="submit" className="btn-primary" disabled={!canSave}>
                 {t('ppvAssign.save')}

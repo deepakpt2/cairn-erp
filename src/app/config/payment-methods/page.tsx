@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { asc } from 'drizzle-orm';
 import { requireSession, can } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { listPaymentMethods, getPaymentMethod } from '@/modules/foundation/payment-methods';
 import { withTenant } from '@/platform/db/client';
 import { country } from '@/platform/tables/reference';
@@ -31,6 +33,11 @@ export default async function PaymentMethodsPage({ searchParams }: {
     : null;
   const creating = params.new === '1' && !!selectedCountry && editable;
   const editing = params.edit === '1' && !!detail && editable;
+  const methodArgument = detail ? `${detail.country}/${detail.methodCode}` : '';
+  const changeLock = editing && detail
+    ? await openChangeForSession(session, { lockObject: 'PAYMENT_METHOD', argument: methodArgument, transactionCode: PAYMENT_METHOD_ACTIVITY })
+    : null;
+  const held = !editing || changeLock?.mode === 'CHANGE';
   const rows = selectedCountry && !params.code && !creating
     ? (await listPaymentMethods(client, selectedCountry)).filter((row) =>
         !params.q || `${row.methodCode} ${row.description}`.toLowerCase().includes(params.q.toLowerCase()),
@@ -120,7 +127,9 @@ export default async function PaymentMethodsPage({ searchParams }: {
       )}
 
       {detail && <>
-        {editing ? <PaymentMethodForm
+        {editing && changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="PAYMENT_METHOD" argument={methodArgument} />}
+        <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+        {editing && held ? <PaymentMethodForm
           country={detail.country}
           initial={{
             methodCode: detail.methodCode,

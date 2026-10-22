@@ -5,6 +5,7 @@ import { requireSession, requireCapability, AuthzError } from '@/platform/auth/c
 import { MaterialError, saveMaterialView, setMaterialDeletionFlag, type MaterialInput } from '@/modules/inventory/materials';
 import { MATERIAL_VIEW_CAPABILITY, MATERIAL_VIEWS } from '@/modules/inventory/constants';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface MaterialState { ok: boolean; message?: string; remedy?: string; materialNumber?: string; status?: string; version?: number }
 
@@ -15,6 +16,9 @@ export async function saveMaterialAction(_previous: MaterialState, form: FormDat
     const view = MATERIAL_VIEWS.find((v) => v === read('view'));
     if (!view) throw new MaterialError('This material view is not implemented.');
     await requireCapability(MATERIAL_VIEW_CAPABILITY[view], session);
+    if (read('existing') === '1') {
+      await assertChangeForSession(session, { lockObject: 'MATERIAL', argument: read('materialNumber') });
+    }
     const common = { client: session.user.client, materialNumber: read('materialNumber'), expectedVersion: Number(read('expectedVersion')), changedBy: session.user.username, reason: read('reason') };
     let input: MaterialInput;
     if (view === 'BASIC') input = { ...common, view, description: read('description'), materialType: read('materialType'), materialGroup: read('materialGroup'), baseUnit: read('baseUnit'),
@@ -27,7 +31,7 @@ export async function saveMaterialAction(_previous: MaterialState, form: FormDat
     revalidatePath('/inventory/materials');
     return { ok: true, message: t(result.changed ? 'material.saved' : 'material.unchanged', { status: t(`material.state.${result.status}`) }), materialNumber: result.materialNumber, status: result.status, version: result.version };
   } catch (error) {
-    if (error instanceof MaterialError || error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
+    if (error instanceof MaterialError || error instanceof AuthzError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
 }
@@ -37,6 +41,7 @@ export async function setMaterialDeletionFlagAction(_previous: MaterialState, fo
   const read = (name: string) => String(form.get(name) ?? '').trim();
   try {
     await requireCapability(MATERIAL_VIEW_CAPABILITY.BASIC, session);
+    await assertChangeForSession(session, { lockObject: 'MATERIAL', argument: read('materialNumber') });
     const scope = read('scope') === 'PLANT' ? 'PLANT' : 'CLIENT';
     const flagged = read('flagged') === 'true';
     const result = await setMaterialDeletionFlag({
@@ -58,7 +63,7 @@ export async function setMaterialDeletionFlagAction(_previous: MaterialState, fo
       materialNumber: read('materialNumber'),
     };
   } catch (error) {
-    if (error instanceof MaterialError || error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
+    if (error instanceof MaterialError || error instanceof AuthzError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
 }

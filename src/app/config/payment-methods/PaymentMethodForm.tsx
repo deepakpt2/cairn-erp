@@ -54,6 +54,7 @@ export function PaymentMethodForm({
       <form action={action} className="space-y-4">
         <input type="hidden" name="country" value={country} />
         <input type="hidden" name="expectedVersion" value={creating ? 0 : initial.version} />
+        {!creating && <input type="hidden" name="changing" value="1" />}
         <div className="grid gap-3 sm:grid-cols-2">
           <label>
             <span className="field-label">{t('pm.code')}</span>

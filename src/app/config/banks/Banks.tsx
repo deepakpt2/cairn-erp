@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type { BankCountryChoice, BankRow } from '@/modules/foundation/bank-master';
 import {
   deleteBankAction,
@@ -130,10 +131,15 @@ function RowDialogs({ row }: { row: BankRow }) {
   const keyText = `${row.bankCountry} · ${row.bankKey}`;
   const idKey = `${row.bankCountry}-${row.bankKey}`;
   const changeLabel = `${t('bank.change')} ${row.bankKey}`;
+  const argument = `${row.bankCountry.trim()}/${row.bankKey.trim()}`;
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('BANK', argument, 'CFG.FIN.BANK.DEFINE', changeOpen);
+  const deleteLock = useChangeLock('BANK', argument, 'CFG.FIN.BANK.DEFINE', deleteOpen);
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('bank.change')}
         </summary>
@@ -160,7 +166,8 @@ function RowDialogs({ row }: { row: BankRow }) {
                   <input id={`bank-swift-${idKey}`} name="swift" className="field-input code" maxLength={11} defaultValue={row.swift ?? ''} />
                 </div>
                 <BankMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || changeLock?.mode !== 'CHANGE'}>
                   {t('bank.save')}
                 </button>
               </form>
@@ -169,7 +176,7 @@ function RowDialogs({ row }: { row: BankRow }) {
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('bank.delete')}
         </summary>
@@ -182,7 +189,8 @@ function RowDialogs({ row }: { row: BankRow }) {
                 <input type="hidden" name="bankKey" value={row.bankKey} />
                 <p className="text-sm text-ink-soft">{t('bank.deleteNote')}</p>
                 <BankMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || deleteLock?.mode !== 'CHANGE'}>
                   {t('bank.delete')}
                 </button>
               </form>

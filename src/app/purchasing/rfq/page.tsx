@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   RFQ_CAPABILITY,
@@ -40,6 +42,14 @@ export default async function PurchasingRfqPage({ searchParams }: {
     : null;
   const selectedRequest = requestedRequest || resolved?.rfqNumber || '';
   const recent = await listRecentRequestsForQuotation(session.user.client);
+  const canMaintain = can(session, RFQ_CAPABILITY);
+  const changeLock = opened && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'RFQ_EVENT',
+        argument: opened.eventNumber,
+        transactionCode: 'ME42',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -61,13 +71,17 @@ export default async function PurchasingRfqPage({ searchParams }: {
       {/* The loaded time is not part of this key. A header save changes it, and
           remounting here would discard the result the user is waiting to read.
           The change form refreshes its own fields from that time. */}
+      {changeLock?.mode === 'CHANGE' && opened && (
+        <ChangeLock lockObject="RFQ_EVENT" argument={opened.eventNumber} />
+      )}
       <RequestForQuotation
         key={`${requestedEvent}:${selectedRequest}`}
         opened={opened}
         requestedEvent={typed && !opened ? typed : requestedEvent}
         selectedRequest={selectedRequest}
         recent={recent}
-        canMaintain={can(session, RFQ_CAPABILITY)}
+        canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
+        lockMessage={changeLock ? displayOnlyMessage(changeLock) : null}
       />
     </div>
   );

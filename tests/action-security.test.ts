@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { sql } from 'drizzle-orm';
 import type { SessionContext } from '@/platform/auth/session';
+import { openForChange } from '@/platform/lock/enqueue';
 import { createTenant, destroyTenant, withTenant, closeDb, type TestTenant } from './helpers';
 import { maintainNumberRange, listNumberRanges } from '@/modules/foundation/number-ranges';
 
@@ -40,14 +41,32 @@ let alpha: TestTenant; let beta: TestTenant;
 const year = new Date().getUTCFullYear();
 beforeAll(async () => {
   alpha = await createTenant('action-alpha'); beta = await createTenant('action-beta');
+  await withTenant(alpha.client, (tx) => tx.execute(sql`
+    insert into app_user (id, client, username, full_name, password_hash, is_active, is_locked, created_by)
+    values ('action-user', ${alpha.client}, 'real.operator', 'Real Operator', 'test-hash', true, false, 'TEST')
+  `));
+  await withTenant(alpha.client, (tx) => tx.execute(sql`
+    insert into user_session (id, client, user_id, token_hash, issued_at, expires_at)
+    values ('action-security-session', ${alpha.client}, 'action-user', 'action-security-token', now(), now() + interval '8 hours')
+  `));
   await maintainNumberRange({ client: alpha.client, objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CREATE', changedBy: 'TEST', reason: 'Action test setup' });
 });
 afterAll(async () => { await destroyTenant(alpha.client); await destroyTenant(beta.client); await closeDb(); });
 function signedIn(capabilities = ['*']) {
-  request.session = { user: { client: alpha.client, userId: 'action-user', username: 'real.operator', fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities }, expiresAt: new Date(Date.now() + 100000), renewed: false };
+  request.session = { sessionId: 'action-security-session', user: { client: alpha.client, userId: 'action-user', username: 'real.operator', fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities }, expiresAt: new Date(Date.now() + 100000), renewed: false };
 }
 function form(values: Record<string, string>) {
   const data = new FormData(); for (const [k, v] of Object.entries(values)) data.set(k, v); return data;
+}
+async function hold(lockObject: string, argument: string) {
+  await openForChange({
+    client: alpha.client,
+    sessionId: 'action-security-session',
+    username: 'real.operator',
+    lockObject,
+    argument,
+    transactionCode: 'ACTION.SECURITY',
+  });
 }
 function periodForm() { return form({ client: beta.client, changedBy: 'FORGED', variant: 'C001', accountType: 'S', periodFrom: '1', periodTo: '11', allowSpecialPeriods: 'on' }); }
 function rangeForm() { return form({ client: beta.client, changedBy: 'FORGED', objectCode: 'RF_BELEG', companyCode: '1000', subObject: 'GENERAL', fiscalYear: '0', prefix: 'JE', fromNumber: '1', toNumber: '1000000', numberLength: '6', displayStyle: 'READABLE', status: 'ACTIVE', mode: 'CHANGE', reason: 'Security verification' }); }
@@ -57,6 +76,7 @@ describe('server action security', () => {
   it('derives customer accounting tenant/actor and ignores a forged chart',async()=>{
     signedIn();const general=form({partnerNumber:'SEC-CUSTOMER',category:'ORGANIZATION',name:'Security customer',country:'KW',city:'Kuwait City',roles:'CUSTOMER',expectedVersion:'0',reason:'Customer action setup'});
     expect((await savePartnerAction({ok:true},general)).ok).toBe(true);
+    await hold('CUSTOMER_COMPANY', 'SEC-CUSTOMER/1000');
     const data=form({client:beta.client,changedBy:'FORGED',chartOfAccounts:'WRONG',partnerNumber:'SEC-CUSTOMER',companyCode:'1000',reconciliationAccount:'110000',paymentTermsCode:'NET30',paymentMethods:'t, c',dunningProcedure:'ma04',interestIndicator:'i1',toleranceGroup:'t1',expectedVersion:'0',reason:'Customer company security test'});
     expect((await saveCustomerCompanyAction({ok:true},data)).ok).toBe(true);
     const customerCompany=await getCustomerCompany(alpha.client,'SEC-CUSTOMER','1000');
@@ -76,7 +96,9 @@ describe('server action security', () => {
     expect((await saveCustomerCompanyAction({ok:true},data)).message).toContain('FIN.CUSTOMER.COMPANY.MAINTAIN');
   });
   it('derives customer sales-area tenant/actor and normalises posted codes',async()=>{
-    signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-CUSTOMER',salesOrg:'1000',distributionChannel:'01',division:'01',deliveringPlant:'1000',pricingProcedure:'rvaa01',salesDistrict:'kw01',completeDelivery:'on',expectedVersion:'0',reason:'Customer sales-area security test'});
+    signedIn();
+    await hold('CUSTOMER_SALES_AREA', 'SEC-CUSTOMER/1000/01/01');
+    const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-CUSTOMER',salesOrg:'1000',distributionChannel:'01',division:'01',deliveringPlant:'1000',pricingProcedure:'rvaa01',salesDistrict:'kw01',completeDelivery:'on',expectedVersion:'0',reason:'Customer sales-area security test'});
     expect((await saveCustomerSalesAreaAction({ok:true},data)).ok).toBe(true);
     const row=await getCustomerSalesArea(alpha.client,'SEC-CUSTOMER','1000','01','01');
     expect(row?.createdBy).toBe('real.operator');expect(row?.pricingProcedure).toBe('RVAA01');expect(row?.salesDistrict).toBe('KW01');expect(row?.completeDelivery).toBe(true);
@@ -109,6 +131,7 @@ describe('server action security', () => {
   });
   it('derives supplier company tenant/actor and ignores submitted chart',async()=>{
     signedIn();
+    await hold('SUPPLIER_COMPANY', 'SEC-PARTNER/1000');
     const data=form({client:beta.client,changedBy:'FORGED',chartOfAccounts:'WRONG',partnerNumber:'SEC-PARTNER',companyCode:'1000',reconciliationAccount:'200000',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Company security test'});
     // General partner is created by the earlier real general action security test.
     expect((await saveSupplierCompanyAction({ok:true},data)).ok).toBe(true);
@@ -124,7 +147,9 @@ describe('server action security', () => {
     request.session=null;await expect(saveSupplierCompanyAction({ok:true},new FormData())).rejects.toThrow('AUTH_REDIRECT');
   });
   it('derives supplier purchasing tenant/actor from session, ignoring forged fields',async()=>{
-    signedIn();const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',orderCurrency:'USD',purchasingGroup:'001',incotermsCode:'FCA',incotermsLocation:'Kuwait City',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Purchasing action security test'});
+    signedIn();
+    await hold('SUPPLIER_PURCHASING', 'SEC-PARTNER/1000');
+    const data=form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',orderCurrency:'USD',purchasingGroup:'001',incotermsCode:'FCA',incotermsLocation:'Kuwait City',paymentTermsCode:'NET30',expectedVersion:'0',reason:'Purchasing action security test'});
     expect((await saveSupplierPurchasingAction({ok:true},data)).ok).toBe(true);
     expect((await getSupplierPurchasing(alpha.client,'SEC-PARTNER','1000'))?.createdBy).toBe('real.operator');
     expect(await getSupplierPurchasing(beta.client,'SEC-PARTNER','1000')).toBeNull();
@@ -141,6 +166,7 @@ describe('server action security', () => {
     signedIn();
     const related = form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-RELATED',category:'ORGANIZATION',name:'Security related supplier',country:'KW',city:'Kuwait City',roles:'SUPPLIER',expectedVersion:'0',reason:'Partner function action setup'});
     expect((await savePartnerAction({ok:true},related)).ok).toBe(true);
+    await hold('SUPPLIER_PURCHASING', 'SEC-PARTNER/1000');
     const data = form({client:beta.client,changedBy:'FORGED',partnerNumber:'SEC-PARTNER',purchasingOrg:'1000',functionCode:'ORDERING_PARTNER',assignedPartnerNumber:'SEC-RELATED',expectedVersion:'0',isDefault:'false',reason:'Partner function action security test'});
     expect(await saveSupplierPurchasingPartnerAction({ok:true},data)).toMatchObject({ok:true,changed:true,version:1,isDefault:false});
     const row = await withTenant(alpha.client,tx=>tx.execute(sql`select created_by from supplier_purchasing_partner where partner_number='SEC-PARTNER' and assigned_partner_number='SEC-RELATED'`));

@@ -3,8 +3,9 @@
 /** FIN.CREDIT.MAINTAIN — authenticate, authorise, save credit data (SCR-103). */
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { CREDIT_CAPABILITY, CreditError, saveCustomerCredit } from '@/modules/finance/credit';
+import { CREDIT_CAPABILITY, CreditError, getCustomerCredit, saveCustomerCredit } from '@/modules/finance/credit';
 import { requireCapability, requireSession, AuthzError } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const PATH = '/finance/credit';
 
@@ -24,6 +25,10 @@ export async function saveCreditAction(_previous: CreditState, formData: FormDat
   const area = read('area').toUpperCase();
   try {
     await requireCapability(CREDIT_CAPABILITY, session);
+    const standing = await getCustomerCredit(session.user.client, customer, area);
+    if (standing) {
+      await assertChangeForSession(session, { lockObject: 'CUSTOMER_CREDIT', argument: `${customer}/${area}` });
+    }
     const view = await saveCustomerCredit({
       client: session.user.client, changedBy: session.user.username,
       customer, creditControlArea: area,
@@ -42,7 +47,7 @@ export async function saveCreditAction(_previous: CreditState, formData: FormDat
       message: `Credit data for ${view.customer} in ${view.creditControlArea} saved (limit ${view.creditLimit.toFixed(2)} ${view.creditCurrency}, version ${view.version}).`,
     };
   } catch (error) {
-    if (error instanceof CreditError || error instanceof AuthzError) {
+    if (error instanceof EnqueueError || error instanceof CreditError || error instanceof AuthzError) {
       return { ok: false, message: error.message, remedy: (error as { remedy?: string }).remedy };
     }
     console.error('Credit save failed', error);

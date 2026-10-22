@@ -2,6 +2,8 @@
 
 import { useActionState, useEffect, useState } from 'react';
 
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
+
 import { t } from '@/platform/i18n';
 import {
   checkPostingAction,
@@ -15,6 +17,50 @@ const ROUTE = '/inventory/physical-inventory-posting';
 
 function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** One material document. The lock is taken when this confirm opens, not for every history row. */
+function ReversePosting({
+  number,
+  today,
+  reverseKey,
+  action,
+  reversing,
+}: {
+  number: string;
+  today: string;
+  reverseKey: string;
+  action: (payload: FormData) => void;
+  reversing: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('MATERIAL_DOCUMENT', number, 'INV.REVERSE', open);
+  const held = lock?.mode === 'CHANGE';
+  return (
+    <details className="mt-2" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="cursor-pointer text-sm text-accent">{t('diffpost.reverse')}</summary>
+      <form action={action} className="mt-2 flex flex-wrap items-end gap-3">
+        <input type="hidden" name="materialDocumentNumber" value={number} />
+        <input type="hidden" name="requestKey" value={reverseKey} />
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.postingDate')}</span>
+          <input type="date" name="postingDate" className="input" defaultValue={today} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.documentDate')}</span>
+          <input type="date" name="documentDate" className="input" defaultValue={today} />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.headerText')}</span>
+          <input name="headerText" className="input w-44" />
+        </label>
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={reversing || !held}>
+          {reversing ? t('diffpost.reversing') : t('diffpost.reverse')}
+        </button>
+      </form>
+    </details>
+  );
 }
 
 export interface PostingLineView {
@@ -57,6 +103,7 @@ export default function PostingWorkbench({
   requestedNumber,
   requestedYear,
   canPost,
+  displayOnly = false,
   canReverse,
   today,
 }: {
@@ -65,6 +112,7 @@ export default function PostingWorkbench({
   requestedNumber: string;
   requestedYear: string;
   canPost: boolean;
+  displayOnly?: boolean;
   canReverse: boolean;
   today: string;
 }) {
@@ -73,6 +121,7 @@ export default function PostingWorkbench({
   const [reverseState, reverseAction, reversing] = useActionState(reversePostingAction, INITIAL);
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const [reverseKey, setReverseKey] = useState(newRequestKey);
+  const writable = canPost && !displayOnly;
   const [selected, setSelected] = useState<number[]>([]);
 
   useEffect(() => {
@@ -155,7 +204,7 @@ export default function PostingWorkbench({
                           name="item"
                           value={line.itemNumber}
                           checked={selected.includes(line.itemNumber)}
-                          disabled={!canPost || !line.eligible}
+                          disabled={!writable || !line.eligible}
                           onChange={(event) => {
                             setSelected((current) => event.target.checked
                               ? [...current, line.itemNumber]
@@ -183,7 +232,7 @@ export default function PostingWorkbench({
               <button
                 type="button"
                 className="btn btn-default min-h-11 sm:min-h-8"
-                disabled={!canPost || eligible.length === 0}
+                disabled={!writable || eligible.length === 0}
                 onClick={() => setSelected(eligible.map((line) => line.itemNumber))}
               >
                 {t('diffpost.selectEligible')}
@@ -215,7 +264,7 @@ export default function PostingWorkbench({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting || selected.length === 0}>
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!writable || posting || selected.length === 0}>
                 {posting ? t('diffpost.posting') : t('diffpost.post')}
               </button>
               <button
@@ -223,7 +272,7 @@ export default function PostingWorkbench({
                 formAction={checkAction}
                 data-posting-check
                 className="btn btn-default min-h-11 sm:min-h-8"
-                disabled={!canPost || checking || selected.length === 0}
+                disabled={!writable || checking || selected.length === 0}
               >
                 {checking ? t('diffpost.checking') : t('diffpost.check')}
               </button>
@@ -319,25 +368,13 @@ export default function PostingWorkbench({
                     </tbody>
                   </table>
                   {open && canReverse && (
-                    <form action={reverseAction} className="mt-2 flex flex-wrap items-end gap-3">
-                      <input type="hidden" name="materialDocumentNumber" value={number} />
-                      <input type="hidden" name="requestKey" value={reverseKey} />
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.postingDate')}</span>
-                        <input type="date" name="postingDate" className="input" defaultValue={today} />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.documentDate')}</span>
-                        <input type="date" name="documentDate" className="input" defaultValue={today} />
-                      </label>
-                      <label className="block">
-                        <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.headerText')}</span>
-                        <input name="headerText" className="input w-44" />
-                      </label>
-                      <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={reversing}>
-                        {reversing ? t('diffpost.reversing') : t('diffpost.reverse')}
-                      </button>
-                    </form>
+                    <ReversePosting
+                      number={number}
+                      today={today}
+                      reverseKey={reverseKey}
+                      action={reverseAction}
+                      reversing={reversing}
+                    />
                   )}
                   {open && !canReverse && <p className="mt-2 text-xs text-ink-faint">{t('diffpost.reverseMissing')}</p>}
                 </div>

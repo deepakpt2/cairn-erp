@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { periodWindows } from '@/platform/periods/windows';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type { FiscalYearVariantRow } from '@/modules/foundation/fiscal-year-variant-maintenance';
 import {
   saveFiscalYearPeriodsAction,
@@ -50,11 +51,13 @@ export function FiscalYearVariantForm({
   initial,
   variants,
   canMaintain,
+  submitDisabled = false,
 }: {
   mode: 'CREATE' | 'CHANGE';
   initial?: FiscalYearVariantRow;
   variants: FiscalYearVariantRow[];
   canMaintain: boolean;
+  submitDisabled?: boolean;
 }) {
   const editing = mode === 'CHANGE' && initial !== undefined;
   const [variant, setVariant] = useState(initial?.variant ?? '');
@@ -94,7 +97,7 @@ export function FiscalYearVariantForm({
   if (!reason.trim()) problems.push(t('fiscalYearVariant.reasonRequired'));
 
   const locked = !canMaintain || pending;
-  const canSubmit = canMaintain && !pending && problems.length === 0;
+  const canSubmit = canMaintain && !pending && problems.length === 0 && !submitDisabled;
 
   return (
     <form action={formAction} className="space-y-3">
@@ -326,59 +329,14 @@ export function FiscalYearVariantList({
                     <td>
                       <div className="flex flex-wrap gap-2">
                         {row.isActive && (
-                          <details className="min-w-28">
-                            <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
-                              {t('fiscalYearVariant.change')}
-                            </summary>
-                            <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
-                              <div className="mx-auto max-w-3xl">
-                                <DialogHeader
-                                  code={row.variant}
-                                  label={`${t('fiscalYearVariant.change')} ${row.variant}`}
-                                />
-                                <section className="panel overflow-hidden p-4">
-                                  <FiscalYearVariantForm
-                                    mode="CHANGE"
-                                    initial={row}
-                                    variants={variants}
-                                    canMaintain={canMaintain}
-                                  />
-                                </section>
-                              </div>
-                            </div>
-                          </details>
+                          <FiscalYearChangeDialog row={row} variants={variants} canMaintain={canMaintain} />
                         )}
                         <VariantLifecycleControl row={row} />
                       </div>
                     </td>
                   )}
                   <td>
-                    <details className="text-sm">
-                      <summary className="min-h-11 cursor-pointer select-none py-2 font-medium text-accent hover:underline sm:min-h-9">
-                        {t('fiscalYearVariant.showPeriods')}
-                      </summary>
-                      {/* The period form opens on top of the list, like Change and the
-                          lifecycle control, instead of expanding inside this narrow
-                          table cell where the grid was squeezed to the side. */}
-                      <div
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={`${t('fiscalYearVariant.periods')} ${row.variant}`}
-                        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
-                      >
-                        <div className="mx-auto max-w-3xl">
-                          <DialogHeader
-                            code={row.variant}
-                            label={`${t('fiscalYearVariant.periods')} · ${row.variant}`}
-                          />
-                          <section className="panel overflow-hidden p-4">
-                            <div className="overflow-x-auto">
-                              <PeriodPanel row={row} canMaintain={canMaintain} />
-                            </div>
-                          </section>
-                        </div>
-                      </div>
-                    </details>
+                    <FiscalYearPeriodDialog row={row} canMaintain={canMaintain} />
                   </td>
                 </tr>
               ))}
@@ -417,10 +375,12 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
     { ok: true },
   );
   const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('FISCAL_YEAR_VARIANT', row.variant.trim(), 'CFG.FIN.FYV.DEFINE', open);
   const label = `${row.isActive ? t('fiscalYearVariant.deactivate') : t('fiscalYearVariant.reactivate')} ${row.variant}`;
 
   return (
-    <details className="min-w-32">
+    <details className="min-w-32" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {row.isActive ? t('fiscalYearVariant.deactivate') : t('fiscalYearVariant.reactivate')}
       </summary>
@@ -433,6 +393,7 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
             </div>
             <div className="space-y-3 p-4">
               <ActionMessage state={state} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
               <form action={formAction} className="space-y-3">
                 <input type="hidden" name="variant" value={row.variant} />
                 <input type="hidden" name="isActive" value={row.isActive ? 'false' : 'true'} />
@@ -461,7 +422,7 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={pending || !reason.trim()}
+                  disabled={pending || !reason.trim() || lock?.mode !== 'CHANGE'}
                 >
                   {pending
                     ? t('common.saving')
@@ -481,7 +442,15 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
 /** The same date shape the read side stores its derived windows in. */
 const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
-function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaintain: boolean }) {
+function PeriodPanel({
+  row,
+  canMaintain,
+  submitDisabled = false,
+}: {
+  row: FiscalYearVariantRow;
+  canMaintain: boolean;
+  submitDisabled?: boolean;
+}) {
   const thisYear = new Date().getFullYear();
   const maintainedYears = row.years.filter((year) => year !== 0);
   const [year, setYear] = useState(
@@ -709,7 +678,7 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
-          <button type="submit" className="btn-primary" disabled={pending || !reason.trim()}>
+          <button type="submit" className="btn-primary" disabled={pending || !reason.trim() || submitDisabled}>
             {pending ? t('common.saving') : t('fiscalYearVariant.periodSave')}
           </button>
         </form>
@@ -722,5 +691,72 @@ function PeriodPanel({ row, canMaintain }: { row: FiscalYearVariantRow; canMaint
         </>
       )}
     </div>
+  );
+}
+
+function FiscalYearChangeDialog({
+  row,
+  variants,
+  canMaintain,
+}: {
+  row: FiscalYearVariantRow;
+  variants: FiscalYearVariantRow[];
+  canMaintain: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('FISCAL_YEAR_VARIANT', row.variant.trim(), 'CFG.FIN.FYV.DEFINE', open);
+  return (
+    <details className="min-w-28" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        {t('fiscalYearVariant.change')}
+      </summary>
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div className="mx-auto max-w-3xl">
+          <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.change')} ${row.variant}`} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <section className="panel overflow-hidden p-4">
+            <FiscalYearVariantForm
+              mode="CHANGE"
+              initial={row}
+              variants={variants}
+              canMaintain={canMaintain}
+              submitDisabled={lock?.mode !== 'CHANGE'}
+            />
+          </section>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function FiscalYearPeriodDialog({ row, canMaintain }: { row: FiscalYearVariantRow; canMaintain: boolean }) {
+  const [open, setOpen] = useState(false);
+  const writes = canMaintain && row.isActive && !row.isCalendarYear;
+  const lock = useChangeLock('FISCAL_YEAR_VARIANT', row.variant.trim(), 'CFG.FIN.FYV.DEFINE', open && writes);
+  return (
+    <details className="text-sm" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 font-medium text-accent hover:underline sm:min-h-9">
+        {t('fiscalYearVariant.showPeriods')}
+      </summary>
+      {/* The period form opens on top of the list, like Change and the
+          lifecycle control, instead of expanding inside this narrow
+          table cell where the grid was squeezed to the side. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${t('fiscalYearVariant.periods')} ${row.variant}`}
+        className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6"
+      >
+        <div className="mx-auto max-w-3xl">
+          <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.periods')} · ${row.variant}`} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <section className="panel overflow-hidden p-4">
+            <div className="overflow-x-auto">
+              <PeriodPanel row={row} canMaintain={canMaintain} submitDisabled={writes && lock?.mode !== 'CHANGE'} />
+            </div>
+          </section>
+        </div>
+      </div>
+    </details>
   );
 }

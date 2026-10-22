@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import {
   PHYSICAL_INVENTORY_RECOUNT_CAPABILITY,
   PHYSICAL_INVENTORY_RECOUNT_ROUTE,
@@ -35,6 +37,15 @@ export default async function PhysicalInventoryRecountPage({ searchParams }: {
     ? await getRecountSource(session.user.client, { documentNumber, fiscalYear })
     : null;
   const today = new Date().toISOString().slice(0, 10);
+  const canRecount = can(session, PHYSICAL_INVENTORY_RECOUNT_CAPABILITY);
+  const recountKey = document ? `${document.documentNumber.trim()}/${document.fiscalYear}` : '';
+  const changeLock = document && canRecount
+    ? await openChangeForSession(session, {
+        lockObject: 'PHYSICAL_INVENTORY',
+        argument: recountKey,
+        transactionCode: 'INV.PHYINV.RECOUNT',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -58,11 +69,16 @@ export default async function PhysicalInventoryRecountPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('recount.subtitle')}</p>
       </header>
 
+      {document && changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={recountKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       <RecountWorkbench
         document={document}
         requestedNumber={documentNumber}
         requestedYear={last(params.year)}
-        canRecount={can(session, PHYSICAL_INVENTORY_RECOUNT_CAPABILITY)}
+        canRecount={canRecount}
+        displayOnly={changeLock?.mode === 'DISPLAY'}
         today={today}
       />
     </div>

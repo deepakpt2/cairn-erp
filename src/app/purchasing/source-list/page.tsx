@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   SOURCE_LIST_CAPABILITY,
@@ -43,6 +45,14 @@ export default async function PurchasingSourceListPage({ searchParams }: {
     ? await getSourceList(session.user.client, materialNumber, plantCode)
     : null;
   const recent = await listRecentSourceEntries(session.user.client);
+  const canMaintain = can(session, SOURCE_LIST_CAPABILITY);
+  const changeLock = opened && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'SOURCE_LIST',
+        argument: opened.sourceNumber,
+        transactionCode: 'PROC.SOURCE.LIST.MAINTAIN',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -60,6 +70,10 @@ export default async function PurchasingSourceListPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('sourceList.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && opened && (
+        <ChangeLock lockObject="SOURCE_LIST" argument={opened.sourceNumber} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <SourceListWorkbench
         key={`${requestedSource}|${requestedMaterial}|${requestedPlant}|${requestedOrg}`}
         list={list}
@@ -69,7 +83,7 @@ export default async function PurchasingSourceListPage({ searchParams }: {
         requestedPlant={requestedPlant}
         requestedOrg={requestedOrg}
         recent={recent}
-        canMaintain={can(session, SOURCE_LIST_CAPABILITY)}
+        canMaintain={canMaintain && changeLock?.mode !== 'DISPLAY'}
       />
     </div>
   );

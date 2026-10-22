@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   SOURCE_LIST_CAPABILITY,
   SOURCE_LIST_ROUTE,
@@ -56,7 +57,7 @@ function missing(): SourceListActionState {
 }
 
 function refused(caught: unknown): SourceListActionState | null {
-  if (caught instanceof SourceListError) {
+  if (caught instanceof SourceListError || caught instanceof EnqueueError) {
     return { ok: false, message: caught.message, remedy: caught.remedy };
   }
   return null;
@@ -210,6 +211,7 @@ export async function changeSourceListAction(
   if (stop) return stop;
   const intent = text(form, 'intent') || 'change';
   try {
+    await assertChangeForSession(session, { lockObject: 'SOURCE_LIST', argument: text(form, 'sourceNumber') });
     const changed = await changeSourceListEntry(
       changeInput(form, session.user.client, session.user.username, intent),
     );

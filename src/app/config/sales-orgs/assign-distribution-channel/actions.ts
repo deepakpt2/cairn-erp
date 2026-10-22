@@ -3,6 +3,7 @@
 /** Capability-protected OVXK Sales Organization ↔ Distribution Channel assignment. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   assignSalesOrgDistributionChannel,
   SalesOrgDistributionChannelAssignmentError,
@@ -105,6 +106,10 @@ export async function unassignSalesOrgDistributionChannelAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, {
+      lockObject: 'SALES_ORG_CHANNEL',
+      argument: `${salesOrg}/${distributionChannel}`,
+    });
     const result = await unassignSalesOrgDistributionChannel({
       client: session.user.client,
       changedBy: session.user.username,
@@ -127,6 +132,9 @@ export async function unassignSalesOrgDistributionChannelAction(
       distributionChannel: result.distributionChannel,
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy, salesOrg, distributionChannel };
+    }
     if (error instanceof SalesOrgDistributionChannelAssignmentError || error instanceof AuthzError) {
       return failure(error, 'removal', salesOrg, distributionChannel);
     }

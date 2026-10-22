@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import {
   PHYSICAL_INVENTORY_COUNT_CAPABILITY,
   PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY,
@@ -58,6 +60,16 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
     : [];
   const documents = await searchCountDocuments(client);
   const today = new Date().toISOString().slice(0, 10);
+  const countKey = document ? `${document.documentNumber.trim()}/${document.fiscalYear}` : '';
+  const canEnter = can(session, PHYSICAL_INVENTORY_COUNT_CAPABILITY)
+    || can(session, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY);
+  const changeLock = document && canEnter
+    ? await openChangeForSession(session, {
+        lockObject: 'PHYSICAL_INVENTORY',
+        argument: countKey,
+        transactionCode: 'INV.PHYINV.COUNT',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -148,12 +160,17 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
         )}
       </section>
 
+      {document && changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={countKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       {document && (
         <CountWorkbench
           document={document}
           history={history}
           canCount={can(session, PHYSICAL_INVENTORY_COUNT_CAPABILITY)}
           canCorrect={can(session, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY)}
+          displayOnly={changeLock?.mode === 'DISPLAY'}
           today={today}
         />
       )}

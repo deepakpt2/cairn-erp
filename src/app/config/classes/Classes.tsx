@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { ClassChoices, ClassRow } from '@/modules/foundation/class-definition';
 import {
@@ -80,6 +81,14 @@ export default function Classes({ data, canMaintain }: {
     | { kind: 'delete'; row: ClassRow }
     | null
   >(null);
+  const changing = editor.mode === 'CHANGE';
+  const changeLock = useChangeLock('CLASS', `${editor.classType.trim()}/${editor.className.trim()}`, 'CFG.PROC.CLASS.DEFINE', changing);
+  const dialogLock = useChangeLock(
+    'CLASS',
+    dialog ? `${dialog.row.classType.trim()}/${dialog.row.className.trim()}` : '',
+    'CFG.PROC.CLASS.DEFINE',
+    Boolean(dialog),
+  );
 
   const state = deleteState.message ? deleteState : statusState.message ? statusState : saveState;
 
@@ -239,7 +248,8 @@ export default function Classes({ data, canMaintain }: {
                 <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
                   onClick={() => setEditor(EMPTY_EDITOR)}>New class</button>
               )}
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving}>
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || (changing && changeLock?.mode !== 'CHANGE')}>
                 Save class
               </button>
             </div>
@@ -261,7 +271,8 @@ export default function Classes({ data, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>
                 {dialog.status === 'ACTIVE' ? 'Activate' : 'Block'}
               </button>
             </div>
@@ -279,7 +290,8 @@ export default function Classes({ data, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Delete</button>
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>Delete</button>
             </div>
           </form>
         </DialogShell>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState, useState } from 'react';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 import type { NumberRangeObjectRow } from '@/modules/foundation/number-ranges';
 import {
@@ -35,6 +36,12 @@ export default function NumberRangeObjects({
   canMaintain: boolean;
 }) {
   const [selected, setSelected] = useState<NumberRangeObjectRow | null>(null);
+  const objectLock = useChangeLock(
+    'NUMBER_RANGE_OBJECT',
+    selected?.objectCode ?? '',
+    'CFG.PLT.NUMBERRANGE.DEFINE',
+    Boolean(selected),
+  );
   const [state, formAction, pending] = useActionState<
     NumberRangeObjectActionState,
     FormData
@@ -183,7 +190,8 @@ export default function NumberRangeObjects({
               this form maintains the facts applications and interval screens read.
             </p>
             <div className="flex gap-2">
-              <button type="submit" className="btn btn-primary" disabled={pending}>
+              <LockNotice message={objectLock?.mode === 'DISPLAY' ? objectLock.message : null} />
+              <button type="submit" className="btn btn-primary" disabled={pending || objectLock?.mode !== 'CHANGE'}>
                 Save changes
               </button>
               <button

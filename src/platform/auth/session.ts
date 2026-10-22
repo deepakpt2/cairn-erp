@@ -387,6 +387,8 @@ export async function createSession(
 export interface SessionContext {
   user: AuthenticatedUser;
   expiresAt: Date;
+  /** The server session that holds a dialog enqueue. Absent only on a fixture. */
+  sessionId?: string;
   /** True when this request extended the session, so the caller refreshes the cookie. */
   renewed: boolean;
 }
@@ -426,6 +428,7 @@ export async function resolveSession(
        and s.token_hash = ${hashToken(input.token)}
      limit 1
   `)) as unknown as Array<{
+    session_id: string;
     user_id: string;
     expires_at: string | Date;
     revoked_at: string | Date | null;
@@ -472,6 +475,7 @@ export async function resolveSession(
         logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
         capabilities: await loadCapabilities(tx, input.client, row.user_id),
       },
+      sessionId: row.session_id,
       expiresAt: next,
       renewed,
     };
@@ -488,6 +492,7 @@ export async function resolveSession(
       logonLanguage: logonLanguageKeyFromPreferences(row.preferences),
       capabilities: await loadCapabilities(tx, input.client, row.user_id),
     },
+    sessionId: row.session_id,
     expiresAt,
     renewed,
   };
@@ -498,6 +503,13 @@ export async function revokeSession(
   tx: Tx,
   input: { client: string; token: string; username?: string | null },
 ): Promise<void> {
+  await tx.execute(sql`
+    delete from enqueue_entry e
+     using user_session s
+     where e.owner_session_id = s.id
+       and s.client = ${input.client}
+       and s.token_hash = ${hashToken(input.token)}
+  `);
   await tx.execute(sql`
     update user_session
        set revoked_at = now()
@@ -519,6 +531,14 @@ export async function revokeAllSessions(
   tx: Tx,
   input: { client: string; userId: string; reason: string },
 ): Promise<number> {
+  await tx.execute(sql`
+    delete from enqueue_entry e
+     using user_session s
+     where e.owner_session_id = s.id
+       and s.client = ${input.client}
+       and s.user_id = ${input.userId}
+       and s.revoked_at is null
+  `);
   const result = (await tx.execute(sql`
     update user_session
        set revoked_at = now()

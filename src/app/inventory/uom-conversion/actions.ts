@@ -10,8 +10,10 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   defineUomConversion,
+  listUomConversions,
   removeUomConversion,
   UnitConversionError,
   UOM_CAPABILITY,
@@ -37,6 +39,15 @@ export async function defineConversionAction(
   }
 
   try {
+    const materialNumber = text(form, 'materialNumber');
+    const alternativeUnit = text(form, 'alternativeUnit').toUpperCase();
+    const standing = await listUomConversions(session.user.client, { materialNumber });
+    if (standing.some((row) => row.alternativeUnit.toUpperCase() === alternativeUnit)) {
+      await assertChangeForSession(session, {
+        lockObject: 'UOM_CONVERSION',
+        argument: `${materialNumber}/${alternativeUnit}`,
+      });
+    }
     await defineUomConversion({
       client: session.user.client,
       changedBy: session.user.username,
@@ -51,6 +62,7 @@ export async function defineConversionAction(
       message: `1 ${text(form, 'alternativeUnit').toUpperCase()} = ${text(form, 'numerator')}/${text(form, 'denominator')} of material ${text(form, 'materialNumber').toUpperCase()}'s base unit.`,
     };
   } catch (caught) {
+    if (caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
     if (caught instanceof UnitConversionError) {
       return { ok: false, message: caught.message, remedy: caught.remedy };
     }
@@ -73,6 +85,10 @@ export async function deleteConversionAction(
     return { ok: false, message: `You do not hold the unit conversion capability (${UOM_CAPABILITY}).` };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'UOM_CONVERSION',
+      argument: `${text(form, 'materialNumber')}/${text(form, 'alternativeUnit')}`,
+    });
     await removeUomConversion({
       client: session.user.client,
       changedBy: session.user.username,
@@ -82,6 +98,9 @@ export async function deleteConversionAction(
     revalidatePath(UOM_ROUTE);
     return { ok: true, message: `Conversion ${text(form, 'alternativeUnit')} removed.` };
   } catch (caught) {
+    if (caught instanceof EnqueueError) {
+      return { ok: false, message: caught.remedy ? `${caught.message} ${caught.remedy}` : caught.message };
+    }
     if (caught instanceof UnitConversionError) {
       return { ok: false, message: caught.message };
     }

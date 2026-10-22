@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ReleaseStrategyError,
   deleteReleaseGroup,
@@ -26,7 +27,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): ReleaseActionState {
-  if (error instanceof ReleaseStrategyError) {
+  if (error instanceof ReleaseStrategyError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -38,7 +39,11 @@ export async function saveReleaseGroupAction(
 ): Promise<ReleaseActionState> {
   const session = await requireSession(ROUTE);
   const payload = JSON.parse(read(form, 'payload') || '{}') as Record<string, unknown>;
+  const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'RELEASE_GROUP', argument: String(payload.groupCode ?? '') });
+    }
     const result = await saveReleaseGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -66,6 +71,7 @@ export async function deleteReleaseGroupAction(
 ): Promise<ReleaseActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'RELEASE_GROUP', argument: read(form, 'groupCode') });
     const result = await deleteReleaseGroup({
       client: session.user.client,
       changedBy: session.user.username,
@@ -85,11 +91,15 @@ export async function saveReleaseStrategyAction(
 ): Promise<ReleaseActionState> {
   const session = await requireSession(ROUTE);
   const payload = JSON.parse(read(form, 'payload') || '{}') as Record<string, unknown>;
+  const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'RELEASE_STRATEGY', argument: String(payload.strategyCode ?? '') });
+    }
     const result = await saveReleaseStrategy({
       client: session.user.client,
       changedBy: session.user.username,
-      mode: read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE',
+      mode,
       groupCode: String(payload.groupCode ?? ''),
       strategyCode: String(payload.strategyCode ?? ''),
       description: String(payload.description ?? ''),
@@ -120,6 +130,7 @@ export async function setReleaseStrategyStatusAction(
   const session = await requireSession(ROUTE);
   const status = read(form, 'status') === 'BLOCKED' ? 'BLOCKED' : 'ACTIVE';
   try {
+    await assertChangeForSession(session, { lockObject: 'RELEASE_STRATEGY', argument: read(form, 'strategyCode') });
     const result = await setReleaseStrategyStatus({
       client: session.user.client,
       changedBy: session.user.username,
@@ -143,6 +154,7 @@ export async function deleteReleaseStrategyAction(
 ): Promise<ReleaseActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'RELEASE_STRATEGY', argument: read(form, 'strategyCode') });
     const result = await deleteReleaseStrategy({
       client: session.user.client,
       changedBy: session.user.username,

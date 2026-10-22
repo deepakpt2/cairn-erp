@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ACTIVITY,
   DocumentTypeError,
@@ -37,6 +38,7 @@ function mapDocTypeError(error: unknown): DocumentTypeActionState {
   if (error instanceof DocumentTypeError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -70,6 +72,9 @@ export async function saveDocumentTypeAction(
     await requireCapability(ACTIVITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'DOCUMENT_TYPE', argument: read(form, 'documentType') });
+    }
     const result = await saveDocumentType({
       client: session.user.client,
       changedBy: session.user.username,
@@ -114,6 +119,7 @@ export async function setDocumentTypeActiveAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, { lockObject: 'DOCUMENT_TYPE', argument: read(form, 'documentType') });
 
     const active = read(form, 'active') === 'true';
     const result = await setDocumentTypeActive({
@@ -149,6 +155,7 @@ export async function deleteDocumentTypeAction(
     await requireCapability(ACTIVITY, session);
 
     const code = read(form, 'documentType');
+    await assertChangeForSession(session, { lockObject: 'DOCUMENT_TYPE', argument: code });
     await deleteDocumentType({
       client: session.user.client,
       changedBy: session.user.username,

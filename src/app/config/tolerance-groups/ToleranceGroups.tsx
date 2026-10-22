@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type {
   CompanyChoice,
   EmployeeToleranceGroupRow,
@@ -172,9 +173,12 @@ function ChangeDialog({ row }: { row: EmployeeToleranceGroupRow }) {
   );
   const keySuffix = `${row.companyCode || 'ALL'}-${row.groupKey || 'DEFAULT'}`;
   const label = `${groupLabel(row.groupKey)} · ${scopeLabel(row.companyCode)}`;
+  const argument = `${row.companyCode.trim()}/${row.groupKey.trim()}`;
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('TOLERANCE_GROUP', argument, 'CFG.FIN.TOLERANCE.DEFINE', open);
 
   return (
-    <details className="min-w-16">
+    <details className="min-w-16" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
         {t('tolGroup.change')}
       </summary>
@@ -204,7 +208,8 @@ function ChangeDialog({ row }: { row: EmployeeToleranceGroupRow }) {
               <LimitFields idPrefix={`tol-group-${keySuffix}`} row={row} />
               <ReasonField id={`tol-group-change-reason-${keySuffix}`} value={reason} onChange={setReason} />
               <TolMessage state={state} />
-              <button type="submit" className="btn-primary" disabled={pending || !reason.trim()}>
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <button type="submit" className="btn-primary" disabled={pending || !reason.trim() || lock?.mode !== 'CHANGE'}>
                 {t('tolGroup.save')}
               </button>
             </form>

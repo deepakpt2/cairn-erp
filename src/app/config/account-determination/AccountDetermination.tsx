@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type {
   AccountDeterminationRow,
   ChartChoice,
@@ -196,10 +197,15 @@ function RowDialogs({
   );
   const keySuffix = `${row.chartOfAccounts}-${row.event}-${row.valuationClass || 'ANY'}-${row.generalModifier || 'NONE'}`;
   const sub = `${row.chartOfAccounts} · ${row.event}`;
+  const argument = [row.chartOfAccounts, row.event, row.valuationClass, row.generalModifier].map((part) => part.trim()).join('/');
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const changeLock = useChangeLock('ACCOUNT_DETERMINATION', argument, 'CFG.FIN.ACCTDET.DEFINE', changeOpen);
+  const deleteLock = useChangeLock('ACCOUNT_DETERMINATION', argument, 'CFG.FIN.ACCTDET.DEFINE', deleteOpen);
 
   return (
     <div className="flex gap-3">
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setChangeOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
           {t('acctDet.change')}
         </summary>
@@ -213,7 +219,8 @@ function RowDialogs({
                 <DeterminationFields idPrefix={`acct-det-${keySuffix}`} entry={entry} chart={row.chartOfAccounts} valuationClasses={valuationClasses} glChoices={glChoices} row={row} />
                 <ReasonField id={`acct-det-change-reason-${keySuffix}`} value={changeReason} onChange={setChangeReason} />
                 <DetMessage state={changeState} />
-                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim()}>
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('acctDet.save')}
                 </button>
               </form>
@@ -222,7 +229,7 @@ function RowDialogs({
         </div>
       </details>
 
-      <details className="min-w-16">
+      <details className="min-w-16" onToggle={(event) => setDeleteOpen(event.currentTarget.open)}>
         <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
           {t('acctDet.delete')}
         </summary>
@@ -235,7 +242,8 @@ function RowDialogs({
                 <p className="text-sm text-ink-soft">{t('acctDet.deleteNote')}</p>
                 <ReasonField id={`acct-det-delete-reason-${keySuffix}`} value={deleteReason} onChange={setDeleteReason} />
                 <DetMessage state={deleteState} />
-                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim()}>
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('acctDet.delete')}
                 </button>
               </form>

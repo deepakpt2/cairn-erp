@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { and, asc, eq } from 'drizzle-orm';
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { t } from '@/platform/i18n';
@@ -35,7 +37,14 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
     ? entries.find((entry) => entry.distributionChannel === params.copy?.trim().toUpperCase() && entry.isActive)
     : undefined;
   const creating = canMaintain && !selectionRequested && (params.new === '1' || Boolean(copySource));
-  const editing = Boolean(params.edit && selected && canMaintain);
+  const changeLock = selected && canMaintain
+    ? await openChangeForSession(session, {
+        lockObject: 'DISTRIBUTION_CHANNEL',
+        argument: selected.distributionChannel,
+        transactionCode: 'CFG.ORG.DISTCHANNEL.DEFINE',
+      })
+    : null;
+  const editing = Boolean(params.edit && selected && canMaintain && changeLock?.mode === 'CHANGE');
   const version = canMaintain && selected
     ? await getDistributionChannelDefinitionVersion(client, selected.distributionChannel)
     : 0;
@@ -121,6 +130,10 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
         </div>
       </section>
 
+      {changeLock?.mode === 'CHANGE' && selected && (
+        <ChangeLock lockObject="DISTRIBUTION_CHANNEL" argument={selected.distributionChannel} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       {creating && <DistributionChannelDefinitionForm key={`CREATE:${copySource?.distributionChannel ?? 'new'}`} mode="CREATE" initial={initial} version={0} />}
       {editing && selected && <DistributionChannelDefinitionForm key={`CHANGE:${selected.distributionChannel}`} mode="CHANGE" initial={initial} version={version} />}
 
@@ -151,7 +164,7 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
           {!selected.isActive && !canMaintain && <p className="mt-3 text-xs text-ink-soft">{t('orgDefinition.inactiveRetained')}</p>}
         </section>
       )}
-      {selected && !editing && canMaintain && <DeactivateDistributionChannelForm distributionChannel={selected.distributionChannel} name={selected.name} version={version} isActive={selected.isActive} />}
+      {selected && !editing && canMaintain && changeLock?.mode === 'CHANGE' && <DeactivateDistributionChannelForm distributionChannel={selected.distributionChannel} name={selected.name} version={version} isActive={selected.isActive} />}
       {selected && params.history === '1' && (
         <section className="panel overflow-x-auto">
           <div className="panel-header"><h2 className="panel-title">{t('orgDefinition.history')} · <span className="code">{selected.distributionChannel}</span></h2></div>

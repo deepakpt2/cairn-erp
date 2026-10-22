@@ -12,6 +12,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   QUOTA_CAPABILITY,
   QUOTA_ROUTE,
@@ -63,7 +64,7 @@ function missing(): QuotaActionState {
 }
 
 function refused(caught: unknown): QuotaActionState | null {
-  if (caught instanceof QuotaError) return { ok: false, message: caught.message, remedy: caught.remedy };
+  if (caught instanceof QuotaError || caught instanceof EnqueueError) return { ok: false, message: caught.message, remedy: caught.remedy };
   return null;
 }
 
@@ -267,6 +268,7 @@ export async function changeQuotaAction(
   if (stop) return stop;
   const intent = text(form, 'intent') || 'change';
   try {
+    await assertChangeForSession(session, { lockObject: 'QUOTA_ARRANGEMENT', argument: text(form, 'quotaNumber') });
     const changed = await changeQuotaArrangement(changeInput(form, session.user.client, session.user.username, intent));
     revalidatePath(QUOTA_ROUTE);
     return {

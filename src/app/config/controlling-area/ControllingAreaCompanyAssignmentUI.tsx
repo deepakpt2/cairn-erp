@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   assignControllingAreaCompanyAction,
   unassignControllingAreaCompanyAction,
@@ -211,17 +212,14 @@ export function ControllingAreaCompanyAssignmentUI({
                     </dl>
                   </div>
                   <div className="flex justify-end border-t border-[#e1e5e8] pt-2">
-                    <form action={unassignAction}>
-                      <input type="hidden" name="controllingArea" value={item.controllingArea} />
-                      <input type="hidden" name="companyCode" value={item.companyCode} />
-                      <button
-                        type="submit"
-                        className="btn btn-default min-h-11"
-                        disabled={!canMaintain || unassignmentPending}
-                      >
-                        {unassignmentPending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}
-                      </button>
-                    </form>
+                    <UnassignPair
+                      controllingArea={item.controllingArea}
+                      companyCode={item.companyCode}
+                      action={unassignAction}
+                      pending={unassignmentPending}
+                      canMaintain={canMaintain}
+                      buttonClass="btn btn-default min-h-11"
+                    />
                   </div>
                 </article>
               ))}
@@ -256,17 +254,14 @@ export function ControllingAreaCompanyAssignmentUI({
                       <td className="px-3 py-2 font-mono">{item.companyCodeFiscalYearVariant || '—'} / {item.controllingAreaFiscalYearVariant || '—'}</td>
                       <td className="px-3 py-2 font-mono">{item.companyCodeCurrency || '—'} / {item.controllingAreaCurrency || '—'}</td>
                       <td className="px-3 py-2 text-right">
-                        <form action={unassignAction}>
-                          <input type="hidden" name="controllingArea" value={item.controllingArea} />
-                          <input type="hidden" name="companyCode" value={item.companyCode} />
-                          <button
-                            type="submit"
-                            className="btn btn-default min-h-11 sm:min-h-9"
-                            disabled={!canMaintain || unassignmentPending}
-                          >
-                            {unassignmentPending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}
-                          </button>
-                        </form>
+                        <UnassignPair
+                          controllingArea={item.controllingArea}
+                          companyCode={item.companyCode}
+                          action={unassignAction}
+                          pending={unassignmentPending}
+                          canMaintain={canMaintain}
+                          buttonClass="btn btn-default min-h-11 sm:min-h-9"
+                        />
                       </td>
                     </tr>
                   ))}
@@ -277,5 +272,50 @@ export function ControllingAreaCompanyAssignmentUI({
         )}
       </section>
     </div>
+  );
+}
+
+/** The listed pair is the opened assignment. A new pair stays unlocked. */
+function UnassignPair({
+  controllingArea,
+  companyCode,
+  action,
+  pending,
+  canMaintain,
+  buttonClass,
+}: {
+  controllingArea: string;
+  companyCode: string;
+  action: (form: FormData) => void;
+  pending: boolean;
+  canMaintain: boolean;
+  buttonClass: string;
+}) {
+  const [engaged, setEngaged] = useState(false);
+  const lock = useChangeLock(
+    'CONTROLLING_AREA_COMPANY',
+    `${controllingArea}/${companyCode}`,
+    'CFG.COST.CONTROLLINGAREA.DEFINE',
+    engaged && canMaintain,
+  );
+  return (
+    <form
+      action={action}
+      onFocus={() => setEngaged(true)}
+      onSubmit={(event) => {
+        if (lock?.mode !== 'CHANGE') event.preventDefault();
+      }}
+    >
+      <input type="hidden" name="controllingArea" value={controllingArea} />
+      <input type="hidden" name="companyCode" value={companyCode} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <button
+        type="submit"
+        className={buttonClass}
+        disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}
+      >
+        {pending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}
+      </button>
+    </form>
   );
 }

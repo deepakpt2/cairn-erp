@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useEffect, useMemo, useState } from 'react';
+import { useActionState, useCallback, useEffect, useMemo, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   savePurchasingGroupChangesAction,
   type PurchasingGroupActionState,
@@ -102,6 +103,22 @@ function applyOutcomes(rows: DraftRow[], outcomes: NonNullable<PurchasingGroupAc
   return next;
 }
 
+function GroupLock({
+  code,
+  onMode,
+}: {
+  code: string;
+  onMode: (code: string, mode: 'CHANGE' | 'DISPLAY' | 'WAITING') => void;
+}) {
+  const lock = useChangeLock('PURCHASING_GROUP', code, 'CFG.PROC.PURGROUP.DEFINE', true);
+  const mode = lock?.mode === 'CHANGE' ? 'CHANGE' : lock?.mode === 'DISPLAY' ? 'DISPLAY' : 'WAITING';
+  useEffect(() => {
+    onMode(code, mode);
+    return () => onMode(code, 'WAITING');
+  }, [code, mode, onMode]);
+  return <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />;
+}
+
 export function PurchasingGroupsGrid({
   records,
   canMaintain,
@@ -155,6 +172,14 @@ export function PurchasingGroupsGrid({
       .toLocaleLowerCase()
       .includes(search),
   );
+  const [lockModes, setLockModes] = useState<Record<string, 'CHANGE' | 'DISPLAY' | 'WAITING'>>({});
+  const reportLock = useCallback((code: string, mode: 'CHANGE' | 'DISPLAY' | 'WAITING') => {
+    setLockModes((current) => (current[code] === mode ? current : { ...current, [code]: mode }));
+  }, []);
+  const lockedCodes = [...new Set(
+    pendingChanges.filter((change) => change.mode !== 'CREATE').map((change) => change.purchasingGroup),
+  )];
+  const locksHeld = lockedCodes.every((code) => lockModes[code] === 'CHANGE');
   const canCopy = canMaintain && copyableRows.length === 1 && selectedRows.length === 1;
   const canDelete = canMaintain && selectedRows.length > 0;
   const hasUnsavedChanges = pendingChanges.length > 0;
@@ -236,6 +261,7 @@ export function PurchasingGroupsGrid({
       <form action={action}>
         <input type="hidden" name="changes" value={JSON.stringify(pendingChanges)} />
         <input type="hidden" name="reason" value="" />
+        {lockedCodes.map((code) => <GroupLock key={code} code={code} onMode={reportLock} />)}
         <div className="flex flex-wrap items-center gap-1 border-b border-[#cbd5de] bg-[#eef3f7] px-2 py-2 text-sm">
           <select aria-label={t('purchasingGroup.view')} className="h-8 w-56 border border-[#aabac6] bg-white px-2 text-xs" value="overview" disabled>
             <option value="overview"></option>
@@ -266,7 +292,7 @@ export function PurchasingGroupsGrid({
               {searchOpen && (
                 <input autoFocus className="h-8 w-52 border border-[#aabac6] bg-white px-2 text-xs outline-none focus:border-[#5388a8]" aria-label={t('purchasingGroup.searchPlaceholder')} placeholder={t('purchasingGroup.searchPlaceholder')} value={searchTerm} onChange={(event) => setSearchTerm(event.currentTarget.value)} />
               )}
-              <button type="submit" className="h-8 border border-[#8faabd] bg-white px-3 font-medium text-[#264e6b] hover:bg-[#f8fbfd] disabled:opacity-50" disabled={pending || !hasUnsavedChanges}>
+              <button type="submit" className="h-8 border border-[#8faabd] bg-white px-3 font-medium text-[#264e6b] hover:bg-[#f8fbfd] disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
                 {pending ? t('common.saving') : t('purchasingGroup.save')}
               </button>
               <details className="relative ml-auto">
@@ -277,7 +303,7 @@ export function PurchasingGroupsGrid({
                   <button type="button" className="w-full px-3 py-2 text-left text-sm hover:bg-[#eef3f7]" onClick={undoChanges} disabled={!hasUnsavedChanges}>
                     {t('purchasingGroup.undo')}
                   </button>
-                  <button type="submit" className="w-full px-3 py-2 text-left text-sm hover:bg-[#eef3f7] disabled:opacity-50" disabled={pending || !hasUnsavedChanges}>
+                  <button type="submit" className="w-full px-3 py-2 text-left text-sm hover:bg-[#eef3f7] disabled:opacity-50" disabled={pending || !hasUnsavedChanges || !locksHeld}>
                     {t('purchasingGroup.save')}
                   </button>
                 </div>

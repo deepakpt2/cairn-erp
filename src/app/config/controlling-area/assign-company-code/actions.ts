@@ -3,6 +3,7 @@
 /** Capability-protected OX19 assignment and unassignment actions. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   assignCompanyCodeToControllingArea,
   ControllingAreaCompanyAssignmentError,
@@ -93,6 +94,10 @@ export async function unassignControllingAreaCompanyAction(
   try {
     await requireCapability(CONTROLLING_AREA_DEFINE, session);
     await requireCapability(COMPANY_CODE_DEFINE, session);
+    await assertChangeForSession(session, {
+      lockObject: 'CONTROLLING_AREA_COMPANY',
+      argument: `${controllingArea}/${companyCode}`,
+    });
     const result = await unassignCompanyCodeFromControllingArea({
       client: session.user.client,
       changedBy: session.user.username,
@@ -111,6 +116,9 @@ export async function unassignControllingAreaCompanyAction(
       companyCode: result.companyCode,
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy, controllingArea, companyCode };
+    }
     if (error instanceof ControllingAreaCompanyAssignmentError || error instanceof AuthzError) {
       return failure(error, controllingArea, companyCode);
     }

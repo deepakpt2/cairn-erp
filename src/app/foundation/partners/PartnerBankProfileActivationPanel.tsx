@@ -1,7 +1,8 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type { PartnerBankProfileActivationViewRow } from '@/modules/foundation/partner-bank-profile-activation-view';
 import {
   activatePartnerBankProfileAction,
@@ -45,6 +46,9 @@ export function PartnerBankProfileActivationPanel({
 
 function ActivationRow({ row }: { readonly row: PartnerBankProfileActivationViewRow }) {
   const [state, action, pending] = useActionState(activatePartnerBankProfileAction, INITIAL_STATE);
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('PARTNER_BANK_PROFILE', row.country, 'CFG.FND.PARTNER.BANKPROFILE.ACTIVATE', open && row.canActivate);
+  const held = lock?.mode === 'CHANGE';
   const status = t(`bp.profile.status.${row.status}`);
 
   return (
@@ -59,14 +63,18 @@ function ActivationRow({ row }: { readonly row: PartnerBankProfileActivationView
       <td className="code">{row.version ?? '—'}</td>
       <td className="min-w-56">
         {row.canActivate ? (
-          <form action={action} className="space-y-2">
-            <input type="hidden" name="country" value={row.country} />
-            <input type="hidden" name="expectedPolicyRevision" value={row.currentPolicyRevision} />
-            <input type="hidden" name="expectedVersion" value={row.version ?? ''} />
-            <button className="btn btn-primary" type="submit" disabled={pending}>
-              {pending ? t('bp.profile.pending') : t('bp.profile.activate')}
-            </button>
-          </form>
+          <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+            <summary className="cursor-pointer text-sm text-accent">{t('bp.profile.activate')}</summary>
+            <form action={action} className="mt-2 space-y-2">
+              <input type="hidden" name="country" value={row.country} />
+              <input type="hidden" name="expectedPolicyRevision" value={row.currentPolicyRevision} />
+              <input type="hidden" name="expectedVersion" value={row.version ?? ''} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <button className="btn btn-primary" type="submit" disabled={pending || !held}>
+                {pending ? t('bp.profile.pending') : t('bp.profile.activate')}
+              </button>
+            </form>
+          </details>
         ) : (
           <span className="text-sm text-ink-faint">{t('bp.profile.noAction')}</span>
         )}

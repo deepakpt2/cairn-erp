@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ActivityTypeError,
   deleteActivityType,
@@ -30,6 +31,10 @@ function readAll(form: FormData, name: string): string[] {
   return form.getAll(name).filter((value): value is string => typeof value === 'string');
 }
 
+function activityArgument(form: FormData): string {
+  return `${read(form, 'controllingArea')}/${read(form, 'activityType')}/${read(form, 'validFrom')}`;
+}
+
 export async function saveActivityTypeAction(
   _previous: ActivityTypeActionState,
   form: FormData,
@@ -54,6 +59,9 @@ export async function saveActivityTypeAction(
   };
 
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'ACTIVITY_TYPE', argument: activityArgument(form) });
+    }
     const result = await saveActivityType(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -70,7 +78,7 @@ export async function saveActivityTypeAction(
           : `Activity Type ${result.activityType} changed for the period from ${result.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof ActivityTypeError) {
+    if (error instanceof ActivityTypeError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -99,6 +107,7 @@ export async function lockActivityTypeAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'ACTIVITY_TYPE', argument: activityArgument(form) });
     const result = await setActivityTypePostingLock(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -114,7 +123,7 @@ export async function lockActivityTypeAction(
         : `Activity Type ${input.activityType} open for posting again from ${input.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof ActivityTypeError) {
+    if (error instanceof ActivityTypeError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -141,6 +150,7 @@ export async function deleteActivityTypeAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'ACTIVITY_TYPE', argument: activityArgument(form) });
     await deleteActivityType(input);
     revalidatePath(ROUTE);
     return {
@@ -148,7 +158,7 @@ export async function deleteActivityTypeAction(
       message: `Activity Type ${input.activityType} period from ${input.validFrom} deleted.`,
     };
   } catch (error) {
-    if (error instanceof ActivityTypeError) {
+    if (error instanceof ActivityTypeError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {

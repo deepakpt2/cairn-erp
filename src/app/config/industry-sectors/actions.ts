@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   IndustrySectorError,
   deleteIndustrySector,
@@ -24,7 +25,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): IndustrySectorActionState {
-  if (error instanceof IndustrySectorError) {
+  if (error instanceof IndustrySectorError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -36,6 +37,9 @@ export async function saveIndustrySectorAction(
 ): Promise<IndustrySectorActionState> {
   const session = await requireSession(ROUTE);
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'INDUSTRY_SECTOR', argument: read(form, 'sector') });
+    }
     const result = await saveIndustrySector({
       client: session.user.client,
       changedBy: session.user.username,
@@ -60,6 +64,7 @@ export async function setIndustrySectorActiveAction(
   const session = await requireSession(ROUTE);
   const active = read(form, 'active') === 'true';
   try {
+    await assertChangeForSession(session, { lockObject: 'INDUSTRY_SECTOR', argument: read(form, 'sector') });
     const result = await setIndustrySectorActive({
       client: session.user.client,
       changedBy: session.user.username,
@@ -82,6 +87,7 @@ export async function deleteIndustrySectorAction(
 ): Promise<IndustrySectorActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'INDUSTRY_SECTOR', argument: read(form, 'sector') });
     const result = await deleteIndustrySector({
       client: session.user.client,
       changedBy: session.user.username,

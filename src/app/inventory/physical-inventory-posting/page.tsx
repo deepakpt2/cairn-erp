@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { REVERSE_CAPABILITY } from '@/modules/inventory/material-document-reversal';
 import {
   PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY,
@@ -41,6 +43,15 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
     ? await getPostingHistory(client, { documentNumber: document.documentNumber, fiscalYear: document.fiscalYear })
     : [];
   const today = new Date().toISOString().slice(0, 10);
+  const canPost = can(session, PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY);
+  const postingKey = document ? `${document.documentNumber.trim()}/${document.fiscalYear}` : '';
+  const changeLock = document && canPost
+    ? await openChangeForSession(session, {
+        lockObject: 'PHYSICAL_INVENTORY',
+        argument: postingKey,
+        transactionCode: 'INV.PHYINV.DIFF.POST',
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -64,12 +75,17 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('diffpost.subtitle')}</p>
       </header>
 
+      {document && changeLock?.mode === 'CHANGE' && (
+        <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={postingKey} />
+      )}
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
       <PostingWorkbench
         document={document}
         history={history}
         requestedNumber={documentNumber}
         requestedYear={last(params.year)}
-        canPost={can(session, PHYSICAL_INVENTORY_DIFF_POST_CAPABILITY)}
+        canPost={canPost}
+        displayOnly={changeLock?.mode === 'DISPLAY'}
         canReverse={can(session, REVERSE_CAPABILITY)}
         today={today}
       />

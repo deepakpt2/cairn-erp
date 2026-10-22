@@ -3,6 +3,7 @@
 /** Capability-protected OVXA Sales Organization ↔ Division assignment actions. */
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   assignSalesOrgDivision,
   SalesOrgDivisionAssignmentError,
@@ -105,6 +106,10 @@ export async function unassignSalesOrgDivisionAction(
 
   try {
     await requireCapability(ACTIVITY, session);
+    await assertChangeForSession(session, {
+      lockObject: 'SALES_ORG_DIVISION',
+      argument: `${salesOrg}/${division}`,
+    });
     const result = await unassignSalesOrgDivision({
       client: session.user.client,
       changedBy: session.user.username,
@@ -124,6 +129,9 @@ export async function unassignSalesOrgDivisionAction(
       division: result.division,
     };
   } catch (error) {
+    if (error instanceof EnqueueError) {
+      return { ok: false, message: error.message, remedy: error.remedy, salesOrg, division };
+    }
     if (error instanceof SalesOrgDivisionAssignmentError || error instanceof AuthzError) {
       return failure(error, 'removal', salesOrg, division);
     }

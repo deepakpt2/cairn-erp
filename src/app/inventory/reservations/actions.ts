@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   RESERVATION_CREATE_CAPABILITY,
   ReservationError,
@@ -78,6 +79,7 @@ export async function withdrawReservationAction(
     return { ok: false, message: 'You do not hold the reservation capability.' };
   }
   try {
+    await assertChangeForSession(session, { lockObject: 'RESERVATION', argument: text(form, 'reservationNumber') });
     const view = await withdrawReservation({
       client: session.user.client,
       changedBy: session.user.username,
@@ -92,7 +94,7 @@ export async function withdrawReservationAction(
       reservationNumber: view.reservationNumber,
     };
   } catch (error) {
-    if (error instanceof ReservationError) return { ok: false, message: error.message, remedy: error.remedy };
+    if (error instanceof ReservationError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
 }
@@ -106,6 +108,7 @@ export async function completeItemAction(
     return { ok: false, message: 'You do not hold the reservation capability.' };
   }
   try {
+    await assertChangeForSession(session, { lockObject: 'RESERVATION', argument: text(form, 'reservationNumber') });
     const view = await completeReservationItem({
       client: session.user.client,
       changedBy: session.user.username,
@@ -119,7 +122,7 @@ export async function completeItemAction(
       reservationNumber: view.reservationNumber,
     };
   } catch (error) {
-    if (error instanceof ReservationError) return { ok: false, message: error.message, remedy: error.remedy };
+    if (error instanceof ReservationError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
 }

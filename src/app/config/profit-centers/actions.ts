@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ProfitCenterError,
   deleteProfitCenter,
@@ -24,6 +25,12 @@ const ROUTE = '/config/profit-centers';
 function read(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value : '';
+}
+
+function periodArgument(form: FormData): string {
+  return [read(form, 'controllingArea'), read(form, 'profitCenter'), read(form, 'validFrom')]
+    .map((part) => part.trim())
+    .join('/');
 }
 
 export async function saveProfitCenterAction(
@@ -50,6 +57,9 @@ export async function saveProfitCenterAction(
   };
 
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER', argument: periodArgument(form) });
+    }
     const result = await saveProfitCenter(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -66,7 +76,7 @@ export async function saveProfitCenterAction(
           : `Profit Centre ${result.profitCenter} changed for the period from ${result.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof ProfitCenterError) {
+    if (error instanceof EnqueueError || error instanceof ProfitCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -95,6 +105,7 @@ export async function lockProfitCenterAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER', argument: periodArgument(form) });
     const result = await setProfitCenterPostingLock(input);
     revalidatePath(ROUTE);
     if (!result.changed) {
@@ -110,7 +121,7 @@ export async function lockProfitCenterAction(
         : `Profit Centre ${input.profitCenter} open for posting again from ${input.validFrom}.`,
     };
   } catch (error) {
-    if (error instanceof ProfitCenterError) {
+    if (error instanceof EnqueueError || error instanceof ProfitCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {
@@ -137,6 +148,7 @@ export async function deleteProfitCenterAction(
   };
 
   try {
+    await assertChangeForSession(session, { lockObject: 'PROFIT_CENTER', argument: periodArgument(form) });
     await deleteProfitCenter(input);
     revalidatePath(ROUTE);
     return {
@@ -144,7 +156,7 @@ export async function deleteProfitCenterAction(
       message: `Profit Centre ${input.profitCenter} period from ${input.validFrom} deleted.`,
     };
   } catch (error) {
-    if (error instanceof ProfitCenterError) {
+    if (error instanceof EnqueueError || error instanceof ProfitCenterError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return {

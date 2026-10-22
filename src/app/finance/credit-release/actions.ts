@@ -8,6 +8,7 @@ import {
   releaseDocumentsBulk, type ReleaseOutcome,
 } from '@/modules/finance/credit';
 import { can, requireCapability, requireSession, AuthzError } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 const PATH = '/finance/credit-release';
 
@@ -20,7 +21,7 @@ async function guard() {
 }
 
 function errorOutcome(salesDocument: string, error: unknown): ReleaseOutcome {
-  if (error instanceof CreditError || error instanceof AuthzError) {
+  if (error instanceof CreditError || error instanceof AuthzError || error instanceof EnqueueError) {
     return { salesDocument, ok: false, status: null, message: error.message };
   }
   console.error('Credit release action failed', error);
@@ -31,8 +32,10 @@ export async function recheckAction(formData: FormData): Promise<void> {
   const session = await guard();
   const salesDocument = String(formData.get('salesDocument') ?? '').trim();
   try {
+    await assertChangeForSession(session, { lockObject: 'SALES_DOCUMENT', argument: salesDocument });
     await recheckDocument({ client: session.user.client, changedBy: session.user.username, salesDocument });
   } catch (error) {
+    if (error instanceof EnqueueError) return;
     if (error instanceof CreditError) throw error;
     throw error;
   }
@@ -43,6 +46,7 @@ export async function releaseAction(_previous: ReleaseState, formData: FormData)
   const salesDocument = String(formData.get('salesDocument') ?? '').trim();
   try {
     const session = await guard();
+    await assertChangeForSession(session, { lockObject: 'SALES_DOCUMENT', argument: salesDocument });
     const justification = String(formData.get('justification') ?? '').trim();
     const outcome = await releaseDocument({
       client: session.user.client, changedBy: session.user.username, salesDocument,
@@ -65,6 +69,9 @@ export async function bulkReleaseAction(_previous: ReleaseState, formData: FormD
       if (key.startsWith('doc_') && formData.get(key) === 'on') documents.push(key.slice(4));
     }
     if (documents.length === 0) return { outcomes: [], message: 'Select at least one document.' };
+    for (const salesDocument of documents) {
+      await assertChangeForSession(session, { lockObject: 'SALES_DOCUMENT', argument: salesDocument });
+    }
     const justification = String(formData.get('justification') ?? '').trim();
     const overrides = justification
       ? Object.fromEntries(documents.map((d) => [d, { justification, approvalRef: String(formData.get('approvalRef') ?? '').trim() || undefined }]))
@@ -84,6 +91,7 @@ export async function rejectAction(_previous: ReleaseState, formData: FormData):
   const salesDocument = String(formData.get('salesDocument') ?? '').trim();
   try {
     const session = await guard();
+    await assertChangeForSession(session, { lockObject: 'SALES_DOCUMENT', argument: salesDocument });
     const outcome = await rejectReleaseRequest({
       client: session.user.client, changedBy: session.user.username, salesDocument,
       reason: String(formData.get('reason') ?? ''),
@@ -99,6 +107,7 @@ export async function reblockAction(_previous: ReleaseState, formData: FormData)
   const salesDocument = String(formData.get('salesDocument') ?? '').trim();
   try {
     const session = await guard();
+    await assertChangeForSession(session, { lockObject: 'SALES_DOCUMENT', argument: salesDocument });
     const outcome = await reblockDocument({
       client: session.user.client, changedBy: session.user.username, salesDocument,
       reason: String(formData.get('reason') ?? ''),

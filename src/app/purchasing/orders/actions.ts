@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PO_CREATE_CAPABILITY,
   PurchaseOrderError,
@@ -113,6 +114,9 @@ export async function saveOrderAction(
       items: (input.items ?? []) as never[],
     };
     const editing = typeof orderNumber === 'string' && orderNumber;
+    if (editing) {
+      await assertChangeForSession(session, { lockObject: 'PURCHASE_ORDER', argument: orderNumber });
+    }
     const result = editing
       ? await changeOrder({ ...base, orderNumber })
       : await createOrder(base);
@@ -126,7 +130,7 @@ export async function saveOrderAction(
         : `Purchase order ${result.orderNumber} created.`,
     };
   } catch (error) {
-    if (error instanceof PurchaseOrderError) {
+    if (error instanceof PurchaseOrderError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     throw error;

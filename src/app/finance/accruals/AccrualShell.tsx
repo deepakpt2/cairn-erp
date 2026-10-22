@@ -6,6 +6,7 @@ import { t } from '@/platform/i18n';
 import { toScaled, fromScaled } from '@/platform/posting/decimal';
 import type { AccrualDocumentView } from '@/modules/finance/accrual';
 import { postAccrualAction, reverseAccrualAction, type AccrualState } from './actions';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: AccrualState = { ok: true };
 
@@ -199,12 +200,7 @@ export default function AccrualShell({ canPost, companies, types, reasons, due }
                 <td className="code">{doc.reversalDocumentNumber ?? '—'}</td>
                 <td>
                   {doc.reversalStatus === 'PENDING' && (
-                    <form action={reverseAccrualAction}>
-                      <input type="hidden" name="companyCode" value={doc.companyCode} />
-                      <input type="hidden" name="documentNumber" value={doc.documentNumber} />
-                      <input type="hidden" name="fiscalYear" value={doc.fiscalYear} />
-                      <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs">{t('accrual.reverseNow')}</button>
-                    </form>
+                    <ReverseAccrual doc={doc} />
                   )}
                 </td>
               </tr>
@@ -216,6 +212,36 @@ export default function AccrualShell({ canPost, companies, types, reasons, due }
         </table>
       </section>
     </div>
+  );
+}
+
+function ReverseAccrual({ doc }: { doc: AccrualDocumentView }) {
+  const [engaged, setEngaged] = useState(false);
+  const [state, action, pending] = useActionState(reverseAccrualAction, INITIAL);
+  const lock = useChangeLock(
+    'ACCRUAL_DOCUMENT',
+    `${doc.companyCode}/${doc.documentNumber}/${doc.fiscalYear}`,
+    'FIN.ACCRUAL.POST',
+    engaged,
+  );
+  return (
+    <form
+      action={action}
+      className="space-y-1"
+      onFocus={() => setEngaged(true)}
+      onSubmit={(event) => {
+        if (lock?.mode !== 'CHANGE') event.preventDefault();
+      }}
+    >
+      <input type="hidden" name="companyCode" value={doc.companyCode} />
+      <input type="hidden" name="documentNumber" value={doc.documentNumber} />
+      <input type="hidden" name="fiscalYear" value={doc.fiscalYear} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      {state.message && !state.ok && <p className="text-2xs text-signal-error">{state.message}</p>}
+      <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={pending || lock?.mode === 'DISPLAY'}>
+        {pending ? t('common.saving') : t('accrual.reverseNow')}
+      </button>
+    </form>
   );
 }
 

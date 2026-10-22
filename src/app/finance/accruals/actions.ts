@@ -6,6 +6,7 @@ import {
   postAccrualDocument, executeAccrualReversal, AccrualError, ACCRUAL_CAPABILITY,
 } from '@/modules/finance/accrual';
 import { requireCapability, requireSession, AuthzError } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface AccrualState {
   ok: boolean;
@@ -66,14 +67,27 @@ export async function postAccrualAction(_previous: AccrualState, formData: FormD
   }
 }
 
-export async function reverseAccrualAction(formData: FormData): Promise<void> {
+export async function reverseAccrualAction(_previous: AccrualState, formData: FormData): Promise<AccrualState> {
   const session = await requireSession('/finance/accruals');
-  await requireCapability(ACCRUAL_CAPABILITY, session);
   const read = (name: string) => String(formData.get(name) ?? '').trim();
-  await executeAccrualReversal({
-    client: session.user.client, changedBy: session.user.username,
-    companyCode: read('companyCode'), documentNumber: read('documentNumber'),
-    fiscalYear: Number(read('fiscalYear')),
-  });
-  revalidatePath('/finance/accruals');
+  try {
+    await requireCapability(ACCRUAL_CAPABILITY, session);
+    await assertChangeForSession(session, {
+      lockObject: 'ACCRUAL_DOCUMENT',
+      argument: `${read('companyCode')}/${read('documentNumber')}/${read('fiscalYear')}`,
+    });
+    await executeAccrualReversal({
+      client: session.user.client, changedBy: session.user.username,
+      companyCode: read('companyCode'), documentNumber: read('documentNumber'),
+      fiscalYear: Number(read('fiscalYear')),
+    });
+    revalidatePath('/finance/accruals');
+    return { ok: true, message: `Accrual ${read('documentNumber')} reversed.`, documentNumber: read('documentNumber') };
+  } catch (error) {
+    if (error instanceof EnqueueError || error instanceof AccrualError || error instanceof AuthzError) {
+      return { ok: false, message: error.message, remedy: (error as { remedy?: string }).remedy };
+    }
+    console.error('Accrual reversal failed', error);
+    return { ok: false, message: 'Reversal failed. Nothing was saved.' };
+  }
 }

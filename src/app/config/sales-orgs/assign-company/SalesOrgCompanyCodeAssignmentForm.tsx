@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   assignSalesOrgCompanyCodeAction,
   type SalesOrgCompanyCodeAssignmentState,
@@ -38,6 +39,15 @@ export function SalesOrgCompanyCodeAssignmentForm({
   const [companyCodeValue, setCompanyCodeValue] = useState('');
   const [helpField, setHelpField] = useState<HelpField | null>(null);
   const [helpSearch, setHelpSearch] = useState('');
+  const [engaged, setEngaged] = useState(false);
+  const chosen = salesOrganisations.find((item) => item.code.toUpperCase() === salesOrgValue.trim().toUpperCase());
+  const changing = Boolean(chosen?.companyCode);
+  const companyLock = useChangeLock(
+    'SALES_ORG_COMPANY',
+    salesOrgValue.trim().toUpperCase(),
+    'CFG.ORG.SALESORG.ASSIGN_COMPANY',
+    engaged && changing,
+  );
 
   function openHelp(field: HelpField) {
     setHelpSearch('');
@@ -93,7 +103,14 @@ export function SalesOrgCompanyCodeAssignmentForm({
           </div>
         )}
 
-        <form action={action} className="space-y-4">
+        <form
+          action={action}
+          className="space-y-4"
+          onFocus={() => setEngaged(true)}
+          onSubmit={(event) => {
+            if (changing && companyLock?.mode !== 'CHANGE') event.preventDefault();
+          }}
+        >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label htmlFor="scr021-sales-org" className="field-label">
@@ -180,10 +197,11 @@ export function SalesOrgCompanyCodeAssignmentForm({
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#d6dce1] pt-4">
             <p className="max-w-2xl text-xs text-ink-soft">{t('salesOrg.assignmentOneCompanyRule')}</p>
+            <LockNotice message={changing && companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
             <button
               type="submit"
               className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
-              disabled={pending || salesOrganisations.length === 0 || companyCodes.length === 0}
+              disabled={pending || salesOrganisations.length === 0 || companyCodes.length === 0 || (changing && companyLock?.mode === 'DISPLAY')}
             >
               {pending ? t('common.saving') : t('salesOrg.submitCompanyAssignment')}
             </button>

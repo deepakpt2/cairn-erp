@@ -19,6 +19,7 @@ import {
   saveMovementTypeAction,
   type MovementTypeActionState,
 } from './actions';
+import { useChangeLock } from '@/ui/lock/ChangeLock';
 
 function RequiredMark() {
   return <span className="ms-1 text-signal-error" aria-hidden="true">*</span>;
@@ -60,6 +61,14 @@ export default function MovementTypes({
   const [checkState, checkAction, checkPending] = useActionState(checkMovementTypeAction, empty);
   const [deleteState, deleteAction, deletePending] = useActionState(deleteMovementTypeAction, empty);
   const row = movements.find((movement) => movement.movementType === selected) ?? null;
+  const changeLock = useChangeLock(
+    'MOVEMENT_TYPE',
+    mode === 'CHANGE' ? selected : null,
+    'OMJJ',
+    canMaintain && mode === 'CHANGE',
+  );
+  const waitingForLock = canMaintain && mode === 'CHANGE' && Boolean(selected) && !changeLock;
+  const lockedOut = changeLock?.mode === 'DISPLAY';
   const frozen = mode === 'CHANGE' && row != null && citedByHistory(row);
 
   useEffect(() => {
@@ -164,7 +173,10 @@ export default function MovementTypes({
         )}
       </section>
 
-      {canMaintain && (mode === 'CREATE' || row) && (
+      {lockedOut && changeLock?.message && (
+        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{changeLock.message}</p>
+      )}
+      {canMaintain && (mode === 'CREATE' || (row && !lockedOut && !waitingForLock)) && (
         <form key={`${mode}-${selected ?? 'new'}`} action={saveAction} className="space-y-3 border border-line p-3">
           <h2 className="text-base font-semibold">
             {mode === 'CREATE' ? 'Create movement type' : `Change ${row?.movementType}`}
@@ -289,7 +301,7 @@ export default function MovementTypes({
         </form>
       )}
 
-      {canMaintain && row && (
+      {canMaintain && row && !lockedOut && (
         <div className="flex flex-wrap gap-2">
           <form action={checkAction}>
             <input type="hidden" name="movementType" value={row.movementType} />

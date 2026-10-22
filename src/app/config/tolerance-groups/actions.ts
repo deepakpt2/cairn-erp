@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ToleranceGroupError,
   saveEmployeeToleranceGroup,
@@ -56,6 +57,12 @@ export async function saveToleranceGroupAction(
   };
 
   try {
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: 'TOLERANCE_GROUP',
+        argument: `${read(form, 'companyCode')}/${read(form, 'groupKey')}`,
+      });
+    }
     const result = await saveEmployeeToleranceGroup(input);
     revalidatePath(ROUTE);
     const words = { group: groupLabel(result.groupKey), scope: scopeLabel(result.companyCode) };
@@ -67,7 +74,7 @@ export async function saveToleranceGroupAction(
       message: mode === 'CREATE' ? t('tolGroup.created', words) : t('tolGroup.changed', words),
     };
   } catch (error) {
-    if (error instanceof ToleranceGroupError) {
+    if (error instanceof ToleranceGroupError || error instanceof EnqueueError) {
       return { ok: false, message: error.message, remedy: error.remedy };
     }
     return { ok: false, message: t('tolGroup.unexpected'), remedy: t('tolGroup.unexpectedRemedy') };

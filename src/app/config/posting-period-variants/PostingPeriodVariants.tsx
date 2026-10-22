@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import type {
   PostingPeriodIntervalDefault,
   PostingPeriodVariantRow,
@@ -68,12 +69,14 @@ export function PostingPeriodVariantForm({
   variants,
   defaults,
   canMaintain,
+  submitDisabled = false,
 }: {
   mode: 'CREATE' | 'CHANGE';
   initial?: PostingPeriodVariantRow;
   variants: PostingPeriodVariantRow[];
   defaults: PostingPeriodIntervalDefault[];
   canMaintain: boolean;
+  submitDisabled?: boolean;
 }) {
   const editing = mode === 'CHANGE' && initial !== undefined;
   const [variant, setVariant] = useState(initial?.variant ?? '');
@@ -98,7 +101,7 @@ export function PostingPeriodVariantForm({
   // Read-only while the write is in flight: a field that can still be edited during a
   // submission is a field whose edit is silently thrown away.
   const locked = !canMaintain || pending;
-  const canSubmit = canMaintain && !pending && problems.length === 0;
+  const canSubmit = canMaintain && !pending && problems.length === 0 && !submitDisabled;
 
   return (
     <form className="space-y-3" action={formAction}>
@@ -269,9 +272,11 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
   );
   const blocked = row.usedByCompanyCodes.length > 0;
   const label = `${t('ppv.delete')} ${row.variant}`;
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('POSTING_PERIOD_VARIANT', row.variant.trim(), 'CFG.FIN.PPV.DEFINE', open);
 
   return (
-    <details className="min-w-28">
+    <details className="min-w-28" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-signal-error hover:underline sm:min-h-9">
         {t('ppv.delete')}
       </summary>
@@ -283,6 +288,7 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
               <input type="hidden" name="variant" value={row.variant} />
 
               <ActionMessage state={state} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
 
               <p className="text-sm text-ink">
                 {t('ppv.deleteConfirm', {
@@ -314,7 +320,7 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
                 <button
                   type="submit"
                   className="btn-primary"
-                  disabled={!canMaintain || blocked || pending}
+                  disabled={!canMaintain || blocked || pending || lock?.mode !== 'CHANGE'}
                 >
                   {t('ppv.deleteConfirmButton')}
                 </button>
@@ -404,28 +410,12 @@ export function PostingPeriodVariantList({
                   {canMaintain && (
                     <td>
                       <div className="flex flex-wrap gap-2">
-                        <details className="min-w-28">
-                          <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
-                            {t('ppv.change')}
-                          </summary>
-                          <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
-                            <div className="mx-auto max-w-3xl">
-                              <DialogHeader
-                                code={row.variant}
-                                label={`${t('ppv.change')} ${row.variant}`}
-                              />
-                              <section className="panel overflow-hidden p-4">
-                                <PostingPeriodVariantForm
-                                  mode="CHANGE"
-                                  initial={row}
-                                  variants={variants}
-                                  defaults={defaults}
-                                  canMaintain={canMaintain}
-                                />
-                              </section>
-                            </div>
-                          </div>
-                        </details>
+                        <PostingPeriodChangeDialog
+                          row={row}
+                          variants={variants}
+                          defaults={defaults}
+                          canMaintain={canMaintain}
+                        />
                         <VariantDeleteControl row={row} canMaintain={canMaintain} />
                       </div>
                     </td>
@@ -437,5 +427,43 @@ export function PostingPeriodVariantList({
         </div>
       )}
     </section>
+  );
+}
+
+function PostingPeriodChangeDialog({
+  row,
+  variants,
+  defaults,
+  canMaintain,
+}: {
+  row: PostingPeriodVariantRow;
+  variants: PostingPeriodVariantRow[];
+  defaults: PostingPeriodIntervalDefault[];
+  canMaintain: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const lock = useChangeLock('POSTING_PERIOD_VARIANT', row.variant.trim(), 'CFG.FIN.PPV.DEFINE', open);
+  return (
+    <details className="min-w-28" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9">
+        {t('ppv.change')}
+      </summary>
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
+        <div className="mx-auto max-w-3xl">
+          <DialogHeader code={row.variant} label={`${t('ppv.change')} ${row.variant}`} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <section className="panel overflow-hidden p-4">
+            <PostingPeriodVariantForm
+              mode="CHANGE"
+              initial={row}
+              variants={variants}
+              defaults={defaults}
+              canMaintain={canMaintain}
+              submitDisabled={lock?.mode !== 'CHANGE'}
+            />
+          </section>
+        </div>
+      </div>
+    </details>
   );
 }

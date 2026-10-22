@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   RETURN_CAPABILITY,
   ReturnDeliveryError,
@@ -99,6 +100,10 @@ export async function postReturnAction(
   }
 
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'MATERIAL_DOCUMENT',
+      argument: text(form, 'documentNumber'),
+    });
     const posted = await postReturnDelivery({
       client: session.user.client,
       changedBy: session.user.username,
@@ -118,7 +123,7 @@ export async function postReturnAction(
       posted,
     };
   } catch (caught) {
-    if (caught instanceof ReturnDeliveryError) {
+    if (caught instanceof ReturnDeliveryError || caught instanceof EnqueueError) {
       return { ok: false, message: caught.message, remedy: caught.remedy, posted: null };
     }
     return { ok: false, message: 'The return could not be posted.', posted: null };

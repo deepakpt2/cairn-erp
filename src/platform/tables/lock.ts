@@ -16,6 +16,7 @@ import {
   timestamp,
   text,
   index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 import { client } from './tenancy';
 
@@ -62,5 +63,35 @@ export const lockWaitLog = pgTable(
   (t) => [
     index('lock_wait_log_client_time_idx').on(t.client, t.occurredAt),
     index('lock_wait_log_object_idx').on(t.lockObjectCode),
+  ],
+);
+
+/**
+ * A dialog enqueue entry — the row SM12 lists.
+ *
+ * Unlike the advisory lock, this outlives the request. It stands while a
+ * session has the object open in change, and it leaves when that session
+ * releases it, signs out, or stops answering. A second session does not
+ * take it; that session is shown the object and cannot change it.
+ */
+export const enqueueEntry = pgTable(
+  'enqueue_entry',
+  {
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    lockObject: varchar('lock_object', { length: 40 }).notNull(),
+    argument: varchar('argument', { length: 200 }).notNull(),
+    mode: varchar('mode', { length: 16 }).notNull().default('EXCLUSIVE'),
+    ownerUser: varchar('owner_user', { length: 60 }).notNull(),
+    ownerSessionId: varchar('owner_session_id', { length: 36 }).notNull(),
+    transactionCode: varchar('transaction_code', { length: 64 }),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.lockObject, t.argument] }),
+    index('enqueue_entry_session_idx').on(t.client, t.ownerSessionId),
+    index('enqueue_entry_user_idx').on(t.client, t.ownerUser),
   ],
 );

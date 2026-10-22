@@ -11,6 +11,7 @@
 import { revalidatePath } from 'next/cache';
 import { AuthzError, requireCapability, requireSession } from '@/platform/auth/current';
 import { t } from '@/platform/i18n';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ACTIVITY,
   TaxCodeError,
@@ -36,6 +37,7 @@ function mapTaxError(error: unknown): TaxCodeActionState {
   if (error instanceof TaxCodeError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,
@@ -63,6 +65,9 @@ export async function saveTaxCodeAction(
     await requireCapability(ACTIVITY, session);
 
     const mode = read(form, 'mode') === 'CHANGE' ? 'CHANGE' : 'CREATE';
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'TAX_CODE', argument: `${read(form, 'country')}/${read(form, 'taxCode')}` });
+    }
     const result = await saveTaxCode({
       client: session.user.client,
       changedBy: session.user.username,
@@ -124,6 +129,7 @@ export async function deleteTaxCodeAction(
 
     const country = read(form, 'country');
     const code = read(form, 'taxCode');
+    await assertChangeForSession(session, { lockObject: 'TAX_CODE', argument: `${country}/${code}` });
 
     await deleteTaxCode({
       client: session.user.client,

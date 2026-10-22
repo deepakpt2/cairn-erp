@@ -4,7 +4,9 @@ import { z } from 'zod';
 
 import { CLEARING_RESET_CAPABILITY, ClearingResetError, getClearingDocument, resetClearing } from '@/modules/finance/clearing-reset';
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
+import { ResetForm } from './ResetForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,15 +57,20 @@ export default async function ClearingResetPage({
     });
     if (!parsed.success) return;
     try {
+      await assertChangeForSession(s, {
+        lockObject: 'CLEARING_DOCUMENT',
+        argument: `${parsed.data.companyCode}/${parsed.data.clearingDocument}/${parsed.data.fiscalYear}`,
+      });
       const r = await resetClearing({
         client: s.user.client, changedBy: s.user.username, ...parsed.data,
       });
       redirect(`${ROUTE}?companyCode=${encodeURIComponent(r.companyCode)}&clearingDocument=${encodeURIComponent(r.clearingDocument)}&fiscalYear=${r.fiscalYear}&reset=${encodeURIComponent(r.resetNumber)}`);
     } catch (e) {
-      if (e instanceof ClearingResetError) {
+      if (e instanceof ClearingResetError || e instanceof EnqueueError) {
+        const message = e instanceof EnqueueError && e.remedy ? `${e.message} ${e.remedy}` : e.message;
         const q = new URLSearchParams({
           companyCode: parsed.data.companyCode, clearingDocument: parsed.data.clearingDocument,
-          fiscalYear: String(parsed.data.fiscalYear), error: e.message,
+          fiscalYear: String(parsed.data.fiscalYear), error: message,
         });
         redirect(`${ROUTE}?${q}`);
       }
@@ -149,19 +156,12 @@ export default async function ClearingResetPage({
               <p className="mt-2 text-sm text-ink-soft">{view.items.length} cleared item(s) would stand open again.</p>
 
               {grant && (
-                <form action={doReset} className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <input type="hidden" name="companyCode" value={view.companyCode} />
-                  <input type="hidden" name="clearingDocument" value={view.clearingDocument} />
-                  <input type="hidden" name="fiscalYear" value={view.fiscalYear} />
-                  <input type="hidden" name="requestKey" value={`cr-${view.companyCode}-${view.clearingDocument}-${view.fiscalYear}`} />
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason (required)</span>
-                    <input name="reason" className="input w-full" maxLength={500} required />
-                  </label>
-                  <div className="flex items-end">
-                    <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8">Reset clearing</button>
-                  </div>
-                </form>
+                <ResetForm
+                  action={doReset}
+                  companyCode={view.companyCode}
+                  clearingDocument={view.clearingDocument}
+                  fiscalYear={view.fiscalYear}
+                />
               )}
             </>
           )}

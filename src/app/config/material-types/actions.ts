@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   MaterialTypeError,
   deleteAccountCategoryReference,
@@ -27,7 +28,7 @@ function read(form: FormData, name: string): string {
 }
 
 function fail(error: unknown): MaterialTypeActionState {
-  if (error instanceof MaterialTypeError) {
+  if (error instanceof MaterialTypeError || error instanceof EnqueueError) {
     return { ok: false, message: error.message, remedy: error.remedy };
   }
   throw error;
@@ -39,6 +40,9 @@ export async function saveMaterialTypeAction(
 ): Promise<MaterialTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'MATERIAL_TYPE', argument: read(form, 'materialType') });
+    }
     const result = await saveMaterialType({
       client: session.user.client,
       changedBy: session.user.username,
@@ -71,6 +75,7 @@ export async function setMaterialTypeActiveAction(
   const session = await requireSession(ROUTE);
   const active = read(form, 'active') === 'true';
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_TYPE', argument: read(form, 'materialType') });
     const result = await setMaterialTypeActive({
       client: session.user.client,
       changedBy: session.user.username,
@@ -93,6 +98,7 @@ export async function deleteMaterialTypeAction(
 ): Promise<MaterialTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'MATERIAL_TYPE', argument: read(form, 'materialType') });
     const result = await deleteMaterialType({
       client: session.user.client,
       changedBy: session.user.username,
@@ -112,6 +118,9 @@ export async function saveAccountCategoryReferenceAction(
 ): Promise<MaterialTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    if (read(form, 'mode') === 'CHANGE') {
+      await assertChangeForSession(session, { lockObject: 'ACCOUNT_CATEGORY_REFERENCE', argument: read(form, 'reference') });
+    }
     const result = await saveAccountCategoryReference({
       client: session.user.client,
       changedBy: session.user.username,
@@ -135,6 +144,7 @@ export async function deleteAccountCategoryReferenceAction(
 ): Promise<MaterialTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, { lockObject: 'ACCOUNT_CATEGORY_REFERENCE', argument: read(form, 'reference') });
     const result = await deleteAccountCategoryReference({
       client: session.user.client,
       changedBy: session.user.username,
@@ -154,6 +164,10 @@ export async function saveTypeValuationAction(
 ): Promise<MaterialTypeActionState> {
   const session = await requireSession(ROUTE);
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'MATERIAL_TYPE_VALUATION',
+      argument: `${read(form, 'materialType')}/${read(form, 'plant')}`,
+    });
     const result = await saveTypeValuation({
       client: session.user.client,
       changedBy: session.user.username,

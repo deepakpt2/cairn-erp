@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   unassignSalesOrgDivisionAction,
   type SalesOrgDivisionAssignmentState,
@@ -28,6 +29,12 @@ export function SalesOrgDivisionAssignmentsList({
     { ok: true },
   );
   const [confirmationFor, setConfirmationFor] = useState<string | null>(null);
+  const removeLock = useChangeLock(
+    'SALES_ORG_DIVISION',
+    confirmationFor ?? '',
+    'CFG.ORG.SALESORG.ASSIGN_DIVISION',
+    Boolean(confirmationFor) && canRemove,
+  );
 
   return (
     <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="ovxa-assignment-list-title">
@@ -100,8 +107,9 @@ export function SalesOrgDivisionAssignmentsList({
                                 division: item.division,
                               })}
                             </p>
+                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} />
                             <div className="flex flex-wrap gap-2 sm:justify-end">
-                              <button type="submit" className="btn btn-danger min-h-11 sm:min-h-9" disabled={pending}>
+                              <button type="submit" className="btn btn-danger min-h-11 sm:min-h-9" disabled={pending || removeLock?.mode !== 'CHANGE'}>
                                 {pending ? t('common.saving') : t('salesOrgDivision.confirmRemove')}
                               </button>
                               <button

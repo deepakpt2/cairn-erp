@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PAYMENT_RUN_CAPABILITY,
   PaymentRunError,
@@ -34,8 +35,15 @@ function guard(session: Awaited<ReturnType<typeof requireSession>>): PaymentRunA
 }
 
 function wrap(error: unknown): PaymentRunActionState {
-  if (error instanceof PaymentRunError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof PaymentRunError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
+}
+
+async function assertRun(session: Awaited<ReturnType<typeof requireSession>>, form: FormData) {
+  await assertChangeForSession(session, {
+    lockObject: 'PAYMENT_RUN',
+    argument: `${text(form, 'runDate')}/${text(form, 'runId')}`,
+  });
 }
 
 export async function createRunAction(
@@ -77,6 +85,7 @@ export async function proposalAction(
   const denied = guard(session);
   if (denied) return denied;
   try {
+    await assertRun(session, form);
     const run = await generateProposal({
       client: session.user.client, changedBy: session.user.username,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
@@ -102,6 +111,7 @@ export async function executeAction(
   const denied = guard(session);
   if (denied) return denied;
   try {
+    await assertRun(session, form);
     const run = await executePaymentRun({
       client: session.user.client, changedBy: session.user.username,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),
@@ -126,6 +136,7 @@ export async function cancelRunAction(
   const denied = guard(session);
   if (denied) return denied;
   try {
+    await assertRun(session, form);
     const run = await cancelPaymentRun({
       client: session.user.client, changedBy: session.user.username,
       runDate: text(form, 'runDate'), runId: text(form, 'runId'),

@@ -5,6 +5,7 @@ import { t } from '@/platform/i18n';
 import type { CreditAuditView, CreditConfigView, CustomerCreditView } from '@/modules/finance/credit';
 import { loadCreditAction, saveCreditAction, type CreditState } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 
 const INITIAL: CreditState = { ok: true };
 
@@ -24,6 +25,12 @@ export default function CreditShell({ canUse, config, credit, audit, selected }:
 }) {
   const [state, saveAction, saving] = useActionState(saveCreditAction, INITIAL);
   const [blocked, setBlocked] = useState(credit?.isBlocked ?? false);
+  const creditLock = useChangeLock(
+    'CUSTOMER_CREDIT',
+    selected ? `${selected.customer}/${selected.area}` : '',
+    'FIN.CREDIT.MAINTAIN',
+    Boolean(selected && credit),
+  );
 
   if (!canUse) {
     return (
@@ -118,7 +125,8 @@ export default function CreditShell({ canUse, config, credit, audit, selected }:
               <input name="changeReason" required maxLength={240} className="field-input w-72" placeholder={t('credit.changeReasonHint')} />
             </Field>
           </div>
-          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving}>
+          <LockNotice message={credit && creditLock?.mode === 'DISPLAY' ? creditLock.message : null} />
+          <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || (Boolean(credit) && creditLock?.mode !== 'CHANGE')}>
             {saving ? t('credit.saving') : t('credit.save')}
           </button>
         </form>

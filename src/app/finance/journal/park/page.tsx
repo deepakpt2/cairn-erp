@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
+import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import {
   PARKED_JOURNAL_CAPABILITY, getParkedJournal, listParkedJournals,
@@ -20,7 +22,16 @@ export default async function ParkedJournalPage({ searchParams }: {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const parked = await listParkedJournals(session.user.client);
-  const editing = params.edit ? await getParkedJournal(session.user.client, params.edit) : null;
+  const loaded = params.edit ? await getParkedJournal(session.user.client, params.edit) : null;
+  const editing = loaded && (loaded.status === 'PARKED' || loaded.status === 'COMPLETED') ? loaded : null;
+  const canPark = can(session, PARKED_JOURNAL_CAPABILITY);
+  const changeLock = editing && canPark
+    ? await openChangeForSession(session, {
+        lockObject: 'PARKED_JOURNAL',
+        argument: editing.parkedNumber,
+        transactionCode: 'FIN.JOURNAL.PARK',
+      })
+    : null;
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -36,11 +47,15 @@ export default async function ParkedJournalPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('parkedJournal.subtitle')}</p>
       </header>
 
+      {changeLock?.mode === 'CHANGE' && editing && (
+        <ChangeLock lockObject="PARKED_JOURNAL" argument={editing.parkedNumber} />
+      )}
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
       <ParkedJournal
         key={editing?.parkedNumber ?? 'new'}
         parked={parked}
-        editing={editing && (editing.status === 'PARKED' || editing.status === 'COMPLETED') ? editing : null}
-        canPark={can(session, PARKED_JOURNAL_CAPABILITY)}
+        editing={editing}
+        canPark={canPark && changeLock?.mode !== 'DISPLAY'}
         today={today}
       />
     </div>

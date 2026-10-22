@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { t } from '@/platform/i18n';
+import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
   deactivateSalesAreaAction,
   reactivateSalesAreaAction,
@@ -48,6 +49,9 @@ function SalesAreaItem({ area, canMaintain }: { area: SalesAreaListEntry; canMai
   const [deactivateState, deactivateAction, deactivatePending] = useActionState<SalesAreaActionState, FormData>(deactivateSalesAreaAction, { ok: true });
   const [reactivateState, reactivateAction, reactivatePending] = useActionState<SalesAreaActionState, FormData>(reactivateSalesAreaAction, { ok: true });
   const key = `${area.salesOrg}/${area.distributionChannel}/${area.division}`;
+  const [engaged, setEngaged] = useState(false);
+  const areaLock = useChangeLock('SALES_AREA', key, 'CFG.ORG.SALESAREA.DEFINE', engaged && canMaintain);
+  const held = !engaged || areaLock?.mode === 'CHANGE';
 
   return (
     <li className="p-3 sm:p-4">
@@ -75,8 +79,9 @@ function SalesAreaItem({ area, canMaintain }: { area: SalesAreaListEntry; canMai
         </div>
 
         {canMaintain && (
-          <div className="space-y-3 border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
-            <form action={changeAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="space-y-3 border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0" onFocus={() => setEngaged(true)}>
+            <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} />
+            <form action={changeAction} className="flex flex-col gap-2 sm:flex-row sm:items-end" onSubmit={(event) => { if (areaLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
               <input type="hidden" name="mode" value="CHANGE" />
               <input type="hidden" name="expectedVersion" value={area.version} />
               <input type="hidden" name="salesOrg" value={area.salesOrg} />
@@ -84,23 +89,23 @@ function SalesAreaItem({ area, canMaintain }: { area: SalesAreaListEntry; canMai
               <input type="hidden" name="division" value={area.division} />
               <div className="min-w-0 flex-1">
                 <label htmlFor={`sales-area-name-${key}`} className="field-label">{t('salesArea.nameField')}</label>
-                <input id={`sales-area-name-${key}`} name="name" type="text" required maxLength={160} defaultValue={area.name} className="field-input mt-1 min-h-11 w-full sm:min-h-9" disabled={changePending} />
+                <input id={`sales-area-name-${key}`} name="name" type="text" required maxLength={160} defaultValue={area.name} className="field-input mt-1 min-h-11 w-full sm:min-h-9" disabled={changePending || !held} />
               </div>
-              <button type="submit" className="btn btn-default min-h-11 sm:min-h-9" disabled={changePending}>{changePending ? t('common.saving') : t('salesArea.saveName')}</button>
+              <button type="submit" className="btn btn-default min-h-11 sm:min-h-9" disabled={changePending || !held}>{changePending ? t('common.saving') : t('salesArea.saveName')}</button>
             </form>
             {changeState.message && <ActionMessage state={changeState} />}
 
             {area.isActive ? (
               <>
                 {confirmDeactivate ? (
-                  <form action={deactivateAction} className="border border-signal-warn/40 bg-signal-warn-soft p-3">
+                  <form action={deactivateAction} className="border border-signal-warn/40 bg-signal-warn-soft p-3" onSubmit={(event) => { if (areaLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
                     <input type="hidden" name="expectedVersion" value={area.version} />
                     <input type="hidden" name="salesOrg" value={area.salesOrg} />
                     <input type="hidden" name="distributionChannel" value={area.distributionChannel} />
                     <input type="hidden" name="division" value={area.division} />
                     <p className="text-sm">{t('salesArea.confirmDeactivateText', { key })}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="submit" className="btn btn-danger min-h-11 sm:min-h-9" disabled={deactivatePending}>{deactivatePending ? t('common.saving') : t('salesArea.confirmDeactivate')}</button>
+                      <button type="submit" className="btn btn-danger min-h-11 sm:min-h-9" disabled={deactivatePending || !held}>{deactivatePending ? t('common.saving') : t('salesArea.confirmDeactivate')}</button>
                       <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={() => setConfirmDeactivate(false)} disabled={deactivatePending}>{t('salesArea.cancelDeactivate')}</button>
                     </div>
                     {deactivateState.message && <div className="mt-3"><ActionMessage state={deactivateState} /></div>}
@@ -110,12 +115,12 @@ function SalesAreaItem({ area, canMaintain }: { area: SalesAreaListEntry; canMai
                 )}
               </>
             ) : (
-              <form action={reactivateAction} className="flex flex-wrap items-center gap-2">
+              <form action={reactivateAction} className="flex flex-wrap items-center gap-2" onSubmit={(event) => { if (areaLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
                 <input type="hidden" name="expectedVersion" value={area.version} />
                 <input type="hidden" name="salesOrg" value={area.salesOrg} />
                 <input type="hidden" name="distributionChannel" value={area.distributionChannel} />
                 <input type="hidden" name="division" value={area.division} />
-                <button type="submit" className="btn btn-default min-h-11 sm:min-h-9" disabled={reactivatePending}>{reactivatePending ? t('common.saving') : t('salesArea.reactivate')}</button>
+                <button type="submit" className="btn btn-default min-h-11 sm:min-h-9" disabled={reactivatePending || !held}>{reactivatePending ? t('common.saving') : t('salesArea.reactivate')}</button>
                 {reactivateState.message && <ActionMessage state={reactivateState} />}
               </form>
             )}

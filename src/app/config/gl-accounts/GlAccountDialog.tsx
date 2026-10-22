@@ -48,6 +48,8 @@ export function GlAccountDialog({
   submitLabel,
   children,
   readOnly = false,
+  onToggle,
+  submitDisabled = false,
 }: {
   /** Row link that opens the dialog. */
   label: string;
@@ -67,9 +69,11 @@ export function GlAccountDialog({
    * table that could drift from the form.
    */
   readOnly?: boolean;
+  onToggle?: (open: boolean) => void;
+  submitDisabled?: boolean;
 }) {
   return (
-    <details className="min-w-44">
+    <details className="min-w-44" onToggle={(event) => onToggle?.(event.currentTarget.open)}>
       <summary className="min-h-11 cursor-pointer select-none py-2 text-sm font-medium text-accent hover:underline sm:min-h-9 sm:py-1">
         {label}
       </summary>
@@ -109,7 +113,7 @@ export function GlAccountDialog({
                   <button
                     type="submit"
                     className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
-                    disabled={pending}
+                    disabled={pending || submitDisabled}
                   >
                     {pending ? t('common.saving') : submitLabel}
                   </button>

@@ -5,8 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { can, requireSession } from '@/platform/auth/current';
 import {
   INTERCOMPANY_CONFIG_CAPABILITY, IntercompanyError,
-  deleteIntercompanyConfig, saveIntercompanyConfig,
+  deleteIntercompanyConfig, listIntercompanyConfigs, saveIntercompanyConfig,
 } from '@/modules/finance/intercompany';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 
 export interface IntercompanyConfigActionState {
   ok: boolean;
@@ -22,8 +23,12 @@ function read(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): IntercompanyConfigActionState {
-  if (error instanceof IntercompanyError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof IntercompanyError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
+}
+
+function pairArgument(sending: string, receiving: string) {
+  return `${sending.trim()}/${receiving.trim()}`;
 }
 
 export async function saveIntercompanyConfigAction(
@@ -35,6 +40,15 @@ export async function saveIntercompanyConfigAction(
     return { ok: false, message: 'You do not hold the intercompany configuration capability.' };
   }
   try {
+    const sendingCompanyCode = read(form, 'sendingCompanyCode');
+    const receivingCompanyCode = read(form, 'receivingCompanyCode');
+    const standing = await listIntercompanyConfigs(session.user.client);
+    if (standing.some((pair) => pair.sendingCompanyCode.toUpperCase() === sendingCompanyCode.toUpperCase() && pair.receivingCompanyCode.toUpperCase() === receivingCompanyCode.toUpperCase())) {
+      await assertChangeForSession(session, {
+        lockObject: 'INTERCOMPANY_PAIR',
+        argument: pairArgument(sendingCompanyCode, receivingCompanyCode),
+      });
+    }
     const saved = await saveIntercompanyConfig({
       client: session.user.client, changedBy: session.user.username,
       sendingCompanyCode: read(form, 'sendingCompanyCode'),
@@ -62,10 +76,16 @@ export async function deleteIntercompanyConfigAction(
     return { ok: false, message: 'You do not hold the intercompany configuration capability.' };
   }
   try {
+    const sendingCompanyCode = read(form, 'sendingCompanyCode');
+    const receivingCompanyCode = read(form, 'receivingCompanyCode');
+    await assertChangeForSession(session, {
+      lockObject: 'INTERCOMPANY_PAIR',
+      argument: pairArgument(sendingCompanyCode, receivingCompanyCode),
+    });
     await deleteIntercompanyConfig({
       client: session.user.client, changedBy: session.user.username,
-      sendingCompanyCode: read(form, 'sendingCompanyCode'),
-      receivingCompanyCode: read(form, 'receivingCompanyCode'),
+      sendingCompanyCode,
+      receivingCompanyCode,
     });
     revalidatePath(ROUTE);
     return { ok: true, message: `Pair ${read(form, 'sendingCompanyCode')} to ${read(form, 'receivingCompanyCode')} stands deleted.` };

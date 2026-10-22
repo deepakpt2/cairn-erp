@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   VENDOR_CLEARING_CAPABILITY,
   VendorClearingError,
@@ -23,7 +24,7 @@ function text(form: FormData, name: string): string {
 }
 
 function wrap(error: unknown): VendorClearingActionState {
-  if (error instanceof VendorClearingError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof VendorClearingError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   throw error;
 }
 
@@ -36,6 +37,10 @@ export async function clearAction(
     return { ok: false, message: 'You do not hold the vendor clearing capability.' };
   }
   try {
+    await assertChangeForSession(session, {
+      lockObject: 'VENDOR_ACCOUNT',
+      argument: `${text(form, 'supplier')}/${text(form, 'companyCode')}`,
+    });
     const items = form.getAll('item').map((value) => {
       const [documentNumber, fiscalYear, lineNumber] = String(value).split('|');
       return { documentNumber, fiscalYear: Number(fiscalYear), lineNumber: Number(lineNumber) };
