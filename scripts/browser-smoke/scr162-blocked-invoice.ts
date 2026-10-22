@@ -157,8 +157,8 @@ export async function scr162BlockedInvoice(ctx: Context) {
   assert.match(await page.locator('[data-blocked-invoice-no-post]').innerText(), /does not post/);
   console.log('  ✓ MRBR opens the hold screen, and the alias is not on the page');
 
-  await page.locator('[name="companyFrom"]').selectOption('1000');
-  await page.locator('[name="fiscalYear"]').fill('2026');
+  await page.locator('select[name="companyFrom"]').selectOption('1000');
+  await page.locator('#blocked-invoice-selection [name="fiscalYear"]').fill('2026');
   await page.locator('[data-blocked-invoice-list]').click();
   await page.locator('[data-blocked-invoice-empty]').waitFor();
   assert.deepEqual(await standing(), before);
