@@ -58,6 +58,10 @@ export default function CountWorkbench({
         <h2 id="count-status" className="text-sm font-semibold">{t('mi04.statusTitle')}</h2>
         <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex justify-between gap-3 border-b border-line/60 py-1">
+            <dt className="text-ink-soft">{t('mi04.companyCode')}</dt>
+            <dd data-count-company>{document.companyCode}</dd>
+          </div>
+          <div className="flex justify-between gap-3 border-b border-line/60 py-1">
             <dt className="text-ink-soft">{t('mi04.documentStatus')}</dt>
             <dd data-count-document-status>{document.status}</dd>
           </div>

@@ -85,6 +85,26 @@ describe('SCR-147 count screen contract', () => {
     expect(actions).not.toContain('postJournalEntry');
   });
 
+  it('shows the company code as context, and does not take it as a key', () => {
+    expect(messages).toContain("'mi04.companyCode': 'Company code'");
+    expect(shell).toContain('data-count-company');
+    expect(shell).toContain("t('mi04.companyCode')");
+    expect(page).not.toContain('name="companyCode"');
+    expect(page).toContain('countNamedRefusal');
+  });
+
+  it('refuses a batch, a posted difference, and a second count by name', () => {
+    const service = read('src/modules/inventory/physical-inventory-count.ts');
+    expect(service).toContain('A batch is not part of this count.');
+    expect(service).toContain('The difference is not entered.');
+    expect(service).toContain('A count is the inventory item.');
+    expect(service).toContain('A count posts nothing.');
+    expect(service).toContain('Count history is the change document.');
+    expect(service).not.toContain('physical_inventory_count');
+    expect(actions).toContain('countNamedRefusal');
+    expect(actions).toContain('namedFields');
+  });
+
   it('is registered under its own route with MI04 as a search alias only', () => {
     expect(messages).toContain("'mi04.code': 'INV.PHYINV.COUNT · MI04'");
     const service = read('src/modules/inventory/physical-inventory-count.ts');

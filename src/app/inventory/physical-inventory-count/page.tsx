@@ -6,6 +6,7 @@ import {
   PHYSICAL_INVENTORY_COUNT_CAPABILITY,
   PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY,
   PHYSICAL_INVENTORY_COUNT_ROUTE,
+  countNamedRefusal,
   getCountDocument,
   getCountHistory,
 } from '@/modules/inventory/physical-inventory-count';
@@ -23,15 +24,32 @@ const ROUTE = PHYSICAL_INVENTORY_COUNT_ROUTE;
  * journal, no stock. The difference it shows is arithmetic held for the difference review, and the
  * page says so rather than leaving it to be discovered.
  */
+function one(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
+}
+
 export default async function PhysicalInventoryCountPage({ searchParams }: {
-  searchParams: Promise<{ doc?: string; year?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
-  const year = Number(params.year ?? '') || null;
-  const document = params.doc && year
-    ? await getCountDocument(client, { documentNumber: params.doc.trim().toUpperCase(), fiscalYear: year })
+  const doc = one(params.doc);
+  const yearText = one(params.year);
+  const refusal = countNamedRefusal({
+    batch: one(params.batch),
+    serialNumber: one(params.serialNumber),
+    handlingUnit: one(params.handlingUnit),
+    bookQuantity: one(params.bookQuantity),
+    differenceQuantity: one(params.differenceQuantity),
+    companyCode: one(params.companyCode),
+    countId: one(params.countId),
+    post: one(params.post),
+    countEvent: one(params.countEvent),
+  });
+  const year = Number(yearText) || null;
+  const document = !refusal && doc && year
+    ? await getCountDocument(client, { documentNumber: doc.toUpperCase(), fiscalYear: year })
     : null;
   const history = document
     ? await getCountHistory(client, {
@@ -84,7 +102,7 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
               name="doc"
               className="input"
               placeholder={t('mi04.documentPlaceholder')}
-              defaultValue={document?.documentNumber ?? ''}
+              defaultValue={document?.documentNumber ?? doc}
               required
             />
           </label>
@@ -101,9 +119,13 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">{t('mi04.load')}</button>
         </form>
 
-        {params.doc && !document && (
+        {refusal && (
+          <p role="status" data-count-refused className="mt-2 text-sm text-red-700">{refusal}</p>
+        )}
+
+        {doc && !refusal && !document && (
           <p role="status" className="mt-2 text-sm text-red-700">
-            {t('mi04.notFound', { document: params.doc, year: params.year ?? '' })}
+            {t('mi04.notFound', { document: doc, year: yearText })}
           </p>
         )}
 

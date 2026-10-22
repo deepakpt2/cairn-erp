@@ -18,6 +18,7 @@ import {
   PHYSICAL_INVENTORY_COUNT_ROUTE,
   PhysicalInventoryCountError,
   clearCount,
+  countNamedRefusal,
   submitCounts,
   type CountDocumentView,
 } from '@/modules/inventory/physical-inventory-count';
@@ -37,6 +38,32 @@ function text(form: FormData, name: string): string {
 /** Which item rows the screen rendered. Mirrors the grid, and the service ignores any it lacks. */
 const LINE_COUNT = 40;
 
+/**
+ * Fields the count does not have. They are read so a posted value is refused by name,
+ * not dropped. The standing screen does not render them.
+ */
+function namedFields(form: FormData): Record<string, string> {
+  const named: Record<string, string> = {
+    batch: text(form, 'batch'),
+    serialNumber: text(form, 'serialNumber'),
+    handlingUnit: text(form, 'handlingUnit'),
+    bookQuantity: text(form, 'bookQuantity'),
+    differenceQuantity: text(form, 'differenceQuantity'),
+    companyCode: text(form, 'companyCode'),
+    countId: text(form, 'countId'),
+    post: text(form, 'post'),
+    countEvent: text(form, 'countEvent'),
+  };
+  for (let n = 1; n <= LINE_COUNT; n += 1) {
+    named.batch ||= text(form, `batch-${n}`);
+    named.serialNumber ||= text(form, `serial-${n}`);
+    named.handlingUnit ||= text(form, `handling-${n}`);
+    named.bookQuantity ||= text(form, `book-${n}`);
+    named.differenceQuantity ||= text(form, `difference-${n}`);
+  }
+  return named;
+}
+
 export async function submitCountsAction(
   _previous: CountActionState,
   form: FormData,
@@ -45,6 +72,9 @@ export async function submitCountsAction(
   if (!can(session, PHYSICAL_INVENTORY_COUNT_CAPABILITY)) {
     return { ok: false, message: `You do not hold the count entry capability (${PHYSICAL_INVENTORY_COUNT_CAPABILITY}).` };
   }
+  const named = namedFields(form);
+  const refused = countNamedRefusal(named);
+  if (refused) return { ok: false, message: refused };
 
   const lines: Parameters<typeof submitCounts>[0]['lines'] = [];
   for (let n = 1; n <= LINE_COUNT; n += 1) {
@@ -82,6 +112,7 @@ export async function submitCountsAction(
       counterName: text(form, 'counterName') || undefined,
       reason: text(form, 'reason') || undefined,
       requestKey: text(form, 'requestKey'),
+      named,
       lines,
     });
     revalidatePath(PHYSICAL_INVENTORY_COUNT_ROUTE);
@@ -103,6 +134,8 @@ export async function clearCountAction(
   form: FormData,
 ): Promise<CountActionState> {
   const session = await requireSession(PHYSICAL_INVENTORY_COUNT_ROUTE);
+  const refused = countNamedRefusal(namedFields(form));
+  if (refused) return { ok: false, message: refused };
   if (!can(session, PHYSICAL_INVENTORY_COUNT_CORRECT_CAPABILITY)) {
     return {
       ok: false,
@@ -118,6 +151,7 @@ export async function clearCountAction(
       itemNumber: Number(text(form, 'itemNumber') || '0'),
       reason: text(form, 'reason'),
       requestKey: text(form, 'requestKey'),
+      named: namedFields(form),
       expectedVersion: Number(text(form, 'version') || '0') || undefined,
     });
     revalidatePath(PHYSICAL_INVENTORY_COUNT_ROUTE);

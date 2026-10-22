@@ -217,6 +217,14 @@ Box seed: 193 capabilities, 71 configuration activities, 11 messages, 167 terms,
 
 Same-stage bookkeeping: B-993 / §27.005 / §30 row 2.823.
 
+## §27.006 — MI04 judged: the count is the item, and a second count is refused
+
+**B-994.** SCR-147 already stood. This package does not add a count table, a count event, a uuid, a company-code key, a batch, or a posting path. The company code is read from the plant and shown. It is not a key. A batch, a serial, a handling unit, a client book quantity, a client difference, a count id, a count event, and a post are refused by name. A repeated request key returns the standing count and writes no second revision. A different payload on that key is refused. Difference posting and recount stay closed. T846 was not rerun.
+
+The service proof. A batch wrote nothing. A company code was refused. A client difference was refused. A post was refused. The same request counted 12.000 once. The retry left the version where it stood. Quantity 13 on that key was refused. Nothing was posted. Service test 17/17. Screen contract 11/11. Route `/inventory/physical-inventory-count`. Capability `INV.PHYINV.COUNT`, posting false. Alias `MI04` only in the catalogue.
+
+Same-stage bookkeeping: B-994 / §27.006 / §30 row 2.824.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -247,3 +255,4 @@ Same-stage bookkeeping: B-993 / §27.005 / §30 row 2.823.
 | 2.821 | 2026-10-22 | **SCR-164 stage 5 — T863 reads one order, and it writes nothing (B-991, §27.003).** Production build. ME23N opened the one screen. PO-DISP1 was shown. The reversal stayed. An exchange rate was refused. Nothing was written. T849 through T862 not rerun. | Agent |
 | 2.822 | 2026-10-22 | **SCR-165 — ME61 local contract (B-992, §27.004).** Migration `9101`. A check writes nothing. Price 93.33 and delivery 69.23 are calculated. A missing score is not zero. The overall score 78.14 is derived. Capability `PROC.VENDOR.EVALUATE`, posting false. T864 not run. T849 through T863 not rerun. | Agent |
 | 2.823 | 2026-10-22 | **SCR-165 stage 5 — T864 checks one evaluation, and only a manual score is stored (B-993, §27.005).** Production build. ME61 opened the one screen. Price 100.00 and delivery 100.00 were calculated. A missing score was not zero. Quality 80 was saved. A company code was refused. Nothing was posted. T849 through T863 not rerun. | Agent |
+| 2.824 | 2026-10-22 | **SCR-147 judged again — the count is the item (B-994, §27.006).** No second count table. A batch, a company code, a client difference, and a post are refused by name. A repeated request writes no second revision. Service test 17/17. Screen contract 11/11. T846 not rerun. | Agent |

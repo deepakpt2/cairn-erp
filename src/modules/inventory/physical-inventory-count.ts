@@ -13,6 +13,10 @@
  *   · **The book quantity is frozen, not re-read.** MI01 stores it with the basis it was taken on;
  *     a correction recomputes the difference against that same snapshot, so a count cannot drift
  *     into measuring itself against stock that moved after it.
+ *
+ * The count is the inventory item. A second count table, a count event, a company-code key, a
+ * batch, and a posting from this screen are refused by name. Difference posting and recount stay
+ * their own transactions.
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -34,6 +38,39 @@ const COUNTABLE_STATUSES = ['CREATED', 'PARTIALLY_COUNTED', 'COUNTED', 'PARTIALL
 
 const ITEM_OBJECT_CLASS = 'physical_inventory_item';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Fields this package names and this count does not have. A value is refused, never dropped.
+ * The count is the inventory item. There is no second count table, no count event, and no posting.
+ */
+const REFUSED_COUNT_FIELDS: Record<string, string> = {
+  batch: 'A batch is not part of this count.',
+  serialNumber: 'A serial number is not part of this count.',
+  handlingUnit: 'A handling unit is not part of this count.',
+  bookQuantity: 'The book quantity is the frozen snapshot. It is not entered.',
+  differenceQuantity: 'The difference is not entered. It is counted quantity minus the frozen book.',
+  companyCode: 'The company code is read from the plant. It is not a key of the count.',
+  countId: 'A count is the inventory item. A separate count id is not accepted.',
+  post: 'A count posts nothing.',
+  countEvent: 'Count history is the change document. A count event is not accepted.',
+};
+
+/** A named field this count does not accept. Empty means the caller did not send one. */
+export function countNamedRefusal(fields: Record<string, string | undefined> | undefined): string | null {
+  if (!fields) return null;
+  for (const [name, value] of Object.entries(fields)) {
+    if (!value?.trim()) continue;
+    return REFUSED_COUNT_FIELDS[name] ?? `${name} is not a field of this count.`;
+  }
+  return null;
+}
+
+function refuseNamed(fields: Record<string, string | undefined> | undefined): void {
+  const refusal = countNamedRefusal(fields);
+  if (refusal) {
+    throw new PhysicalInventoryCountError(refusal, 'Count the document and the fiscal year. A count posts nothing.');
+  }
+}
 
 export class PhysicalInventoryCountError extends Error {
   readonly remedy?: string;
@@ -78,6 +115,8 @@ export interface SubmitCountsInput {
   counterName?: string;
   requestKey: string;
   reason?: string;
+  /** Named fields this count refuses rather than dropping. Absent on the standing screen. */
+  named?: Record<string, string | undefined>;
   lines: Array<{
     itemNumber: number;
     quantity?: number;
@@ -354,6 +393,65 @@ export async function searchCountDocuments(
   });
 }
 
+/**
+ * A request key that already counted this document is a retry, not a second revision.
+ * The same lines return the standing count and write nothing. Different lines are refused.
+ */
+async function replayOf(
+  tx: Tx,
+  client: string,
+  submission: {
+    documentNumber: string;
+    fiscalYear: number;
+    requestKey: string;
+    lines: Array<{ itemNumber: number; quantity?: number; zeroCount?: boolean; entryUnit?: string; countDate?: string }>;
+  },
+  items: ItemRow[],
+): Promise<CountDocumentView | null> {
+  const prior = await tx.execute(sql`
+    select object_key
+      from change_document
+     where client = ${client}
+       and correlation_id = ${submission.requestKey}
+       and object_class = ${ITEM_OBJECT_CLASS}
+  `) as unknown as Array<{ object_key: string }>;
+  if (prior.length === 0) return null;
+  const prefix = `${submission.documentNumber}/${submission.fiscalYear}/`;
+  if (prior.some((row) => !String(row.object_key).startsWith(prefix))) {
+    throw new PhysicalInventoryCountError(
+      'This request already counted another document.',
+      'Use a new request for a different count.',
+    );
+  }
+  if (!linesMatchStanding(items, submission.lines)) {
+    throw new PhysicalInventoryCountError(
+      'This request already counted the document, and a retry cannot change it.',
+      'Read the count again. A correction is a new request.',
+    );
+  }
+  return viewOf(tx, client, submission.documentNumber, submission.fiscalYear);
+}
+
+function linesMatchStanding(
+  items: ItemRow[],
+  lines: Array<{ itemNumber: number; quantity?: number; zeroCount?: boolean; entryUnit?: string; countDate?: string }>,
+): boolean {
+  const byNumber = new Map(items.map((item) => [item.itemNumber, item]));
+  for (const line of lines) {
+    const item = byNumber.get(line.itemNumber);
+    if (!item || item.countStatus !== 'COUNTED') return false;
+    const zero = line.zeroCount === true;
+    if (item.zeroCountFlag !== zero) return false;
+    const stored = item.countedQuantity === null ? Number.NaN : Number(item.countedQuantity);
+    const submitted = zero ? 0 : Number(line.quantity);
+    if (!Number.isFinite(stored) || Math.abs(stored - submitted) > 0.0005) return false;
+    const entryUnit = line.entryUnit?.trim();
+    if (entryUnit && item.entryUnit && entryUnit !== item.entryUnit) return false;
+    if (line.countDate && item.countDate && line.countDate !== item.countDate) return false;
+  }
+  return lines.length > 0;
+}
+
 /** The book quantity for an item that carries no snapshot — measured now, and said to be. */
 async function liveBookQuantity(
   tx: Tx, client: string, header: { plant: string; storageLocation: string | null },
@@ -378,6 +476,7 @@ async function liveBookQuantity(
  * writes stock, a material document or a journal — a test reads all three back afterwards.
  */
 export async function submitCounts(input: SubmitCountsInput): Promise<CountDocumentView> {
+  refuseNamed(input.named);
   const parsed = submissionSchema.safeParse({
     documentNumber: input.documentNumber,
     fiscalYear: input.fiscalYear,
@@ -448,6 +547,8 @@ export async function submitCounts(input: SubmitCountsInput): Promise<CountDocum
        for update
     `);
     const items = await loadItems(tx, input.client, submission.documentNumber, submission.fiscalYear);
+    const replay = await replayOf(tx, input.client, submission, items);
+    if (replay) return replay;
     const byNumber = new Map(items.map((i) => [i.itemNumber, i]));
 
     // Judge everything before writing anything: a bulk submission lands whole or not at all.
@@ -670,6 +771,8 @@ export interface ClearCountInput {
   reason: string;
   requestKey: string;
   expectedVersion?: number;
+  /** Named fields this count refuses rather than dropping. Absent on the standing screen. */
+  named?: Record<string, string | undefined>;
 }
 
 /**
@@ -679,6 +782,7 @@ export interface ClearCountInput {
  * cleared, because a correction that erases its own evidence is not an audit trail.
  */
 export async function clearCount(input: ClearCountInput): Promise<CountDocumentView> {
+  refuseNamed(input.named);
   if (!input.reason.trim()) {
     throw new PhysicalInventoryCountError(
       'Clearing a count needs a reason.',

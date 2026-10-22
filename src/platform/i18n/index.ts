@@ -2646,6 +2646,7 @@ const en: Catalogue = {
   'mi04.openDocuments': 'Count documents in this tenant',
   'mi04.statusTitle': 'Count status',
   'mi04.documentStatus': 'Document status',
+  'mi04.companyCode': 'Company code',
   'mi04.items': 'Items',
   'mi04.counted': 'Counted',
   'mi04.uncounted': 'Uncounted',

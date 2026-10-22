@@ -371,4 +371,62 @@ describe('SCR-147 physical inventory count (MI04)', () => {
     expect(status).toMatchObject({ items: 4, counted: 3, uncounted: 1 });
     expect(status!.uncountedItems).toEqual([20]);
   });
+
+  it('refuses a batch, a company code, and a client difference by name, and writes nothing', async () => {
+    const before = await itemOf(20);
+    const fingerprint = await ledgerFingerprint();
+    await expect(submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: nextKey(),
+      named: { batch: 'BATCH-1' },
+      lines: [{ itemNumber: 20, quantity: 4 }],
+    })).rejects.toThrow(/A batch is not part of this count/);
+    await expect(submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: nextKey(),
+      named: { companyCode: '1000' },
+      lines: [{ itemNumber: 20, quantity: 4 }],
+    })).rejects.toThrow(/not a key of the count/);
+    await expect(submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: nextKey(),
+      named: { differenceQuantity: '1' },
+      lines: [{ itemNumber: 20, quantity: 4 }],
+    })).rejects.toThrow(/The difference is not entered/);
+    await expect(submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: nextKey(),
+      named: { post: 'yes' },
+      lines: [{ itemNumber: 20, quantity: 4 }],
+    })).rejects.toThrow(/A count posts nothing/);
+    const after = await itemOf(20);
+    expect(after.version).toBe(before.version);
+    expect(after.countStatus).toBe(before.countStatus);
+    expect(await ledgerFingerprint()).toBe(fingerprint);
+  });
+
+  it('replays the same request without a second revision, and refuses a different one', async () => {
+    const key = nextKey();
+    const first = await submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: key,
+      lines: [{ itemNumber: 20, quantity: 12 }],
+    });
+    const counted = first.items.find((item) => item.itemNumber === 20)!;
+    expect(counted.countedQuantity).toBe('12.000');
+    const history = await getCountHistory(client, { documentNumber, fiscalYear, itemNumber: 20 });
+
+    const replay = await submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: key,
+      lines: [{ itemNumber: 20, quantity: 12 }],
+    });
+    const again = replay.items.find((item) => item.itemNumber === 20)!;
+    expect(again.version).toBe(counted.version);
+    expect(again.countedQuantity).toBe('12.000');
+    const after = await getCountHistory(client, { documentNumber, fiscalYear, itemNumber: 20 });
+    expect(after).toHaveLength(history.length);
+
+    await expect(submitCounts({
+      client, changedBy: ACTOR, documentNumber, fiscalYear, countDate: DAY, requestKey: key,
+      lines: [{ itemNumber: 20, quantity: 13 }],
+    })).rejects.toThrow(/retry cannot change it/);
+    const standing = await itemOf(20);
+    expect(standing.countedQuantity).toBe('12.000');
+    expect(standing.version).toBe(counted.version);
+  });
 });
