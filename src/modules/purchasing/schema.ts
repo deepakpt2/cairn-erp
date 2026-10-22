@@ -576,8 +576,9 @@ export const customerInvoiceLine = pgTable('customer_invoice_line', {
  * Request for quotation — SCR-155. One event groups the requirement. Each
  * invited supplier receives a separate request, and that request copies the
  * lines. The drawn numbers are the keys. A collective number is a label, not
- * the key. There is no status, no price, no quotation, and no company code.
- * The order is not given a request column.
+ * the key. There is no status, no price, and no company code. A quotation is
+ * a later document. It is not a column here. The order is not given a request
+ * column.
  */
 export const purchasingRfqEvent = pgTable('purchasing_rfq_event', {
   client: tenant(),
@@ -713,4 +714,58 @@ export const purchasingRfqItem = pgTable('purchasing_rfq_item', {
   check('purchasing_rfq_item_number_ck', sql`${t.itemNumber} > 0 and ${t.itemNumber} % 10 = 0`),
   check('purchasing_rfq_item_qty_ck', sql`${t.quantity} > 0`),
   check('purchasing_rfq_item_text_ck', sql`char_length(btrim(${t.shortText})) between 1 and 40`),
+]);
+
+/**
+ * Quotation — SCR-157. One quotation prices one standing request. The drawn
+ * number is the key. The request number is the link. The supplier and the
+ * currency are not stored again. There is no status, no revision, and no
+ * condition. The order is not given a quotation column.
+ */
+export const purchasingQuotation = pgTable('purchasing_quotation', {
+  client: tenant(),
+  quotationNumber: varchar('quotation_number', { length: 20 }).notNull(),
+  rfqNumber: varchar('rfq_number', { length: 20 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotationNumber] }),
+  unique('purchasing_quotation_request_uq').on(t.client, t.rfqNumber),
+  unique('purchasing_quotation_request_pair_uq').on(t.client, t.quotationNumber, t.rfqNumber),
+  foreignKey({
+    columns: [t.client, t.rfqNumber],
+    foreignColumns: [purchasingRfq.client, purchasingRfq.rfqNumber],
+  }).onDelete('restrict'),
+  check('purchasing_quotation_number_ck', sql`char_length(btrim(${t.quotationNumber})) between 1 and 20`),
+]);
+
+export const purchasingQuotationItem = pgTable('purchasing_quotation_item', {
+  client: tenant(),
+  quotationNumber: varchar('quotation_number', { length: 20 }).notNull(),
+  rfqNumber: varchar('rfq_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  netPrice: numeric('net_price', { precision: 23, scale: 4 }).notNull(),
+  priceUnit: numeric('price_unit', { precision: 5, scale: 0 }).notNull(),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  remark: varchar('remark', { length: 80 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.quotationNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.quotationNumber, t.rfqNumber],
+    foreignColumns: [purchasingQuotation.client, purchasingQuotation.quotationNumber, purchasingQuotation.rfqNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.rfqNumber, t.itemNumber],
+    foreignColumns: [purchasingRfqItem.client, purchasingRfqItem.rfqNumber, purchasingRfqItem.itemNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.unit],
+    foreignColumns: [unitOfMeasure.code],
+  }).onDelete('restrict'),
+  check('purchasing_quotation_item_qty_ck', sql`${t.quantity} > 0`),
+  check('purchasing_quotation_item_price_ck', sql`${t.netPrice} >= 0`),
+  check('purchasing_quotation_item_price_unit_ck', sql`${t.priceUnit} > 0`),
+  check('purchasing_quotation_item_remark_ck', sql`${t.remark} is null or char_length(btrim(${t.remark})) between 1 and 80`),
 ]);

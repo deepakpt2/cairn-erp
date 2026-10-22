@@ -128,6 +128,7 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'QUOTAARR', subObject: '*', prefix: 'QA', length: 7 },
   { objectCode: 'RFQEVENT', subObject: '*', prefix: 'EV', length: 7 },
   { objectCode: 'RFQ', subObject: '*', prefix: 'RQ', length: 7 },
+  { objectCode: 'QUOTATION', subObject: '*', prefix: 'QT', length: 7 },
 ];
 
 export interface CreateTenantInput {

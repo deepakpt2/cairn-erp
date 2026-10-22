@@ -67,6 +67,7 @@ async function search(
   const plant = clean(context.plant);
   const org = clean(context.purchasingOrg);
   const material = clean(context.materialNumber).toUpperCase();
+  const askedUnit = clean(context.askedUnit).toUpperCase();
   const dimension = clean(context.dimension).toUpperCase();
   const postingDate = DATE.test(clean(context.postingDate))
     ? clean(context.postingDate)
@@ -140,17 +141,33 @@ async function search(
         select code, name as label, dimension as meta
           from unit_of_measure
          where (${dimension === ''} or dimension = ${dimension})
-           and (${material === ''} or code = (
-             select upper(base_unit) from material
-              where client = ${client} and material_number = ${material}
-           ) or exists (
-             select 1 from material_uom_conversion c
-              where c.client = ${client}
-                and c.material_number = ${material}
-                and c.alternative_unit = unit_of_measure.code
-           ))
+           and (
+             (${material === '' && askedUnit === ''})
+             or (${askedUnit !== ''} and code = ${askedUnit})
+             or (${material !== ''} and (
+               code = (
+                 select upper(base_unit) from material
+                  where client = ${client} and material_number = ${material}
+               ) or exists (
+                 select 1 from material_uom_conversion c
+                  where c.client = ${client}
+                    and c.material_number = ${material}
+                    and c.alternative_unit = unit_of_measure.code
+               )
+             ))
+           )
            and (${!typed} or code ilike ${pattern} escape '\\' or name ilike ${pattern} escape '\\')
          order by code
+         limit ${cap}
+      `);
+    case 'quotation-request':
+      return rows(tx, sql`
+        select r.rfq_number as code, r.partner_number as label, e.quotation_deadline as meta
+          from purchasing_rfq r
+          join purchasing_rfq_event e on e.client = r.client and e.event_number = r.event_number
+         where r.client = ${client}
+           and (r.rfq_number ilike ${pattern} escape '\\' or r.partner_number ilike ${pattern} escape '\\')
+         order by r.rfq_number
          limit ${cap}
       `);
     case 'material-order':

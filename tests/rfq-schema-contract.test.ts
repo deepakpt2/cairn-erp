@@ -211,9 +211,10 @@ describe('SCR-155 request-for-quotation schema', () => {
     expect(names).toContain('collective_number');
     expect(names).toContain('quotation_deadline');
     expect(names).toContain('short_text');
+    // purchasing_quotation is ME47's table. This round still has no delivery attempt and no second event table.
     const absentTables = await withTenant(client, (tx) => tx.execute(sql`
       select name
-        from (values ('purchasing_quotation'), ('rfq_delivery_attempt'), ('sourcing_event')) as wanted(name)
+        from (values ('rfq_delivery_attempt'), ('sourcing_event')) as wanted(name)
        where to_regclass('public.' || name) is not null
     `)) as unknown as Array<{ name: string }>;
     expect(absentTables).toEqual([]);

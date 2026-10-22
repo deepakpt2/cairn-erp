@@ -51,6 +51,7 @@ export default async function PurchasingRfqPage({ searchParams }: {
             <Link href="/purchasing/quota-arrangement" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toQuota')}</Link>
             <Link href="/purchasing/source-list" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toSourceList')}</Link>
             <Link href="/purchasing/orders" className="btn btn-default min-h-11 sm:min-h-8">{t('requestForQuotation.toOrders')}</Link>
+            <Link href="/purchasing/quotation" className="btn btn-default min-h-11 sm:min-h-8">{t('quotation.title')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>
         </div>
