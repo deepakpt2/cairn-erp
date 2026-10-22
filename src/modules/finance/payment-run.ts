@@ -14,6 +14,7 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { bankAccount, houseBank, paymentMethod } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
+import { activeBlockedInvoiceNumbers } from '../purchasing/blocked-invoice';
 import { supplierInvoice } from '../purchasing/schema';
 import {
   journalEntry, journalEntryLine, paymentDocument, paymentProposalItem,
@@ -252,6 +253,7 @@ async function openItems(tx: Tx, client: string, run: PaymentRunView): Promise<O
   for (const inv of await tx.select().from(supplierInvoice).where(eq(supplierInvoice.client, client))) {
     invoices.set(inv.invoiceNumber, { dueDate: inv.dueDate });
   }
+  const blocked = await activeBlockedInvoiceNumbers(tx, client);
   const items: OpenItem[] = [];
   for (const line of lines) {
     if (!companySet.has(line.companyCode)) continue;
@@ -259,6 +261,8 @@ async function openItems(tx: Tx, client: string, run: PaymentRunView): Promise<O
     if (run.supplierFrom && line.partner! < run.supplierFrom) continue;
     if (run.supplierTo && line.partner! > run.supplierTo) continue;
     const isInvoice = line.originClass === 'supplier_invoice' && line.originKey;
+    // The same manual hold MRBR releases. The line stays open and is not proposed.
+    if (isInvoice && blocked.has(line.originKey!)) continue;
     const invoice = isInvoice ? invoices.get(line.originKey!) : undefined;
     items.push({
       journalDocumentNumber: line.documentNumber,

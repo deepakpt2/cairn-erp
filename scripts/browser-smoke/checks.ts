@@ -5072,6 +5072,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr159-quotation-comparison': scr159QuotationComparison,
   'scr160-parked-invoice': scr160ParkedInvoice,
   'scr161-invoice-overview': scr161InvoiceOverview,
+  'scr162-blocked-invoice': scr162BlockedInvoice,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

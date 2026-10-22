@@ -107,6 +107,7 @@ export default async function InvoiceOverviewPage({ searchParams }: {
           <h1 className="text-xl font-semibold tracking-tight">{t('invoiceOverview.title')}</h1>
           <div className="flex flex-wrap gap-2">
             <Link href="/purchasing/parked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.title')}</Link>
+            <Link href="/purchasing/blocked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.toBlocked')}</Link>
             <Link href="/purchasing/invoice-verification" className="btn btn-default min-h-11 sm:min-h-8">{t('invoiceOverview.toPost')}</Link>
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
           </div>

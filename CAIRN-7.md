@@ -109,6 +109,28 @@ An export, a payment block, and MIR4 were not started.
 
 Same-stage bookkeeping: B-979 / §26.991 / §30 row 2.809.
 
+## §26.992 — MRBR contracted: a release is not a posting
+
+**B-980.** SCR-162. The owner's package (2026-10-22) is the contract. MRBR releases a payment block on a posted logistics invoice. It does not repost, reverse, or change the invoice amount or the accounting document. A check writes nothing. Releasing one reason does not clear another. A payable stays blocked while a mandatory block remains. A payable in a payment proposal, or already paid, is not released. A closed period does not by itself refuse a release that posts nothing.
+
+**What already stands, and this round does not invent.** The payable is the uncleared supplier credit line of a posted journal whose origin is `supplier_invoice`. Invoice verification posts that journal. It does not write a payment block, and a price difference is not a block. There is no tolerance that generates a price block or a quantity block. MIR6 still refuses a payment block by name. The payment run already proposes and pays open supplier lines. This round does not build another payment run.
+
+**The only hold that can stand.** A manual hold on a posted unpaid supplier invoice whose supplier line is still open and not sitting in a proposal. The hold is a row the payment run reads. It is not a second payable and not a flag the run ignores. A price block, a quantity block, and a quality block are refused by name.
+
+## §26.993 — MRBR service: the hold is the row the payment run reads
+
+**B-981.** SCR-162 stage 2. Migration `9099`. Tables `supplier_invoice_payment_block` and `supplier_invoice_payment_block_event`. The reason check admits only `MANUAL`. A release sets the hold inactive and appends an event. It does not update the invoice or the journal. The same request key returns the standing result and does not write again. A stale version is refused. `openItems` in the payment run skips an invoice with an active hold.
+
+The service proof. A posted invoice with a price difference had no hold until one was placed. A check wrote nothing. The same request key did not write a second event. The payment proposal left the held invoice out. Period 10 was closed for vendors, and the release still stood. The invoice gross, the journal document, the journal count, the line amount, and the clearing stamp were unchanged. A replay did not add an event. After the release, the same proposal included the invoice. Execution paid it, and a later hold was refused as already paid. An invoice already in a proposal could not be held. After that proposal was cancelled, the hold stood, was released, and was placed again as the same row. A price block, a quantity block, a quality block, and a parked number were refused by name. Service test 3/3. The existing payment-run tests still passed, 2/2. The screen was not the acceptance of this stage. T861 was not run. T849 through T860 were not rerun.
+
+Same-stage bookkeeping: B-981 / §26.993 / §30 row 2.811.
+
+## §26.994 — MRBR screen: one route, and it does not post
+
+**B-982.** SCR-162 stage 3. Route `/purchasing/blocked-invoice`. Capabilities `PROC.INV.BLOCK` and `PROC.INV.BLOCK.RELEASE`, both posting false. Alias `MRBR` in the catalogue only, on the release capability. It is not an identifier on the page. Company code is a dropdown. Vendor, purchase order, and invoice suggest as the user types, five at a time. The fiscal year is required and is the year stored on the invoice. The list shows the manual reason, who placed it, and whether the payable is open, in a proposal, or paid. A check writes nothing. Place and release return to the same selection. The history names the action, the person, and the reason. There is no post button, no price field, and no quantity field. A link to the invoice overview and a link to the payment run are navigation. Live seed on this workspace was 188 capabilities, 162 terms, 185 aliases. Configuration activities stayed 71. The message catalogue stayed 11. Screen contract 2/2. Service test was not the browser acceptance. T861 was not run. T849 through T860 were not rerun.
+
+Same-stage bookkeeping: B-982 / §26.994 / §30 row 2.812.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -125,3 +147,6 @@ Same-stage bookkeeping: B-979 / §26.991 / §30 row 2.809.
 | 2.807 | 2026-10-22 | **SCR-161 stage 2 — one row per invoice (B-977, §26.989).** A park has no journal. A cancellation names the original and is not a credit memo. Fiscal year 2025 stayed out of 2026. Two items did not duplicate the row. Service test 2/2. | Agent |
 | 2.808 | 2026-10-22 | **SCR-161 stage 3 — one screen (B-978, §26.990).** Route `/purchasing/invoice-overview`. Alias only in the catalogue. Capability `PROC.INV.OVERVIEW`, posting false. T860 not run. T849 through T859 not rerun. | Agent |
 | 2.809 | 2026-10-22 | **SCR-161 stage 5 — T860 lists one park, and it does not post (B-979, §26.991).** Production build. MIR6 opened the one screen. PV-0000001 stood parked, with no accounting document. A draft was refused. Nothing was written. T849 through T859 not rerun. | Agent |
+| 2.810 | 2026-10-22 | **SCR-162 / MRBR contracted (B-980, §26.992).** A release is not a posting. The only hold is manual. A price difference is not a block. The payment run reads the same row. | Agent |
+| 2.811 | 2026-10-22 | **SCR-162 stage 2 — the hold is the row the payment run reads (B-981, §26.993).** Migration `9099`. A closed period did not refuse the release. The journal amount did not change. A paid item and a proposal item were refused. Service test 3/3. | Agent |
+| 2.812 | 2026-10-22 | **SCR-162 stage 3 — one screen (B-982, §26.994).** Route `/purchasing/blocked-invoice`. Alias only in the catalogue. Capabilities `PROC.INV.BLOCK` and `PROC.INV.BLOCK.RELEASE`, posting false. T861 not run. T849 through T860 not rerun. | Agent |

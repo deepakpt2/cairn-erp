@@ -1,5 +1,5 @@
 /** Purchase requisitions — SCR-055 / R-103 (ME51N). Item-level documents, no header record. */
-import { pgTable, varchar, char, integer, smallint, numeric, boolean, date, primaryKey, foreignKey, unique, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, char, integer, bigint, smallint, numeric, boolean, date, timestamp, primaryKey, foreignKey, unique, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
@@ -839,4 +839,51 @@ export const parkedSupplierInvoiceItem = pgTable('parked_supplier_invoice_item',
   check('parked_supplier_invoice_item_line_ck', sql`${t.lineNumber} = ${t.purchaseOrderItem}`),
   check('parked_supplier_invoice_item_qty_ck', sql`${t.quantity} > 0`),
   check('parked_supplier_invoice_item_amounts_ck', sql`${t.netAmount} >= 0 and ${t.expectedAmount} >= 0 and ${t.taxAmount} >= 0`),
+]);
+
+/**
+ * A manual payment hold on a posted supplier invoice. The open item remains
+ * the journal line. This row is not a second payable.
+ */
+export const supplierInvoicePaymentBlock = pgTable('supplier_invoice_payment_block', {
+  client: tenant(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  reason: varchar('reason', { length: 16 }).notNull(),
+  journalDocumentNumber: varchar('journal_document_number', { length: 40 }).notNull(),
+  active: boolean('active').notNull(),
+  comment: varchar('comment', { length: 100 }).notNull(),
+  version: integer('version').notNull().default(1),
+  clearedBy: varchar('cleared_by', { length: 60 }),
+  clearedAt: timestamp('cleared_at', { withTimezone: true }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.invoiceNumber, t.reason] }),
+  foreignKey({
+    columns: [t.client, t.invoiceNumber],
+    foreignColumns: [supplierInvoice.client, supplierInvoice.invoiceNumber],
+  }).onDelete('restrict'),
+  check('supplier_invoice_payment_block_reason_ck', sql`${t.reason} = 'MANUAL'`),
+]);
+
+/** Append-only. A release does not update or delete an event. */
+export const supplierInvoicePaymentBlockEvent = pgTable('supplier_invoice_payment_block_event', {
+  client: tenant(),
+  eventId: bigint('event_id', { mode: 'number' }).generatedAlwaysAsIdentity(),
+  invoiceNumber: varchar('invoice_number', { length: 20 }).notNull(),
+  reason: varchar('reason', { length: 16 }).notNull(),
+  action: varchar('action', { length: 16 }).notNull(),
+  outcome: varchar('outcome', { length: 16 }).notNull(),
+  actor: varchar('actor', { length: 60 }).notNull(),
+  comment: varchar('comment', { length: 100 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  previousActive: boolean('previous_active').notNull(),
+  resultingActive: boolean('resulting_active').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventId] }),
+  unique('supplier_invoice_payment_block_event_request_uq').on(t.client, t.requestKey),
+  foreignKey({
+    columns: [t.client, t.invoiceNumber, t.reason],
+    foreignColumns: [supplierInvoicePaymentBlock.client, supplierInvoicePaymentBlock.invoiceNumber, supplierInvoicePaymentBlock.reason],
+  }).onDelete('restrict'),
 ]);
