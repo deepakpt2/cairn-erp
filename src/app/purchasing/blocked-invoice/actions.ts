@@ -32,8 +32,6 @@ export interface BlockedInvoiceActionState {
   active?: boolean;
 }
 
-const INITIAL_MESSAGE = '';
-
 function text(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value.trim() : '';
@@ -152,4 +150,4 @@ export async function releaseBlockedInvoiceAction(
   );
 }
 
-export const blockedInvoiceIdle: BlockedInvoiceActionState = { ok: false, message: INITIAL_MESSAGE };
+

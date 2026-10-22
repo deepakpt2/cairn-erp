@@ -1,14 +1,15 @@
 'use client';
 
-import { useActionState, useState, type ReactNode } from 'react';
+import { useActionState, useEffect, useState, type ReactNode } from 'react';
 
 import {
-  blockedInvoiceIdle,
   checkBlockedInvoiceAction,
   placeBlockedInvoiceAction,
   releaseBlockedInvoiceAction,
   type BlockedInvoiceActionState,
 } from './actions';
+
+const blockedInvoiceIdle: BlockedInvoiceActionState = { ok: false, message: '' };
 
 function Notice({ state }: { state: BlockedInvoiceActionState }) {
   if (!state.message) return null;
@@ -43,7 +44,8 @@ export function PlaceHoldForm({ invoiceNumber, invoiceLabel, commentLabel, check
   placingLabel: string;
   selection: Record<string, string>;
 }) {
-  const [key] = useState(() => crypto.randomUUID());
+  const [key, setKey] = useState('');
+  useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [placeState, placeAction, placing] = useActionState(placeBlockedInvoiceAction, blockedInvoiceIdle);
   const notice = placeState.message ? placeState : checkState;
@@ -59,8 +61,8 @@ export function PlaceHoldForm({ invoiceNumber, invoiceLabel, commentLabel, check
         <Field label={commentLabel}>
           <input name="comment" className="input w-full" required maxLength={100} />
         </Field>
-        <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={checking || placing} data-blocked-invoice-place-check>{checking ? checkingLabel : checkLabel}</button>
-        <button type="submit" formAction={placeAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={checking || placing} data-blocked-invoice-place-save>{placing ? placingLabel : placeLabel}</button>
+        <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || placing} data-blocked-invoice-place-check>{checking ? checkingLabel : checkLabel}</button>
+        <button type="submit" formAction={placeAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || placing} data-blocked-invoice-place-save>{placing ? placingLabel : placeLabel}</button>
       </div>
       <Notice state={notice} />
     </form>
@@ -77,7 +79,8 @@ export function ReleaseHoldForm({ invoiceNumber, version, commentLabel, checkLab
   releasingLabel: string;
   selection: Record<string, string>;
 }) {
-  const [key] = useState(() => crypto.randomUUID());
+  const [key, setKey] = useState('');
+  useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [releaseState, releaseAction, releasing] = useActionState(releaseBlockedInvoiceAction, blockedInvoiceIdle);
   const notice = releaseState.message ? releaseState : checkState;
@@ -90,8 +93,8 @@ export function ReleaseHoldForm({ invoiceNumber, version, commentLabel, checkLab
       {Object.entries(selection).map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
       <div className="flex flex-wrap items-end gap-2">
         <input name="comment" className="input min-w-48 flex-1" required maxLength={100} aria-label={commentLabel} placeholder={commentLabel} />
-        <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={checking || releasing} data-blocked-invoice-release-check>{checking ? checkingLabel : checkLabel}</button>
-        <button type="submit" formAction={releaseAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={checking || releasing} data-blocked-invoice-release-save>{releasing ? releasingLabel : releaseLabel}</button>
+        <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || releasing} data-blocked-invoice-release-check>{checking ? checkingLabel : checkLabel}</button>
+        <button type="submit" formAction={releaseAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || releasing} data-blocked-invoice-release-save>{releasing ? releasingLabel : releaseLabel}</button>
       </div>
       <Notice state={notice} />
     </form>
