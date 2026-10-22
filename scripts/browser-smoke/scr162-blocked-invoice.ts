@@ -158,13 +158,13 @@ export async function scr162BlockedInvoice(ctx: Context) {
   console.log('  ✓ MRBR opens the hold screen, and the alias is not on the page');
 
   await page.locator('select[name="companyFrom"]').selectOption('1000');
-  await page.locator('#blocked-invoice-selection [name="fiscalYear"]').fill('2026');
+  await page.getByRole('textbox', { name: 'Fiscal year' }).fill('2026');
   await page.locator('[data-blocked-invoice-list]').click();
   await page.locator('[data-blocked-invoice-empty]').waitFor();
   assert.deepEqual(await standing(), before);
   console.log('  ✓ an unheld invoice is not listed, and nothing is written');
 
-  const place = page.locator('#blocked-invoice-place');
+  const place = page.getByRole('region', { name: 'Place hold' });
   await place.locator('[name="invoiceNumber"]').fill(posted.invoiceNumber);
   await place.locator('[name="comment"]').fill('hold for acceptance');
   await place.locator('[data-blocked-invoice-place-check]').click();

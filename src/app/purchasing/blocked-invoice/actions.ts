@@ -9,7 +9,6 @@
  * through, so the service refuses them by name. This screen does not post.
  */
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 
 import { can, requireSession } from '@/platform/auth/current';
 import {
@@ -71,17 +70,6 @@ function refused(caught: unknown): BlockedInvoiceActionState | null {
   return null;
 }
 
-function returnTo(form: FormData, invoiceNumber: string, notice: string): never {
-  const params = new URLSearchParams();
-  for (const name of ['companyFrom', 'companyTo', 'fiscalYear', 'supplier', 'orderNumber', 'reference', 'includeReleased']) {
-    const value = text(form, name);
-    if (value) params.set(name, value);
-  }
-  params.set('invoiceNumber', invoiceNumber);
-  params.set('notice', notice);
-  redirect(`${BLOCKED_INVOICE_ROUTE}?${params.toString()}`);
-}
-
 function missing(which: 'place' | 'release'): BlockedInvoiceActionState {
   const code = which === 'place' ? BLOCKED_INVOICE_HOLD_CAPABILITY : BLOCKED_INVOICE_CAPABILITY;
   return { ok: false, message: `You do not hold ${code}.` };
@@ -119,13 +107,15 @@ export async function placeBlockedInvoiceAction(
     return refused(caught) ?? { ok: false, message: 'The hold could not be placed.' };
   }
   revalidatePath(BLOCKED_INVOICE_ROUTE);
-  returnTo(
-    form,
-    result.invoiceNumber,
-    result.wrote
+  return {
+    ok: true,
+    wrote: result.wrote,
+    invoiceNumber: result.invoiceNumber,
+    active: result.active,
+    message: result.wrote
       ? `A manual hold stands on ${result.invoiceNumber}. The journal was not changed.`
       : `The same request already stood. ${result.invoiceNumber} was not written again.`,
-  );
+  };
 }
 
 export async function releaseBlockedInvoiceAction(
@@ -141,13 +131,15 @@ export async function releaseBlockedInvoiceAction(
     return refused(caught) ?? { ok: false, message: 'The hold could not be released.' };
   }
   revalidatePath(BLOCKED_INVOICE_ROUTE);
-  returnTo(
-    form,
-    result.invoiceNumber,
-    result.wrote
+  return {
+    ok: true,
+    wrote: result.wrote,
+    invoiceNumber: result.invoiceNumber,
+    active: result.active,
+    message: result.wrote
       ? `The manual hold on ${result.invoiceNumber} was released. The journal was not changed.`
       : `The same request already stood. ${result.invoiceNumber} was not written again.`,
-  );
+  };
 }
 
 

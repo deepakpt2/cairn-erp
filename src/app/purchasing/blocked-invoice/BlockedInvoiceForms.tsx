@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState, type ReactNode } from 'react';
 
 import {
@@ -10,6 +11,18 @@ import {
 } from './actions';
 
 const blockedInvoiceIdle: BlockedInvoiceActionState = { ok: false, message: '' };
+const ROUTE = '/purchasing/blocked-invoice';
+
+function useRemember(state: BlockedInvoiceActionState) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!state.ok || !state.invoiceNumber) return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('invoiceNumber', state.invoiceNumber);
+    params.set('notice', state.message);
+    router.replace(`${ROUTE}?${params.toString()}`);
+  }, [router, state.ok, state.invoiceNumber, state.message]);
+}
 
 function Notice({ state }: { state: BlockedInvoiceActionState }) {
   if (!state.message) return null;
@@ -48,6 +61,7 @@ export function PlaceHoldForm({ invoiceNumber, invoiceLabel, commentLabel, check
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [placeState, placeAction, placing] = useActionState(placeBlockedInvoiceAction, blockedInvoiceIdle);
+  useRemember(placeState);
   const notice = placeState.message ? placeState : checkState;
   return (
     <form className="space-y-2">
@@ -83,6 +97,7 @@ export function ReleaseHoldForm({ invoiceNumber, version, commentLabel, checkLab
   useEffect(() => { setKey(crypto.randomUUID()); }, []);
   const [checkState, checkAction, checking] = useActionState(checkBlockedInvoiceAction, blockedInvoiceIdle);
   const [releaseState, releaseAction, releasing] = useActionState(releaseBlockedInvoiceAction, blockedInvoiceIdle);
+  useRemember(releaseState);
   const notice = releaseState.message ? releaseState : checkState;
   return (
     <form className="space-y-2">
