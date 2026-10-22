@@ -142,7 +142,6 @@ export async function scr161InvoiceOverview(ctx: Context) {
   assert.deepEqual(await tallies(), before);
   console.log('  ✓ a draft is refused, and nothing is written');
 
-  await page.locator('[name="companyFrom"] option[value="1000"]').waitFor();
   await page.locator('[name="companyFrom"]').selectOption('1000');
   await page.locator('[name="fiscalYear"]').fill(String(before.fiscal_year));
   await page.locator('[data-invoice-overview-run]').click();

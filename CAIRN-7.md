@@ -101,6 +101,14 @@ An export, a payment block, and MIR4 were not started.
 
 Same-stage bookkeeping: B-978 / §26.990 / §30 row 2.808.
 
+## §26.991 — MIR6 acceptance: T860 lists one park, and it does not post
+
+**B-979.** T860 green on the production build. MIR6 opened the one screen. The alias was not on the page. A draft, a payment block and an export are not fields. There is no post button. A draft was refused by name, and nothing was written. Company 1000 and fiscal year 2026 listed PV-0000001 as parked. The posting date was blank. There was no accounting document, and the payment state was not applicable. The parked count, the posted count, the journal count and the change count were unchanged. The document opened on the list and said no accounting document stands. The park link opened the parked invoice. The list still wrote nothing. Live seed 186 capabilities, 160 terms, 184 aliases. Configuration activities stayed 71. The message catalogue stayed 11. Service test 2/2. Screen contract 2/2. T849 through T859 were not rerun.
+
+An export, a payment block, and MIR4 were not started.
+
+Same-stage bookkeeping: B-979 / §26.991 / §30 row 2.809.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -116,3 +124,4 @@ Same-stage bookkeeping: B-978 / §26.990 / §30 row 2.808.
 | 2.806 | 2026-10-22 | **SCR-161 / MIR6 contracted (B-976, §26.988).** The list is not a posting. No new invoice table. The fiscal year is the stored year. A closed period is not read. | Agent |
 | 2.807 | 2026-10-22 | **SCR-161 stage 2 — one row per invoice (B-977, §26.989).** A park has no journal. A cancellation names the original and is not a credit memo. Fiscal year 2025 stayed out of 2026. Two items did not duplicate the row. Service test 2/2. | Agent |
 | 2.808 | 2026-10-22 | **SCR-161 stage 3 — one screen (B-978, §26.990).** Route `/purchasing/invoice-overview`. Alias only in the catalogue. Capability `PROC.INV.OVERVIEW`, posting false. T860 not run. T849 through T859 not rerun. | Agent |
+| 2.809 | 2026-10-22 | **SCR-161 stage 5 — T860 lists one park, and it does not post (B-979, §26.991).** Production build. MIR6 opened the one screen. PV-0000001 stood parked, with no accounting document. A draft was refused. Nothing was written. T849 through T859 not rerun. | Agent |
