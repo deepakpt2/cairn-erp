@@ -1,0 +1,60 @@
+# Build box behind CGNAT. Tailscale owns the network. SSH listens on 2222 there.
+# From this directory, after cloning the repo:
+#
+#   export BUILD_BOX_PASSWORD='choose-a-disposable-password'
+#   export TS_AUTHKEY='tskey-auth-...'
+#   docker compose up -d --build
+#
+# The tailnet address is:
+#   docker compose exec tailscale tailscale ip -4
+# Forward the public VPS port to that address, port 2222.
+# Use a reusable auth key, not an ephemeral one. Do not commit the key.
+
+name: cairn-build-box
+
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    hostname: cairn-build
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:?Set TS_AUTHKEY}
+      TS_HOSTNAME: ${TS_HOSTNAME:-cairn-build}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_AUTH_ONCE: "true"
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "${BUILD_BOX_SSH_PORT:-2222}:2222"
+    restart: unless-stopped
+
+  build-box:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    pull_policy: build
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    mem_limit: 4g
+    shm_size: 2gb
+    environment:
+      BUILD_BOX_PASSWORD: ${BUILD_BOX_PASSWORD:?Set BUILD_BOX_PASSWORD}
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      NODE_OPTIONS: --max-old-space-size=2048
+    volumes:
+      - ..:/work
+      - build-box-modules:/work/node_modules
+      - build-box-next:/work/.next
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
+  build-box-modules:
+  build-box-next:
