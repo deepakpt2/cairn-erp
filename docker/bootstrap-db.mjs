@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const envPath = '/work/.env.local';
 
@@ -46,7 +46,6 @@ if (!appUrl || !migrationUrl) {
 
 const app = role(appUrl);
 const migration = role(migrationUrl);
-const sqlPath = '/tmp/build-box-bootstrap.sql';
 const sql = `
 DO $$
 BEGIN
@@ -66,12 +65,8 @@ SELECT format('CREATE DATABASE %I OWNER %I', ${quote(app.database)}, ${quote(mig
 GRANT CONNECT ON DATABASE ${app.database} TO ${app.user};
 `;
 
-try {
-  writeFileSync(sqlPath, sql, { mode: 0o600 });
-  execFileSync('su', ['-s', '/bin/sh', 'postgres', '-c', 'psql -v ON_ERROR_STOP=1 -f ' + sqlPath], {
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  console.log('Database roles stand for ' + app.database + '.');
-} finally {
-  if (existsSync(sqlPath)) unlinkSync(sqlPath);
-}
+execFileSync('su', ['-s', '/bin/sh', 'postgres', '-c', 'psql -v ON_ERROR_STOP=1'], {
+  input: sql,
+  stdio: ['pipe', 'ignore', 'inherit'],
+});
+console.log('Database roles stand for ' + app.database + '.');
