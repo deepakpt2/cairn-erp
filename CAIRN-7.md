@@ -131,6 +131,12 @@ Same-stage bookkeeping: B-981 / §26.993 / §30 row 2.811.
 
 Same-stage bookkeeping: B-982 / §26.994 / §30 row 2.812.
 
+## §26.995 — MRBR acceptance: T861 releases one hold, and it does not post
+
+**B-983.** T861 green on the production build. MRBR opened the one screen. The alias was not on the page. An unheld invoice was not listed, and nothing was written. A check named the manual hold on VI-0000001 and wrote nothing. The hold then stood. The reason was manual. The source was the person who placed it. The journal count, the invoice gross, and the line amount did not change. A release check wrote nothing. The release stood in the history, named the person, and left the invoice amount standing. The active row left the list. T849 through T860 were not rerun.
+
+Same-stage bookkeeping: B-983 / §26.995 / §30 row 2.813.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -150,3 +156,4 @@ Same-stage bookkeeping: B-982 / §26.994 / §30 row 2.812.
 | 2.810 | 2026-10-22 | **SCR-162 / MRBR contracted (B-980, §26.992).** A release is not a posting. The only hold is manual. A price difference is not a block. The payment run reads the same row. | Agent |
 | 2.811 | 2026-10-22 | **SCR-162 stage 2 — the hold is the row the payment run reads (B-981, §26.993).** Migration `9099`. A closed period did not refuse the release. The journal amount did not change. A paid item and a proposal item were refused. Service test 3/3. | Agent |
 | 2.812 | 2026-10-22 | **SCR-162 stage 3 — one screen (B-982, §26.994).** Route `/purchasing/blocked-invoice`. Alias only in the catalogue. Capabilities `PROC.INV.BLOCK` and `PROC.INV.BLOCK.RELEASE`, posting false. T861 not run. T849 through T860 not rerun. | Agent |
+| 2.813 | 2026-10-22 | **SCR-162 stage 5 — T861 releases one hold, and it does not post (B-983, §26.995).** Production build. MRBR opened the one screen. VI-0000001 was held, then released. The journal amount did not change. T849 through T860 not rerun. | Agent |
