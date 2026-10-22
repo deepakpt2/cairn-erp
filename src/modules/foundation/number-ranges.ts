@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV', 'MRPRUN', 'PLANORD',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -55,6 +55,8 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'RFQ', description: 'Requests for quotation', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'QUOTATION', description: 'Supplier quotations', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'PARKINV', description: 'Parked supplier invoices', numberLength: 7, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'MRPRUN', description: 'MRP runs', numberLength: 7, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PLANORD', description: 'Planned orders', numberLength: 7, yearRelevant: false, subobjectHint: null },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */

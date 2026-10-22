@@ -74,6 +74,8 @@ const documentInput = z.object({
   client: z.string().min(1),
   changedBy: z.string().min(1),
   documentType: z.string().trim().min(1).max(20).optional().default('STANDARD'),
+  /** Total planning's run number. A buyer's requisition does not send one. */
+  planningRunNumber: z.string().trim().max(12).optional(),
   items: z.array(itemInput).min(1, 'a requisition needs at least one item'),
 });
 
@@ -325,6 +327,18 @@ export async function createRequisition(
   const requisitionDate = today();
 
   const requisitionNumber = await withTenant(input.client, async (tx) => {
+    if (input.planningRunNumber && input.items[0]?.materialNumber && input.items[0]?.plant) {
+      const already = await tx.execute(sql`
+        select requisition_number
+          from purchase_requisition_item
+         where client = ${input.client}
+           and planning_run_number = ${input.planningRunNumber}
+           and material_number = ${input.items[0].materialNumber}
+           and plant = ${input.items[0].plant}
+         limit 1
+      `) as unknown as Array<{ requisition_number: string }>;
+      if (already[0]?.requisition_number) return already[0].requisition_number;
+    }
     let drawn: Awaited<ReturnType<typeof allocateNumber>>;
     try {
       drawn = await allocateNumber(tx, {
@@ -352,6 +366,7 @@ export async function createRequisition(
         requisitionNumber: number,
         itemNumber,
         createdBy: input.changedBy,
+        planningRunNumber: input.planningRunNumber ?? null,
       });
       let line = 0;
       for (const row of item.assignments) {

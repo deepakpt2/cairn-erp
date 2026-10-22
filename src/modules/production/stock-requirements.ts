@@ -15,8 +15,8 @@
  * plant has already promised away, dated at its required date. SCR-130 deferred
  * them because no table existed; the deferral is closed.
  *
- * Deferred by name: planned orders, production orders and sales orders (no such
- * tables); excess-stock alerts (no stock ceiling exists).
+ * A committed planned order is a receipt. Production orders and sales orders
+ * remain deferred. Excess-stock alerts have no stock ceiling.
  * Refused by name: MRP area, the one-character special stock indicator, a
  * simulation version, and PR-to-PO conversion (a posting action, not a report).
  */
@@ -35,7 +35,7 @@ export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
 export type ElementType =
-  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'SAFETY_STOCK' | 'RESERVATION';
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'SAFETY_STOCK' | 'RESERVATION';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -284,6 +284,13 @@ export async function stockRequirementsList(input: {
       order by po.document_date, i.order_number, i.item_number
     `) as unknown as Array<Record<string, unknown>>;
 
+    const plannedRows = await tx.execute(sql`
+      select order_number, quantity::text as quantity, finish_date::text as finish_date
+      from planned_order
+      where client = ${client} and material_number = ${s.material!} and plant = ${s.plant!}
+      order by finish_date, order_number
+    `) as unknown as Array<Record<string, string>>;
+
     const reservationRows = await tx.execute(sql`
       select i.reservation_number, i.item_number, i.required_quantity::text as required_quantity,
              i.withdrawn_quantity::text as withdrawn_quantity, h.base_date
@@ -347,6 +354,20 @@ export async function stockRequirementsList(input: {
         documentItem: String(row.item_number),
         quantity: open,
         drillDown: `/purchasing/orders?order=${encodeURIComponent(String(row.order_number))}`,
+      });
+    }
+    for (const row of plannedRows) {
+      const open = num(row.quantity);
+      if (open <= 0) continue;
+      elements.push({
+        date: String(row.finish_date),
+        elementType: 'PLANNED_ORDER',
+        elementLabel: 'Planned order',
+        direction: 'RECEIPT',
+        documentNumber: String(row.order_number),
+        documentItem: '',
+        quantity: open,
+        drillDown: `/production/mrp-run`,
       });
     }
     for (const row of reservationRows) {

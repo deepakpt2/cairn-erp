@@ -225,6 +225,14 @@ The service proof. A batch wrote nothing. A company code was refused. A client d
 
 Same-stage bookkeeping: B-994 / §27.006 / §30 row 2.824.
 
+## §27.007 — MD01 local contract: a run plans a shortage, and it posts nothing
+
+**B-995.** SCR-166. Migration `9102`. The planning file is the net-change marker. There is no second change table. A buy shortage becomes a purchase requisition. A make shortage becomes a planned order, which is not a production order. A bill of material does not stand, so dependent demand is the open reservation and is not exploded. An MRP area, a schedule line, a background run, parallel processing, delete-and-recreate, a factory calendar, a company code as a key, a uuid, and a financial period are refused by name. A check writes nothing. A repeated request returns the same run. A changed proposal is not overwritten.
+
+The service proof. Stock that covers safety proposed nothing. Zero stock with no demand proposed nothing. A future receipt did not cover today's shortage of 6.000. Blocked stock did not count. A check left the planning file marked and wrote no requisition. The same request returned the same run. A different scope on that key was refused. An eligible proposal was adapted from 4.000 to 7.000. A proposal changed to 99.000 was not overwritten. A make shortage created one planned order, and the stock/requirements list showed it once. A reorder point of 10 was not raised to the safety stock of 20. The fixed lot stood. An unchanged material was not selected. Regenerative planning without confirmation was refused. A missing planning file was not treated as a complete net-change run. Nothing was posted. The other tenant saw nothing. Service test 11/11. Screen contract 4/4. Route `/production/mrp-run`. Capabilities `PROD.MRP.RUN` and `PROD.MRP.REGENERATE`, posting false. Alias `MD01` only in the catalogue. No browser smoke was run.
+
+Same-stage bookkeeping: B-995 / §27.007 / §30 row 2.825.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -256,3 +264,4 @@ Same-stage bookkeeping: B-994 / §27.006 / §30 row 2.824.
 | 2.822 | 2026-10-22 | **SCR-165 — ME61 local contract (B-992, §27.004).** Migration `9101`. A check writes nothing. Price 93.33 and delivery 69.23 are calculated. A missing score is not zero. The overall score 78.14 is derived. Capability `PROC.VENDOR.EVALUATE`, posting false. T864 not run. T849 through T863 not rerun. | Agent |
 | 2.823 | 2026-10-22 | **SCR-165 stage 5 — T864 checks one evaluation, and only a manual score is stored (B-993, §27.005).** Production build. ME61 opened the one screen. Price 100.00 and delivery 100.00 were calculated. A missing score was not zero. Quality 80 was saved. A company code was refused. Nothing was posted. T849 through T863 not rerun. | Agent |
 | 2.824 | 2026-10-22 | **SCR-147 judged again — the count is the item (B-994, §27.006).** No second count table. A batch, a company code, a client difference, and a post are refused by name. A repeated request writes no second revision. Service test 17/17. Screen contract 11/11. T846 not rerun. | Agent |
+| 2.825 | 2026-10-22 | **SCR-166 / MD01 contracted (B-995, §27.007).** A run plans a shortage and posts nothing. The planning file is the marker. A buy shortage is a requisition. A make shortage is a planned order. No bill of material. No MRP area. Service test 11/11. Screen contract 4/4. | Agent |

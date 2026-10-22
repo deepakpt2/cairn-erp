@@ -22,7 +22,8 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
     : type === 'PURCHASE_REQUISITION' ? t('md04.reqElement')
       : type === 'PURCHASE_ORDER' ? t('md04.poElement')
         : type === 'RESERVATION' ? t('md04.reservationElement')
-          : t('md04.safetyElement');
+          : type === 'PLANNED_ORDER' ? t('md04.plannedElement')
+            : t('md04.safetyElement');
   const exceptionLabel = (code: string) => code === 'SHORTAGE' ? t('md04.shortage')
     : code === 'SAFETY_BREACH' ? t('md04.safetyBreach')
       : t('md04.pastDue');

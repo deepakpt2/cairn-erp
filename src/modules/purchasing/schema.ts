@@ -1,5 +1,5 @@
 /** Purchase requisitions — SCR-055 / R-103 (ME51N). Item-level documents, no header record. */
-import { pgTable, varchar, char, integer, bigint, smallint, numeric, boolean, date, timestamp, primaryKey, foreignKey, unique, check } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, char, integer, bigint, smallint, numeric, boolean, date, timestamp, primaryKey, foreignKey, unique, uniqueIndex, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
@@ -39,6 +39,8 @@ export const purchaseRequisitionItem = pgTable('purchase_requisition_item', {
   currency: varchar('currency', { length: 5 }),
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   creationSource: varchar('creation_source', { length: 16 }).notNull().default('MANUAL'),
+  /** Set when total planning created the item. A buyer's requisition leaves this empty and is not rewritten. */
+  planningRunNumber: varchar('planning_run_number', { length: 12 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.requisitionNumber, t.itemNumber] }),
@@ -68,6 +70,7 @@ export const purchaseRequisitionItem = pgTable('purchase_requisition_item', {
   check('pr_item_category_ck', sql`${t.itemCategory} in ('STANDARD')`),
   check('pr_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
   check('pr_item_source_ck', sql`${t.creationSource} in ('MANUAL')`),
+  uniqueIndex('pr_item_planning_origin_uq').on(t.client, t.planningRunNumber, t.materialNumber, t.plant).where(sql`${t.planningRunNumber} is not null`),
 ]);
 
 export const purchaseRequisitionAssignment = pgTable('purchase_requisition_assignment', {

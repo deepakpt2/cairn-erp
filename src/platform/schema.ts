@@ -15,3 +15,4 @@ export * from '../modules/finance/schema';
 export * from '../modules/foundation/schema';
 
 export * from '../modules/inventory/schema';
+export * from '../modules/production/schema';
