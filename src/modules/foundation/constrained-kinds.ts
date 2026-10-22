@@ -17,6 +17,8 @@ export const CONSTRAINED_KINDS = [
   'material-stock',
   'material-issue',
   'quotation-request',
+  'quotation-number',
+  'quotation-event',
   'supplier-purchasing',
   'supplier-company',
   'customer-company',

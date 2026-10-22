@@ -216,6 +216,9 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'scr153-source-list') return '/purchasing/source-list';
   if (target.id === 'scr154-quota-arrangement') return '/purchasing/quota-arrangement';
   if (target.id === 'scr155-rfq' || target.id === 'scr156-rfq-change') return '/purchasing/rfq';
+  if (target.id === 'scr157-quotation') return '/purchasing/quotation';
+  if (target.id === 'scr158-quotation-display') return '/purchasing/quotation-display';
+  if (target.id === 'scr159-quotation-comparison') return '/purchasing/quotation-comparison';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
   if (target.id === 'release-strategies') return '/config/release-strategies';

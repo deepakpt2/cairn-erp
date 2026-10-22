@@ -22,7 +22,7 @@
 | **Every decision gets an ID** | `D-nnn` for decisions, `DV-nnn` for intentional divergences from SAP, `R-nn` for requirements, `FND-nnn` for defects/findings, `SCR-nnn` for screens, `TST-nnn` for test cases. |
 | **Status markers** | Every section carries one: `DRAFT` · `AGREED` · `FROZEN` · `IN BUILD` · `SIGNED OFF` · `DEFERRED`. |
 | **Update cadence** | The canonical file set is updated in the same turn as any change to code, schema, decision or scope. A code change without a corresponding entry here is not complete. |
-| **File size ceiling** | No part of the log may exceed 400 KB (400,000 bytes); a live part rotates to the next numbered file once it passes 360 KB, with the continuation stated in both directions. Operational detail: §0.3 of the live part (`CAIRN-3.md`). |
+| **File size ceiling** | No part of the log may exceed 400 KB (400,000 bytes); a live part rotates to the next numbered file once it passes 360 KB, with the continuation stated in both directions. Operational detail: §0.3 of the live part (`CAIRN-7.md`). |
 | **Red-line protocol** | The product owner marks up sections in place or replies with the section number. Agent response: apply, log in §30, restate the change. |
 
 ### 0.2 Contents

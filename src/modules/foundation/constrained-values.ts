@@ -160,6 +160,25 @@ async function search(
          order by code
          limit ${cap}
       `);
+    case 'quotation-number':
+      return rows(tx, sql`
+        select q.quotation_number as code, r.partner_number as label, q.rfq_number as meta
+          from purchasing_quotation q
+          join purchasing_rfq r on r.client = q.client and r.rfq_number = q.rfq_number
+         where q.client = ${client}
+           and q.quotation_number ilike ${pattern} escape '\\'
+         order by q.quotation_number
+         limit ${cap}
+      `);
+    case 'quotation-event':
+      return rows(tx, sql`
+        select event_number as code, purchasing_org as label, coalesce(collective_number, '') as meta
+          from purchasing_rfq_event
+         where client = ${client}
+           and event_number ilike ${pattern} escape '\\'
+         order by event_number
+         limit ${cap}
+      `);
     case 'quotation-request':
       return rows(tx, sql`
         select r.rfq_number as code, r.partner_number as label, e.quotation_deadline as meta

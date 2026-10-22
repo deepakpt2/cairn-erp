@@ -105,6 +105,9 @@ import { scr153SourceList } from './scr153-source-list';
 import { scr154QuotaArrangement } from './scr154-quota-arrangement';
 import { scr155Rfq } from './scr155-rfq';
 import { scr156RfqChange } from './scr156-rfq-change';
+import { scr157Quotation } from './scr157-quotation';
+import { scr158QuotationDisplay } from './scr158-quotation-display';
+import { scr159QuotationComparison } from './scr159-quotation-comparison';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5062,6 +5065,9 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr154-quota-arrangement': scr154QuotaArrangement,
   'scr155-rfq': scr155Rfq,
   'scr156-rfq-change': scr156RfqChange,
+  'scr157-quotation': scr157Quotation,
+  'scr158-quotation-display': scr158QuotationDisplay,
+  'scr159-quotation-comparison': scr159QuotationComparison,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

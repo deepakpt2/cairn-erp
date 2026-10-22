@@ -3,7 +3,7 @@
 **Product:** Cairn — an enterprise resource planning system
 **Hostname:** cairn.deepakpt.com
 **Document status:** AGREED baseline (2026-10-08 Go) — implementation IN BUILD; screen sign-off remains per §24.1
-**Created:** 2026-10-19 (v2.374) · **Part 6 of 6 — this is the live part**
+**Created:** 2026-10-19 (v2.374) · **Part 6 of 7 — FROZEN at v2.797 (2026-10-22); the set continues in [CAIRN-7.md](CAIRN-7.md)**
 **Continues:** [CAIRN.md](CAIRN.md) (§0–§26.35) · [CAIRN-2.md](CAIRN-2.md) (§26.36–§30 through v1.69) · [CAIRN-3.md](CAIRN-3.md) (§0.3, §1.4 R-24–R-72, §2.1 D-093–D-139, §26.167–§26.259, §30 v1.70–v2.61) · [CAIRN-4.md](CAIRN-4.md) (§1.4 R-73–R-98, §26.260–§26.364, §30 v2.62–2.169) · [CAIRN-5.md](CAIRN-5.md) (§26.365–§26.555, §30 v2.170–2.373)
 **Owner:** Deepak (product owner) · Built with Arena.ai Agent Mode
 
@@ -20,6 +20,8 @@ measured on disk in the same turn any canonical file is edited.
 **Set status at v2.374 (2026-10-19):** `CAIRN-5.md` passed the rotation trigger at 361,576 bytes and
 is frozen to pointer edits; this part continues §26 from 26.556 and §30 from 2.374. SCR-083 (F-29) is
 the last round closed in part 5; SCR-084 (F-39) opens here.
+
+**Set status at v2.798 (2026-10-22):** `CAIRN-6.md` is frozen at v2.797. It had already passed the 400,000-byte ceiling; its written sections are not moved. The set continues in [CAIRN-7.md](CAIRN-7.md) from §26.980 and §30 v2.798.
 
 ---
 
@@ -5297,6 +5299,58 @@ T856 is not run. T855 is not rerun. ME48 and ME49 are not wired.
 
 Same-stage bookkeeping: B-962 / §26.974 / §30 row 2.792.
 
+## §26.975 — ME47 acceptance: T856 prices one request, and it does not buy
+
+**B-963.** T856 green on the production build. ME47 opened the one screen. A price, a status, a currency, a revision, an award, a rejection and a condition are not fields. The screen says it does not compare. RQ-0000001 opened the asked lines. The supplier was V-QT and the currency was KWD, both read from the request. A check of 250 per 100 showed 2.5000, named the asked date 2026-12-01 beside the offered date 2026-12-20, and said item 20 has no offer. The check wrote nothing, including the number. QT-0000001 stands at a zero price, price unit 100, quantity 8.000, unit PC, delivery 2026-12-20. 2.5000 is not stored, and there is no price-per-unit column. RQ-0000002, the other request of the same event, has no quotation. Both copies and the event's line stayed 12.500. A second quotation, an unknown request, a supplier that is not the request's, an item that is not on the request, a currency that is not the company's, a day after the deadline, a stale screen, a missing price, a negative price, a zero quantity, a negative quantity, a zero price unit, an unknown unit, and an alternate unit with no conversion were refused, and nothing was written. The late request has no quotation. Purchase order PO-QT and requisition PR-QT were not rewritten. The info record was not written. No quotation column stands on the request, the order, the requisition, or the info record. No journal and no material document.
+
+Service tests were not rerun. T855 was not rerun. Screen contract 4/4 stands from the screen stage.
+
+ME48 and ME49 remain later rounds. They were not wired. A comparison, an award, a rejection, a supplier portal, EDI and dispatch were not started.
+
+Same-stage bookkeeping: B-963 / §26.975 / §30 row 2.793.
+
+## §26.976 — ME48 contracted: a quotation is read, and it does not buy
+
+**B-964.** SCR-158. The owner's package (2026-10-22, three parts) is the contract. ME48 displays a standing quotation. It is not a second quotation, not a revision, not a comparison, not an award, and not an order. ME47 still refuses a status, a revision stack, a condition, a currency column, and an award. This round does not weaken that refusal. ME49 stays later. A supplier portal, EDI, email dispatch, an award, a rejection workflow, and a price comparison stay later. Balance-form suggestions stay deferred.
+
+**What already stands, and this round does not rebuild.** One quotation prices one request. The drawn number is the key. The request number is the link, not the key. The supplier is on the request. The currency is the company's, on the event. The asked lines are the request's copy. An unquoted line is the absence of an offer, not a no-bid row. History is `recordChange` on the quotation. Migration `9097` is applied. It is not edited. There is no schema stage.
+
+**The display.** The route is `/purchasing/quotation-display`. A quotation number opens that quotation. A request number resolves the one quotation that stands for it, and the screen names both numbers. A request number typed as a quotation number does not open a quotation. A missing quotation and another tenant's quotation are the same miss. A request that stands and has no quotation is named as such. A day after the deadline does not hide the quotation, and a posting period is not read. The supplier name is the current master, not a snapshot. The offer is what was saved. The company is the plant's and is not a column. The price per one unit is calculated and labeled as calculated. It is not stored. The changes are the change documents. They are not a revision stack.
+
+**Refused by name, so a later round does not mistake refusal for absence:** a stored status, a revision column, a revision selector, a current-revision pointer, a condition, a discount, freight, a tax, a currency column, a company-code column, a validity date, incoterms, payment terms, a minimum order quantity, an attachment, a submission timestamp distinct from the save, a last-viewed write, a request key, an outbox, a uuid, a purchasing-organisation authorization object, a comparison, an award, a purchase order, and a goods movement or a journal. Viewing writes nothing, including a change document. ME49 is not linked, because it does not stand. An order is not created from this screen.
+
+**Capability.** `PROC.RFQ.QUOTATION.DISPLAY`, posting false. It does not grant maintenance and it does not grant the purchase order. Maintaining a quotation does not grant this screen. The alias `ME48` is only in the catalogue and the code line. Suggestions on the quotation field match quotation numbers, not request numbers.
+
+**Acceptance (stage 5): T857** — the production build. A quotation is read with its supplier, the company's currency, the asked quantity, the offered price, a zero price, an unquoted line, and the calculated price per one unit; the change document names the old and new price; a request number in the quotation field does not open it; the request field resolves it and the two numbers stay distinct; the other request has no quotation; a day after the deadline still displays it; nothing is written; the order, the requisition and the info record are unchanged; no journal and no material document. T856 is not rerun.
+
+**Next, in order:** the read, if the cut stands. No migration. The screen is not built in that stage. T857 is not run. ME49 is not wired.
+
+Same-stage bookkeeping: B-964 / §26.976 / §30 row 2.794.
+
+## §26.977 — ME48 read: the quotation number is the key, and nothing is written
+
+**B-965.** SCR-158 stage 2. No schema. The lookup is the quotation primary key. A request lookup uses the unique request link that already stands. No further index. `src/modules/purchasing/quotation-display.ts` reads the quotation, the request, the event, the current supplier name, the plant's company, the asked lines, the offers, and the change documents. It does not insert, update, or delete. It does not draw a number. It does not record a view. A price unit of 100 is shown as the price per one unit and is not a column. A zero price stands. An unquoted line is not a row of zeroes. A day after the deadline still returns the quotation. Another tenant's number does not stand. Service test 1/1. The capability is not seeded in this stage. The screen is not built. T857 is not run. T856 is not rerun. ME49 is not wired.
+
+**Next, in order:** the screen, if the owner continues. One route. Nothing is written.
+
+Same-stage bookkeeping: B-965 / §26.977 / §30 row 2.795.
+
+## §26.978 — ME48 screen: one route, and nothing is written
+
+**B-966.** SCR-158 stage 3. Route `/purchasing/quotation-display`. A quotation number opens the standing quotation. A request number resolves it and is labeled as the request, not as the key. Neither open writes. There is no save, no price field, no status, no currency field, no revision, no award, and no condition. A posted price has no action to receive it. The screen says it does not compare, and it does not award or buy. The company is labeled as the plant's. The price per one unit is labeled as calculated. The changes are the history, and the screen says there is no revision stack. A link to the request is navigation. A link to maintain is shown only when the user holds `PROC.RFQ.QUOTATION`. Suggestions use the same cuts as the read. The alias is only in the catalogue and the code line. Capability `PROC.RFQ.QUOTATION.DISPLAY`, posting false. The live seed holds 183 capabilities, 157 terms and 181 aliases. Screen contract 2/2. T857 is not run. T856 is not rerun. ME49 is not wired.
+
+**Next, in order:** the browser acceptance, if the owner continues. Production build, not `npm run dev`. T856 is not rerun.
+
+Same-stage bookkeeping: B-966 / §26.978 / §30 row 2.796.
+
+## §26.979 — ME48 acceptance: T857 reads one quotation, and it does not buy
+
+**B-967.** T857 green on the production build. ME48 opened the one screen. A price, a status, a currency, a revision, an award and a net price are not fields. RQ-0000001 typed as a quotation number did not open a quotation, and nothing was written. QT-0000001 was read. The supplier was V-QT, Quoted supplier. The currency was KWD. Item 10 was asked 12.500 and offered 8.000 at 300.0000 per 100, shown as 3.0000 and labeled calculated. Item 20 stood at a zero price. Item 30 had no offer. The change document named 250.0000 and 300.0000. The plant's company was 1000. RQ-0000002 has no quotation. The request number resolved QT-0000001, and the two numbers stayed distinct. After the deadline was 2026-10-21 the quotation still displayed. The order, the requisition and the info record were unchanged. No journal and no material document. Service test 1/1. Screen contract 2/2. T856 was not rerun.
+
+ME49 remains a later round. It was not wired. An award, a rejection, a supplier portal, EDI and dispatch were not started.
+
+Same-stage bookkeeping: B-967 / §26.979 / §30 row 2.797.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -5720,3 +5774,13 @@ Same-stage bookkeeping: B-962 / §26.974 / §30 row 2.792.
 | 2.790 | 2026-10-22 | **SCR-157 stage 2 — one quotation prices one request (B-960, §26.972).** Migration `9097`. One quotation per request. A line must belong to that request. A zero price stands. A negative price does not. Lookup of 20,000 quotations: hit 0.047 ms and 6 buffers on `purchasing_quotation_request_uq`; miss 0.030 ms and 2 buffers. No further index. Schema contract 3/3. Number object not registered. Capability not seeded. Screen not built. T856 not run. T855 not rerun. | Agent |
 | 2.791 | 2026-10-22 | **SCR-157 stage 3 — a check writes nothing, and save draws the quotation (B-961, §26.973).** `QUOTATION` registered, prefix `QT`, length 7. Service tests 3/3. A check draws no number. A zero price stands. A price unit of 100 is shown as the price per one unit and is not stored. A late change is refused. Two writers leave one change. No info record, order, requisition, journal, or material document. Capability not seeded. Screen not built. T856 not run. T855 not rerun. | Agent |
 | 2.792 | 2026-10-22 | **SCR-157 stage 4 — one route, and a check writes nothing (B-962, §26.974).** Route `/purchasing/quotation`. A request number opens the asked lines and the standing quotation. Check writes nothing, including the number. The screen does not compare. Suggestions use the save cuts. Alias only in the catalogue and the code line. Capability `PROC.RFQ.QUOTATION`, posting false. Catalogue file 181/156/182. Screen contract 4/4. T856 not run. T855 not rerun. | Agent |
+| 2.793 | 2026-10-22 | **SCR-157 stage 5 — T856 prices one request, and it does not buy (B-963, §26.975).** Production build. ME47 opened the one screen. A check of 250 per 100 showed 2.5000 and wrote nothing, including the number. QT-0000001 stands at a zero price. The other request has none. The copies and the event lines stayed as asked. The named refusals wrote nothing. The order, the requisition and the info record were not rewritten. No journal and no material document. T855 not rerun. ME48 and ME49 not wired. | Agent |
+| 2.794 | 2026-10-22 | **SCR-158 / ME48 contracted from the owner's three-part package — a quotation is read, and it does not buy (B-964, §26.976).** Display of one standing quotation. The quotation number is the key. A request number is not the key. No status, revision, condition, award, or comparison. No schema. Acceptance **T857**. T856 is not rerun. | Agent |
+| 2.795 | 2026-10-22 | **SCR-158 stage 2 — the quotation number is the key, and nothing is written (B-965, §26.977).** No migration. The primary key is the lookup. A day after the deadline still returns the quotation. A price unit of 100 is calculated and is not a column. Service test 1/1. Screen not built. T857 not run. T856 not rerun. | Agent |
+| 2.796 | 2026-10-22 | **SCR-158 stage 3 — one route, and nothing is written (B-966, §26.978).** Route `/purchasing/quotation-display`. A request number resolves the quotation and is not the key. No save. Alias only in the catalogue and the code line. Capability `PROC.RFQ.QUOTATION.DISPLAY`, posting false. Live seed 183/157/181. Screen contract 2/2. T857 not run. T856 not rerun. | Agent |
+| 2.797 | 2026-10-22 | **SCR-158 stage 5 — T857 reads one quotation, and it does not buy (B-967, §26.979).** Production build. ME48 opened the one screen. QT-0000001 was read. 300 per 100 showed 3.0000 and was not stored. A request number was not the key. The other request had no quotation. A day after the deadline still displayed it. Nothing was written. T856 not rerun. ME49 not wired. | Agent |
+
+*This part is frozen. It had passed both the 360,000-byte trigger and the 400,000-byte ceiling before this rotation, so the set continues in
+[`CAIRN-7.md`](CAIRN-7.md), which is the live canonical log from 2026-10-22 onward and carries §26.980+
+and §30 v2.798+ (§0.3 / D-093). The sections already written here are not moved. Edits here are limited to pointer and continuation lines and to
+corrections that cannot be deferred.*
