@@ -166,7 +166,19 @@ export default function ParkedInvoice({
               ))}
             </ul>
           )}
-          <form action={saveAction} className="mt-3 space-y-3">
+          <form
+            className="mt-3 space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              const submitter = (event.nativeEvent as SubmitEvent).submitter;
+              if (submitter instanceof HTMLButtonElement && submitter.hasAttribute('data-parked-invoice-check')) {
+                checkAction(data);
+              } else {
+                saveAction(data);
+              }
+            }}
+          >
             <input type="hidden" name="orderNumber" value={opened.orderNumber} />
             {standing && <input type="hidden" name="parkedNumber" value={standing.parkedNumber} />}
             {standing && <input type="hidden" name="expectedChangedAt" value={standing.changedAt} />}
@@ -254,7 +266,7 @@ export default function ParkedInvoice({
               </Field>
             )}
             <div className="flex flex-wrap gap-2">
-              <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!canPark || checking} data-parked-invoice-check>
+              <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canPark || checking} data-parked-invoice-check>
                 {checking ? t('parkedInvoice.checking') : t('parkedInvoice.check')}
               </button>
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPark || saving} data-parked-invoice-save>
