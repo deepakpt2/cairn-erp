@@ -4,7 +4,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import {
-  createRequestForQuotation, getRequestForQuotation, previewRequestForQuotation, writeRequestForQuotation,
+  changeRequestForQuotation, createRequestForQuotation, getRequestForQuotation,
+  previewRequestForQuotation, previewRequestForQuotationChange, writeRequestForQuotation,
+  writeRequestForQuotationChange,
 } from '../src/modules/purchasing/rfq';
 import { createTenant, destroyTenant } from './helpers';
 
@@ -355,4 +357,196 @@ describe('SCR-155 request for quotation', () => {
     other = (await createTenant('scr155-rfq-other')).client;
     expect(await getRequestForQuotation(other, events[0].event_number)).toBeNull();
   });
+
+  it('changes one request, and a check writes nothing', async () => {
+    const c = await standing();
+    if (!other) other = (await createTenant('scr155-rfq-other')).client;
+    const beforeCounts = await counts(c);
+    await withTenant(c, (tx) => tx.execute(sql`
+      insert into unit_of_measure (code, name)
+      values ('CS', 'Case')
+      on conflict do nothing
+    `));
+    const first = await createRequestForQuotation({
+      client: c, changedBy: ACTOR, ...header, collectiveNumber: 'BID-1', suppliers, lines,
+    });
+    const second = await createRequestForQuotation({
+      client: c, changedBy: ACTOR, ...header, collectiveNumber: 'BID-1', suppliers: [suppliers[0]], lines,
+    });
+    const opened = await getRequestForQuotation(c, first.eventNumber);
+    const request = opened?.requests[0];
+    const otherRequest = opened?.requests[1];
+    expect(request?.changedAt).toBeNull();
+    expect(opened?.changedAt).toBeNull();
+    const token = {
+      expectedEventChangedAt: opened?.changedAt,
+      expectedRequestChangedAt: request?.changedAt,
+    };
+    const lineChange = {
+      client: c,
+      changedBy: ACTOR,
+      rfqNumber: request!.rfqNumber,
+      ...token,
+      reason: 'Revised quantity and delivery',
+      lines: [{ itemNumber: 10, quantity: '20', deliveryDate: '2026-12-15' }],
+    };
+    const beforeDocs = await changeDocs(c);
+    const preview = await previewRequestForQuotationChange(lineChange);
+    expect(preview.nothingWritten).toBe(true);
+    expect(preview.headerIsTheEvents).toBe(false);
+    expect(preview.message).toBe('Nothing has been written.');
+    expect(preview.lines[0].after).toMatchObject({ quantity: '20.000', deliveryDate: '2026-12-15' });
+    expect(await changeDocs(c)).toBe(beforeDocs);
+    expect((await getRequestForQuotation(c, first.eventNumber))?.requests[0].lines[0].quantity).toBe('12.500');
+
+    const changed = await changeRequestForQuotation(lineChange);
+    expect(changed.linesChanged).toBe(true);
+    expect(changed.headerChanged).toBe(false);
+    expect(changed.requestChangedAt).toBeTruthy();
+    const afterLines = await getRequestForQuotation(c, first.eventNumber);
+    expect(afterLines?.lines[0]).toMatchObject({
+      quantity: '12.500', deliveryDate: '2026-12-01', shortText: opened?.lines[0].shortText,
+    });
+    expect(afterLines?.requests[0].lines[0]).toMatchObject({ quantity: '20.000', deliveryDate: '2026-12-15' });
+    expect(afterLines?.requests[1].lines[0]).toMatchObject({
+      quantity: '12.500', deliveryDate: '2026-12-01', shortText: opened?.requests[1].lines[0].shortText,
+    });
+    expect(afterLines?.requests[1].rfqNumber).toBe(otherRequest?.rfqNumber);
+    expect(afterLines?.changedAt).toBeNull();
+    expect(afterLines?.requests[0].changedAt).toBe(changed.requestChangedAt);
+
+    const headerChange = {
+      client: c,
+      changedBy: ACTOR,
+      rfqNumber: request!.rfqNumber,
+      expectedEventChangedAt: afterLines?.changedAt,
+      expectedRequestChangedAt: afterLines?.requests[0].changedAt,
+      reason: 'Extended the deadline',
+      quotationDeadline: '2026-11-20',
+      collectiveNumber: 'BID-2',
+    };
+    const headerPreview = await previewRequestForQuotationChange(headerChange);
+    expect(headerPreview.headerIsTheEvents).toBe(true);
+    expect(headerPreview.message).toBe("The header is the event's. Nothing has been written.");
+    expect(headerPreview.header.collectiveNumber).toEqual({ before: 'BID-1', after: 'BID-2' });
+    expect(await changeDocs(c)).toBe(beforeDocs + 1);
+    await changeRequestForQuotation(headerChange);
+    const afterHeader = await getRequestForQuotation(c, first.eventNumber);
+    const untouchedEvent = await getRequestForQuotation(c, second.eventNumber);
+    expect(afterHeader?.quotationDeadline).toBe('2026-11-20');
+    expect(afterHeader?.collectiveNumber).toBe('BID-2');
+    expect(afterHeader?.requests[0].lines[0].quantity).toBe('20.000');
+    expect(afterHeader?.requests[1].lines[0].quantity).toBe('12.500');
+    expect(untouchedEvent?.collectiveNumber).toBe('BID-1');
+    expect(untouchedEvent?.quotationDeadline).toBe('2026-11-05');
+
+    const docs = await withTenant(c, (tx) => tx.execute(sql`
+      select d.object_class, d.object_key, d.change_type, d.reason, i.field_name, i.old_value, i.new_value
+        from change_document d
+        join change_document_item i on i.change_document_id = d.id
+       where d.client = ${c} and d.change_type = 'CHANGE'
+         and d.object_key in (${request!.rfqNumber}, ${first.eventNumber})
+    `)) as unknown as Array<{
+      object_class: string; object_key: string; reason: string; field_name: string; old_value: string; new_value: string;
+    }>;
+    const quantity = docs.find((row) => row.object_key === request!.rfqNumber && row.field_name === 'line10.quantity');
+    expect(quantity).toMatchObject({ old_value: '12.500', new_value: '20.000', reason: 'Revised quantity and delivery' });
+    const delivery = docs.find((row) => row.object_key === request!.rfqNumber && row.field_name === 'line10.deliveryDate');
+    expect(delivery).toMatchObject({ old_value: '2026-12-01', new_value: '2026-12-15' });
+    const deadline = docs.find((row) => row.object_key === first.eventNumber && row.field_name === 'quotationDeadline');
+    expect(deadline).toMatchObject({ old_value: '2026-11-05', new_value: '2026-11-20', reason: 'Extended the deadline' });
+    const label = docs.find((row) => row.object_key === first.eventNumber && row.field_name === 'collectiveNumber');
+    expect(label).toMatchObject({ old_value: 'BID-1', new_value: 'BID-2' });
+    expect(docs.filter((row) => row.object_class === 'purchasing_rfq' && row.object_key === request!.rfqNumber).length).toBeGreaterThan(0);
+    expect(docs.some((row) => row.object_class === 'purchasing_rfq_event' && row.field_name === 'line10.quantity')).toBe(false);
+
+    const held = await withTenant(c, (tx) => tx.execute(sql`
+      select object_code, current_number from number_range
+       where client = ${c} and object_code in ('RFQEVENT', 'RFQ')
+       order by object_code
+    `)) as unknown as Array<{ object_code: string; current_number: string }>;
+    const fresh = {
+      client: c,
+      changedBy: ACTOR,
+      rfqNumber: request!.rfqNumber,
+      expectedEventChangedAt: afterHeader?.changedAt,
+      expectedRequestChangedAt: afterHeader?.requests[0].changedAt,
+      reason: 'Should be refused',
+    };
+    await expect(changeRequestForQuotation({ ...fresh, rfqNumber: 'NO-RQ' })).rejects.toThrow('does not stand');
+    await expect(changeRequestForQuotation({ ...fresh, expectedEventChangedAt: null })).rejects.toThrow('stands as of');
+    await expect(changeRequestForQuotation({
+      ...fresh, reason: null, lines: [{ itemNumber: 10, quantity: '21' }],
+    })).rejects.toThrow('A reason is required.');
+    await expect(changeRequestForQuotation({
+      ...fresh, quotationDeadline: '2026-10-01',
+    })).rejects.toThrow('before the RFQ date');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, quantity: '0' }],
+    })).rejects.toThrow('greater than zero');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, quantity: '-1' }],
+    })).rejects.toThrow('greater than zero');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, unit: 'ZZ' }],
+    })).rejects.toThrow('not a standing unit');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, unit: 'CS' }],
+    })).rejects.toThrow('no conversion');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, plant: '2000' }],
+    })).rejects.toThrow('not assigned');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 10, plant: '3000' }],
+    })).rejects.toThrow("not the event's company");
+    await expect(changeRequestForQuotation({
+      ...fresh, suppliers: [{ partnerNumber: 'V-RFQ' }, { partnerNumber: 'V-RFQ' }],
+    })).rejects.toThrow('invited twice');
+    await expect(changeRequestForQuotation({
+      ...fresh, lines: [{ itemNumber: 20, quantity: '1' }],
+    })).rejects.toThrow('not added');
+    const still = await withTenant(c, (tx) => tx.execute(sql`
+      select object_code, current_number from number_range
+       where client = ${c} and object_code in ('RFQEVENT', 'RFQ')
+       order by object_code
+    `)) as unknown as Array<{ object_code: string; current_number: string }>;
+    expect(still).toEqual(held);
+
+    const beforeRollback = await changeDocs(c);
+    await expect(withTenant(c, async (tx) => {
+      await writeRequestForQuotationChange(tx, {
+        ...fresh, lines: [{ itemNumber: 10, quantity: '30' }], reason: 'Roll this back',
+      });
+      throw new Error('fail the change');
+    })).rejects.toThrow('fail the change');
+    expect(await changeDocs(c)).toBe(beforeRollback);
+    expect((await getRequestForQuotation(c, first.eventNumber))?.requests[0].lines[0].quantity).toBe('20.000');
+
+    const raced = await Promise.allSettled([
+      changeRequestForQuotation({ ...fresh, lines: [{ itemNumber: 10, quantity: '22' }], reason: 'First writer' }),
+      changeRequestForQuotation({ ...fresh, lines: [{ itemNumber: 10, quantity: '23' }], reason: 'Second writer' }),
+    ]);
+    expect(raced.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
+    expect(raced.filter((row) => row.status === 'rejected').map((row) => String((row as PromiseRejectedResult).reason))).toEqual([
+      expect.stringContaining('stands as of'),
+    ]);
+
+    await expect(changeRequestForQuotation({
+      ...fresh, client: other, lines: [{ itemNumber: 10, quantity: '24' }],
+    })).rejects.toThrow('does not stand');
+
+    const end = await counts(c);
+    expect(end.journals).toBe(beforeCounts.journals);
+    expect(end.movements).toBe(beforeCounts.movements);
+    expect(end.orders).toBe(beforeCounts.orders);
+    expect(end.requisition).toBe(beforeCounts.requisition);
+  });
 });
+
+async function changeDocs(client: string): Promise<number> {
+  const [row] = await withTenant(client, (tx) => tx.execute(sql`
+    select count(*)::int as n from change_document
+     where client = ${client} and change_type = 'CHANGE'
+  `)) as unknown as Array<{ n: number }>;
+  return Number(row.n);
+}

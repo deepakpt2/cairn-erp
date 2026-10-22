@@ -6,11 +6,10 @@ const root = join(__dirname, '..');
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
 
 /**
- * SCR-155 stage 4 — the request-for-quotation screen's contract.
+ * SCR-155 / SCR-156 — the request-for-quotation screen's contract.
  *
- * The browser acceptance is the next stage. This proves the screen cannot drift
- * away from the service: one screen, a check that writes nothing, the maintained
- * fields only, and the search alias kept out of the identifiers.
+ * One screen creates and changes. A check writes nothing. The search aliases
+ * stay out of the identifiers. The browser acceptance is the next stage.
  */
 describe('SCR-155 request for quotation screen contract', () => {
   const page = read('src/app/purchasing/rfq/page.tsx');
@@ -24,6 +23,7 @@ describe('SCR-155 request for quotation screen contract', () => {
 
   it('opens an event by number and offers the save cuts as suggestions', () => {
     expect(page).toContain('getRequestForQuotation(');
+    expect(page).toContain('resolveRequestForQuotation(');
     expect(page).toContain('listRecentRequestsForQuotation(');
     expect(page).toContain('RFQ_ROUTE');
     expect(shell).toContain('name="event"');
@@ -47,7 +47,11 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(shell).not.toContain('name="requestKey"');
     expect(shell).not.toContain('name="currency"');
     expect(shell).not.toContain('name="eventNumber"');
-    expect(shell).not.toContain('name="rfqNumber"');
+    expect(shell).not.toContain('name="revision"');
+    expect(shell).not.toContain('name="notification"');
+    const createForm = shell.slice(shell.indexOf('id="rfq-create"'));
+    expect(createForm).not.toContain('name="rfqNumber"');
+    expect(shell.slice(0, shell.indexOf('id="rfq-create"'))).toContain('name="rfqNumber"');
     expect(shell).not.toContain('name="requisitionNumber"');
     expect(shell).not.toContain('name="orderNumber"');
     expect(shell).not.toContain('name="quotationNumber"');
@@ -62,7 +66,9 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(shell).toContain('data-rfq-check');
     expect(shell).toContain('formAction={checkAction}');
     expect(shell).toContain('data-rfq-nothing-created');
-    expect(shell).not.toContain('data-rfq-change');
+    expect(shell).toContain('data-rfq-change');
+    expect(shell).toContain('data-rfq-change-check');
+    expect(shell).toContain('data-rfq-header-shared');
     expect(actions).toContain('previewRequestForQuotation(');
     const check = actions.slice(
       actions.indexOf('export async function checkRfqAction'),
@@ -73,6 +79,16 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(check).not.toContain('revalidatePath');
     expect(check).not.toContain('allocateNumber');
     expect(actions).toContain('createRequestForQuotation(');
+    const changeCheck = actions.slice(
+      actions.indexOf('export async function checkChangeRfqAction'),
+      actions.indexOf('export async function changeRfqAction'),
+    );
+    expect(changeCheck).toContain('previewRequestForQuotationChange(');
+    expect(changeCheck).not.toContain('changeRequestForQuotation(');
+    expect(changeCheck).not.toContain('revalidatePath');
+    expect(actions).toContain('changeRequestForQuotation(');
+    expect(actions).toContain('notification');
+    expect(actions).toContain('revision');
     expect(actions).not.toContain('allocateNumber');
     expect(actions).not.toContain('postJournalEntry');
     expect(actions).not.toContain('postMaterialDocument');
@@ -90,12 +106,12 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(identifiers).not.toMatch(/name="[^"]*ME41/);
     expect(schema).not.toMatch(/me41/i);
     expect(service).not.toMatch(/table\([^)]*me41/i);
-    expect(messages).toContain("'requestForQuotation.code': 'PROC.RFQ.CREATE · ME41'");
-    expect(seed).toMatch(/code: 'PROC\.RFQ\.CREATE'[\s\S]{0,280}posting: false/);
-    expect(seed).toContain("aliases: ['ME41']");
+    expect(messages).toContain("'requestForQuotation.code': 'PROC.RFQ.CREATE · ME41 · ME42'");
+    expect(seed).toMatch(/code: 'PROC\.RFQ\.CREATE'[\s\S]{0,320}posting: false/);
+    expect(seed).toContain("aliases: ['ME41', 'ME42']");
     expect(service).toContain("RFQ_ROUTE = '/purchasing/rfq'");
     expect(page).toContain('RFQ_CAPABILITY');
-    expect(page).not.toContain('ME42');
+    expect(identifiers).not.toMatch(/ME42/);
     expect(page).not.toContain('ME47');
     expect(page).not.toContain('ME48');
     expect(page).not.toContain('ME49');

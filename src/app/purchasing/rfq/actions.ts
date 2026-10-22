@@ -1,12 +1,14 @@
 'use server';
 
 /**
- * SCR-155 — the request-for-quotation screen's door.
+ * SCR-155 / SCR-156 — the request-for-quotation screen's door.
  *
  * Check calls the preview and writes nothing, including either number. Save
- * calls the service. A price, a status, a delivery channel and a request key
- * are passed through, so the service refuses them by name rather than the
- * action quietly dropping them.
+ * calls the service. A change check calls the change preview and writes
+ * nothing, including the change document. A price, a status, a delivery
+ * channel, a quotation, a notification, a revision and a request key are
+ * passed through, so the service refuses them by name rather than the action
+ * quietly dropping them.
  */
 import { revalidatePath } from 'next/cache';
 
@@ -15,8 +17,12 @@ import {
   RFQ_CAPABILITY,
   RFQ_ROUTE,
   RfqError,
+  changeRequestForQuotation,
   createRequestForQuotation,
   previewRequestForQuotation,
+  previewRequestForQuotationChange,
+  type RfqChangeInput,
+  type RfqChangePreview,
   type RfqCreateInput,
   type RfqLineInput,
   type RfqSupplierInput,
@@ -33,6 +39,8 @@ export interface RfqActionState {
   currency?: string;
   lines?: StandingRfqLine[];
   requests?: Array<{ rfqNumber: string | null; partnerNumber: string }>;
+  rfqNumber?: string | null;
+  change?: RfqChangePreview | null;
 }
 
 function text(form: FormData, name: string): string {
@@ -194,6 +202,118 @@ export async function createRfqAction(
       eventNumber: created.eventNumber,
       rfqNumbers: created.rfqNumbers,
       message: `Event ${created.eventNumber} stands. Nothing was posted.`,
+    };
+  } catch (caught) {
+    return refused(caught) ?? (() => { throw caught; })();
+  }
+}
+
+function changeExtras(form: FormData): Partial<RfqChangeInput> {
+  const extra: Partial<RfqChangeInput> = {};
+  if (text(form, 'eventNumber')) extra.eventNumber = text(form, 'eventNumber');
+  if (text(form, 'partnerNumber')) extra.partnerNumber = text(form, 'partnerNumber');
+  if (text(form, 'purchasingOrg')) extra.purchasingOrg = text(form, 'purchasingOrg');
+  if (text(form, 'rfqDate')) extra.rfqDate = text(form, 'rfqDate');
+  if (text(form, 'documentType')) extra.documentType = text(form, 'documentType');
+  if (text(form, 'currency')) extra.currency = text(form, 'currency');
+  if (text(form, 'companyCode')) extra.companyCode = text(form, 'companyCode');
+  if (text(form, 'status')) extra.status = text(form, 'status');
+  if (text(form, 'deliveryChannel')) extra.deliveryChannel = text(form, 'deliveryChannel');
+  if (text(form, 'contactId')) extra.contactId = text(form, 'contactId');
+  if (text(form, 'sentAt')) extra.sentAt = text(form, 'sentAt');
+  if (text(form, 'deliveryReference')) extra.deliveryReference = text(form, 'deliveryReference');
+  if (text(form, 'requestKey')) extra.requestKey = text(form, 'requestKey');
+  if (text(form, 'price')) extra.price = text(form, 'price');
+  if (text(form, 'quotationNumber')) extra.quotationNumber = text(form, 'quotationNumber');
+  if (text(form, 'award')) extra.award = text(form, 'award');
+  if (text(form, 'comparison')) extra.comparison = text(form, 'comparison');
+  if (text(form, 'requisitionNumber')) extra.requisitionNumber = text(form, 'requisitionNumber');
+  if (text(form, 'orderNumber')) extra.orderNumber = text(form, 'orderNumber');
+  if (text(form, 'outbox')) extra.outbox = text(form, 'outbox');
+  if (text(form, 'notification')) extra.notification = text(form, 'notification');
+  if (text(form, 'revision')) extra.revision = text(form, 'revision');
+  if (text(form, 'id')) extra.id = text(form, 'id');
+  if (text(form, 'deleteEvent') || text(form, 'deleteItem')) extra.deleteItem = true;
+  if (text(form, 'supplierCount')) extra.suppliers = suppliersOf(form);
+  return extra;
+}
+
+function changeLinesOf(form: FormData): RfqLineInput[] {
+  const count = Number(text(form, 'lineCount') || '0');
+  const lines: RfqLineInput[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const line: RfqLineInput = { itemNumber: text(form, `line${index}Item`) || null };
+    if (text(form, `line${index}Text`)) line.shortText = text(form, `line${index}Text`);
+    if (text(form, `line${index}Quantity`)) line.quantity = text(form, `line${index}Quantity`);
+    if (text(form, `line${index}Unit`)) line.unit = text(form, `line${index}Unit`);
+    if (text(form, `line${index}Plant`)) line.plant = text(form, `line${index}Plant`);
+    if (form.has(`line${index}Storage`)) line.storageLocation = text(form, `line${index}Storage`) || null;
+    if (text(form, `line${index}Delivery`)) line.deliveryDate = text(form, `line${index}Delivery`);
+    if (text(form, `line${index}Material`)) line.materialNumber = text(form, `line${index}Material`);
+    if (text(form, `line${index}Price`)) line.price = text(form, `line${index}Price`);
+    if (text(form, `line${index}DeliveryLocation`)) line.deliveryLocation = text(form, `line${index}DeliveryLocation`);
+    if (text(form, `line${index}Requisition`)) line.requisitionNumber = text(form, `line${index}Requisition`);
+    lines.push(line);
+  }
+  return lines;
+}
+
+function changeInput(form: FormData, client: string, changedBy: string): RfqChangeInput {
+  return {
+    client,
+    changedBy,
+    rfqNumber: text(form, 'rfqNumber'),
+    expectedEventChangedAt: text(form, 'expectedEventChangedAt') || null,
+    expectedRequestChangedAt: text(form, 'expectedRequestChangedAt') || null,
+    reason: text(form, 'reason') || null,
+    purchasingGroup: text(form, 'purchasingGroup'),
+    quotationDeadline: text(form, 'quotationDeadline'),
+    collectiveNumber: text(form, 'collectiveNumber') || null,
+    lines: changeLinesOf(form),
+    ...changeExtras(form),
+  };
+}
+
+export async function checkChangeRfqAction(
+  _previous: RfqActionState,
+  form: FormData,
+): Promise<RfqActionState> {
+  const session = await requireSession(RFQ_ROUTE);
+  if (!can(session, RFQ_CAPABILITY)) return missing();
+  const stop = blocked(form);
+  if (stop) return stop;
+  try {
+    const preview = await previewRequestForQuotationChange(changeInput(form, session.user.client, session.user.username));
+    return {
+      ok: true,
+      wrote: false,
+      eventNumber: preview.eventNumber,
+      rfqNumber: preview.rfqNumber,
+      change: preview,
+      message: preview.message,
+    };
+  } catch (caught) {
+    return refused(caught) ?? (() => { throw caught; })();
+  }
+}
+
+export async function changeRfqAction(
+  _previous: RfqActionState,
+  form: FormData,
+): Promise<RfqActionState> {
+  const session = await requireSession(RFQ_ROUTE);
+  if (!can(session, RFQ_CAPABILITY)) return missing();
+  const stop = blocked(form);
+  if (stop) return stop;
+  try {
+    const changed = await changeRequestForQuotation(changeInput(form, session.user.client, session.user.username));
+    revalidatePath(RFQ_ROUTE);
+    return {
+      ok: true,
+      wrote: true,
+      eventNumber: changed.eventNumber,
+      rfqNumber: changed.rfqNumber,
+      message: `Request ${changed.rfqNumber} stands. Nothing was posted.`,
     };
   } catch (caught) {
     return refused(caught) ?? (() => { throw caught; })();

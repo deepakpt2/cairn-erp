@@ -7,6 +7,7 @@ import {
   RFQ_ROUTE,
   getRequestForQuotation,
   listRecentRequestsForQuotation,
+  resolveRequestForQuotation,
 } from '@/modules/purchasing/rfq';
 import RequestForQuotation from './RequestForQuotation';
 
@@ -18,20 +19,26 @@ function last(value: string | string[] | undefined): string {
 }
 
 /**
- * Request for quotation — SCR-155.
+ * Request for quotation — SCR-155, and its change — SCR-156.
  *
- * One screen creates the event and one request per supplier. The search alias
- * stays in the catalogue. Check writes nothing. A change is not this screen.
+ * One screen creates the event and changes a standing request. An event number
+ * opens the event. A request number opens its event and selects that request.
+ * Neither creates a document. Check writes nothing. The search aliases stay in
+ * the catalogue.
  */
 export default async function PurchasingRfqPage({ searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession(RFQ_ROUTE);
   const params = await searchParams;
-  const requestedEvent = last(params.event).toUpperCase();
-  const opened = requestedEvent
-    ? await getRequestForQuotation(session.user.client, requestedEvent)
+  const typed = last(params.event).toUpperCase();
+  const requestedRequest = last(params.request).toUpperCase();
+  const resolved = typed ? await resolveRequestForQuotation(session.user.client, typed) : null;
+  const requestedEvent = resolved?.eventNumber ?? (typed && !resolved ? typed : '');
+  const opened = resolved
+    ? await getRequestForQuotation(session.user.client, resolved.eventNumber)
     : null;
+  const selectedRequest = requestedRequest || resolved?.rfqNumber || '';
   const recent = await listRecentRequestsForQuotation(session.user.client);
 
   return (
@@ -50,10 +57,14 @@ export default async function PurchasingRfqPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('requestForQuotation.subtitle')}</p>
       </header>
 
+      {/* The loaded time is not part of this key. A header save changes it, and
+          remounting here would discard the result the user is waiting to read.
+          The change form refreshes its own fields from that time. */}
       <RequestForQuotation
-        key={requestedEvent}
+        key={`${requestedEvent}:${selectedRequest}`}
         opened={opened}
-        requestedEvent={requestedEvent}
+        requestedEvent={typed && !opened ? typed : requestedEvent}
+        selectedRequest={selectedRequest}
         recent={recent}
         canMaintain={can(session, RFQ_CAPABILITY)}
       />

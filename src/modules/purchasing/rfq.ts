@@ -1,10 +1,15 @@
 /**
- * Request for quotation — SCR-155.
+ * Request for quotation — SCR-155, and its change — SCR-156.
  *
  * One event groups the requirement. Each invited supplier receives a separate
  * request, and that request copies the lines. Creating a request does not
  * create an order, a requisition, a quotation, a goods movement or a journal.
  * A check writes nothing, including either number.
+ *
+ * A change rewrites one request's copy. A header change is the event's, because
+ * the group, the deadline and the collective number are not copied. The other
+ * request's copy stays. A check of a change writes nothing, including the
+ * change document.
  */
 import { and, asc, desc, eq } from 'drizzle-orm';
 
@@ -107,6 +112,7 @@ export interface StandingRfqLine {
 export interface StandingRfq {
   rfqNumber: string;
   partnerNumber: string;
+  changedAt: string | null;
   lines: StandingRfqLine[];
 }
 
@@ -119,6 +125,7 @@ export interface StandingRfqEvent {
   quotationDeadline: string;
   currency: string;
   collectiveNumber: string | null;
+  changedAt: string | null;
   lines: StandingRfqLine[];
   requests: StandingRfq[];
 }
@@ -139,6 +146,18 @@ function blank(value: string | number | null | undefined): string | null {
   if (value == null) return null;
   const trimmed = String(value).trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+/** The loaded time is the concurrency token. A null token is a row that has not been changed. */
+function tokenOf(value: Date | string | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function tokensMatch(sent: string | null | undefined, standing: Date | string | null | undefined): boolean {
+  return blank(sent) === tokenOf(standing);
 }
 
 function assertDate(value: string, label: string): void {
@@ -568,12 +587,544 @@ export async function getRequestForQuotation(client: string, eventNumber: string
       quotationDeadline: event.quotationDeadline,
       currency: event.currency.trim(),
       collectiveNumber: event.collectiveNumber,
+      changedAt: tokenOf(event.changedAt),
       lines: eventLines.map(lineOf),
       requests: headers.map((header) => ({
         rfqNumber: header.rfqNumber,
         partnerNumber: header.partnerNumber,
+        changedAt: tokenOf(header.changedAt),
         lines: copies.filter((row) => row.rfqNumber === header.rfqNumber).map(lineOf),
       })),
     };
+  });
+}
+
+export interface RfqChangeInput {
+  client: string;
+  changedBy: string;
+  rfqNumber: string;
+  expectedEventChangedAt?: string | null;
+  expectedRequestChangedAt?: string | null;
+  reason?: string | null;
+  purchasingGroup?: string | null;
+  quotationDeadline?: string | null;
+  collectiveNumber?: string | null;
+  lines?: RfqLineInput[];
+  suppliers?: RfqSupplierInput[];
+  eventNumber?: string | null;
+  partnerNumber?: string | null;
+  purchasingOrg?: string | null;
+  rfqDate?: string | null;
+  documentType?: string | null;
+  currency?: string | null;
+  companyCode?: string | null;
+  status?: string | null;
+  deliveryChannel?: string | null;
+  contactId?: string | null;
+  sentAt?: string | null;
+  deliveryReference?: string | null;
+  requestKey?: string | null;
+  price?: number | string | null;
+  quotationNumber?: string | null;
+  award?: string | null;
+  comparison?: string | null;
+  requisitionNumber?: string | null;
+  orderNumber?: string | null;
+  outbox?: string | null;
+  notification?: string | null;
+  revision?: string | null;
+  deleteEvent?: boolean;
+  deleteItem?: boolean;
+  id?: string | null;
+}
+
+export interface RfqChangePreview {
+  rfqNumber: string;
+  eventNumber: string;
+  partnerNumber: string;
+  eventChangedAt: string | null;
+  requestChangedAt: string | null;
+  headerIsTheEvents: boolean;
+  header: {
+    purchasingGroup: { before: string; after: string };
+    quotationDeadline: { before: string; after: string };
+    collectiveNumber: { before: string | null; after: string | null };
+  };
+  lines: Array<{ itemNumber: number; before: StandingRfqLine; after: StandingRfqLine }>;
+  nothingWritten: true;
+  unchanged: boolean;
+  message: string;
+}
+
+export interface RfqChangeResult {
+  rfqNumber: string;
+  eventNumber: string;
+  eventChangedAt: string | null;
+  requestChangedAt: string | null;
+  headerChanged: boolean;
+  linesChanged: boolean;
+}
+
+interface ChangePlan {
+  preview: RfqChangePreview;
+  reason: string | null;
+  headerChanged: boolean;
+  linesChanged: boolean;
+  nextHeader: {
+    purchasingGroup: string;
+    quotationDeadline: string;
+    collectiveNumber: string | null;
+  };
+  nextLines: StandingRfqLine[];
+}
+
+function refuseChangeCuts(input: RfqChangeInput): void {
+  if (!blank(input.rfqNumber)) throw new RfqError('A request number is required.');
+  if (blank(input.id)) throw new RfqError('The drawn number is the key.');
+  if (blank(input.companyCode)) throw new RfqError('A company code is not a column. The plant carries it.');
+  if (blank(input.status)) throw new RfqError('A request has no stored status. It stands when it is saved.');
+  if (blank(input.deliveryChannel)) throw new RfqError('There is no dispatcher. A delivery channel is not stored.');
+  if (blank(input.contactId)) throw new RfqError('A supplier contact is not stored.');
+  if (blank(input.sentAt) || blank(input.deliveryReference)) throw new RfqError('A delivery attempt is not stored.');
+  if (blank(input.outbox)) throw new RfqError('An outbox is not written.');
+  if (blank(input.requestKey)) throw new RfqError('A request key is not stored. A retry of a committed change is a stale refusal.');
+  if (blank(input.price) || input.lines?.some((line) => blank(line.price))) throw new RfqError('A request carries no price.');
+  if (blank(input.quotationNumber) || blank(input.award)) throw new RfqError('A quotation is not created from this request.');
+  if (blank(input.comparison)) throw new RfqError('A comparison is not stored.');
+  if (blank(input.requisitionNumber) || input.lines?.some((line) => blank(line.requisitionNumber))) {
+    throw new RfqError('A requisition is not converted.');
+  }
+  if (blank(input.orderNumber)) throw new RfqError('An order is not created.');
+  if (input.lines?.some((line) => blank(line.deliveryLocation))) throw new RfqError('The plant is the delivery destination.');
+  if (input.deleteEvent || input.deleteItem) throw new RfqError('A request is not physically deleted.');
+  if (blank(input.revision)) throw new RfqError('A revision is not stored. The loaded time is the token.');
+  if (blank(input.notification)) throw new RfqError('A supplier is not notified from this change.');
+  if (input.suppliers && input.suppliers.length > 0) {
+    const seen = new Set<string>();
+    for (const supplier of input.suppliers) {
+      const partner = blank(supplier.partnerNumber);
+      if (!partner) throw new RfqError('A supplier is not invited from a change.');
+      if (seen.has(partner)) throw new RfqError(`Supplier ${partner} is invited twice.`);
+      seen.add(partner);
+    }
+    throw new RfqError('A supplier is not invited from a change.');
+  }
+}
+
+function stoodAt(kind: 'Event' | 'Request', number: string, standing: Date | string | null | undefined): string {
+  return `${kind} ${number} stands as of ${tokenOf(standing) ?? 'its creation'}. Reload it.`;
+}
+
+function lineSame(left: StandingRfqLine, right: StandingRfqLine): boolean {
+  return left.shortText === right.shortText
+    && left.quantity === right.quantity
+    && left.unit === right.unit
+    && left.plant === right.plant
+    && left.storageLocation === right.storageLocation
+    && left.deliveryDate === right.deliveryDate
+    && left.materialNumber === right.materialNumber;
+}
+
+function lineFields(line: StandingRfqLine): Record<string, string | null> {
+  const prefix = `line${line.itemNumber}`;
+  return {
+    [`${prefix}.shortText`]: line.shortText,
+    [`${prefix}.quantity`]: line.quantity,
+    [`${prefix}.unit`]: line.unit,
+    [`${prefix}.plant`]: line.plant,
+    [`${prefix}.storageLocation`]: line.storageLocation,
+    [`${prefix}.deliveryDate`]: line.deliveryDate,
+  };
+}
+
+async function loadChange(tx: Tx, client: string, rfqNumber: string, lock: boolean) {
+  const [found] = await tx.select().from(purchasingRfq).where(and(
+    eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, rfqNumber),
+  ));
+  if (!found) throw new RfqError(`Request ${rfqNumber} does not stand.`);
+  const eventQuery = tx.select().from(purchasingRfqEvent).where(and(
+    eq(purchasingRfqEvent.client, client), eq(purchasingRfqEvent.eventNumber, found.eventNumber),
+  ));
+  const [event] = lock ? await eventQuery.for('update') : await eventQuery;
+  if (!event) throw new RfqError(`Request ${rfqNumber} does not stand.`);
+  const requestQuery = tx.select().from(purchasingRfq).where(and(
+    eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, rfqNumber),
+  ));
+  const [request] = lock ? await requestQuery.for('update') : await requestQuery;
+  if (!request) throw new RfqError(`Request ${rfqNumber} does not stand.`);
+  const copies = await tx.select().from(purchasingRfqItem).where(and(
+    eq(purchasingRfqItem.client, client), eq(purchasingRfqItem.rfqNumber, rfqNumber),
+  )).orderBy(asc(purchasingRfqItem.itemNumber));
+  return { event, request, copies };
+}
+
+async function planChange(tx: Tx, input: RfqChangeInput, lock: boolean): Promise<ChangePlan> {
+  refuseChangeCuts(input);
+  const loaded = await loadChange(tx, input.client, input.rfqNumber.trim(), lock);
+  const { event, request, copies } = loaded;
+  if (!tokensMatch(input.expectedEventChangedAt, event.changedAt)) {
+    throw new RfqError(stoodAt('Event', event.eventNumber, event.changedAt));
+  }
+  if (!tokensMatch(input.expectedRequestChangedAt, request.changedAt)) {
+    throw new RfqError(stoodAt('Request', request.rfqNumber, request.changedAt));
+  }
+  const sentEvent = blank(input.eventNumber);
+  if (sentEvent && sentEvent !== event.eventNumber) throw new RfqError('The event is not changed.');
+  const sentPartner = blank(input.partnerNumber);
+  if (sentPartner && sentPartner !== request.partnerNumber) throw new RfqError('The supplier is not changed.');
+  const sentOrg = blank(input.purchasingOrg);
+  if (sentOrg && sentOrg !== event.purchasingOrg) throw new RfqError('The purchasing organisation is not changed.');
+  const sentDate = blank(input.rfqDate);
+  if (sentDate && sentDate !== event.rfqDate) throw new RfqError('The RFQ date is not changed.');
+  const sentType = blank(input.documentType);
+  if (sentType && sentType !== event.documentType) throw new RfqError('The document type is not changed.');
+  const sentCurrency = blank(input.currency)?.toUpperCase();
+  if (sentCurrency && sentCurrency !== event.currency.trim()) {
+    throw new RfqError(`The currency is the company's local currency ${event.currency.trim()}, not a field on the request.`);
+  }
+
+  const nextHeader = {
+    purchasingGroup: event.purchasingGroup,
+    quotationDeadline: event.quotationDeadline,
+    collectiveNumber: event.collectiveNumber,
+  };
+  if (input.purchasingGroup !== undefined) {
+    const groupCode = blank(input.purchasingGroup);
+    if (!groupCode) throw new RfqError('A purchasing group is required.');
+    nextHeader.purchasingGroup = groupCode;
+  }
+  if (input.quotationDeadline !== undefined) {
+    assertDate(input.quotationDeadline, 'The quotation deadline');
+    if (input.quotationDeadline < event.rfqDate) {
+      throw new RfqError('The quotation deadline is before the RFQ date.');
+    }
+    nextHeader.quotationDeadline = input.quotationDeadline;
+  }
+  if (input.collectiveNumber !== undefined) {
+    const collective = blank(input.collectiveNumber);
+    if (collective && collective.length > 10) {
+      throw new RfqError('A collective number is at most ten characters. It is a label, not the key.');
+    }
+    nextHeader.collectiveNumber = collective;
+  }
+  const headerChanged = nextHeader.purchasingGroup !== event.purchasingGroup
+    || nextHeader.quotationDeadline !== event.quotationDeadline
+    || nextHeader.collectiveNumber !== event.collectiveNumber;
+  if (headerChanged && nextHeader.purchasingGroup !== event.purchasingGroup) {
+    const [group] = await tx.select().from(purchasingGroup).where(and(
+      eq(purchasingGroup.client, input.client), eq(purchasingGroup.purchasingGroup, nextHeader.purchasingGroup),
+    ));
+    if (!group?.isActive) throw new RfqError(`Purchasing group ${nextHeader.purchasingGroup} does not exist or is inactive.`);
+    if (group.purchasingOrg && group.purchasingOrg !== event.purchasingOrg) {
+      throw new RfqError(`Purchasing group ${nextHeader.purchasingGroup} belongs to organisation ${group.purchasingOrg}.`);
+    }
+  }
+
+  const standingLines = copies.map((row): StandingRfqLine => ({
+    itemNumber: row.itemNumber,
+    materialNumber: row.materialNumber,
+    shortText: row.shortText,
+    quantity: row.quantity,
+    unit: row.unit,
+    plant: row.plant,
+    storageLocation: row.storageLocation,
+    deliveryDate: row.deliveryDate,
+  }));
+  const byItem = new Map(standingLines.map((line) => [line.itemNumber, line]));
+  const nextLines = standingLines.map((line) => ({ ...line }));
+  if (input.lines) {
+    const named = new Set<number>();
+    for (const line of input.lines) {
+      const itemNumber = line.itemNumber == null || String(line.itemNumber).trim() === ''
+        ? null
+        : Number(String(line.itemNumber).trim());
+      if (itemNumber == null || !Number.isSafeInteger(itemNumber) || !byItem.has(itemNumber)) {
+        throw new RfqError('A line is not added.');
+      }
+      if (named.has(itemNumber)) throw new RfqError(`Item ${itemNumber} is named twice.`);
+      named.add(itemNumber);
+      const standing = byItem.get(itemNumber)!;
+      if (line.materialNumber !== undefined && blank(line.materialNumber) !== standing.materialNumber) {
+        throw new RfqError('The material is not changed.');
+      }
+      const proposed: StandingRfqLine = { ...standing };
+      if (line.shortText !== undefined) {
+        const text = blank(line.shortText);
+        if (!text) throw new RfqError('A short text is required.');
+        if (text.length > 40) throw new RfqError('A short text is at most 40 characters.');
+        proposed.shortText = text;
+      }
+      if (line.quantity !== undefined) proposed.quantity = quantityText(line.quantity);
+      if (line.unit !== undefined) {
+        const unit = blank(line.unit)?.toUpperCase();
+        if (!unit) throw new RfqError('A unit of measure is required.');
+        proposed.unit = unit;
+      }
+      if (line.plant !== undefined) {
+        const plantCode = blank(line.plant);
+        if (!plantCode) throw new RfqError('A plant is required.');
+        proposed.plant = plantCode;
+      }
+      if (line.storageLocation !== undefined) proposed.storageLocation = blank(line.storageLocation);
+      if (line.deliveryDate !== undefined) {
+        assertDate(line.deliveryDate ?? '', 'The delivery date');
+        proposed.deliveryDate = line.deliveryDate as string;
+      }
+      if (!lineSame(standing, proposed)) await judgeChangedLine(tx, input.client, event, standing, proposed);
+      const at = nextLines.findIndex((row) => row.itemNumber === itemNumber);
+      nextLines[at] = proposed;
+    }
+    if (named.size !== standingLines.length) throw new RfqError('A line is not removed.');
+  }
+  const linesChanged = nextLines.some((line, index) => !lineSame(line, standingLines[index]));
+  const unchanged = !headerChanged && !linesChanged;
+  const reason = unchanged ? null : reasonOf(input.reason);
+  const preview: RfqChangePreview = {
+    rfqNumber: request.rfqNumber,
+    eventNumber: event.eventNumber,
+    partnerNumber: request.partnerNumber,
+    eventChangedAt: tokenOf(event.changedAt),
+    requestChangedAt: tokenOf(request.changedAt),
+    headerIsTheEvents: headerChanged,
+    header: {
+      purchasingGroup: { before: event.purchasingGroup, after: nextHeader.purchasingGroup },
+      quotationDeadline: { before: event.quotationDeadline, after: nextHeader.quotationDeadline },
+      collectiveNumber: { before: event.collectiveNumber, after: nextHeader.collectiveNumber },
+    },
+    lines: nextLines.map((line, index) => ({
+      itemNumber: line.itemNumber,
+      before: standingLines[index],
+      after: line,
+    })),
+    nothingWritten: true,
+    unchanged,
+    message: unchanged
+      ? 'Nothing would change.'
+      : headerChanged
+        ? "The header is the event's. Nothing has been written."
+        : 'Nothing has been written.',
+  };
+  return { preview, reason, headerChanged, linesChanged, nextHeader, nextLines };
+}
+
+function reasonOf(value: string | null | undefined): string {
+  const reason = blank(value);
+  if (!reason) throw new RfqError('A reason is required.');
+  if (reason.length < 3 || reason.length > 500) throw new RfqError('A reason is three to five hundred characters.');
+  return reason;
+}
+
+async function judgeChangedLine(
+  tx: Tx,
+  client: string,
+  event: { purchasingOrg: string; currency: string; eventNumber: string },
+  standing: StandingRfqLine,
+  proposed: StandingRfqLine,
+): Promise<void> {
+  if (proposed.plant !== standing.plant || proposed.storageLocation !== standing.storageLocation) {
+    const [plantRow] = await tx.select().from(plant).where(and(
+      eq(plant.client, client), eq(plant.plant, proposed.plant),
+    ));
+    if (!plantRow?.isActive) throw new RfqError(`Plant ${proposed.plant} does not exist or is inactive.`);
+    if (!plantRow.companyCode) {
+      throw new RfqError(`Plant ${proposed.plant} belongs to no company code, so its currency cannot be judged.`);
+    }
+    const [assigned] = await tx.select().from(purchasingOrgPlant).where(and(
+      eq(purchasingOrgPlant.client, client),
+      eq(purchasingOrgPlant.purchasingOrg, event.purchasingOrg),
+      eq(purchasingOrgPlant.plant, proposed.plant),
+    ));
+    if (!assigned) throw new RfqError(`Plant ${proposed.plant} is not assigned to purchasing organisation ${event.purchasingOrg}.`);
+    const eventCompany = await companyOfEvent(tx, client, event.eventNumber);
+    if (plantRow.companyCode !== eventCompany) {
+      throw new RfqError(`Plant ${proposed.plant} belongs to company ${plantRow.companyCode}, not the event's company ${eventCompany}.`);
+    }
+    const [company] = await tx.select().from(companyCode).where(and(
+      eq(companyCode.client, client), eq(companyCode.companyCode, plantRow.companyCode),
+    ));
+    if (!company?.currency || company.currency.trim() !== event.currency.trim()) {
+      throw new RfqError(`The currency is the company's local currency ${event.currency.trim()}, not a field on the request.`);
+    }
+    if (proposed.storageLocation) {
+      const [location] = await tx.select().from(storageLocation).where(and(
+        eq(storageLocation.client, client),
+        eq(storageLocation.plant, proposed.plant),
+        eq(storageLocation.storageLocation, proposed.storageLocation),
+      ));
+      if (!location?.isActive) {
+        throw new RfqError(`Storage location ${proposed.storageLocation} does not stand active at plant ${proposed.plant}.`);
+      }
+    }
+  }
+  if (proposed.materialNumber && (proposed.plant !== standing.plant || proposed.unit !== standing.unit)) {
+    const [master] = await tx.select().from(material).where(and(
+      eq(material.client, client), eq(material.materialNumber, proposed.materialNumber),
+    ));
+    if (!master) throw new RfqError(`Material ${proposed.materialNumber} does not exist.`);
+    if (master.isBlocked) throw new RfqError(`Material ${proposed.materialNumber} is blocked.`);
+    if (proposed.plant !== standing.plant) {
+      const [extension] = await tx.select().from(materialPlant).where(and(
+        eq(materialPlant.client, client),
+        eq(materialPlant.materialNumber, proposed.materialNumber),
+        eq(materialPlant.plant, proposed.plant),
+      ));
+      if (!extension) throw new RfqError(`Material ${proposed.materialNumber} is not extended to plant ${proposed.plant}.`);
+    }
+    if (proposed.unit !== standing.unit) {
+      const unit = proposed.unit;
+      const [unitRow] = await tx.select().from(unitOfMeasure).where(eq(unitOfMeasure.code, unit));
+      if (!unitRow) throw new RfqError(`Unit ${unit} is not a standing unit of measure.`);
+      const baseUnit = master.baseUnit?.toUpperCase() ?? null;
+      if (unit !== baseUnit) {
+        const [conversion] = await tx.select().from(materialUomConversion).where(and(
+          eq(materialUomConversion.client, client),
+          eq(materialUomConversion.materialNumber, proposed.materialNumber),
+          eq(materialUomConversion.alternativeUnit, unit),
+        ));
+        if (!conversion) throw new RfqError(`Material ${proposed.materialNumber} has no conversion from ${unit}.`);
+      }
+    }
+  }
+  if (proposed.unit !== standing.unit && !proposed.materialNumber) {
+    const [unitRow] = await tx.select().from(unitOfMeasure).where(eq(unitOfMeasure.code, proposed.unit));
+    if (!unitRow) throw new RfqError(`Unit ${proposed.unit} is not a standing unit of measure.`);
+  }
+}
+
+async function companyOfEvent(tx: Tx, client: string, eventNumber: string): Promise<string> {
+  const lines = await tx.select().from(purchasingRfqEventItem).where(and(
+    eq(purchasingRfqEventItem.client, client), eq(purchasingRfqEventItem.eventNumber, eventNumber),
+  ));
+  const companies = new Set<string>();
+  for (const line of lines) {
+    const [plantRow] = await tx.select().from(plant).where(and(
+      eq(plant.client, client), eq(plant.plant, line.plant),
+    ));
+    if (!plantRow?.companyCode) {
+      throw new RfqError(`Plant ${line.plant} belongs to no company code, so its currency cannot be judged.`);
+    }
+    companies.add(plantRow.companyCode);
+  }
+  if (companies.size !== 1) throw new RfqError('The plants do not share one company.');
+  return [...companies][0];
+}
+
+export async function previewRequestForQuotationChange(input: RfqChangeInput): Promise<RfqChangePreview> {
+  return withTenant(input.client, async (tx) => (await planChange(tx, input, false)).preview);
+}
+
+export async function changeRequestForQuotation(input: RfqChangeInput): Promise<RfqChangeResult> {
+  return withTenant(input.client, (tx) => writeRequestForQuotationChange(tx, input));
+}
+
+export async function writeRequestForQuotationChange(tx: Tx, input: RfqChangeInput): Promise<RfqChangeResult> {
+  const plan = await planChange(tx, input, true);
+  if (plan.preview.unchanged) throw new RfqError('Nothing would change.');
+  const now = new Date();
+  const { eventNumber, rfqNumber } = plan.preview;
+  if (plan.headerChanged) {
+    await tx.update(purchasingRfqEvent).set({
+      purchasingGroup: plan.nextHeader.purchasingGroup,
+      quotationDeadline: plan.nextHeader.quotationDeadline,
+      collectiveNumber: plan.nextHeader.collectiveNumber,
+      changedBy: input.changedBy,
+      changedAt: now,
+    }).where(and(
+      eq(purchasingRfqEvent.client, input.client),
+      eq(purchasingRfqEvent.eventNumber, eventNumber),
+    ));
+    await recordChange(tx, {
+      client: input.client,
+      objectClass: EVENT_CLASS,
+      objectKey: eventNumber,
+      changeType: 'CHANGE',
+      changedBy: input.changedBy,
+      transactionCode: RFQ_CAPABILITY,
+      reason: plan.reason ?? undefined,
+      before: {
+        purchasingGroup: plan.preview.header.purchasingGroup.before,
+        quotationDeadline: plan.preview.header.quotationDeadline.before,
+        collectiveNumber: plan.preview.header.collectiveNumber.before,
+      },
+      after: {
+        purchasingGroup: plan.nextHeader.purchasingGroup,
+        quotationDeadline: plan.nextHeader.quotationDeadline,
+        collectiveNumber: plan.nextHeader.collectiveNumber,
+      },
+    });
+  }
+  if (plan.linesChanged) {
+    for (const line of plan.preview.lines) {
+      if (lineSame(line.before, line.after)) continue;
+      await tx.update(purchasingRfqItem).set({
+        shortText: line.after.shortText,
+        quantity: line.after.quantity,
+        unit: line.after.unit,
+        plant: line.after.plant,
+        storageLocation: line.after.storageLocation,
+        deliveryDate: line.after.deliveryDate,
+        changedBy: input.changedBy,
+        changedAt: now,
+      }).where(and(
+        eq(purchasingRfqItem.client, input.client),
+        eq(purchasingRfqItem.rfqNumber, rfqNumber),
+        eq(purchasingRfqItem.itemNumber, line.itemNumber),
+      ));
+    }
+    await tx.update(purchasingRfq).set({
+      changedBy: input.changedBy,
+      changedAt: now,
+    }).where(and(
+      eq(purchasingRfq.client, input.client),
+      eq(purchasingRfq.rfqNumber, rfqNumber),
+    ));
+    const before: Record<string, string | null> = {};
+    const after: Record<string, string | null> = {};
+    for (const line of plan.preview.lines) {
+      Object.assign(before, lineFields(line.before));
+      Object.assign(after, lineFields(line.after));
+    }
+    await recordChange(tx, {
+      client: input.client,
+      objectClass: REQUEST_CLASS,
+      objectKey: rfqNumber,
+      changeType: 'CHANGE',
+      changedBy: input.changedBy,
+      transactionCode: RFQ_CAPABILITY,
+      reason: plan.reason ?? undefined,
+      before,
+      after,
+    });
+  }
+  return {
+    rfqNumber,
+    eventNumber,
+    eventChangedAt: plan.headerChanged ? tokenOf(now) : plan.preview.eventChangedAt,
+    requestChangedAt: plan.linesChanged ? tokenOf(now) : plan.preview.requestChangedAt,
+    headerChanged: plan.headerChanged,
+    linesChanged: plan.linesChanged,
+  };
+}
+
+/** An event number opens the event. A request number opens its event and names that request. */
+export async function resolveRequestForQuotation(
+  client: string,
+  number: string,
+): Promise<{ eventNumber: string; rfqNumber: string | null } | null> {
+  const key = number.trim();
+  if (!key) return null;
+  return withTenant(client, async (tx) => {
+    const [event] = await tx.select({ eventNumber: purchasingRfqEvent.eventNumber }).from(purchasingRfqEvent).where(and(
+      eq(purchasingRfqEvent.client, client), eq(purchasingRfqEvent.eventNumber, key),
+    ));
+    if (event) return { eventNumber: event.eventNumber, rfqNumber: null };
+    const [request] = await tx.select({
+      eventNumber: purchasingRfq.eventNumber,
+      rfqNumber: purchasingRfq.rfqNumber,
+    }).from(purchasingRfq).where(and(
+      eq(purchasingRfq.client, client), eq(purchasingRfq.rfqNumber, key),
+    ));
+    if (!request) return null;
+    return { eventNumber: request.eventNumber, rfqNumber: request.rfqNumber };
   });
 }
