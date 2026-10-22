@@ -110,6 +110,7 @@ import { scr158QuotationDisplay } from './scr158-quotation-display';
 import { scr159QuotationComparison } from './scr159-quotation-comparison';
 import { scr160ParkedInvoice } from './scr160-parked-invoice';
 import { scr161InvoiceOverview } from './scr161-invoice-overview';
+import { scr162BlockedInvoice } from './scr162-blocked-invoice';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
