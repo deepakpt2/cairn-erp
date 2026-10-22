@@ -112,6 +112,7 @@ import { scr160ParkedInvoice } from './scr160-parked-invoice';
 import { scr161InvoiceOverview } from './scr161-invoice-overview';
 import { scr162BlockedInvoice } from './scr162-blocked-invoice';
 import { scr163GrIrClearing } from './scr163-grir-clearing';
+import { scr164PurchaseOrderDisplay } from './scr164-purchase-order-display';
 import { assetMasterAs01As02 } from './asset-master';
 import { assetAcquisitionAbzon } from './asset-acquisition';
 import { assetRetirementAbavn } from './asset-retirement';
@@ -5076,6 +5077,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'scr161-invoice-overview': scr161InvoiceOverview,
   'scr162-blocked-invoice': scr162BlockedInvoice,
   'scr163-grir-clearing': scr163GrIrClearing,
+  'scr164-purchase-order-display': scr164PurchaseOrderDisplay,
   'asset-master': assetMasterAs01As02,
   'asset-acquisition': assetAcquisitionAbzon,
   'asset-retirement': assetRetirementAbavn,

@@ -15,8 +15,8 @@ export const dynamic = 'force-dynamic';
 const ROUTE = '/purchasing/orders';
 
 /**
- * Purchase orders (SCR-056 / ME21N create, ME22N change, ME23N
- * display; inert in stage 1, live since stage 3).
+ * Purchase orders (SCR-056 / ME21N create, ME22N change).
+ * Display is SCR-164, not this screen.
  */
 export default async function PurchaseOrdersPage({ searchParams }: {
   searchParams: Promise<{ order?: string }>;

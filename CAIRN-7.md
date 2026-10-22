@@ -169,6 +169,38 @@ The first production attempt did not submit the check, because the posting date 
 
 Same-stage bookkeeping: B-987 / §26.999 / §30 row 2.817.
 
+## §27.000 — ME23N contracted: a display is not a change
+
+**B-988.** SCR-164. The owner's package (2026-10-22) is the contract. ME23N displays a standing purchase order. It does not change the order, release it, receive goods, or post an invoice. Opening the document writes nothing. A closed period does not hide it. The purchase order number is the key. A missing optional value is not shown as zero.
+
+**What already stands, and this round does not rebuild.** The order, its items, its schedule lines, and its cost-centre assignments already stand. The item net value is the stored baseline. Received and invoiced quantities are the purchase-order list's derivation: a posted receipt adds, a posted reversal subtracts, and a posted invoice quantity is summed. The release workflow, when one claims the order, is the release row. F.19 and MR11 are not this read. ME2L stays closed, and its drill is not moved.
+
+**What this document does not store.** Payment terms, delivery terms, a supplier reference, an exchange rate, an attachment, a pricing condition, a revision stack, a goods-receipt indicator, an invoice-receipt indicator, a delivery-completed indicator, and a final-invoice indicator. A service item, a limit, subcontracting, consignment, and a delivery cost are not this document. There is no stored header status. Mixed items are not called completed.
+
+Same-stage bookkeeping: B-988 / §27.000 / §30 row 2.818.
+
+## §27.001 — ME23N read: the order is shown, and nothing is written
+
+**B-989.** SCR-164 stage 2. No migration. The display reads the standing order, its schedule lines, its assignments, the release row, the change history, the goods movements, the logistics invoices, a park, and a GR/IR clearing link. A reversal and a cancellation stay in the history. They are not erased. The received quantity follows the purchase-order list. A cancelled invoice is not invoiced quantity. The net value is the stored value, not quantity times today's price. A share is a line of that stored value, not a second item total. Another tenant's number is the same refusal as a missing number. An exchange rate is refused by name. A closed period does not hide the order.
+
+The service proof. An order of ten at a stored net value of 100, with a price of 15, showed 100. Two schedule lines and two assignment shares stood, and the item total was not repeated. A receipt of four and a reversal of one left a received quantity of three. A posted invoice of two counted. A cancelled invoice stayed in the history and did not count. A marked second item made the header mixed. The release row was not required. The other tenant could not read the order. Closing the period did not hide it. The order, the material documents, the invoices, the journals, and the change documents were unchanged. Service test 1/1. The screen was not the acceptance of this stage. T863 was not run. T849 through T862 were not rerun.
+
+Same-stage bookkeeping: B-989 / §27.001 / §30 row 2.819.
+
+## §27.002 — ME23N screen: one route, and it writes nothing
+
+**B-990.** SCR-164 stage 3. Route `/purchasing/purchase-order-display`. Capability `PROC.PO.DISPLAY`, posting false. Alias `ME23N` moved from purchase-order create to this capability. It is not an identifier on the page. Create keeps ME21N, ME22N, ME28, and ME29N. The purchase order suggests as the user types. Supplier, purchasing organisation, and plant are constrained. Release flag and derived state are dropdowns. A direct number opens that order. A search does not write. Links to the change screen, the goods receipt, the invoice overview, the requisition, the material document, the journal, and GR/IR clearing are navigation. They do not post. Screen contract 1/1. Service test was not the browser acceptance. T863 was not run. T849 through T862 were not rerun.
+
+Same-stage bookkeeping: B-990 / §27.002 / §30 row 2.820.
+
+## §27.003 — ME23N acceptance: T863 reads one order, and it writes nothing
+
+**B-991.** T863 green on the production build. ME23N opened the one screen. The alias was not on the page. PO-DISP1 was shown. The stored net value stood. Two schedule lines and two assignment shares stood. The receipt and its reversal both stayed in the history. The received quantity was three, and the cancelled invoice did not count as invoiced. An exchange rate was refused by name. Nothing was written. T849 through T862 were not rerun.
+
+Box seed: 192 capabilities, 71 configuration activities, 11 messages, 166 terms, 186 aliases. The alias moved. It was not added.
+
+Same-stage bookkeeping: B-991 / §27.003 / §30 row 2.821.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -193,3 +225,7 @@ Same-stage bookkeeping: B-987 / §26.999 / §30 row 2.817.
 | 2.815 | 2026-10-22 | **SCR-163 stage 2 — the residual is the posted difference (B-985, §26.997).** Migration `9100`. A closed period refused the posting. Stock did not move. Service test 2/2. T862 not run. | Agent |
 | 2.816 | 2026-10-22 | **SCR-163 stage 3 — one screen (B-986, §26.998).** Route `/purchasing/grir-clearing`. Alias only in the catalogue. A check writes nothing. T862 not run. T849 through T861 not rerun. | Agent |
 | 2.817 | 2026-10-22 | **SCR-163 stage 5 — T862 clears one residual, and stock does not move (B-987, §26.999).** Production build. MR11 opened the one screen. POF-0000001 was cleared, then reversed. Stock did not move. T849 through T861 not rerun. | Agent |
+| 2.818 | 2026-10-22 | **SCR-164 / ME23N contracted (B-988, §27.000).** A display is not a change. The number is the key. A missing optional value is not a zero. No schema. | Agent |
+| 2.819 | 2026-10-22 | **SCR-164 stage 2 — the order is shown, and nothing is written (B-989, §27.001).** A reversal stays in the history. The stored net value is not recalculated. A closed period does not hide the order. Service test 1/1. T863 not run. | Agent |
+| 2.820 | 2026-10-22 | **SCR-164 stage 3 — one screen (B-990, §27.002).** Route `/purchasing/purchase-order-display`. Alias only in the catalogue. Capability `PROC.PO.DISPLAY`, posting false. T863 not run. T849 through T862 not rerun. | Agent |
+| 2.821 | 2026-10-22 | **SCR-164 stage 5 — T863 reads one order, and it writes nothing (B-991, §27.003).** Production build. ME23N opened the one screen. PO-DISP1 was shown. The reversal stayed. An exchange rate was refused. Nothing was written. T849 through T862 not rerun. | Agent |
