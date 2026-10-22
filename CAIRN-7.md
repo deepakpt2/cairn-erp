@@ -161,6 +161,14 @@ Same-stage bookkeeping: B-985 / §26.997 / §30 row 2.815.
 
 Same-stage bookkeeping: B-986 / §26.998 / §30 row 2.816.
 
+## §26.999 — MR11 acceptance: T862 clears one residual, and stock does not move
+
+**B-987.** T862 green on the production build. MR11 opened the one screen. The alias was not on the page. The residual on POF-0000001 was listed at 200.00 KWD, and the list wrote nothing. A check named the open quantity and wrote nothing. The posting date is not required for that check. The clearing posted one journal. The material-document count and the stock quantity did not change. The residual left the list. The posted row named the journal. A reversal restored the residual. The original journal was not deleted. Journals increased by two. T849 through T861 were not rerun.
+
+The first production attempt did not submit the check, because the posting date and the reason were required on the same form. The posted list then returned the database column names, so the journal number was not on the row. Both were corrected before this pass. Box seed: 191 capabilities, 71 configuration activities, 11 messages, 165 terms, 186 aliases. Migration `9100` stood on the box.
+
+Same-stage bookkeeping: B-987 / §26.999 / §30 row 2.817.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -184,3 +192,4 @@ Same-stage bookkeeping: B-986 / §26.998 / §30 row 2.816.
 | 2.814 | 2026-10-22 | **SCR-163 / MR11 contracted (B-984, §26.996).** A clearing is a journal. It is not a goods movement. The residual is the posted difference. A price variance that already left GR/IR is not cleared again. | Agent |
 | 2.815 | 2026-10-22 | **SCR-163 stage 2 — the residual is the posted difference (B-985, §26.997).** Migration `9100`. A closed period refused the posting. Stock did not move. Service test 2/2. T862 not run. | Agent |
 | 2.816 | 2026-10-22 | **SCR-163 stage 3 — one screen (B-986, §26.998).** Route `/purchasing/grir-clearing`. Alias only in the catalogue. A check writes nothing. T862 not run. T849 through T861 not rerun. | Agent |
+| 2.817 | 2026-10-22 | **SCR-163 stage 5 — T862 clears one residual, and stock does not move (B-987, §26.999).** Production build. MR11 opened the one screen. POF-0000001 was cleared, then reversed. Stock did not move. T849 through T861 not rerun. | Agent |

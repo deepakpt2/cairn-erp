@@ -444,9 +444,11 @@ export async function listGrIrMaintenance(input: { client: string } & GrIrSelect
   const selection = selectionOf(input);
   return withTenant(input.client, async (tx) => {
     const rows = await tx.execute(sql`
-      select l.document_number, l.fiscal_year, l.order_number, l.item_number, l.company_code,
-             l.posting_date::text as posting_date, l.surplus, l.allocated_amount::text as allocated_amount,
-             l.currency, l.comment, l.created_by, l.reversed_by
+      select l.document_number as "documentNumber", l.fiscal_year as "fiscalYear",
+             l.order_number as "orderNumber", l.item_number as "itemNumber",
+             l.company_code as "companyCode", l.posting_date::text as "postingDate",
+             l.surplus, l.allocated_amount::text as "allocatedAmount",
+             l.currency, l.comment, l.created_by as "createdBy", l.reversed_by as "reversedBy"
         from gr_ir_maintenance_link l
         join purchase_order po
           on po.client = l.client and po.order_number = l.order_number

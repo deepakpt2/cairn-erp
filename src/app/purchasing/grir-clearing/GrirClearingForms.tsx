@@ -82,7 +82,7 @@ export function ClearResidualForm({
           <input type="checkbox" name="acknowledge" value="1" checked={acknowledge} onChange={(event) => setAcknowledge(event.target.checked)} />
           {acknowledgeLabel}
         </label>
-        <button type="submit" formAction={checkAction} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-check>{checking ? checkingLabel : checkLabel}</button>
+        <button type="submit" formAction={checkAction} formNoValidate className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-check>{checking ? checkingLabel : checkLabel}</button>
         <button type="submit" formAction={postAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-post>{posting ? postingLabel : postLabel}</button>
       </div>
       <Notice state={notice} />
