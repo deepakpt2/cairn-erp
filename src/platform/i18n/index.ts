@@ -3674,6 +3674,11 @@ const en: Catalogue = {
     'Material groups defined once per tenant: the classification materials carry for ' +
     'procurement, reporting and search. A group decides nothing about numbering, ' +
     'valuation or periods; a group in use is never deleted under its materials.',
+  'movementType.title': 'Configure Movement Types',
+  'movementType.subtitle':
+    'The movement catalogue, maintained once per tenant. A posting service reads the row as it stands. ' +
+    'This screen does not post stock or a journal, and a closed posting period does not block it. ' +
+    'A cited movement keeps its posting rules; the change document is the history, and a posted document is not rewritten.',
   'materialType.title': 'Define Material Types',
   'materialType.subtitle':
     'Material types defined once per tenant: the key and description, the price-control ' +

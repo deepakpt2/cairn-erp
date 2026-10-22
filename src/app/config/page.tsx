@@ -91,6 +91,7 @@ export default async function WorkbenchPage({
     '/config/profit-centers',
     '/config/profit-center-hierarchy',
     '/config/material-types',
+    '/config/movement-types',
     '/config/material-groups',
     '/config/material-number-ranges',
     '/config/industry-sectors',

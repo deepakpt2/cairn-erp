@@ -233,6 +233,14 @@ The service proof. Stock that covers safety proposed nothing. Zero stock with no
 
 Same-stage bookkeeping: B-995 / §27.007 / §30 row 2.825.
 
+## §27.008 — OMJJ local contract: the catalogue is the row, and it posts nothing
+
+**B-996.** No screen number was named. Migration `9103` registers the capability, the workbench activity, the term and the search alias. It does not add a table. The movement catalogue already stands. Posting, reversal, transfer, return, reservation and account determination read `movement_type`. This screen maintains that row. A second configuration table, a stored three-digit code, a draft, a version, a policy, a field-selection profile, a G/L account, a company code, a two-step movement, batch, serial and special stock are refused by name. A closed posting period is not read. A check writes nothing. A movement a material document or a reservation already cites keeps its posting rules. The description may still change. The posted document is not rewritten. Being named as a reversal blocks deletion, not the reciprocal pair. Goods receipt will not guess between two receipt movements for a purchase order. Physical inventory posting will not guess between two difference movements for one direction. A movement created here is not offered by a posting service unless that service already names it.
+
+The service proof. A missing period did not block the create. A G/L account, a company code, a three-digit alias, a draft, a policy, a field profile, a period, a two-step movement and special stock were refused. The same request created the movement once. A different payload on that key was refused. A check wrote nothing. A missing reversal, a self reversal and a reversal that already names another counter were refused. A reciprocal pair was completed. A second purchase-order receipt was refused. A second surplus difference movement was refused. A cited movement refused a direction change, accepted a description change, and the posted line still named the same movement. Deletion under that history was refused. An unused movement was deleted, and the same delete key did not fail the second time. Stock and the journal did not move. Service test 10/10. Screen contract 3/3. Route `/config/movement-types`. Capability `CFG.INV.MOVETYPE.CONFIG`, posting false. Alias `OMJJ` only in the catalogue. No browser smoke was run.
+
+Same-stage bookkeeping: B-996 / §27.008 / §30 row 2.826.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -265,3 +273,4 @@ Same-stage bookkeeping: B-995 / §27.007 / §30 row 2.825.
 | 2.823 | 2026-10-22 | **SCR-165 stage 5 — T864 checks one evaluation, and only a manual score is stored (B-993, §27.005).** Production build. ME61 opened the one screen. Price 100.00 and delivery 100.00 were calculated. A missing score was not zero. Quality 80 was saved. A company code was refused. Nothing was posted. T849 through T863 not rerun. | Agent |
 | 2.824 | 2026-10-22 | **SCR-147 judged again — the count is the item (B-994, §27.006).** No second count table. A batch, a company code, a client difference, and a post are refused by name. A repeated request writes no second revision. Service test 17/17. Screen contract 11/11. T846 not rerun. | Agent |
 | 2.825 | 2026-10-22 | **SCR-166 / MD01 contracted (B-995, §27.007).** A run plans a shortage and posts nothing. The planning file is the marker. A buy shortage is a requisition. A make shortage is a planned order. No bill of material. No MRP area. Service test 11/11. Screen contract 4/4. | Agent |
+| 2.826 | 2026-10-22 | **OMJJ contracted (B-996, §27.008).** The catalogue is the standing row. No second table. A cited movement keeps its posting rules. A check writes nothing. A closed period is not read. Service test 10/10. Screen contract 3/3. Migration `9103` is registry only. | Agent |
