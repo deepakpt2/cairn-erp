@@ -224,6 +224,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'scr162-blocked-invoice') return '/purchasing/blocked-invoice';
   if (target.id === 'scr163-grir-clearing') return '/purchasing/grir-clearing';
   if (target.id === 'scr164-purchase-order-display') return '/purchasing/purchase-order-display';
+  if (target.id === 'scr165-vendor-evaluation') return '/purchasing/vendor-evaluation';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
   if (target.id === 'release-strategies') return '/config/release-strategies';

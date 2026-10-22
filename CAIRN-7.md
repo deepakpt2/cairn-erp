@@ -201,6 +201,22 @@ Box seed: 192 capabilities, 71 configuration activities, 11 messages, 166 terms,
 
 Same-stage bookkeeping: B-991 / §27.003 / §30 row 2.821.
 
+## §27.004 — ME61 local contract: a check writes nothing, and a missing score is not zero
+
+**B-992.** SCR-165. Migration `9101`. The key is the supplier, the purchasing organisation, and the period. The as-of date is the period end. Price and delivery are calculated from posted invoices and receipts and are not stored. Quality and service are the only stored scores. A missing score is not zero, and the weights are not redistributed. The overall score is derived when every criterion has a score. A closed financial period is not read. A company code, a material, a purchasing document, a sub-criterion, a run, a status, a weight, and an overall score are refused by name.
+
+The service proof. Posted invoices of 150 expected and 160 invoiced scored 93.33. A credit memo, a cancellation, an invoice outside the period, and another purchasing organisation did not count. Receipts of nine on time out of thirteen scored 69.23. A reversal inside the period removed that receipt. A later reversal did not. A receipt with no schedule was not scored as zero. An expected amount of zero was not a score. Quality 80 and service 70 made the overall 78.14. One manual score left the overall empty. A check wrote nothing. A blocked supplier was shown and could not be saved. A request key replayed the same score and refused a different one. The other tenant saw no assessment. Nothing was posted. Service test 1/1. Screen contract 1/1. Route `/purchasing/vendor-evaluation`. Capability `PROC.VENDOR.EVALUATE`, posting false. Alias `ME61` only in the catalogue. T864 was not run. T849 through T863 were not rerun.
+
+Same-stage bookkeeping: B-992 / §27.004 / §30 row 2.822.
+
+## §27.005 — ME61 acceptance: T864 checks one evaluation, and only a manual score is stored
+
+**B-993.** T864 green on the production build. ME61 opened the one screen. The alias was not on the page. The check showed price 100.00 and delivery 100.00. Quality was missing, and the overall score was not zero. Nothing was written. Quality 80 was saved. The change stood. Nothing was posted. A company code was refused by name. T849 through T863 were not rerun.
+
+Box seed: 193 capabilities, 71 configuration activities, 11 messages, 167 terms, 187 aliases. The alias was added. It was not moved.
+
+Same-stage bookkeeping: B-993 / §27.005 / §30 row 2.823.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -229,3 +245,5 @@ Same-stage bookkeeping: B-991 / §27.003 / §30 row 2.821.
 | 2.819 | 2026-10-22 | **SCR-164 stage 2 — the order is shown, and nothing is written (B-989, §27.001).** A reversal stays in the history. The stored net value is not recalculated. A closed period does not hide the order. Service test 1/1. T863 not run. | Agent |
 | 2.820 | 2026-10-22 | **SCR-164 stage 3 — one screen (B-990, §27.002).** Route `/purchasing/purchase-order-display`. Alias only in the catalogue. Capability `PROC.PO.DISPLAY`, posting false. T863 not run. T849 through T862 not rerun. | Agent |
 | 2.821 | 2026-10-22 | **SCR-164 stage 5 — T863 reads one order, and it writes nothing (B-991, §27.003).** Production build. ME23N opened the one screen. PO-DISP1 was shown. The reversal stayed. An exchange rate was refused. Nothing was written. T849 through T862 not rerun. | Agent |
+| 2.822 | 2026-10-22 | **SCR-165 — ME61 local contract (B-992, §27.004).** Migration `9101`. A check writes nothing. Price 93.33 and delivery 69.23 are calculated. A missing score is not zero. The overall score 78.14 is derived. Capability `PROC.VENDOR.EVALUATE`, posting false. T864 not run. T849 through T863 not rerun. | Agent |
+| 2.823 | 2026-10-22 | **SCR-165 stage 5 — T864 checks one evaluation, and only a manual score is stored (B-993, §27.005).** Production build. ME61 opened the one screen. Price 100.00 and delivery 100.00 were calculated. A missing score was not zero. Quality 80 was saved. A company code was refused. Nothing was posted. T849 through T863 not rerun. | Agent |

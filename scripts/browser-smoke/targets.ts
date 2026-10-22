@@ -124,6 +124,7 @@ export const TARGETS = [
   { id: 'scr162-blocked-invoice', client: 'T861', label: 'SCR-162 blocked invoices: a manual hold keeps a posted invoice out of the payment run, and a release does not post' },
   { id: 'scr163-grir-clearing', client: 'T862', label: 'SCR-163 GR/IR clearing: a posted residual is cleared by a journal, and stock does not move' },
   { id: 'scr164-purchase-order-display', client: 'T863', label: 'SCR-164 purchase order display: one order is read, a reversal stays in the history, and nothing is written' },
+  { id: 'scr165-vendor-evaluation', client: 'T864', label: 'SCR-165 vendor evaluation: a check writes nothing, automatic scores are calculated, and a manual score is the only write' },
   { id: 'scr147-mi04-count', client: 'T846', label: 'SCR-147 MI04 count entry: a positive count and an explicit zero against a document created in MI01, a correction that keeps its history, a zero-beside-quantity and a stale screen refused, a cleared count returning the item to uncounted, and a ledger that never moves' },
   { id: 'scr146-mb1b-configuration', client: 'T845', label: 'SCR-146 MB1B movement configuration: a check that posts nothing, the plant rule read from the movement row, a same-plant 311 refused once configured DIFFERENT, two-step and a batch requirement refused by name, a reused key with a different payload refused, and the configured counter movement reversing' },
   { id: 'goods-issue', client: 'T836', label: 'SCR-136 MB1A goods issue: post a 201, issue against a reservation, watch MD04 fall' },

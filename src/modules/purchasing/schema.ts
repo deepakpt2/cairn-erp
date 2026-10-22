@@ -5,6 +5,7 @@ import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
 import { plant, purchasingGroup, purchasingOrg, storageLocation } from '../foundation/schema';
 import { bpRole } from '../foundation/business-partner-schema';
+import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialGroup } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
@@ -923,4 +924,55 @@ export const grIrMaintenanceLink = pgTable('gr_ir_maintenance_link', {
   }).onDelete('restrict'),
   check('gr_ir_maintenance_link_surplus_ck', sql`${t.surplus} in ('DELIVERY', 'INVOICE')`),
   check('gr_ir_maintenance_link_amount_ck', sql`${t.allocatedAmount} <> 0`),
+]);
+
+/**
+ * Vendor evaluation — SCR-165. Configuration and a manual score.
+ * An automatic score is not a row. The overall score is not a column.
+ */
+export const vendorEvaluationCriterion = pgTable('vendor_evaluation_criterion', {
+  client: tenant(),
+  criterionCode: varchar('criterion_code', { length: 16 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  method: varchar('method', { length: 12 }).notNull(),
+  evidence: varchar('evidence', { length: 16 }).notNull(),
+  scoreMin: numeric('score_min', { precision: 5, scale: 2 }).notNull(),
+  scoreMax: numeric('score_max', { precision: 5, scale: 2 }).notNull(),
+  weight: numeric('weight', { precision: 5, scale: 2 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.criterionCode] }),
+  check('vendor_evaluation_criterion_method_ck', sql`${t.method} in ('MANUAL', 'AUTOMATIC')`),
+  check('vendor_evaluation_criterion_evidence_ck', sql`${t.evidence} in ('NONE', 'PRICE', 'DELIVERY')`),
+  check('vendor_evaluation_criterion_pair_ck', sql`(${t.method} = 'MANUAL') = (${t.evidence} = 'NONE')`),
+  check('vendor_evaluation_criterion_scale_ck', sql`${t.scoreMin} >= 0 and ${t.scoreMax} <= 100 and ${t.scoreMin} < ${t.scoreMax}`),
+  check('vendor_evaluation_criterion_weight_ck', sql`${t.weight} > 0 and ${t.weight} <= 100`),
+]);
+
+export const vendorEvaluationAssessment = pgTable('vendor_evaluation_assessment', {
+  client: tenant(),
+  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  periodFrom: date('period_from', { mode: 'string' }).notNull(),
+  periodTo: date('period_to', { mode: 'string' }).notNull(),
+  criterionCode: varchar('criterion_code', { length: 16 }).notNull(),
+  score: numeric('score', { precision: 5, scale: 2 }).notNull(),
+  reason: varchar('reason', { length: 100 }).notNull(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.supplierNumber, t.purchasingOrg, t.periodFrom, t.periodTo, t.criterionCode] }),
+  unique('vendor_evaluation_assessment_request_uq').on(t.client, t.requestKey),
+  foreignKey({
+    columns: [t.client, t.criterionCode],
+    foreignColumns: [vendorEvaluationCriterion.client, vendorEvaluationCriterion.criterionCode],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.supplierNumber, t.purchasingOrg],
+    foreignColumns: [supplierPurchasing.client, supplierPurchasing.partnerNumber, supplierPurchasing.purchasingOrg],
+  }).onDelete('restrict'),
+  check('vendor_evaluation_assessment_score_ck', sql`${t.score} >= 0 and ${t.score} <= 100`),
+  check('vendor_evaluation_assessment_period_ck', sql`${t.periodFrom} <= ${t.periodTo}`),
+  check('vendor_evaluation_assessment_version_ck', sql`${t.version} > 0`),
 ]);
