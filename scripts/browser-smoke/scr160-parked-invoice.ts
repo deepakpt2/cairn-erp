@@ -123,7 +123,7 @@ export async function scr160ParkedInvoice(ctx: Context) {
   }
 
   function form() {
-    return page.locator('form[action]').last();
+    return page.locator('form').filter({ has: page.locator('[name="supplierReference"]') });
   }
 
   async function dismiss() {

@@ -75,6 +75,14 @@ An approval, a workflow, MIR4 and MIR6 were not started.
 
 Same-stage bookkeeping: B-974 / §26.986 / §30 row 2.804.
 
+## §26.987 — MIR7 acceptance: T859 parks one invoice, and it does not post
+
+**B-975.** T859 green on the production build. MIR7 opened the one screen. The alias was not on the page. A status, a currency and a category are not fields. There is no post button and no delete button. Purchase order POF-0000001 opened for V-PARK in KWD. Item 10 had received 0, invoiced 0 and invoiceable 0. An empty order click suggested nothing. A typed prefix suggested the order, and no more than five. Purchase order NO-SUCH was named, and nothing was written. A check of quantity 8 and net 800 named the missing receipt. Payment terms were NET30 and the due date was 2026-11-21. The check wrote nothing, including the number. The entered invoice remained, and the park submitted it. The park stood as PV-0000001. The journal count, the posted-invoice count, the material-document count and the vendor-invoice number were unchanged. The order quantity stayed 5. A change to reference PARK-2, quantity 2 and net 200 stood in the change history beside the create. Invoiced stayed 0. The parked count did not grow, and the vendor-invoice number was not drawn. Service test 5/5. Screen contract 2/2. T849 through T858 were not rerun.
+
+A credit memo, an approval, a post from the park, MIR4 and MIR6 were not started.
+
+Same-stage bookkeeping: B-975 / §26.987 / §30 row 2.805.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -86,3 +94,4 @@ Same-stage bookkeeping: B-974 / §26.986 / §30 row 2.804.
 | 2.802 | 2026-10-22 | **SCR-160 / MIR7 contracted (B-972, §26.984).** A park is not a posted invoice. No status. The order and the receipt are not consumed. A closed period is not read. | Agent |
 | 2.803 | 2026-10-22 | **SCR-160 stage 2 — the park stands, and the receipt still posts (B-973, §26.985).** Migration `9098`. Number `PARKINV` / `PV`. A check writes nothing. A parked quantity is not invoiced quantity. A shared reference is refused by name. | Agent |
 | 2.804 | 2026-10-22 | **SCR-160 stage 3 — one screen (B-974, §26.986).** Route `/purchasing/parked-invoice`. Alias only in the catalogue. Capability `PROC.INV.PARK`, posting false. Screen contract 2/2. Service test 5/5. T859 not run. T849 through T858 not rerun. | Agent |
+| 2.805 | 2026-10-22 | **SCR-160 stage 5 — T859 parks one invoice, and it does not post (B-975, §26.987).** Production build. MIR7 opened the one screen. The check named the missing receipt and wrote nothing. PV-0000001 stood. The change stood in the history. The order was not invoiced. T849 through T858 not rerun. | Agent |
