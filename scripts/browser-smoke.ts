@@ -219,6 +219,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'scr157-quotation') return '/purchasing/quotation';
   if (target.id === 'scr158-quotation-display') return '/purchasing/quotation-display';
   if (target.id === 'scr159-quotation-comparison') return '/purchasing/quotation-comparison';
+  if (target.id === 'scr160-parked-invoice') return '/purchasing/parked-invoice';
   if (target.id === 'characteristics') return '/config/characteristics';
   if (target.id === 'classes') return '/config/classes';
   if (target.id === 'release-strategies') return '/config/release-strategies';

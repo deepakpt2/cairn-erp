@@ -24,6 +24,7 @@ import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { materialDocumentLine, materialValuation, movementType } from '../inventory/schema';
 import {
+  parkedSupplierInvoice,
   purchaseOrder, purchaseOrderItem, supplierInvoice, supplierInvoiceItem,
 } from './schema';
 
@@ -335,6 +336,18 @@ export async function postSupplierInvoice(input: PostInvoiceInput): Promise<Supp
       throw new InvoiceVerificationError(
         `Supplier reference ${input.supplierReference} already stands posted as invoice ${duplicate[0].invoiceNumber}.`,
         'Check for a duplicate entry; cancel the standing invoice if it is wrong.',
+      );
+    }
+    const parkedDuplicate = await tx.select({ parkedNumber: parkedSupplierInvoice.parkedNumber }).from(parkedSupplierInvoice).where(and(
+      eq(parkedSupplierInvoice.client, input.client),
+      eq(parkedSupplierInvoice.companyCode, view.companyCode),
+      eq(parkedSupplierInvoice.supplierNumber, view.supplierNumber),
+      eq(parkedSupplierInvoice.supplierReference, input.supplierReference),
+    ));
+    if (parkedDuplicate.length > 0) {
+      throw new InvoiceVerificationError(
+        `Supplier reference ${input.supplierReference} already stands parked as ${parkedDuplicate[0].parkedNumber}.`,
+        'Invoice verification does not post a parked invoice from this reference alone. Use another reference, or post from the parked invoice in a later round.',
       );
     }
 

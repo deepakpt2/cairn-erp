@@ -769,3 +769,74 @@ export const purchasingQuotationItem = pgTable('purchasing_quotation_item', {
   check('purchasing_quotation_item_price_unit_ck', sql`${t.priceUnit} > 0`),
   check('purchasing_quotation_item_remark_ck', sql`${t.remark} is null or char_length(btrim(${t.remark})) between 1 and 80`),
 ]);
+
+/**
+ * Parked supplier invoice — SCR-160. Not a posted invoice.
+ *
+ * The row is the park. There is no status. The order is named and is not
+ * consumed. The number is not a vendor invoice number. A later post writes
+ * supplier_invoice; this table does not become one.
+ */
+export const parkedSupplierInvoice = pgTable('parked_supplier_invoice', {
+  client: tenant(),
+  parkedNumber: varchar('parked_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }).notNull(),
+  invoiceDate: date('invoice_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  supplierReference: varchar('supplier_reference', { length: 16 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull(),
+  grossAmount: numeric('gross_amount', { precision: 23, scale: 4 }).notNull(),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  paymentTerms: varchar('payment_terms', { length: 12 }),
+  baselineDate: date('baseline_date', { mode: 'string' }),
+  dueDate: date('due_date', { mode: 'string' }),
+  headerText: varchar('header_text', { length: 100 }),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.parkedNumber] }),
+  unique('parked_supplier_invoice_order_pair_uq').on(t.client, t.parkedNumber, t.purchaseOrderNumber),
+  unique('parked_supplier_invoice_request_uq').on(t.client, t.requestKey),
+  unique('parked_supplier_invoice_reference_uq').on(t.client, t.companyCode, t.supplierNumber, t.supplierReference),
+  foreignKey({
+    columns: [t.client, t.purchaseOrderNumber],
+    foreignColumns: [purchaseOrder.client, purchaseOrder.orderNumber],
+  }).onDelete('restrict'),
+  check('parked_supplier_invoice_year_ck', sql`${t.fiscalYear} between 1000 and 9999`),
+  check('parked_supplier_invoice_amounts_ck', sql`${t.grossAmount} >= 0 and ${t.taxAmount} >= 0`),
+]);
+
+/** One parked line. The line number is the order item. It does not add an item. */
+export const parkedSupplierInvoiceItem = pgTable('parked_supplier_invoice_item', {
+  client: tenant(),
+  parkedNumber: varchar('parked_number', { length: 20 }).notNull(),
+  purchaseOrderNumber: varchar('purchase_order_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  purchaseOrderItem: integer('purchase_order_item').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }),
+  plant: varchar('plant', { length: 10 }),
+  quantity: numeric('quantity', { precision: 23, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull(),
+  expectedAmount: numeric('expected_amount', { precision: 23, scale: 4 }).notNull(),
+  varianceAmount: numeric('variance_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.parkedNumber, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.parkedNumber, t.purchaseOrderNumber],
+    foreignColumns: [parkedSupplierInvoice.client, parkedSupplierInvoice.parkedNumber, parkedSupplierInvoice.purchaseOrderNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.purchaseOrderNumber, t.purchaseOrderItem],
+    foreignColumns: [purchaseOrderItem.client, purchaseOrderItem.orderNumber, purchaseOrderItem.itemNumber],
+  }).onDelete('restrict'),
+  check('parked_supplier_invoice_item_line_ck', sql`${t.lineNumber} = ${t.purchaseOrderItem}`),
+  check('parked_supplier_invoice_item_qty_ck', sql`${t.quantity} > 0`),
+  check('parked_supplier_invoice_item_amounts_ck', sql`${t.netAmount} >= 0 and ${t.expectedAmount} >= 0 and ${t.taxAmount} >= 0`),
+]);

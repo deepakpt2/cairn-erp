@@ -57,6 +57,24 @@ An award, a rejection, a supplier portal, EDI and dispatch were not started.
 
 Same-stage bookkeeping: B-971 / §26.983 / §30 row 2.801.
 
+## §26.984 — MIR7 contracted: a park is not a posted invoice
+
+**B-972.** SCR-160. The owner's package (2026-10-22) is the contract. MIR7 parks a supplier invoice. It is not invoice verification, not a credit memo, not a subsequent debit or credit, not an approval, and not a deletion. The row is the park. There is no status to complete, post, reject or delete. Posting remains `supplier_invoice`, and only a posted row counts as invoiced. The purchase order is named and is not consumed. The goods receipt is not consumed. No journal is written. The supplier, the company and the currency are the order's. Payment terms are the supplier's company data. The tax is the standing tax code, calculated and not entered. A quantity above the invoiceable quantity is shown and is not a refusal. A missing receipt is shown and is not a refusal. A check writes nothing, including the number. A closed period is not read, so it cannot block a park. A date that is not a fiscal date is refused. MIR4, MIR6, a workflow and balance-form suggestions stay later. T849 through T858 were not rerun. Migrations `9093` through `9097` were not edited.
+
+## §26.985 — MIR7 service: the park stands, and the receipt still posts
+
+**B-973.** SCR-160 stage 2. Migration `9098`. Tables `parked_supplier_invoice` and `parked_supplier_invoice_item`. The number object is `PARKINV`, prefix `PV`, length 7. It is not `VENDINV` and it is not `PARKDOC`. The line number is the order item. It does not add an item. There is no status column, no exchange rate, no freight, no discount and no approval.
+
+The service proof. A check of eight against an order of five, with nothing received, wrote nothing and did not draw a number. The note named the missing receipt. Payment terms were NET30 and the due date was 2026-11-21. The park then stood as a `PV-` number. The journal count, the posted-invoice count, the material-document count and the vendor-invoice number were unchanged. The same request key returned that number and did not draw another. Another tenant's read was the same miss. A later goods receipt of five was not consumed by a parked quantity of eight. Invoice verification refused that supplier reference and named the parked number. A different reference posted five, and the parked quantity remained eight while invoiced became five. A posted reference was refused and named the invoice. A second park of the same reference was refused and named the first park. A change of the reference and the quantity stood in the change history. The stale token was refused and the new reference remained. A credit memo, a subsequent debit, a subsequent credit, a currency, a company code, a supplier, payment terms, an entered tax, an exchange rate, freight, a discount, a status, an approval, a posting, an award, a deletion and a request key on the check were refused by name, and the counts were unchanged. An empty order suggestion returned nothing. A typed order returned that order, and no more than five. The other tenant saw none. The screen was not the acceptance of this stage. T859 was not run.
+
+## §26.986 — MIR7 screen: one route, and it does not post
+
+**B-974.** SCR-160 stage 3. Route `/purchasing/parked-invoice`. Capability `PROC.INV.PARK`, posting false. Alias `MIR7` in the catalogue only. It is not an identifier on the page. The order field and the parked-number field suggest as the user types, five at a time. An empty query returns nothing. The screen shows received, invoiced and invoiceable. It says the tax is calculated, that a difference from the order price is not a match status, and that a parked invoice is not invoiced quantity. Check writes nothing, including the number. There is no post button and no delete button. A link to invoice verification is navigation. Invoice verification links back, and it does not park. Invoice verification now refuses a supplier reference that already stands parked, and it names that number. It does not post the parked document. Live seed was not re-run. Screen contract 2/2. Service test 5/5. T859 was not run. T849 through T858 were not rerun.
+
+An approval, a workflow, MIR4 and MIR6 were not started.
+
+Same-stage bookkeeping: B-974 / §26.986 / §30 row 2.804.
+
 ## §30 · Change log (continued)
 
 | Ver | Date | Change | By |
@@ -65,3 +83,6 @@ Same-stage bookkeeping: B-971 / §26.983 / §30 row 2.801.
 | 2.799 | 2026-10-22 | **SCR-159 stage 2 — the comparison reads, and it writes nothing (B-969, §26.981).** A zero ranks when it can be compared. A missing conversion does not. Equal prices share a rank. A shared label is refused by name. | Agent |
 | 2.800 | 2026-10-22 | **SCR-159 stage 3 — one screen (B-970, §26.982).** Route `/purchasing/quotation-comparison`. Alias only in the catalogue and the code line. Capability `PROC.RFQ.COMPARISON`, posting false. Live seed 184/158/182. Screen contract 2/2. T858 not run. T854 through T857 not rerun. | Agent |
 | 2.801 | 2026-10-22 | **SCR-159 stage 5 — T858 compares one event, and it does not buy (B-971, §26.983).** Production build. ME49 opened the one screen. The lower price ranked first, a tie was named, a zero ranked, and a missing offer did not. A shared collective number was refused. Nothing was written. T854 through T857 not rerun. | Agent |
+| 2.802 | 2026-10-22 | **SCR-160 / MIR7 contracted (B-972, §26.984).** A park is not a posted invoice. No status. The order and the receipt are not consumed. A closed period is not read. | Agent |
+| 2.803 | 2026-10-22 | **SCR-160 stage 2 — the park stands, and the receipt still posts (B-973, §26.985).** Migration `9098`. Number `PARKINV` / `PV`. A check writes nothing. A parked quantity is not invoiced quantity. A shared reference is refused by name. | Agent |
+| 2.804 | 2026-10-22 | **SCR-160 stage 3 — one screen (B-974, §26.986).** Route `/purchasing/parked-invoice`. Alias only in the catalogue. Capability `PROC.INV.PARK`, posting false. Screen contract 2/2. Service test 5/5. T859 not run. T849 through T858 not rerun. | Agent |

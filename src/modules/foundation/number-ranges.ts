@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -54,6 +54,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'RFQEVENT', description: 'Sourcing events', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'RFQ', description: 'Requests for quotation', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'QUOTATION', description: 'Supplier quotations', numberLength: 7, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'PARKINV', description: 'Parked supplier invoices', numberLength: 7, yearRelevant: false, subobjectHint: null },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */

@@ -179,6 +179,24 @@ async function search(
          order by event_number
          limit ${cap}
       `);
+    case 'purchase-order':
+      return rows(tx, sql`
+        select order_number as code, supplier_number as label, currency as meta
+          from purchase_order
+         where client = ${client}
+           and (order_number ilike ${pattern} escape '\\' or supplier_number ilike ${pattern} escape '\\')
+         order by order_number
+         limit ${cap}
+      `);
+    case 'parked-invoice':
+      return rows(tx, sql`
+        select parked_number as code, supplier_reference as label, purchase_order_number as meta
+          from parked_supplier_invoice
+         where client = ${client}
+           and (parked_number ilike ${pattern} escape '\\' or supplier_reference ilike ${pattern} escape '\\')
+         order by parked_number
+         limit ${cap}
+      `);
     case 'quotation-request':
       return rows(tx, sql`
         select r.rfq_number as code, r.partner_number as label, e.quotation_deadline as meta

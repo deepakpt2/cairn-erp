@@ -31,9 +31,12 @@ export default async function InvoiceVerificationPage({ searchParams }: {
         <span className="code text-ink-faint">PROC.INV.RECORD · MIRO</span>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('invoiceVerification.title')}</h1>
-          <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
-            {t('nav.launchpad')}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/purchasing/parked-invoice" className="btn btn-default min-h-11 sm:min-h-8">{t('parkedInvoice.title')}</Link>
+            <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
+              {t('nav.launchpad')}
+            </Link>
+          </div>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('invoiceVerification.subtitle')}</p>
       </header>
