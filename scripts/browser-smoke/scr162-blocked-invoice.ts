@@ -199,10 +199,11 @@ export async function scr162BlockedInvoice(ctx: Context) {
 
   await row.locator('[name="comment"]').fill('reviewed');
   await row.locator('[data-blocked-invoice-release-save]').click();
-  await page.getByText(/was released/).waitFor();
-  await page.locator('[data-blocked-invoice-events]').waitFor();
-  assert.match(await page.locator('#blocked-invoice-events').innerText(), /RELEASE/);
-  assert.match(await page.locator('#blocked-invoice-events').innerText(), /browser\.admin/);
+  await expect(page.locator(`[data-blocked-invoice-row="${posted.invoiceNumber}"]`)).toHaveCount(0);
+  const events = page.getByRole('region', { name: 'Hold history' });
+  await events.getByText(/RELEASE/).waitFor();
+  assert.match(await events.innerText(), /RELEASE/);
+  assert.match(await events.innerText(), /browser\.admin/);
   const released = await standing();
   assert.equal(released.held, false);
   assert.equal(released.events, 2);

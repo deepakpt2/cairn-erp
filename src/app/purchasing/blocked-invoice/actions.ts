@@ -8,8 +8,6 @@
  * clear, an export, a batch, an evaluation date and a payment run are passed
  * through, so the service refuses them by name. This screen does not post.
  */
-import { revalidatePath } from 'next/cache';
-
 import { can, requireSession } from '@/platform/auth/current';
 import {
   BLOCKED_INVOICE_CAPABILITY,
@@ -106,7 +104,6 @@ export async function placeBlockedInvoiceAction(
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be placed.' };
   }
-  revalidatePath(BLOCKED_INVOICE_ROUTE);
   return {
     ok: true,
     wrote: result.wrote,
@@ -130,7 +127,6 @@ export async function releaseBlockedInvoiceAction(
   } catch (caught) {
     return refused(caught) ?? { ok: false, message: 'The hold could not be released.' };
   }
-  revalidatePath(BLOCKED_INVOICE_ROUTE);
   return {
     ok: true,
     wrote: result.wrote,
