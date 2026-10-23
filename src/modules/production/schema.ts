@@ -1,5 +1,5 @@
 /** Total planning — SCR-166 / MD01. A run is evidence. It is not stock and not a requisition. */
-import { pgTable, varchar, integer, boolean, date, timestamp, numeric, primaryKey, foreignKey, unique, check, index } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, primaryKey, foreignKey, unique, check, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { plant } from '../foundation/schema';
@@ -68,4 +68,21 @@ export const mrpRun = pgTable('mrp_run', {
   check('mrp_run_key_ck', sql`${t.processingKey} in ('NETCH', 'NETPL', 'NEUPL')`),
   check('mrp_run_status_ck', sql`${t.status} in ('QUEUED', 'RUNNING', 'COMPLETED', 'COMPLETED_WITH_WARNINGS', 'FAILED', 'CANCELLING', 'CANCELLED')`),
   index('mrp_run_status_idx').on(t.client, t.status, t.createdAt),
+]);
+
+/**
+ * OMCWB — TCUWIPB, one row per client. WIPBATCH_ACTIVE is domain XFELD.
+ * X is active. Blank is not active. Once X is saved it cannot be revoked.
+ * This row is not a WIP batch and not a plant setting.
+ */
+export const wipBatchActivation = pgTable('wip_batch_activation', {
+  client: tenant(),
+  wipBatchActive: char('wip_batch_active', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('wip_batch_activation_code_ck', sql`${t.wipBatchActive} in ('X', ' ')`),
+  check('wip_batch_activation_version_ck', sql`${t.version} > 0`),
 ]);

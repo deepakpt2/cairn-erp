@@ -6,6 +6,7 @@ import { getInternalBatchAssignment } from '@/modules/inventory/batch-number-ass
 import { getBatchStatusManagement } from '@/modules/inventory/batch-status';
 import { ACTIVITY } from '@/modules/inventory/batch-master';
 
+import DocumentTab from '../DocumentTab';
 import CreateBatchForm from './CreateBatchForm';
 
 export const dynamic = 'force-dynamic';
@@ -51,6 +52,7 @@ export default async function CreateBatchPage() {
         internalActive={numbering.code === 'X'}
         canCreate={canCreate && !!level}
       />
+      <DocumentTab client={session.user.client} />
     </div>
   );
 }

@@ -15,7 +15,12 @@ const ROUTE = '/config/classes';
  */
 export default async function ClassesPage() {
   const session = await requireSession(ROUTE);
-  const choices = await listClasses(session.user.client);
+  const loaded = await listClasses(session.user.client);
+  const choices = {
+    ...loaded,
+    classTypes: loaded.classTypes.filter((row) => row.classType !== '022' && row.classType !== '023'),
+    classes: loaded.classes.filter((row) => row.classType !== '022' && row.classType !== '023'),
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -30,6 +35,7 @@ export default async function ClassesPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('classificationClass.subtitle')}</p>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           OCHA is not this screen. A class assigns a characteristic. It does not store a batch value.
+          Batch class types 022 and 023 are not this screen. They are BMC1, and the type comes from the batch level.
         </p>
       </header>
 

@@ -27,6 +27,7 @@ import {
 import { postingValuationRefusal } from './valuation-class-definition';
 import { assignedReceiptRefusal, readAssignedGoodsReceiptDecision } from './batch-number-assignment';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
 import {
   applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
@@ -335,6 +336,8 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveMovement(tx, input.client, 'RECEIPT', 'PURCHASE_ORDER');
+    const refused = await batchClassificationRefusal(tx, input.client, movement.movementType);
+    if (refused) throw new GoodsReceiptError(refused.message, refused.remedy);
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/gr/${input.orderNumber}`}, 0))`);
 
@@ -679,6 +682,8 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveMovement(tx, input.client, 'REVERSAL', 'MATERIAL_DOCUMENT');
+    const refused = await batchClassificationRefusal(tx, input.client, movement.movementType);
+    if (refused) throw new GoodsReceiptError(refused.message, refused.remedy);
 
     const [original] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),

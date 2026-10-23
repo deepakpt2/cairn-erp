@@ -27,6 +27,7 @@ import {
 } from './balance-update';
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
+import { batchClassificationRefusal } from './batch-classification';
 import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
 import {
   materialDocument, materialDocumentLine, materialValuation, movementType, stockQuantity,
@@ -432,6 +433,8 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
           'Complete the movement catalogue, then reverse the document.',
         );
       }
+      const refused = await batchClassificationRefusal(tx, input.client, counters.get(line.movementType)!);
+      if (refused) throw new MaterialReversalError(refused.message, refused.remedy);
     }
 
     const { position, company } = await judgePeriods(

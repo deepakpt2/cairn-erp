@@ -6,6 +6,7 @@ import { changeDocument } from '../../platform/tables/audit-trail';
 import { markActivityComplete } from '../../platform/tenancy';
 import { postingEvent } from '../foundation/account-determination';
 import {
+  batchSearchAllocation,
   materialDocumentLine,
   movementType,
   reservationHeader,
@@ -144,6 +145,7 @@ interface Usage {
   documents: number;
   reservations: number;
   namedAsReversal: string[];
+  allocations: number;
 }
 
 function requireClient(client: string): string {
@@ -357,7 +359,7 @@ function sameRules(left: MovementTypeRules, right: MovementTypeRules): boolean {
 
 function usageText(usage: Usage): string {
   const named = usage.namedAsReversal.length > 0 ? usage.namedAsReversal.join(', ') : 'none';
-  return `${usage.documents} material document line(s), ${usage.reservations} reservation(s), and reversal of ${named}`;
+  return `${usage.documents} material document line(s), ${usage.reservations} reservation(s), reversal of ${named}, and ${usage.allocations} search allocation(s)`;
 }
 
 /** A posted document or a reservation cites the movement. Its posting rules stay. */
@@ -371,7 +373,7 @@ function citedByHistory(usage: Usage): boolean {
  * pair is a change to the counter, and no document has been rewritten.
  */
 function citedAtAll(usage: Usage): boolean {
-  return citedByHistory(usage) || usage.namedAsReversal.length > 0;
+  return citedByHistory(usage) || usage.namedAsReversal.length > 0 || usage.allocations > 0;
 }
 
 async function usageOf(tx: Tx, client: string, key: string): Promise<Usage> {
@@ -387,10 +389,15 @@ async function usageOf(tx: Tx, client: string, key: string): Promise<Usage> {
     .select({ movementType: movementType.movementType })
     .from(movementType)
     .where(and(eq(movementType.client, client), eq(movementType.reversalMovementType, key)));
+  const [allocations] = await tx
+    .select({ n: count() })
+    .from(batchSearchAllocation)
+    .where(and(eq(batchSearchAllocation.client, client), eq(batchSearchAllocation.movementType, key)));
   return {
     documents: Number(documents?.n ?? 0),
     reservations: Number(reservations?.n ?? 0),
     namedAsReversal: named.map((row) => row.movementType).sort(),
+    allocations: Number(allocations?.n ?? 0),
   };
 }
 

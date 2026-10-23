@@ -442,6 +442,58 @@ Leave the indicator blank for this walk. Active is the character `1`, not a labe
 
 Do not change a material type on this walk. Opening the screen does not restrict a batch. Checked is the character `X`, stored for a future batch only. An existing batch is not rewritten. This screen does not create a material type, select a plant, or post. Restricted use is not blocked stock. `OMCS` and `MSC1N` are not this screen.
 
+**Batch classification for goods movements** · `CFG.INV.BATCHCLASSIFY.DEFINE` · `OMCV` · `/config/batch-classification`
+
+Leave the classification control blank on this walk. Blank is no branching, and a goods movement posts as it does today. `1`, `2`, `3`, and `4` ask for classification. Class type `023` is not active, so a goods movement with one of those codes is refused before stock or a journal. Characteristic copying, WIP-batch adoption, and extended CFC are not stored and are not functional. This screen does not create a movement type, change its posting rules, or rewrite a posted movement. `OMJJ` and `MSC1N` are not this screen.
+
+**Inventory Management strategy types** · `CFG.INV.BATCHSTRATEGY.DEFINE` · `OMCW` · `/config/batch-strategy-types`
+
+Do not create a strategy type on this walk. Opening the screen writes nothing. Usage is `H` and application is `ME`. The key is the condition type, one to four uppercase letters or digits. The description is at most 20 characters. An access sequence is optional and must already stand on `OMCX`. Naming it does not run an access. Selection classes, sort rules, quantity-proposal exits, and batch splits are not stored and do not select a batch. Class type `023` is not active. A goods movement is not changed. `OMCY` and `MBC1` are not this screen.
+
+**Inventory Management access sequences** · `CFG.INV.BATCHACCESS.DEFINE` · `OMCX` · `/config/batch-access-sequences`
+
+Do not create an access sequence on this walk. Opening the screen writes nothing. Usage is `H` and application is `ME`. The key is one to four uppercase letters or digits. The description is at most 30 characters. An access may name a condition table that already stands on `OMA1`. The access number is two digits and need not follow the previous one. Naming a table does not search it, and an exclusive indicator, a requirement, and a field mapping are not stored. A strategy type may name a standing sequence, and that name does not change a goods movement. `OMCY` and `MBC1` are not this screen.
+
+**Inventory Management condition tables** · `CFG.INV.BATCHCONDTABLE.DEFINE` · `OMA1` · `/config/batch-condition-tables`
+
+Do not create a condition table on this walk. Opening the screen writes nothing. Usage is `H` and application is `ME`. The number is 501 to 999. Tables 001 to 500 are refused and are not seeded. The key fields are movement type, customer, storage location, supplier, material group, material, material type, special stock, and plant. A field outside that list is refused. No physical table is generated, no condition record is stored, and no batch is selected. `OMA0`, `OMCX`, and `MBC1` are not this screen.
+
+**Inventory Management search procedures** · `CFG.INV.BATCHSEARCH.DEFINE` · `OMCY` · `/config/batch-search-procedures`
+
+Do not create a search procedure on this walk. Opening the screen writes nothing. Usage is `H` and application is `ME`. The key is one to six uppercase letters or digits. The description is at most 30 characters. A step may name a strategy type that already stands on `OMCW`. The step number is three digits and the counter is two digits. Neither need follow the previous one. Naming a strategy type does not select a batch. A requirement, a manual indicator, and a movement-type allocation are not stored. `OMCG` and `MBC1` are not this screen.
+
+**Allocate IM search procedure** · `CFG.INV.BATCHALLOCATE.DEFINE` · `OMCG` · `/config/batch-search-allocations`
+
+Do not allocate a procedure on this walk. Opening the screen writes nothing. The key is a movement type that already stands, and own stock. Blank special stock is not a plant and not a wildcard. The search procedure must already stand on `OMCY`. A transfer procedure is optional. The check indicator `X` records the request and does not check a batch. No batch is selected, and a goods movement is not changed. `MBC1` is not this screen.
+
+**Batch search strategy** · `INV.BATCHSTRATEGY.MAINTAIN` · `MBC1` / `MBC2` / `MBC3` · `/inventory/batch-search-strategies`
+
+Do not create a search strategy on this walk. Opening the screen writes nothing. The strategy type must already stand on `OMCW` and name an access sequence. The key combination is a condition table named by that sequence. A field is required only when that combination names it. Valid from must not be later than valid to. A selection class, a sort rule, and a quantity proposal are not stored. No batch is selected, and a goods movement is not changed.
+
+**Batch class** · `INV.BATCHCLASS.MAINTAIN` · `BMC1` / `BMC2` / `BMC3` · `/inventory/batch-classes`
+
+Do not create a batch class on this walk. Opening the screen writes nothing. This is not `CL01`. The batch level must already stand on `OMCE`. Plant level names class type `022`. Material or client level names `023`. The type is not typed and is not hard-coded. A characteristic must already stand, and a blocked characteristic is refused. The class name is at most 18 characters. One description is stored. The class is not assigned to a material or a batch. No characteristic value is stored, no batch is selected, and a goods movement is not changed.
+
+**Batch sort sequence** · `INV.BATCHSORT.MAINTAIN` · `CU70` / `CU71` / `CU72` · `/inventory/batch-sort-sequences`
+
+Do not create a sort sequence on this walk. Opening the screen writes nothing. The name is at most 18 characters. The description is at most 40 characters. Status `0` is in preparation, `1` is released, and `2` is locked. A characteristic must already stand, except `LOBM_LGORT` and `LOBM_MENGE`, which sort stock and must not stand in a batch class. Each criterion is ascending or descending. The row order is the priority. A weighting factor is not stored. The sequence is not assigned to a search strategy. No batch is selected, and a goods movement is not changed.
+
+**Batch level and status conversion** · `CFG.INV.BATCHCONVERT.DEFINE` · `OMCT` · `/config/batch-conversion`
+
+Do not convert on this walk. Opening the screen writes nothing. This is not `OMCE` and not `OMCS`. The level codes stay `0`, `1`, and `2`. A dry run writes nothing. A confirmed check records the finding and does not change the level, the status, a batch, stock, or a document. Duplicate batch identifiers are reported and are not merged. A batch with no plant is not given one. Movements `341` and `342` are not posted. Live conversion is not available.
+
+**Activate document management for batches** · `CFG.INV.BATCHDOCMGMT.DEFINE` · `ODOC` · `/config/batch-document-management`
+
+Do not activate document management on this walk. Opening the screen writes nothing. The indicator is `X` or blank. A missing row is not active. `X` shows a documents tab on the batch master. Blank hides that tab. Neither save creates a document, uploads a file, or stores a link. Deactivation does not delete a batch. `CV01N`, `MB56`, `MB57`, and `MB5C` are not this screen.
+
+**Activate WIP batch** · `CFG.PROD.WIPBATCH.DEFINE` · `OMCWB` · `/config/wip-batch`
+
+Do not activate WIP batch on this walk. Opening the screen writes nothing. The indicator is `X` or blank. A missing row is not active. Activation requires a batch level and an explicit confirmation. Once `X` is saved it cannot be revoked. The save does not create a WIP batch, a production order, or a material document. `LOG_PP_WIP_BATCH`, original-batch reference material, a confirmation profile, and a control key are not this screen.
+
+**Batch information cockpit** · `INV.BATCH.COCKPIT` · `BMBC` · `/inventory/batch-cockpit`
+
+Open the cockpit and name a material or a batch that already stands. Opening the screen writes nothing. A batch with no material document is still listed. Stock is the stock master, shown in the material base unit, and is not the sum of document lines. Restricted use is not unrestricted, quality, or blocked stock. A row opens the direct material-document lines, the purchase order on a line, and the supplier on that order. It is not a top-down or bottom-up explosion. A class, a characteristic, an inspection lot, and a sales document are not filters on this screen. `MSC3N`, `MB5C`, and `MMBE` are the detail screens. A closed posting period does not block it.
+
 **Batch status management in plant** · `CFG.INV.BATCHSTATUSPLANT.DEFINE` · `OMCU` · `/config/batch-status-plants`
 
 Do not select a plant on this walk. Opening the screen does not select one. Selected is the character `X`, not `1`. The plant name is read from the plant master. This screen applies only when the batch level is plant. It does not change `OMCS`, create a batch, or post movement `341` or `342`. Restricted use is not blocked stock. `OMAB` and `MSC1N` are not this screen.

@@ -173,6 +173,13 @@ export async function saveClass(input: ClassInput) {
     seen.add(key);
   }
 
+  if (input.classType === '022' || input.classType === '023') {
+    throw new ClassError(
+      `Class type ${input.classType} is a batch class. It is maintained on BMC1, not here.`,
+      'Open BMC1. The class type is derived from the batch level.',
+    );
+  }
+
   return withTenant(client, async (tx) => {
     await ensureClassTypes(tx, client, changedBy);
     const [type] = await tx.select().from(classType)

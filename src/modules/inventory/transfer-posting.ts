@@ -30,6 +30,7 @@ import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
@@ -889,6 +890,8 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       issuingLocation, receivingLocation, company, position,
       valueMoves, movedValue, receivingValue, q, batch,
     } = pre;
+    const refused = await batchClassificationRefusal(tx, input.client, scenario.movementType);
+    if (refused) throw new TransferPostingError(refused.message, refused.remedy);
 
     const allocated = await allocateNumber(tx, {
       client: input.client, objectCode: 'MATDOC', allocatedBy: input.changedBy,
@@ -1094,6 +1097,8 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
         'Complete the movement catalogue, then reverse.',
       );
     }
+    const refused = await batchClassificationRefusal(tx, input.client, counter.movementType);
+    if (refused) throw new TransferPostingError(refused.message, refused.remedy);
 
     const quantity = Number(issue.baseQuantity);
     const [returningLocation] = await tx.select().from(storageLocation).where(and(

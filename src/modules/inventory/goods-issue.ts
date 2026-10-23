@@ -31,6 +31,7 @@ import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
@@ -348,6 +349,8 @@ export async function postGoodsIssue(
     }
 
     await ensureMovements(tx, input.client, input.changedBy);
+    const refused = await batchClassificationRefusal(tx, input.client, scenario.movementType);
+    if (refused) throw new GoodsIssueError(refused.message, refused.remedy);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/gi`}, 0))`);
     await lockStockScope(
       tx, input.client,

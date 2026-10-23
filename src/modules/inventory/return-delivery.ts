@@ -43,6 +43,7 @@ import { postingValuationRefusal } from './valuation-class-definition';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import {
   applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
   REQUEST_MISMATCH_REMEDY,
@@ -466,6 +467,8 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveReturnMovement(tx, input.client);
+    const refused = await batchClassificationRefusal(tx, input.client, movement.movementType);
+    if (refused) throw new ReturnDeliveryError(refused.message, refused.remedy);
 
     const [reference] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),

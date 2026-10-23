@@ -34,6 +34,7 @@ import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
@@ -271,6 +272,8 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     }
 
     await ensureMovements(tx, input.client, input.changedBy);
+    const refused = await batchClassificationRefusal(tx, input.client, PRODUCTION_RECEIPT_SCENARIO.movementType);
+    if (refused) throw new ProductionReceiptError(refused.message, refused.remedy);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/prod-receipt/${orderNumber}`}, 0))`);
 
     const [order] = await tx.select().from(productionOrder).where(and(

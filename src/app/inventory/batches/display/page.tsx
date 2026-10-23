@@ -102,7 +102,10 @@ export default async function DisplayBatchPage({ searchParams }: {
             <Link href={`/inventory/stock-overview?material=${encodeURIComponent(opened.materialNumber)}`} className="underline">Material stock overview</Link>
             {' · '}
             <Link href={`/inventory/batch-pickup?material=${encodeURIComponent(opened.materialNumber)}&batch=${encodeURIComponent(opened.batchNumber)}`} className="underline">Batch pick-up list</Link>
+            {' · '}
+            <Link href={`/inventory/batch-cockpit?material=${encodeURIComponent(opened.materialNumber)}&batch=${encodeURIComponent(opened.batchNumber)}`} className="underline">Batch information cockpit</Link>
           </p>
+          <DocumentTab client={session.user.client} />
           {opened.history.length > 0 && (
             <div>
               <h2 className="font-medium">Change documents</h2>

@@ -313,6 +313,11 @@ export const movementType = pgTable('movement_type', {
   offsetModifier: varchar('offset_modifier', { length: 4 }),
   /** What a withdrawal under this movement must be charged to — the T156 fact (SCR-133). */
   accountAssignment: varchar('account_assignment', { length: 16 }).notNull().default('NONE'),
+  /**
+   * OMCV / KZCLA. Blank is no branching. 1, 2, 3, and 4 ask for classification.
+   * Copying, WIP adoption, and extended CFC are not stored on this row.
+   */
+  batchClassification: char('batch_classification', { length: 1 }).notNull().default(' '),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.movementType] }),
@@ -324,6 +329,7 @@ export const movementType = pgTable('movement_type', {
   check('movement_type_negative_stock_ck', sql`${t.negativeStockPolicy} in ('LOCATION', 'FORBID')`),
   check('movement_type_reference_ck', sql`${t.referenceCategory} in ('PURCHASE_ORDER', 'MATERIAL_DOCUMENT', 'RESERVATION', 'PRODUCTION_ORDER', 'PHYSICAL_INVENTORY')`),
   check('movement_type_account_assignment_ck', sql`${t.accountAssignment} in ('NONE', 'COST_CENTER', 'ORDER')`),
+  check('movement_type_batch_classification_ck', sql`${t.batchClassification} in (' ', '1', '2', '3', '4')`),
   check('movement_type_inventory_event_ck', sql`${t.inventoryEvent} is null or ${t.inventoryEvent} ~ '^[A-Z][A-Z0-9_]{2,23}$'`),
   check('movement_type_offset_event_ck', sql`${t.offsetEvent} is null or ${t.offsetEvent} ~ '^[A-Z][A-Z0-9_]{2,23}$'`),
   check('movement_type_offset_modifier_ck', sql`${t.offsetModifier} is null or ${t.offsetModifier} ~ '^[A-Z0-9]{1,4}$'`),
@@ -1041,4 +1047,346 @@ export const batchAssignedReceipt = pgTable('batch_assigned_receipt', {
   }).onDelete('restrict'),
   check('batch_assigned_receipt_code_ck', sql`${t.assignedReceipt} in ('X', ' ')`),
   check('batch_assigned_receipt_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMA1 — Inventory Management condition table. Usage H and application ME.
+ * The number is the customer key area, 501 to 999. The fields are the key.
+ * No physical table is generated, and no condition record is stored.
+ */
+export const batchConditionTable = pgTable('batch_condition_table', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  conditionTable: char('condition_table', { length: 3 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.conditionTable] }),
+  check('batch_condition_table_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_condition_table_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_condition_table_number_ck', sql`${t.conditionTable} ~ '^(50[1-9]|5[1-9][0-9]|[6-9][0-9]{2})$'`),
+  check('batch_condition_table_version_ck', sql`${t.version} > 0`),
+]);
+
+/** Key fields of one OMA1 condition table, in the order they were named. */
+export const batchConditionTableField = pgTable('batch_condition_table_field', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  conditionTable: char('condition_table', { length: 3 }).notNull(),
+  position: integer('position').notNull(),
+  fieldName: varchar('field_name', { length: 30 }).notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.conditionTable, t.position] }),
+  uniqueIndex('batch_condition_table_field_name_uk').on(t.client, t.usage, t.conditionTable, t.fieldName),
+  check('batch_condition_table_field_position_ck', sql`${t.position} between 1 and 9`),
+]);
+
+/**
+ * OMCX — Inventory Management access sequence. Usage H and application ME,
+ * the VV_T682_ME scope. The key is KOZGF. A step names a standing condition
+ * table and does not search it.
+ */
+export const batchAccessSequence = pgTable('batch_access_sequence', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  accessSequence: varchar('access_sequence', { length: 4 }).notNull(),
+  description: varchar('description', { length: 30 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.application, t.accessSequence] }),
+  check('batch_access_sequence_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_access_sequence_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_access_sequence_key_ck', sql`${t.accessSequence} ~ '^[A-Z0-9]{1,4}$'`),
+  check('batch_access_sequence_version_ck', sql`${t.version} > 0`),
+]);
+
+/** OMCX access step. The number is KOLNR, two digits. The table must stand. Exclusive access is not stored. */
+export const batchAccessStep = pgTable('batch_access_step', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  accessSequence: varchar('access_sequence', { length: 4 }).notNull(),
+  accessNumber: char('access_number', { length: 2 }).notNull(),
+  conditionTable: char('condition_table', { length: 3 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.application, t.accessSequence, t.accessNumber] }),
+  index('batch_access_step_table_idx').on(t.client, t.usage, t.conditionTable),
+  check('batch_access_step_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_access_step_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_access_step_number_ck', sql`${t.accessNumber} ~ '^[0-9]{2}$'`),
+  check('batch_access_step_table_ck', sql`${t.conditionTable} ~ '^[0-9]{3}$'`),
+  check('batch_access_step_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMCY — Inventory Management search procedure. Usage H and application ME.
+ * The key is KALSM, six characters. A step names a standing strategy type
+ * and does not select a batch.
+ */
+export const batchSearchProcedure = pgTable('batch_search_procedure', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  searchProcedure: varchar('search_procedure', { length: 6 }).notNull(),
+  description: varchar('description', { length: 30 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.application, t.searchProcedure] }),
+  check('batch_search_procedure_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_search_procedure_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_search_procedure_key_ck', sql`${t.searchProcedure} ~ '^[A-Z0-9]{1,6}$'`),
+  check('batch_search_procedure_version_ck', sql`${t.version} > 0`),
+]);
+
+/** OMCY procedure step. STUNR is three digits. ZAEHK is two digits. The strategy type must stand. */
+export const batchSearchProcedureStep = pgTable('batch_search_procedure_step', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  searchProcedure: varchar('search_procedure', { length: 6 }).notNull(),
+  stepNumber: char('step_number', { length: 3 }).notNull(),
+  counter: char('counter', { length: 2 }).notNull(),
+  strategyType: varchar('strategy_type', { length: 4 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.application, t.searchProcedure, t.stepNumber, t.counter] }),
+  index('batch_search_procedure_step_type_idx').on(t.client, t.usage, t.application, t.strategyType),
+  check('batch_search_procedure_step_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_search_procedure_step_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_search_procedure_step_number_ck', sql`${t.stepNumber} ~ '^[0-9]{3}$'`),
+  check('batch_search_procedure_step_counter_ck', sql`${t.counter} ~ '^[0-9]{2}$'`),
+  check('batch_search_procedure_step_type_ck', sql`${t.strategyType} ~ '^[A-Z0-9]{1,4}$'`),
+  check('batch_search_procedure_step_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMCG — allocation of an Inventory Management search procedure.
+ * View V_156B_SS. The key is the movement type and the special stock.
+ * Blank special stock is own stock, not a wildcard and not a plant.
+ * The check indicator is stored. It does not select a batch.
+ */
+export const batchSearchAllocation = pgTable('batch_search_allocation', {
+  client: tenant(),
+  movementType: varchar('movement_type', { length: 20 }).notNull(),
+  specialStock: char('special_stock', { length: 1 }).notNull().default(' '),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  searchProcedure: varchar('search_procedure', { length: 6 }).notNull(),
+  transferProcedure: varchar('transfer_procedure', { length: 6 }).notNull().default(''),
+  checkBatch: char('check_batch', { length: 1 }).notNull().default(' '),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.movementType, t.specialStock] }),
+  index('batch_search_allocation_procedure_idx').on(t.client, t.usage, t.application, t.searchProcedure),
+  index('batch_search_allocation_transfer_idx').on(t.client, t.usage, t.application, t.transferProcedure),
+  foreignKey({
+    columns: [t.client, t.movementType],
+    foreignColumns: [movementType.client, movementType.movementType],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.usage, t.application, t.searchProcedure],
+    foreignColumns: [batchSearchProcedure.client, batchSearchProcedure.usage, batchSearchProcedure.application, batchSearchProcedure.searchProcedure],
+  }).onDelete('cascade'),
+  check('batch_search_allocation_stock_ck', sql`${t.specialStock} = ' '`),
+  check('batch_search_allocation_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_search_allocation_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_search_allocation_procedure_ck', sql`${t.searchProcedure} ~ '^[A-Z0-9]{1,6}$'`),
+  check('batch_search_allocation_transfer_ck', sql`${t.transferProcedure} = '' or ${t.transferProcedure} ~ '^[A-Z0-9]{1,6}$'`),
+  check('batch_search_allocation_check_ck', sql`${t.checkBatch} in (' ', 'X')`),
+  check('batch_search_allocation_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * MBC1 — Inventory Management batch search strategy. Usage H, application ME.
+ * The key combination comes from the strategy type's access sequence.
+ * Validity is the business period. The record does not select a batch.
+ */
+export const batchSearchStrategy = pgTable('batch_search_strategy', {
+  client: tenant(),
+  recordNumber: char('record_number', { length: 10 }).notNull(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  strategyType: varchar('strategy_type', { length: 4 }).notNull(),
+  conditionTable: char('condition_table', { length: 3 }).notNull(),
+  keyFingerprint: varchar('key_fingerprint', { length: 500 }).notNull(),
+  validFrom: varchar('valid_from', { length: 10 }).notNull(),
+  validTo: varchar('valid_to', { length: 10 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.recordNumber] }),
+  uniqueIndex('batch_search_strategy_key_uk').on(
+    t.client, t.usage, t.application, t.strategyType, t.conditionTable, t.keyFingerprint, t.validTo,
+  ),
+  index('batch_search_strategy_lookup_idx').on(t.client, t.strategyType, t.conditionTable, t.keyFingerprint),
+  foreignKey({
+    columns: [t.client, t.usage, t.application, t.strategyType],
+    foreignColumns: [batchStrategyType.client, batchStrategyType.usage, batchStrategyType.application, batchStrategyType.strategyType],
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.usage, t.conditionTable],
+    foreignColumns: [batchConditionTable.client, batchConditionTable.usage, batchConditionTable.conditionTable],
+  }).onDelete('cascade'),
+  check('batch_search_strategy_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_search_strategy_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_search_strategy_record_ck', sql`${t.recordNumber} ~ '^[0-9]{10}$'`),
+  check('batch_search_strategy_from_ck', sql`${t.validFrom} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
+  check('batch_search_strategy_to_ck', sql`${t.validTo} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'`),
+  check('batch_search_strategy_period_ck', sql`${t.validFrom} <= ${t.validTo}`),
+  check('batch_search_strategy_version_ck', sql`${t.version} > 0`),
+]);
+
+/** Key values of one MBC1 record, in the condition-table order. */
+export const batchSearchStrategyKey = pgTable('batch_search_strategy_key', {
+  client: tenant(),
+  recordNumber: char('record_number', { length: 10 }).notNull(),
+  fieldName: varchar('field_name', { length: 30 }).notNull(),
+  fieldValue: varchar('field_value', { length: 40 }).notNull(),
+  position: integer('position').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.recordNumber, t.fieldName] }),
+  foreignKey({
+    columns: [t.client, t.recordNumber],
+    foreignColumns: [batchSearchStrategy.client, batchSearchStrategy.recordNumber],
+  }).onDelete('cascade'),
+  check('batch_search_strategy_key_position_ck', sql`${t.position} between 1 and 9`),
+  check('batch_search_strategy_key_value_ck', sql`length(btrim(${t.fieldValue})) >= 1`),
+]);
+
+/**
+ * OMCW — Inventory Management strategy type. Usage H and application ME,
+ * the VV_T685H_ME scope. The key is the condition type. A blank access
+ * sequence is no reference. A non-blank value names a standing OMCX
+ * sequence and does not run an access.
+ */
+export const batchStrategyType = pgTable('batch_strategy_type', {
+  client: tenant(),
+  usage: char('usage', { length: 1 }).notNull().default('H'),
+  application: char('application', { length: 2 }).notNull().default('ME'),
+  strategyType: varchar('strategy_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 20 }).notNull(),
+  accessSequence: varchar('access_sequence', { length: 4 }).notNull().default(''),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.usage, t.application, t.strategyType] }),
+  check('batch_strategy_type_usage_ck', sql`${t.usage} = 'H'`),
+  check('batch_strategy_type_application_ck', sql`${t.application} = 'ME'`),
+  check('batch_strategy_type_key_ck', sql`${t.strategyType} ~ '^[A-Z0-9]{1,4}$'`),
+  check('batch_strategy_type_access_ck', sql`${t.accessSequence} = '' or ${t.accessSequence} ~ '^[A-Z0-9]{1,4}$'`),
+  check('batch_strategy_type_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * CU70 — sort sequence. The name is the class-number domain, 18 characters.
+ * Status is the class-status code: 0 in preparation, 1 released, 2 locked.
+ * A criterion names a standing characteristic, or the stock exceptions
+ * LOBM_LGORT and LOBM_MENGE. Direction is ascending or descending. The
+ * sequence does not select a batch.
+ */
+export const batchSortSequence = pgTable('batch_sort_sequence', {
+  client: tenant(),
+  sortSequence: varchar('sort_sequence', { length: 18 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  status: char('status', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.sortSequence] }),
+  check('batch_sort_sequence_name_ck', sql`${t.sortSequence} ~ '^[A-Z0-9_]{1,18}$'`),
+  check('batch_sort_sequence_status_ck', sql`${t.status} in ('0', '1', '2')`),
+  check('batch_sort_sequence_version_ck', sql`${t.version} > 0`),
+]);
+
+/** Ordered criteria of one CU70 sort sequence. A characteristic stands once. */
+export const batchSortSequenceCriterion = pgTable('batch_sort_sequence_criterion', {
+  client: tenant(),
+  sortSequence: varchar('sort_sequence', { length: 18 }).notNull(),
+  position: integer('position').notNull(),
+  characteristicName: varchar('characteristic_name', { length: 30 }).notNull(),
+  direction: char('direction', { length: 1 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.sortSequence, t.position] }),
+  uniqueIndex('batch_sort_sequence_criterion_uk').on(t.client, t.sortSequence, t.characteristicName),
+  foreignKey({
+    columns: [t.client, t.sortSequence],
+    foreignColumns: [batchSortSequence.client, batchSortSequence.sortSequence],
+  }).onDelete('cascade'),
+  check('batch_sort_sequence_criterion_position_ck', sql`${t.position} > 0`),
+  check('batch_sort_sequence_criterion_direction_ck', sql`${t.direction} in ('A', 'D')`),
+  check('batch_sort_sequence_criterion_name_ck', sql`${t.characteristicName} ~ '^[A-Z0-9_]{1,30}$'`),
+]);
+
+/**
+ * OMCT — a conversion check. It records what a level or status change
+ * would collide with. It never changes the level, the status, or a batch.
+ */
+export const batchConversionCheck = pgTable('batch_conversion_check', {
+  client: tenant(),
+  checkId: varchar('check_id', { length: 36 }).notNull(),
+  proposal: varchar('proposal', { length: 12 }).notNull(),
+  sourceLevel: char('source_level', { length: 1 }).notNull(),
+  targetLevel: char('target_level', { length: 1 }).notNull(),
+  sourceStatus: char('source_status', { length: 1 }).notNull(),
+  targetStatus: char('target_status', { length: 1 }).notNull(),
+  result: varchar('result', { length: 16 }).notNull(),
+  batchCount: integer('batch_count').notNull(),
+  stockBatchCount: integer('stock_batch_count').notNull(),
+  documentBatchCount: integer('document_batch_count').notNull(),
+  conflictCount: integer('conflict_count').notNull(),
+  summary: text('summary').notNull(),
+  reason: varchar('reason', { length: 500 }).notNull(),
+  startedBy: varchar('started_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.checkId] }),
+  check('batch_conversion_check_proposal_ck', sql`${t.proposal} in ('LEVEL', 'STATUS', 'BOTH')`),
+  check('batch_conversion_check_level_ck', sql`${t.sourceLevel} in ('0', '1', '2') and ${t.targetLevel} in ('0', '1', '2')`),
+  check('batch_conversion_check_status_ck', sql`${t.sourceStatus} in ('1', ' ') and ${t.targetStatus} in ('1', ' ')`),
+  check('batch_conversion_check_result_ck', sql`${t.result} in ('BLOCKED', 'NOT_REQUIRED')`),
+]);
+
+/** Conflicts named by one OMCT check. A collision is not merged. */
+export const batchConversionConflict = pgTable('batch_conversion_conflict', {
+  client: tenant(),
+  checkId: varchar('check_id', { length: 36 }).notNull(),
+  position: integer('position').notNull(),
+  conflictCode: varchar('conflict_code', { length: 32 }).notNull(),
+  objectKey: varchar('object_key', { length: 80 }).notNull(),
+  detail: varchar('detail', { length: 240 }).notNull(),
+  blocks: boolean('blocks').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.checkId, t.position] }),
+  foreignKey({
+    columns: [t.client, t.checkId],
+    foreignColumns: [batchConversionCheck.client, batchConversionCheck.checkId],
+  }).onDelete('cascade'),
+  check('batch_conversion_conflict_position_ck', sql`${t.position} > 0`),
+]);
+
+/**
+ * ODOC — TCUCD, one row per client. KZDCD is the only business field.
+ * Domain CHAR1 has no value table. X is active. Blank is not active.
+ * LCHGD, LCHGT, and LCHGU are the change stamp, stored in the audit columns.
+ * This row does not store a document, a file, or a batch link.
+ */
+export const batchDocumentManagement = pgTable('batch_document_management', {
+  client: tenant(),
+  documentManagement: char('document_management', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('batch_document_management_code_ck', sql`${t.documentManagement} in ('X', ' ')`),
+  check('batch_document_management_version_ck', sql`${t.version} > 0`),
 ]);

@@ -19,6 +19,7 @@ import { recomputePostingStatus } from './physical-inventory-posting-status';
 import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { batchClassificationRefusal } from './batch-classification';
 import {
   material, materialDocument, materialDocumentLine, materialValuation,
   movementType, stockQuantity,
@@ -822,6 +823,8 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
       }
     }
     for (const line of judged) {
+      const refused = await batchClassificationRefusal(tx, input.client, line.movement.movement_type);
+      if (refused) throw new PhysicalInventoryPostingError(refused.message, refused.remedy);
       try {
         line.batch = await resolvePostingBatch(tx, {
           client: input.client, materialNumber: line.item.material_number, plant: header.plant,
