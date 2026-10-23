@@ -39,7 +39,7 @@ describe('SCR-138 production order create UI contract', () => {
     }
     expect(shell).toContain('data-component-line={n}');
     expect(shell).toContain('co01.componentsHint');
-    expect(service).toContain('no BOM master');
+    expect(service).toContain('does not read a material BOM');
   });
 
   it('shows the company code as derived from the plant, and the status as an attribute', () => {

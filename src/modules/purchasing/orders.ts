@@ -18,6 +18,7 @@
  * nor the material period control is consulted on save (R-104).
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
+import { assertPurchaseContractCallOff, PurchaseContractError } from './contract';
 import { z } from 'zod';
 
 import { recordChange } from '../../platform/change';
@@ -102,6 +103,8 @@ const itemInput = z.object({
   requisitionItem: z.coerce.number().int().positive().optional(),
   quotationNumber: z.string().trim().max(20).optional().default(''),
   quotationItem: z.coerce.number().int().positive().optional(),
+  contractNumber: z.string().trim().max(20).optional().default(''),
+  contractItem: z.number().int().positive().nullish(),
   scheduleLines: z.array(scheduleInput).min(1, 'an item needs at least one schedule line'),
   assignments: z.array(assignmentInput).optional().default([]),
 });
@@ -145,6 +148,8 @@ export interface OrderItemRow {
   infoRecordNumber: string | null;
   priceSequence: number | null;
   sourceNumber: string | null;
+  contractNumber: string | null;
+  contractItem: number | null;
   scheduleLines: Array<{ lineNumber: number; deliveryDate: string; quantity: string }>;
   assignments: Array<{ lineNumber: number; glAccount: string; costCenter: string; distributionPercentage: string }>;
 }
@@ -241,6 +246,11 @@ async function judgeItem(
   warnings: string[],
   applyRecord: boolean,
 ): Promise<JudgedItem> {
+  const contractNumber = item.contractNumber.trim();
+  const contractItem = item.contractItem ?? null;
+  if ((contractNumber.length === 0) !== (contractItem == null)) {
+    throw new PurchaseOrderError('A contract call-off needs both the contract number and the contract item.');
+  }
   const [company] = await tx.select().from(companyCode)
     .where(and(eq(companyCode.client, client), eq(companyCode.companyCode, header.companyCode)));
   if (!company) throw new PurchaseOrderError(`Company code ${header.companyCode} does not exist.`);
@@ -609,6 +619,8 @@ async function judgeItem(
       infoUpdate,
       quotaNumber,
       quotaItem,
+      contractNumber: item.contractNumber.trim() || null,
+      contractItem: item.contractItem ?? null,
       markedForDeletion: item.markedForDeletion,
     },
     scheduleLines: item.scheduleLines.map((line) => ({
@@ -674,6 +686,8 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       infoRecordNumber: item.infoRecordNumber,
       priceSequence: item.priceSequence,
       sourceNumber: item.sourceNumber,
+      contractNumber: item.contractNumber,
+      contractItem: item.contractItem,
       scheduleLines: schedules.filter((s) => s.itemNumber === item.itemNumber)
         .map((s) => ({ lineNumber: s.lineNumber, deliveryDate: s.deliveryDate, quantity: s.quantity })),
       assignments: assignments.filter((a) => a.itemNumber === item.itemNumber)
@@ -768,6 +782,15 @@ async function writeInfoUpdates(
       if (error instanceof FollowOnError) throw new PurchaseOrderError(error.message, error.remedy);
       throw error;
     }
+  }
+}
+
+async function consumeContract(tx: Tx, client: string, orderNumber: string, itemNumber: number): Promise<void> {
+  try {
+    await assertPurchaseContractCallOff(tx, client, orderNumber, itemNumber);
+  } catch (error) {
+    if (error instanceof PurchaseContractError) throw new PurchaseOrderError(error.message, error.remedy);
+    throw error;
   }
 }
 
@@ -878,6 +901,7 @@ export async function createOrder(
         companyCode: input.companyCode, currency, supplierNumber: input.supplierNumber, purchasingOrg: input.purchasingOrg,
       }, item, documentDate, null, warnings, true);
       await writeItem(tx, input.client, number, itemNumber, judged, input.changedBy, true, documentDate, false);
+      await consumeContract(tx, input.client, number, itemNumber);
       saved.push(judged);
     }
     await writeInfoUpdates(tx, input.client, input.changedBy, input.supplierNumber, input.purchasingOrg, currency, documentDate, saved, warnings);
@@ -937,6 +961,7 @@ export async function changeOrder(
         companyCode: input.companyCode, currency, supplierNumber: input.supplierNumber, purchasingOrg: input.purchasingOrg,
       }, item, before.documentDate, raw.orderNumber, warnings, isNew);
       await writeItem(tx, input.client, raw.orderNumber, itemNumber, judged, input.changedBy, isNew, before.documentDate, !isNew);
+      await consumeContract(tx, input.client, raw.orderNumber, itemNumber);
       saved.push(judged);
     }
     await writeInfoUpdates(tx, input.client, input.changedBy, input.supplierNumber, input.purchasingOrg, currency, before.documentDate, saved, warnings);

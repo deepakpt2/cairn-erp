@@ -26,6 +26,8 @@ import {
 export const RELEASE_CAPABILITIES: Record<string, string> = {
   PURCHASE_REQUISITION: 'PROC.PR.RELEASE',
   PURCHASE_ORDER: 'PROC.PO.RELEASE',
+  PURCHASE_CONTRACT: 'PROC.CONTRACT.RELEASE',
+  SCHED_AGREEMENT: 'PROC.SCHEDAGREE.RELEASE',
 };
 
 export class ReleaseError extends Error {
@@ -266,6 +268,8 @@ export interface ReleaseActInput {
 const OBJECT_CLASS_BY_CATEGORY: Record<string, string> = {
   PURCHASE_REQUISITION: 'purchase_requisition',
   PURCHASE_ORDER: 'purchase_order',
+  PURCHASE_CONTRACT: 'purchase_contract',
+  SCHED_AGREEMENT: 'scheduling_agreement',
 };
 
 async function syncOrderHeader(tx: Tx, client: string, number: string, released: boolean, changedBy: string) {

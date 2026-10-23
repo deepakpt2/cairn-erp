@@ -181,6 +181,16 @@ export const material = pgTable('material', {
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   /** MARA-XCHPF. Used when the batch level is material or client. Existing materials stay non-batch. */
   batchManaged: boolean('batch_managed').notNull().default(false),
+  /**
+   * MARA shelf-life data, client level, shown on the plant storage view in SAP.
+   * Null means not maintained. A plant does not store a second copy.
+   * MB5M reads these fields and does not calculate a batch date from them.
+   */
+  minRemainingShelfLife: integer('min_remaining_shelf_life'),
+  totalShelfLife: integer('total_shelf_life'),
+  storagePercentage: integer('storage_percentage'),
+  /** IPRKZ. Space is days. 1 week, 2 month, 3 year. Null is not maintained. */
+  sledPeriodIndicator: char('sled_period_indicator', { length: 1 }),
   version: integer('version').notNull().default(1),
   lowLevelCode: integer('low_level_code').notNull().default(0), ...auditColumns,
 }, (t) => [
@@ -189,6 +199,10 @@ export const material = pgTable('material', {
   foreignKey({ columns: [t.client, t.materialGroup], foreignColumns: [materialGroup.client, materialGroup.materialGroup] }),
   check('material_basic_status_ck', sql`${t.basicStatus} in ('INCOMPLETE','CREATED','MAINTAINED')`),
   check('material_weight_ck', sql`${t.grossWeight} >= 0 and ${t.netWeight} >= 0 and ${t.grossWeight} >= ${t.netWeight}`),
+  check('material_min_shelf_life_ck', sql`${t.minRemainingShelfLife} is null or (${t.minRemainingShelfLife} >= 0 and ${t.minRemainingShelfLife} <= 9999)`),
+  check('material_total_shelf_life_ck', sql`${t.totalShelfLife} is null or (${t.totalShelfLife} >= 0 and ${t.totalShelfLife} <= 9999)`),
+  check('material_storage_percentage_ck', sql`${t.storagePercentage} is null or (${t.storagePercentage} >= 1 and ${t.storagePercentage} <= 999)`),
+  check('material_sled_period_ck', sql`${t.sledPeriodIndicator} is null or ${t.sledPeriodIndicator} in (' ', '1', '2', '3')`),
 ]);
 
 export const materialPlant = pgTable('material_plant', {
@@ -204,6 +218,8 @@ export const materialPlant = pgTable('material_plant', {
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   /** MARC-XCHPF. Used when the batch level is plant. Existing plant views stay non-batch. */
   batchManaged: boolean('batch_managed').notNull().default(false),
+  /** JIT delivery schedule for this plant. Existing plant views stay off. ME84 does not infer it. */
+  jitDeliverySchedule: boolean('jit_delivery_schedule').notNull().default(false),
   /**
    * MARC-SFCPF. The production scheduling profile for this plant.
    * Blank means no profile. The key is not forced to four-character SAP plant length.
@@ -537,9 +553,9 @@ export const outputMessage = pgTable('output_message', {
  * column: it stands on the plant (SCR-030), and is derived wherever it is needed,
  * exactly as MB03 derives its own.
  *
- * The component list is a **snapshot on the order**, not an explosion of a BOM: canon
- * carries no BOM master, so the components are entered and stored as stated. A later
- * issue may consume them; nothing recomputes them.
+ * The component list is a **snapshot on the order**. A material BOM may stand. Creating
+ * or changing that BOM does not read this order, and this order is not rewritten from it.
+ * A later issue may consume the snapshot; nothing recomputes it.
  */
 export const productionOrder = pgTable('production_order', {
   client: tenant(),

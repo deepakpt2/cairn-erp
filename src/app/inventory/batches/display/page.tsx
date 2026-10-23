@@ -104,6 +104,8 @@ export default async function DisplayBatchPage({ searchParams }: {
             {' · '}
             <Link href={`/inventory/batch-pickup?material=${encodeURIComponent(opened.materialNumber)}&batch=${encodeURIComponent(opened.batchNumber)}`} className="underline">Batch pick-up list</Link>
             {' · '}
+            <Link href={`/inventory/shelf-life-list?run=1&materialFrom=${encodeURIComponent(opened.materialNumber)}&materialTo=${encodeURIComponent(opened.materialNumber)}&batchFrom=${encodeURIComponent(opened.batchNumber)}&batchTo=${encodeURIComponent(opened.batchNumber)}&remainingShelfLifeDays=9999`} className="underline">Shelf life list</Link>
+            {' · '}
             <Link href={`/inventory/batch-cockpit?material=${encodeURIComponent(opened.materialNumber)}&batch=${encodeURIComponent(opened.batchNumber)}`} className="underline">Batch information cockpit</Link>
           </p>
           <BatchRelations client={session.user.client} />

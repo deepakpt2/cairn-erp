@@ -35,7 +35,7 @@ describe('OCHA batch management IMG', () => {
     ]);
     expect(BATCH_IMG_NODES.every((node) => node.route.startsWith('/config/'))).toBe(true);
     expect(RELATED_BATCH_NODES.map((node) => node.tcode)).toEqual([
-      'MBC1', 'BMC1', 'CU70', 'MB5C', 'BMBC', 'MSC2N', 'MSC3N',
+      'MBC1', 'BMC1', 'CU70', 'MB5C', 'MB5M', 'BMBC', 'MSC2N', 'MSC3N',
     ]);
     expect(BATCH_IMG_NODES.some((node) => node.route === '/config/characteristics')).toBe(false);
     expect(NOT_OCHA.find((node) => node.tcode === 'CT04')).toMatchObject({

@@ -22,7 +22,7 @@ const ROUTE = '/purchasing/orders';
  * Display is SCR-164, not this screen.
  */
 export default async function PurchaseOrdersPage({ searchParams }: {
-  searchParams: Promise<{ order?: string; quotation?: string; requisition?: string }>;
+  searchParams: Promise<{ order?: string; quotation?: string; requisition?: string; contract?: string; contractItem?: string }>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
@@ -79,6 +79,7 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_ORDER)}
         draft={draft}
+        callOff={params.contract ? { contractNumber: params.contract, contractItem: params.contractItem ?? '' } : null}
       />
     </div>
   );

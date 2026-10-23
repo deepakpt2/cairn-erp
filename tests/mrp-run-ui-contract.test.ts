@@ -33,7 +33,7 @@ describe('SCR-166 total planning screen contract', () => {
 
   it('refuses the second path by name and does not post', () => {
     expect(service).toContain('An MRP area does not stand.');
-    expect(service).toContain('A bill of material does not stand.');
+    expect(service).toContain('This run does not explode a bill of material.');
     expect(service).toContain('A planning run posts nothing.');
     expect(service).toContain('A financial period is not read.');
     expect(service).not.toContain('posting_period');

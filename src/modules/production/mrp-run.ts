@@ -7,8 +7,8 @@
  *
  * The planning file is the net-change marker. There is no second change table.
  * A purchase requisition is the purchasing document. A planned order is not a
- * production order. A bill of material does not stand, so dependent demand is
- * the open reservation and is not exploded. An MRP area does not stand.
+ * production order. This run does not explode a bill of material. Dependent demand is
+ * the open reservation. An MRP area does not stand.
  */
 import { sql } from 'drizzle-orm';
 
@@ -34,7 +34,7 @@ const REFUSED: Record<string, string> = {
   deleteAndRecreate: 'Delete and recreate is not this planning mode. An existing proposal is not removed.',
   recreate: 'Recreate is not this planning mode. An eligible proposal is adapted, not replaced.',
   calendar: 'A factory calendar is not carried. Lead time is a number of days.',
-  bom: 'A bill of material does not stand. Dependent demand is the open reservation.',
+  bom: 'This run does not explode a bill of material. Dependent demand is the open reservation.',
   companyCode: 'The company code is read from the plant. It is not a key of the run.',
   uuid: 'A uuid is not the key of the run. The run number is.',
   post: 'A planning run posts nothing.',

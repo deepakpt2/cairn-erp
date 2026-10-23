@@ -396,6 +396,9 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   /** The quota item whose base this save increased. Empty when the vendor was not in the quota. */
   quotaNumber: varchar('quota_number', { length: 20 }),
   quotaItem: varchar('quota_item', { length: 3 }),
+  /** A saved purchase order is the call-off. These columns do not post stock. */
+  contractNumber: varchar('contract_number', { length: 20 }),
+  contractItem: integer('contract_item'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),
@@ -484,7 +487,7 @@ export const documentRelease = pgTable('document_release', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.documentCategory, t.documentNumber] }),
-  check('document_release_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER')`),
+  check('document_release_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PURCHASE_CONTRACT', 'SCHED_AGREEMENT')`),
   check('document_release_status_ck', sql`${t.status} in ('PENDING', 'RELEASED')`),
   check('document_release_step_ck', sql`${t.currentStep} >= 0`),
 ]);
@@ -1011,4 +1014,269 @@ export const vendorEvaluationAssessment = pgTable('vendor_evaluation_assessment'
   check('vendor_evaluation_assessment_score_ck', sql`${t.score} >= 0 and ${t.score} <= 100`),
   check('vendor_evaluation_assessment_period_ck', sql`${t.periodFrom} <= ${t.periodTo}`),
   check('vendor_evaluation_assessment_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * Configured purchase-contract types. The service reads this table.
+ * MK and WK are seeded names for existing tenants, not hardcoded meanings.
+ */
+export const purchasingContractType = pgTable('purchasing_contract_type', {
+  client: tenant(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  category: varchar('category', { length: 10 }).notNull(),
+  numberRangeSubObject: varchar('number_range_sub_object', { length: 10 }).notNull().default('*'),
+  itemInterval: integer('item_interval').notNull().default(10),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentType] }),
+  check('purchasing_contract_type_category_ck', sql`${t.category} in ('QUANTITY', 'VALUE')`),
+]);
+
+/** Outline agreement. Creation does not change stock, goods receipts, or accounting. */
+export const purchaseContract = pgTable('purchase_contract', {
+  client: tenant(),
+  contractNumber: varchar('contract_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  category: varchar('category', { length: 10 }).notNull(),
+  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  purchasingGroup: varchar('purchasing_group', { length: 3 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  agreementDate: date('agreement_date', { mode: 'string' }).notNull(),
+  validityStart: date('validity_start', { mode: 'string' }).notNull(),
+  validityEnd: date('validity_end', { mode: 'string' }).notNull(),
+  targetValue: numeric('target_value', { precision: 15, scale: 2 }),
+  paymentTermsCode: varchar('payment_terms_code', { length: 12 }),
+  incotermsCode: varchar('incoterms_code', { length: 3 }),
+  incotermsLocation: varchar('incoterms_location', { length: 160 }),
+  yourReference: varchar('your_reference', { length: 12 }),
+  ourReference: varchar('our_reference', { length: 12 }),
+  languageCode: varchar('language_code', { length: 2 }),
+  sourceContractNumber: varchar('source_contract_number', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.contractNumber] }),
+  check('purchase_contract_category_ck', sql`${t.category} in ('QUANTITY', 'VALUE')`),
+  check('purchase_contract_validity_ck', sql`${t.validityEnd} >= ${t.validityStart}`),
+]);
+
+export const purchaseContractItem = pgTable('purchase_contract_item', {
+  client: tenant(),
+  contractNumber: varchar('contract_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  itemCategory: varchar('item_category', { length: 16 }).notNull().default('STANDARD'),
+  accountAssignmentCategory: varchar('account_assignment_category', { length: 16 }),
+  materialNumber: varchar('material_number', { length: 40 }),
+  shortText: varchar('short_text', { length: 40 }).notNull(),
+  targetQuantity: numeric('target_quantity', { precision: 13, scale: 3 }),
+  unit: varchar('unit', { length: 6 }),
+  netPrice: numeric('net_price', { precision: 11, scale: 2 }).notNull().default('0'),
+  priceUnit: numeric('price_unit', { precision: 5, scale: 0 }).notNull().default('1'),
+  netValue: numeric('net_value', { precision: 15, scale: 2 }).notNull().default('0'),
+  plant: varchar('plant', { length: 10 }),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  materialGroup: varchar('material_group', { length: 9 }),
+  costCenter: varchar('cost_center', { length: 10 }),
+  glAccount: varchar('gl_account', { length: 10 }),
+  requisitionNumber: varchar('requisition_number', { length: 10 }),
+  requisitionItem: integer('requisition_item'),
+  rfqNumber: varchar('rfq_number', { length: 20 }),
+  rfqItem: integer('rfq_item'),
+  quotationNumber: varchar('quotation_number', { length: 20 }),
+  quotationItem: integer('quotation_item'),
+  infoRecordNumber: varchar('info_record_number', { length: 20 }),
+  priceSequence: integer('price_sequence'),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.contractNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.contractNumber],
+    foreignColumns: [purchaseContract.client, purchaseContract.contractNumber],
+  }),
+  check('purchase_contract_item_category_ck', sql`${t.itemCategory} = 'STANDARD'`),
+  check('purchase_contract_item_assignment_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} = 'COST_CENTER'`),
+]);
+
+/**
+ * Scheduling-agreement types. LP is a seeded name, not a meaning in the service.
+ * This is not a purchase-contract type.
+ */
+export const schedulingAgreementType = pgTable('scheduling_agreement_type', {
+  client: tenant(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  category: varchar('category', { length: 12 }).notNull(),
+  numberRangeSubObject: varchar('number_range_sub_object', { length: 10 }).notNull().default('*'),
+  itemInterval: integer('item_interval').notNull().default(10),
+  /** When false, ME84 does not create a supplier release. LP stays false. The code is not the rule. */
+  releaseDocumentation: boolean('release_documentation').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentType] }),
+  check('scheduling_agreement_type_category_ck', sql`${t.category} = 'SCHEDULING'`),
+]);
+
+/** Scheduling agreement. Creation does not create a schedule line, a purchase order, or a goods receipt. */
+export const schedulingAgreement = pgTable('scheduling_agreement', {
+  client: tenant(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 4 }).notNull(),
+  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  purchasingGroup: varchar('purchasing_group', { length: 3 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  agreementDate: date('agreement_date', { mode: 'string' }).notNull(),
+  validityStart: date('validity_start', { mode: 'string' }).notNull(),
+  validityEnd: date('validity_end', { mode: 'string' }).notNull(),
+  paymentTermsCode: varchar('payment_terms_code', { length: 12 }),
+  incotermsCode: varchar('incoterms_code', { length: 3 }),
+  incotermsLocation: varchar('incoterms_location', { length: 160 }),
+  yourReference: varchar('your_reference', { length: 12 }),
+  ourReference: varchar('our_reference', { length: 12 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.agreementNumber] }),
+  check('scheduling_agreement_validity_ck', sql`${t.validityEnd} >= ${t.validityStart}`),
+]);
+
+export const schedulingAgreementItem = pgTable('scheduling_agreement_item', {
+  client: tenant(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  itemCategory: varchar('item_category', { length: 16 }).notNull().default('STANDARD'),
+  accountAssignmentCategory: varchar('account_assignment_category', { length: 16 }),
+  materialNumber: varchar('material_number', { length: 40 }),
+  shortText: varchar('short_text', { length: 40 }).notNull(),
+  targetQuantity: numeric('target_quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  netPrice: numeric('net_price', { precision: 11, scale: 2 }).notNull(),
+  priceUnit: numeric('price_unit', { precision: 5, scale: 0 }).notNull().default('1'),
+  netValue: numeric('net_value', { precision: 15, scale: 2 }).notNull(),
+  plant: varchar('plant', { length: 10 }),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  costCenter: varchar('cost_center', { length: 10 }),
+  glAccount: varchar('gl_account', { length: 10 }),
+  requisitionNumber: varchar('requisition_number', { length: 10 }),
+  requisitionItem: integer('requisition_item'),
+  infoRecordNumber: varchar('info_record_number', { length: 20 }),
+  priceSequence: integer('price_sequence'),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  /** JIT delivery schedule. Existing items stay off. Forecast does not use this flag. */
+  jitEnabled: boolean('jit_enabled').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.agreementNumber, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.agreementNumber],
+    foreignColumns: [schedulingAgreement.client, schedulingAgreement.agreementNumber],
+  }),
+  check('scheduling_agreement_item_category_ck', sql`${t.itemCategory} = 'STANDARD'`),
+  check('scheduling_agreement_item_assignment_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} = 'COST_CENTER'`),
+]);
+
+/** Delivery schedule lines. ME38 maintains them. ME31L does not insert them. */
+export const schedulingAgreementScheduleLine = pgTable('scheduling_agreement_schedule_line', {
+  client: tenant(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  lineNumber: integer('line_number').notNull(),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.agreementNumber, t.itemNumber, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.agreementNumber, t.itemNumber],
+    foreignColumns: [schedulingAgreementItem.client, schedulingAgreementItem.agreementNumber, schedulingAgreementItem.itemNumber],
+  }),
+]);
+
+/** Release creation profile. No horizon or tolerance is assumed when this row is absent. */
+export const schedulingReleaseProfile = pgTable('scheduling_release_profile', {
+  client: tenant(),
+  profileCode: varchar('profile_code', { length: 10 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  releaseType: varchar('release_type', { length: 3 }).notNull(),
+  horizonDays: integer('horizon_days'),
+  aggregation: varchar('aggregation', { length: 8 }).notNull(),
+  comparisonMode: varchar('comparison_mode', { length: 8 }).notNull(),
+  tolerancePercent: numeric('tolerance_percent', { precision: 5, scale: 2 }),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.profileCode] }),
+  check('scheduling_release_profile_type_ck', sql`${t.releaseType} in ('FRC', 'JIT')`),
+  check('scheduling_release_profile_aggregation_ck', sql`${t.aggregation} in ('NONE', 'DAY', 'WEEK', 'MONTH')`),
+  check('scheduling_release_profile_comparison_ck', sql`${t.comparisonMode} in ('LINE', 'OVERALL')`),
+  check('scheduling_release_profile_horizon_ck', sql`${t.horizonDays} is null or (${t.horizonDays} >= 0 and ${t.horizonDays} <= 999)`),
+  check('scheduling_release_profile_tolerance_ck', sql`${t.tolerancePercent} is null or (${t.tolerancePercent} >= 0 and ${t.tolerancePercent} <= 999.99)`),
+]);
+
+/** Supplier and plant default for a release profile. A blank plant is the organisation default. */
+export const schedulingReleaseProfileAssignment = pgTable('scheduling_release_profile_assignment', {
+  client: tenant(),
+  supplierNumber: varchar('supplier_number', { length: 40 }).notNull(),
+  purchasingOrg: varchar('purchasing_org', { length: 10 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull().default(''),
+  releaseType: varchar('release_type', { length: 3 }).notNull(),
+  profileCode: varchar('profile_code', { length: 10 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.supplierNumber, t.purchasingOrg, t.plant, t.releaseType] }),
+  check('scheduling_release_profile_assignment_type_ck', sql`${t.releaseType} in ('FRC', 'JIT')`),
+]);
+
+/** Supplier-facing release. Saving it does not post, and it does not notify the supplier. */
+export const schedulingAgreementRelease = pgTable('scheduling_agreement_release', {
+  client: tenant(),
+  releaseNumber: varchar('release_number', { length: 20 }).notNull(),
+  agreementNumber: varchar('agreement_number', { length: 20 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  releaseType: varchar('release_type', { length: 3 }).notNull(),
+  profileCode: varchar('profile_code', { length: 10 }).notNull(),
+  aggregation: varchar('aggregation', { length: 8 }).notNull(),
+  comparisonMode: varchar('comparison_mode', { length: 8 }).notNull(),
+  horizonDays: integer('horizon_days'),
+  tolerancePercent: numeric('tolerance_percent', { precision: 5, scale: 2 }),
+  generationDate: date('generation_date', { mode: 'string' }).notNull(),
+  releasedQuantity: numeric('released_quantity', { precision: 13, scale: 3 }).notNull(),
+  transmissionStatus: varchar('transmission_status', { length: 20 }).notNull().default('NOT_TRANSMITTED'),
+  transmissionDetail: varchar('transmission_detail', { length: 200 }).notNull(),
+  requestKey: varchar('request_key', { length: 120 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.releaseNumber] }),
+  foreignKey({
+    columns: [t.client, t.agreementNumber, t.itemNumber],
+    foreignColumns: [schedulingAgreementItem.client, schedulingAgreementItem.agreementNumber, schedulingAgreementItem.itemNumber],
+  }),
+  check('scheduling_agreement_release_type_ck', sql`${t.releaseType} in ('FRC', 'JIT')`),
+  check('scheduling_agreement_release_transmission_ck', sql`${t.transmissionStatus} = 'NOT_TRANSMITTED'`),
+]);
+
+export const schedulingAgreementReleaseLine = pgTable('scheduling_agreement_release_line', {
+  client: tenant(),
+  releaseNumber: varchar('release_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  quantity: numeric('quantity', { precision: 13, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.releaseNumber, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.releaseNumber],
+    foreignColumns: [schedulingAgreementRelease.client, schedulingAgreementRelease.releaseNumber],
+  }),
+  check('scheduling_agreement_release_line_quantity_ck', sql`${t.quantity} > 0`),
 ]);

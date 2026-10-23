@@ -47,6 +47,8 @@ interface ItemRow {
   requisitionItem: string;
   quotationNumber: string;
   quotationItem: string;
+  contractNumber: string;
+  contractItem: string;
   assignment: 'STOCK' | 'COST_CENTER';
   markedForDeletion: boolean;
   scheduleLines: ScheduleRow[];
@@ -68,6 +70,8 @@ const EMPTY_ITEM: ItemRow = {
   requisitionItem: '',
   quotationNumber: '',
   quotationItem: '',
+  contractNumber: '',
+  contractItem: '',
   assignment: 'STOCK',
   markedForDeletion: false,
   scheduleLines: [{ deliveryDate: '', quantity: '' }],
@@ -91,6 +95,8 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     requisitionItem: item.requisitionItem ? String(item.requisitionItem) : '',
     quotationNumber: item.quotationNumber ?? '',
     quotationItem: item.quotationItem ? String(item.quotationItem) : '',
+    contractNumber: item.contractNumber ?? '',
+    contractItem: item.contractItem ? String(item.contractItem) : '',
     assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
     markedForDeletion: item.markedForDeletion,
     scheduleLines: item.scheduleLines.map((s) => ({ deliveryDate: s.deliveryDate, quantity: s.quantity })),
@@ -104,7 +110,7 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
 
 const INITIAL: OrderActionState = { ok: false };
 
-export default function Orders({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease, draft = null }: {
+export default function Orders({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease, draft = null, callOff = null }: {
   documents: OrderDocument[];
   choices: OrderChoices;
   selected: OrderDocument | null;
@@ -114,6 +120,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
   releases: Record<string, DocumentReleaseState>;
   selectedRelease: DocumentReleaseState | null;
   canRelease: boolean;
+  callOff?: { contractNumber: string; contractItem: string } | null;
   draft?: {
     supplierNumber: string;
     purchasingOrg: string;
@@ -180,7 +187,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
               : [{ glAccount: '', costCenter: '', percentage: '100' }],
             scheduleLines: [{ deliveryDate: item.deliveryDate, quantity: String(item.quantity) }],
           }))
-        : [{ ...EMPTY_ITEM }],
+        : [{ ...EMPTY_ITEM, contractNumber: callOff?.contractNumber ?? '', contractItem: callOff?.contractItem ?? '' }],
   );
 
   function patch(index: number, next: Partial<ItemRow>) {
@@ -208,6 +215,8 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
         requisitionItem: item.requisitionItem ? Number(item.requisitionItem) : undefined,
         quotationNumber: item.quotationNumber,
         quotationItem: item.quotationItem ? Number(item.quotationItem) : undefined,
+        contractNumber: item.contractNumber,
+        contractItem: item.contractItem ? Number(item.contractItem) : null,
         scheduleLines: item.scheduleLines.map((line) => ({
           deliveryDate: line.deliveryDate, quantity: Number(line.quantity),
         })),
@@ -417,6 +426,8 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                   <th className="px-2 py-2">Plant</th>
                   <th className="px-2 py-2">Storage location</th>
                   <th className="px-2 py-2">Batch</th>
+                  <th className="px-2 py-2">Contract</th>
+                  <th className="px-2 py-2">Item</th>
                   <th className="px-2 py-2">Net value</th>
                   {selected && <th className="px-2 py-2">Marked for deletion</th>}
                 </tr>
@@ -493,6 +504,22 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                           value={item.batch}
                           placeholder="Batch"
                           onChange={(event) => patch(index, { batch: event.target.value })}
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          className="input w-28"
+                          value={item.contractNumber}
+                          placeholder="Contract"
+                          onChange={(event) => patch(index, { contractNumber: event.target.value })}
+                        />
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          className="input w-16"
+                          value={item.contractItem}
+                          placeholder="Item"
+                          onChange={(event) => patch(index, { contractItem: event.target.value })}
                         />
                       </td>
                       <td className="px-2 py-2">{item.quantity && item.netPrice ? value.toFixed(2) : ''}</td>

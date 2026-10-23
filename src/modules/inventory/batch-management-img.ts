@@ -156,6 +156,13 @@ export const RELATED_BATCH_NODES: readonly BatchImgNode[] = [
     note: 'The list names documents that already stand.',
   },
   {
+    tcode: 'MB5M',
+    title: 'Shelf life list',
+    route: '/inventory/shelf-life-list',
+    activity: 'INV.SLED.LIST',
+    note: 'Unrestricted batch stock by the stored expiration date. It does not post.',
+  },
+  {
     tcode: 'BMBC',
     title: 'Batch cockpit',
     route: '/inventory/batch-cockpit',

@@ -125,7 +125,7 @@ export const releaseGroup = pgTable('release_group', {
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.groupCode] }),
-  check('release_group_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER')`),
+  check('release_group_category_ck', sql`${t.documentCategory} in ('PURCHASE_REQUISITION', 'PURCHASE_ORDER', 'PURCHASE_CONTRACT', 'SCHED_AGREEMENT')`),
 ]);
 
 export const releaseCode = pgTable('release_code', {

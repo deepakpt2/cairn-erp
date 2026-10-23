@@ -102,7 +102,7 @@ describe('SCR-166 total planning (MD01)', () => {
     await expect(planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       named: { bom: 'BOM-1' },
-    })).rejects.toThrow(/bill of material does not stand/);
+    })).rejects.toThrow(/does not explode a bill of material/);
     await expect(planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       planningMode: 'DELETE_AND_RECREATE',

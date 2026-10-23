@@ -12,9 +12,9 @@
  * material, as it must be in SAP, and every component must be extended to the plant it
  * will be consumed from.
  *
- * The components are a **snapshot**: canon carries no BOM master, so what the order says
- * it needs is what it needs. A later issue may consume them; nothing recomputes them,
- * and nothing here reads a routings or capacity master, which canon does not have.
+ * The components are a **snapshot**. Creating an order does not read a material BOM.
+ * A saved order is not rewritten when a BOM changes. A later issue may consume the
+ * snapshot; nothing recomputes it, and nothing here reads a routing or capacity master.
  *
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
  * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability

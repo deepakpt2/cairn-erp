@@ -1529,3 +1529,280 @@ export const costCenterPlan = pgTable('cost_center_plan', {
   }).onDelete('cascade'),
   check('cost_center_plan_period_ck', sql`${t.period} between 1 and 16`),
 ]);
+
+/** Internal-order types. IO01 is a seeded name, not a meaning in the service. */
+export const internalOrderType = pgTable('internal_order_type', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  numberRangeSubObject: varchar('number_range_sub_object', { length: 10 }).notNull().default('*'),
+  statisticalDefault: boolean('statistical_default').notNull().default(false),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderType] }),
+  check('internal_order_type_code_ck', sql`${t.orderType} ~ '^[A-Z0-9]{2,4}$'`),
+]);
+
+/** Internal order master. Creation does not post controlling or financial documents. */
+export const internalOrder = pgTable('internal_order', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }).notNull(),
+  personResponsible: varchar('person_responsible', { length: 20 }),
+  responsibleUser: varchar('responsible_user', { length: 40 }),
+  costCenter: varchar('cost_center', { length: 10 }),
+  profitCenter: varchar('profit_center', { length: 10 }),
+  statistical: boolean('statistical').notNull().default(false),
+  isPostingLocked: boolean('is_posting_locked').notNull().default(false),
+  markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  sourceOrderNumber: varchar('source_order_number', { length: 20 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber] }),
+  check('internal_order_validity_ck', sql`${t.endDate} >= ${t.startDate}`),
+  check('internal_order_currency_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+  foreignKey({
+    columns: [t.client, t.controllingArea, t.companyCode],
+    foreignColumns: [controllingAreaCompany.client, controllingAreaCompany.controllingArea, controllingAreaCompany.companyCode],
+  }),
+]);
+
+/**
+ * Settlement profile for an order type. It names the document type and the
+ * allocation structure the user stored. It does not name a receiver.
+ */
+export const settlementProfile = pgTable('settlement_profile', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  profileCode: varchar('profile_code', { length: 6 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  allocationStructure: varchar('allocation_structure', { length: 6 }).notNull(),
+  documentType: varchar('document_type', { length: 12 }).notNull(),
+  percentageAllowed: boolean('percentage_allowed').notNull(),
+  equivalenceAllowed: boolean('equivalence_allowed').notNull(),
+  amountAllowed: boolean('amount_allowed').notNull(),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.profileCode] }),
+  check('settlement_profile_code_ck', sql`${t.profileCode} ~ '^[A-Z0-9]{2,6}$'`),
+  check('settlement_profile_method_ck', sql`${t.percentageAllowed} or ${t.equivalenceAllowed} or ${t.amountAllowed}`),
+  foreignKey({
+    columns: [t.client, t.documentType],
+    foreignColumns: [documentType.client, documentType.documentType],
+  }),
+]);
+
+/** One settlement profile for an internal-order type. IO01 is not assumed. */
+export const internalOrderTypeSettlementProfile = pgTable('internal_order_type_settlement_profile', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  profileCode: varchar('profile_code', { length: 6 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderType] }),
+  foreignKey({
+    columns: [t.client, t.orderType],
+    foreignColumns: [internalOrderType.client, internalOrderType.orderType],
+  }),
+  foreignKey({
+    columns: [t.client, t.profileCode],
+    foreignColumns: [settlementProfile.client, settlementProfile.profileCode],
+  }),
+]);
+
+/** Allocation structure. A source account is mapped only by a stored assignment. */
+export const allocationStructure = pgTable('allocation_structure', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  structureCode: varchar('structure_code', { length: 6 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.structureCode] }),
+  check('allocation_structure_code_ck', sql`${t.structureCode} ~ '^[A-Z0-9]{2,6}$'`),
+]);
+
+export const allocationStructureAssignment = pgTable('allocation_structure_assignment', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  structureCode: varchar('structure_code', { length: 6 }).notNull(),
+  sourceAccount: varchar('source_account', { length: 10 }).notNull(),
+  receiverCategory: varchar('receiver_category', { length: 16 }).notNull(),
+  byOriginalAccount: boolean('by_original_account').notNull(),
+  settlementAccount: varchar('settlement_account', { length: 10 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.structureCode, t.sourceAccount, t.receiverCategory] }),
+  check('allocation_structure_assignment_category_ck', sql`${t.receiverCategory} in ('COST_CENTER', 'INTERNAL_ORDER', 'GL_ACCOUNT')`),
+  check('allocation_structure_assignment_account_ck', sql`(
+    (${t.byOriginalAccount} = true and ${t.settlementAccount} is null)
+    or (${t.byOriginalAccount} = false and ${t.settlementAccount} is not null)
+  )`),
+  foreignKey({
+    columns: [t.client, t.structureCode],
+    foreignColumns: [allocationStructure.client, allocationStructure.structureCode],
+  }),
+]);
+
+/** Distribution rule for one internal order. A receiver is stored here, never assumed. */
+export const settlementDistributionRule = pgTable('settlement_distribution_rule', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  ruleNumber: smallint('rule_number').notNull(),
+  receiverCategory: varchar('receiver_category', { length: 16 }).notNull(),
+  receiver: varchar('receiver', { length: 20 }).notNull(),
+  percentage: numeric('percentage', { precision: 7, scale: 4 }),
+  equivalence: numeric('equivalence', { precision: 10, scale: 0 }),
+  amount: numeric('amount', { precision: 23, scale: 4 }),
+  settlementType: varchar('settlement_type', { length: 3 }).notNull(),
+  validFromYear: integer('valid_from_year').notNull(),
+  validFromPeriod: smallint('valid_from_period').notNull(),
+  validToYear: integer('valid_to_year').notNull(),
+  validToPeriod: smallint('valid_to_period').notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.ruleNumber] }),
+  check('settlement_distribution_rule_category_ck', sql`${t.receiverCategory} in ('COST_CENTER', 'INTERNAL_ORDER', 'GL_ACCOUNT')`),
+  check('settlement_distribution_rule_type_ck', sql`${t.settlementType} in ('PER', 'FUL')`),
+  check('settlement_distribution_rule_share_ck', sql`num_nonnulls(${t.percentage}, ${t.equivalence}, ${t.amount}) = 1`),
+  check('settlement_distribution_rule_percentage_ck', sql`${t.percentage} is null or (${t.percentage} > 0 and ${t.percentage} <= 100)`),
+  check('settlement_distribution_rule_equivalence_ck', sql`${t.equivalence} is null or ${t.equivalence} > 0`),
+  check('settlement_distribution_rule_amount_ck', sql`${t.amount} is null or ${t.amount} > 0`),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [internalOrder.client, internalOrder.orderNumber],
+  }),
+]);
+
+/** Link from a posted settlement to its journal. The journal is not deleted from here. */
+export const settlementDocument = pgTable('settlement_document', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  documentNumber: varchar('document_number', { length: 40 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  settlementPeriod: smallint('settlement_period').notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  requestKey: varchar('request_key', { length: 80 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear] }),
+  check('settlement_document_amount_ck', sql`${t.amount} > 0`),
+  uniqueIndex('settlement_document_request_key_uq').on(t.client, t.requestKey),
+]);
+
+/** Budget profile for an order type. Availability control is stored and not executed. */
+export const internalOrderBudgetProfile = pgTable('internal_order_budget_profile', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  profileCode: varchar('profile_code', { length: 6 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  overallBudget: boolean('overall_budget').notNull(),
+  annualBudget: boolean('annual_budget').notNull(),
+  annualNotExceedOverall: boolean('annual_not_exceed_overall').notNull().default(false),
+  availabilityControl: boolean('availability_control').notNull().default(false),
+  changeAllowed: boolean('change_allowed').notNull().default(true),
+  isActive: boolean('is_active').notNull().default(true),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.profileCode] }),
+  check('internal_order_budget_profile_code_ck', sql`${t.profileCode} ~ '^[A-Z0-9]{2,6}$'`),
+  check('internal_order_budget_profile_scope_ck', sql`${t.overallBudget} or ${t.annualBudget}`),
+]);
+
+/** One budget profile for an order type. The service does not assume IO01 or BP01. */
+export const internalOrderTypeBudgetProfile = pgTable('internal_order_type_budget_profile', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  profileCode: varchar('profile_code', { length: 6 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderType] }),
+  foreignKey({
+    columns: [t.client, t.profileCode],
+    foreignColumns: [internalOrderBudgetProfile.client, internalOrderBudgetProfile.profileCode],
+  }),
+]);
+
+/** Original budget document. A later document does not rewrite an earlier one. */
+export const internalOrderOriginalBudget = pgTable('internal_order_original_budget', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  period: smallint('period').notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  overallAmount: numeric('overall_amount', { precision: 23, scale: 4 }),
+  documentText: varchar('document_text', { length: 50 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentNumber] }),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [internalOrder.client, internalOrder.orderNumber],
+  }).onDelete('cascade'),
+  check('internal_order_original_budget_amount_ck', sql`${t.overallAmount} is null or ${t.overallAmount} >= 0`),
+  check('internal_order_original_budget_currency_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+]);
+
+export const internalOrderOriginalBudgetYear = pgTable('internal_order_original_budget_year', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  documentNumber: varchar('document_number', { length: 20 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  amount: numeric('amount', { precision: 23, scale: 4 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.documentNumber, t.fiscalYear] }),
+  foreignKey({
+    columns: [t.client, t.documentNumber],
+    foreignColumns: [internalOrderOriginalBudget.client, internalOrderOriginalBudget.documentNumber],
+  }).onDelete('cascade'),
+  check('internal_order_original_budget_year_amount_ck', sql`${t.amount} >= 0`),
+]);
+
+/** Plan-revaluation definition. Saving it does not change plan amounts. KOPU is not this table. */
+export const planRevaluationOrder = pgTable('plan_revaluation_order', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  revaluationNumber: varchar('revaluation_number', { length: 20 }).notNull(),
+  controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+  fiscalYear: integer('fiscal_year').notNull(),
+  periodFrom: smallint('period_from').notNull(),
+  periodTo: smallint('period_to').notNull(),
+  planVersion: varchar('plan_version', { length: 3 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull(),
+  executionStatus: varchar('execution_status', { length: 16 }).notNull().default('NOT_EXECUTED'),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.revaluationNumber] }),
+  foreignKey({
+    columns: [t.client, t.controllingArea],
+    foreignColumns: [controllingArea.client, controllingArea.controllingArea],
+  }),
+  check('plan_revaluation_order_year_ck', sql`${t.fiscalYear} between 1000 and 9999`),
+  check('plan_revaluation_order_period_ck', sql`${t.periodFrom} between 1 and 16 and ${t.periodTo} between 1 and 16 and ${t.periodTo} >= ${t.periodFrom}`),
+  check('plan_revaluation_order_version_ck', sql`${t.planVersion} ~ '^[A-Z0-9]{1,3}$'`),
+  check('plan_revaluation_order_status_ck', sql`${t.executionStatus} = 'NOT_EXECUTED'`),
+  check('plan_revaluation_order_currency_ck', sql`${t.currency} ~ '^[A-Z]{3}$'`),
+]);
+
+export const planRevaluationOrderItem = pgTable('plan_revaluation_order_item', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  revaluationNumber: varchar('revaluation_number', { length: 20 }).notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.revaluationNumber, t.orderNumber] }),
+  foreignKey({
+    columns: [t.client, t.revaluationNumber],
+    foreignColumns: [planRevaluationOrder.client, planRevaluationOrder.revaluationNumber],
+  }).onDelete('cascade'),
+]);

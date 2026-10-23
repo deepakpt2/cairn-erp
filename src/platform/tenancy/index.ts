@@ -9,7 +9,7 @@
  * the session key to the very tenant being created, so the policy's WITH CHECK
  * passes. No elevation, no back door, no special case in the security model.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { withTenant, type Tx } from '../db/client';
 import { client as clientTable, clientSettings } from '../tables/tenancy';
 import { appUser, role, roleCapability, userRole } from '../tables/security';
@@ -109,6 +109,12 @@ const STANDARD_RANGES: Array<{
   { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', length: 8 },
   { objectCode: 'RESERV', subObject: '*', prefix: 'RSV', length: 8 },
   { objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', length: 7 },
+  { objectCode: 'PURCHCONT', subObject: '*', prefix: '46', length: 10 },
+  { objectCode: 'SCHEDAGREE', subObject: '*', prefix: '55', length: 10 },
+  { objectCode: 'SARELEASE', subObject: '*', prefix: '56', length: 10 },
+  { objectCode: 'INTORDER', subObject: '*', prefix: 'IO', length: 8 },
+  { objectCode: 'ORDBUDGET', subObject: '*', prefix: 'OB', length: 8 },
+  { objectCode: 'REVALORD', subObject: '*', prefix: 'RV', length: 8 },
   { objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', length: 7 },
   { objectCode: 'SALESORD', subObject: 'OR', prefix: 'SO', length: 7 },
   { objectCode: 'DELIVERY', subObject: 'LF', prefix: 'DL', length: 7 },
@@ -310,6 +316,69 @@ export async function createTenant(input: CreateTenantInput, admission?: (tx: Tx
       });
       rangesCreated++;
     }
+    await tx.execute(sql`
+      insert into purchasing_contract_type (
+        client, document_type, description, category, number_range_sub_object, item_interval, created_by
+      ) values
+        (${clientKey}, 'MK', 'Quantity contract', 'QUANTITY', '*', 10, ${input.createdBy}),
+        (${clientKey}, 'WK', 'Value contract', 'VALUE', '*', 10, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into scheduling_agreement_type (
+        client, document_type, description, category, number_range_sub_object, item_interval, created_by
+      ) values
+        (${clientKey}, 'LP', 'Scheduling agreement', 'SCHEDULING', '*', 10, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into scheduling_agreement_type (
+        client, document_type, description, category, number_range_sub_object, item_interval,
+        release_documentation, created_by
+      ) values
+        (${clientKey}, 'LPA', 'Release documentation', 'SCHEDULING', '*', 10, true, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into number_range_object (client, object_code, description, number_length, year_relevant, created_by)
+      values (${clientKey}, 'SARELEASE', 'Scheduling agreement releases', 10, false, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into number_range_object (client, object_code, description, number_length, year_relevant, created_by)
+      values (${clientKey}, 'INTORDER', 'Internal orders', 8, false, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into internal_order_type (
+        client, order_type, description, number_range_sub_object, statistical_default, created_by
+      ) values
+        (${clientKey}, 'IO01', 'Internal order', '*', false, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into number_range_object (client, object_code, description, number_length, year_relevant, created_by)
+      values (${clientKey}, 'ORDBUDGET', 'Original budgets', 8, false, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into number_range_object (client, object_code, description, number_length, year_relevant, created_by)
+      values (${clientKey}, 'REVALORD', 'Plan revaluation orders', 8, false, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into internal_order_budget_profile (
+        client, profile_code, description, overall_budget, annual_budget,
+        annual_not_exceed_overall, availability_control, change_allowed, created_by
+      ) values
+        (${clientKey}, 'BP01', 'Original budget', true, true, true, false, true, ${input.createdBy})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into internal_order_type_budget_profile (client, order_type, profile_code, created_by)
+      values (${clientKey}, 'IO01', 'BP01', ${input.createdBy})
+      on conflict do nothing
+    `);
 
     // ── Configuration workbench state ────────────────────────────────────────
     // Every activity starts NOT_STARTED. The workbench shows what to do next;

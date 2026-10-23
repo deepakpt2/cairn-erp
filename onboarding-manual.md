@@ -428,7 +428,7 @@ Open `101` goods receipt against a purchase order, `201` goods issue to a cost c
 
 **IMG Batch Management** · `CFG.INV.BATCHIMG.DISPLAY` · `OCHA` · `/config/batch-management`
 
-This walk does not change a batch setting here. OCHA opens the batch management index. It is not CT04. It does not define a characteristic, assign a class, create a batch, or post. The index lists OMCE, OMCS, OMCU, OMAB, OMCZ, OMAD, OMCT, ODOC, OMCV, OMCW, OMCX, OMA1, OMCY, OMCG, and OMCWB. It also links MBC1, BMC1, CU70, MB5C, BMBC, MSC2N, and MSC3N. Opening it writes nothing. Class type 023 is not active. Movements 341 and 342 are not this screen.
+This walk does not change a batch setting here. OCHA opens the batch management index. It is not CT04. It does not define a characteristic, assign a class, create a batch, or post. The index lists OMCE, OMCS, OMCU, OMAB, OMCZ, OMAD, OMCT, ODOC, OMCV, OMCW, OMCX, OMA1, OMCY, OMCG, and OMCWB. It also links MBC1, BMC1, CU70, MB5C, MB5M, BMBC, MSC2N, and MSC3N. Opening it writes nothing. Class type 023 is not active. Movements 341 and 342 are not this screen.
 
 **Batch level** · `CFG.INV.BATCHLEVEL.DEFINE` · `OMCE` · `/config/batch-level`
 
@@ -521,6 +521,10 @@ Do not open a batch on this walk. This screen reads a batch that already stands.
 **Batch pick-up list** · `INV.BATCH.PICKUP` · `MB5C` · `/inventory/batch-pickup`
 
 Do not open this list on this walk. It reads a batch that already stands and already appears on a material document. It does not create a batch and does not post. A sales order, a delivery, a billing document, and a scheduling agreement are refused. Those documents are not on the material document.
+
+**Shelf life list** · `INV.SLED.LIST` · `MB5M` · `/inventory/shelf-life-list`
+
+Do not run this list on this walk. It reads unrestricted batch stock and the expiration date already stored on the batch. A blank remaining-shelf-life field lists batches already expired. Warehouse remaining life is not total remaining life, and it is shown only when a storage percentage and a minimum remaining shelf life stand. A missing date is named and not invented. Quality inspection and blocked stock are not the quantity. The list does not post, does not change a batch date, and does not create a batch.
 
 **48. Material period** · `CFG.INV.MATPERIOD.DEFINE` · `OMSY` / `MMPV` / `MMRV` · `/config/material-period-control`
 
@@ -1211,6 +1215,58 @@ Do not create a profile on this walk. Opening the screen does not select a plant
 **187. Production order** · `PROD.ORDER.CREATE` · `CO01` · `/production/orders`
 
 Material `MAT-20001` is raw, not finished. Try finished type only if you created a finished material. If you did not, enter material `MAT-20001`, plant `1000`, quantity `1`, date `2026-10-23`. Leave Batch empty. Expect a refusal because it is not a produced material or because no bill of material exists. Record it. A batch is stored only when that batch already stands.
+
+**188. Purchase contract** · `PROC.CONTRACT.MAINTAIN` · `ME31K` · `/purchasing/contracts`
+
+Open ME31K. Choose document type `MK` if it is listed. That type is configured data, not a value typed into the program. Supplier `V10001`, purchasing organization `1000`, purchasing group `001`, company `1000`, currency `INR`. Valid from `2026-04-01`, valid to `2027-03-31`. For `MK`, enter material `MAT-20001`, target quantity `100`, unit `PC`, net price `10`. Leave plant blank. Save. Expect a contract number and no stock movement, no goods receipt, and no accounting document. ME32K is this screen with the contract open. ME33K is the next screen. ME35K releases only when a strategy already claims the contract. ME3N is the list on this screen. A call-off is a purchase order on ME21N with the contract number and item. A draft is not a call-off. ME31L is not this screen.
+
+**189. Display purchase contract** · `PROC.CONTRACT.DISPLAY` · `ME33K` · `/purchasing/contract-display`
+
+Open the contract saved in the previous step. Expect the same number, target, called-off, remaining, goods receipt, and invoice as separate figures. Do not expect a save. A price in the address does not change the contract. ME32K is the change link, and only a user who can maintain the contract sees it. Changing a released contract is refused until its release is cancelled. A price change does not rewrite an existing purchase order.
+
+**190. Scheduling agreement** · `PROC.SCHEDAGREE.MAINTAIN` · `ME31L` · `/purchasing/scheduling-agreements`
+
+Open ME31L. Choose document type `LP` if it is listed. That type is configured data, not a value typed into the program. Supplier `V10001`, purchasing organization `1000`, purchasing group `001`, company `1000`, currency `INR`. Valid from `2026-04-01`, valid to `2027-03-31`. Material `MAT-20001`, target quantity `100`, unit `PC`, net price `10`, plant `1000`. Save. Expect an agreement number and no delivery schedule line, no purchase order, no goods receipt, and no accounting document. ME32L is this screen with the agreement open. ME33L is `/purchasing/scheduling-agreement-display` and does not save. ME38 is the next screen. This is not ME31K.
+
+**191. Delivery schedule** · `PROC.SCHEDLINE.MAINTAIN` · `ME38` · `/purchasing/delivery-schedule`
+
+Open the agreement saved in the previous step. Enter a delivery date inside the validity period and a quantity below the target. Save. Expect the line, and no purchase order, no goods receipt, and no supplier release. A quantity above the target is refused. ME39 is `/purchasing/delivery-schedule-display` and does not save. ME84 is not this screen. A firm zone is not stored.
+
+**192. Internal order** · `CO.ORDER.MAINTAIN` · `KO01` · `/controlling/internal-orders`
+
+Open KO01. Choose order type `IO01` if it is listed. That type is configured data, not a value typed into the program. Controlling area `A000`, company `1000`, description `Plant overhead`, start `2026-04-01`, end `2027-03-31`. Leave the cost center blank. Save. Expect an order number, the controlling-area currency, and no journal, budget, plan, or settlement. KO02 is this screen with the order open. KO03 is `/controlling/internal-order-display` and does not save. No status profile is configured. KO88 is not this screen.
+
+**193. Scheduling agreement release** · `PROC.SARELEASE.CREATE` · `ME84` · `/purchasing/scheduling-agreement-releases`
+
+Open ME84. Enter the agreement saved in paragraph 191. Leave the release type as forecast. Create releases. Expect no release, and a reason that the document type does not use release documentation. Expect no purchase order, no goods receipt, and no supplier message. A release profile is not assumed. JIT is not enabled. Background execution is not available. ME83 and ME88 are not this screen.
+
+**194. Original budget** · `CO.BUDGET.ORIGINAL.CHANGE` · `KO22` · `/controlling/original-budget`
+
+Open KO22. Enter the internal order saved in paragraph 192. If budget profile `BP01` is shown, enter document date `2026-04-01` and overall original budget `10000`. Leave the annual rows blank. Save. Expect a budget document number, the order currency, and no journal. A supplement is not this screen. Availability control is not executed. KO23 is `/controlling/original-budget-display` and does not save. KO24 and KO88 are not this screen.
+
+**195. Plan revaluation** · `CO.PLANREVAL.CREATE` · `KOP1` · `/controlling/plan-revaluation`
+
+Open KOP1. Choose the controlling area of the order saved in paragraph 192. Fiscal year `2026`, period from `1`, period to `1`, plan version `000`, and that order number. Save. Expect a revaluation number and no change to plan amounts, the original budget, or a journal. No percentage is entered. KOP2, KOP3, KOP4, and KOPU are not this screen.
+
+**196. Actual settlement** · `CO.SETTLE.ORDER` · `KO88` · `/controlling/order-settlement`
+
+Open KO88. Enter the internal order saved in paragraph 192, fiscal year `2026`, and settlement period `1`. Leave the test run selected. Run. Expect no settlement document and no journal. No receiver or percentage is entered on this screen. An update posts only when a settlement rule is already stored and the order has costs. KO8G is `/controlling/order-settlement-collective`. It selects by controlling area and order range and calls the same settlement. CO88, CJ88, and KO8B are not this screen.
+
+**197. Settlement rule** · `CO.SETTLE.RULE` · `/controlling/settlement-rules`
+
+Open the settlement rule screen. It has no SAP transaction code. Enter the order from paragraph 192. Choose a document type that is listed. Enter a profile, an allocation structure, and the source account. Leave settlement by the original account selected, or name a settlement account that exists. Enter a cost center that already exists and the percentage you intend. Save. Expect no journal. KO02 and KO8B are not this screen.
+
+**198. Work center** · `PROD.WORKCENTER.CREATE` · `CR01` · `/production/work-centers`
+
+Open CR01. Define a category first if none is listed. The category is tenant data. No category 0001 is delivered. Plant `1000`, work center `WC01`, that category, description `Assembly`. Save. Expect the work center, and no routing, no capacity evaluation, and no costing document. CR02 is this screen with the work center open. The category cannot be changed. CR03 is `/production/work-center-display` and does not save. A formula key is stored and not calculated. The routing transaction is not this screen. The chart-of-accounts key CA01 is not a work center.
+
+**199. Material BOM** · `PROD.BOM.CREATE` · `CS01` · `/production/boms`
+
+Open CS01. Define a BOM usage and an item category first if none is listed. No usage `1` is delivered. Plant `1000`, a material extended to that plant, that usage, alternative `01`, base quantity `1`, and the material base unit. Add a component that exists in the plant. Save. Expect the BOM, and no explosion, no costing document, and no change to a production order. CS02 is this screen with the BOM open. The material, plant, usage, and alternative cannot be changed. A change number is refused. CS03 is `/production/bom-display` and does not save. The routing transaction is not this screen.
+
+**200. Routing** · `PROD.ROUTING.CREATE` · `CA01` · `/production/routings`
+
+Open CA01. This is not the chart of accounts. Define a task list type, a usage, and a control key first if none is listed. None of those is delivered. Plant `1000`, a work center in that plant, base quantity `1`, and a unit. Add two operations. Save. Expect the routing group and counter, the standard sequence only, and no schedule, no confirmation, and no change to a production order. CA02 is this screen with the routing open. The group and counter cannot be changed. A change number is refused. CA03 is `/production/routing-display` and does not save.
 
 ## What you should have at the end
 

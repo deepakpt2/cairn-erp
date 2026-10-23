@@ -4,17 +4,19 @@ import { requireSession, can } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
 import { listMaterials, materialChoices, getMaterialDetail } from '@/modules/inventory/materials';
+import { getMaterialShelfLife } from '@/modules/inventory/material-shelf-life';
 import { listTypeValuation } from '@/modules/inventory/material-type-definition';
 import { MATERIAL_VIEWS, MATERIAL_VIEW_CAPABILITY } from '@/modules/inventory/constants';
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { MaterialForm } from './MaterialForm';
 import DeletionFlags from './DeletionFlags';
+import ShelfLifePanel from './ShelfLifePanel';
 
 export const dynamic = 'force-dynamic';
 
 export default async function MaterialsPage({ searchParams }: {
-  searchParams: Promise<{ material?: string; view?: string; plant?: string; q?: string; new?: string; copy?: string; history?: string }>;
+  searchParams: Promise<{ material?: string; view?: string; plant?: string; q?: string; new?: string; copy?: string; history?: string; shelfLife?: string }>;
 }) {
   const session = await requireSession('/inventory/materials');
   const client = session.user.client;
@@ -22,6 +24,7 @@ export default async function MaterialsPage({ searchParams }: {
   const choices = await materialChoices(client);
   const creating = params.new === '1';
   const detail = params.material ? await getMaterialDetail(client, params.material) : null;
+  const shelfLife = detail ? await getMaterialShelfLife(client, detail.base.materialNumber) : null;
   const source = creating && params.copy ? await getMaterialDetail(client, params.copy) : null;
   const rows = !detail && !creating ? await listMaterials(client, params.q ?? '') : [];
   const view = creating ? 'BASIC' : MATERIAL_VIEWS.find((v) => v === params.view) ?? 'BASIC';
@@ -75,6 +78,8 @@ export default async function MaterialsPage({ searchParams }: {
     {detail && <>
       <section className="panel grid gap-3 p-3 sm:grid-cols-4"><Summary label={t('material.number')} value={detail.base.materialNumber} /><Summary label={t('material.description')} value={detail.base.description || '—'} /><Summary label={t('material.type')} value={`${detail.base.materialType} / ${detail.base.baseUnit ?? '—'}`} /><Summary label={t('material.status')} value={t(`material.state.${detail.base.isBlocked ? 'BLOCKED' : detail.base.basicStatus}`)} /></section>
       <DeletionFlags materialNumber={detail.base.materialNumber} clientFlagged={detail.base.markedForDeletion} clientStock={detail.valuations.reduce((sum, v) => sum + Number(v.totalStockQuantity), 0).toString()} plants={detail.plants.map((p) => ({ plant: p.plant, flagged: p.markedForDeletion, stock: detail.valuations.find((v) => v.valuationArea === p.plant)?.totalStockQuantity ?? '0' }))} canMaintain={canDelete && changeLock?.mode === 'CHANGE'} />
+      {params.shelfLife ? <p className="text-sm text-ink-soft" role="status">{params.shelfLife === 'saved' ? 'Shelf life was stored. No batch date was changed.' : params.shelfLife}</p> : null}
+      {shelfLife ? <ShelfLifePanel current={shelfLife} canMaintain={canDelete} /> : null}
       <div className="flex flex-wrap items-end justify-between gap-3"><form method="get" className="flex items-end gap-2"><input type="hidden" name="material" value={detail.base.materialNumber} /><input type="hidden" name="view" value={view} /><label><span className="field-label">{t('plant.code')}</span><select name="plant" defaultValue={plant} className="field-input code">{choices.plants.map((p) => <option key={p.plant} value={p.plant}>{p.plant} · {p.name}</option>)}</select></label><button className="btn btn-default">{t('material.choosePlant')}</button></form><Link href={`${url(view)}&history=1`} className="text-sm text-accent underline">{t('material.history')}</Link></div>
       <nav aria-label={t('material.views')} className="flex flex-wrap gap-1 border-b border-line pb-3">{MATERIAL_VIEWS.map((v) => <Link key={v} href={url(v)} className={`border px-3 py-2 text-sm ${v === view ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-paper text-ink-soft'}`}>{t(`material.view.${v}`)}<span className="ms-2 text-2xs">{t(`material.state.${statuses[v]}`)}</span></Link>)}{['PRODUCTION', 'SALES', 'SALES_GENERAL', 'STORAGE', 'FORECASTING', 'QUALITY', 'WAREHOUSE'].map((v) => <span key={v} aria-disabled="true" className="border border-dashed border-line px-3 py-2 text-sm text-ink-faint">{t(`material.view.${v}`)} · {t('material.pending')}</span>)}</nav>
     </>}
