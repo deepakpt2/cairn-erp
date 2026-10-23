@@ -31,16 +31,21 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import {
-  accountDetermination, plant, storageLocation,
+  accountDetermination, plant,
 } from '../foundation/schema';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
 } from './schema';
 import { materialPeriodAllows } from './material-period-control';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { getMaterialPeriodControlInTx } from './goods-issue';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
+  REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 
@@ -444,9 +449,18 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
     );
   }
 
+  const fingerprint = postingFingerprint([
+    'RET', input.documentNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
+    ...[...input.lines].map((line) => `${line.originalLine}:${quantityToken(line.quantity)}:${line.entryUnit ?? ''}:${line.storageLocation ?? ''}`).sort(),
+  ]);
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new ReturnDeliveryError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveReturnMovement(tx, input.client);
@@ -488,6 +502,13 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       inArray(materialDocumentLine.lineNumber, input.lines.map((l) => l.originalLine)),
     ));
     const byLine = new Map(originals.map((l) => [l.lineNumber, l]));
+    await lockStockScope(
+      tx, input.client,
+      [...new Set(originals.map((line) => line.materialNumber).filter((m): m is string => Boolean(m)))].sort(),
+      'EXCLUSIVE',
+    );
+    const claimedReturn = new Map<number, number>();
+    const claimedStock = new Map<string, number>();
 
     const prepared: Array<{
       original: typeof materialDocumentLine.$inferSelect;
@@ -534,14 +555,6 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
 
       const already = returned.get(original.lineNumber) ?? 0;
       const remaining = round2(Math.max(0, Number(original.baseQuantity) - already));
-      if (line.quantity > remaining + 1e-9) {
-        throw new ReturnDeliveryError(
-          `Line ${original.lineNumber}: ${line.quantity} was entered but only ${remaining.toFixed(3)} of the ${Number(original.baseQuantity).toFixed(3)} received may still be returned.`,
-          already > 0
-            ? `The difference is already out: ${already.toFixed(3)} has been returned. Reduce the quantity to what remains.`
-            : 'Reduce the quantity to what was received.',
-        );
-      }
 
       const entryUnit = line.entryUnit ?? original.baseUnit;
       let quantity = line.quantity;
@@ -556,6 +569,16 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
           throw caught;
         }
       }
+      const claimed = claimedReturn.get(original.lineNumber) ?? 0;
+      if (quantity + claimed > remaining + 1e-9) {
+        throw new ReturnDeliveryError(
+          `Line ${original.lineNumber}: ${(quantity + claimed).toFixed(3)} was entered but only ${remaining.toFixed(3)} of the ${Number(original.baseQuantity).toFixed(3)} received may still be returned.`,
+          already > 0
+            ? `The difference is already out: ${already.toFixed(3)} has been returned. Reduce the quantity to what remains.`
+            : 'Reduce the quantity to what was received.',
+        );
+      }
+      claimedReturn.set(original.lineNumber, claimed + quantity);
 
       const [mat] = await tx.select().from(material).where(and(
         eq(material.client, input.client), eq(material.materialNumber, original.materialNumber),
@@ -588,30 +611,30 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         throw new ReturnDeliveryError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
       }
 
-      const storageLocationName = (line.storageLocation ?? original.storageLocation ?? '').trim();
-      if (!storageLocationName) {
-        throw new ReturnDeliveryError(
-          `Line ${original.lineNumber}: a storage location is required to return from.`,
-          'Name the storage location holding the stock being returned.',
-        );
+      let returning;
+      try {
+        returning = await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: original.plant,
+          typed: line.storageLocation,
+          documentDefault: original.storageLocation,
+          applyPlantDefault: false,
+          required: true,
+          verb: 'Return from',
+        });
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) {
+          throw new ReturnDeliveryError(
+            caught.message.includes('is required')
+              ? `Line ${original.lineNumber}: a storage location is required to return from.`
+              : caught.message,
+            caught.remedy,
+          );
+        }
+        throw caught;
       }
-      const [location] = await tx.select().from(storageLocation).where(and(
-        eq(storageLocation.client, input.client),
-        eq(storageLocation.plant, original.plant),
-        eq(storageLocation.storageLocation, storageLocationName),
-      ));
-      if (!location) {
-        throw new ReturnDeliveryError(
-          `Storage location ${storageLocationName} does not stand in plant ${original.plant}.`,
-          `Return from a storage location of plant ${original.plant}.`,
-        );
-      }
-      if (!location.isActive) {
-        throw new ReturnDeliveryError(
-          `Storage location ${storageLocationName} in plant ${original.plant} is blocked.`,
-          'Return from an active storage location.',
-        );
-      }
+      const storageLocationName = returning.storageLocation;
+      const location = returning.row!;
 
       // SCR-142/143: the count block reaches this posting like every other stock writer.
       try {
@@ -634,12 +657,15 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         eq(stockQuantity.stockType, original.stockType),
       ));
       const onHand = held ? Number(held.quantity) : 0;
-      if (!location.allowNegativeStock && onHand + 1e-9 < quantity) {
+      const stockKey = `${original.materialNumber}|${original.plant}|${storageLocationName}|${original.stockType}`;
+      const alreadyStock = claimedStock.get(stockKey) ?? 0;
+      if (!location.allowNegativeStock && onHand + 1e-9 < quantity + alreadyStock) {
         throw new ReturnDeliveryError(
-          `Stock of ${original.materialNumber} (${original.stockType}) in storage location ${storageLocationName} of plant ${original.plant} is ${onHand.toFixed(3)}, short of the ${quantity.toFixed(3)} to return.`,
+          `Stock of ${original.materialNumber} (${original.stockType}) in storage location ${storageLocationName} of plant ${original.plant} is ${onHand.toFixed(3)}, short of the ${(quantity + alreadyStock).toFixed(3)} to return.`,
           'Reduce the quantity to what stands, or release negative stock on that storage location.',
         );
       }
+      claimedStock.set(stockKey, alreadyStock + quantity);
 
       const poValue = round2((quantity * Number(original.unitPrice)) / Number(original.priceUnit ?? '1'));
       const stockValue = valuation.priceControl === 'STANDARD'
@@ -731,6 +757,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      requestFingerprint: fingerprint,
       createdBy: input.changedBy,
     });
 
@@ -762,20 +789,9 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         eq(stockQuantity.storageLocation, p.storageLocation),
         eq(stockQuantity.stockType, p.original.stockType),
       ));
-      const newQty = Number(p.valuation.totalStockQuantity) - p.quantity;
-      const newValue = round2(Number(p.valuation.stockValue) - p.value);
-      await tx.update(materialValuation).set({
-        totalStockQuantity: String(newQty),
-        stockValue: String(newValue),
-        movingAveragePrice: p.valuation.priceControl === 'MOVING_AVERAGE' && newQty > 0
-          ? String(round2((newValue / newQty) * Number(p.valuation.priceUnit)) || 0)
-          : p.valuation.movingAveragePrice,
-        changedBy: input.changedBy, changedAt: new Date(),
-      }).where(and(
-        eq(materialValuation.client, input.client),
-        eq(materialValuation.materialNumber, p.original.materialNumber),
-        eq(materialValuation.valuationArea, p.original.plant),
-      ));
+      await applyValuationDelta(
+        tx, input.client, input.changedBy, p.original.materialNumber, p.original.plant, -p.quantity, -p.value,
+      );
     }
 
     await linkDocuments(tx, {

@@ -176,6 +176,10 @@ export default function Quotation({
                     <Field label={t('quotation.remark')}>
                       <input name={`line${index}Remark`} className="input w-full" maxLength={80} defaultValue={offer?.remark ?? ''} />
                     </Field>
+                    <label className="flex min-h-11 items-center gap-2 text-sm">
+                      <input type="checkbox" name={`line${index}InfoUpdate`} defaultChecked={offer?.infoUpdate ?? false} />
+                      <span>{t('quotation.infoUpdate')}</span>
+                    </label>
                   </div>
                 </div>
               );
@@ -194,6 +198,13 @@ export default function Quotation({
               </button>
             </div>
           </form>
+          {standing && (
+            <p className="mt-3">
+              <Link href={`/purchasing/orders?quotation=${standing.quotationNumber}`} className="underline" data-quotation-order>
+                {t('quotation.toOrder')}
+              </Link>
+            </p>
+          )}
           <Notice state={checkState} />
           <Notice state={saveState} />
           {!canMaintain && <p className="mt-3 text-sm text-red-700">{t('quotation.capabilityMissing')}</p>}

@@ -124,7 +124,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                       </td>
                       <td className="px-2 py-2">
                         {item.eligible && (
-                          <input name={`sloc-${item.itemNumber}`} className="input w-24" defaultValue={item.storageLocation ?? ''} />
+                          <input name={`sloc-${item.itemNumber}`} className="input w-24" defaultValue={item.proposedStorageLocation ?? item.storageLocation ?? ''} />
                         )}
                       </td>
                     </tr>

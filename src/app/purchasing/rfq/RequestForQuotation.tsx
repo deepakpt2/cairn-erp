@@ -307,7 +307,8 @@ export default function RequestForQuotation({
                 <th className="py-1 pr-3">{t('requestForQuotation.quantity')}</th>
                 <th className="py-1 pr-3">{t('requestForQuotation.unit')}</th>
                 <th className="py-1 pr-3">{t('requestForQuotation.plant')}</th>
-                <th className="py-1">{t('requestForQuotation.deliveryDate')}</th>
+                <th className="py-1 pr-3">{t('requestForQuotation.deliveryDate')}</th>
+                <th className="py-1">{t('requestForQuotation.requisition')}</th>
               </tr>
             </thead>
             <tbody>
@@ -318,7 +319,8 @@ export default function RequestForQuotation({
                   <td className="py-1 pr-3">{line.quantity}</td>
                   <td className="py-1 pr-3">{line.unit}</td>
                   <td className="py-1 pr-3">{line.plant}</td>
-                  <td className="py-1">{line.deliveryDate}</td>
+                  <td className="py-1 pr-3">{line.deliveryDate}</td>
+                  <td className="py-1">{line.requisitionNumber ? `${line.requisitionNumber} / ${line.requisitionItem}` : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -328,6 +330,9 @@ export default function RequestForQuotation({
               <li key={request.rfqNumber} data-rfq-request={request.rfqNumber}>
                 <Link href={`${ROUTE}?event=${opened.eventNumber}&request=${request.rfqNumber}`} className="underline" data-rfq-change-link={request.rfqNumber}>
                   {t('requestForQuotation.changeCopy', { number: request.rfqNumber })}
+                </Link>
+                <Link href={`/purchasing/quotation?request=${request.rfqNumber}`} className="ml-3 underline" data-rfq-quotation={request.rfqNumber}>
+                  {t('requestForQuotation.toQuotation')}
                 </Link>
                 <span className="ml-2">{request.partnerNumber}</span>
                 <span className="ml-2 text-ink-soft">{request.lines.map((line) => `${line.shortText} ${line.quantity}`).join(', ')}</span>
@@ -415,6 +420,12 @@ export default function RequestForQuotation({
                 </Field>
                 <Field label={t('requestForQuotation.deliveryDate')}>
                   <input name={`line${index}Delivery`} type="date" className="input w-full" required />
+                </Field>
+                <Field label={t('requestForQuotation.requisition')}>
+                  <input name={`line${index}Requisition`} className="input w-full" maxLength={10} />
+                </Field>
+                <Field label={t('requestForQuotation.requisitionItem')}>
+                  <input name={`line${index}RequisitionItem`} className="input w-full" inputMode="numeric" />
                 </Field>
               </div>
             ))}

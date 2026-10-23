@@ -1008,12 +1008,6 @@ export async function resolvePurchasingInfoRecord(
     };
   }
   const price = applicable[0];
-  if (price.currency.trim() !== input.orderCurrency.trim()) {
-    return {
-      qualified: false,
-      warning: `Info record ${general.infoRecordNumber} is priced in ${price.currency.trim()}, not the order currency ${input.orderCurrency.trim()}. It is not applied.`,
-    };
-  }
   return {
     qualified: true,
     infoRecordNumber: general.infoRecordNumber,

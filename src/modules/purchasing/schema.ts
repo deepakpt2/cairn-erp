@@ -304,7 +304,7 @@ export const purchasingSourceListEntry = pgTable('purchasing_source_list_entry',
  * in the database, and the locked service refuses that. Deactivation does not
  * delete the row and does not hold the start. There is no allocated quantity,
  * no minimum split, no maximum lot, no supplying plant, and no status. The
- * order is not given a quota column.
+ * order adds to the quota base when the vendor stands in it.
  */
 export const purchasingQuotaArrangement = pgTable('purchasing_quota_arrangement', {
   client: tenant(),
@@ -386,6 +386,14 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   priceSequence: integer('price_sequence'),
   /** The source that qualified, when one did. The supplier on the order remains what it used. */
   sourceNumber: varchar('source_number', { length: 20 }),
+  /** The quotation this item was saved from. The order must not exceed what that quotation still has open. */
+  quotationNumber: varchar('quotation_number', { length: 20 }),
+  quotationItem: integer('quotation_item'),
+  /** Copied from the quotation. The info record is written on this save only when it is set. */
+  infoUpdate: boolean('info_update').notNull().default(false),
+  /** The quota item whose base this save increased. Empty when the vendor was not in the quota. */
+  quotaNumber: varchar('quota_number', { length: 20 }),
+  quotaItem: varchar('quota_item', { length: 3 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),
@@ -409,6 +417,12 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   check('po_item_assignment_category_ck', sql`${t.accountAssignmentCategory} is null or ${t.accountAssignmentCategory} in ('COST_CENTER')`),
   check('po_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
   check('purchase_order_item_info_record_pair_ck', sql`(${t.infoRecordNumber} is null) = (${t.priceSequence} is null)`),
+  check('purchase_order_item_quotation_pair_ck', sql`(${t.quotationNumber} is null) = (${t.quotationItem} is null)`),
+  check('purchase_order_item_quota_pair_ck', sql`(${t.quotaNumber} is null) = (${t.quotaItem} is null)`),
+  foreignKey({
+    columns: [t.client, t.quotaNumber, t.quotaItem],
+    foreignColumns: [purchasingQuotaArrangementItem.client, purchasingQuotaArrangementItem.quotaNumber, purchasingQuotaArrangementItem.itemNumber],
+  }).onDelete('restrict'),
   foreignKey({
     columns: [t.client, t.sourceNumber],
     foreignColumns: [purchasingSourceListEntry.client, purchasingSourceListEntry.sourceNumber],
@@ -626,6 +640,9 @@ export const purchasingRfqEventItem = pgTable('purchasing_rfq_event_item', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }),
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  /** Copied from a requisition. The request does not consume that quantity. */
+  requisitionNumber: varchar('requisition_number', { length: 10 }),
+  requisitionItem: integer('requisition_item'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.eventNumber, t.itemNumber] }),
@@ -652,6 +669,11 @@ export const purchasingRfqEventItem = pgTable('purchasing_rfq_event_item', {
   check('purchasing_rfq_event_item_number_ck', sql`${t.itemNumber} > 0 and ${t.itemNumber} % 10 = 0`),
   check('purchasing_rfq_event_item_qty_ck', sql`${t.quantity} > 0`),
   check('purchasing_rfq_event_item_text_ck', sql`char_length(btrim(${t.shortText})) between 1 and 40`),
+  check('purchasing_rfq_event_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
+  foreignKey({
+    columns: [t.client, t.requisitionNumber, t.requisitionItem],
+    foreignColumns: [purchaseRequisitionItem.client, purchaseRequisitionItem.requisitionNumber, purchaseRequisitionItem.itemNumber],
+  }).onDelete('restrict'),
 ]);
 
 export const purchasingRfq = pgTable('purchasing_rfq', {
@@ -688,6 +710,8 @@ export const purchasingRfqItem = pgTable('purchasing_rfq_item', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }),
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  requisitionNumber: varchar('requisition_number', { length: 10 }),
+  requisitionItem: integer('requisition_item'),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.rfqNumber, t.itemNumber] }),
@@ -718,13 +742,18 @@ export const purchasingRfqItem = pgTable('purchasing_rfq_item', {
   check('purchasing_rfq_item_number_ck', sql`${t.itemNumber} > 0 and ${t.itemNumber} % 10 = 0`),
   check('purchasing_rfq_item_qty_ck', sql`${t.quantity} > 0`),
   check('purchasing_rfq_item_text_ck', sql`char_length(btrim(${t.shortText})) between 1 and 40`),
+  check('purchasing_rfq_item_requisition_pair_ck', sql`(${t.requisitionNumber} is null) = (${t.requisitionItem} is null)`),
+  foreignKey({
+    columns: [t.client, t.requisitionNumber, t.requisitionItem],
+    foreignColumns: [purchaseRequisitionItem.client, purchaseRequisitionItem.requisitionNumber, purchaseRequisitionItem.itemNumber],
+  }).onDelete('restrict'),
 ]);
 
 /**
  * Quotation — SCR-157. One quotation prices one standing request. The drawn
  * number is the key. The request number is the link. The supplier and the
  * currency are not stored again. There is no status, no revision, and no
- * condition. The order is not given a quotation column.
+ * condition. The order stores the quotation it was saved from.
  */
 export const purchasingQuotation = pgTable('purchasing_quotation', {
   client: tenant(),
@@ -753,6 +782,8 @@ export const purchasingQuotationItem = pgTable('purchasing_quotation_item', {
   priceUnit: numeric('price_unit', { precision: 5, scale: 0 }).notNull(),
   deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
   remark: varchar('remark', { length: 80 }),
+  /** Set on the quotation. The info record is written when the order is saved, not here. */
+  infoUpdate: boolean('info_update').notNull().default(false),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.quotationNumber, t.itemNumber] }),

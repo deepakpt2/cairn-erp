@@ -130,6 +130,7 @@ function linesOf(form: FormData): QuotationLineInput[] {
     if (text(form, `line${index}Tax`)) line.tax = text(form, `line${index}Tax`);
     if (text(form, `line${index}Discount`)) line.discount = text(form, `line${index}Discount`);
     if (text(form, `line${index}Minimum`)) line.minimumOrderQuantity = text(form, `line${index}Minimum`);
+    line.infoUpdate = form.get(`line${index}InfoUpdate`) != null;
     lines.push(line);
   }
   return lines;

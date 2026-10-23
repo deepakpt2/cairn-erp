@@ -44,6 +44,7 @@ export interface QuotationLineInput {
   priceUnit?: number | string | null;
   deliveryDate?: string | null;
   remark?: string | null;
+  infoUpdate?: boolean | null;
   materialNumber?: string | null;
   plant?: string | null;
   price?: number | string | null;
@@ -98,6 +99,7 @@ export interface StandingQuotationLine {
   priceUnit: string;
   deliveryDate: string;
   remark: string | null;
+  infoUpdate: boolean;
 }
 
 export interface AskedLine {
@@ -388,7 +390,8 @@ async function offerOf(
     : (line.deliveryDate ?? '');
   assertDate(deliveryDate, 'The delivery date');
   const remark = line.remark === undefined ? standing?.remark ?? null : remarkText(line.remark);
-  return { itemNumber: asked.itemNumber, quantity, unit, netPrice, priceUnit, deliveryDate, remark };
+  const infoUpdate = line.infoUpdate === undefined ? standing?.infoUpdate ?? false : Boolean(line.infoUpdate);
+  return { itemNumber: asked.itemNumber, quantity, unit, netPrice, priceUnit, deliveryDate, remark, infoUpdate };
 }
 
 function sameLine(left: StandingQuotationLine, right: StandingQuotationLine): boolean {
@@ -397,7 +400,8 @@ function sameLine(left: StandingQuotationLine, right: StandingQuotationLine): bo
     && left.netPrice === right.netPrice
     && left.priceUnit === right.priceUnit
     && left.deliveryDate === right.deliveryDate
-    && left.remark === right.remark;
+    && left.remark === right.remark
+    && left.infoUpdate === right.infoUpdate;
 }
 
 function lineFields(line: StandingQuotationLine): Record<string, string | null> {
@@ -409,6 +413,7 @@ function lineFields(line: StandingQuotationLine): Record<string, string | null> 
     [`${prefix}.priceUnit`]: line.priceUnit,
     [`${prefix}.deliveryDate`]: line.deliveryDate,
     [`${prefix}.remark`]: line.remark,
+    [`${prefix}.infoUpdate`]: line.infoUpdate ? 'true' : 'false',
   };
 }
 
@@ -460,6 +465,7 @@ async function plan(tx: Tx, input: QuotationInput, creating: boolean, lock: bool
     priceUnit: row.priceUnit,
     deliveryDate: row.deliveryDate,
     remark: row.remark,
+    infoUpdate: row.infoUpdate,
   }));
   const byItem = new Map(request.lines.map((line) => [line.itemNumber, line]));
   const standingByItem = new Map(standing.map((line) => [line.itemNumber, line]));
@@ -553,6 +559,7 @@ export async function writeQuotation(tx: Tx, input: QuotationInput): Promise<Quo
     priceUnit: line.priceUnit,
     deliveryDate: line.deliveryDate,
     remark: line.remark,
+    infoUpdate: line.infoUpdate,
     createdBy: input.changedBy,
   })));
   const after: Record<string, string | null> = {};
@@ -594,6 +601,7 @@ export async function writeQuotationChange(tx: Tx, input: QuotationInput): Promi
         priceUnit: line.priceUnit,
         deliveryDate: line.deliveryDate,
         remark: line.remark,
+        infoUpdate: line.infoUpdate,
         createdBy: input.changedBy,
       });
       continue;
@@ -606,6 +614,7 @@ export async function writeQuotationChange(tx: Tx, input: QuotationInput): Promi
       priceUnit: line.priceUnit,
       deliveryDate: line.deliveryDate,
       remark: line.remark,
+      infoUpdate: line.infoUpdate,
       changedBy: input.changedBy,
       changedAt: now,
     }).where(and(
@@ -706,6 +715,7 @@ export async function openQuotation(client: string, rfqNumber: string): Promise<
           priceUnit: row.priceUnit,
           deliveryDate: row.deliveryDate,
           remark: row.remark,
+          infoUpdate: row.infoUpdate,
         })),
       } : null,
     };
@@ -759,6 +769,7 @@ export async function getQuotation(client: string, quotationNumber: string) {
         priceUnit: row.priceUnit,
         deliveryDate: row.deliveryDate,
         remark: row.remark,
+        infoUpdate: row.infoUpdate,
       })),
     };
   });

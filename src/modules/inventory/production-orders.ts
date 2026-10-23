@@ -25,8 +25,9 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { recordChange } from '../../platform/change';
-import { plant as plantTable, storageLocation } from '../foundation/schema';
+import { plant as plantTable } from '../foundation/schema';
 import { material, materialPlant } from './schema';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
 
 export const PRODUCTION_ORDER_CAPABILITY = 'PROD.ORDER.CREATE';
@@ -293,26 +294,24 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
         );
       }
       let location: string | null = null;
-      const named = (component.storageLocation ?? '').trim();
-      if (named) {
-        const [row] = await tx.select().from(storageLocation).where(and(
-          eq(storageLocation.client, input.client),
-          eq(storageLocation.plant, componentPlant),
-          eq(storageLocation.storageLocation, named),
-        ));
-        if (!row) {
+      try {
+        const resolved = await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: componentPlant,
+          typed: component.storageLocation,
+          required: false,
+          applyPlantDefault: false,
+          verb: 'Issue from',
+        });
+        location = resolved.storageLocation || null;
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) {
           throw new ProductionOrderError(
-            `Storage location ${named} does not stand in plant ${componentPlant}.`,
+            caught.message,
             `Enter a storage location that belongs to plant ${componentPlant}, or leave it empty.`,
           );
         }
-        if (!row.isActive) {
-          throw new ProductionOrderError(
-            `Storage location ${named} in plant ${componentPlant} is blocked.`,
-            'Choose an active storage location, or leave it empty.',
-          );
-        }
-        location = row.storageLocation;
+        throw caught;
       }
       prepared.push({
         materialNumber: componentNumber,

@@ -1,5 +1,5 @@
 /** Material master — CAIRN.md §8.4/§9.1, SCR-048. Own domain keys and views. */
-import { pgTable, varchar, text, boolean, integer, numeric, char, timestamp, primaryKey, foreignKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, boolean, integer, numeric, char, date, timestamp, primaryKey, foreignKey, check, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
@@ -236,6 +236,13 @@ export const materialValuation = pgTable('material_valuation', {
   /** Book quantities/values are changed by goods movements, never master forms. */
   totalStockQuantity: quantity('total_stock_quantity').notNull().default('0'),
   stockValue: money('stock_value').notNull().default('0'),
+  /** A price that does not post until it is released. */
+  futurePrice: money('future_price'),
+  futurePriceUnit: quantity('future_price_unit'),
+  futureValidFrom: date('future_valid_from', { mode: 'string' }),
+  /** The price last posted to the previous material period. The current book price is separate. */
+  previousPrice: money('previous_price'),
+  previousPriceUnit: quantity('previous_price_unit'),
   accountingStatus: varchar('accounting_status', { length: 16 }).notNull().default('INCOMPLETE'),
   version: integer('version').notNull().default(1), ...auditColumns,
 }, (t) => [
@@ -245,6 +252,8 @@ export const materialValuation = pgTable('material_valuation', {
   foreignKey({ columns: [t.client, t.valuationClass], foreignColumns: [valuationClass.client, valuationClass.valuationClass] }),
   check('material_valuation_codes_ck', sql`${t.priceControl} in ('STANDARD','MOVING_AVERAGE') and ${t.accountingStatus} in ('INCOMPLETE','CREATED','MAINTAINED')`),
   check('material_valuation_values_ck', sql`${t.standardPrice} >= 0 and ${t.movingAveragePrice} >= 0 and ${t.priceUnit} > 0 and ${t.totalStockQuantity} >= 0 and ${t.stockValue} >= 0`),
+  check('material_valuation_future_ck', sql`(${t.futurePrice} is null and ${t.futurePriceUnit} is null and ${t.futureValidFrom} is null) or (${t.futurePrice} >= 0 and ${t.futurePriceUnit} > 0 and ${t.futureValidFrom} is not null)`),
+  check('material_valuation_previous_ck', sql`(${t.previousPrice} is null and ${t.previousPriceUnit} is null) or (${t.previousPrice} >= 0 and ${t.previousPriceUnit} > 0)`),
 ]);
 
 export const planningFile = pgTable('planning_file', {
@@ -785,4 +794,78 @@ export const materialUomConversion = pgTable('material_uom_conversion', {
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialNumber, t.alternativeUnit] }),
   index('material_uom_conversion_material_idx').on(t.client, t.materialNumber),
+]);
+
+/**
+ * OMCE — one batch level for the client. The stored code is the SAP character
+ * 0, 1, or 2. The description is derived and is never the key.
+ */
+export const batchLevelConfiguration = pgTable('batch_level_configuration', {
+  client: tenant(),
+  batchLevel: char('batch_level', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('batch_level_configuration_level_ck', sql`${t.batchLevel} in ('0', '1', '2')`),
+  check('batch_level_configuration_version_ck', sql`${t.version} > 0`),
+]);
+
+/** A refused or unnecessary conversion attempt. It never changes the level. */
+export const batchLevelConversion = pgTable('batch_level_conversion', {
+  client: tenant(),
+  conversionRunId: varchar('conversion_run_id', { length: 36 }).notNull(),
+  sourceLevel: char('source_level', { length: 1 }).notNull(),
+  targetLevel: char('target_level', { length: 1 }).notNull(),
+  sourceVersion: integer('source_version').notNull(),
+  status: varchar('status', { length: 24 }).notNull(),
+  batchCount: integer('batch_count').notNull(),
+  stockBatchCount: integer('stock_batch_count').notNull(),
+  documentBatchCount: integer('document_batch_count').notNull(),
+  stockColumnPresent: boolean('stock_column_present').notNull(),
+  documentColumnPresent: boolean('document_column_present').notNull(),
+  errorSummary: text('error_summary').notNull(),
+  reason: varchar('reason', { length: 500 }).notNull(),
+  startedBy: varchar('started_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.conversionRunId] }),
+  check('batch_level_conversion_status_ck', sql`${t.status} in ('BLOCKED', 'NOT_REQUIRED')`),
+  check('batch_level_conversion_level_ck', sql`${t.sourceLevel} in ('0', '1', '2') and ${t.targetLevel} in ('0', '1', '2')`),
+]);
+
+/**
+ * Batch identity. MSC1N is not this table's screen. Partial unique indexes
+ * enforce the level that was current when the row was written.
+ */
+export const batch = pgTable('batch', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  client: tenant(),
+  batchNumber: varchar('batch_number', { length: 40 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }),
+  batchLevelAtCreation: char('batch_level_at_creation', { length: 1 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  uniqueIndex('batch_plant_level_uq')
+    .on(t.client, t.materialNumber, t.plant, t.batchNumber)
+    .where(sql`${t.batchLevelAtCreation} = '0'`),
+  uniqueIndex('batch_material_level_uq')
+    .on(t.client, t.materialNumber, t.batchNumber)
+    .where(sql`${t.batchLevelAtCreation} = '1'`),
+  uniqueIndex('batch_client_level_uq')
+    .on(t.client, t.batchNumber)
+    .where(sql`${t.batchLevelAtCreation} = '2'`),
+  index('batch_client_idx').on(t.client),
+  check('batch_level_ck', sql`${t.batchLevelAtCreation} in ('0', '1', '2')`),
+  check('batch_identity_ck', sql`(${t.batchLevelAtCreation} = '0' and ${t.plant} is not null) or (${t.batchLevelAtCreation} in ('1', '2') and ${t.plant} is null)`),
 ]);

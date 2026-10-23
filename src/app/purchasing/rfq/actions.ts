@@ -121,6 +121,7 @@ function linesOf(form: FormData): RfqLineInput[] {
     if (text(form, `line${index}Price`)) line.price = text(form, `line${index}Price`);
     if (text(form, `line${index}DeliveryLocation`)) line.deliveryLocation = text(form, `line${index}DeliveryLocation`);
     if (text(form, `line${index}Requisition`)) line.requisitionNumber = text(form, `line${index}Requisition`);
+    if (text(form, `line${index}RequisitionItem`)) line.requisitionItem = text(form, `line${index}RequisitionItem`);
     lines.push(line);
   }
   return lines;
@@ -254,6 +255,7 @@ function changeLinesOf(form: FormData): RfqLineInput[] {
     if (text(form, `line${index}Price`)) line.price = text(form, `line${index}Price`);
     if (text(form, `line${index}DeliveryLocation`)) line.deliveryLocation = text(form, `line${index}DeliveryLocation`);
     if (text(form, `line${index}Requisition`)) line.requisitionNumber = text(form, `line${index}Requisition`);
+    if (text(form, `line${index}RequisitionItem`)) line.requisitionItem = text(form, `line${index}RequisitionItem`);
     lines.push(line);
   }
   return lines;

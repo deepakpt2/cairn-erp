@@ -3,10 +3,11 @@
 /**
  * Command bar action — CAIRN.md §19.1, §4.4
  *
- * The single most familiar behaviour we keep: type a code, press Enter, go there.
- * Resolution order is our own codes first, then registry aliases, then a title
- * search — and if nothing matches, land on the registry with the term pre-filled
- * rather than silently doing nothing.
+ * Type a code and press Enter. An exact custom code or table name opens that
+ * term. Anything else uses the registry ranking: tcode, then our code, then
+ * name, then explanation, exact words before a nearest spelling. Enter opens
+ * that screen when the top hit has a route. A nearest hit that ties with
+ * another does not open: the registry shows the list so the choice is visible.
  */
 import { redirect } from 'next/navigation';
 import { resolveTerm } from '@/platform/registry';
@@ -19,10 +20,10 @@ export async function executeCommand(formData: FormData): Promise<void> {
 
   const hit = await resolveTerm(term);
 
-  if (hit?.routePath) {
+  if (hit?.routePath && (hit.matchKind !== 'NEAREST' || hit.matchUnique !== false)) {
     redirect(hit.routePath);
   }
 
-  // Nothing matched — show the search rather than failing silently.
-  redirect(`/registry?q=${encodeURIComponent(term)}&miss=1`);
+  const miss = hit ? '' : '&miss=1';
+  redirect(`/registry?q=${encodeURIComponent(term)}${miss}`);
 }

@@ -36,7 +36,7 @@ export default async function NumberRangesPage({ searchParams }: {
       <span className="code text-ink-faint">{NUMBER_RANGE_ACTIVITY}</span>
       <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold tracking-tight">{t('nr.title')}</h1>
-        <div className="flex gap-2"><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>{editable && <Link href="/config/number-ranges?new=1" className="btn btn-primary">{t('nr.create')}</Link>}</div>
+        <div className="flex gap-2"><Link href="/config/number-range-objects" className="btn btn-default">Number range objects</Link><Link href="/config" className="btn btn-default">{t('nav.workbench')}</Link>{editable && <Link href="/config/number-ranges?new=1" className="btn btn-primary">{t('nr.create')}</Link>}</div>
       </div>
       <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('nr.subtitle')}</p>
     </header>

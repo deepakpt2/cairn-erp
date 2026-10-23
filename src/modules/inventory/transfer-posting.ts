@@ -27,6 +27,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
@@ -34,7 +35,10 @@ import {
   movementType, stockQuantity,
 } from './schema';
 import { DELIVERED_TRANSFER_MOVEMENTS, type ScenarioKind, type TransferScenario } from './transfer-scenarios';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 
 export { DELIVERED_TRANSFER_MOVEMENTS, TRANSFER_SCENARIOS } from './transfer-scenarios';
 
@@ -409,24 +413,16 @@ async function loadPlant(
 async function loadStorageLocation(
   tx: Tx, client: string, plant: string, storageLocationCode: string, role: string,
 ): Promise<typeof storageLocation.$inferSelect> {
-  const [row] = await tx.select().from(storageLocation).where(and(
-    eq(storageLocation.client, client),
-    eq(storageLocation.plant, plant),
-    eq(storageLocation.storageLocation, storageLocationCode),
-  ));
-  if (!row) {
-    throw new TransferPostingError(
-      `Storage location ${storageLocationCode} does not stand in plant ${plant}.`,
-      `Enter a ${role} storage location that belongs to plant ${plant}.`,
-    );
+  try {
+    const resolved = await resolveStorageLocation(tx, {
+      client, plant, typed: storageLocationCode, required: true, applyPlantDefault: false,
+      verb: role === 'issuing' ? 'Issue from' : 'Receive into',
+    });
+    return resolved.row!;
+  } catch (caught) {
+    if (caught instanceof StorageLocationError) throw new TransferPostingError(caught.message, caught.remedy);
+    throw caught;
   }
-  if (!row.isActive) {
-    throw new TransferPostingError(
-      `Storage location ${storageLocationCode} in plant ${plant} is blocked for postings.`,
-      'Choose an active storage location.',
-    );
-  }
-  return row;
 }
 
 async function stockAt(
@@ -493,20 +489,9 @@ async function moveValuation(
   quantityDelta: number, valueDelta: number,
 ): Promise<void> {
   const v = prepared.valuation;
-  const newQty = Number(v.totalStockQuantity) + quantityDelta;
-  const newValue = Number(v.stockValue) + valueDelta;
-  await tx.update(materialValuation).set({
-    totalStockQuantity: String(newQty),
-    stockValue: String(newValue),
-    movingAveragePrice: v.priceControl === 'MOVING_AVERAGE' && newQty > 0
-      ? String(round2((newValue / newQty) * Number(v.priceUnit)) || 0)
-      : v.movingAveragePrice,
-    changedBy, changedAt: new Date(),
-  }).where(and(
-    eq(materialValuation.client, client),
-    eq(materialValuation.materialNumber, v.materialNumber),
-    eq(materialValuation.valuationArea, v.valuationArea),
-  ));
+  await applyValuationDelta(
+    tx, client, changedBy, v.materialNumber, v.valuationArea, quantityDelta, valueDelta,
+  );
 }
 
 async function resolveAccount(
@@ -608,6 +593,7 @@ async function preflight(
   // order, because a lock taken after the read leaves a window in which two postings both see the
   // same stock. The lock is on the material, so a transfer and a reversal of it serialise.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/transfer/${materialNumber}`}, 0))`);
+  await lockStockScope(tx, client, [materialNumber], 'EXCLUSIVE');
   const scenario = await resolveScenario(tx, client, input.movementTypeCode);
 
   const [mat] = await tx.select().from(material).where(and(
@@ -853,6 +839,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
   if (!materialNumber) throw new TransferPostingError('A material is required.', 'Enter the material being transferred.');
 
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprintOf(input));
     if (replay) return replay;
 
@@ -1000,10 +987,18 @@ export interface ReverseTransferInput {
 export async function reverseTransfer(input: ReverseTransferInput): Promise<TransferDocumentView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
+  const fingerprint = postingFingerprint([
+    'TR-REV', input.materialDocumentNumber.trim(), input.postingDate, input.documentDate,
+  ]);
 
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new TransferPostingError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
 
@@ -1012,12 +1007,18 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
       eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
     ));
     if (!original) throw new TransferPostingError(`Material document ${input.materialDocumentNumber} does not exist.`);
-    if (original.reversalOf) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reverse/${input.materialDocumentNumber}`}, 0))`);
+    const [locked] = await tx.select().from(materialDocument).where(and(
+      eq(materialDocument.client, input.client),
+      eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
+    ));
+    if (!locked) throw new TransferPostingError(`Material document ${input.materialDocumentNumber} does not exist.`);
+    if (locked.reversalOf) {
       throw new TransferPostingError('A reversal document cannot itself be reversed.', 'Reverse the original document instead.');
     }
-    if (original.status === 'REVERSED') {
+    if (locked.status === 'REVERSED') {
       throw new TransferPostingError(
-        `Material document ${input.materialDocumentNumber} has already been reversed by ${original.reversedBy}.`,
+        `Material document ${input.materialDocumentNumber} has already been reversed by ${locked.reversedBy}.`,
       );
     }
     const lines = await tx.select().from(materialDocumentLine).where(and(
@@ -1026,12 +1027,13 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
     )).orderBy(materialDocumentLine.lineNumber);
     const issue = lines.find((l) => l.lineDirection === 'ISSUE');
     const receipt = lines.find((l) => l.lineDirection === 'RECEIPT');
-    if (!issue || !receipt) {
+    if (!issue?.materialNumber || !receipt) {
       throw new TransferPostingError(
         `Material document ${input.materialDocumentNumber} is not a transfer.`,
         'Only a transfer document carries an issuing and a receiving line; reverse a goods receipt from its own screen.',
       );
     }
+    await lockStockScope(tx, input.client, [issue.materialNumber], 'EXCLUSIVE');
     const [movement] = await tx.select().from(movementType).where(and(
       eq(movementType.client, input.client), eq(movementType.movementType, issue.movementType),
     ));
@@ -1092,7 +1094,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: `Reversal of ${input.materialDocumentNumber}`, status: 'POSTED',
       journalDocumentNumber: journalNumber, reversalOf: input.materialDocumentNumber,
-      requestKey: input.requestKey, createdBy: input.changedBy,
+      requestKey: input.requestKey, requestFingerprint: fingerprint, createdBy: input.changedBy,
     });
 
     // The sides swap: the reversal issues from where the transfer arrived.

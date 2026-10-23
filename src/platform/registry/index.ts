@@ -4,10 +4,24 @@
  * Powers the command bar, alias search and the coverage view. Reference
  * identifiers are accepted as input and reported as a lookup courtesy, never as
  * our own naming (§19.5 AI-05).
+ *
+ * Search ranking lives in `suggest.ts`. An exact custom code or table name is
+ * never second-guessed. Every other query uses that ranking, and the command
+ * bar opens the top hit that has a route.
  */
-import { and, eq, ilike, or, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { termAlias, termRegistry } from '../tables/registry';
+import {
+  equallyNear,
+  rankRegistry,
+  type RankedSuggestion,
+  type RegistrySuggestion,
+  type SuggestionField,
+  type SuggestionKind,
+} from './suggest';
+
+export type { RegistrySuggestion, SuggestionField, SuggestionKind };
 
 export interface RegistryHit {
   id: string;
@@ -20,115 +34,66 @@ export interface RegistryHit {
   coverageTier: string;
   routePath: string | null;
   conformanceTier: string | null;
-  matchedOn: 'OUR_CODE' | 'ALIAS' | 'TITLE' | 'TABLE';
+  matchedOn: 'OUR_CODE' | 'ALIAS' | 'TITLE' | 'TABLE' | 'DESCRIPTION';
   matchedTerm?: string;
   aliases?: string[];
+  matchField?: SuggestionField;
+  matchKind?: SuggestionKind;
+  matchedText?: string;
+  /** False when several nearest hits are equally close. Enter must not pick one. */
+  matchUnique?: boolean;
+}
+
+interface CatalogueTerm extends RegistryHit {
+  isSearchable: boolean;
+  aliases: string[];
 }
 
 /**
  * Resolve whatever the user typed in the command bar.
  *
- * Order matters: our own codes win, then aliases, then a title search. If someone
- * types our code we never second-guess them.
+ * An exact custom code or table name wins. Otherwise the top ranked suggestion
+ * wins, including a nearest spelling when nothing matches exactly. The caller
+ * opens the route only when this hit has one.
  */
 export async function resolveTerm(term: string): Promise<RegistryHit | null> {
   const input = term.trim();
   if (input === '') return null;
-
-  // 1 · Our own transaction code, exact.
-  const byCode = await db()
-    .select()
-    .from(termRegistry)
-    .where(eq(termRegistry.ourCode, input))
-    .limit(1);
-  if (byCode.length > 0) {
-    return toHit(byCode[0], 'OUR_CODE');
-  }
-
-  // 2 · Our own table name, exact.
-  const byTable = await db()
-    .select()
-    .from(termRegistry)
-    .where(eq(termRegistry.ourTable, input))
-    .limit(1);
-  if (byTable.length > 0) {
-    return toHit(byTable[0], 'TABLE');
-  }
-
-  // 3 · An external alias, exact and case-insensitive.
-  const aliasRows = await db()
-    .select({ term: termRegistry, alias: termAlias.alias })
-    .from(termAlias)
-    .innerJoin(termRegistry, eq(termRegistry.id, termAlias.termId))
-    .where(ilike(termAlias.alias, input))
-    .limit(1);
-  if (aliasRows.length > 0) {
-    const hit = toHit(aliasRows[0].term, 'ALIAS');
-    hit.matchedTerm = aliasRows[0].alias;
-    return hit;
-  }
-
-  // 4 · A partial title match, so an approximate search still lands somewhere.
-  const byTitle = await db()
-    .select()
-    .from(termRegistry)
-    .where(
-      and(
-        eq(termRegistry.isSearchable, true),
-        or(
-          ilike(termRegistry.title, `%${input}%`),
-          ilike(termRegistry.description, `%${input}%`),
-          sql`${termRegistry.ourCode} ilike ${'%' + input + '%'}`,
-        ),
-      ),
-    )
-    .limit(1);
-  if (byTitle.length > 0) {
-    return toHit(byTitle[0], 'TITLE');
-  }
-
-  return null;
+  const ranked = rankRegistry(await loadCatalogue(), input, 2);
+  if (ranked.length === 0) return null;
+  const hit = toRankedHit(ranked[0]);
+  hit.matchUnique = ranked.length === 1 || ranked[0].kind === 'EXACT' || !equallyNear(ranked[0], ranked[1], input);
+  return hit;
 }
 
-/** Full-text-ish search for the registry screen. */
+/** Ranked search for the registry screen. An empty query lists the catalogue. */
 export async function searchRegistry(query: string, limit = 50): Promise<RegistryHit[]> {
+  const catalogue = await loadCatalogue();
   const input = query.trim();
-
-  const rows =
-    input === ''
-      ? await db().select().from(termRegistry).orderBy(termRegistry.module, termRegistry.title).limit(limit)
-      : await db()
-          .select()
-          .from(termRegistry)
-          .where(
-            or(
-              ilike(termRegistry.title, `%${input}%`),
-              ilike(termRegistry.ourCode, `%${input}%`),
-              ilike(termRegistry.description, `%${input}%`),
-            ),
-          )
-          .limit(limit);
-
-  // If a text search matched nothing, try treating the term as an alias.
-  if (rows.length === 0 && input !== '') {
-    const aliasRows = await db()
-      .select({ term: termRegistry, alias: termAlias.alias })
-      .from(termAlias)
-      .innerJoin(termRegistry, eq(termRegistry.id, termAlias.termId))
-      .where(ilike(termAlias.alias, `%${input}%`))
-      .limit(limit);
-    if (aliasRows.length > 0) {
-      return Promise.all(
-        aliasRows.map(async (row) => {
-          const hit = toHit(row.term, 'ALIAS');
-          hit.matchedTerm = row.alias;
-          return hit;
-        }),
-      );
-    }
+  if (input === '') {
+    return catalogue
+      .slice()
+      .sort((left, right) => left.module.localeCompare(right.module) || left.title.localeCompare(right.title))
+      .slice(0, limit)
+      .map((row) => toHit(row, 'OUR_CODE', row.aliases));
   }
+  return rankRegistry(catalogue, input, limit).map(toRankedHit);
+}
 
-  return rows.map((row) => toHit(row, 'TITLE'));
+/** Short list for the registry search box. Same order as `searchRegistry`. */
+export async function suggestRegistry(query: string, limit = 8): Promise<RegistrySuggestion[]> {
+  const input = query.trim();
+  if (input === '') return [];
+  return rankRegistry(await loadCatalogue(), input, limit).map((ranked) => ({
+    id: ranked.item.id,
+    ourCode: ranked.item.ourCode,
+    ourTable: ranked.item.ourTable,
+    title: ranked.item.title,
+    routePath: ranked.item.routePath,
+    field: ranked.field,
+    kind: ranked.kind,
+    matchedText: ranked.matchedText,
+  }));
 }
 
 /** Aliases for a set of registry entries, for the "also known as" display. */
@@ -147,9 +112,60 @@ export async function aliasesFor(termIds: string[]): Promise<Record<string, stri
   return result;
 }
 
+let catalogueCache: { at: number; rows: CatalogueTerm[] } | null = null;
+
+async function loadCatalogue(): Promise<CatalogueTerm[]> {
+  const now = Date.now();
+  if (catalogueCache && now - catalogueCache.at < 15_000) return catalogueCache.rows;
+  const rows = await readCatalogue();
+  catalogueCache = { at: now, rows };
+  return rows;
+}
+
+async function readCatalogue(): Promise<CatalogueTerm[]> {
+  const rows = await db().select().from(termRegistry);
+  const aliases = await db().select({ termId: termAlias.termId, alias: termAlias.alias }).from(termAlias);
+  const byTerm = new Map<string, string[]>();
+  for (const alias of aliases) {
+    const list = byTerm.get(alias.termId);
+    if (list) list.push(alias.alias);
+    else byTerm.set(alias.termId, [alias.alias]);
+  }
+  for (const list of byTerm.values()) {
+    list.sort((left, right) => left.length - right.length || left.localeCompare(right));
+  }
+  return rows.map((row) => ({
+    id: row.id,
+    ourCode: row.ourCode,
+    ourTable: row.ourTable,
+    title: row.title,
+    termType: row.termType,
+    module: row.module,
+    description: row.description,
+    coverageTier: row.coverageTier,
+    routePath: row.routePath,
+    conformanceTier: row.conformanceTier,
+    matchedOn: 'OUR_CODE' as const,
+    isSearchable: row.isSearchable,
+    aliases: byTerm.get(row.id) ?? [],
+  }));
+}
+
 function toHit(
-  row: typeof termRegistry.$inferSelect,
+  row: {
+    id: string;
+    ourCode: string | null;
+    ourTable: string | null;
+    title: string;
+    termType: string;
+    module: string;
+    description: string | null;
+    coverageTier: string;
+    routePath: string | null;
+    conformanceTier: string | null;
+  },
   matchedOn: RegistryHit['matchedOn'],
+  aliases?: string[],
 ): RegistryHit {
   return {
     id: row.id,
@@ -163,7 +179,29 @@ function toHit(
     routePath: row.routePath,
     conformanceTier: row.conformanceTier,
     matchedOn,
+    aliases,
   };
+}
+
+function toRankedHit(ranked: RankedSuggestion<CatalogueTerm>): RegistryHit {
+  const matchedOn =
+    ranked.field === 'ALIAS'
+      ? 'ALIAS'
+      : ranked.field === 'TITLE'
+        ? 'TITLE'
+        : ranked.field === 'DESCRIPTION'
+          ? 'DESCRIPTION'
+          : ranked.matchedText === ranked.item.ourTable
+            ? 'TABLE'
+            : ranked.item.ourCode
+              ? 'OUR_CODE'
+              : 'TABLE';
+  const hit = toHit(ranked.item, matchedOn, ranked.item.aliases);
+  hit.matchField = ranked.field;
+  hit.matchKind = ranked.kind;
+  hit.matchedText = ranked.matchedText;
+  if (ranked.field === 'ALIAS') hit.matchedTerm = ranked.matchedText;
+  return hit;
 }
 
 /** Human label for a coverage tier (§4.4). */

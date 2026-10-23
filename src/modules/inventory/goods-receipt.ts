@@ -21,8 +21,15 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
+import {
+  proposeStorageLocation, resolveStorageLocation, storageLocationRequired, StorageLocationError,
+} from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
+  REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
@@ -138,6 +145,8 @@ export interface ReceiptItemView {
   shortText: string;
   plant: string;
   storageLocation: string | null;
+  /** The location a blank receipt line will use: the order item, else the plant default. */
+  proposedStorageLocation: string | null;
   unit: string;
   ordered: number;
   received: number;
@@ -180,7 +189,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
       currency: header.currency,
       releaseRequired: Boolean(release),
       released: !release || release.status === 'RELEASED',
-      items: items.map((item) => {
+      items: await Promise.all(items.map(async (item) => {
         const got = received.get(item.itemNumber) ?? 0;
         const ordered = Number(item.quantity);
         let refusal: string | null = null;
@@ -193,6 +202,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           shortText: item.shortText,
           plant: item.plant,
           storageLocation: item.storageLocation,
+          proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
           unit: item.unit,
           ordered,
           received: got,
@@ -202,7 +212,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           eligible: !refusal,
           refusal,
         };
-      }),
+      })),
     };
   });
 }
@@ -301,9 +311,20 @@ async function resolveAccount(
 }
 
 export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<MaterialDocumentView> {
+  const fingerprint = postingFingerprint([
+    'GR', input.orderNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
+    ...[...input.lines]
+      .map((line) => `${line.itemNumber}:${quantityToken(line.quantity)}:${line.storageLocation ?? ''}`)
+      .sort(),
+  ]);
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new GoodsReceiptError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveMovement(tx, input.client, 'RECEIPT', 'PURCHASE_ORDER');
@@ -335,7 +356,11 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       );
     }
 
+    const materials = [...new Set(view.items.map((item) => item.materialNumber).filter((m): m is string => Boolean(m)))].sort();
+    await lockStockScope(tx, input.client, materials, 'EXCLUSIVE');
+
     const itemsByNumber = new Map(view.items.map((i) => [i.itemNumber, i]));
+    const claimedReceipt = new Map<number, number>();
     const journalLines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; material?: string; plant?: string }> = [];
     const prepared: Array<{
       item: ReceiptItemView; quantity: number; storageLocation: string;
@@ -367,7 +392,8 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         throw new GoodsReceiptError(`Material ${item.materialNumber} is flagged for deletion in plant ${item.plant}.`, 'Cancel the plant deletion flag, then post again.');
       }
       const toleranceMax = item.ordered * (1 + Number(ext.overdeliveryTolerance) / 100);
-      if (item.received + line.quantity > toleranceMax + 1e-9) {
+      const alreadyClaimed = claimedReceipt.get(line.itemNumber) ?? 0;
+      if (item.received + alreadyClaimed + line.quantity > toleranceMax + 1e-9) {
         throw new GoodsReceiptError(
           `Item ${line.itemNumber}: received ${item.received} plus ${line.quantity} exceeds the ordered ${item.ordered} beyond the overdelivery tolerance of ${ext.overdeliveryTolerance}%.`,
           'Reduce the receipt quantity to the remaining open quantity.',
@@ -400,10 +426,26 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         ? round2((line.quantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
         : poValue;
       // SCR-142: an open count with a posting block refuses the receipt for this material here.
+      const required = await storageLocationRequired(tx, input.client, item.materialNumber, item.plant);
+      let receivedAt;
+      try {
+        receivedAt = await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: item.plant,
+          typed: line.storageLocation,
+          documentDefault: item.storageLocation,
+          applyPlantDefault: true,
+          required,
+          verb: 'Receive into',
+        });
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) throw new GoodsReceiptError(caught.message, caught.remedy);
+        throw caught;
+      }
       try {
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber: item.materialNumber, plant: item.plant,
-          storageLocation: line.storageLocation ?? item.storageLocation ?? null,
+          storageLocation: receivedAt.storageLocation || null,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) {
@@ -414,7 +456,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
 
       prepared.push({
         item, quantity: line.quantity,
-        storageLocation: line.storageLocation ?? item.storageLocation ?? '',
+        storageLocation: receivedAt.storageLocation,
         value: stockValue, poValue, valuation,
       });
     }
@@ -467,6 +509,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      requestFingerprint: fingerprint,
       createdBy: input.changedBy,
     });
 
@@ -493,20 +536,9 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         target: [stockQuantity.client, stockQuantity.materialNumber, stockQuantity.plant, stockQuantity.storageLocation, stockQuantity.stockType],
         set: { quantity: sql`${stockQuantity.quantity} + ${p.quantity}`, changedBy: input.changedBy, changedAt: new Date() },
       });
-      const newQty = Number(p.valuation.totalStockQuantity) + p.quantity;
-      const newValue = Number(p.valuation.stockValue) + p.value;
-      await tx.update(materialValuation).set({
-        totalStockQuantity: String(newQty),
-        stockValue: String(newValue),
-        movingAveragePrice: p.valuation.priceControl === 'MOVING_AVERAGE' && newQty > 0
-          ? String(round2((newValue / newQty) * Number(p.valuation.priceUnit)) || 0)
-          : p.valuation.movingAveragePrice,
-        changedBy: input.changedBy, changedAt: new Date(),
-      }).where(and(
-        eq(materialValuation.client, input.client),
-        eq(materialValuation.materialNumber, p.item.materialNumber!),
-        eq(materialValuation.valuationArea, p.item.plant),
-      ));
+      await applyValuationDelta(
+        tx, input.client, input.changedBy, p.item.materialNumber!, p.item.plant, p.quantity, p.value,
+      );
     }
 
     await linkDocuments(tx, {
@@ -558,7 +590,7 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
     currency: header.currency,
     releaseRequired: Boolean(release),
     released: !release || release.status === 'RELEASED',
-    items: items.map((item) => {
+    items: await Promise.all(items.map(async (item) => {
       const got = received.get(item.itemNumber) ?? 0;
       const ordered = Number(item.quantity);
       let refusal: string | null = null;
@@ -571,12 +603,13 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
         shortText: item.shortText,
         plant: item.plant,
         storageLocation: item.storageLocation,
+        proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
         unit: item.unit,
         ordered, received: got, remaining: Math.max(0, ordered - got),
         netPrice: item.netPrice, priceUnit: item.priceUnit,
         eligible: !refusal, refusal,
       };
-    }),
+    })),
   };
 }
 
@@ -609,9 +642,17 @@ export interface ReverseGoodsReceiptInput {
 }
 
 export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Promise<MaterialDocumentView> {
+  const fingerprint = postingFingerprint([
+    'GR-REV', input.materialDocumentNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
+  ]);
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new GoodsReceiptError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
     const movement = await resolveMovement(tx, input.client, 'REVERSAL', 'MATERIAL_DOCUMENT');
@@ -621,10 +662,16 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
       eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
     ));
     if (!original) throw new GoodsReceiptError(`Material document ${input.materialDocumentNumber} does not exist.`);
-    if (original.status === 'REVERSED') {
-      throw new GoodsReceiptError(`Material document ${input.materialDocumentNumber} has already been reversed by ${original.reversedBy}.`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reverse/${input.materialDocumentNumber}`}, 0))`);
+    const [locked] = await tx.select().from(materialDocument).where(and(
+      eq(materialDocument.client, input.client),
+      eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
+    ));
+    if (!locked) throw new GoodsReceiptError(`Material document ${input.materialDocumentNumber} does not exist.`);
+    if (locked.status === 'REVERSED') {
+      throw new GoodsReceiptError(`Material document ${input.materialDocumentNumber} has already been reversed by ${locked.reversedBy}.`);
     }
-    if (original.reversalOf) {
+    if (locked.reversalOf) {
       throw new GoodsReceiptError('A reversal document cannot itself be reversed.', 'Reverse the original document instead.');
     }
     const originalLines = await tx.select().from(materialDocumentLine).where(and(
@@ -632,6 +679,11 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
       eq(materialDocumentLine.materialDocumentNumber, input.materialDocumentNumber),
     )).orderBy(materialDocumentLine.lineNumber);
     if (originalLines.length === 0) throw new GoodsReceiptError('The document carries no lines.');
+    await lockStockScope(
+      tx, input.client,
+      [...new Set(originalLines.map((line) => line.materialNumber).filter((m): m is string => Boolean(m)))].sort(),
+      'EXCLUSIVE',
+    );
 
     // SCR-143: reversing a receipt moves stock back out, so it answers to the count block too.
     for (const line of originalLines) {
@@ -711,7 +763,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: `Reversal of ${input.materialDocumentNumber}`, status: 'POSTED',
       journalDocumentNumber: journalNumber, reversalOf: input.materialDocumentNumber,
-      requestKey: input.requestKey, createdBy: input.changedBy,
+      requestKey: input.requestKey, requestFingerprint: fingerprint, createdBy: input.changedBy,
     });
     for (const line of originalLines) {
       await tx.insert(materialDocumentLine).values({
@@ -737,26 +789,11 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
         eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
         eq(stockQuantity.stockType, line.stockType),
       ));
-      const [valuation] = await tx.select().from(materialValuation).where(and(
-        eq(materialValuation.client, input.client),
-        eq(materialValuation.materialNumber, line.materialNumber),
-        eq(materialValuation.valuationArea, line.plant),
-      ));
-      if (valuation) {
-        const newQty = Number(valuation.totalStockQuantity) - Number(line.baseQuantity);
-        const newValue = Number(valuation.stockValue) - Number(line.value);
-        await tx.update(materialValuation).set({
-          totalStockQuantity: String(newQty),
-          stockValue: String(newValue),
-          movingAveragePrice: valuation.priceControl === 'MOVING_AVERAGE' && newQty > 0
-            ? String(round2((newValue / newQty) * Number(valuation.priceUnit)) || 0)
-            : valuation.movingAveragePrice,
-          changedBy: input.changedBy, changedAt: new Date(),
-        }).where(and(
-          eq(materialValuation.client, input.client),
-          eq(materialValuation.materialNumber, line.materialNumber),
-          eq(materialValuation.valuationArea, line.plant),
-        ));
+      if (line.materialNumber) {
+        await applyValuationDelta(
+          tx, input.client, input.changedBy, line.materialNumber, line.plant,
+          -Number(line.baseQuantity), -Number(line.value),
+        );
       }
     }
     await tx.update(materialDocument).set({

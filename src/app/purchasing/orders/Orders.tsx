@@ -44,6 +44,8 @@ interface ItemRow {
   storageLocation: string;
   requisitionNumber: string;
   requisitionItem: string;
+  quotationNumber: string;
+  quotationItem: string;
   assignment: 'STOCK' | 'COST_CENTER';
   markedForDeletion: boolean;
   scheduleLines: ScheduleRow[];
@@ -62,6 +64,8 @@ const EMPTY_ITEM: ItemRow = {
   storageLocation: '',
   requisitionNumber: '',
   requisitionItem: '',
+  quotationNumber: '',
+  quotationItem: '',
   assignment: 'STOCK',
   markedForDeletion: false,
   scheduleLines: [{ deliveryDate: '', quantity: '' }],
@@ -82,6 +86,8 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     storageLocation: item.storageLocation ?? '',
     requisitionNumber: item.requisitionNumber ?? '',
     requisitionItem: item.requisitionItem ? String(item.requisitionItem) : '',
+    quotationNumber: item.quotationNumber ?? '',
+    quotationItem: item.quotationItem ? String(item.quotationItem) : '',
     assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
     markedForDeletion: item.markedForDeletion,
     scheduleLines: item.scheduleLines.map((s) => ({ deliveryDate: s.deliveryDate, quantity: s.quantity })),
@@ -95,7 +101,7 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
 
 const INITIAL: OrderActionState = { ok: false };
 
-export default function Orders({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease }: {
+export default function Orders({ documents, choices, selected, canCreate, viewOnly = false, lockMessage = null, releases, selectedRelease, canRelease, draft = null }: {
   documents: OrderDocument[];
   choices: OrderChoices;
   selected: OrderDocument | null;
@@ -105,6 +111,31 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
   releases: Record<string, DocumentReleaseState>;
   selectedRelease: DocumentReleaseState | null;
   canRelease: boolean;
+  draft?: {
+    supplierNumber: string;
+    purchasingOrg: string;
+    purchasingGroup: string;
+    companyCode: string;
+    currency: string;
+    warning: string | null;
+    items: Array<{
+      materialNumber: string;
+      shortText: string;
+      quantity: number;
+      unit: string;
+      netPrice: number | null;
+      priceUnit: number;
+      plant: string;
+      storageLocation: string;
+      requisitionNumber: string;
+      requisitionItem: number | null;
+      quotationNumber: string;
+      quotationItem: number | null;
+      deliveryDate: string;
+      accountAssignmentCategory?: 'COST_CENTER' | null;
+      assignments?: Array<{ glAccount: string; costCenter: string; percentage: string }>;
+    }>;
+  } | null;
 }) {
   const [state, formAction, pending] = useActionState(saveOrderAction, INITIAL);
   const [releaseState, releaseAction] = useActionState(releaseOrderAction, INITIAL);
@@ -112,14 +143,41 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
   const releaseMessage = cancelState.message ? cancelState : releaseState;
   const [header, setHeader] = useState({
     documentType: selected?.documentType ?? 'STANDARD',
-    supplierNumber: selected?.supplierNumber ?? '',
-    purchasingOrg: selected?.purchasingOrg ?? '',
-    purchasingGroup: selected?.purchasingGroup ?? '',
-    companyCode: selected?.companyCode ?? '',
-    currency: selected?.currency ?? '',
+    supplierNumber: selected?.supplierNumber ?? draft?.supplierNumber ?? '',
+    purchasingOrg: selected?.purchasingOrg ?? draft?.purchasingOrg ?? '',
+    purchasingGroup: selected?.purchasingGroup ?? draft?.purchasingGroup ?? '',
+    companyCode: selected?.companyCode ?? draft?.companyCode ?? '',
+    currency: selected?.currency ?? draft?.currency ?? '',
   });
   const [items, setItems] = useState<ItemRow[]>(
-    selected ? selected.items.map(itemFromDocument) : [{ ...EMPTY_ITEM }],
+    selected
+      ? selected.items.map(itemFromDocument)
+      : draft && draft.items.length > 0
+        ? draft.items.map((item) => ({
+            ...EMPTY_ITEM,
+            material: item.materialNumber,
+            text: item.shortText,
+            quantity: String(item.quantity),
+            unit: item.unit,
+            netPrice: item.netPrice == null ? '' : String(item.netPrice),
+            priceUnit: String(item.priceUnit),
+            plant: item.plant,
+            storageLocation: item.storageLocation,
+            requisitionNumber: item.requisitionNumber,
+            requisitionItem: item.requisitionItem ? String(item.requisitionItem) : '',
+            quotationNumber: item.quotationNumber,
+            quotationItem: item.quotationItem ? String(item.quotationItem) : '',
+            assignment: item.accountAssignmentCategory === 'COST_CENTER' ? 'COST_CENTER' : 'STOCK',
+            assignments: item.assignments && item.assignments.length > 0
+              ? item.assignments.map((row) => ({
+                  glAccount: row.glAccount,
+                  costCenter: row.costCenter,
+                  percentage: row.percentage,
+                }))
+              : [{ glAccount: '', costCenter: '', percentage: '100' }],
+            scheduleLines: [{ deliveryDate: item.deliveryDate, quantity: String(item.quantity) }],
+          }))
+        : [{ ...EMPTY_ITEM }],
   );
 
   function patch(index: number, next: Partial<ItemRow>) {
@@ -144,6 +202,8 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
         markedForDeletion: item.markedForDeletion,
         requisitionNumber: item.requisitionNumber,
         requisitionItem: item.requisitionItem ? Number(item.requisitionItem) : undefined,
+        quotationNumber: item.quotationNumber,
+        quotationItem: item.quotationItem ? Number(item.quotationItem) : undefined,
         scheduleLines: item.scheduleLines.map((line) => ({
           deliveryDate: line.deliveryDate, quantity: Number(line.quantity),
         })),
@@ -157,7 +217,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
     });
   }
 
-  const itemFields: Array<{ key: 'material' | 'text' | 'quantity' | 'unit' | 'netPrice' | 'priceUnit' | 'taxCode' | 'requisitionNumber' | 'requisitionItem'; label: string; width: string }> = [
+  const itemFields: Array<{ key: 'material' | 'text' | 'quantity' | 'unit' | 'netPrice' | 'priceUnit' | 'taxCode' | 'requisitionNumber' | 'requisitionItem' | 'quotationNumber' | 'quotationItem'; label: string; width: string }> = [
     { key: 'material', label: 'Material', width: 'w-32' },
     { key: 'text', label: 'Short text', width: 'w-44' },
     { key: 'quantity', label: 'Order quantity', width: 'w-28' },
@@ -167,6 +227,8 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
     { key: 'taxCode', label: 'Tax code', width: 'w-20' },
     { key: 'requisitionNumber', label: 'Requisition', width: 'w-32' },
     { key: 'requisitionItem', label: 'Req. item', width: 'w-20' },
+    { key: 'quotationNumber', label: 'Quotation', width: 'w-32' },
+    { key: 'quotationItem', label: 'Quot. item', width: 'w-20' },
   ];
 
   return (
@@ -268,6 +330,9 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
         <h2 id="po-create" className="text-sm font-semibold">
           {selected ? `Purchase order ${selected.orderNumber}` : 'New purchase order'}
         </h2>
+        {draft?.warning && (
+          <p role="status" className="mt-2 text-sm text-amber-800">{draft.warning}</p>
+        )}
 
         {lockMessage && (
           <p role="status" className="mt-2 border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{lockMessage}</p>

@@ -9,6 +9,7 @@ import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, postJournalEntry } from '../../platform/posting';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { lockStockScope } from './physical-inventory';
+import { lockRequestKey } from './balance-update';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { materialPeriodAllows } from './material-period-control';
 import { postingValuationRefusal } from './valuation-class-definition';
@@ -16,6 +17,7 @@ import { recordOutputsForPostedDocument } from './material-document-output';
 import { reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
 import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import {
   material, materialDocument, materialDocumentLine, materialValuation,
   movementType, stockQuantity,
@@ -781,6 +783,7 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
   assertShape(input, true);
   const fingerprint = fingerprintOf(input);
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprint);
     if (replay) return replay;
 
@@ -795,6 +798,21 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
     await lockStockScope(tx, input.client, items.map((item) => item.material_number), 'EXCLUSIVE');
     const { companyCode, judged } = await judgeSelection(tx, input.client, input, header, items);
 
+    if (header.storage_location) {
+      try {
+        await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: header.plant,
+          typed: header.storage_location,
+          required: true,
+          applyPlantDefault: false,
+          verb: 'Post into',
+        });
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) throw new PhysicalInventoryPostingError(caught.message, caught.remedy);
+        throw caught;
+      }
+    }
     for (const line of judged) {
       const [location] = await tx.select().from(storageLocation).where(and(
         eq(storageLocation.client, input.client),

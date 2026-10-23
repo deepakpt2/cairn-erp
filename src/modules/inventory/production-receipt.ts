@@ -22,12 +22,17 @@ import { recordChange } from '../../platform/change';
 import { allocateNumber } from '../../platform/numbering';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
-import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
+import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
 import { postingValuationRefusal } from './valuation-class-definition';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
+  REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
+import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
@@ -234,13 +239,20 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     );
   }
   let quantity = input.lines.reduce((sum, l) => sum + (l.quantity > 0 ? l.quantity : 0), 0);
+  const fingerprint = postingFingerprint([
+    'PROD-GR', orderNumber, input.postingDate, input.documentDate, input.headerText ?? '',
+    ...input.lines.map((line) => `${quantityToken(line.quantity)}:${line.entryUnit ?? ''}:${line.storageLocation ?? ''}`),
+  ]);
 
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const [replay] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
       eq(materialDocument.requestKey, input.requestKey),
     ));
     if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new ProductionReceiptError(mismatch, REQUEST_MISMATCH_REMEDY);
       const [order] = await tx.select().from(productionOrder).where(and(
         eq(productionOrder.client, input.client), eq(productionOrder.orderNumber, orderNumber),
       ));
@@ -315,18 +327,6 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     }
     const companyCode = plantRow.companyCode;
 
-    // SCR-142: an open count with a posting block refuses the receipt for this material here.
-    try {
-      await assertInventoryCountOpen(tx, input.client, {
-        materialNumber, plant, storageLocation: input.lines[0]?.storageLocation ?? null,
-      });
-    } catch (caught) {
-      if (caught instanceof PhysicalInventoryError) {
-        throw new ProductionReceiptError(caught.message, caught.remedy);
-      }
-      throw caught;
-    }
-
     // The order states how much it will make; a receipt beyond that is a receipt with no plan.
     const orderQuantity = Number(order.orderQuantity);
     const received = await receivedFor(tx, input.client, orderNumber);
@@ -338,26 +338,33 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       );
     }
 
-    // One receiving location per document, judged once: the plant is the order's own.
-    const location = (input.lines[0]?.storageLocation ?? '').trim();
-    if (location) {
-      const [row] = await tx.select().from(storageLocation).where(and(
-        eq(storageLocation.client, input.client),
-        eq(storageLocation.plant, plant),
-        eq(storageLocation.storageLocation, location),
-      ));
-      if (!row) {
-        throw new ProductionReceiptError(
-          `Storage location ${location} does not stand in plant ${plant}.`,
-          `Receive into a storage location of plant ${plant}.`,
-        );
+    // One receiving location per document. A blank line takes the plant default when the material is stocked.
+    const required = await storageLocationRequired(tx, input.client, materialNumber, plant);
+    let receivedAt;
+    try {
+      receivedAt = await resolveStorageLocation(tx, {
+        client: input.client,
+        plant,
+        typed: input.lines[0]?.storageLocation,
+        applyPlantDefault: true,
+        required,
+        verb: 'Receive into',
+      });
+    } catch (caught) {
+      if (caught instanceof StorageLocationError) throw new ProductionReceiptError(caught.message, caught.remedy);
+      throw caught;
+    }
+    const location = receivedAt.storageLocation;
+    await lockStockScope(tx, input.client, [materialNumber], 'EXCLUSIVE');
+    try {
+      await assertInventoryCountOpen(tx, input.client, {
+        materialNumber, plant, storageLocation: location || null,
+      });
+    } catch (caught) {
+      if (caught instanceof PhysicalInventoryError) {
+        throw new ProductionReceiptError(caught.message, caught.remedy);
       }
-      if (!row.isActive) {
-        throw new ProductionReceiptError(
-          `Storage location ${location} in plant ${plant} is blocked.`,
-          'Receive into an active storage location.',
-        );
-      }
+      throw caught;
     }
 
     const [valuation] = await tx.select().from(materialValuation).where(and(
@@ -444,6 +451,7 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      requestFingerprint: fingerprint,
       createdBy: input.changedBy,
     });
 
@@ -470,20 +478,9 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
                     changed_by = ${input.changedBy}, changed_at = now()
     `);
 
-    const newQty = Number(valuation.totalStockQuantity) + quantity;
-    const newValue = Number(valuation.stockValue) + value;
-    await tx.update(materialValuation).set({
-      totalStockQuantity: String(newQty),
-      stockValue: String(newValue),
-      movingAveragePrice: valuation.priceControl === 'MOVING_AVERAGE' && newQty > 0
-        ? String(round2((newValue / newQty) * Number(valuation.priceUnit)) || 0)
-        : valuation.movingAveragePrice,
-      changedBy: input.changedBy, changedAt: new Date(),
-    }).where(and(
-      eq(materialValuation.client, input.client),
-      eq(materialValuation.materialNumber, materialNumber),
-      eq(materialValuation.valuationArea, plant),
-    ));
+    await applyValuationDelta(
+      tx, input.client, input.changedBy, materialNumber, plant, quantity, value,
+    );
 
     await recordChange(tx, {
       client: input.client,

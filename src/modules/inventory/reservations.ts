@@ -17,8 +17,9 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { getCompanyCode } from '../../platform/periods';
-import { costCenter, plant as plantTable, storageLocation } from '../foundation/schema';
+import { costCenter, plant as plantTable } from '../foundation/schema';
 import { material, materialPlant, movementType, reservationHeader, reservationItem } from './schema';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 
 export const RESERVATION_CREATE_CAPABILITY = 'INV.RESERVATION.CREATE';
 const RESERVATION_CLASS = 'reservation';
@@ -272,25 +273,24 @@ export async function createReservation(input: CreateReservationInput): Promise<
         );
       }
       let location: string | null = null;
-      if (item.storageLocation) {
-        const [row] = await tx.select().from(storageLocation).where(and(
-          eq(storageLocation.client, input.client),
-          eq(storageLocation.plant, item.plant),
-          eq(storageLocation.storageLocation, item.storageLocation),
-        ));
-        if (!row) {
+      try {
+        const resolved = await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: item.plant,
+          typed: item.storageLocation,
+          required: false,
+          applyPlantDefault: false,
+          verb: 'Reserve in',
+        });
+        location = resolved.storageLocation || null;
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) {
           throw new ReservationError(
-            `Storage location ${item.storageLocation} does not stand in plant ${item.plant}.`,
+            caught.message,
             `Enter a storage location that belongs to plant ${item.plant}, or leave it empty.`,
           );
         }
-        if (!row.isActive) {
-          throw new ReservationError(
-            `Storage location ${item.storageLocation} in plant ${item.plant} is blocked.`,
-            'Choose an active storage location, or leave it empty.',
-          );
-        }
-        location = row.storageLocation;
+        throw caught;
       }
       if (!mat.baseUnit) {
         throw new ReservationError(

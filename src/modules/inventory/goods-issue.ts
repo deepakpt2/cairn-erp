@@ -25,16 +25,21 @@ import { recordChange } from '../../platform/change';
 import { allocateNumber } from '../../platform/numbering';
 import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
-import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
+import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
+  REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
-  movementType, productionOrder, productionOrderComponent, stockQuantity,
+  movementType, productionOrder, productionOrderComponent, reservationItem, stockQuantity,
 } from './schema';
 
 export const GOODS_ISSUE_CAPABILITY = 'INV.GI.POST';
@@ -320,13 +325,32 @@ export async function postGoodsIssue(
     throw new GoodsIssueError('No issue lines were entered.', 'Enter at least one material to issue.');
   }
   const scenario = resolveScenario(input.movementTypeCode, screen);
+  const fingerprint = postingFingerprint([
+    'GI', scenario.code, input.postingDate, input.documentDate, input.headerText ?? '',
+    ...[...input.lines].map((line) => [
+      line.materialNumber.trim().toUpperCase(), line.plant.trim(), line.storageLocation ?? '',
+      quantityToken(line.quantity), line.entryUnit ?? '', line.costCenter ?? '',
+      line.reservationNumber ?? '', line.reservationItem ?? '',
+      line.productionOrderNumber ?? '', line.productionOrderItem ?? '',
+    ].join(':')).sort(),
+  ]);
 
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new GoodsIssueError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     await ensureMovements(tx, input.client, input.changedBy);
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/gi`}, 0))`);
+    await lockStockScope(
+      tx, input.client,
+      [...new Set(input.lines.map((line) => line.materialNumber.trim()).filter(Boolean))].sort(),
+      'EXCLUSIVE',
+    );
 
     // Every line must stand in one company code: a goods issue writes one journal.
     const companies = new Set<string>();
@@ -395,6 +419,7 @@ export async function postGoodsIssue(
       orderOpenAfter: string | null;
     };
     const prepared: Prepared[] = [];
+    const claimedStock = new Map<string, number>();
 
     for (const line of input.lines) {
       const materialNumber = line.materialNumber.trim();
@@ -423,41 +448,11 @@ export async function postGoodsIssue(
         throw new GoodsIssueError(`Material ${materialNumber} carries no base unit.`, 'Maintain the base unit of measure.');
       }
 
-      let location: typeof storageLocation.$inferSelect | null = null;
-      if (line.storageLocation) {
-        const [found] = await tx.select().from(storageLocation).where(and(
-          eq(storageLocation.client, input.client),
-          eq(storageLocation.plant, line.plant),
-          eq(storageLocation.storageLocation, line.storageLocation),
-        ));
-        if (!found) {
-          throw new GoodsIssueError(`Storage location ${line.storageLocation} does not stand in plant ${line.plant}.`);
-        }
-        if (!found.isActive) {
-          throw new GoodsIssueError(
-            `Storage location ${line.storageLocation} in plant ${line.plant} is blocked.`,
-            'Issue from an active storage location.',
-          );
-        }
-        location = found;
-      }
-
-      // SCR-142: an open count with a posting block refuses the movement for this material here.
-      try {
-        await assertInventoryCountOpen(tx, input.client, {
-          materialNumber, plant: line.plant, storageLocation: line.storageLocation ?? null,
-        });
-      } catch (caught) {
-        if (caught instanceof PhysicalInventoryError) {
-          throw new GoodsIssueError(caught.message, caught.remedy);
-        }
-        throw caught;
-      }
-
       // SCR-139: a 261 consumes for a released order, and no more than the component still needs.
       let productionOrderNumber: string | null = null;
       let productionOrderItem: number | null = null;
       let orderOpenAfter: string | null = null;
+      let documentLocation: string | null = null;
       if (scenario.accountAssignment === 'ORDER') {
         const orderNumber = (line.productionOrderNumber ?? '').trim();
         if (!orderNumber) {
@@ -499,6 +494,7 @@ export async function postGoodsIssue(
             'Issue a component the order states.',
           );
         }
+        documentLocation = component.storageLocation;
         if (component.materialNumber !== materialNumber || component.plant !== line.plant) {
           throw new GoodsIssueError(
             `Order ${orderNumber} item ${itemNumber} requires ${component.materialNumber} in plant ${component.plant}, and the line issues ${materialNumber} from ${line.plant}.`,
@@ -533,6 +529,41 @@ export async function postGoodsIssue(
         );
       }
 
+      const reservationNumber = (line.reservationNumber ?? '').trim();
+      if (!documentLocation && reservationNumber && line.reservationItem) {
+        const [reserved] = await tx.select({ storageLocation: reservationItem.storageLocation }).from(reservationItem).where(and(
+          eq(reservationItem.client, input.client),
+          eq(reservationItem.reservationNumber, reservationNumber),
+          eq(reservationItem.itemNumber, line.reservationItem),
+        ));
+        documentLocation = reserved?.storageLocation ?? null;
+      }
+      const required = await storageLocationRequired(tx, input.client, materialNumber, line.plant);
+      let location;
+      try {
+        location = await resolveStorageLocation(tx, {
+          client: input.client,
+          plant: line.plant,
+          typed: line.storageLocation,
+          documentDefault: documentLocation,
+          applyPlantDefault: true,
+          required,
+          verb: 'Issue from',
+        });
+      } catch (caught) {
+        if (caught instanceof StorageLocationError) throw new GoodsIssueError(caught.message, caught.remedy);
+        throw caught;
+      }
+      const issuingLocation = location.storageLocation;
+      try {
+        await assertInventoryCountOpen(tx, input.client, {
+          materialNumber, plant: line.plant, storageLocation: issuingLocation || null,
+        });
+      } catch (caught) {
+        if (caught instanceof PhysicalInventoryError) throw new GoodsIssueError(caught.message, caught.remedy);
+        throw caught;
+      }
+
       const [valuation] = await tx.select().from(materialValuation).where(and(
         eq(materialValuation.client, input.client),
         eq(materialValuation.materialNumber, materialNumber),
@@ -554,21 +585,13 @@ export async function postGoodsIssue(
         eq(stockQuantity.client, input.client),
         eq(stockQuantity.materialNumber, materialNumber),
         eq(stockQuantity.plant, line.plant),
-        eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
+        eq(stockQuantity.storageLocation, issuingLocation),
         eq(stockQuantity.stockType, 'UNRESTRICTED'),
       ));
       const onHand = Number(stock?.quantity ?? 0);
-      if (!location?.allowNegativeStock && onHand + 1e-9 < line.quantity) {
-        throw new GoodsIssueError(
-          `Storage location ${line.storageLocation || '(none)'} in plant ${line.plant} carries ${onHand.toFixed(3)} ${mat.baseUnit} of ${materialNumber}, and ${line.quantity.toFixed(3)} was entered.`,
-          'Reduce the quantity to what stands, or allow negative stock on the location.',
-        );
-      }
-
       const price = valuation.priceControl === 'STANDARD'
         ? Number(valuation.standardPrice) / Number(valuation.priceUnit)
         : Number(valuation.movingAveragePrice) / Number(valuation.priceUnit);
-      const value = round2(line.quantity * price);
 
       // The cost centre only where the movement demands one.
       if (scenario.accountAssignment === 'COST_CENTER') {
@@ -644,9 +667,19 @@ export async function postGoodsIssue(
         if (caught instanceof UnitConversionError) throw new GoodsIssueError(caught.message, caught.remedy);
         throw caught;
       });
+      const value = round2(conversion.baseQuantity * price);
+      const claimKey = `${materialNumber}|${line.plant}|${issuingLocation}|UNRESTRICTED`;
+      const alreadyClaimed = claimedStock.get(claimKey) ?? 0;
+      if (!location.row?.allowNegativeStock && onHand + 1e-9 < conversion.baseQuantity + alreadyClaimed) {
+        throw new GoodsIssueError(
+          `Storage location ${issuingLocation || '(none)'} in plant ${line.plant} carries ${onHand.toFixed(3)} ${mat.baseUnit} of ${materialNumber}, and ${(conversion.baseQuantity + alreadyClaimed).toFixed(3)} was entered.`,
+          'Reduce the quantity to what stands, or allow negative stock on the location.',
+        );
+      }
+      claimedStock.set(claimKey, alreadyClaimed + conversion.baseQuantity);
 
       prepared.push({
-        line, materialNumber, storageLocation: line.storageLocation ?? null,
+        line, materialNumber, storageLocation: issuingLocation || null,
         quantity: conversion.baseQuantity, unit: conversion.baseUnit, value, valuation,
         entryQuantity: line.quantity, entryUnit: line.entryUnit ?? conversion.baseUnit,
         unitPrice: valuation.priceControl === 'STANDARD' ? valuation.standardPrice : valuation.movingAveragePrice,
@@ -717,6 +750,7 @@ export async function postGoodsIssue(
       documentDate: input.documentDate, postingDate: input.postingDate,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      requestFingerprint: fingerprint,
       createdBy: input.changedBy,
     });
 
@@ -748,20 +782,9 @@ export async function postGoodsIssue(
                       changed_by = ${input.changedBy}, changed_at = now()
       `);
 
-      const newQty = Number(p.valuation.totalStockQuantity) - p.quantity;
-      const newValue = Number(p.valuation.stockValue) - p.value;
-      await tx.update(materialValuation).set({
-        totalStockQuantity: String(newQty),
-        stockValue: String(newValue),
-        movingAveragePrice: p.valuation.priceControl === 'MOVING_AVERAGE' && newQty > 0
-          ? String(round2((newValue / newQty) * Number(p.valuation.priceUnit)) || 0)
-          : p.valuation.movingAveragePrice,
-        changedBy: input.changedBy, changedAt: new Date(),
-      }).where(and(
-        eq(materialValuation.client, input.client),
-        eq(materialValuation.materialNumber, p.materialNumber),
-        eq(materialValuation.valuationArea, p.line.plant),
-      ));
+      await applyValuationDelta(
+        tx, input.client, input.changedBy, p.materialNumber, p.line.plant, -p.quantity, -p.value,
+      );
     }
 
     await recordChange(tx, {

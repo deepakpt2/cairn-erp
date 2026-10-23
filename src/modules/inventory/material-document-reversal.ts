@@ -21,7 +21,10 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { PostingError, reverseJournalEntry } from '../../platform/posting';
 import { plant as plantTable, storageLocation } from '../foundation/schema';
-import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
+import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import {
+  applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, REQUEST_MISMATCH_REMEDY,
+} from './balance-update';
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
@@ -43,7 +46,6 @@ export class MaterialReversalError extends Error {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export interface ReversalLineView {
   lineNumber: number;
@@ -243,7 +245,7 @@ async function stockAt(
     eq(stockQuantity.plant, line.plant),
     eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
     eq(stockQuantity.stockType, line.stockType),
-  ));
+  )).for('update');
   return row ? Number(row.quantity) : 0;
 }
 
@@ -284,26 +286,7 @@ async function moveValuation(
   tx: Tx, client: string, changedBy: string, materialNumber: string, plant: string,
   quantityDelta: number, valueDelta: number,
 ) {
-  const [v] = await tx.select().from(materialValuation).where(and(
-    eq(materialValuation.client, client),
-    eq(materialValuation.materialNumber, materialNumber),
-    eq(materialValuation.valuationArea, plant),
-  ));
-  if (!v) return;
-  const newQty = Number(v.totalStockQuantity) + quantityDelta;
-  const newValue = Number(v.stockValue) + valueDelta;
-  await tx.update(materialValuation).set({
-    totalStockQuantity: String(newQty),
-    stockValue: String(newValue),
-    movingAveragePrice: v.priceControl === 'MOVING_AVERAGE' && newQty > 0
-      ? String(round2((newValue / newQty) * Number(v.priceUnit)) || 0)
-      : v.movingAveragePrice,
-    changedBy, changedAt: new Date(),
-  }).where(and(
-    eq(materialValuation.client, client),
-    eq(materialValuation.materialNumber, materialNumber),
-    eq(materialValuation.valuationArea, plant),
-  ));
+  await applyValuationDelta(tx, client, changedBy, materialNumber, plant, quantityDelta, valueDelta);
 }
 
 function splitJournalKey(key: string): [number, string] {
@@ -334,9 +317,19 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     );
   }
 
+  const fingerprint = postingFingerprint([
+    'REV', input.materialDocumentNumber.trim(), input.fiscalYear ?? '',
+    input.postingDate, input.documentDate, input.headerText ?? '',
+    ...(input.lines ?? []).map(String).sort(),
+  ]);
   return withTenant(input.client, async (tx) => {
+    await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
-    if (replay) return replay;
+    if (replay) {
+      const mismatch = await mismatchedRequest(tx, input.client, input.requestKey, fingerprint);
+      if (mismatch) throw new MaterialReversalError(mismatch, REQUEST_MISMATCH_REMEDY);
+      return replay;
+    }
 
     const [original] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
@@ -368,12 +361,27 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     }
 
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/reverse/${input.materialDocumentNumber}`}, 0))`);
+    const [locked] = await tx.select().from(materialDocument).where(and(
+      eq(materialDocument.client, input.client),
+      eq(materialDocument.materialDocumentNumber, input.materialDocumentNumber),
+    ));
+    if (locked?.status === 'REVERSED' && !(input.lines && input.lines.length > 0)) {
+      throw new MaterialReversalError(
+        `Material document ${input.materialDocumentNumber} has already been cancelled by ${locked.reversedBy}.`,
+        'A document is reversed once; post a fresh movement instead.',
+      );
+    }
 
     const lines = await tx.select().from(materialDocumentLine).where(and(
       eq(materialDocumentLine.client, input.client),
       eq(materialDocumentLine.materialDocumentNumber, input.materialDocumentNumber),
     )).orderBy(materialDocumentLine.lineNumber);
     if (lines.length === 0) throw new MaterialReversalError('The document carries no lines.');
+    await lockStockScope(
+      tx, input.client,
+      [...new Set(lines.map((line) => line.materialNumber).filter((m): m is string => Boolean(m)))].sort(),
+      'EXCLUSIVE',
+    );
     const reversed = await reversedQuantities(tx, input.client, input.materialDocumentNumber);
     const counters = await counterMovements(tx, input.client);
 
@@ -423,6 +431,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     );
 
     // A reversal takes stock back, so its issue side is judged for sufficiency first.
+    const claimedStock = new Map<string, number>();
     for (const line of wanted) {
       if (line.lineDirection !== 'RECEIPT') continue;
       const [location] = await tx.select().from(storageLocation).where(and(
@@ -431,12 +440,16 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         eq(storageLocation.storageLocation, line.storageLocation ?? ''),
       ));
       const held = await stockAt(tx, input.client, line);
-      if (held + 1e-9 < Number(line.baseQuantity) && !location?.allowNegativeStock) {
+      const stockKey = `${line.materialNumber}|${line.plant}|${line.storageLocation ?? ''}|${line.stockType}`;
+      const already = claimedStock.get(stockKey) ?? 0;
+      const taking = Number(line.baseQuantity) + already;
+      if (held + 1e-9 < taking && !location?.allowNegativeStock) {
         throw new MaterialReversalError(
-          `Stock of ${line.materialNumber} in plant ${line.plant} storage location ${line.storageLocation ?? ''} is ${held.toFixed(3)}, short of the ${Number(line.baseQuantity).toFixed(3)} the reversal takes back.`,
+          `Stock of ${line.materialNumber} in plant ${line.plant} storage location ${line.storageLocation ?? ''} is ${held.toFixed(3)}, short of the ${taking.toFixed(3)} the reversal takes back.`,
           'The received stock has been consumed; the receipt can no longer be reversed in full.',
         );
       }
+      claimedStock.set(stockKey, taking);
     }
 
     const allocated = await allocateNumber(tx, {
@@ -473,6 +486,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
       journalDocumentNumber: journalNumber,
       reversalOf: input.materialDocumentNumber,
       requestKey: input.requestKey,
+      requestFingerprint: fingerprint,
       createdBy: input.changedBy,
     });
 

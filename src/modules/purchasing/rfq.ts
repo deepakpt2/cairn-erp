@@ -28,6 +28,7 @@ import {
 } from '../foundation/schema';
 import { supplierPurchasing } from '../foundation/supplier-purchasing-schema';
 import { material, materialPlant, materialUomConversion } from '../inventory/schema';
+import { FollowOnError, copyRequisition } from './follow-on';
 import { purchasingRfq, purchasingRfqEvent, purchasingRfqEventItem, purchasingRfqItem } from './schema';
 
 export const RFQ_CAPABILITY = 'PROC.RFQ.CREATE';
@@ -61,6 +62,7 @@ export interface RfqLineInput {
   storageLocation?: string | null;
   deliveryDate?: string | null;
   requisitionNumber?: string | null;
+  requisitionItem?: number | string | null;
   price?: number | string | null;
   deliveryLocation?: string | null;
 }
@@ -113,6 +115,8 @@ export interface StandingRfqLine {
   plant: string;
   storageLocation: string | null;
   deliveryDate: string;
+  requisitionNumber: string | null;
+  requisitionItem: number | null;
 }
 
 export interface StandingRfq {
@@ -146,6 +150,7 @@ interface PreparedRequest {
   collectiveNumber: string | null;
   lines: StandingRfqLine[];
   suppliers: string[];
+  warnings: string[];
 }
 
 function blank(value: string | number | null | undefined): string | null {
@@ -221,8 +226,8 @@ function refuseCuts(input: RfqCreateInput): void {
     throw new RfqError('A quotation is not created from this request.');
   }
   if (blank(input.comparison)) throw new RfqError('A comparison is not stored.');
-  if (blank(input.requisitionNumber) || input.lines.some((line) => blank(line.requisitionNumber))) {
-    throw new RfqError('A requisition is not converted.');
+  if (blank(input.requisitionNumber)) {
+    throw new RfqError('A requisition is not converted from this request.');
   }
   if (blank(input.orderNumber)) throw new RfqError('An order is not created.');
   if (input.lines.some((line) => blank(line.deliveryLocation))) {
@@ -282,11 +287,21 @@ async function prepareCreate(tx: Tx, input: RfqCreateInput): Promise<PreparedReq
   }
 
   const lines: StandingRfqLine[] = [];
+  const warnings: string[] = [];
   const companies = new Set<string>();
   for (const [index, line] of input.lines.entries()) {
-    const plantCode = blank(line.plant);
+    let copied: Awaited<ReturnType<typeof copyRequisition>> = null;
+    try {
+      copied = await copyRequisition(tx, input.client, line);
+    } catch (error) {
+      if (error instanceof FollowOnError) throw new RfqError(error.message, error.remedy);
+      throw error;
+    }
+    if (copied?.warning) warnings.push(copied.warning);
+    const plantCode = blank(line.plant) ?? copied?.plant ?? null;
     if (!plantCode) throw new RfqError('A plant is required.');
-    assertDate(line.deliveryDate ?? '', 'The delivery date');
+    const deliveryDate = blank(line.deliveryDate) ?? copied?.deliveryDate ?? '';
+    assertDate(deliveryDate, 'The delivery date');
     const [plantRow] = await tx.select().from(plant).where(and(
       eq(plant.client, input.client), eq(plant.plant, plantCode),
     ));
@@ -316,9 +331,9 @@ async function prepareCreate(tx: Tx, input: RfqCreateInput): Promise<PreparedReq
       }
     }
 
-    const materialNumber = blank(line.materialNumber);
-    let shortText = blank(line.shortText);
-    let unit = blank(line.unit)?.toUpperCase() ?? null;
+    const materialNumber = blank(line.materialNumber) ?? copied?.materialNumber ?? null;
+    let shortText = blank(line.shortText) ?? copied?.shortText ?? null;
+    let unit = blank(line.unit)?.toUpperCase() ?? copied?.unit ?? null;
     let baseUnit: string | null = null;
     if (materialNumber) {
       const [master] = await tx.select().from(material).where(and(
@@ -353,11 +368,13 @@ async function prepareCreate(tx: Tx, input: RfqCreateInput): Promise<PreparedReq
       itemNumber: (index + 1) * 10,
       materialNumber,
       shortText,
-      quantity: quantityText(line.quantity),
+      quantity: quantityText(line.quantity ?? copied?.quantity),
       unit,
       plant: plantCode,
-      storageLocation: storage,
-      deliveryDate: line.deliveryDate as string,
+      storageLocation: storage ?? copied?.storageLocation ?? null,
+      deliveryDate,
+      requisitionNumber: copied?.requisitionNumber ?? null,
+      requisitionItem: copied?.requisitionItem ?? null,
     });
   }
 
@@ -420,6 +437,7 @@ async function prepareCreate(tx: Tx, input: RfqCreateInput): Promise<PreparedReq
     collectiveNumber: collective,
     lines,
     suppliers,
+    warnings,
   };
 }
 
@@ -493,6 +511,8 @@ export async function writeRequestForQuotation(
       plant: line.plant,
       storageLocation: line.storageLocation,
       deliveryDate: line.deliveryDate,
+      requisitionNumber: line.requisitionNumber,
+      requisitionItem: line.requisitionItem,
       createdBy: input.changedBy,
     });
   }
@@ -519,6 +539,8 @@ export async function writeRequestForQuotation(
         plant: line.plant,
         storageLocation: line.storageLocation,
         deliveryDate: line.deliveryDate,
+        requisitionNumber: line.requisitionNumber,
+        requisitionItem: line.requisitionItem,
         createdBy: input.changedBy,
       });
     }
@@ -585,6 +607,8 @@ export async function getRequestForQuotation(client: string, eventNumber: string
       plant: row.plant,
       storageLocation: row.storageLocation,
       deliveryDate: row.deliveryDate,
+      requisitionNumber: row.requisitionNumber,
+      requisitionItem: row.requisitionItem,
     });
     return {
       eventNumber: event.eventNumber,
@@ -699,8 +723,8 @@ function refuseChangeCuts(input: RfqChangeInput): void {
   if (blank(input.price) || input.lines?.some((line) => blank(line.price))) throw new RfqError('A request carries no price.');
   if (blank(input.quotationNumber) || blank(input.award)) throw new RfqError('A quotation is not created from this request.');
   if (blank(input.comparison)) throw new RfqError('A comparison is not stored.');
-  if (blank(input.requisitionNumber) || input.lines?.some((line) => blank(line.requisitionNumber))) {
-    throw new RfqError('A requisition is not converted.');
+  if (blank(input.requisitionNumber)) {
+    throw new RfqError('A requisition is not converted from this request.');
   }
   if (blank(input.orderNumber)) throw new RfqError('An order is not created.');
   if (input.lines?.some((line) => blank(line.deliveryLocation))) throw new RfqError('The plant is the delivery destination.');
@@ -837,6 +861,8 @@ async function planChange(tx: Tx, input: RfqChangeInput, lock: boolean): Promise
     plant: row.plant,
     storageLocation: row.storageLocation,
     deliveryDate: row.deliveryDate,
+    requisitionNumber: row.requisitionNumber,
+    requisitionItem: row.requisitionItem,
   }));
   const byItem = new Map(standingLines.map((line) => [line.itemNumber, line]));
   const nextLines = standingLines.map((line) => ({ ...line }));
@@ -854,6 +880,9 @@ async function planChange(tx: Tx, input: RfqChangeInput, lock: boolean): Promise
       const standing = byItem.get(itemNumber)!;
       if (line.materialNumber !== undefined && blank(line.materialNumber) !== standing.materialNumber) {
         throw new RfqError('The material is not changed.');
+      }
+      if (line.requisitionNumber !== undefined && blank(line.requisitionNumber) !== standing.requisitionNumber) {
+        throw new RfqError('The requisition reference is not changed.');
       }
       const proposed: StandingRfqLine = { ...standing };
       if (line.shortText !== undefined) {

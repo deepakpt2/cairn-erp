@@ -4,6 +4,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import { PO_CREATE_CAPABILITY, getOrder, listOrders, orderChoices } from '@/modules/purchasing/orders';
+import { orderDraftFromQuotation, orderDraftFromRequisition } from '@/modules/purchasing/follow-on';
 import {
   RELEASE_CAPABILITIES,
   getDocumentRelease,
@@ -21,11 +22,18 @@ const ROUTE = '/purchasing/orders';
  * Display is SCR-164, not this screen.
  */
 export default async function PurchaseOrdersPage({ searchParams }: {
-  searchParams: Promise<{ order?: string }>;
+  searchParams: Promise<{ order?: string; quotation?: string; requisition?: string }>;
 }) {
   const session = await requireSession(ROUTE);
   const params = await searchParams;
   const client = session.user.client;
+  const draft = params.order
+    ? null
+    : params.requisition
+      ? await orderDraftFromRequisition(client, params.requisition.trim())
+      : params.quotation
+        ? await orderDraftFromQuotation(client, params.quotation.trim())
+        : null;
   const [documents, choices, releases] = await Promise.all([
     listOrders(client),
     orderChoices(client),
@@ -70,6 +78,7 @@ export default async function PurchaseOrdersPage({ searchParams }: {
         releases={Object.fromEntries(releases)}
         selectedRelease={selectedRelease}
         canRelease={can(session, RELEASE_CAPABILITIES.PURCHASE_ORDER)}
+        draft={draft}
       />
     </div>
   );

@@ -18,7 +18,8 @@ import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { materialPeriodAllows } from './material-period-control';
 import { getMaterialPeriodControlInTx } from './goods-issue';
-import { plant as plantTable, storageLocation } from '../foundation/schema';
+import { plant as plantTable } from '../foundation/schema';
+import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { material } from './schema';
 import {
   physicalInventoryDocument, physicalInventoryItem,
@@ -249,22 +250,23 @@ export async function writeInventoryDocument(
     );
   }
   if (location) {
-    const [sloc] = await tx.select().from(storageLocation).where(and(
-      eq(storageLocation.client, spec.client),
-      eq(storageLocation.plant, plant),
-      eq(storageLocation.storageLocation, location),
-    ));
-    if (!sloc) {
-      throw new PhysicalInventoryError(
-        `Storage location ${location} does not stand in plant ${plant}.`,
-        'Choose a storage location of the plant being counted, or count the whole plant.',
-      );
-    }
-    if (!sloc.isActive) {
-      throw new PhysicalInventoryError(
-        `Storage location ${location} in plant ${plant} is not active.`,
-        'Choose an active storage location.',
-      );
+    try {
+      await resolveStorageLocation(tx, {
+        client: spec.client,
+        plant,
+        typed: location,
+        required: true,
+        applyPlantDefault: false,
+        verb: 'Count',
+      });
+    } catch (caught) {
+      if (caught instanceof StorageLocationError) {
+        throw new PhysicalInventoryError(
+          caught.message,
+          'Choose a storage location of the plant being counted, or count the whole plant.',
+        );
+      }
+      throw caught;
     }
   }
 

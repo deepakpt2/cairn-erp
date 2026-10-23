@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState, useState } from 'react';
 
 import type {
@@ -258,6 +259,15 @@ export default function Requisitions({ documents, choices, selected, canCreate, 
           <h2 id="pr-create" className="text-sm font-semibold">
             {selected ? `Requisition ${selected.requisitionNumber}` : 'New requisition'}
           </h2>
+          {selected && (
+            <Link
+              href={`/purchasing/orders?requisition=${selected.requisitionNumber}`}
+              className="btn btn-default min-h-11 sm:min-h-8"
+              data-pr-create-order
+            >
+              Create purchase order
+            </Link>
+          )}
           <label className="block">
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Document type</span>
             <select

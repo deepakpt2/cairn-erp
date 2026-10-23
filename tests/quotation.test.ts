@@ -155,7 +155,7 @@ describe('SCR-157 quotation', () => {
     const quotation = await getQuotation(c, saved.quotationNumber);
     expect(quotation?.rfqNumber).toBe(request!.rfqNumber);
     expect(quotation?.lines).toEqual([{
-      itemNumber: 10, quantity: '8.000', unit: 'BX', netPrice: '0.0000', priceUnit: '100', deliveryDate: '2026-12-20', remark: null,
+      itemNumber: 10, quantity: '8.000', unit: 'BX', netPrice: '0.0000', priceUnit: '100', deliveryDate: '2026-12-20', remark: null, infoUpdate: false,
     }]);
     const after = await getRequestForQuotation(c, created.eventNumber);
     expect(after?.lines[0]).toMatchObject({ quantity: '12.500', deliveryDate: '2026-12-01' });
