@@ -46,6 +46,8 @@ export const materialType = pgTable('material_type', {
   externalPurchaseOrders: char('external_purchase_orders', { length: 1 }).notNull().default('2'),
   internalPurchaseOrders: char('internal_purchase_orders', { length: 1 }).notNull().default('1'),
   isConfigurable: boolean('is_configurable').notNull().default(false),
+  /** OMAB initial status. False means a new batch is not restricted. No OMAB screen sets this. */
+  initialBatchRestricted: boolean('initial_batch_restricted').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true), ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.materialType] }),
@@ -177,6 +179,8 @@ export const material = pgTable('material', {
   isBlocked: boolean('is_blocked').notNull().default(false),
   /** Deletion flag at client level (SCR-053 / MM06): a marker, never a lock. */
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  /** MARA-XCHPF. Used when the batch level is material or client. Existing materials stay non-batch. */
+  batchManaged: boolean('batch_managed').notNull().default(false),
   version: integer('version').notNull().default(1),
   lowLevelCode: integer('low_level_code').notNull().default(0), ...auditColumns,
 }, (t) => [
@@ -198,6 +202,8 @@ export const materialPlant = pgTable('material_plant', {
   purchasingStatus: varchar('purchasing_status', { length: 16 }).notNull().default('NOT_CREATED'),
   /** Deletion flag at plant level (SCR-053 / MM06): a marker, never a lock. */
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
+  /** MARC-XCHPF. Used when the batch level is plant. Existing plant views stay non-batch. */
+  batchManaged: boolean('batch_managed').notNull().default(false),
   mrpType: varchar('mrp_type', { length: 16 }),
   mrpController: varchar('mrp_controller', { length: 3 }),
   procurementType: varchar('procurement_type', { length: 8 }),
@@ -350,6 +356,8 @@ export const materialDocumentLine = pgTable('material_document_line', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }),
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** Blank for a material that is not batch-managed. A batch must already stand. */
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
   /** Which side of the document this line is: a transfer writes one ISSUE and one RECEIPT line (SCR-131). */
   lineDirection: varchar('line_direction', { length: 8 }).notNull().default('RECEIPT'),
   entryQuantity: quantity('entry_quantity').notNull(),
@@ -391,12 +399,14 @@ export const stockQuantity = pgTable('stock_quantity', {
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }).notNull().default(''),
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** Blank is the balance that stood before a batch was posted. */
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
   quantity: quantity('quantity').notNull().default('0'),
   ...auditColumns,
 }, (t) => [
   // No table-level non-negative guard: negative stock is permitted where the storage
   // location configures it, and a row check cannot read that configuration (SCR-131).
-  primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.storageLocation, t.stockType] }),
+  primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.storageLocation, t.stockType, t.batchNumber] }),
 ]);
 
 /**
@@ -527,6 +537,8 @@ export const productionOrder = pgTable('production_order', {
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
   orderQuantity: quantity('order_quantity').notNull(),
+  /** A batch that already stands for the finished good. Blank means the receipt must name one. */
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
   unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
   scheduledStart: varchar('scheduled_start', { length: 10 }).notNull(),
   scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
@@ -609,6 +621,8 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
    * must name — and `stockAt` reads only UNRESTRICTED, which hid quality stock entirely.
    */
   stockType: varchar('stock_type', { length: 16 }).notNull().default('UNRESTRICTED'),
+  /** Blank for a material that is not batch-managed. A named batch must already stand. */
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
   /** SCR-147: the count result. Nullable on purpose — null is "nobody has looked". */
   countedQuantity: quantity('counted_quantity'),
   entryUnit: varchar('entry_unit', { length: 10 }),
@@ -639,6 +653,9 @@ export const physicalInventoryItem = pgTable('physical_inventory_item', {
     ],
   }).onDelete('cascade'),
   index('physical_inventory_item_material_idx').on(t.client, t.materialNumber),
+  uniqueIndex('physical_inventory_item_material_key').on(
+    t.client, t.inventoryDocumentNumber, t.fiscalYear, t.materialNumber, t.stockType, t.batchNumber,
+  ),
   check('physical_inventory_item_count_status_ck', sql`${t.countStatus} in ('UNCOUNTED', 'COUNTED', 'RECOUNT_REQUIRED')`),
   check('physical_inventory_item_posting_status_ck', sql`${t.postingStatus} in ('UNPOSTED', 'POSTED')`),
   check(
@@ -846,6 +863,15 @@ export const batch = pgTable('batch', {
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }),
   batchLevelAtCreation: char('batch_level_at_creation', { length: 1 }).notNull(),
+  /** ZUSTD / XFELD. Null when status management does not apply. Blank is unrestricted. X is restricted. */
+  restrictedUse: char('restricted_use', { length: 1 }),
+  manufactureDate: date('manufacture_date'),
+  shelfLifeExpirationDate: date('shelf_life_expiration_date'),
+  vendorBatch: varchar('vendor_batch', { length: 15 }),
+  countryOfOrigin: char('country_of_origin', { length: 2 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  /** Optimistic token. A change must send the version it opened. */
+  version: integer('version').notNull().default(1),
   ...auditColumns,
 }, (t) => [
   foreignKey({
@@ -868,4 +894,25 @@ export const batch = pgTable('batch', {
   index('batch_client_idx').on(t.client),
   check('batch_level_ck', sql`${t.batchLevelAtCreation} in ('0', '1', '2')`),
   check('batch_identity_ck', sql`(${t.batchLevelAtCreation} = '0' and ${t.plant} is not null) or (${t.batchLevelAtCreation} in ('1', '2') and ${t.plant} is null)`),
+  check('batch_restricted_use_ck', sql`${t.restrictedUse} is null or ${t.restrictedUse} in ('X', ' ')`),
+  check('batch_number_length_ck', sql`char_length(${t.batchNumber}) between 1 and 40`),
+  check('batch_vendor_batch_ck', sql`${t.vendorBatch} is null or char_length(${t.vendorBatch}) between 1 and 15`),
+  check('batch_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMCS — client indicator for batch status management. The stored code is
+ * the SAP character 1, or a blank when a save turned it off. The batch level
+ * stays on the OMCE row. A plant selection is not stored here.
+ */
+export const batchStatusManagement = pgTable('batch_status_management', {
+  client: tenant(),
+  statusManagement: char('status_management', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('batch_status_management_code_ck', sql`${t.statusManagement} in ('1', ' ')`),
+  check('batch_status_management_version_ck', sql`${t.version} > 0`),
 ]);

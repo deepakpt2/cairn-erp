@@ -139,6 +139,7 @@ export async function postReceiptAction(
         storageLocation: text(form, 'storageLocation'),
         quantity: Number(text(form, 'quantity') || '0'),
         entryUnit: text(form, 'unit') || undefined,
+        batch: text(form, 'batch') || undefined,
       }],
       requestKey: text(form, 'requestKey'),
     });

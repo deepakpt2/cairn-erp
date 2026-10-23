@@ -100,6 +100,7 @@ export default async function WorkbenchPage({
     '/config/valuation-classes',
     '/config/movement-types',
     '/config/batch-level',
+    '/config/batch-status',
     '/config/material-groups',
     '/config/material-number-ranges',
     '/config/industry-sectors',

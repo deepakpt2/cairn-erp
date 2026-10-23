@@ -119,7 +119,7 @@ describe('SCR-150 physical inventory recount', () => {
           (${client}, 'RC-B', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 12, ${ACTOR}),
           (${client}, 'RC-Z', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 9, ${ACTOR}),
           (${client}, 'RC-P', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 20, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = excluded.quantity
       `);
       await tx.execute(sql`

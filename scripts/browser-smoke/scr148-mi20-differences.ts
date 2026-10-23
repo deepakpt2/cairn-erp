@@ -63,7 +63,7 @@ export async function scr148Mi20Differences(ctx: Context) {
         (${client}, 'MDIF-A', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 100, 'browser.admin'),
         (${client}, 'MDIF-B', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 40, 'browser.admin'),
         (${client}, 'MDIF-C', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 8, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = excluded.quantity
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = excluded.quantity
     `);
     await tx.execute(sql`
       insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,

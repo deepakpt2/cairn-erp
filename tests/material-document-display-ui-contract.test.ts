@@ -46,6 +46,9 @@ describe('SCR-134 material document display UI contract', () => {
     expect(page).toContain('line.materialDescription');
     expect(page).toContain('mdDoc.columnValue');
     expect(page).toContain('line.purchaseOrderNumber');
+    expect(page).toContain('data-batch={line.batch}');
+    expect(page).not.toContain('name="batch"');
+    expect(page).not.toContain('name={`batch-');
   });
 
   it('refuses a missing or foreign document in the SAP shape and says why', () => {

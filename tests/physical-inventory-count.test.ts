@@ -117,7 +117,7 @@ describe('SCR-147 physical inventory count (MI04)', () => {
           (${client}, 'MI04-A', ${PLANT}, ${SLOC}, 'QUALITY', 10, ${ACTOR}),
           (${client}, 'MI04-B', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 40, ${ACTOR}),
           (${client}, 'MI04-C', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 24, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = excluded.quantity
       `);
     });

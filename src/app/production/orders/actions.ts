@@ -56,6 +56,7 @@ export async function createOrderAction(
       orderQuantity: Number(text(form, 'orderQuantity') || '0'),
       scheduledStart: text(form, 'scheduledStart'),
       scheduledFinish: text(form, 'scheduledFinish'),
+      batch: text(form, 'batch') || undefined,
       components,
       requestKey: text(form, 'requestKey') || undefined,
     });

@@ -337,6 +337,10 @@ export default function MigoShell({ canPost, today }: { canPost: boolean; today:
                 <input name="storageLocation" className="input w-full" placeholder="0001" required />
               </label>
               <label className="block">
+                <span className="field-label">Batch</span>
+                <input name="batch" maxLength={10} className="input w-full" placeholder="Batch" />
+              </label>
+              <label className="block">
                 <span className="field-label">{t('migo.receiptQuantity')}</span>
                 <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full text-right" required />
               </label>

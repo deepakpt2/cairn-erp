@@ -33,6 +33,7 @@ import {
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
@@ -74,6 +75,9 @@ export interface ProductionReceiptLineInput {
   /** The receiving storage location; the plant is the order's own. */
   storageLocation?: string;
   quantity: number;
+  entryUnit?: string;
+  /** Required when the material is batch-managed. The batch must already stand. */
+  batch?: string;
 }
 
 export interface PostProductionReceiptInput {
@@ -93,6 +97,7 @@ export interface ProductionReceiptLineView {
   materialNumber: string;
   plant: string;
   storageLocation: string | null;
+  batch: string;
   quantity: string;
   unit: string;
   value: string;
@@ -209,6 +214,7 @@ async function toView(
       materialNumber: l.materialNumber,
       plant: l.plant,
       storageLocation: l.storageLocation,
+      batch: l.batchNumber,
       quantity: l.baseQuantity,
       unit: l.baseUnit,
       value: l.value,
@@ -241,7 +247,11 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
   let quantity = input.lines.reduce((sum, l) => sum + (l.quantity > 0 ? l.quantity : 0), 0);
   const fingerprint = postingFingerprint([
     'PROD-GR', orderNumber, input.postingDate, input.documentDate, input.headerText ?? '',
-    ...input.lines.map((line) => `${quantityToken(line.quantity)}:${line.entryUnit ?? ''}:${line.storageLocation ?? ''}`),
+    ...input.lines.map((line) => {
+      const token = `${quantityToken(line.quantity)}:${line.entryUnit ?? ''}:${line.storageLocation ?? ''}`;
+      const batch = (line.batch ?? '').trim().toUpperCase();
+      return batch ? `${token}:${batch}` : token;
+    }),
   ]);
 
   return withTenant(input.client, async (tx) => {
@@ -359,6 +369,7 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     try {
       await assertInventoryCountOpen(tx, input.client, {
         materialNumber, plant, storageLocation: location || null,
+        batch: input.lines.map((line) => (line.batch ?? '').trim()).find(Boolean) || order.batchNumber,
       });
     } catch (caught) {
       if (caught instanceof PhysicalInventoryError) {
@@ -455,11 +466,30 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       createdBy: input.changedBy,
     });
 
+    const typedBatches = [...new Set(
+      input.lines.filter((line) => line.quantity > 0)
+        .map((line) => (line.batch ?? '').trim().toUpperCase())
+        .filter((batch) => batch !== ''),
+    )];
+    if (typedBatches.length > 1) {
+      throw new ProductionReceiptError('The receipt lines name more than one batch.', 'Receive one batch on this document.');
+    }
+    let postingBatch = '';
+    try {
+      postingBatch = await resolvePostingBatch(tx, {
+        client: input.client, materialNumber, plant,
+        batch: typedBatches[0] || order.batchNumber, postingDate: input.postingDate,
+      });
+    } catch (caught) {
+      if (caught instanceof BatchPostingError) throw new ProductionReceiptError(caught.message, caught.remedy);
+      throw caught;
+    }
+
     await tx.insert(materialDocumentLine).values({
       client: input.client, materialDocumentNumber: number, lineNumber: 1,
       movementType: PRODUCTION_RECEIPT_SCENARIO.movementType,
       materialNumber, plant,
-      storageLocation: location || null, stockType: 'UNRESTRICTED',
+      storageLocation: location || null, stockType: 'UNRESTRICTED', batchNumber: postingBatch,
       lineDirection: 'RECEIPT',
       entryQuantity: String(input.lines[0]?.entryQuantity ?? quantity),
       entryUnit,
@@ -471,9 +501,9 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     });
 
     await tx.execute(sql`
-      insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
-      values (${input.client}, ${materialNumber}, ${plant}, ${location}, 'UNRESTRICTED', ${String(quantity)}, ${input.changedBy})
-      on conflict (client, material_number, plant, storage_location, stock_type)
+      insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
+      values (${input.client}, ${materialNumber}, ${plant}, ${location}, 'UNRESTRICTED', ${postingBatch}, ${String(quantity)}, ${input.changedBy})
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
       do update set quantity = stock_quantity.quantity + ${quantity},
                     changed_by = ${input.changedBy}, changed_at = now()
     `);

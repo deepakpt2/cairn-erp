@@ -25,6 +25,7 @@ import {
   proposeStorageLocation, resolveStorageLocation, storageLocationRequired, StorageLocationError,
 } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
 import {
   applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
@@ -145,6 +146,8 @@ export interface ReceiptItemView {
   shortText: string;
   plant: string;
   storageLocation: string | null;
+  /** The batch named on the order. Blank means the receipt must name one. */
+  batch: string;
   /** The location a blank receipt line will use: the order item, else the plant default. */
   proposedStorageLocation: string | null;
   unit: string;
@@ -202,6 +205,7 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           shortText: item.shortText,
           plant: item.plant,
           storageLocation: item.storageLocation,
+          batch: item.batchNumber,
           proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
           unit: item.unit,
           ordered,
@@ -225,7 +229,7 @@ export interface PostGoodsReceiptInput {
   postingDate: string;
   headerText?: string;
   requestKey: string;
-  lines: Array<{ itemNumber: number; quantity: number; storageLocation?: string }>;
+  lines: Array<{ itemNumber: number; quantity: number; storageLocation?: string; batch?: string }>;
 }
 
 export interface MaterialDocumentView {
@@ -240,7 +244,7 @@ export interface MaterialDocumentView {
   reversedBy: string | null;
   lines: Array<{
     lineNumber: number; movementType: string; materialNumber: string; plant: string;
-    storageLocation: string | null; stockType: string; quantity: string; unit: string; value: string;
+    storageLocation: string | null; stockType: string; batch: string; quantity: string; unit: string; value: string;
     purchaseOrderNumber: string | null; purchaseOrderItem: number | null; itemText: string | null;
   }>;
 }
@@ -258,7 +262,7 @@ function toView(header: typeof materialDocument.$inferSelect, lines: Array<typeo
     reversedBy: header.reversedBy,
     lines: lines.map((l) => ({
       lineNumber: l.lineNumber, movementType: l.movementType, materialNumber: l.materialNumber,
-      plant: l.plant, storageLocation: l.storageLocation, stockType: l.stockType, quantity: l.baseQuantity,
+      plant: l.plant, storageLocation: l.storageLocation, stockType: l.stockType, batch: l.batchNumber, quantity: l.baseQuantity,
       unit: l.baseUnit, value: l.value, purchaseOrderNumber: l.purchaseOrderNumber,
       purchaseOrderItem: l.purchaseOrderItem, itemText: l.itemText,
     })),
@@ -314,7 +318,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
   const fingerprint = postingFingerprint([
     'GR', input.orderNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
     ...[...input.lines]
-      .map((line) => `${line.itemNumber}:${quantityToken(line.quantity)}:${line.storageLocation ?? ''}`)
+      .map((line) => `${line.itemNumber}:${quantityToken(line.quantity)}:${line.storageLocation ?? ''}:${(line.batch ?? '').trim().toUpperCase()}`)
       .sort(),
   ]);
   return withTenant(input.client, async (tx) => {
@@ -363,7 +367,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
     const claimedReceipt = new Map<number, number>();
     const journalLines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; material?: string; plant?: string }> = [];
     const prepared: Array<{
-      item: ReceiptItemView; quantity: number; storageLocation: string;
+      item: ReceiptItemView; quantity: number; storageLocation: string; batch: string;
       value: number; poValue: number; valuation: typeof materialValuation.$inferSelect;
     }> = [];
 
@@ -446,6 +450,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber: item.materialNumber, plant: item.plant,
           storageLocation: receivedAt.storageLocation || null,
+          batch: line.batch || item.batch,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) {
@@ -454,9 +459,20 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         throw caught;
       }
 
+      let batch = '';
+      try {
+        batch = await resolvePostingBatch(tx, {
+          client: input.client, materialNumber: item.materialNumber, plant: item.plant,
+          batch: line.batch || item.batch, postingDate: input.postingDate,
+        });
+      } catch (caught) {
+        if (caught instanceof BatchPostingError) throw new GoodsReceiptError(caught.message, caught.remedy);
+        throw caught;
+      }
+
       prepared.push({
         item, quantity: line.quantity,
-        storageLocation: receivedAt.storageLocation,
+        storageLocation: receivedAt.storageLocation, batch,
         value: stockValue, poValue, valuation,
       });
     }
@@ -521,6 +537,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         movementType: movement.movementType,
         materialNumber: p.item.materialNumber!, plant: p.item.plant,
         storageLocation: p.storageLocation || null, stockType: 'UNRESTRICTED',
+        batchNumber: p.batch,
         entryQuantity: String(p.quantity), entryUnit: p.item.unit,
         baseQuantity: String(p.quantity), baseUnit: p.item.unit,
         unitPrice: p.item.netPrice, priceUnit: p.item.priceUnit, currency: view.currency,
@@ -530,10 +547,10 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       });
       await tx.insert(stockQuantity).values({
         client: input.client, materialNumber: p.item.materialNumber!, plant: p.item.plant,
-        storageLocation: p.storageLocation, stockType: 'UNRESTRICTED',
+        storageLocation: p.storageLocation, stockType: 'UNRESTRICTED', batchNumber: p.batch,
         quantity: String(p.quantity), createdBy: input.changedBy,
       }).onConflictDoUpdate({
-        target: [stockQuantity.client, stockQuantity.materialNumber, stockQuantity.plant, stockQuantity.storageLocation, stockQuantity.stockType],
+        target: [stockQuantity.client, stockQuantity.materialNumber, stockQuantity.plant, stockQuantity.storageLocation, stockQuantity.stockType, stockQuantity.batchNumber],
         set: { quantity: sql`${stockQuantity.quantity} + ${p.quantity}`, changedBy: input.changedBy, changedAt: new Date() },
       });
       await applyValuationDelta(
@@ -603,6 +620,7 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
         shortText: item.shortText,
         plant: item.plant,
         storageLocation: item.storageLocation,
+        batch: item.batchNumber,
         proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
         unit: item.unit,
         ordered, received: got, remaining: Math.max(0, ordered - got),
@@ -692,6 +710,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber: line.materialNumber, plant: line.plant,
           storageLocation: line.storageLocation ?? null,
+          batch: line.batchNumber,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) {
@@ -725,6 +744,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
         eq(stockQuantity.plant, line.plant),
         eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
         eq(stockQuantity.stockType, line.stockType),
+        eq(stockQuantity.batchNumber, line.batchNumber),
       ));
       if (!stock || Number(stock.quantity) < Number(line.baseQuantity)) {
         throw new GoodsReceiptError(
@@ -771,6 +791,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
         movementType: movement.movementType,
         materialNumber: line.materialNumber, plant: line.plant,
         storageLocation: line.storageLocation, stockType: line.stockType,
+        batchNumber: line.batchNumber,
         entryQuantity: line.entryQuantity, entryUnit: line.entryUnit,
         baseQuantity: line.baseQuantity, baseUnit: line.baseUnit,
         unitPrice: line.unitPrice, priceUnit: line.priceUnit, currency: line.currency,
@@ -788,6 +809,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
         eq(stockQuantity.plant, line.plant),
         eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
         eq(stockQuantity.stockType, line.stockType),
+        eq(stockQuantity.batchNumber, line.batchNumber),
       ));
       if (line.materialNumber) {
         await applyValuationDelta(

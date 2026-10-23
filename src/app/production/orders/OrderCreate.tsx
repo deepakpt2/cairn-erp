@@ -52,6 +52,10 @@ export default function OrderCreate({
               <input name="orderQuantity" type="number" step="0.001" min="0.001" className="input w-full" required />
             </label>
             <label className="block">
+              <span className="field-label">Batch</span>
+              <input name="batch" maxLength={10} className="input w-full" placeholder="Existing batch" />
+            </label>
+            <label className="block">
               <span className="field-label">{t('co01.start')}</span>
               <input type="date" name="scheduledStart" className="input w-full" defaultValue={today} required />
             </label>

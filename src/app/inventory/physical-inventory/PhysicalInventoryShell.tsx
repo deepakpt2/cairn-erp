@@ -65,6 +65,7 @@ export default function PhysicalInventoryShell({
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th className="py-1">{t('mi01.columnLine')}</th>
                 <th className="py-1">{t('mi01.columnMaterial')}</th>
+                <th className="py-1">{t('mi01.columnBatch')}</th>
               </tr>
             </thead>
             <tbody>
@@ -73,6 +74,9 @@ export default function PhysicalInventoryShell({
                   <td className="py-1">{n}</td>
                   <td className="py-1">
                     <input name={`material-${n}`} className="input w-full" placeholder="MAT-…" />
+                  </td>
+                  <td className="py-1">
+                    <input name={`batch-${n}`} maxLength={10} className="input w-28" placeholder="Batch" />
                   </td>
                 </tr>
               ))}
@@ -111,6 +115,7 @@ export default function PhysicalInventoryShell({
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th className="py-1">{t('mi01.columnLine')}</th>
                 <th className="py-1">{t('mi01.columnMaterial')}</th>
+                <th className="py-1">{t('mi01.columnBatch')}</th>
                 <th className="py-1 text-right">{t('mi01.columnStock')}</th>
               </tr>
             </thead>
@@ -119,6 +124,7 @@ export default function PhysicalInventoryShell({
                 <tr key={item.itemNumber} className="border-t border-line" data-item={item.itemNumber}>
                   <td className="py-1">{item.itemNumber}</td>
                   <td className="py-1">{item.materialNumber} · {item.description}</td>
+                  <td className="py-1" data-batch={item.batch}>{item.batch || '—'}</td>
                   <td className="py-1 text-right tabular" data-stock={item.materialNumber}>
                     {item.stockQuantity} {item.unit}
                   </td>

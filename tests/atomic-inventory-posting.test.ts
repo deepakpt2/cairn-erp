@@ -199,7 +199,7 @@ describe('atomic inventory posting', () => {
       await tx.execute(sql`
         insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         values (${c}, ${MATERIAL}, '1000', '0002', 'UNRESTRICTED', 10, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = 10
       `);
       await tx.execute(sql`

@@ -144,6 +144,7 @@ type SourceItem = {
   item_number: number;
   material_number: string;
   stock_type: string;
+  batch_number?: string;
   count_status: string;
   counted_quantity: string | null;
   difference_quantity: string | null;
@@ -173,7 +174,7 @@ async function lockSource(tx: Tx, client: string, documentNumber: string, fiscal
 
 async function loadSourceItems(tx: Tx, client: string, documentNumber: string, fiscalYear: number): Promise<SourceItem[]> {
   return await tx.execute(sql`
-    select item_number, material_number, stock_type, count_status,
+    select item_number, material_number, stock_type, batch_number, count_status,
            counted_quantity::text, difference_quantity::text, book_quantity_snapshot::text, posting_status
       from physical_inventory_item
      where client = ${client}
@@ -238,13 +239,14 @@ async function judgeItem(
 }
 
 async function booksNow(
-  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, stockType: string,
+  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, stockType: string, batch = '',
 ): Promise<string> {
   const rows = await tx.execute(sql`
     select coalesce(sum(quantity), 0)::text as quantity
       from stock_quantity
      where client = ${client} and material_number = ${materialNumber} and plant = ${plant}
        and stock_type = ${stockType}
+       and batch_number = ${batch}
        and (${location}::text is null or storage_location = ${location})
   `) as unknown as Array<{ quantity: string }>;
   return Number(rows[0]?.quantity ?? 0).toFixed(3);
@@ -346,7 +348,7 @@ export async function validateRecount(input: Omit<CreateRecountInput, 'requestKe
         originalBookQuantity: item.book_quantity_snapshot ?? '',
         originalCountedQuantity: item.counted_quantity ?? '',
         originalDifference: item.difference_quantity ?? '',
-        bookQuantityNow: await booksNow(tx, input.client, header.plant, header.storage_location, item.material_number, item.stock_type),
+        bookQuantityNow: await booksNow(tx, input.client, header.plant, header.storage_location, item.material_number, item.stock_type, item.batch_number ?? ''),
       });
     }
     return {
@@ -437,7 +439,9 @@ export async function createRecount(input: CreateRecountInput): Promise<RecountV
       postingBlock: false,
       requestKey: input.requestKey,
       materials: [...new Set(chosen.map((item) => item.material_number))],
-      lines: chosen.map((item) => ({ materialNumber: item.material_number, stockType: item.stock_type })),
+      lines: chosen.map((item) => ({
+        materialNumber: item.material_number, stockType: item.stock_type, batch: item.batch_number ?? '',
+      })),
     });
 
     for (let index = 0; index < chosen.length; index += 1) {
@@ -698,6 +702,7 @@ export interface RecountSourceItem {
   itemNumber: number;
   materialNumber: string;
   stockType: string;
+  batch: string;
   countStatus: string;
   bookQuantity: string;
   countedQuantity: string;
@@ -735,7 +740,7 @@ export async function getRecountSource(
     const header = headers[0];
     if (!header) return null;
     const items = await tx.execute(sql`
-      select item_number, material_number, stock_type, count_status,
+      select item_number, material_number, stock_type, batch_number, count_status,
              counted_quantity::text, difference_quantity::text, book_quantity_snapshot::text, posting_status
         from physical_inventory_item
        where client = ${client}
@@ -751,11 +756,12 @@ export async function getRecountSource(
         itemNumber: item.item_number,
         materialNumber: item.material_number,
         stockType: item.stock_type,
+        batch: item.batch_number ?? '',
         countStatus: item.count_status,
         bookQuantity: shown(item.book_quantity_snapshot),
         countedQuantity: shown(item.counted_quantity),
         difference: shown(item.difference_quantity),
-        bookQuantityNow: await booksNow(tx, client, header.plant, header.storage_location, item.material_number, item.stock_type),
+        bookQuantityNow: await booksNow(tx, client, header.plant, header.storage_location, item.material_number, item.stock_type, item.batch_number ?? ''),
         eligible: reason === null,
         reason,
         recountDocumentNumber: link?.recount_document_number ?? null,

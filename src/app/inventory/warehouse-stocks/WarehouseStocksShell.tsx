@@ -108,6 +108,7 @@ export default function WarehouseStocksShell({ canUse, selection, result, report
               <th rowSpan={2}>{t('whStock.description')}</th>
               <th rowSpan={2}>{t('whStock.plant')}</th>
               <th rowSpan={2}>{t('whStock.storageLocation')}</th>
+              <th rowSpan={2}>Batch</th>
               <th rowSpan={2}>{t('whStock.unit')}</th>
               <th colSpan={5} className="text-center">{t('whStock.total')}</th>
               {showValuation ? <th colSpan={3} className="text-center">{t('whStock.value')}</th> : null}
@@ -126,17 +127,18 @@ export default function WarehouseStocksShell({ canUse, selection, result, report
           </thead>
           <tbody>
             {result === null && !reportError ? (
-              <tr><td colSpan={showValuation ? 14 : 11} className="text-ink-soft">{t('whStock.prompt')}</td></tr>
+              <tr><td colSpan={showValuation ? 15 : 12} className="text-ink-soft">{t('whStock.prompt')}</td></tr>
             ) : null}
             {result && result.rows.length === 0 ? (
-              <tr><td colSpan={showValuation ? 14 : 11} className="text-ink-soft">{t('whStock.empty')}</td></tr>
+              <tr><td colSpan={showValuation ? 15 : 12} className="text-ink-soft">{t('whStock.empty')}</td></tr>
             ) : null}
             {result?.rows.map((row) => (
-              <tr key={`${row.materialNumber}|${row.plant}|${row.storageLocation}`} data-material={row.materialNumber}>
+              <tr key={`${row.materialNumber}|${row.plant}|${row.storageLocation}|${row.batch}`} data-material={row.materialNumber} data-batch={row.batch}>
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.materialDescription}</td>
                 <td className="code">{row.plant}</td>
                 <td className="code">{row.storageLocation}</td>
+                <td className="code">{row.batch || '—'}</td>
                 <td>{row.baseUnit}</td>
                 <td className="text-end">{row.unrestrictedQuantity.toFixed(3)}</td>
                 <td className="text-end">{row.qualityInspectionQuantity.toFixed(3)}</td>
@@ -164,7 +166,7 @@ export default function WarehouseStocksShell({ canUse, selection, result, report
           {showTotals ? (
             <tfoot>
               <tr>
-                <td colSpan={5} className="font-semibold">{t('whStock.totals')}</td>
+                <td colSpan={6} className="font-semibold">{t('whStock.totals')}</td>
                 <td className="text-end">{result!.totals.unrestrictedQuantity.toFixed(3)}</td>
                 <td className="text-end">{result!.totals.qualityInspectionQuantity.toFixed(3)}</td>
                 <td className="text-end">{result!.totals.blockedQuantity.toFixed(3)}</td>

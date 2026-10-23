@@ -13,14 +13,16 @@
  *
  * Read-only: this module issues no insert, update or delete.
  *
- * Deferred by name (contract §26.852): valuation type and batch (no batch master
- * and no valuation type on the stock record). Refused by name: SAP's one-character
- * special stock indicator, which Cairn replaces with a named stock type.
+ * A named batch splits the row and filters this list. The list does not create
+ * a batch. Valuation type is deferred by name (no valuation type on the stock
+ * record). Refused by name: SAP's one-character special stock indicator, which
+ * Cairn replaces with a named stock type.
  */
 import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 
 export const WAREHOUSE_STOCK_CAPABILITY = 'INV.STOCK.WAREHOUSE';
 export const WAREHOUSE_STOCK_ALIAS = 'MB52';
@@ -58,6 +60,7 @@ export interface WarehouseStockRow {
   materialDescription: string;
   plant: string;
   storageLocation: string;
+  batch: string;
   baseUnit: string;
   unrestrictedQuantity: number;
   qualityInspectionQuantity: number;
@@ -158,12 +161,6 @@ export async function listWarehouseStocks(input: {
       'Valuation type is deferred: this canon carries no valuation type on the stock record.',
     );
   }
-  if (s.batch) {
-    fail(
-      `Batch ${s.batch} is not maintained.`,
-      'Batch is deferred: this canon carries no batch master.',
-    );
-  }
 
   if (s.materialFrom && s.materialTo && s.materialTo < s.materialFrom) fail('The material range is inverted.', 'The lower bound must not exceed the upper bound.');
   if (s.plantFrom && s.plantTo && s.plantTo < s.plantFrom) fail('The plant range is inverted.', 'The lower bound must not exceed the upper bound.');
@@ -209,6 +206,29 @@ export async function listWarehouseStocks(input: {
       `) as unknown as Array<{ hit: number }>;
       if (rows.length === 0) fail(`The stock type ${s.stockType} does not stand.`, 'Choose a stock type the stock master carries.');
     }
+    if (s.batch) {
+      const typed = s.batch.trim().toUpperCase();
+      s.batch = typed;
+      const singleMaterial = Boolean(s.materialFrom) && (!s.materialTo || s.materialTo === s.materialFrom);
+      const singlePlant = Boolean(s.plantFrom) && (!s.plantTo || s.plantTo === s.plantFrom);
+      if (singleMaterial && singlePlant) {
+        try {
+          s.batch = await resolvePostingBatch(tx, {
+            client, materialNumber: s.materialFrom!, plant: s.plantFrom!, batch: typed,
+          });
+        } catch (caught) {
+          if (caught instanceof BatchPostingError) fail(caught.message.replace(' No stock was posted.', ''), caught.remedy);
+          throw caught;
+        }
+      } else {
+        const standing = await tx.execute(sql`
+          select 1 as hit from batch where client = ${client} and batch_number = ${typed} limit 1
+        `) as unknown as Array<{ hit: number }>;
+        if (standing.length === 0) {
+          fail(`Batch ${typed} does not stand.`, 'Create the batch in MSC1N first. This list does not create a batch.');
+        }
+      }
+    }
 
     const filters = [
       s.materialFrom ? sql`and s.material_number >= ${s.materialFrom}` : sql``,
@@ -218,13 +238,14 @@ export async function listWarehouseStocks(input: {
       s.storageLocationFrom ? sql`and s.storage_location >= ${s.storageLocationFrom}` : sql``,
       s.storageLocationTo ? sql`and s.storage_location <= ${s.storageLocationTo}` : sql``,
       s.stockType ? sql`and s.stock_type = ${s.stockType}` : sql``,
+      s.batch ? sql`and s.batch_number = ${s.batch}` : sql``,
     ];
     const where = sql.join(filters, sql` `);
     const having = s.displayZero ? sql`` : sql`having sum(s.quantity) <> 0`;
 
     const rows = await tx.execute(sql`
       select s.material_number, coalesce(mat.description, '') as material_description,
-             s.plant, s.storage_location, coalesce(mat.base_unit, '') as base_unit,
+             s.plant, s.storage_location, s.batch_number, coalesce(mat.base_unit, '') as base_unit,
              sum(case when s.stock_type = ${UNRESTRICTED} then s.quantity else 0 end) as unrestricted_qty,
              sum(case when s.stock_type = ${QUALITY_INSPECTION} then s.quantity else 0 end) as quality_qty,
              sum(case when s.stock_type = ${BLOCKED} then s.quantity else 0 end) as blocked_qty,
@@ -239,9 +260,9 @@ export async function listWarehouseStocks(input: {
       left join material_valuation v
         on v.client = s.client and v.material_number = s.material_number and v.valuation_area = s.plant
       where s.client = ${client} ${where}
-      group by s.material_number, mat.description, s.plant, s.storage_location, mat.base_unit
+      group by s.material_number, mat.description, s.plant, s.storage_location, s.batch_number, mat.base_unit
       ${having}
-      order by s.material_number, s.plant, s.storage_location
+      order by s.material_number, s.plant, s.storage_location, s.batch_number
       limit ${maxHits + 1}
     `) as unknown as Array<Record<string, unknown>>;
 
@@ -268,6 +289,7 @@ export async function listWarehouseStocks(input: {
       const materialNumber = String(r.material_number);
       const plant = String(r.plant ?? '');
       const storageLocation = String(r.storage_location ?? '');
+      const batch = String(r.batch_number ?? '');
       const totalQuantity = num(r.total_qty);
       const priceControl = r.price_control === null || r.price_control === undefined ? null : String(r.price_control);
       const priceUnit = r.price_unit === null || r.price_unit === undefined ? 1 : num(r.price_unit);
@@ -296,6 +318,7 @@ export async function listWarehouseStocks(input: {
           + (base.includes('stock-on-posting-date')
             ? `&dateFrom=${firstDate}&dateTo=${lastDate}`
             : `&postingDateFrom=${firstDate}&postingDateTo=${lastDate}`)
+          + (batch ? `&batch=${encodeURIComponent(batch)}` : '')
         : null);
 
       return {
@@ -303,6 +326,7 @@ export async function listWarehouseStocks(input: {
         materialDescription: String(r.material_description ?? ''),
         plant,
         storageLocation,
+        batch,
         baseUnit: String(r.base_unit ?? ''),
         unrestrictedQuantity: num(r.unrestricted_qty),
         qualityInspectionQuantity: num(r.quality_qty),

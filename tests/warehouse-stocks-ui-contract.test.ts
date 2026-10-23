@@ -85,7 +85,7 @@ describe('SCR-127 warehouse stocks on hand UI contract', () => {
   it('refuses the special stock indicator and defers batch and valuation type by name', () => {
     expect(service).toContain('The special stock indicator');
     expect(service).toMatch(/Valuation type .* is not maintained/);
-    expect(service).toMatch(/Batch .* is not maintained/);
+    expect(service).toContain('A named batch splits the row and filters this list');
     expect(service).toContain('named stock type');
   });
 

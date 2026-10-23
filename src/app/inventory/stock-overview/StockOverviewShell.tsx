@@ -144,13 +144,25 @@ export default function StockOverviewShell({ canUse, selection, result, reportEr
                         </tr>
                       </thead>
                       <tbody>
-                        {location.stockTypes.map((type) => (
+                        {location.stockTypes.flatMap((type) => [
                           <tr key={`${location.storageLocation}|${type.stockType}`} data-stock-type={type.stockType}>
                             <td className="code">{type.stockType}</td>
                             <td className="text-end">{type.quantity.toFixed(3)}</td>
                             <td>{result.baseUnit}</td>
-                          </tr>
-                        ))}
+                          </tr>,
+                          ...type.batches.filter((batch) => batch.batch !== '').map((batch) => (
+                            <tr key={`${location.storageLocation}|${type.stockType}|${batch.batch}`} data-batch={batch.batch}>
+                              <td className="ps-4 code">{batch.batch}</td>
+                              <td className="text-end">{batch.quantity.toFixed(3)}</td>
+                              <td>
+                                {result.baseUnit}
+                                {batchReadback(location.movementsDrillDown, batch.batch) ? (
+                                  <Link className="ms-2" href={batchReadback(location.movementsDrillDown, batch.batch)!}>{t('stockOvw.movements')}</Link>
+                                ) : null}
+                              </td>
+                            </tr>
+                          )),
+                        ])}
                       </tbody>
                     </table>
                   </details>
@@ -170,6 +182,11 @@ export default function StockOverviewShell({ canUse, selection, result, reportEr
       ) : null}
     </div>
   );
+}
+
+function batchReadback(url: string | null, batch: string): string | null {
+  if (!url || !batch || url.includes('batch=')) return url;
+  return `${url}&batch=${encodeURIComponent(batch)}`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

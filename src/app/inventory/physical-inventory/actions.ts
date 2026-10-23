@@ -42,9 +42,12 @@ export async function createPhysicalInventoryAction(
   }
 
   const materials: string[] = [];
+  const batches: string[] = [];
   for (let n = 1; n <= LINE_COUNT; n += 1) {
     const materialNumber = text(form, `material-${n}`);
-    if (materialNumber) materials.push(materialNumber);
+    if (!materialNumber) continue;
+    materials.push(materialNumber);
+    batches.push(text(form, `batch-${n}`));
   }
 
   try {
@@ -56,6 +59,7 @@ export async function createPhysicalInventoryAction(
       plannedCountDate: text(form, 'plannedCountDate'),
       postingBlock: text(form, 'postingBlock') === 'on',
       materials,
+      batches,
       requestKey: text(form, 'requestKey'),
     });
     revalidatePath(PHYSICAL_INVENTORY_ROUTE);

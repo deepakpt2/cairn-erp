@@ -81,7 +81,7 @@ describe('SCR-142 physical inventory document (MI01)', () => {
         insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         select ${client}, v.n, ${PLANT}, 'SP01', 'UNRESTRICTED', 100, ${ACTOR}
         from (values ('PI-MAT'), ('PI-OTHER'), ('PI-REV'), ('PI-LOCK')) as v(n)
-        on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = 100
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = 100
       `);
       await tx.execute(sql`
         insert into gl_account (client, chart_of_accounts, account_number, name, account_type,

@@ -60,6 +60,9 @@ export default function MaterialDocumentListShell({ canUse, selection, result, l
           <Field label={t('mdList.stockType')}>
             <input name="stockType" maxLength={16} className="field-input code w-36" defaultValue={selection.stockType ?? ''} placeholder="UNRESTRICTED" />
           </Field>
+          <Field label={t('mdList.batch')}>
+            <input name="batch" maxLength={10} className="field-input code w-32" defaultValue={selection.batch ?? ''} />
+          </Field>
           <Field label={t('mdList.purchaseOrderFrom')}>
             <input name="purchaseOrderFrom" maxLength={10} className="field-input code w-36" defaultValue={selection.purchaseOrderFrom ?? ''} />
           </Field>
@@ -115,6 +118,7 @@ export default function MaterialDocumentListShell({ canUse, selection, result, l
               <th>{t('mdList.plant')}</th>
               <th>{t('mdList.storageLocation')}</th>
               <th>{t('mdList.stockType')}</th>
+              <th>{t('mdList.batch')}</th>
               <th>{t('mdList.postingDate')}</th>
               <th>{t('mdList.documentDate')}</th>
               <th>{t('mdList.headerText')}</th>
@@ -128,10 +132,10 @@ export default function MaterialDocumentListShell({ canUse, selection, result, l
           </thead>
           <tbody>
             {result === null && !listError ? (
-              <tr><td colSpan={23} className="text-ink-soft">{t('mdList.prompt')}</td></tr>
+              <tr><td colSpan={24} className="text-ink-soft">{t('mdList.prompt')}</td></tr>
             ) : null}
             {result && result.rows.length === 0 ? (
-              <tr><td colSpan={23} className="text-ink-soft">{t('mdList.empty')}</td></tr>
+              <tr><td colSpan={24} className="text-ink-soft">{t('mdList.empty')}</td></tr>
             ) : null}
             {result?.rows.map((row) => (
               <tr key={`${row.materialDocumentNumber}|${row.lineNumber}`} data-document={row.materialDocumentNumber}>
@@ -151,6 +155,7 @@ export default function MaterialDocumentListShell({ canUse, selection, result, l
                 <td className="code">{row.plant}</td>
                 <td className="code">{row.storageLocation}</td>
                 <td className="code">{row.stockType}</td>
+                <td className="code" data-batch={row.batch}>{row.batch || '—'}</td>
                 <td>{row.postingDate}</td>
                 <td>{row.documentDate}</td>
                 <td>{row.headerText}</td>

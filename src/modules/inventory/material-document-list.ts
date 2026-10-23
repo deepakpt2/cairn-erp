@@ -11,9 +11,11 @@
  * status and its reversal is a document of its own carrying the REVERSAL
  * direction. Closed posting periods never suppress history.
  *
- * Deferred by name (contract §26.846): Scope-of-List presentation variants,
- * project and sales-order special stock (the package's Q/E indicators — this
- * canon carries none), batch and serial-number selection, and exporting.
+ * A named batch filters and shows the batch already stored on the line. It does
+ * not create a batch. Deferred by name: Scope-of-List presentation variants,
+ * project and sales-order special stock, serial-number selection, and exporting.
+ * A sales order, a delivery, a billing document, and a scheduling agreement are
+ * refused by name. Those documents are not on the material document.
  */
 import { sql } from 'drizzle-orm';
 
@@ -41,10 +43,17 @@ export interface MaterialDocListSelection {
   documentDateFrom?: string;
   documentDateTo?: string;
   stockType?: string;
+  /** Exact batch already stored on the line. Blank means every batch, including none. */
+  batch?: string;
   purchaseOrderFrom?: string;
   purchaseOrderTo?: string;
   userName?: string;
   maxHits?: number;
+  salesOrder?: string;
+  delivery?: string;
+  billingDocument?: string;
+  schedulingAgreement?: string;
+  serialNumber?: string;
 }
 
 export interface MaterialDocListRow {
@@ -66,6 +75,7 @@ export interface MaterialDocListRow {
   plant: string;
   storageLocation: string;
   stockType: string;
+  batch: string;
   postingDate: string;
   documentDate: string;
   headerText: string;
@@ -149,11 +159,33 @@ export async function listMaterialDocuments(input: {
     documentDateFrom: bound(raw.documentDateFrom),
     documentDateTo: bound(raw.documentDateTo),
     stockType: bound(raw.stockType),
+    batch: bound(raw.batch)?.toUpperCase(),
     purchaseOrderFrom: bound(raw.purchaseOrderFrom),
+    salesOrder: bound(raw.salesOrder),
+    delivery: bound(raw.delivery),
+    billingDocument: bound(raw.billingDocument),
+    schedulingAgreement: bound(raw.schedulingAgreement),
+    serialNumber: bound(raw.serialNumber),
     purchaseOrderTo: bound(raw.purchaseOrderTo),
     userName: bound(raw.userName),
     maxHits: raw.maxHits,
   };
+
+  if (s.salesOrder) {
+    fail('A sales order is not on the material document. No list was read.', 'Select a material or a batch. This list does not read a sales order.');
+  }
+  if (s.delivery) {
+    fail('A delivery is not on the material document. No list was read.', 'Select a material or a batch. This list does not read a delivery.');
+  }
+  if (s.billingDocument) {
+    fail('A billing document is not on the material document. No list was read.', 'Select a material or a batch. This list does not read a billing document.');
+  }
+  if (s.schedulingAgreement) {
+    fail('A scheduling agreement is not on the material document. No list was read.', 'Select a material or a batch. This list does not read a scheduling agreement.');
+  }
+  if (s.serialNumber) {
+    fail('A serial number is not on the material document. No list was read.', 'Select a material or a batch. This list does not read a serial number.');
+  }
 
   // The posting-date range is required: without it the query has no index path
   // and the list becomes a scan of the whole ledger.
@@ -239,6 +271,17 @@ export async function listMaterialDocuments(input: {
         fail(`User ${s.userName} is not known.`, 'Select a user that stands, or one who has posted a material document.');
       }
     }
+    if (s.batch) {
+      const standing = await tx.execute(sql`
+        select 1 as hit from batch where client = ${client} and batch_number = ${s.batch} limit 1
+      `) as unknown as Array<{ hit: number }>;
+      if (standing.length === 0) {
+        fail(
+          `Batch ${s.batch} does not stand. No list was read.`,
+          'Create the batch in MSC1N first. This list does not create a batch.',
+        );
+      }
+    }
 
     const filters = [sql`l.client = ${client}`];
     const range = (column: string, from?: string, to?: string) => {
@@ -255,6 +298,7 @@ export async function listMaterialDocuments(input: {
     if (s.documentDateFrom) filters.push(sql`d.document_date >= ${s.documentDateFrom}`);
     if (s.documentDateTo) filters.push(sql`d.document_date <= ${s.documentDateTo}`);
     if (s.stockType) filters.push(sql`l.stock_type = ${s.stockType}`);
+    if (s.batch) filters.push(sql`l.batch_number = ${s.batch}`);
     if (s.userName) filters.push(sql`d.created_by = ${s.userName}`);
     const where = sql.join(filters, sql` and `);
 
@@ -264,6 +308,7 @@ export async function listMaterialDocuments(input: {
              l.entry_quantity, l.entry_unit, l.base_quantity, l.base_unit,
              l.unit_price, l.price_unit, l.value, l.currency,
              l.plant, coalesce(l.storage_location, '') as storage_location, l.stock_type,
+             coalesce(l.batch_number, '') as batch_number,
              d.posting_date::text as posting_date, d.document_date::text as document_date,
              coalesce(d.header_text, '') as header_text, d.status, d.created_by,
              coalesce(d.journal_document_number, '') as journal_document,
@@ -301,6 +346,7 @@ export async function listMaterialDocuments(input: {
       plant: String(r.plant ?? ''),
       storageLocation: String(r.storage_location ?? ''),
       stockType: String(r.stock_type ?? ''),
+      batch: String(r.batch_number ?? ''),
       postingDate: String(r.posting_date),
       documentDate: String(r.document_date),
       headerText: String(r.header_text ?? ''),

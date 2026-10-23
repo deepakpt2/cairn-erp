@@ -12,6 +12,8 @@ import {
   receivedQuantityFor,
 } from '../src/modules/inventory/production-receipt';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
+import { getBatchLevel, saveBatchLevel } from '../src/modules/inventory/batch-level';
+import { createBatch } from '../src/modules/inventory/batch-master';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -84,7 +86,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       await tx.execute(sql`
         insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
         values (${client}, 'GR-RM', ${PLANT}, 'SG01', 'UNRESTRICTED', 100, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = 100
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = 100
       `);
       await tx.execute(sql`
         insert into material_period_control (client, company_code, current_fiscal_year, current_period,
@@ -314,5 +316,73 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
     }).catch((e: unknown) => e as ProductionReceiptError);
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
+  });
+
+  it('receives a batch-managed order onto a batch that already stands', async () => {
+    await withTenant(client, (tx) => tx.execute(sql`
+      update material set batch_managed = true where client = ${client} and material_number = 'GR-FG'
+    `));
+    await saveBatchLevel({ client, changedBy: ACTOR, batchLevel: '1', version: 0, reason: 'Material level' });
+    await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00012', reason: 'Output batch' });
+    const draft = await createProductionOrder({
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 4,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 4 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const before = await withTenant(client, (tx) => tx.execute(sql`
+      select coalesce(sum(quantity), 0)::text as quantity from stock_quantity
+      where client = ${client} and material_number = 'GR-FG' and batch_number = ''
+    `)) as unknown as Array<{ quantity: string }>;
+    await expect(postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 1 }],
+      requestKey: 'gr-batch-missing',
+    })).rejects.toThrow(/batch is required/i);
+    await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 2, batch: '00012' }],
+      requestKey: 'gr-batch',
+    });
+    const stock = await withTenant(client, (tx) => tx.execute(sql`
+      select batch_number, quantity::text as quantity from stock_quantity
+      where client = ${client} and material_number = 'GR-FG' and storage_location = 'SG01' and quantity <> 0
+      order by batch_number
+    `)) as unknown as Array<{ batch_number: string; quantity: string }>;
+    expect(stock.find((row) => row.batch_number === '00012')?.quantity).toBe('2.000');
+    const blank = await withTenant(client, (tx) => tx.execute(sql`
+      select coalesce(sum(quantity), 0)::text as quantity from stock_quantity
+      where client = ${client} and material_number = 'GR-FG' and batch_number = ''
+    `)) as unknown as Array<{ quantity: string }>;
+    expect(Number(blank[0]?.quantity)).toBe(Number(before[0]?.quantity));
+  });
+
+  it('receives the batch named on the order when the receipt line leaves it blank', async () => {
+    await withTenant(client, (tx) => tx.execute(sql`
+      update material set batch_managed = true where client = ${client} and material_number = 'GR-FG'
+    `));
+    const level = await getBatchLevel(client);
+    if (!level) {
+      await saveBatchLevel({ client, changedBy: ACTOR, batchLevel: '1', version: 0, reason: 'Material level' });
+    }
+    await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00013', reason: 'Order batch' });
+    const draft = await createProductionOrder({
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 3, batch: '00013',
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 3 }],
+    });
+    expect(draft.batch).toBe('00013');
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const receipt = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 1 }],
+      requestKey: 'gr-order-batch',
+    });
+    expect(receipt.lines[0]?.batch).toBe('00013');
   });
 });

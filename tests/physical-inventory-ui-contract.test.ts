@@ -33,6 +33,7 @@ describe('SCR-142 physical inventory screen', () => {
       expect(shell).toContain(`name="${field}"`);
     }
     expect(shell).toContain('name={`material-${n}`}');
+    expect(shell).toContain('name={`batch-${n}`}');
     expect(shell).not.toContain('name="companyCode"');
     // The year is never typed; it is carried hidden, and only to identify a document for cancelling.
     expect(shell).toContain('<input type="hidden" name="fiscalYear"');

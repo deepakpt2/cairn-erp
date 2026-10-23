@@ -69,7 +69,7 @@ export async function physicalInventoryCount(ctx: Context) {
       insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
       select ${client}, v.n, 'QP02', 'SQ01', 'UNRESTRICTED', 100, 'browser.admin'
       from (values ('MPI-COUNT'), ('MPI-FREE')) as v(n)
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = 100
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = 100
     `);
     await tx.execute(sql`
       insert into material_period_control (client, company_code, current_fiscal_year, current_period,

@@ -55,6 +55,8 @@ export interface ReversalLineView {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  /** The batch stored on the line. Blank when the line carries none. Not typed on this screen. */
+  batch: string;
   quantity: string;
   unit: string;
   value: string;
@@ -137,6 +139,7 @@ async function toView(
         plant: l.plant,
         storageLocation: l.storageLocation,
         stockType: l.stockType,
+        batch: l.batchNumber,
         quantity: l.baseQuantity,
         unit: l.baseUnit,
         value: l.value,
@@ -237,7 +240,7 @@ async function judgePeriods(tx: Tx, client: string, plants: string[], postingDat
 }
 
 async function stockAt(
-  tx: Tx, client: string, line: { materialNumber: string; plant: string; storageLocation: string | null; stockType: string },
+  tx: Tx, client: string, line: { materialNumber: string; plant: string; storageLocation: string | null; stockType: string; batchNumber?: string | null },
 ): Promise<number> {
   const [row] = await tx.select().from(stockQuantity).where(and(
     eq(stockQuantity.client, client),
@@ -245,13 +248,14 @@ async function stockAt(
     eq(stockQuantity.plant, line.plant),
     eq(stockQuantity.storageLocation, line.storageLocation ?? ''),
     eq(stockQuantity.stockType, line.stockType),
+    eq(stockQuantity.batchNumber, line.batchNumber ?? ''),
   )).for('update');
   return row ? Number(row.quantity) : 0;
 }
 
 async function moveStock(
   tx: Tx, client: string, changedBy: string,
-  line: { materialNumber: string; plant: string; storageLocation: string | null; stockType: string },
+  line: { materialNumber: string; plant: string; storageLocation: string | null; stockType: string; batchNumber?: string | null },
   delta: number,
 ) {
   const location = line.storageLocation ?? '';
@@ -261,11 +265,13 @@ async function moveStock(
     eq(stockQuantity.plant, line.plant),
     eq(stockQuantity.storageLocation, location),
     eq(stockQuantity.stockType, line.stockType),
+    eq(stockQuantity.batchNumber, line.batchNumber ?? ''),
   ));
   if (!existing) {
     await tx.insert(stockQuantity).values({
       client, materialNumber: line.materialNumber, plant: line.plant,
       storageLocation: location, stockType: line.stockType,
+      batchNumber: line.batchNumber ?? '',
       quantity: String(delta), createdBy: changedBy,
     });
     return;
@@ -279,6 +285,7 @@ async function moveStock(
     eq(stockQuantity.plant, line.plant),
     eq(stockQuantity.storageLocation, location),
     eq(stockQuantity.stockType, line.stockType),
+    eq(stockQuantity.batchNumber, line.batchNumber ?? ''),
   ));
 }
 
@@ -402,6 +409,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber: line.materialNumber, plant: line.plant,
           storageLocation: line.storageLocation ?? null,
+          batch: line.batchNumber,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) {
@@ -431,6 +439,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     );
 
     // A reversal takes stock back, so its issue side is judged for sufficiency first.
+    // The claim is the batch the line stored. Two batches of one material are not one pile.
     const claimedStock = new Map<string, number>();
     for (const line of wanted) {
       if (line.lineDirection !== 'RECEIPT') continue;
@@ -440,12 +449,13 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         eq(storageLocation.storageLocation, line.storageLocation ?? ''),
       ));
       const held = await stockAt(tx, input.client, line);
-      const stockKey = `${line.materialNumber}|${line.plant}|${line.storageLocation ?? ''}|${line.stockType}`;
+      const batch = line.batchNumber ?? '';
+      const stockKey = `${line.materialNumber}|${line.plant}|${line.storageLocation ?? ''}|${line.stockType}|${batch}`;
       const already = claimedStock.get(stockKey) ?? 0;
       const taking = Number(line.baseQuantity) + already;
       if (held + 1e-9 < taking && !location?.allowNegativeStock) {
         throw new MaterialReversalError(
-          `Stock of ${line.materialNumber} in plant ${line.plant} storage location ${line.storageLocation ?? ''} is ${held.toFixed(3)}, short of the ${taking.toFixed(3)} the reversal takes back.`,
+          `Stock of ${line.materialNumber}${batch ? ` batch ${batch}` : ''} in plant ${line.plant} storage location ${line.storageLocation ?? ''} is ${held.toFixed(3)}, short of the ${taking.toFixed(3)} the reversal takes back.`,
           'The received stock has been consumed; the receipt can no longer be reversed in full.',
         );
       }
@@ -506,6 +516,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         plant: line.plant,
         storageLocation: line.storageLocation,
         stockType: line.stockType,
+        batchNumber: line.batchNumber,
         entryQuantity: line.entryQuantity,
         entryUnit: line.entryUnit,
         baseQuantity: line.baseQuantity,

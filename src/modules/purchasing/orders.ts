@@ -29,6 +29,7 @@ import {
   storageLocation, taxCode,
 } from '../foundation/schema';
 import { businessPartner } from '../foundation/business-partner-schema';
+import { BatchPostingError, resolvePostingBatch } from '../inventory/batch-posting';
 import {
   assertPurchasingOrgForPlant,
   PurchasingOrgPlantAuthorizationError,
@@ -93,6 +94,8 @@ const itemInput = z.object({
   taxCode: z.string().trim().max(4).optional().default(''),
   plant: z.string().trim().min(1).max(10),
   storageLocation: z.string().trim().max(10).optional().default(''),
+  /** A batch that already stands. The order does not create it. */
+  batch: z.string().trim().max(10).optional().default(''),
   accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
   markedForDeletion: z.boolean().optional().default(false),
   requisitionNumber: z.string().trim().max(10).optional().default(''),
@@ -558,6 +561,25 @@ async function judgeItem(
     );
   }
 
+  let batchNumber = '';
+  const typedBatch = (item.batch ?? '').trim();
+  if (typedBatch && !item.materialNumber) {
+    throw new PurchaseOrderError(
+      'A batch was entered on an item with no material. No order was saved.',
+      'Leave the batch empty, or name the material.',
+    );
+  }
+  if (typedBatch) {
+    try {
+      batchNumber = await resolvePostingBatch(tx, {
+        client, materialNumber: item.materialNumber, plant: item.plant, batch: typedBatch,
+      });
+    } catch (caught) {
+      if (caught instanceof BatchPostingError) throw new PurchaseOrderError(caught.message, caught.remedy);
+      throw caught;
+    }
+  }
+
   return {
     values: {
       client,
@@ -578,6 +600,7 @@ async function judgeItem(
       taxCode: item.taxCode || null,
       plant: item.plant,
       storageLocation: item.storageLocation || null,
+      batchNumber,
       materialGroup: group9,
       requisitionNumber: storedRequisition,
       requisitionItem: storedRequisitionItem,
@@ -637,6 +660,7 @@ async function loadDocument(tx: Tx, client: string, orderNumber: string): Promis
       taxCode: item.taxCode,
       plant: item.plant,
       storageLocation: item.storageLocation,
+      batch: item.batchNumber,
       materialGroup: item.materialGroup,
       accountAssignmentCategory: item.accountAssignmentCategory,
       markedForDeletion: item.markedForDeletion,

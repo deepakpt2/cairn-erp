@@ -105,6 +105,10 @@ export default function TransferPosting({ document, stock, canPost, today }: {
               <input name="quantity" type="number" step="0.001" min="0.001" className="input w-full" required />
             </label>
             <label className="block">
+              <span className="field-label">Batch</span>
+              <input name="batch" maxLength={10} className="input w-full" placeholder="Batch" />
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('mb1b.stockType')}</span>
               <input name="stockType" className="input w-full" placeholder="QUALITY" />
             </label>
@@ -232,14 +236,16 @@ export default function TransferPosting({ document, stock, canPost, today }: {
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th className="py-1">{t('mb1b.columnLocation')}</th>
                 <th className="py-1">{t('mb1b.columnStockType')}</th>
+                <th className="py-1">Batch</th>
                 <th className="py-1 text-right">{t('mb1b.columnQuantity')}</th>
               </tr>
             </thead>
             <tbody>
               {stock.map((row) => (
-                <tr key={`${row.storageLocation}/${row.stockType}`} className="border-t border-line">
+                <tr key={`${row.storageLocation}/${row.stockType}/${row.batchNumber}`} className="border-t border-line">
                   <td className="py-1">{row.storageLocation}</td>
                   <td className="py-1">{row.stockType}</td>
+                  <td className="py-1">{row.batchNumber || '—'}</td>
                   <td className="py-1 text-right tabular-nums">{Number(row.quantity).toFixed(3)}</td>
                 </tr>
               ))}

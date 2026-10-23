@@ -79,7 +79,7 @@ export async function materialDocumentReversal(ctx: Context) {
       insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by) values
         (${client}, 'MBST-MAT', 'QJ01', 'SJ01', 'UNRESTRICTED', 40, 'browser.admin'),
         (${client}, 'MBST-MAT', 'QJ01', 'SJ02', 'UNRESTRICTED', 5, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type)
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
       do update set quantity = excluded.quantity
     `);
   });

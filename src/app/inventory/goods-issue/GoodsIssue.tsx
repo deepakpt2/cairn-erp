@@ -29,6 +29,7 @@ function IssueLine({ n, chargesCostCentre }: { n: number; chargesCostCentre: boo
         />
       </td>
       <td className="py-1"><ConstrainedField kind="storage-location" name={`sloc-${n}`} context={{ plant }} /></td>
+      <td className="py-1"><input name={`batch-${n}`} maxLength={10} className="input w-24" placeholder="Batch" /></td>
       <td className="py-1">
         <input name={`quantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
       </td>
@@ -99,6 +100,7 @@ export default function GoodsIssue({ scenarios, canPost, today }: {
                 <th className="py-1">{t('mb1a.columnMaterial')}</th>
                 <th className="py-1">{t('mb1a.columnPlant')}</th>
                 <th className="py-1">{t('mb1a.columnLocation')}</th>
+                <th className="py-1">Batch</th>
                 <th className="py-1 text-right">{t('mb1a.columnQuantity')}</th>
                 <th className="py-1">{t('mb1a.columnCostCenter')}</th>
                 <th className="py-1">{t('mb1a.columnReservation')}</th>

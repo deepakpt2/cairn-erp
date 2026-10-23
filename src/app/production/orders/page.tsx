@@ -47,6 +47,7 @@ export default async function ProductionOrdersPage({ searchParams }: {
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             {existing.materialNumber} · {t('co01.plant')} {existing.plant} · {t('co01.company')} {existing.companyCode}
+            {existing.batch ? ` · Batch ${existing.batch}` : ''}
             {' · '}<span data-status={existing.status}>{existing.status}</span>
           </p>
           <table className="mt-2 w-full text-sm">

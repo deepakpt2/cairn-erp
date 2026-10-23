@@ -29,6 +29,7 @@ import { accountDetermination, plant as plantTable, storageLocation } from '../f
 import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
@@ -122,10 +123,13 @@ function scenarioFromRow(row: typeof movementType.$inferSelect, code: string): T
  * Resolve the movement from configuration (§9, §10 step 3).
  *
  * Every refusal here names what the configuration says, because a rule a person cannot see is a
- * rule they cannot satisfy: a two-step movement says so, a movement needing a batch says canon has
- * no batch master, and a movement whose kind is not a transfer says which kinds are.
+ * rule they cannot satisfy: a two-step movement says so, and a movement whose kind is not a
+ * transfer says which kinds are. A batch requirement is not a missing master. The posting uses
+ * the batch already entered.
  */
-async function resolveScenario(tx: Tx, client: string, code: string): Promise<TransferScenario> {
+async function resolveScenario(
+  tx: Tx, client: string, code: string,
+): Promise<{ scenario: TransferScenario; requiresBatch: boolean }> {
   const trimmed = (code ?? '').trim();
   if (TWO_STEP_ALIASES[trimmed]) {
     throw new TransferPostingError(
@@ -163,10 +167,9 @@ async function resolveScenario(tx: Tx, client: string, code: string): Promise<Tr
       'Canon has no in-transit stock dimension; post a one-step transfer instead.',
     );
   }
-  // The requirement flags exist so a tenant can state what a movement needs. Where canon carries no
-  // master for it, the movement is refused rather than posted against stock that belongs to no layer.
+  // Serial, special stock and valuation type still have no master. A batch requirement is
+  // judged after the entered batch is resolved, not refused here as a missing master.
   const unmet: string[] = [];
-  if (row.requiresBatch) unmet.push('a batch (canon carries no batch master)');
   if (row.requiresSerial) unmet.push('serial numbers (canon carries no serial-number master)');
   if (row.requiresSpecialStock) unmet.push('a special-stock category (canon carries stock as a named stock type)');
   if (row.requiresValuationType) unmet.push('a valuation type (canon carries no split valuation)');
@@ -176,7 +179,7 @@ async function resolveScenario(tx: Tx, client: string, code: string): Promise<Tr
       'Clear the requirement in the movement catalogue, or use a movement that does not need it.',
     );
   }
-  return scenarioFromRow(row, trimmed);
+  return { scenario: scenarioFromRow(row, trimmed), requiresBatch: row.requiresBatch };
 }
 
 /**
@@ -192,13 +195,16 @@ function fingerprintOf(input: {
   issuingPlant: string; issuingStorageLocation: string;
   receivingPlant: string; receivingStorageLocation: string;
   postingDate: string; documentDate: string; entryUnit?: string; externalReference?: string;
+  batch?: string;
 }): string {
+  const batch = (input.batch ?? '').trim().toUpperCase();
   const canonical = [
     input.movementTypeCode.trim(), input.materialNumber.trim().toUpperCase(),
     input.quantity.toFixed(6), input.entryUnit ?? '',
     input.issuingPlant.trim(), input.issuingStorageLocation.trim(),
     input.receivingPlant.trim(), input.receivingStorageLocation.trim(),
     input.postingDate, input.documentDate, input.externalReference?.trim() ?? '',
+    ...(batch ? [batch] : []),
   ].join('|');
   // A digest, not the payload: the column is 64 characters and the comparison only needs equality.
   return createHash('sha256').update(canonical).digest('hex');
@@ -242,6 +248,7 @@ export interface TransferLineView {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  batch: string;
   quantity: string;
   unit: string;
   value: string;
@@ -279,7 +286,7 @@ function transferView(
     lines: lines.map((l) => ({
       lineNumber: l.lineNumber, lineDirection: l.lineDirection, movementType: l.movementType,
       materialNumber: l.materialNumber, plant: l.plant, storageLocation: l.storageLocation,
-      stockType: l.stockType, quantity: l.baseQuantity, unit: l.baseUnit, value: l.value,
+      stockType: l.stockType, batch: l.batchNumber, quantity: l.baseQuantity, unit: l.baseUnit, value: l.value,
     })),
   };
 }
@@ -301,6 +308,7 @@ export async function getTransferDocument(client: string, number: string): Promi
 export interface TransferStockRow {
   storageLocation: string;
   stockType: string;
+  batchNumber: string;
   quantity: string;
 }
 
@@ -315,7 +323,8 @@ export async function transferStockAt(
       eq(stockQuantity.plant, plant),
     )).orderBy(stockQuantity.storageLocation, stockQuantity.stockType);
     return rows.map((r) => ({
-      storageLocation: r.storageLocation, stockType: r.stockType, quantity: r.quantity,
+      storageLocation: r.storageLocation, stockType: r.stockType,
+      batchNumber: r.batchNumber, quantity: r.quantity,
     }));
   });
 }
@@ -335,6 +344,8 @@ export interface PostTransferInput {
   documentDate: string;
   headerText?: string;
   externalReference?: string;
+  /** Required when the material is batch-managed. The batch must already stand. */
+  batch?: string;
   requestKey: string;
 }
 
@@ -427,6 +438,7 @@ async function loadStorageLocation(
 
 async function stockAt(
   tx: Tx, client: string, materialNumber: string, plant: string, location: string, stockType: string,
+  batch = '',
 ): Promise<number | null> {
   const [row] = await tx.select().from(stockQuantity).where(and(
     eq(stockQuantity.client, client),
@@ -434,6 +446,7 @@ async function stockAt(
     eq(stockQuantity.plant, plant),
     eq(stockQuantity.storageLocation, location),
     eq(stockQuantity.stockType, stockType),
+    eq(stockQuantity.batchNumber, batch),
   ));
   return row ? Number(row.quantity) : null;
 }
@@ -441,9 +454,9 @@ async function stockAt(
 /** The sufficiency rule: the issuing side must cover it, unless the location permits a negative. */
 async function requireStock(
   tx: Tx, client: string, materialNumber: string, plant: string, location: string,
-  stockType: string, quantity: number, allowNegative: boolean, role: string,
+  stockType: string, quantity: number, allowNegative: boolean, role: string, batch = '',
 ): Promise<void> {
-  const held = await stockAt(tx, client, materialNumber, plant, location, stockType);
+  const held = await stockAt(tx, client, materialNumber, plant, location, stockType, batch);
   if ((held ?? 0) + 1e-9 < quantity && !allowNegative) {
     throw new TransferPostingError(
       `Stock of ${materialNumber} (${stockType}) in storage location ${location} of plant ${plant} is ${(held ?? 0).toFixed(3)}, short of the ${quantity.toFixed(3)} to move.`,
@@ -454,20 +467,22 @@ async function requireStock(
 
 async function moveStock(
   tx: Tx, client: string, changedBy: string, row: {
-    materialNumber: string; plant: string; storageLocation: string; stockType: string;
+    materialNumber: string; plant: string; storageLocation: string; stockType: string; batchNumber?: string;
   }, delta: number,
 ): Promise<void> {
+  const batchNumber = row.batchNumber ?? '';
   const [existing] = await tx.select().from(stockQuantity).where(and(
     eq(stockQuantity.client, client),
     eq(stockQuantity.materialNumber, row.materialNumber),
     eq(stockQuantity.plant, row.plant),
     eq(stockQuantity.storageLocation, row.storageLocation),
     eq(stockQuantity.stockType, row.stockType),
+    eq(stockQuantity.batchNumber, batchNumber),
   ));
   if (!existing) {
     await tx.insert(stockQuantity).values({
       client, materialNumber: row.materialNumber, plant: row.plant,
-      storageLocation: row.storageLocation, stockType: row.stockType,
+      storageLocation: row.storageLocation, stockType: row.stockType, batchNumber,
       quantity: String(delta), createdBy: changedBy,
     });
     return;
@@ -481,6 +496,7 @@ async function moveStock(
     eq(stockQuantity.plant, row.plant),
     eq(stockQuantity.storageLocation, row.storageLocation),
     eq(stockQuantity.stockType, row.stockType),
+    eq(stockQuantity.batchNumber, batchNumber),
   ));
 }
 
@@ -574,6 +590,7 @@ export interface TransferPreflight {
   movedValue: number;
   receivingValue: number;
   stockOnHand: number;
+  batch: string;
 }
 
 /**
@@ -594,7 +611,7 @@ async function preflight(
   // same stock. The lock is on the material, so a transfer and a reversal of it serialise.
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/transfer/${materialNumber}`}, 0))`);
   await lockStockScope(tx, client, [materialNumber], 'EXCLUSIVE');
-  const scenario = await resolveScenario(tx, client, input.movementTypeCode);
+  const { scenario, requiresBatch } = await resolveScenario(tx, client, input.movementTypeCode);
 
   const [mat] = await tx.select().from(material).where(and(
   eq(material.client, input.client), eq(material.materialNumber, materialNumber),
@@ -683,9 +700,11 @@ async function preflight(
   try {
     await assertInventoryCountOpen(tx, input.client, {
       materialNumber, plant: input.issuingPlant, storageLocation: issuingLocation.storageLocation,
+      batch: input.batch,
     });
     await assertInventoryCountOpen(tx, input.client, {
       materialNumber, plant: input.receivingPlant, storageLocation: receivingLocation.storageLocation,
+      batch: input.batch,
     });
   } catch (caught) {
     if (caught instanceof PhysicalInventoryError) {
@@ -694,11 +713,32 @@ async function preflight(
     throw caught;
   }
 
+  let batch = '';
+  try {
+    batch = await resolvePostingBatch(tx, {
+      client: input.client, materialNumber, plant: input.issuingPlant, batch: input.batch, postingDate: input.postingDate,
+    });
+    if (input.receivingPlant !== input.issuingPlant) {
+      await resolvePostingBatch(tx, {
+        client: input.client, materialNumber, plant: input.receivingPlant, batch: input.batch, postingDate: input.postingDate,
+      });
+    }
+  } catch (caught) {
+    if (caught instanceof BatchPostingError) throw new TransferPostingError(caught.message, caught.remedy);
+    throw caught;
+  }
+  if (requiresBatch && !batch) {
+    throw new TransferPostingError(
+      `Movement ${scenario.movementType} requires a batch. No stock was posted.`,
+      'Enter a batch that already stands. This posting does not create a batch.',
+    );
+  }
+
   await requireStock(
   tx, input.client, materialNumber, input.issuingPlant, issuingLocation.storageLocation,
   scenario.fromStockType, quantity,
   scenario.negativeStockPolicy === 'FORBID' ? false : issuingLocation.allowNegativeStock,
-  'issuing',
+  'issuing', batch,
   );
 
   // Value: a move inside one plant changes none; a move between plants carries it — but only
@@ -719,13 +759,13 @@ async function preflight(
 
   const stockOnHand = (await stockAt(
   tx, client, materialNumber, input.issuingPlant,
-  issuingLocation.storageLocation, scenario.fromStockType,
+  issuingLocation.storageLocation, scenario.fromStockType, batch,
   )) ?? 0;
 
   return {
     scenario, mat, entryUnit, entryQuantity: input.quantity, quantity, q,
     issuing, receiving, issuingLocation, receivingLocation, company, position,
-    valueMoves, movedValue, receivingValue, stockOnHand,
+    valueMoves, movedValue, receivingValue, stockOnHand, batch,
   };
 }
 
@@ -847,7 +887,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
     const {
       scenario, mat, entryUnit, quantity, issuing, receiving,
       issuingLocation, receivingLocation, company, position,
-      valueMoves, movedValue, receivingValue, q,
+      valueMoves, movedValue, receivingValue, q, batch,
     } = pre;
 
     const allocated = await allocateNumber(tx, {
@@ -917,6 +957,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       movementType: scenario.movementType, lineDirection: 'ISSUE',
       materialNumber, plant: input.issuingPlant,
       storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType,
+      batchNumber: batch,
       entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
       baseQuantity: String(q), baseUnit: unit,
       unitPrice: scenario.kind === 'PLANT' ? String(round2(issuingValue / q)) : '0',
@@ -930,6 +971,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
       movementType: scenario.movementType, lineDirection: 'RECEIPT',
       materialNumber, plant: input.receivingPlant,
       storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
+      batchNumber: batch,
       entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
       baseQuantity: String(q), baseUnit: unit,
       unitPrice: scenario.kind === 'PLANT' ? String(round2(receivingLineValue / q)) : '0',
@@ -941,11 +983,11 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
 
     await moveStock(tx, input.client, input.changedBy, {
       materialNumber, plant: input.issuingPlant,
-      storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType,
+      storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType, batchNumber: batch,
     }, -q);
     await moveStock(tx, input.client, input.changedBy, {
       materialNumber, plant: input.receivingPlant,
-      storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
+      storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType, batchNumber: batch,
     }, q);
 
     if (valueMoves) {
@@ -1062,6 +1104,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
     await requireStock(
       tx, input.client, issue.materialNumber, receipt.plant, receipt.storageLocation ?? '',
       receipt.stockType, quantity, Boolean(returningLocation?.allowNegativeStock), 'receiving',
+      receipt.batchNumber ?? '',
     );
 
     const { position } = await judgePeriod(tx, input.client, issue.plant, input.postingDate);
@@ -1108,6 +1151,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
         movementType: counter.movementType, lineDirection: line.direction,
         materialNumber: line.from.materialNumber, plant: line.from.plant,
         storageLocation: line.from.storageLocation, stockType: line.from.stockType,
+        batchNumber: line.from.batchNumber,
         entryQuantity: line.from.entryQuantity, entryUnit: line.from.entryUnit,
         baseQuantity: line.from.baseQuantity, baseUnit: line.from.baseUnit,
         unitPrice: line.from.unitPrice, priceUnit: line.from.priceUnit, currency: line.from.currency,
@@ -1119,6 +1163,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
       await moveStock(tx, input.client, input.changedBy, {
         materialNumber: line.from.materialNumber, plant: line.from.plant,
         storageLocation: line.from.storageLocation ?? '', stockType: line.from.stockType,
+        batchNumber: line.from.batchNumber ?? '',
       }, line.direction === 'ISSUE' ? -Number(line.from.baseQuantity) : Number(line.from.baseQuantity));
     }
 

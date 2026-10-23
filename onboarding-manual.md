@@ -430,6 +430,26 @@ Open `101` goods receipt against a purchase order, `201` goods issue to a cost c
 
 This walk does not use batches. Leave the level unset. An unset level is not plant level. The screen stores one code for the client, `0`, `1`, or `2`, and it does not post. A closed period does not block it. `OMCS`, `OMCZ`, `OMAD`, `MSC1N`, `MSC2N`, and `MSC3N` are not this screen.
 
+**Batch status** · `CFG.INV.BATCHSTATUS.DEFINE` · `OMCS` · `/config/batch-status`
+
+Leave the indicator blank for this walk. Active is the character `1`, not a label. The level is read from the previous screen. This screen does not select a plant and does not post. A closed period does not block it. `OMCU`, `OMAB`, `MSC1N`, `MSC2N`, and `MSC3N` are not this screen.
+
+**Create batch** · `INV.BATCH.CREATE` · `MSC1N` · `/inventory/batches/new`
+
+Do not create a batch on this walk. The material must already be batch-managed, and that indicator is not on the material screen yet. Type the batch number. This screen does not post stock. `MSC2N` and `MSC3N` are not this screen.
+
+**Change batch** · `INV.BATCH.CHANGE` · `MSC2N` · `/inventory/batches/change`
+
+Do not change a batch on this walk. Open a batch that already stands. The material, plant, and batch number cannot be changed. This screen does not post stock and does not post movements 341 or 342. `MSC1N` and `MSC3N` are not this screen.
+
+**Display batch** · `INV.BATCH.DISPLAY` · `MSC3N` · `/inventory/batches/display`
+
+Do not open a batch on this walk. This screen reads a batch that already stands. It does not change the batch and does not post. The status is `X` or blank, not `1` or `2`. The date of manufacture is HSDAT, not HERDT. Deletion, classification, and inspection lots are not stored. `MSC1N` and `MSC2N` are not this screen.
+
+**Batch pick-up list** · `INV.BATCH.PICKUP` · `MB5C` · `/inventory/batch-pickup`
+
+Do not open this list on this walk. It reads a batch that already stands and already appears on a material document. It does not create a batch and does not post. A sales order, a delivery, a billing document, and a scheduling agreement are refused. Those documents are not on the material document.
+
 **48. Material period** · `CFG.INV.MATPERIOD.DEFINE` · `OMSY` / `MMPV` / `MMRV` · `/config/material-period-control`
 
 Company `1000`, financial year `2026`, period `7`. That is October 2026. Do not close the period.
@@ -668,7 +688,7 @@ Material `MAT-10001` or the RFQ number. You may only have one quotation. Confirm
 
 **92. Purchase order, two items** · `PROC.PO.CREATE` · `ME21N` · `/purchasing/orders`
 
-Vendor `V10000`, organisation `1000`, group `001`, company `1000`, currency `INR`, date `2026-10-08`. Storage location `0001` on every line. Do not leave the location blank.
+Vendor `V10000`, organisation `1000`, group `001`, company `1000`, currency `INR`, date `2026-10-08`. Storage location `0001` on every line. Do not leave the location blank. Leave Batch empty. This walk does not use batches, and a batch is stored only when that batch already stands.
 
 | Item | Material | Quantity | Unit | Net price | Per | Plant | Delivery |
 |---|---|---|---|---|---|---|---|
@@ -699,7 +719,7 @@ Write this number down as **PO-C**. Net value `4900` INR. This one stays unpaid.
 
 **95. Display a purchase order** · `PROC.PO.DISPLAY` · `ME23N` · `/purchasing/purchase-order-display`
 
-Open **PO-A**. Confirm two items and location `0001`.
+Open **PO-A**. Confirm two items and location `0001`. Batch is shown when the item stores one. This order has none, so Batch stays empty.
 
 **96. Purchase order list** · `PROC.PO.LIST` · `ME2L` · `/purchasing/purchase-order-list`
 
@@ -719,7 +739,7 @@ Use location `0001` on every receipt line. A blank location is accepted by the p
 
 **99. Goods receipt for PO-A** · `INV.GR.POST` · `/inventory/goods-receipt`
 
-Order **PO-A**. Document date and posting date `2026-10-20`. Item 10 quantity `10`. Item 20 quantity `20`. Location `0001` on both. Write down the material document and the journal number.
+Order **PO-A**. Document date and posting date `2026-10-20`. Item 10 quantity `10`. Item 20 quantity `20`. Location `0001` on both. Leave Batch empty. These materials are not batch-managed. A blank Batch posts the batch stored on the order when one already stands, and it does not create a batch. Write down the material document and the journal number.
 
 **100. Goods receipt for PO-B** · same screen
 
@@ -735,11 +755,11 @@ Display the first material document. Do not post a second receipt for the same o
 
 **103. Material document** · `INV.DISPLAY` · `MB03` · `/inventory/material-documents`
 
-The PO-A document. Two lines, location `0001`.
+The PO-A document. Two lines, location `0001`. Batch is shown when the line stores one. This walk's receipts have none, so Batch stays empty.
 
 **104. Material document list** · `INV.MATERIALDOC.LIST` · `MB51` · `/inventory/material-document-list`
 
-Plant `1000`, posting date `2026-10-01` to `2026-10-23`, material `MAT-10001`. Quantities `10` and `5`.
+Plant `1000`, posting date `2026-10-01` to `2026-10-23`, material `MAT-10001`. Quantities `10` and `5`. Leave Batch empty. These receipts have none, so Batch stays empty. A sales order, a delivery, and a billing document are not selected.
 
 **105. Output** · `INV.MATERIALDOC.RECEIVEPRINT` · `MB90` · `/inventory/material-document-output`
 
@@ -753,15 +773,15 @@ The PO-A document. If it only queues a message, that is enough.
 | `MAT-10002` | `20` |
 | `MAT-20001` | `8` |
 
-If the quantity is under a blank location, the receipt did not keep `0001`. Record that. Do not continue the count until you know which location holds the stock.
+If the quantity is under a blank location, the receipt did not keep `0001`. Record that. Do not continue the count until you know which location holds the stock. Leave Batch empty. These materials are not batch-managed. A named batch is read back and does not create a batch.
 
 **107. Warehouse stock** · `INV.STOCK.WAREHOUSE` · `MB52` · `/inventory/warehouse-stocks`
 
-Plant `1000`. Same three quantities.
+Plant `1000`. Same three quantities. Leave Batch empty. These materials are not batch-managed. A named batch is read back and does not create a batch.
 
 **108. Stock on a posting date** · `INV.STOCK.POSTINGDATE` · `MB5B` · `/inventory/stock-posting-date`
 
-Plant `1000`, date `2026-10-20`. `MAT-10001` should be `10` and `MAT-10002` `20`. `MAT-20001` should be zero on that date.
+Plant `1000`, date `2026-10-20`. `MAT-10001` should be `10` and `MAT-10002` `20`. `MAT-20001` should be zero on that date. Leave Batch empty. These materials are not batch-managed. A named batch is read back and does not create a batch.
 
 **109. Invoice verification, PO-A** · `PROC.INV.RECORD` · `MIRO` · `/purchasing/invoice-verification`
 
@@ -834,7 +854,7 @@ Do not pay `V30000` here either, or the later open-item reports change. Open the
 
 **122. Transfer** · `INV.TRANSFER.POST` · `MB1B` · `/inventory/transfer-posting`
 
-Movement `311` if asked. Material `MAT-10001`, plant `1000`, from `0001` to `0002`, quantity `1`, date `2026-10-23`. Stock in `0001` becomes `14`. Stock in `0002` becomes `1`.
+Movement `311` if asked. Material `MAT-10001`, plant `1000`, from `0001` to `0002`, quantity `1`, date `2026-10-23`. Leave Batch empty. These materials are not batch-managed. A named batch moves with the transfer and does not create a batch. Stock in `0001` becomes `14`. Stock in `0002` becomes `1`.
 
 **123. Goods issue** · `INV.GI.POST` · `MB1A` · `/inventory/goods-issue`
 
@@ -846,15 +866,15 @@ Material `MAT-20001`, plant `1000`, location `0001`, quantity `1`, requirement d
 
 **125. Return to vendor** · `INV.RETURN.POST` · `MBRL` · `/inventory/return-delivery`
 
-The PO-C receipt. Material `MAT-10001`, quantity `1`, location `0001`, date `2026-10-23`. PO-C stock becomes `4` in `0001`, plus the `1` already transferred to `0002` from the other receipt. Write down the return document.
+The PO-C receipt. Material `MAT-10001`, quantity `1`, location `0001`, date `2026-10-23`. The batch is the receipt line's batch and is not typed. This walk's materials are not batch-managed, so Batch stays empty. PO-C stock becomes `4` in `0001`, plus the `1` already transferred to `0002` from the other receipt. Write down the return document.
 
 **126. Reverse the goods issue** · `INV.REVERSE` · `MBST` · `/inventory/reversal`
 
-Reverse the document from step 123, date `2026-10-23`. `MAT-10002` in `0001` returns to `20`. Do not reverse the receipts.
+Reverse the document from step 123, date `2026-10-23`. `MAT-10002` in `0001` returns to `20`. Do not reverse the receipts. The batch is the document line's batch and is not typed. This walk's materials are not batch-managed, so Batch stays empty.
 
 **127. Physical inventory document** · `INV.PHYINV.CREATE` · `MI01` · `/inventory/physical-inventory`
 
-Plant `1000`, location `0001`, date `2026-10-23`. Materials `MAT-10001`, `MAT-10002`, `MAT-20001`. Write down the count document.
+Plant `1000`, location `0001`, date `2026-10-23`. Materials `MAT-10001`, `MAT-10002`, `MAT-20001`. Leave Batch empty. These materials are not batch-managed. A batch is stored only when that batch already stands. Write down the count document.
 
 **128. Enter the count** · `INV.PHYINV.COUNT` · `MI04` · `/inventory/physical-inventory-count`
 
@@ -1114,7 +1134,7 @@ Plant `1000`. If it refuses because sales demand or planning data is missing, re
 
 **187. Production order** · `PROD.ORDER.CREATE` · `CO01` · `/production/orders`
 
-Material `MAT-20001` is raw, not finished. Try finished type only if you created a finished material. If you did not, enter material `MAT-20001`, plant `1000`, quantity `1`, date `2026-10-23`. Expect a refusal because it is not a produced material or because no bill of material exists. Record it.
+Material `MAT-20001` is raw, not finished. Try finished type only if you created a finished material. If you did not, enter material `MAT-20001`, plant `1000`, quantity `1`, date `2026-10-23`. Leave Batch empty. Expect a refusal because it is not a produced material or because no bill of material exists. Record it. A batch is stored only when that batch already stands.
 
 ## What you should have at the end
 

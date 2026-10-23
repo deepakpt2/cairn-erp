@@ -190,7 +190,7 @@ describe('SCR-127 warehouse stocks on hand (MB52)', () => {
     const specialRemedy = await report({ specialStockIndicator: 'L' }).catch((error: WarehouseStockError) => error);
     expect((specialRemedy as WarehouseStockError).remedy).toMatch(/named stock type/);
     await expect(report({ valuationType: '0010' })).rejects.toThrow(/Valuation type 0010 is not maintained/);
-    await expect(report({ batch: 'B0001' })).rejects.toThrow(/Batch B0001 is not maintained/);
+    await expect(report({ batch: 'B0001' })).rejects.toThrow(/Batch B0001 does not stand/);
     await expect(report({ scopeOfList: 'BOGUS' })).rejects.toBeInstanceOf(WarehouseStockError);
   });
 

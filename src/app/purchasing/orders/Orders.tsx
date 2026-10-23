@@ -42,6 +42,7 @@ interface ItemRow {
   taxCode: string;
   plant: string;
   storageLocation: string;
+  batch: string;
   requisitionNumber: string;
   requisitionItem: string;
   quotationNumber: string;
@@ -62,6 +63,7 @@ const EMPTY_ITEM: ItemRow = {
   taxCode: '',
   plant: '',
   storageLocation: '',
+  batch: '',
   requisitionNumber: '',
   requisitionItem: '',
   quotationNumber: '',
@@ -84,6 +86,7 @@ function itemFromDocument(item: OrderDocument['items'][number]): ItemRow {
     taxCode: item.taxCode ?? '',
     plant: item.plant,
     storageLocation: item.storageLocation ?? '',
+    batch: item.batch ?? '',
     requisitionNumber: item.requisitionNumber ?? '',
     requisitionItem: item.requisitionItem ? String(item.requisitionItem) : '',
     quotationNumber: item.quotationNumber ?? '',
@@ -198,6 +201,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
         taxCode: item.taxCode,
         plant: item.plant,
         storageLocation: item.storageLocation,
+        batch: item.batch,
         accountAssignmentCategory: item.assignment === 'COST_CENTER' ? 'COST_CENTER' : null,
         markedForDeletion: item.markedForDeletion,
         requisitionNumber: item.requisitionNumber,
@@ -412,6 +416,7 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                   ))}
                   <th className="px-2 py-2">Plant</th>
                   <th className="px-2 py-2">Storage location</th>
+                  <th className="px-2 py-2">Batch</th>
                   <th className="px-2 py-2">Net value</th>
                   {selected && <th className="px-2 py-2">Marked for deletion</th>}
                 </tr>
@@ -480,6 +485,15 @@ export default function Orders({ documents, choices, selected, canCreate, viewOn
                             <option key={sl.storageLocation} value={sl.storageLocation}>{sl.storageLocation} · {sl.name}</option>
                           ))}
                         </select>
+                      </td>
+                      <td className="px-1 py-1">
+                        <input
+                          className="input w-28"
+                          maxLength={10}
+                          value={item.batch}
+                          placeholder="Batch"
+                          onChange={(event) => patch(index, { batch: event.target.value })}
+                        />
                       </td>
                       <td className="px-2 py-2">{item.quantity && item.netPrice ? value.toFixed(2) : ''}</td>
                       {selected && (

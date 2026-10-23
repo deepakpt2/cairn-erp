@@ -14,7 +14,8 @@
  * plants the lines stand in and shown, never typed.
  *
  * Optional item number (ZEILE) narrows the grid to one line and marks it; a line
- * the document does not carry refuses by name.
+ * the document does not carry refuses by name. The batch is the one the line
+ * stored. A blank batch stays blank. This display does not change it.
  *
  * The journal number is the drill: SCR-137 delivered `FIN.JOURNAL.DISPLAY`, so the
  * number opens the accounting document display (§26.892) rather than standing as text.
@@ -55,6 +56,8 @@ export interface DisplayedDocumentLine {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  /** The batch the line stored. Blank when the line has none. Not entered here. */
+  batch: string;
   quantity: string;
   unit: string;
   entryQuantity: string;
@@ -212,6 +215,7 @@ export async function displayMaterialDocument(input: {
       plant: l.plant,
       storageLocation: l.storageLocation,
       stockType: l.stockType,
+      batch: l.batchNumber ?? '',
       quantity: l.baseQuantity,
       unit: l.baseUnit,
       entryQuantity: l.entryQuantity,

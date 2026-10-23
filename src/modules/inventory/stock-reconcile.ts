@@ -31,6 +31,7 @@ export interface StockDriftRow {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  batchNumber: string;
   /** What the material documents say. */
   ledgerQuantity: string;
   /** What the projection says. */
@@ -53,7 +54,7 @@ export interface ReconcileResult {
 async function driftIn(tx: Tx, client: string, plant: string | null): Promise<StockDriftRow[]> {
   const rows = await tx.execute(sql`
     with ledger as (
-      select l.client, l.material_number, l.plant, l.storage_location, l.stock_type,
+      select l.client, l.material_number, l.plant, l.storage_location, l.stock_type, l.batch_number,
              sum(case when l.line_direction = 'RECEIPT' then l.base_quantity else -l.base_quantity end) as qty
         from material_document_line l
         join material_document d
@@ -61,10 +62,10 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
        where l.client = ${client}
          and d.status in ('POSTED', 'REVERSED')
          and (${plant}::text is null or l.plant = ${plant}::text)
-       group by 1, 2, 3, 4, 5
+       group by 1, 2, 3, 4, 5, 6
     ),
     projected as (
-      select s.client, s.material_number, s.plant, s.storage_location, s.stock_type, s.quantity as qty
+      select s.client, s.material_number, s.plant, s.storage_location, s.stock_type, s.batch_number, s.quantity as qty
         from stock_quantity s
        where s.client = ${client}
          and (${plant}::text is null or s.plant = ${plant}::text)
@@ -74,6 +75,7 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
              coalesce(l.plant, p.plant) as plant,
              coalesce(l.storage_location, p.storage_location) as storage_location,
              coalesce(l.stock_type, p.stock_type) as stock_type,
+             coalesce(l.batch_number, p.batch_number) as batch_number,
              coalesce(l.qty, 0) as ledger_qty,
              coalesce(p.qty, 0) as projected_qty
         from ledger l
@@ -83,8 +85,9 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
          and p.plant = l.plant
          and p.storage_location is not distinct from l.storage_location
          and p.stock_type = l.stock_type
+         and p.batch_number = l.batch_number
     )
-    select material_number, plant, storage_location, stock_type,
+    select material_number, plant, storage_location, stock_type, batch_number,
            ledger_qty::text as ledger_quantity,
            projected_qty::text as projected_quantity,
            (projected_qty - ledger_qty)::text as difference
@@ -99,6 +102,7 @@ async function driftIn(tx: Tx, client: string, plant: string | null): Promise<St
     plant: String(r.plant),
     storageLocation: r.storage_location === null ? null : String(r.storage_location),
     stockType: String(r.stock_type),
+    batchNumber: String(r.batch_number ?? ''),
     ledgerQuantity: Number(r.ledger_quantity).toFixed(3),
     projectedQuantity: Number(r.projected_quantity).toFixed(3),
     difference: Number(r.difference).toFixed(3),
@@ -139,6 +143,7 @@ export async function rebuildStockDimension(input: {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  batchNumber?: string;
 }): Promise<{ ledgerQuantity: string }> {
   return withTenant(input.client, async (tx) => {
     await tx.execute(sql`
@@ -150,6 +155,7 @@ export async function rebuildStockDimension(input: {
     try {
       await assertInventoryCountOpen(tx, input.client, {
         materialNumber: input.materialNumber, plant: input.plant, storageLocation: input.storageLocation,
+        batch: input.batchNumber,
       });
     } catch (caught) {
       if (caught instanceof PhysicalInventoryError) {
@@ -169,6 +175,7 @@ export async function rebuildStockDimension(input: {
          and l.plant = ${input.plant}
          and l.storage_location is not distinct from ${input.storageLocation}
          and l.stock_type = ${input.stockType}
+         and l.batch_number = ${input.batchNumber ?? ''}
     `) as unknown as Array<{ qty: string }>;
     const quantity = Number(rows[0]?.qty ?? 0);
 
@@ -179,13 +186,14 @@ export async function rebuildStockDimension(input: {
            and plant = ${input.plant}
            and storage_location is not distinct from ${input.storageLocation}
            and stock_type = ${input.stockType}
+           and batch_number = ${input.batchNumber ?? ''}
       `);
     } else {
       await tx.execute(sql`
-        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
         values (${input.client}, ${input.materialNumber}, ${input.plant}, ${input.storageLocation},
-                ${input.stockType}, ${quantity.toFixed(3)}, ${input.changedBy})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+                ${input.stockType}, ${input.batchNumber ?? ''}, ${quantity.toFixed(3)}, ${input.changedBy})
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = ${quantity.toFixed(3)}, changed_by = ${input.changedBy}, changed_at = now()
       `);
     }

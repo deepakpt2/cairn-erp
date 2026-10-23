@@ -133,6 +133,7 @@ export interface CountItemView {
   materialNumber: string;
   description: string;
   stockType: string;
+  batch: string;
   plant: string;
   storageLocation: string | null;
   bookQuantity: string;
@@ -180,6 +181,7 @@ interface ItemRow {
   itemNumber: number;
   materialNumber: string;
   stockType: string;
+  batchNumber: string;
   countedQuantity: string | null;
   entryUnit: string | null;
   countedBaseQuantity: string | null;
@@ -316,6 +318,7 @@ async function viewOf(
       materialNumber: item.materialNumber,
       description: master?.description ?? '',
       stockType: item.stockType,
+      batch: item.batchNumber ?? '',
       plant: header.plant,
       storageLocation: header.storageLocation,
       bookQuantity: item.bookQuantitySnapshot ?? '0',
@@ -463,6 +466,7 @@ async function liveBookQuantity(
       join material m on m.client = s.client and m.material_number = s.material_number
      where s.client = ${client} and s.material_number = ${item.materialNumber}
        and s.plant = ${header.plant} and s.stock_type = ${item.stockType}
+       and s.batch_number = ${item.batchNumber ?? ''}
        and (${header.storageLocation}::text is null or s.storage_location = ${header.storageLocation}::text)
   `) as unknown as Array<{ quantity: string; unit: string }>;
   return { quantity: Number(rows[0]?.quantity ?? 0), unit: rows[0]?.unit ?? '' };

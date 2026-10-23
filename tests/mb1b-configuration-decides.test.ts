@@ -216,7 +216,8 @@ describe('SCR-146 movement configuration decides the transfer', () => {
     await configure('TRANSFER_SLOC', { requires_batch: true });
     try {
       const words = await refusal(() => postTransfer(transfer({ movementTypeCode: '311' })));
-      expect(words).toMatch(/requires a batch \(canon carries no batch master\)/);
+      expect(words).toMatch(/requires a batch/);
+      expect(words).not.toMatch(/no batch master/);
     } finally {
       await configure('TRANSFER_SLOC', { requires_batch: false });
     }

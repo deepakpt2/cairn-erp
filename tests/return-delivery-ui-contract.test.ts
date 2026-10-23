@@ -29,6 +29,9 @@ describe('SCR-145 the return screen', () => {
     expect(shell).not.toContain('name={`plant-');
     expect(shell).not.toContain('name={`sloc-');
     expect(shell).toContain('{item.materialNumber}');
+    expect(shell).toContain('item.batch');
+    expect(shell).not.toContain('name="batch"');
+    expect(shell).not.toContain('name={`batch-');
   });
 
   it('disables the quantity of an item that cannot be returned and prints its reason', () => {

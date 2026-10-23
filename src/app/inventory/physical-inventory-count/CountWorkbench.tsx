@@ -146,7 +146,7 @@ export default function CountWorkbench({
                       </td>
                       <td className="py-1 pr-2">
                         {item.materialNumber}
-                        <span className="block text-xs text-ink-faint">{item.description}</span>
+                        <span className="block text-xs text-ink-faint">{item.description}{item.batch ? ` · Batch ${item.batch}` : ''}</span>
                       </td>
                       <td className="py-1 pr-2">{item.stockType}</td>
                       <td className="py-1 pr-2 text-right tabular-nums" data-count-book>

@@ -101,7 +101,7 @@ export async function scr146Mb1bConfiguration(ctx: Context) {
         (${client}, ${MATERIAL}, ${PLANT_A}, ${SLOC_A}, 'QUALITY', 10, 'browser.admin'),
         (${client}, ${MATERIAL}, ${PLANT_A}, ${SLOC_B}, 'UNRESTRICTED', 0, 'browser.admin'),
         (${client}, ${MATERIAL}, ${PLANT_B}, ${SLOC_A}, 'UNRESTRICTED', 0, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type)
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
       do update set quantity = excluded.quantity
     `);
   });
@@ -231,8 +231,9 @@ export async function scr146Mb1bConfiguration(ctx: Context) {
     });
     await page.getByRole('button', { name: 'Post transfer', exact: true }).click();
     await status.waitFor();
-    assert.match(await status.innerText(), /requires a batch \(canon carries no batch master\)/);
-    console.log('  ✓ a movement requiring a batch was refused, naming the master canon lacks');
+    assert.match(await status.innerText(), /requires a batch/);
+    assert.doesNotMatch(await status.innerText(), /no batch master/);
+    console.log('  ✓ a movement requiring a batch was refused when none was entered');
   } finally {
     await configure('TRANSFER_STYPE', { requires_batch: false });
   }

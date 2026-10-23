@@ -39,7 +39,7 @@ describe('SCR-125 material document list UI contract', () => {
       'materialFrom', 'materialTo', 'plantFrom', 'plantTo',
       'storageLocationFrom', 'storageLocationTo', 'movementTypeFrom', 'movementTypeTo',
       'postingDateFrom', 'postingDateTo', 'documentDateFrom', 'documentDateTo',
-      'stockType', 'purchaseOrderFrom', 'purchaseOrderTo', 'userName', 'maxHits',
+      'stockType', 'batch', 'purchaseOrderFrom', 'purchaseOrderTo', 'userName', 'maxHits',
     ]) {
       expect(shell, name).toContain(`name="${name}"`);
     }
@@ -50,7 +50,7 @@ describe('SCR-125 material document list UI contract', () => {
       'mdList.document', 'mdList.item', 'mdList.movementType', 'mdList.direction',
       'mdList.material', 'mdList.description', 'mdList.entryQuantity', 'mdList.baseQuantity',
       'mdList.unit', 'mdList.value', 'mdList.currency', 'mdList.plant', 'mdList.storageLocation',
-      'mdList.stockType', 'mdList.postingDate', 'mdList.documentDate', 'mdList.headerText',
+      'mdList.stockType', 'mdList.batch', 'mdList.postingDate', 'mdList.documentDate', 'mdList.headerText',
       'mdList.status', 'mdList.purchaseOrder', 'mdList.itemText', 'mdList.user', 'mdList.journal',
     ]) {
       expect(shell, key).toContain(key);
@@ -88,6 +88,10 @@ describe('SCR-125 material document list UI contract', () => {
     expect(service).not.toMatch(/\bupdate .* set\b/i);
     expect(service).not.toMatch(/\bdelete from\b/i);
     expect(service).toContain('from material_document_line l');
+    expect(shell).toContain('data-batch={row.batch}');
+    expect(shell).not.toContain('name="salesOrder"');
+    expect(shell).not.toContain('name="delivery"');
+    expect(shell).not.toContain('name="billingDocument"');
     expect(service).toContain('join material_document d');
   });
 });

@@ -53,6 +53,9 @@ export default function StockOnPostingDateShell({ canUse, selection, result, rep
             <input name="dateTo" type="date" required className="field-input code w-40"
               defaultValue={selection.dateTo ?? ''} />
           </Field>
+          <Field label="Batch">
+            <input name="batch" maxLength={10} className="field-input code w-32" defaultValue={selection.batch ?? ''} />
+          </Field>
           <Field label={t('stockDate.stockType')}>
             <input name="stockType" maxLength={16} className="field-input code w-36"
               defaultValue={selection.stockType ?? 'UNRESTRICTED'} placeholder="UNRESTRICTED" />
@@ -102,6 +105,7 @@ export default function StockOnPostingDateShell({ canUse, selection, result, rep
               <th rowSpan={2}>{t('stockDate.plant')}</th>
               <th rowSpan={2}>{t('stockDate.storageLocation')}</th>
               <th rowSpan={2}>{t('stockDate.stockType')}</th>
+              <th rowSpan={2}>Batch</th>
               <th rowSpan={2}>{t('stockDate.unit')}</th>
               <th colSpan={2} className="text-center">{t('stockDate.opening')}</th>
               <th colSpan={2} className="text-center">{t('stockDate.receipts')}</th>
@@ -122,21 +126,23 @@ export default function StockOnPostingDateShell({ canUse, selection, result, rep
           </thead>
           <tbody>
             {result === null && !reportError ? (
-              <tr><td colSpan={15} className="text-ink-soft">{t('stockDate.prompt')}</td></tr>
+              <tr><td colSpan={16} className="text-ink-soft">{t('stockDate.prompt')}</td></tr>
             ) : null}
             {result && result.rows.length === 0 ? (
-              <tr><td colSpan={15} className="text-ink-soft">{t('stockDate.empty')}</td></tr>
+              <tr><td colSpan={16} className="text-ink-soft">{t('stockDate.empty')}</td></tr>
             ) : null}
             {result?.rows.map((row) => (
               <tr
-                key={`${row.materialNumber}|${row.plant}|${row.storageLocation}|${row.stockType}`}
+                key={`${row.materialNumber}|${row.plant}|${row.storageLocation}|${row.stockType}|${row.batch}`}
                 data-material={row.materialNumber}
+                data-batch={row.batch}
               >
                 <td className="code">{row.materialNumber}</td>
                 <td>{row.materialDescription}</td>
                 <td className="code">{row.plant}</td>
                 <td className="code">{row.storageLocation}</td>
                 <td className="code">{row.stockType}</td>
+                <td className="code">{row.batch || '—'}</td>
                 <td>{row.baseUnit}</td>
                 <td className="text-end">{row.openingQuantity.toFixed(3)}</td>
                 <td className="text-end">{row.openingValue.toFixed(2)}</td>

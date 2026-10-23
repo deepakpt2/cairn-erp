@@ -75,6 +75,7 @@ export default function Reversal({ document, canPost, displayOnly = false, today
                 <th className="py-1">{t('mbst.columnMaterial')}</th>
                 <th className="py-1">{t('mbst.columnPlant')}</th>
                 <th className="py-1">{t('mbst.columnLocation')}</th>
+                <th className="py-1">{t('mbst.columnBatch')}</th>
                 <th className="py-1 text-right">{t('mbst.columnQuantity')}</th>
                 <th className="py-1 text-right">{t('mbst.columnReversed')}</th>
                 <th className="py-1 text-right">{t('mbst.columnOpen')}</th>
@@ -105,6 +106,7 @@ export default function Reversal({ document, canPost, displayOnly = false, today
                   <td className="py-1">{line.materialNumber}</td>
                   <td className="py-1">{line.plant}</td>
                   <td className="py-1">{line.storageLocation}</td>
+                  <td className="code py-1" data-batch={line.batch}>{line.batch || '—'}</td>
                   <td className="py-1 text-right tabular-nums">{Number(line.quantity).toFixed(3)}</td>
                   <td className="py-1 text-right tabular-nums">{line.reversedQuantity}</td>
                   <td className="py-1 text-right tabular-nums">{line.remainingQuantity}</td>

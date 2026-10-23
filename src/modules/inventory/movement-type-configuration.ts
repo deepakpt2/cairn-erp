@@ -236,8 +236,8 @@ function refuseAbsent(input: MovementTypeInput): void {
   }
   if (input.requiresBatch) {
     throw new MovementTypeConfigError(
-      'Batch requirement is not configured here. No batch master stands.',
-      'Leave batch off. A posting that needs a batch is refused by name.',
+      'A batch requirement is not set on this screen.',
+      'The posting uses the batch already entered when the movement row already requires one. This screen does not add a second posting engine.',
     );
   }
   if (input.requiresSerial) {

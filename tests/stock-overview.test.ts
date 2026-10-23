@@ -97,8 +97,8 @@ describe('SCR-128 stock overview (MMBE)', () => {
     const sl1 = a.storageLocations.find((l) => l.storageLocation === 'SL1')!;
     expect(sl1.quantity).toBe(35);
     expect(sl1.stockTypes).toEqual([
-      { stockType: 'QUALITY', isUnrestricted: false, isQualityInspection: true, isBlocked: false, quantity: 5 },
-      { stockType: 'UNRESTRICTED', isUnrestricted: true, isQualityInspection: false, isBlocked: false, quantity: 30 },
+      { stockType: 'QUALITY', isUnrestricted: false, isQualityInspection: true, isBlocked: false, quantity: 5, batches: [{ batch: '', quantity: 5 }] },
+      { stockType: 'UNRESTRICTED', isUnrestricted: true, isQualityInspection: false, isBlocked: false, quantity: 30, batches: [{ batch: '', quantity: 30 }] },
     ]);
     const sl2 = a.storageLocations.find((l) => l.storageLocation === 'SL2')!;
     expect(sl2.stockTypes.map((t) => [t.stockType, t.quantity])).toEqual([['BLOCKED', 4], ['PROJECT', 3]]);
@@ -161,7 +161,7 @@ describe('SCR-128 stock overview (MMBE)', () => {
     await expect(tree({ specialStockIndicator: 'E' })).rejects.toThrow(/special stock indicator E does not stand/);
     const remedy = await tree({ specialStockIndicator: 'E' }).catch((error: StockOverviewError) => error);
     expect((remedy as StockOverviewError).remedy).toMatch(/named stock type/);
-    await expect(tree({ batch: 'B0001' })).rejects.toThrow(/Batch B0001 is not maintained/);
+    await expect(tree({ batch: 'B0001' })).rejects.toThrow(/is not batch-managed/);
   });
 
   it('refuses keys that do not stand and inverted ranges, by name', async () => {

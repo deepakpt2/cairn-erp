@@ -77,7 +77,7 @@ export async function scr150Mi11Recount(ctx: Context) {
         (${client}, 'RC49-P', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 20, ${ACTOR}),
         (${client}, 'RC49-D', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 6, ${ACTOR}),
         (${client}, 'RC49-E', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 4, ${ACTOR})
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = excluded.quantity
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = excluded.quantity
     `);
     await tx.execute(sql`
       insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,

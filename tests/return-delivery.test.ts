@@ -329,7 +329,7 @@ describe('SCR-145 return delivery (MBRL)', () => {
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1 }], batch: 'B-1',
     }).catch((e: unknown) => e as ReturnDeliveryError);
-    expect(batched.message).toMatch(/no batch master/);
+    expect(batched.message).toMatch(/has no batch/);
 
     const delivery = await postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,

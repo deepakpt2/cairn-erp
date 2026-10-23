@@ -18,7 +18,8 @@
  *
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
  * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability
- * checking (ATP), batch, collective orders, and external order numbering.
+ * checking (ATP), collective orders, and external order numbering. A finished-good
+ * batch may be named when that batch already stands; the order does not create it.
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
@@ -29,6 +30,7 @@ import { plant as plantTable } from '../foundation/schema';
 import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 
 export const PRODUCTION_ORDER_CAPABILITY = 'PROD.ORDER.CREATE';
 export const PRODUCTION_ORDER_RELEASE_CAPABILITY = 'PROD.ORDER.RELEASE';
@@ -78,6 +80,7 @@ export interface ProductionOrderView {
   unit: string;
   scheduledStart: string;
   scheduledFinish: string;
+  batch: string;
   status: 'CREATED' | 'RELEASED';
   releasedBy: string | null;
   releasedAt: string | null;
@@ -124,6 +127,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     unit: header.unitOfMeasure,
     scheduledStart: header.scheduledStart,
     scheduledFinish: header.scheduledFinish,
+    batch: header.batchNumber,
     status: header.status as 'CREATED' | 'RELEASED',
     releasedBy: header.releasedBy,
     releasedAt: header.releasedAt ? header.releasedAt.toISOString() : null,
@@ -160,6 +164,8 @@ export interface CreateProductionOrderInput {
   orderQuantity: number;
   scheduledStart: string;
   scheduledFinish: string;
+  /** A batch that already stands for the finished good. The order does not create it. */
+  batch?: string;
   components: ProductionOrderComponentInput[];
   requestKey?: string;
 }
@@ -326,6 +332,17 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       client: input.client, objectCode: 'PRODORDER', allocatedBy: input.createdBy,
     });
     const orderNumber = drawn.display;
+    let batchNumber = '';
+    if ((input.batch ?? '').trim()) {
+      try {
+        batchNumber = await resolvePostingBatch(tx, {
+          client: input.client, materialNumber, plant, batch: input.batch,
+        });
+      } catch (caught) {
+        if (caught instanceof BatchPostingError) throw new ProductionOrderError(caught.message, caught.remedy);
+        throw caught;
+      }
+    }
 
     const [header] = await tx.insert(productionOrder).values({
       client: input.client,
@@ -333,6 +350,7 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       materialNumber,
       plant,
       orderQuantity: String(input.orderQuantity),
+      batchNumber,
       unitOfMeasure: produced.baseUnit,
       scheduledStart: start,
       scheduledFinish: finish,

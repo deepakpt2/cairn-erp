@@ -42,6 +42,7 @@ export async function postGoodsReceiptAction(
         itemNumber,
         quantity,
         storageLocation: text(form, `sloc-${itemNumber}`) || undefined,
+        batch: text(form, `batch-${itemNumber}`) || undefined,
       });
     }
   }

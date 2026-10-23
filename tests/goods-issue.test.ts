@@ -262,7 +262,7 @@ describe('SCR-136 goods issue (MB1A)', () => {
     await expect(postGoodsIssue(input({ lines: [line({ storageLocation: '0099' })] })))
       .rejects.toThrow(/is blocked/);
     const batch = await postGoodsIssue(input({ lines: [line({ batch: 'B001' })] })).catch((e: unknown) => e);
-    expect((batch as GoodsIssueError).message).toMatch(/canon carries no batch master/);
+    expect((batch as GoodsIssueError).message).toMatch(/is not batch-managed/);
   });
 
   it('withdraws from a reservation in the same commit, and MD04’s demand falls with the stock', async () => {

@@ -72,7 +72,7 @@ export async function migoTransferPosting(ctx: Context) {
       insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by) values
         (${client}, 'MGT-MAT', 'QG03', 'SG03', 'UNRESTRICTED', 100, 'browser.admin'),
         (${client}, 'MGT-MAT', 'QG03', 'SG03', 'QUALITY', 20, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = excluded.quantity
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = excluded.quantity
     `);
     await tx.execute(sql`
       insert into gl_account (client, chart_of_accounts, account_number, name, account_type,

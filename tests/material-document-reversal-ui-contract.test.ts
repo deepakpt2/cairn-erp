@@ -37,6 +37,9 @@ describe('SCR-132 material document reversal UI contract', () => {
     expect(shell).toContain('data-side={line.lineDirection}');
     expect(shell).toContain('mbst.columnReversed');
     expect(shell).toContain('mbst.columnOpen');
+    expect(shell).toContain('data-batch={line.batch}');
+    expect(shell).toContain('mbst.columnBatch');
+    expect(shell).not.toMatch(/name="batch"/);
     expect(service).toContain('reversedQuantity');
     expect(service).toContain('remainingQuantity');
   });
@@ -77,7 +80,7 @@ describe('SCR-132 material document reversal UI contract', () => {
   });
 
   it('renders every caption from the message catalogue', () => {
-    for (const key of ['mbst.title', 'mbst.subtitle', 'mbst.reverse', 'mbst.lookup', 'mbst.columnOpen']) {
+    for (const key of ['mbst.title', 'mbst.subtitle', 'mbst.reverse', 'mbst.lookup', 'mbst.columnOpen', 'mbst.columnBatch']) {
       expect(shell + page).toContain(key);
       expect(messages).toContain(`'${key}'`);
     }

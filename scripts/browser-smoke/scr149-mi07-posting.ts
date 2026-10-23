@@ -70,7 +70,7 @@ export async function scr149Mi07Posting(ctx: Context) {
         (${client}, 'MP48-Z', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 24, 'browser.admin'),
         (${client}, 'MP48-U', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 8, 'browser.admin'),
         (${client}, 'MP48-N', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 10, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = excluded.quantity
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = excluded.quantity
     `);
     await tx.execute(sql`
       insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,

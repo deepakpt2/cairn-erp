@@ -98,6 +98,7 @@ function OrderView({ order, canChange }: { order: DisplayedOrder; canChange: boo
           <p className="mt-1 text-sm">
             {item.materialNumber ?? t('poDisplay.notProvided')} · {item.plant}
             {item.storageLocation ? ` · ${item.storageLocation}` : ` · ${t('poDisplay.notProvided')}`}
+            {item.batch ? ` · Batch ${item.batch}` : ''}
             {' · '}{item.itemCategory}
             {item.markedForDeletion ? ` · ${t('poDisplay.marked')}` : ''}
           </p>

@@ -120,7 +120,7 @@ export async function scr144CloseTheGaps(ctx: Context) {
     await tx.execute(sql`
       insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
       values (${client}, 'SCR144-BOX', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 60, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type)
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
       do update set quantity = 60
     `);
   });

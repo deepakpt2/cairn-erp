@@ -24,6 +24,7 @@ export interface RecountLineView {
   itemNumber: number;
   materialNumber: string;
   stockType: string;
+  batch?: string;
   countStatus: string;
   bookQuantity: string;
   countedQuantity: string;
@@ -169,7 +170,7 @@ export default function RecountWorkbench({
                         />
                       </td>
                       <td className="py-1 pr-2">{line.itemNumber}</td>
-                      <td className="py-1 pr-2">{line.materialNumber}</td>
+                      <td className="py-1 pr-2">{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
                       <td className="py-1 pr-2" data-recount-stock-type>{line.stockType}</td>
                       <td className="py-1 pr-2 tabular-nums">{line.bookQuantity || '—'}</td>
                       <td className="py-1 pr-2 tabular-nums" data-recount-counted>{line.countedQuantity || '—'}</td>

@@ -111,7 +111,7 @@ describe('SCR-149 physical inventory difference posting', () => {
           (${client}, 'POST-U', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 8, ${ACTOR}),
           (${client}, 'POST-N', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 10, ${ACTOR}),
           (${client}, 'POST-Q', ${PLANT}, ${SLOC}, 'QUALITY', 6, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = excluded.quantity
       `);
       await tx.execute(sql`

@@ -67,6 +67,7 @@ export interface PostingLineView {
   itemNumber: number;
   materialNumber: string;
   stockType: string;
+  batch?: string;
   difference: string;
   direction: 'SHORTAGE' | 'SURPLUS';
   quantity: string;
@@ -214,7 +215,7 @@ export default function PostingWorkbench({
                         />
                       </td>
                       <td className="py-1 pr-2">{line.itemNumber}</td>
-                      <td className="py-1 pr-2">{line.materialNumber}</td>
+                      <td className="py-1 pr-2">{line.materialNumber}{line.batch ? ` · ${line.batch}` : ''}</td>
                       <td className="py-1 pr-2">{line.stockType}</td>
                       <td className="py-1 pr-2 tabular-nums" data-posting-difference>{line.difference || '—'}</td>
                       <td className="py-1 pr-2" data-posting-direction={line.direction}>

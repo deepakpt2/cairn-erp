@@ -86,6 +86,7 @@ export interface DisplayedItem {
   shortText: string;
   plant: string;
   storageLocation: string | null;
+  batch: string;
   orderedQuantity: string;
   unit: string;
   netPrice: string;
@@ -342,7 +343,7 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
     if (!header) return null;
 
     const items = await tx.execute(sql`
-      select i.item_number, i.item_category, i.material_number, i.short_text, i.plant, i.storage_location,
+      select i.item_number, i.item_category, i.material_number, i.short_text, i.plant, i.storage_location, i.batch_number,
              i.quantity::text as quantity, i.unit, i.net_price::text as net_price, i.price_unit::text as price_unit,
              i.net_value::text as net_value, i.tax_code, i.marked_for_deletion, i.account_assignment_category,
              i.requisition_number, i.requisition_item, i.info_record_number, i.source_number,
@@ -475,6 +476,7 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
       shortText: text(row.short_text),
       plant: text(row.plant),
       storageLocation: row.storage_location == null ? null : text(row.storage_location),
+      batch: text(row.batch_number),
       orderedQuantity: qty(quantity),
       unit,
       netPrice: money(text(row.net_price)),

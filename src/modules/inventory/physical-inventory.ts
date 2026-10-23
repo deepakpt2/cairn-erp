@@ -54,6 +54,8 @@ export interface CreatePhysicalInventoryInput {
   /** Refuse every stock movement for these materials here while the count is open. */
   postingBlock?: boolean;
   materials: string[];
+  /** Parallel to materials. Blank counts the blank batch. A named batch must already stand. */
+  batches?: string[];
   requestKey?: string;
 }
 
@@ -65,6 +67,8 @@ export interface PhysicalInventoryItemView {
   unit: string;
   /** SCR-147: the stock identity this item counts, and where its count has got to. */
   stockType: string;
+  /** Blank when the material is not batch-managed. */
+  batch: string;
   countStatus: string;
   countedQuantity: string | null;
 }
@@ -101,14 +105,14 @@ function requireDate(value: string, label: string): string {
  * so a document now carries one item per stock type that actually holds stock.
  */
 async function stockByType(
-  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string,
+  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, batch = '',
 ) {
   const rows = await tx.execute(sql`
     select s.stock_type, sum(s.quantity)::text as quantity, min(m.base_unit) as unit
       from stock_quantity s
       join material m on m.client = s.client and m.material_number = s.material_number
      where s.client = ${client} and s.material_number = ${materialNumber}
-       and s.plant = ${plant}
+       and s.plant = ${plant} and s.batch_number = ${batch}
        and (${location}::text is null or s.storage_location = ${location}::text)
      group by s.stock_type
      order by s.stock_type
@@ -127,7 +131,7 @@ async function stockAt(
           from stock_quantity s
           join material m on m.client = s.client and m.material_number = s.material_number
          where s.client = ${client} and s.material_number = ${materialNumber}
-           and s.plant = ${plant} and s.stock_type = 'UNRESTRICTED'
+           and s.plant = ${plant} and s.stock_type = 'UNRESTRICTED' and s.batch_number = ${''}
            and (${location}::text is null or s.storage_location = ${location}::text)
       ) t
   `) as unknown as Array<{ quantity: string; unit: string }>;
@@ -156,7 +160,7 @@ async function toView(tx: Tx, client: string, header: {
       ));
     // The book quantity is the one frozen at creation when the document carries one — the count
     // answers for that quantity, not for whatever the stock has drifted to since.
-    const held = await stockByType(tx, client, header.plant, header.storageLocation, item.materialNumber);
+    const held = await stockByType(tx, client, header.plant, header.storageLocation, item.materialNumber, item.batchNumber);
     const live = held.find((h) => h.stockType === item.stockType);
     const book = item.bookQuantitySnapshot !== null
       ? Number(item.bookQuantitySnapshot)
@@ -168,6 +172,7 @@ async function toView(tx: Tx, client: string, header: {
       stockQuantity: book.toFixed(3),
       unit: item.bookQuantityUnit || live?.unit || master?.unit || '',
       stockType: item.stockType,
+      batch: item.batchNumber,
       countStatus: item.countStatus,
       countedQuantity: item.countedQuantity,
     });
@@ -214,7 +219,9 @@ export async function writeInventoryDocument(
     postingBlock: boolean;
     requestKey: string | null;
     materials: string[];
-    lines?: Array<{ materialNumber: string; stockType: string }>;
+    /** Parallel to materials, used only when lines are absent. */
+    batches?: string[];
+    lines?: Array<{ materialNumber: string; stockType: string; batch?: string }>;
   },
 ): Promise<{
   inventoryDocumentNumber: string; fiscalYear: number; plant: string;
@@ -317,6 +324,14 @@ export async function writeInventoryDocument(
     );
   }
 
+  if (spec.lines) {
+    for (const line of spec.lines) await countBatch(tx, spec.client, line.materialNumber, plant, line.batch ?? '');
+  } else {
+    for (const [index, materialNumber] of materials.entries()) {
+      await countBatch(tx, spec.client, materialNumber, plant, spec.batches?.[index] ?? '');
+    }
+  }
+
   const drawn = await allocateNumber(tx, {
     client: spec.client,
     objectCode: NUMBER_OBJECT,
@@ -340,7 +355,8 @@ export async function writeInventoryDocument(
   const itemRows: Array<typeof physicalInventoryItem.$inferInsert> = [];
   if (spec.lines) {
     for (const line of spec.lines) {
-      const held = await stockOfType(tx, spec.client, plant, location || null, line.materialNumber, line.stockType);
+      const batch = await countBatch(tx, spec.client, line.materialNumber, plant, line.batch ?? '');
+      const held = await stockOfType(tx, spec.client, plant, location || null, line.materialNumber, line.stockType, batch);
       itemRows.push({
         client: spec.client,
         inventoryDocumentNumber,
@@ -348,6 +364,7 @@ export async function writeInventoryDocument(
         itemNumber: (itemRows.length + 1) * 10,
         materialNumber: line.materialNumber,
         stockType: line.stockType,
+        batchNumber: batch,
         bookQuantitySnapshot: held.quantity.toFixed(3),
         bookQuantityUnit: held.unit || null,
         bookQuantityBasis: 'DOCUMENT_CREATION',
@@ -355,8 +372,9 @@ export async function writeInventoryDocument(
       });
     }
   } else {
-    for (const materialNumber of materials) {
-      const held = await stockByType(tx, spec.client, plant, location || null, materialNumber);
+    for (const [index, materialNumber] of materials.entries()) {
+      const batch = await countBatch(tx, spec.client, materialNumber, plant, spec.batches?.[index] ?? '');
+      const held = await stockByType(tx, spec.client, plant, location || null, materialNumber, batch);
       const [_master] = await tx.select({ unit: material.baseUnit }).from(material).where(and(
         eq(material.client, spec.client), eq(material.materialNumber, materialNumber),
       ));
@@ -369,6 +387,7 @@ export async function writeInventoryDocument(
           itemNumber: (itemRows.length + 1) * 10,
           materialNumber,
           stockType: type.stockType,
+          batchNumber: batch,
           bookQuantitySnapshot: String(type.quantity),
           bookQuantityUnit: type.unit || _master?.unit || null,
           bookQuantityBasis: 'DOCUMENT_CREATION',
@@ -393,19 +412,78 @@ export async function writeInventoryDocument(
 }
 
 async function stockOfType(
-  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, stockType: string,
+  tx: Tx, client: string, plant: string, location: string | null, materialNumber: string, stockType: string, batch = '',
 ) {
   const rows = await tx.execute(sql`
     select coalesce(sum(s.quantity), 0)::text as quantity, min(m.base_unit) as unit
       from material m
       left join stock_quantity s
         on s.client = m.client and s.material_number = m.material_number
-       and s.plant = ${plant} and s.stock_type = ${stockType}
+       and s.plant = ${plant} and s.stock_type = ${stockType} and s.batch_number = ${batch}
        and (${location}::text is null or s.storage_location = ${location})
      where m.client = ${client} and m.material_number = ${materialNumber}
      group by m.material_number
   `) as unknown as Array<{ quantity: string; unit: string | null }>;
   return { quantity: Number(rows[0]?.quantity ?? 0), unit: rows[0]?.unit ?? '' };
+}
+
+/** A batch the count may name. It must already stand. Restricted and expired stock can still be counted. */
+async function countBatch(
+  tx: Tx, client: string, materialNumber: string, plant: string, batch: string,
+): Promise<string> {
+  const typed = batch.trim().toUpperCase();
+  const levelRows = await tx.execute(sql`
+    select batch_level from batch_level_configuration where client = ${client} limit 1
+  `) as unknown as Array<{ batch_level: string }>;
+  const level = levelRows[0]?.batch_level?.trim();
+  const code = level === '0' || level === '1' || level === '2' ? level : null;
+  let managed = false;
+  if (code === '0') {
+    const plants = await tx.execute(sql`
+      select batch_managed from material_plant
+       where client = ${client} and material_number = ${materialNumber} and plant = ${plant}
+       limit 1
+    `) as unknown as Array<{ batch_managed: boolean }>;
+    managed = Boolean(plants[0]?.batch_managed);
+  } else if (code) {
+    const materials = await tx.execute(sql`
+      select batch_managed from material
+       where client = ${client} and material_number = ${materialNumber}
+       limit 1
+    `) as unknown as Array<{ batch_managed: boolean }>;
+    managed = Boolean(materials[0]?.batch_managed);
+  }
+  if (!managed) {
+    if (typed) {
+      throw new PhysicalInventoryError(
+        `Material ${materialNumber} is not batch-managed. No count was created.`,
+        'Leave the batch empty.',
+      );
+    }
+    return '';
+  }
+  if (!typed) {
+    throw new PhysicalInventoryError(
+      `Material ${materialNumber} is batch-managed. A batch is required. No count was created.`,
+      'Create the batch in MSC1N, then name that number. This count does not create a batch.',
+    );
+  }
+  const rows = await tx.execute(sql`
+    select batch_number from batch
+     where client = ${client}
+       and material_number = ${materialNumber}
+       and batch_number = ${typed}
+       and batch_level_at_creation = ${code}
+       and ((${code} = '0' and plant = ${plant}) or (${code} <> '0' and plant is null))
+     limit 1
+  `) as unknown as Array<{ batch_number: string }>;
+  if (!rows[0]) {
+    throw new PhysicalInventoryError(
+      `Batch ${typed} does not stand for material ${materialNumber}. No count was created.`,
+      'Create the batch in MSC1N first. This count does not create a batch.',
+    );
+  }
+  return rows[0].batch_number;
 }
 
 export async function createPhysicalInventory(
@@ -420,17 +498,23 @@ export async function createPhysicalInventory(
 
   const seen = new Set<string>();
   const materials: string[] = [];
-  for (const raw of input.materials) {
+  const batches: string[] = [];
+  for (const [index, raw] of input.materials.entries()) {
     const materialNumber = raw.trim();
     if (!materialNumber) continue;
-    if (seen.has(materialNumber)) {
+    const batch = (input.batches?.[index] ?? '').trim().toUpperCase();
+    const key = `${materialNumber}\0${batch}`;
+    if (seen.has(key)) {
       throw new PhysicalInventoryError(
-        `Material ${materialNumber} appears twice in the count.`,
-        'Name each material once; a count measures a material, not an entry.',
+        batch
+          ? `Material ${materialNumber} batch ${batch} appears twice in the count.`
+          : `Material ${materialNumber} appears twice in the count.`,
+        'Name each material and batch once; a count measures that stock, not an entry.',
       );
     }
-    seen.add(materialNumber);
+    seen.add(key);
     materials.push(materialNumber);
+    batches.push(batch);
   }
   if (materials.length === 0) {
     throw new PhysicalInventoryError(
@@ -457,6 +541,7 @@ export async function createPhysicalInventory(
       postingBlock: input.postingBlock === true,
       requestKey: input.requestKey ?? null,
       materials,
+      batches,
     });
     return toView(tx, input.client, header);
   });
@@ -585,7 +670,7 @@ export async function tryLockStockScope(
 export async function assertInventoryCountOpen(
   tx: Tx,
   client: string,
-  movement: { materialNumber: string; plant: string; storageLocation?: string | null },
+  movement: { materialNumber: string; plant: string; storageLocation?: string | null; batch?: string | null },
 ): Promise<void> {
   // Shared: this posting may proceed only if no count creation holds the scope exclusively,
   // and a count created after this point must wait for this posting to finish.
@@ -604,6 +689,11 @@ export async function assertInventoryCountOpen(
        and i.material_number = ${movement.materialNumber}
        and d.plant = ${movement.plant}
        and (d.storage_location is null or d.storage_location = ${movement.storageLocation ?? null})
+       and (
+         ${ (movement.batch ?? '').trim().toUpperCase() } = ''
+         or coalesce(i.batch_number, '') = ''
+         or i.batch_number = ${ (movement.batch ?? '').trim().toUpperCase() }
+       )
      limit 1
   `) as unknown as Array<{ inventory_document_number: string; planned_count_date: string }>;
 

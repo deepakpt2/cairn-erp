@@ -18,6 +18,7 @@ import { reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
 import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import {
   material, materialDocument, materialDocumentLine, materialValuation,
   movementType, stockQuantity,
@@ -83,6 +84,7 @@ export interface PostingLineView {
   itemNumber: number;
   materialNumber: string;
   stockType: string;
+  batch: string;
   difference: string;
   direction: 'SHORTAGE' | 'SURPLUS';
   movementType: string;
@@ -145,6 +147,7 @@ interface ItemRow {
   item_number: number;
   material_number: string;
   stock_type: string;
+  batch_number: string;
   count_status: string;
   difference_quantity: string | null;
   counted_base_quantity: string | null;
@@ -188,6 +191,7 @@ interface JudgedLine {
   priceControl: string | null;
   inventoryAccount: string | null;
   offsetAccount: string | null;
+  batch: string;
 }
 
 function requireDate(value: string, label: string): string {
@@ -297,7 +301,7 @@ async function loadHeader(tx: Tx, client: string, documentNumber: string, fiscal
 
 async function loadItems(tx: Tx, client: string, documentNumber: string, fiscalYear: number): Promise<ItemRow[]> {
   return await tx.execute(sql`
-    select i.item_number, i.material_number, i.stock_type, i.count_status,
+    select i.item_number, i.material_number, i.stock_type, i.batch_number, i.count_status,
            i.difference_quantity::text as difference_quantity,
            i.counted_base_quantity::text as counted_base_quantity,
            i.book_quantity_snapshot::text as book_quantity_snapshot,
@@ -312,7 +316,7 @@ async function loadItems(tx: Tx, client: string, documentNumber: string, fiscalY
      where i.client = ${client}
        and i.inventory_document_number = ${documentNumber}
        and i.fiscal_year = ${fiscalYear}
-     group by i.item_number, i.material_number, i.stock_type, i.count_status, i.difference_quantity,
+     group by i.item_number, i.material_number, i.stock_type, i.batch_number, i.count_status, i.difference_quantity,
               i.counted_base_quantity, i.book_quantity_snapshot, i.version, i.posting_status
      order by i.item_number
   `) as unknown as ItemRow[];
@@ -345,11 +349,11 @@ async function movementFor(tx: Tx, client: string, direction: 'RECEIPT' | 'ISSUE
   return rows[0];
 }
 
-function refuseUnusable(movement: MovementRow, itemNumber: number): void {
-  if (movement.requires_batch) {
+function refuseUnusable(movement: MovementRow, itemNumber: number, batch: string): void {
+  if (movement.requires_batch && !batch.trim()) {
     throw new PhysicalInventoryPostingError(
       `Movement ${movement.movement_type} requires a batch, and item ${itemNumber} does not carry one.`,
-      'Batch is refused by name. Use a difference movement that does not require one.',
+      'Name a batch that already stands on the count item, or use a difference movement that does not require one.',
     );
   }
   if (movement.requires_serial) {
@@ -444,7 +448,7 @@ async function judgeItem(
 ): Promise<JudgedLine> {
   const signed = Number(item.difference_quantity);
   const movement = await movementFor(tx, client, signed > 0 ? 'RECEIPT' : 'ISSUE');
-  refuseUnusable(movement, item.item_number);
+  refuseUnusable(movement, item.item_number, item.batch_number ?? '');
   const stockType = stockTypeOf(movement, item);
   const quantity = Math.abs(signed);
 
@@ -515,6 +519,7 @@ async function judgeItem(
     valuationClass: valuation!.valuationClass,
     priceControl: valuation!.priceControl,
     inventoryAccount, offsetAccount,
+    batch: item.batch_number ?? '',
   };
 }
 
@@ -524,6 +529,7 @@ function lineView(judged: JudgedLine, eligible: boolean, reason: string | null):
     itemNumber: judged.item.item_number,
     materialNumber: judged.item.material_number,
     stockType: judged.stockType,
+    batch: judged.batch,
     difference: judged.signed.toFixed(3),
     direction: judged.signed < 0 ? 'SHORTAGE' : 'SURPLUS',
     movementType: judged.movement.movement_type,
@@ -624,7 +630,7 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
   ));
   const lines = await tx.execute(sql`
     select a.item_number, a.posted_difference::text as difference, l.movement_type, l.base_quantity::text as quantity,
-           l.value::text as value, l.currency, c.decimal_places, l.stock_type, l.material_number, l.line_direction
+           l.value::text as value, l.currency, c.decimal_places, l.stock_type, l.batch_number, l.material_number, l.line_direction
       from physical_inventory_difference_allocation a
       join material_document_line l
         on l.client = a.client and l.material_document_number = a.material_document_number and l.line_number = a.line_number
@@ -634,7 +640,7 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
   `) as unknown as Array<{
     item_number: number; difference: string; movement_type: string; quantity: string;
     value: string; currency: string | null; decimal_places: number | null;
-    stock_type: string; material_number: string; line_direction: string;
+    stock_type: string; batch_number: string; material_number: string; line_direction: string;
   }>;
   const allocation = lines[0];
   const inventory = allocation
@@ -655,6 +661,7 @@ async function postedView(tx: Tx, client: string, materialDocumentNumber: string
       itemNumber: line.item_number,
       materialNumber: line.material_number,
       stockType: line.stock_type,
+      batch: line.batch_number ?? '',
       difference: Number(line.difference).toFixed(3),
       direction: line.line_direction === 'ISSUE' ? 'SHORTAGE' as const : 'SURPLUS' as const,
       movementType: line.movement_type,
@@ -719,6 +726,7 @@ export async function getDifferencePosting(
         itemNumber: item.item_number,
         materialNumber: item.material_number,
         stockType: item.stock_type,
+        batch: item.batch_number ?? '',
         difference: item.difference_quantity === null ? '' : signed.toFixed(3),
         direction: signed < 0 ? 'SHORTAGE' as const : 'SURPLUS' as const,
         movementType: '',
@@ -814,6 +822,15 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
       }
     }
     for (const line of judged) {
+      try {
+        line.batch = await resolvePostingBatch(tx, {
+          client: input.client, materialNumber: line.item.material_number, plant: header.plant,
+          batch: line.item.batch_number,
+        });
+      } catch (caught) {
+        if (caught instanceof BatchPostingError) throw new PhysicalInventoryPostingError(caught.message, caught.remedy);
+        throw caught;
+      }
       const [location] = await tx.select().from(storageLocation).where(and(
         eq(storageLocation.client, input.client),
         eq(storageLocation.plant, header.plant),
@@ -825,6 +842,7 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
         eq(stockQuantity.plant, header.plant),
         eq(stockQuantity.storageLocation, header.storage_location ?? ''),
         eq(stockQuantity.stockType, line.stockType),
+        eq(stockQuantity.batchNumber, line.batch),
       ));
       const onHand = Number(stock?.quantity ?? 0);
       const forbid = line.movement.negative_stock_policy === 'FORBID' || !location?.allowNegativeStock;
@@ -921,6 +939,7 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
         plant: header.plant,
         storageLocation: header.storage_location,
         stockType: line.stockType,
+        batchNumber: line.batch,
         lineDirection: direction,
         entryQuantity: line.quantity.toFixed(3),
         entryUnit: 'PC',
@@ -946,10 +965,10 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
       }
       const delta = line.signed < 0 ? -line.quantity : line.quantity;
       await tx.execute(sql`
-        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
         values (${input.client}, ${line.item.material_number}, ${header.plant}, ${header.storage_location ?? ''},
-                ${line.stockType}, ${String(delta)}, ${input.changedBy})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+                ${line.stockType}, ${line.batch}, ${String(delta)}, ${input.changedBy})
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = stock_quantity.quantity + ${delta},
                       changed_by = ${input.changedBy}, changed_at = now()
       `);

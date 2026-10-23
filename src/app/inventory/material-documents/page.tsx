@@ -203,6 +203,7 @@ export default async function MaterialDocumentPage({ searchParams }: {
                     <th className="py-1">{t('mdDoc.columnPlant')}</th>
                     <th className="py-1">{t('mdDoc.columnLocation')}</th>
                     <th className="py-1">{t('mdDoc.columnStockType')}</th>
+                    <th className="py-1">{t('mdDoc.columnBatch')}</th>
                     <th className="py-1 text-right">{t('mdDoc.columnQuantity')}</th>
                     <th className="py-1 text-right">{t('mdDoc.columnValue')}</th>
                     <th className="py-1">{t('mdDoc.columnReference')}</th>
@@ -233,6 +234,7 @@ export default async function MaterialDocumentPage({ searchParams }: {
                       <td className="py-1">{line.plant}</td>
                       <td className="py-1">{line.storageLocation ?? '—'}</td>
                       <td className="py-1">{line.stockType}</td>
+                      <td className="code py-1" data-batch={line.batch}>{line.batch || '—'}</td>
                       <td className="py-1 text-right tabular-nums">{line.quantity} {line.unit}</td>
                       <td className="py-1 text-right tabular-nums">
                         {line.value}{line.currency ? ` ${line.currency}` : ''}

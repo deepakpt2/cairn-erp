@@ -18,9 +18,9 @@
  * No vendor liability is touched and no credit memo is created — that is invoice verification's
  * own work, and pretending otherwise here would put a document in the books nobody authorized.
  *
- * Refused by name, because the structure to carry them does not exist: batch, serial numbers,
- * split valuation, special stock, and shipping integration. A return of batch-managed stock cannot
- * be expressed, so the service says so rather than quietly returning the wrong layer of stock.
+ * The batch is the receipt line's batch. It is not typed and it is not changed. A typed
+ * batch that is not that batch is refused. Serial numbers, split valuation, special stock,
+ * and shipping integration stay refused by name.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
@@ -42,6 +42,7 @@ import { resolveStorageLocation, StorageLocationError } from './storage-location
 import { postingValuationRefusal } from './valuation-class-definition';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import {
   applyValuationDelta, lockRequestKey, mismatchedRequest, postingFingerprint, quantityToken,
   REQUEST_MISMATCH_REMEDY,
@@ -125,6 +126,8 @@ export interface ReturnableItem {
   plant: string;
   storageLocation: string | null;
   stockType: string;
+  /** The receipt line's batch. Blank when that line has none. Not entered on the return. */
+  batch: string;
   unit: string;
   originalQuantity: number;
   previouslyReturned: number;
@@ -189,6 +192,7 @@ export async function getReturnableDocument(
         plant: line.plant,
         storageLocation: line.storageLocation,
         stockType: line.stockType,
+        batch: line.batchNumber ?? '',
         unit: line.baseUnit,
         originalQuantity: round2(original),
         previouslyReturned: round2(already),
@@ -295,7 +299,10 @@ export interface PostReturnDeliveryInput {
   externalReference?: string;
   lines: ReturnLineInput[];
   requestKey: string;
-  /** Refused by name: canon carries no batch, serial, valuation-type or special-stock structure. */
+  /**
+   * Optional confirmation of the receipt line's batch. A different batch is refused.
+   * A blank value uses the batch already on that line.
+   */
   batch?: string;
   serialNumbers?: string[];
   valuationType?: string;
@@ -318,7 +325,7 @@ export interface ReturnDocumentView {
   returnsAgainst: { documentNumber: string; documentYear: number } | null;
   lines: Array<{
     lineNumber: number; materialNumber: string; plant: string; storageLocation: string | null;
-    stockType: string; quantity: string; unit: string; value: string;
+    stockType: string; batch: string; quantity: string; unit: string; value: string;
     purchaseOrderNumber: string | null; purchaseOrderItem: number | null;
     returnOfLine: number | null;
   }>;
@@ -348,6 +355,7 @@ function toView(
       plant: line.plant,
       storageLocation: line.storageLocation,
       stockType: line.stockType,
+      batch: line.batchNumber ?? '',
       quantity: line.baseQuantity,
       unit: line.baseUnit,
       value: line.value,
@@ -417,13 +425,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
   if (input.lines.length === 0) {
     throw new ReturnDeliveryError('No return quantities were entered.', 'Enter a quantity against at least one receipt item.');
   }
-  // The structures these would address do not exist. Say so rather than post the wrong layer.
-  if ((input.batch ?? '').trim()) {
-    throw new ReturnDeliveryError(
-      'A batch-managed return cannot be posted: this canon carries no batch master.',
-      'Post the return against the material without a batch, or record the batch in the item text.',
-    );
-  }
+  const typedBatch = (input.batch ?? '').trim().toUpperCase();
   if ((input.serialNumbers ?? []).length > 0) {
     throw new ReturnDeliveryError(
       'A serial-managed return cannot be posted: this canon carries no serial-number master.',
@@ -549,6 +551,30 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
           'This round returns goods received against a purchase order.',
         );
       }
+      const receiptBatch = (original.batchNumber ?? '').trim().toUpperCase();
+      if (typedBatch && typedBatch !== receiptBatch) {
+        throw new ReturnDeliveryError(
+          receiptBatch
+            ? `Line ${original.lineNumber} stands on batch ${receiptBatch}. A return does not change it. No stock was posted.`
+            : `Line ${original.lineNumber} has no batch. A return does not assign one. No stock was posted.`,
+          'Leave the batch empty. The return uses the batch on the receipt line.',
+        );
+      }
+      let postingBatch = receiptBatch;
+      if (receiptBatch) {
+        try {
+          postingBatch = await resolvePostingBatch(tx, {
+            client: input.client,
+            materialNumber: original.materialNumber,
+            plant: original.plant,
+            batch: receiptBatch,
+            postingDate: input.postingDate,
+          });
+        } catch (caught) {
+          if (caught instanceof BatchPostingError) throw new ReturnDeliveryError(caught.message, caught.remedy);
+          throw caught;
+        }
+      }
       if (!(line.quantity > 0)) {
         throw new ReturnDeliveryError(`Line ${line.originalLine}: the return quantity must be positive.`, 'Enter a quantity greater than zero.');
       }
@@ -641,27 +667,28 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber: original.materialNumber, plant: original.plant,
           storageLocation: storageLocationName,
+          batch: postingBatch,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) throw new ReturnDeliveryError(caught.message, caught.remedy);
         throw caught;
       }
 
-      // The exact dimension, not a plant total: batch, special stock and valuation type are
-      // absent here, so the stock type and this location are the whole dimension.
+      // The exact dimension includes the receipt line's batch. A return does not choose another.
       const [held] = await tx.select().from(stockQuantity).where(and(
         eq(stockQuantity.client, input.client),
         eq(stockQuantity.materialNumber, original.materialNumber),
         eq(stockQuantity.plant, original.plant),
         eq(stockQuantity.storageLocation, storageLocationName),
         eq(stockQuantity.stockType, original.stockType),
+        eq(stockQuantity.batchNumber, postingBatch),
       ));
       const onHand = held ? Number(held.quantity) : 0;
-      const stockKey = `${original.materialNumber}|${original.plant}|${storageLocationName}|${original.stockType}`;
+      const stockKey = `${original.materialNumber}|${original.plant}|${storageLocationName}|${original.stockType}|${postingBatch}`;
       const alreadyStock = claimedStock.get(stockKey) ?? 0;
       if (!location.allowNegativeStock && onHand + 1e-9 < quantity + alreadyStock) {
         throw new ReturnDeliveryError(
-          `Stock of ${original.materialNumber} (${original.stockType}) in storage location ${storageLocationName} of plant ${original.plant} is ${onHand.toFixed(3)}, short of the ${(quantity + alreadyStock).toFixed(3)} to return.`,
+          `Stock of ${original.materialNumber} (${original.stockType})${postingBatch ? ` batch ${postingBatch}` : ''} in storage location ${storageLocationName} of plant ${original.plant} is ${onHand.toFixed(3)}, short of the ${(quantity + alreadyStock).toFixed(3)} to return.`,
           'Reduce the quantity to what stands, or release negative stock on that storage location.',
         );
       }
@@ -673,7 +700,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         : poValue;
 
       prepared.push({
-        original, quantity, entryQuantity: line.quantity, entryUnit, storageLocation: storageLocationName,
+        original, postingBatch, quantity, entryQuantity: line.quantity, entryUnit, storageLocation: storageLocationName,
         value: stockValue, poValue, valuation,
         poNumber: original.purchaseOrderNumber, poItem: original.purchaseOrderItem,
       });
@@ -769,6 +796,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         movementType: movement.movementType, lineDirection: 'ISSUE',
         materialNumber: p.original.materialNumber, plant: p.original.plant,
         storageLocation: p.storageLocation, stockType: p.original.stockType,
+        batchNumber: p.postingBatch,
         entryQuantity: String(p.entryQuantity), entryUnit: p.entryUnit,
         baseQuantity: String(p.quantity), baseUnit: p.original.baseUnit,
         unitPrice: p.original.unitPrice, priceUnit: p.original.priceUnit, currency: p.valuation.currency,
@@ -788,6 +816,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         eq(stockQuantity.plant, p.original.plant),
         eq(stockQuantity.storageLocation, p.storageLocation),
         eq(stockQuantity.stockType, p.original.stockType),
+        eq(stockQuantity.batchNumber, p.postingBatch),
       ));
       await applyValuationDelta(
         tx, input.client, input.changedBy, p.original.materialNumber, p.original.plant, -p.quantity, -p.value,

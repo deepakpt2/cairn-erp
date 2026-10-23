@@ -377,6 +377,8 @@ export const purchaseOrderItem = pgTable('purchase_order_item', {
   taxCode: varchar('tax_code', { length: 4 }),
   plant: varchar('plant', { length: 10 }).notNull(),
   storageLocation: varchar('storage_location', { length: 10 }),
+  /** A batch that already stands. Blank means the receipt must name one. */
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
   materialGroup: varchar('material_group', { length: 9 }),
   requisitionNumber: varchar('requisition_number', { length: 10 }),
   requisitionItem: integer('requisition_item'),

@@ -100,7 +100,7 @@ export async function transferPosting(ctx: Context) {
         (${client}, 'MB1B-MAT', 'QH01', 'SH01', 'UNRESTRICTED', 100, 'browser.admin'),
         (${client}, 'MB1B-MAT', 'QH01', 'SH01', 'QUALITY', 10, 'browser.admin'),
         (${client}, 'MB1B-MAT', 'QH01', 'SH02', 'UNRESTRICTED', 0, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type)
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
       do update set quantity = excluded.quantity
     `);
   });

@@ -69,7 +69,7 @@ export async function scr147Mi04Count(ctx: Context) {
         (${client}, 'MCNT-A', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 100, 'browser.admin'),
         (${client}, 'MCNT-A', ${PLANT}, ${SLOC}, 'QUALITY', 10, 'browser.admin'),
         (${client}, 'MCNT-B', ${PLANT}, ${SLOC}, 'UNRESTRICTED', 40, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = excluded.quantity
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = excluded.quantity
     `);
     await tx.execute(sql`
       insert into material_period_control (client, company_code, current_fiscal_year, current_period,

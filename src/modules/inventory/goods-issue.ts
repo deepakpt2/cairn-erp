@@ -14,9 +14,10 @@
  * catalogue with their `reversal_movement_type` links so **MBST** reverses an issue
  * through the tested path; this service posts no counter movement of its own.
  *
- * Deferred by name: batch (no batch master exists — a batch entered refuses rather
- * than being dropped), and the production-order issue until `PROD.ORDER.CREATE`
- * brings an order.
+ * A batch-managed material posts only against a batch that already stands.
+ * The production-order issue stays on MIGO until PROD.ORDER.CREATE names it.
+ * The posting does not create the batch, and a restricted batch is refused
+ * because movements 341 and 342 are not available.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
@@ -29,6 +30,7 @@ import { accountDetermination, plant as plantTable } from '../foundation/schema'
 import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
@@ -128,7 +130,7 @@ export interface GoodsIssueLineInput {
   productionOrderItem?: number;
   /** The unit the reader typed in. Absent means the material's base unit. */
   entryUnit?: string;
-  /** Refused by name: canon has no batch master. */
+  /** Required when the material is batch-managed. The batch must already stand. */
   batch?: string;
 }
 
@@ -332,6 +334,7 @@ export async function postGoodsIssue(
       quantityToken(line.quantity), line.entryUnit ?? '', line.costCenter ?? '',
       line.reservationNumber ?? '', line.reservationItem ?? '',
       line.productionOrderNumber ?? '', line.productionOrderItem ?? '',
+      (line.batch ?? '').trim().toUpperCase(),
     ].join(':')).sort(),
   ]);
 
@@ -355,12 +358,6 @@ export async function postGoodsIssue(
     // Every line must stand in one company code: a goods issue writes one journal.
     const companies = new Set<string>();
     for (const line of input.lines) {
-      if (line.batch) {
-        throw new GoodsIssueError(
-          `Line ${line.materialNumber}: a batch was entered, and canon carries no batch master.`,
-          'Post without a batch; batch management is deferred by name.',
-        );
-      }
       if (!(line.quantity > 0)) {
         throw new GoodsIssueError(
           `Line ${line.materialNumber}: the issue quantity must be positive.`,
@@ -413,6 +410,7 @@ export async function postGoodsIssue(
       valuation: typeof materialValuation.$inferSelect;
       unitPrice: string;
       priceUnit: string;
+      batch: string;
       reservationOpenAfter: string | null;
       productionOrderNumber: string | null;
       productionOrderItem: number | null;
@@ -558,6 +556,7 @@ export async function postGoodsIssue(
       try {
         await assertInventoryCountOpen(tx, input.client, {
           materialNumber, plant: line.plant, storageLocation: issuingLocation || null,
+          batch: line.batch,
         });
       } catch (caught) {
         if (caught instanceof PhysicalInventoryError) throw new GoodsIssueError(caught.message, caught.remedy);
@@ -580,6 +579,16 @@ export async function postGoodsIssue(
         throw new GoodsIssueError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
       }
 
+      let postingBatch = '';
+      try {
+        postingBatch = await resolvePostingBatch(tx, {
+          client: input.client, materialNumber, plant: line.plant, batch: line.batch, postingDate: input.postingDate,
+        });
+      } catch (caught) {
+        if (caught instanceof BatchPostingError) throw new GoodsIssueError(caught.message, caught.remedy);
+        throw caught;
+      }
+
       // Sufficiency, on the location's own terms (SCR-131).
       const [stock] = await tx.select().from(stockQuantity).where(and(
         eq(stockQuantity.client, input.client),
@@ -587,6 +596,7 @@ export async function postGoodsIssue(
         eq(stockQuantity.plant, line.plant),
         eq(stockQuantity.storageLocation, issuingLocation),
         eq(stockQuantity.stockType, 'UNRESTRICTED'),
+        eq(stockQuantity.batchNumber, postingBatch),
       ));
       const onHand = Number(stock?.quantity ?? 0);
       const price = valuation.priceControl === 'STANDARD'
@@ -668,7 +678,7 @@ export async function postGoodsIssue(
         throw caught;
       });
       const value = round2(conversion.baseQuantity * price);
-      const claimKey = `${materialNumber}|${line.plant}|${issuingLocation}|UNRESTRICTED`;
+      const claimKey = `${materialNumber}|${line.plant}|${issuingLocation}|UNRESTRICTED|${postingBatch}`;
       const alreadyClaimed = claimedStock.get(claimKey) ?? 0;
       if (!location.row?.allowNegativeStock && onHand + 1e-9 < conversion.baseQuantity + alreadyClaimed) {
         throw new GoodsIssueError(
@@ -679,7 +689,7 @@ export async function postGoodsIssue(
       claimedStock.set(claimKey, alreadyClaimed + conversion.baseQuantity);
 
       prepared.push({
-        line, materialNumber, storageLocation: issuingLocation || null,
+        line, materialNumber, storageLocation: issuingLocation || null, batch: postingBatch,
         quantity: conversion.baseQuantity, unit: conversion.baseUnit, value, valuation,
         entryQuantity: line.quantity, entryUnit: line.entryUnit ?? conversion.baseUnit,
         unitPrice: valuation.priceControl === 'STANDARD' ? valuation.standardPrice : valuation.movingAveragePrice,
@@ -762,6 +772,7 @@ export async function postGoodsIssue(
         movementType: scenario.movementType,
         materialNumber: p.materialNumber, plant: p.line.plant,
         storageLocation: p.storageLocation, stockType: 'UNRESTRICTED',
+        batchNumber: p.batch,
         lineDirection: 'ISSUE',
         entryQuantity: String(p.entryQuantity ?? p.quantity), entryUnit: p.entryUnit ?? p.unit,
         baseQuantity: String(p.quantity), baseUnit: p.unit,
@@ -774,10 +785,10 @@ export async function postGoodsIssue(
 
       // Stock falls at the issuing location; a location with no row is the empty one.
       await tx.execute(sql`
-        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
         values (${input.client}, ${p.materialNumber}, ${p.line.plant}, ${p.storageLocation ?? ''}, 'UNRESTRICTED',
-                ${String(-p.quantity)}, ${input.changedBy})
-        on conflict (client, material_number, plant, storage_location, stock_type)
+                ${p.batch}, ${String(-p.quantity)}, ${input.changedBy})
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
         do update set quantity = stock_quantity.quantity - ${p.quantity},
                       changed_by = ${input.changedBy}, changed_at = now()
       `);

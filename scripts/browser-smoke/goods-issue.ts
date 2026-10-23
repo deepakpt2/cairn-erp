@@ -67,7 +67,7 @@ export async function goodsIssue(ctx: Context) {
     await tx.execute(sql`
       insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
       values (${client}, 'MB1A-MAT', 'QP01', 'SP01', 'UNRESTRICTED', 100, 'browser.admin')
-      on conflict (client, material_number, plant, storage_location, stock_type) do update set quantity = 100
+      on conflict (client, material_number, plant, storage_location, stock_type, batch_number) do update set quantity = 100
     `);
     await tx.execute(sql`
       insert into material_period_control (client, company_code, current_fiscal_year, current_period,

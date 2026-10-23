@@ -105,6 +105,7 @@ export interface DifferenceRow {
   materialNumber: string;
   description: string;
   stockType: string;
+  batch: string;
   bookQuantity: string | null;
   bookUnit: string | null;
   bookBasis: string | null;
@@ -156,6 +157,7 @@ interface RawRow {
   fiscal_year: number;
   item_number: number;
   material_number: string;
+  batch_number: string;
   description: string;
   base_unit: string;
   stock_type: string;
@@ -241,6 +243,7 @@ function toRow(raw: RawRow, periodNote: string | null): DifferenceRow {
     materialNumber: raw.material_number,
     description: raw.description || raw.material_number,
     stockType: raw.stock_type,
+    batch: raw.batch_number ?? '',
     bookQuantity: raw.book_quantity,
     bookUnit: raw.book_unit,
     bookBasis: raw.book_basis,
@@ -383,7 +386,7 @@ export async function listDifferences(
       select d.plant, d.storage_location, p.company_code,
              d.inventory_document_number as document_number, d.fiscal_year, d.status as document_status,
              d.planned_count_date,
-             i.item_number, i.material_number, coalesce(m.description, '') as description,
+             i.item_number, i.material_number, i.batch_number, coalesce(m.description, '') as description,
              coalesce(m.base_unit, '') as base_unit, i.stock_type,
              i.book_quantity_snapshot::text as book_quantity, i.book_quantity_unit as book_unit,
              i.book_quantity_basis as book_basis,

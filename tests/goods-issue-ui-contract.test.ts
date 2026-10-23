@@ -66,7 +66,7 @@ describe('SCR-136 goods issue UI contract', () => {
   it('says what it refuses rather than hiding it: 261, counters and batch', () => {
     expect(service).toContain('PROD.ORDER.CREATE');
     expect(service).toContain('MBST');
-    expect(service).toContain('canon carries no batch master');
+    expect(service).toContain('A batch-managed material posts only against a batch that already stands.');
     expect(messages).toContain("'mb1a.hint'");
   });
 

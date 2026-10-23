@@ -122,7 +122,7 @@ export default function ReturnDeliveryShell({
                     data-eligible={item.eligible ? 'true' : 'false'}
                   >
                     <td className="py-1">{item.lineNumber}</td>
-                    <td className="py-1 code">{item.materialNumber}</td>
+                    <td className="py-1 code">{item.materialNumber}{item.batch ? ` · Batch ${item.batch}` : ''}</td>
                     <td className="py-1 code">{item.purchaseOrderNumber ?? '—'}{item.purchaseOrderItem ? `/${item.purchaseOrderItem}` : ''}</td>
                     <td className="py-1 code">{item.plant}</td>
                     <td className="py-1 code">{item.storageLocation ?? '—'}</td>
@@ -233,7 +233,7 @@ export default function ReturnDeliveryShell({
                 {posted.posted.lines.map((line) => (
                   <tr key={line.lineNumber} className="border-t border-line" data-line={line.materialNumber}>
                     <td className="py-1">{line.lineNumber}</td>
-                    <td className="py-1">{line.materialNumber}</td>
+                    <td className="py-1">{line.materialNumber}{line.batch ? ` · Batch ${line.batch}` : ''}</td>
                     <td className="py-1">{line.storageLocation ?? '—'}</td>
                     <td className="py-1 text-right tabular">{line.quantity} {line.unit}</td>
                     <td className="py-1 text-right tabular">{line.value}</td>

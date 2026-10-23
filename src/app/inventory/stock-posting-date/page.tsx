@@ -37,6 +37,7 @@ export default async function StockPostingDatePage({
     dateFrom: get('dateFrom'),
     dateTo: get('dateTo'),
     stockType: (get('stockType') || DEFAULT_STOCK_TYPE).toUpperCase(),
+    batch: get('batch').toUpperCase(),
     displayZero: get('displayZero') === 'on' || get('displayZero') === '1',
     maxHits: Number(get('maxHits', String(DEFAULT_MAX_HITS))) || DEFAULT_MAX_HITS,
   };

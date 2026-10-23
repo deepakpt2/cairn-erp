@@ -99,7 +99,7 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                     <th className="px-2 py-2">Item</th><th className="px-2 py-2">Material</th>
                     <th className="px-2 py-2">Plant</th><th className="px-2 py-2">Ordered</th>
                     <th className="px-2 py-2">Received</th><th className="px-2 py-2">Remaining</th>
-                    <th className="px-2 py-2">Receipt quantity</th><th className="px-2 py-2">Storage location</th>
+                    <th className="px-2 py-2">Receipt quantity</th><th className="px-2 py-2">Storage location</th><th className="px-2 py-2">Batch</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -125,6 +125,11 @@ export default function GoodsReceipt({ order, document, canPost, today }: {
                       <td className="px-2 py-2">
                         {item.eligible && (
                           <input name={`sloc-${item.itemNumber}`} className="input w-24" defaultValue={item.proposedStorageLocation ?? item.storageLocation ?? ''} />
+                        )}
+                      </td>
+                      <td className="px-2 py-2">
+                        {item.eligible && (
+                          <input name={`batch-${item.itemNumber}`} maxLength={10} className="input w-28" placeholder="Batch" defaultValue={item.batch} />
                         )}
                       </td>
                     </tr>

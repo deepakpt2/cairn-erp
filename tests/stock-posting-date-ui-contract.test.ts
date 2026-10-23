@@ -95,6 +95,8 @@ describe('SCR-126 stocks on posting date UI contract', () => {
   });
 
   it('defers batch, valuation type and exporting by name in the catalogue entry', () => {
-    expect(registry).toMatch(/Batch and valuation type[^']*deferred by name/);
+    expect(registry).toMatch(/Valuation type, Scope-of-List variants[^']*deferred by name/);
+    expect(shell).toContain('name="batch"');
+    expect(service).toContain('A named batch splits the rollforward');
   });
 });

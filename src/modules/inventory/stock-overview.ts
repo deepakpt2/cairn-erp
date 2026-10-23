@@ -11,7 +11,8 @@
  *
  * Read-only: this module issues no insert, update or delete.
  *
- * Deferred by name (contract §26.855): batch (no batch master), in-transit (no
+ * A named batch filters this tree to the stock that stands on that batch.
+ * The overview does not create a batch. In-transit is deferred by name (no
  * movement type in this canon produces transit stock). Refused by name: SAP's
  * one-character special stock indicator — Cairn carries special stock as a named
  * stock type, which is exactly what the third tree level shows.
@@ -20,6 +21,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 
 export const STOCK_OVERVIEW_CAPABILITY = 'INV.STOCK.VIEW';
 export const STOCK_OVERVIEW_ALIAS = 'MMBE';
@@ -47,12 +49,18 @@ export interface StockOverviewSelection {
   maxHits?: number;
 }
 
+export interface StockBatchNode {
+  batch: string;
+  quantity: number;
+}
+
 export interface StockTypeNode {
   stockType: string;
   isUnrestricted: boolean;
   isQualityInspection: boolean;
   isBlocked: boolean;
   quantity: number;
+  batches: StockBatchNode[];
 }
 
 export interface StorageLocationNode {
@@ -145,9 +153,6 @@ export async function stockOverview(input: {
       'Cairn records special stock as a named stock type; the third level of the tree names it.',
     );
   }
-  if (s.batch) {
-    fail(`Batch ${s.batch} is not maintained.`, 'Batch is deferred: this canon carries no batch master.');
-  }
   if (s.plantFrom && s.plantTo && s.plantTo < s.plantFrom) fail('The plant range is inverted.', 'The lower bound must not exceed the upper bound.');
   if (s.storageLocationFrom && s.storageLocationTo && s.storageLocationTo < s.storageLocationFrom) {
     fail('The storage location range is inverted.', 'The lower bound must not exceed the upper bound.');
@@ -178,21 +183,45 @@ export async function stockOverview(input: {
       if (rows.length === 0) fail(`The storage location ${value} does not stand.`, 'Maintain the storage location before selecting it.');
     }
 
+    let batchFilter = '';
+    if (s.batch) {
+      const levelRows = await tx.execute(sql`
+        select batch_level from batch_level_configuration where client = ${client} limit 1
+      `) as unknown as Array<{ batch_level: string }>;
+      const level = levelRows[0]?.batch_level?.trim();
+      if (level === '0' && !s.plantFrom) {
+        fail('A plant is required before a batch can be read.', 'Enter one plant, then the batch.');
+      }
+      if (level === '0' && s.plantTo && s.plantFrom !== s.plantTo) {
+        fail('A batch at plant level is read for one plant.', 'Enter the same plant in both bounds.');
+      }
+      try {
+        batchFilter = await resolvePostingBatch(tx, {
+          client, materialNumber: s.material!, plant: s.plantFrom ?? s.plantTo ?? '', batch: s.batch,
+        });
+      } catch (caught) {
+        if (caught instanceof BatchPostingError) {
+          fail(caught.message.replace(' No stock was posted.', ''), caught.remedy);
+        }
+        throw caught;
+      }
+    }
     const filters = [
       s.plantFrom ? sql`and plant >= ${s.plantFrom}` : sql``,
       s.plantTo ? sql`and plant <= ${s.plantTo}` : sql``,
       s.storageLocationFrom ? sql`and storage_location >= ${s.storageLocationFrom}` : sql``,
       s.storageLocationTo ? sql`and storage_location <= ${s.storageLocationTo}` : sql``,
+      batchFilter ? sql`and batch_number = ${batchFilter}` : sql``,
     ];
     // One read of the stock master; the tree folds these same rows, so no parent
     // can disagree with the children it displays.
     const rows = await tx.execute(sql`
-      select plant, storage_location, stock_type, quantity::text as quantity
+      select plant, storage_location, stock_type, batch_number, quantity::text as quantity
       from stock_quantity
       where client = ${client} and material_number = ${s.material!} ${sql.join(filters, sql` `)}
-      order by plant, storage_location, stock_type
+      order by plant, storage_location, stock_type, batch_number
       limit ${maxHits + 1}
-    `) as unknown as Array<{ plant: string; storage_location: string; stock_type: string; quantity: string }>;
+    `) as unknown as Array<{ plant: string; storage_location: string; stock_type: string; batch_number: string; quantity: string }>;
 
     const truncated = rows.length > maxHits;
     const leaves = rows.slice(0, maxHits);
@@ -206,29 +235,35 @@ export async function stockOverview(input: {
     const lastDate = span[0]?.last_date ?? null;
     const materialNumber = s.material!;
 
-    const drill = (base: string, plant: string, storageLocation: string) => (firstDate && lastDate
-      ? `${base}?materialFrom=${encodeURIComponent(materialNumber)}&materialTo=${encodeURIComponent(materialNumber)}`
+    const drill = (base: string, plant: string, storageLocation: string) => {
+      if (!firstDate || !lastDate) return null;
+      const url = `${base}?materialFrom=${encodeURIComponent(materialNumber)}&materialTo=${encodeURIComponent(materialNumber)}`
         + `&plantFrom=${encodeURIComponent(plant)}&plantTo=${encodeURIComponent(plant)}`
         + `&storageLocationFrom=${encodeURIComponent(storageLocation)}&storageLocationTo=${encodeURIComponent(storageLocation)}`
         + (base.includes('stock-on-posting-date')
           ? `&dateFrom=${firstDate}&dateTo=${lastDate}`
           : base.includes('warehouse-stocks')
             ? ''
-            : `&postingDateFrom=${firstDate}&postingDateTo=${lastDate}`)
-      : null);
+            : `&postingDateFrom=${firstDate}&postingDateTo=${lastDate}`);
+      // A filtered batch must follow the node. The other batch is not this readback.
+      return batchFilter ? `${url}&batch=${encodeURIComponent(batchFilter)}` : url;
+    };
 
     // Fold: stock type → location → plant, all from the same leaves.
-    const plantMap = new Map<string, Map<string, Map<string, number>>>();
+    const plantMap = new Map<string, Map<string, Map<string, Map<string, number>>>>();
     for (const leaf of leaves) {
       const plant = String(leaf.plant);
       const location = String(leaf.storage_location ?? '');
       const stockType = String(leaf.stock_type);
+      const batch = String(leaf.batch_number ?? '');
       const quantity = num(String(leaf.quantity));
       if (!plantMap.has(plant)) plantMap.set(plant, new Map());
       const locations = plantMap.get(plant)!;
       if (!locations.has(location)) locations.set(location, new Map());
       const types = locations.get(location)!;
-      types.set(stockType, (types.get(stockType) ?? 0) + quantity);
+      if (!types.has(stockType)) types.set(stockType, new Map());
+      const batches = types.get(stockType)!;
+      batches.set(batch, (batches.get(batch) ?? 0) + quantity);
     }
 
     const plants: PlantNode[] = [];
@@ -246,14 +281,21 @@ export async function stockOverview(input: {
         const stockTypes: StockTypeNode[] = [];
         let locationTotal = 0;
         for (const stockType of [...types.keys()].sort()) {
-          const quantity = Number(types.get(stockType)!.toFixed(3));
-          if (!s.displayZero && quantity === 0) continue;
+          const batchMap = types.get(stockType)!;
+          const batches = [...batchMap.keys()].sort().flatMap((batch) => {
+            const quantity = Number(batchMap.get(batch)!.toFixed(3));
+            if (!s.displayZero && quantity === 0) return [];
+            return [{ batch, quantity }];
+          });
+          if (batches.length === 0) continue;
+          const quantity = Number(batches.reduce((sum, batch) => sum + batch.quantity, 0).toFixed(3));
           stockTypes.push({
             stockType,
             isUnrestricted: stockType === UNRESTRICTED,
             isQualityInspection: stockType === QUALITY,
             isBlocked: stockType === BLOCKED,
             quantity,
+            batches,
           });
           locationTotal += quantity;
         }

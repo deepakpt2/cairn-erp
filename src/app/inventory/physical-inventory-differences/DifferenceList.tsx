@@ -274,7 +274,7 @@ export default function DifferenceList({
                     <td className="py-1 pr-2">{row.itemNumber}</td>
                     <td className="py-1 pr-2">
                       {row.materialNumber}
-                      <span className="block text-xs text-ink-faint">{row.description}</span>
+                      <span className="block text-xs text-ink-faint">{row.description}{row.batch ? ` · Batch ${row.batch}` : ''}</span>
                     </td>
                     <td className="py-1 pr-2">{row.stockType}</td>
                     <td className="py-1 pr-2 text-right tabular-nums" data-difference-book>

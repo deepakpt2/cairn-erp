@@ -51,7 +51,7 @@ describe('SCR-128 stock overview UI contract', () => {
     expect(shell).toContain('data-location={`${plant.plant}|${location.storageLocation}`}');
     expect(shell).toContain('data-stock-type={type.stockType}');
     expect(shell).toContain('plant.storageLocations.map');
-    expect(shell).toContain('location.stockTypes.map');
+    expect(shell).toContain('location.stockTypes.flatMap');
     // The expansion level decides whether plants open on arrival.
     expect(shell).toContain("const openPlants = result?.expansionLevel === 'STORAGE_LOCATION'");
     expect(shell).toContain('open={openPlants}');
@@ -75,6 +75,8 @@ describe('SCR-128 stock overview UI contract', () => {
     expect(shell).toContain('href={plant.rollforwardDrillDown}');
     expect(shell).toContain('href={plant.warehouseDrillDown}');
     expect(shell).toContain('href={location.movementsDrillDown}');
+    expect(shell).toContain('batchReadback(location.movementsDrillDown, batch.batch)');
+    expect(shell).toContain('&batch=');
     expect(service).toContain("drill('/inventory/material-document-list'");
     expect(service).toContain("drill('/inventory/stock-on-posting-date'");
     expect(service).toContain("drill('/inventory/warehouse-stocks'");
@@ -90,7 +92,7 @@ describe('SCR-128 stock overview UI contract', () => {
 
   it('refuses the special stock indicator and defers batch and in-transit by name', () => {
     expect(service).toContain('The special stock indicator');
-    expect(service).toMatch(/Batch .* is not maintained/);
+    expect(service).toContain('A named batch filters this tree');
     expect(service).toContain('named stock type');
     expect(service).toContain('produces transit stock'); // in-transit deferred in the module header
     expect(service).not.toContain('IN_TRANSIT');

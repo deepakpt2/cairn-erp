@@ -1,0 +1,8 @@
+-- MBRL returns the batch already on the receipt line. It adds no table
+-- and no index. A typed batch that is not that batch is refused.
+
+UPDATE term_registry
+   SET description = $mbrl$Return goods received against a purchase order, read against a posted goods receipt named by number and fiscal year: every item shows what was received, what has already gone back and what may still be returned, and only the return quantity is entered. The receipt is not cancelled; it stands, and the received position on the order falls by what went back. The return posts its own material document through the canonical engine and numbering service, carrying the original document, its year and its line so that a return and a cancellation stay distinguishable. The movement is configuration — RETURN_TO_VENDOR, direction ISSUE, counter RETURN_TO_VENDOR_REV — and a movement that adds stock cannot post as a return. Stock is judged on the exact material, plant, storage location, stock type and the receipt line's batch after the locks are taken and the returnable quantity re-read. Accounting mirrors the receipt: inventory credited, GR/IR debited, price difference where order price and stock value disagree, reopening the clearing position the later credit memo closes, with no vendor liability touched and no credit memo created. The batch is the receipt line's batch. It is not typed and it is not changed. A typed batch that is not that batch is refused. Serial numbers, split valuation, special stock and outbound delivery are refused by name.$mbrl$,
+       changed_by = 'MIGRATION_9120',
+       changed_at = now()
+ WHERE our_code = 'INV.RETURN.POST';
