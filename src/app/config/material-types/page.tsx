@@ -43,6 +43,9 @@ export default async function MaterialTypesPage() {
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold tracking-tight">{t('materialType.title')}</h1>
           <div className="flex flex-wrap gap-2">
+            <Link href="/config/valuation-classes" className="btn btn-default min-h-11 sm:min-h-8">
+              Valuation classes
+            </Link>
             <Link href="/config" className="btn btn-default min-h-11 sm:min-h-8">
               {t('nav.workbench')}
             </Link>

@@ -3695,6 +3695,12 @@ const en: Catalogue = {
     'The movement catalogue, maintained once per tenant. A posting service reads the row as it stands. ' +
     'This screen does not post stock or a journal, and a closed posting period does not block it. ' +
     'A cited movement keeps its posting rules; the change document is the history, and a posted document is not rewritten.',
+  'valuationClass.title': 'Define Valuation Classes',
+  'valuationClass.subtitle':
+    'Account category references, valuation classes, and which classes a reference permits. ' +
+    'A material type names one reference. A material may carry only an active class assigned to that reference. ' +
+    'This screen does not post a journal, and a closed posting period does not block it. ' +
+    'A change must send the version it opened. The change document is the history. A material valuation class is not rewritten.',
   'materialType.title': 'Define Material Types',
   'materialType.subtitle':
     'Material types defined once per tenant: the key and description, the price-control ' +

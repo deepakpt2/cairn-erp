@@ -11,6 +11,7 @@ import { accountDetermination, plant as plantTable, storageLocation } from '../f
 import { lockStockScope } from './physical-inventory';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
@@ -462,6 +463,13 @@ async function judgeItem(
       unitPrice: null, priceUnit: null, valuationClass: null, priceControl: null,
       inventoryAccount: null, offsetAccount: null,
     };
+  }
+  const classRefusal = await postingValuationRefusal(tx, client, item.material_number, valuation!.valuationClass!);
+  if (classRefusal) {
+    throw new PhysicalInventoryPostingError(
+      classRefusal,
+      'Maintain a valuation class this material type permits, then post the difference.',
+    );
   }
   if (valuation!.currency !== companyCurrency) {
     throw new PhysicalInventoryPostingError(

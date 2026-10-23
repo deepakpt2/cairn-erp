@@ -21,6 +21,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { accountDetermination, plant as plantTable } from '../foundation/schema';
 import { documentRelease, purchaseOrder, purchaseOrderItem } from '../purchasing/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
@@ -382,6 +383,10 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
           `Material ${item.materialNumber} carries no valuation class in plant ${item.plant}.`,
           'Complete the material valuation data, then post again.',
         );
+      }
+      const classRefusal = await postingValuationRefusal(tx, input.client, item.materialNumber, valuation.valuationClass);
+      if (classRefusal) {
+        throw new GoodsReceiptError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
       }
       if (valuation.currency !== view.currency) {
         throw new GoodsReceiptError(

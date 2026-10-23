@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useActionState } from 'react';
 import { t } from '@/platform/i18n';
 import { materialFormValue } from '@/modules/inventory/form-values';
+import { classPermittedForType } from '@/modules/inventory/valuation-class-permission';
 import type { materialChoices } from '@/modules/inventory/materials';
 import { type MaterialView, MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from '@/modules/inventory/constants';
 import { saveMaterialAction } from './actions';
@@ -75,7 +76,19 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
       </>}
       {view === 'ACCOUNTING' && <>
         <div className="grid gap-3 sm:grid-cols-3">
-          {options('valuationClass', 'material.valuationClass', choices.valuationClasses.filter((c) => c.allowedMaterialTypes.split(',').includes(value('materialType'))).map((r) => ({ key: r.valuationClass, text: r.name })))}
+          {options('valuationClass', 'material.valuationClass', choices.valuationClasses.filter((c) => {
+            const typeKey = value('materialType', 'RAW');
+            const type = choices.types.find((row) => row.materialType === typeKey);
+            const reference = choices.accountCategoryReferences.find((row) => row.reference === type?.accountCategoryReference);
+            return classPermittedForType({
+              materialType: typeKey,
+              reference: type?.accountCategoryReference,
+              referenceActive: reference?.isActive ?? false,
+              classActive: c.isActive,
+              allowedMaterialTypes: c.allowedMaterialTypes,
+              assignedToReference: choices.valuationClassReferences.some((row) => row.valuationClass === c.valuationClass && row.reference === type?.accountCategoryReference),
+            });
+          }).map((r) => ({ key: r.valuationClass, text: r.name })))}
           {coded('priceControl', 'material.priceControl', PRICE_CONTROLS, (currentType?.defaultPriceControl === 'V' ? 'MOVING_AVERAGE' : 'STANDARD'))}
           {decimal('priceUnit', 'material.priceUnit', '1')}
           {decimal('standardPrice', 'material.standardPrice')}{decimal('movingAveragePrice', 'material.movingPrice')}

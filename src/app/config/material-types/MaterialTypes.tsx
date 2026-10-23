@@ -306,7 +306,7 @@ export default function MaterialTypes({
                   defaultValue={selected?.accountCategoryReference ?? references[0]?.reference ?? ''}
                   className="input mt-1 w-full"
                 >
-                  {references.map((r) => (
+                  {references.filter((r) => r.isActive !== false).map((r) => (
                     <option key={r.reference} value={r.reference}>
                       {r.reference} — {r.name}
                     </option>
@@ -539,7 +539,7 @@ export default function MaterialTypes({
                   id="ref-name"
                   name="name"
                   required
-                  maxLength={40}
+                  maxLength={60}
                   defaultValue={selectedReference?.name ?? ''}
                   className="input mt-1 w-full"
                 />

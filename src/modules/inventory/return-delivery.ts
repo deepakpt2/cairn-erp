@@ -38,6 +38,7 @@ import {
   movementType, stockQuantity,
 } from './schema';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { recordOutputsForPostedDocument } from './material-document-output';
@@ -581,6 +582,10 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
           `Material ${original.materialNumber} carries no valuation class in plant ${original.plant}.`,
           'Complete the material valuation data, then post again.',
         );
+      }
+      const classRefusal = await postingValuationRefusal(tx, input.client, original.materialNumber, valuation.valuationClass);
+      if (classRefusal) {
+        throw new ReturnDeliveryError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
       }
 
       const storageLocationName = (line.storageLocation ?? original.storageLocation ?? '').trim();

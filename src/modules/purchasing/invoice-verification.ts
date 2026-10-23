@@ -23,6 +23,7 @@ import { accountDetermination, taxCode } from '../foundation/schema';
 import { supplierCompany } from '../foundation/supplier-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { materialDocumentLine, materialValuation, movementType } from '../inventory/schema';
+import { postingValuationRefusal } from '../inventory/valuation-class-definition';
 import {
   parkedSupplierInvoice,
   purchaseOrder, purchaseOrderItem, supplierInvoice, supplierInvoiceItem,
@@ -273,6 +274,10 @@ async function valuationClassFor(tx: Tx, client: string, materialNumber: string,
       `Material ${materialNumber} carries no valuation class in plant ${plant}.`,
       'Complete the material valuation data, then post again.',
     );
+  }
+  const classRefusal = await postingValuationRefusal(tx, client, materialNumber, valuation.valuationClass);
+  if (classRefusal) {
+    throw new InvoiceVerificationError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
   }
   return valuation.valuationClass;
 }

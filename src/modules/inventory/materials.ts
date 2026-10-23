@@ -8,7 +8,8 @@ import { unitOfMeasure } from '../../platform/tables/reference';
 import { allocateNumber } from '../../platform/numbering';
 import { numberRange } from '../../platform/tables/numbering';
 import { companyCode, plant, purchasingGroup } from '../foundation/schema';
-import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, industrySector, valuationClass, mrpController, planningFile } from './schema';
+import { material, materialPlant, materialValuation, materialType, materialTypeValuation, materialGroup, industrySector, valuationClass, valuationClassReference, accountCategoryReference, mrpController, planningFile } from './schema';
+import { valuationClassRefusal } from './valuation-class-definition';
 import { MRP_TYPES, PROCUREMENT_TYPES, LOT_PROCEDURES, PRICE_CONTROLS } from './constants';
 
 export class MaterialError extends Error {
@@ -195,8 +196,13 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       const [before] = await tx.select().from(materialValuation).where(filter).for('update');
       checkVersion(before, expectedVersion);
       if (input.valuationClass) {
-        const [c] = await tx.select().from(valuationClass).where(eq(valuationClass.valuationClass, input.valuationClass));
-        if (!c?.isActive || !c.allowedMaterialTypes.split(',').includes(base.materialType)) throw new MaterialError(`Valuation class ${input.valuationClass} is not allowed for material type ${base.materialType}.`);
+        const refusal = await valuationClassRefusal(tx, client, base.materialType, input.valuationClass);
+        if (refusal) {
+          throw new MaterialError(
+            refusal,
+            'Choose a class assigned to this material type account category reference, or maintain the class on the valuation classes screen.',
+          );
+        }
       }
       const values = { valuationClass: input.valuationClass || null, priceControl: input.priceControl,
         standardPrice: input.standardPrice, movingAveragePrice: input.movingAveragePrice, priceUnit: input.priceUnit, currency: company.currency };
@@ -382,7 +388,15 @@ export async function materialChoices(client: string) {
     types: await tx.select().from(materialType).where(eq(materialType.isActive, true)).orderBy(materialType.materialType),
     groups: await tx.select().from(materialGroup).where(eq(materialGroup.isActive, true)).orderBy(materialGroup.materialGroup),
     sectors: await tx.select().from(industrySector).where(eq(industrySector.isActive, true)).orderBy(industrySector.sector),
-    valuationClasses: await tx.select().from(valuationClass).where(eq(valuationClass.isActive, true)).orderBy(valuationClass.valuationClass),
+    valuationClasses: await tx.select().from(valuationClass).where(and(eq(valuationClass.client, client), eq(valuationClass.isActive, true))).orderBy(valuationClass.valuationClass),
+    valuationClassReferences: await tx.select({
+      reference: valuationClassReference.reference,
+      valuationClass: valuationClassReference.valuationClass,
+    }).from(valuationClassReference).where(eq(valuationClassReference.client, client)),
+    accountCategoryReferences: await tx.select({
+      reference: accountCategoryReference.reference,
+      isActive: accountCategoryReference.isActive,
+    }).from(accountCategoryReference).where(eq(accountCategoryReference.client, client)),
     controllers: await tx.select().from(mrpController).where(eq(mrpController.isActive, true)).orderBy(mrpController.controller),
     units: await tx.select().from(unitOfMeasure).orderBy(unitOfMeasure.code),
     plants: await tx.select().from(plant).where(and(eq(plant.isActive, true), isNotNull(plant.companyCode))).orderBy(plant.plant),

@@ -81,9 +81,8 @@ describe('SCR-149 physical inventory difference posting', () => {
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, m.number, m.description, t.material_type, 'PC', ${ACTOR}
-        from (select material_type from material_type where client = ${client} order by material_type limit 1) t
-        cross join (values
+        select ${client}, m.number, m.description, 'RAW', 'PC', ${ACTOR}
+        from (values
           ('POST-S', 'Shortage'), ('POST-P', 'Surplus'), ('POST-Z', 'Exact'),
           ('POST-U', 'Uncounted'), ('POST-N', 'Unvalued'), ('POST-Q', 'Quality')
         ) m(number, description)

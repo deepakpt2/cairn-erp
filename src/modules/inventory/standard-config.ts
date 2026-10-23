@@ -11,6 +11,7 @@ import {
   materialTypeValuation,
   mrpController,
   valuationClass,
+  valuationClassReference,
   industrySector,
 } from './schema';
 
@@ -86,9 +87,14 @@ export async function applyMaterialDefaults(tx: Tx, client: string, createdBy: s
     { valuationClass: 'SEMI_INVENTORY', name: 'Semi-finished inventory', allowedMaterialTypes: 'SEMI' },
     { valuationClass: 'FINISHED_INVENTORY', name: 'Finished product inventory', allowedMaterialTypes: 'FIN' },
     { valuationClass: 'TRADE_INVENTORY', name: 'Trading goods inventory', allowedMaterialTypes: 'TRAD' },
-  ]) await tx.insert(valuationClass).values({ ...c, client, createdBy }).onConflictDoNothing();
+  ]) {
+    await tx.insert(valuationClass).values({ ...c, client, createdBy }).onConflictDoNothing();
+    await tx.insert(valuationClassReference).values({
+      client, reference: '0001', valuationClass: c.valuationClass, createdBy,
+    }).onConflictDoNothing();
+  }
   await tx.insert(mrpController).values({ client, controller: '001', name: 'Primary planner', createdBy }).onConflictDoNothing();
-  for (const code of ['CFG.INV.MATERIALTYPE.DEFINE', 'CFG.INV.MATERIALGROUP.DEFINE', 'CFG.PROD.MRPCONTROLLER.DEFINE']) {
+  for (const code of ['CFG.INV.MATERIALTYPE.DEFINE', 'CFG.INV.MATERIALGROUP.DEFINE', 'CFG.PROD.MRPCONTROLLER.DEFINE', 'CFG.INV.VALCLASS.DEFINE']) {
     await markActivityComplete(tx, client, code, createdBy);
   }
 }

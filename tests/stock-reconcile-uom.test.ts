@@ -37,9 +37,8 @@ describe('SCR-144 reconcile and unit conversion', () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, v.n, v.d, t.material_type, v.u, ${ACTOR}
+        select ${client}, v.n, v.d, 'RAW', v.u, ${ACTOR}
         from (values ('UOM-MAT', 'Converted material', 'PC'), ('UOM-PLAIN', 'Base unit only', 'PC')) as v(n, d, u)
-        cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
         on conflict do nothing
       `);
       await tx.execute(sql`

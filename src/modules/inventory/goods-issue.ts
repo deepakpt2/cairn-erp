@@ -27,6 +27,7 @@ import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { withdrawReservationInTx } from './reservations';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
@@ -542,6 +543,10 @@ export async function postGoodsIssue(
           `Material ${materialNumber} carries no valuation class in plant ${line.plant}.`,
           'Complete the material valuation data, then post again.',
         );
+      }
+      const classRefusal = await postingValuationRefusal(tx, input.client, materialNumber, valuation.valuationClass);
+      if (classRefusal) {
+        throw new GoodsIssueError(classRefusal, 'Maintain a valuation class this material type permits, then post again.');
       }
 
       // Sufficiency, on the location's own terms (SCR-131).

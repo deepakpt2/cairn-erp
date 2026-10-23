@@ -71,9 +71,8 @@ describe('SCR-136 goods issue (MB1A)', () => {
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, v.n, v.d, t.material_type, 'PC', ${ACTOR}
+        select ${client}, v.n, v.d, 'RAW', 'PC', ${ACTOR}
         from (values ('GI-MAT', 'Issued material'), ('GI-SCRAP', 'Scrapped material')) as v(n, d)
-        cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
         on conflict do nothing
       `);
       await tx.execute(sql`

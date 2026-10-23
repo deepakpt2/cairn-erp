@@ -11,7 +11,12 @@ const money = (name: string) => numeric(name, { precision: 23, scale: 4 });
 
 export const accountCategoryReference = pgTable('account_category_reference', {
   client: tenant(), reference: varchar('reference', { length: 4 }).notNull(),
-  name: varchar('name', { length: 40 }).notNull(), ...auditColumns,
+  name: varchar('name', { length: 60 }).notNull(),
+  /** Inactive references cannot be newly assigned. Existing types keep the key. */
+  isActive: boolean('is_active').notNull().default(true),
+  /** Optimistic token. A save must send the version it opened. */
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
 }, (t) => [primaryKey({ columns: [t.client, t.reference] })]);
 
 /**
@@ -113,10 +118,44 @@ export const materialNumberRangeGroup = pgTable('material_number_range_group', {
 export const valuationClass = pgTable('valuation_class', {
   client: tenant(), valuationClass: varchar('valuation_class', { length: 20 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),
-  /** Comma-separated allowed material type keys, not external identifiers. */
+  /**
+   * Optional narrowing beside the reference assignment. Empty means every
+   * material type on an assigned reference may use the class. A delivered
+   * class names its types, so a shared reference does not loosen them.
+   */
   allowedMaterialTypes: text('allowed_material_types').notNull(),
-  isActive: boolean('is_active').notNull().default(true), ...auditColumns,
+  isActive: boolean('is_active').notNull().default(true),
+  /** Optimistic token. A save must send the version it opened. */
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
 }, (t) => [primaryKey({ columns: [t.client, t.valuationClass] })]);
+
+/**
+ * Valuation class to account category reference (OMSK).
+ *
+ * Separate from the class master so one class may be permitted by more
+ * than one reference. A material type names one reference; the class is
+ * not copied onto the type, and a material's stored class is not rewritten
+ * when this assignment changes.
+ */
+export const valuationClassReference = pgTable('valuation_class_reference', {
+  client: tenant(),
+  reference: varchar('reference', { length: 4 }).notNull(),
+  valuationClass: varchar('valuation_class', { length: 20 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.reference, t.valuationClass] }),
+  foreignKey({
+    columns: [t.client, t.reference],
+    foreignColumns: [accountCategoryReference.client, accountCategoryReference.reference],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.valuationClass],
+    foreignColumns: [valuationClass.client, valuationClass.valuationClass],
+  }).onDelete('restrict'),
+  index('valuation_class_reference_class_idx').on(t.client, t.valuationClass),
+]);
 
 export const mrpController = pgTable('mrp_controller', {
   client: tenant(), controller: varchar('controller', { length: 3 }).notNull(),

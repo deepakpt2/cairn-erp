@@ -45,9 +45,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, v.n, v.d, t.material_type, 'PC', ${ACTOR}
-        from (values ('GR-FG', 'Finished good'), ('GR-RM', 'Component')) as v(n, d)
-        cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
+        values (${client}, 'GR-FG', 'Finished good', 'FIN', 'PC', ${ACTOR}),
+               (${client}, 'GR-RM', 'Component', 'RAW', 'PC', ${ACTOR})
         on conflict do nothing
       `);
       await tx.execute(sql`

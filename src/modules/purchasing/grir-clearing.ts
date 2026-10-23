@@ -21,6 +21,7 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platform/posting';
 import { getMaterialPeriodControlInTx } from '../inventory/goods-issue';
+import { postingValuationRefusal } from '../inventory/valuation-class-definition';
 import { materialPeriodAllows } from '../inventory/material-period-control';
 
 export const GRIR_CLEARING_CAPABILITY = 'PROC.GRIR.MAINTAIN';
@@ -395,7 +396,8 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     else if (item.currency !== item.company_currency) refusal = `The order currency ${item.currency} does not agree with the company currency ${item.company_currency}.`;
     else if (!grIr) refusal = `Account determination for GR_IR_CLEARING does not stand in chart ${item.chart_of_accounts}.`;
     else if (!item.valuation_class) refusal = `Material ${item.material_number} carries no valuation class in plant ${item.plant}.`;
-    else if (!offset) refusal = `Account determination for PRICE_DIFFERENCE and valuation class ${item.valuation_class} does not stand in chart ${item.chart_of_accounts}.`;
+    else refusal = await postingValuationRefusal(tx, client, item.material_number, item.valuation_class)
+      ?? (!offset ? `Account determination for PRICE_DIFFERENCE and valuation class ${item.valuation_class} does not stand in chart ${item.chart_of_accounts}.` : null);
 
     const tolerance = Number(item.overdelivery_tolerance ?? 0);
     const toleranceMax = Number(item.ordered_qty) * (1 + tolerance / 100);

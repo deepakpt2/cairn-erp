@@ -24,6 +24,7 @@ import { postJournalEntry, PostingError } from '../../platform/posting';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { assertInventoryCountOpen, PhysicalInventoryError } from './physical-inventory';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
@@ -369,6 +370,10 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
         `Material ${materialNumber} carries no valuation class in plant ${plant}.`,
         'Complete the material valuation data, then receive the output.',
       );
+    }
+    const classRefusal = await postingValuationRefusal(tx, input.client, materialNumber, valuation.valuationClass);
+    if (classRefusal) {
+      throw new ProductionReceiptError(classRefusal, 'Maintain a valuation class this material type permits, then receive the output.');
     }
 
     const company = await getCompanyCode(tx, input.client, companyCode);

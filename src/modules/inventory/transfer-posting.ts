@@ -27,6 +27,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
 import { accountDetermination, plant as plantTable, storageLocation } from '../foundation/schema';
 import { materialPeriodAllows } from './material-period-control';
+import { postingValuationRefusal } from './valuation-class-definition';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
@@ -397,6 +398,10 @@ async function loadPlant(
       `Material ${materialNumber} carries no valuation in ${role} plant ${plant}.`,
       'Complete the material valuation data, then post the transfer.',
     );
+  }
+  const classRefusal = await postingValuationRefusal(tx, client, materialNumber, valuation.valuationClass);
+  if (classRefusal) {
+    throw new TransferPostingError(classRefusal, 'Maintain a valuation class this material type permits, then post the transfer.');
   }
   return { plant, companyCode: row.companyCode, valuation };
 }

@@ -90,9 +90,8 @@ describe('SCR-150 physical inventory recount', () => {
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, m.number, m.description, t.material_type, 'PC', ${ACTOR}
-        from (select material_type from material_type where client = ${client} order by material_type limit 1) t
-        cross join (values
+        select ${client}, m.number, m.description, 'RAW', 'PC', ${ACTOR}
+        from (values
           ('RC-A', 'Selected'), ('RC-B', 'Uncounted'), ('RC-Z', 'Exact'), ('RC-P', 'Posted')
         ) m(number, description)
         on conflict do nothing

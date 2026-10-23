@@ -123,8 +123,7 @@ describe('SCR-146 movement configuration decides the transfer', () => {
       `);
       await tx.execute(sql`
         insert into material (client, material_number, description, material_type, base_unit, created_by)
-        select ${client}, 'MAT-CFG', 'Configuration material', t.material_type, 'PC', ${ACTOR}
-        from (select material_type from material_type where client = ${client} order by material_type limit 1) t
+        select ${client}, 'MAT-CFG', 'Configuration material', 'RAW', 'PC', ${ACTOR}
         on conflict do nothing
       `);
       await tx.execute(sql`

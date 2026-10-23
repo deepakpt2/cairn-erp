@@ -12,7 +12,9 @@ import {
   materialType,
   materialTypeValuation,
   materialNumberRangeGroup,
+  valuationClassReference,
 } from './schema';
+import { referenceChangeBlock } from './valuation-class-definition';
 
 /**
  * Material type definition (SCR-048 / OMS2; R-96).
@@ -181,6 +183,7 @@ export async function listMaterialTypes(client: string): Promise<MaterialTypeRow
 export interface AccountCategoryReferenceRow {
   reference: string;
   name: string;
+  isActive: boolean;
   typeCount: number;
 }
 
@@ -209,7 +212,7 @@ export async function listAccountCategoryReferences(
         );
       return Number(row?.n ?? 0);
     });
-    out.push({ reference: r.reference, name: r.name, typeCount: usage });
+    out.push({ reference: r.reference, name: r.name, isActive: r.isActive, typeCount: usage });
   }
   return out;
 }
@@ -336,7 +339,10 @@ export async function saveMaterialType(input: MaterialTypeInput) {
 
   return withTenant(client, async (tx) => {
     const [referenceRow] = await tx
-      .select({ reference: accountCategoryReference.reference })
+      .select({
+        reference: accountCategoryReference.reference,
+        isActive: accountCategoryReference.isActive,
+      })
       .from(accountCategoryReference)
       .where(
         and(
@@ -348,6 +354,12 @@ export async function saveMaterialType(input: MaterialTypeInput) {
       throw new MaterialTypeError(
         `Account category reference ${reference} does not stand.`,
         'Define the reference in the section below, then save the type again.',
+      );
+    }
+    if (!referenceRow.isActive) {
+      throw new MaterialTypeError(
+        `Account category reference ${reference} is not active.`,
+        'Activate it on the valuation classes screen, or choose an active reference.',
       );
     }
     const internalRange = await judgeNumberRange(tx, client, input.internalNumberRange, false, 'internal');
@@ -410,6 +422,15 @@ export async function saveMaterialType(input: MaterialTypeInput) {
         `Material type ${key} does not stand.`,
         'Create it first, then change it.',
       );
+    }
+    if (existing.accountCategoryReference !== reference) {
+      const blocked = await referenceChangeBlock(tx, client, key, reference);
+      if (blocked) {
+        throw new MaterialTypeError(
+          blocked,
+          'Assign the classes those materials carry to the new reference first. This screen does not rewrite the materials.',
+        );
+      }
     }
     const unchanged = (Object.keys(values) as (keyof typeof values)[]).every(
       (f) => existing[f] === values[f],
@@ -545,7 +566,7 @@ export async function saveAccountCategoryReference(input: AccountCategoryReferen
   const changedBy = requireActor(input.changedBy);
   const reason = requireReason(input.reason);
   const key = normaliseKey(input.reference, 'Account category reference', 4);
-  const name = normaliseName(input.name, 40);
+  const name = normaliseName(input.name, 60);
   return withTenant(client, async (tx) => {
     const [existing] = await tx
       .select()
@@ -584,7 +605,7 @@ export async function saveAccountCategoryReference(input: AccountCategoryReferen
     if (existing.name === name) return { reference: key, changed: false };
     await tx
       .update(accountCategoryReference)
-      .set({ name, changedBy, changedAt: new Date() })
+      .set({ name, version: existing.version + 1, changedBy, changedAt: new Date() })
       .where(
         and(
           eq(accountCategoryReference.client, client),
@@ -642,6 +663,17 @@ export async function deleteAccountCategoryReference(input: AccountCategoryRefer
       throw new MaterialTypeError(
         `Account category reference ${key} cannot be deleted: ${used} material type${used === 1 ? '' : 's'} name${used === 1 ? 's' : ''} it.`,
         'Reassign the types to another reference first.',
+      );
+    }
+    const [assigned] = await tx
+      .select({ n: count() })
+      .from(valuationClassReference)
+      .where(and(eq(valuationClassReference.client, client), eq(valuationClassReference.reference, key)));
+    const classCount = Number(assigned?.n ?? 0);
+    if (classCount > 0) {
+      throw new MaterialTypeError(
+        `Account category reference ${key} cannot be deleted: ${classCount} valuation class${classCount === 1 ? '' : 'es'} ${classCount === 1 ? 'is' : 'are'} assigned to it.`,
+        'Remove those assignments on the valuation classes screen first.',
       );
     }
     await tx
