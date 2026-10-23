@@ -25,6 +25,7 @@ import {
   proposeStorageLocation, resolveStorageLocation, storageLocationRequired, StorageLocationError,
 } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { assignedReceiptRefusal, readAssignedGoodsReceiptDecision } from './batch-number-assignment';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
 import {
@@ -198,7 +199,9 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
         let refusal: string | null = null;
         if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
         else if (!item.materialNumber) refusal = 'Text items carry no stock.';
-        else if (item.accountAssignmentCategory) refusal = 'Account-assigned items are received without stock; that movement is a later round.';
+        else if (item.accountAssignmentCategory) {
+          refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
+        }
         return {
           itemNumber: item.itemNumber,
           materialNumber: item.materialNumber,
@@ -613,7 +616,9 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
       let refusal: string | null = null;
       if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
       else if (!item.materialNumber) refusal = 'Text items carry no stock.';
-      else if (item.accountAssignmentCategory) refusal = 'Account-assigned items are received without stock; that movement is a later round.';
+      else if (item.accountAssignmentCategory) {
+        refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
+      }
       return {
         itemNumber: item.itemNumber,
         materialNumber: item.materialNumber,

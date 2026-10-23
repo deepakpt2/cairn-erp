@@ -19,7 +19,8 @@
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
  * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability
  * checking (ATP), collective orders, and external order numbering. A finished-good
- * batch may be named when that batch already stands; the order does not create it.
+ * batch may be named when that batch already stands. A new batch is created only when
+ * the scheduling profile snapshotted at create says so. OPKP is not this screen.
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 
@@ -31,6 +32,13 @@ import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import {
+  ensureOrderBatch,
+  readMaterialSchedulingProfile,
+  SchedulingProfileError,
+  type BatchCreation,
+  type ReleaseOnCreate,
+} from './scheduling-profile';
 
 export const PRODUCTION_ORDER_CAPABILITY = 'PROD.ORDER.CREATE';
 export const PRODUCTION_ORDER_RELEASE_CAPABILITY = 'PROD.ORDER.RELEASE';
@@ -81,6 +89,9 @@ export interface ProductionOrderView {
   scheduledStart: string;
   scheduledFinish: string;
   batch: string;
+  schedulingProfile: string;
+  releaseOnCreate: ReleaseOnCreate;
+  batchCreation: BatchCreation;
   status: 'CREATED' | 'RELEASED';
   releasedBy: string | null;
   releasedAt: string | null;
@@ -128,6 +139,11 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     scheduledStart: header.scheduledStart,
     scheduledFinish: header.scheduledFinish,
     batch: header.batchNumber,
+    schedulingProfile: header.schedulingProfile,
+    releaseOnCreate: header.releaseOnCreate.trim() === 'X' ? 'X' : ' ',
+    batchCreation: header.batchCreation.trim() === '1' || header.batchCreation.trim() === '2'
+      ? header.batchCreation.trim() as BatchCreation
+      : ' ',
     status: header.status as 'CREATED' | 'RELEASED',
     releasedBy: header.releasedBy,
     releasedAt: header.releasedAt ? header.releasedAt.toISOString() : null,
@@ -175,7 +191,11 @@ export interface CreateProductionOrderInput {
  * the plant and its company, the material's extension to that plant, each component and
  * its storage location — so a refusal leaves no half-created order behind.
  */
-export async function createProductionOrder(input: CreateProductionOrderInput): Promise<ProductionOrderView> {
+export interface CreateProductionOrderResult extends ProductionOrderView {
+  releaseNote: string | null;
+}
+
+export async function createProductionOrder(input: CreateProductionOrderInput): Promise<CreateProductionOrderResult> {
   const plant = input.plant.trim();
   const materialNumber = input.materialNumber.trim();
   if (!materialNumber) {
@@ -332,6 +352,12 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       client: input.client, objectCode: 'PRODORDER', allocatedBy: input.createdBy,
     });
     const orderNumber = drawn.display;
+    const profile = await readMaterialSchedulingProfile(tx, input.client, materialNumber, plant)
+      .catch((caught) => {
+        if (caught instanceof SchedulingProfileError) throw new ProductionOrderError(caught.message, caught.remedy);
+        throw caught;
+      });
+    const snapshot = profile ?? { profile: '', releaseOnCreate: ' ' as const, batchCreation: ' ' as const };
     let batchNumber = '';
     if ((input.batch ?? '').trim()) {
       try {
@@ -343,6 +369,22 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
         throw caught;
       }
     }
+    try {
+      batchNumber = await ensureOrderBatch(tx, {
+        client: input.client,
+        materialNumber,
+        plant,
+        batchNumber,
+        batchCreation: snapshot.batchCreation,
+        moment: 'CREATE',
+        changedBy: input.createdBy,
+      });
+    } catch (caught) {
+      if (caught instanceof SchedulingProfileError) {
+        throw new ProductionOrderError(`${caught.message} No order was saved.`, caught.remedy);
+      }
+      throw caught;
+    }
 
     const [header] = await tx.insert(productionOrder).values({
       client: input.client,
@@ -351,6 +393,9 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       plant,
       orderQuantity: String(input.orderQuantity),
       batchNumber,
+      schedulingProfile: snapshot.profile,
+      releaseOnCreate: snapshot.releaseOnCreate,
+      batchCreation: snapshot.batchCreation,
       unitOfMeasure: produced.baseUnit,
       scheduledStart: start,
       scheduledFinish: finish,
@@ -392,7 +437,32 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       },
     });
 
-    return toView(tx, input.client, header);
+    if (snapshot.releaseOnCreate !== 'X') {
+      return { ...(await toView(tx, input.client, header)), releaseNote: null };
+    }
+    await tx.execute(sql`SAVEPOINT opkp_release`);
+    try {
+      const released = await releaseProductionOrderInTx(tx, {
+        client: input.client,
+        orderNumber,
+        releasedBy: input.createdBy,
+      });
+      await tx.execute(sql`RELEASE SAVEPOINT opkp_release`);
+      return { ...released, releaseNote: null };
+    } catch (caught) {
+      await tx.execute(sql`ROLLBACK TO SAVEPOINT opkp_release`);
+      const reason = caught instanceof ProductionOrderError
+        ? caught.message
+        : 'Release at creation failed.';
+      const [standing] = await tx.select().from(productionOrder).where(and(
+        eq(productionOrder.client, input.client),
+        eq(productionOrder.orderNumber, orderNumber),
+      ));
+      return {
+        ...(await toView(tx, input.client, standing ?? header)),
+        releaseNote: `Release at creation did not happen. ${reason} The order stands created.`,
+      };
+    }
   });
 }
 
@@ -409,39 +479,69 @@ export async function releaseProductionOrder(input: {
   const number = input.orderNumber.trim();
   if (!number) throw new ProductionOrderError('An order number is required.', 'Enter the order to release.');
 
-  return withTenant(input.client, async (tx) => {
-    const [header] = await tx.select().from(productionOrder).where(and(
-      eq(productionOrder.client, input.client), eq(productionOrder.orderNumber, number),
-    ));
-    if (!header) {
-      throw new ProductionOrderError(
-        `Production order ${number} does not exist.`,
-        'Check the order number, or create the order first.',
-      );
-    }
-    if (header.status === 'RELEASED') return toView(tx, input.client, header);
+  return withTenant(input.client, (tx) => releaseProductionOrderInTx(tx, {
+    client: input.client,
+    orderNumber: number,
+    releasedBy: input.releasedBy,
+  }));
+}
 
-    const [released] = await tx.update(productionOrder).set({
-      status: 'RELEASED',
-      releasedBy: input.releasedBy,
-      releasedAt: new Date(),
-      changedBy: input.releasedBy,
-      changedAt: new Date(),
-    }).where(and(
-      eq(productionOrder.client, input.client), eq(productionOrder.orderNumber, number),
-    )).returning();
-
-    await recordChange(tx, {
+async function releaseProductionOrderInTx(tx: Tx, input: {
+  client: string;
+  orderNumber: string;
+  releasedBy: string;
+}): Promise<ProductionOrderView> {
+  const [header] = await tx.select().from(productionOrder).where(and(
+    eq(productionOrder.client, input.client),
+    eq(productionOrder.orderNumber, input.orderNumber),
+  )).for('update');
+  if (!header) {
+    throw new ProductionOrderError(
+      `Production order ${input.orderNumber} does not exist.`,
+      'Check the order number, or create the order first.',
+    );
+  }
+  if (header.status === 'RELEASED') return toView(tx, input.client, header);
+  let batchNumber = header.batchNumber;
+  try {
+    batchNumber = await ensureOrderBatch(tx, {
       client: input.client,
-      objectClass: 'production_order',
-      objectKey: number,
-      changeType: 'RELEASE',
+      materialNumber: header.materialNumber,
+      plant: header.plant,
+      batchNumber: header.batchNumber,
+      batchCreation: header.batchCreation.trim() === '1' || header.batchCreation.trim() === '2'
+        ? header.batchCreation.trim() as BatchCreation
+        : ' ',
+      moment: 'RELEASE',
       changedBy: input.releasedBy,
-      reason: `Order ${number} released for production`,
-      before: { status: 'CREATED' },
-      after: { status: 'RELEASED', releasedBy: input.releasedBy },
     });
+  } catch (caught) {
+    if (caught instanceof SchedulingProfileError) throw new ProductionOrderError(caught.message, caught.remedy);
+    throw caught;
+  }
 
-    return toView(tx, input.client, released);
+  const [released] = await tx.update(productionOrder).set({
+    status: 'RELEASED',
+    batchNumber,
+    releasedBy: input.releasedBy,
+    releasedAt: new Date(),
+    changedBy: input.releasedBy,
+    changedAt: new Date(),
+  }).where(and(
+    eq(productionOrder.client, input.client),
+    eq(productionOrder.orderNumber, input.orderNumber),
+  )).returning();
+
+  await recordChange(tx, {
+    client: input.client,
+    objectClass: 'production_order',
+    objectKey: input.orderNumber,
+    changeType: 'RELEASE',
+    changedBy: input.releasedBy,
+    reason: `Order ${input.orderNumber} released for production`,
+    before: { status: 'CREATED', batch: header.batchNumber },
+    after: { status: 'RELEASED', releasedBy: input.releasedBy, batch: batchNumber },
   });
+
+  return toView(tx, input.client, released);
 }

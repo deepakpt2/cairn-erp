@@ -61,7 +61,9 @@ export async function createOrderAction(
       requestKey: text(form, 'requestKey') || undefined,
     });
     revalidatePath(PRODUCTION_ORDER_ROUTE);
-    return { ok: true, message: `Order ${order.orderNumber} created.`, order };
+    const note = order.releaseNote ? ` ${order.releaseNote}` : '';
+    const released = order.status === 'RELEASED' ? ' and released by the scheduling profile' : '';
+    return { ok: true, message: `Order ${order.orderNumber} created${released}.${note}`, order };
   } catch (caught) {
     if (caught instanceof ProductionOrderError) {
       return { ok: false, message: caught.message, remedy: caught.remedy, order: null };

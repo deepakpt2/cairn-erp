@@ -66,6 +66,9 @@ async function allocateBuffered(
   companyCode: string,
   fiscalYear: number,
 ): Promise<AllocatedNumber | null> {
+  // BATCH_CLT is not buffered. A process-local block would issue a number
+  // the database had not yet given to this transaction.
+  if (options.objectCode === 'BATCH_CLT') return null;
   const label = `${options.objectCode} / ${companyCode} / ${subObject}`;
   const remedy = 'Maintain the interval in Number Range Maintenance (CFG.PLT.NUMBERRANGE.DEFINE).';
 

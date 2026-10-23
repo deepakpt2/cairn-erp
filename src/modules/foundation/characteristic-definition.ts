@@ -7,9 +7,8 @@
  * that never carried values. The lifecycle is a Cairn workflow, not an
  * SAP status. Maintenance is never a period act. Language-dependent
  * descriptions are deferred (B-223) — the description stands in the
- * tenant language. Class assignments do not exist yet, so the usage
- * count stands at zero; the structural judges read it so the class
- * round only has to give it rows.
+ * tenant language. Where-used is the class assignment. A batch value
+ * is not stored here, and class type 023 is not active.
  */
 import { and, asc, eq } from 'drizzle-orm';
 
@@ -78,6 +77,12 @@ async function usageCount(tx: Tx, client: string, characteristicName: string): P
   return rows.length;
 }
 
+export interface CharacteristicUse {
+  classType: string;
+  className: string;
+  position: number;
+}
+
 export interface CharacteristicRow {
   characteristicName: string;
   description: string;
@@ -94,6 +99,7 @@ export interface CharacteristicRow {
   requiredEntry: boolean;
   lifecycleStatus: string;
   values: string[];
+  whereUsed: CharacteristicUse[];
   createdBy: string;
   changedBy: string | null;
 }
@@ -107,6 +113,14 @@ export async function listCharacteristics(clientKey: string): Promise<Characteri
     const values = await tx.select().from(characteristicValue)
       .where(eq(characteristicValue.client, client))
       .orderBy(asc(characteristicValue.characteristicName), asc(characteristicValue.sortOrder), asc(characteristicValue.valueText));
+    const uses = await tx.select({
+      classType: classAssignment.classType,
+      className: classAssignment.className,
+      position: classAssignment.position,
+      characteristicName: classAssignment.characteristicName,
+    }).from(classAssignment)
+      .where(eq(classAssignment.client, client))
+      .orderBy(asc(classAssignment.classType), asc(classAssignment.className), asc(classAssignment.position));
     return rows.map((row) => ({
       characteristicName: row.characteristicName,
       description: row.description,
@@ -123,6 +137,9 @@ export async function listCharacteristics(clientKey: string): Promise<Characteri
       requiredEntry: row.requiredEntry,
       lifecycleStatus: row.lifecycleStatus,
       values: values.filter((v) => v.characteristicName === row.characteristicName).map((v) => v.valueText),
+      whereUsed: uses
+        .filter((use) => use.characteristicName === row.characteristicName)
+        .map((use) => ({ classType: use.classType, className: use.className, position: use.position })),
       createdBy: row.createdBy,
       changedBy: row.changedBy,
     }));

@@ -426,6 +426,10 @@ If you will type material numbers yourself, an external range is enough. Group f
 
 Open `101` goods receipt against a purchase order, `201` goods issue to a cost centre, and `311` storage-location transfer. Confirm each is active. Do not add a movement type. If `101` is missing, record that and stop before the goods receipt.
 
+**IMG Batch Management** · `CFG.INV.BATCHIMG.DISPLAY` · `OCHA` · `/config/batch-management`
+
+This walk does not change a batch setting here. OCHA opens the batch management index. It is not CT04. It does not define a characteristic, assign a class, create a batch, or post. The index lists OMCE, OMCS, OMCU, OMAB, OMCZ, and OMAD. Opening it writes nothing. Class type 023 is not active. Movements 341 and 342 are not this screen.
+
 **Batch level** · `CFG.INV.BATCHLEVEL.DEFINE` · `OMCE` · `/config/batch-level`
 
 This walk does not use batches. Leave the level unset. An unset level is not plant level. The screen stores one code for the client, `0`, `1`, or `2`, and it does not post. A closed period does not block it. `OMCS`, `OMCZ`, `OMAD`, `MSC1N`, `MSC2N`, and `MSC3N` are not this screen.
@@ -434,9 +438,25 @@ This walk does not use batches. Leave the level unset. An unset level is not pla
 
 Leave the indicator blank for this walk. Active is the character `1`, not a label. The level is read from the previous screen. This screen does not select a plant and does not post. A closed period does not block it. `OMCU`, `OMAB`, `MSC1N`, `MSC2N`, and `MSC3N` are not this screen.
 
+**Initial status of a new batch** · `CFG.INV.BATCHINITIAL.DEFINE` · `OMAB` · `/config/batch-initial-status`
+
+Do not change a material type on this walk. Opening the screen does not restrict a batch. Checked is the character `X`, stored for a future batch only. An existing batch is not rewritten. This screen does not create a material type, select a plant, or post. Restricted use is not blocked stock. `OMCS` and `MSC1N` are not this screen.
+
+**Batch status management in plant** · `CFG.INV.BATCHSTATUSPLANT.DEFINE` · `OMCU` · `/config/batch-status-plants`
+
+Do not select a plant on this walk. Opening the screen does not select one. Selected is the character `X`, not `1`. The plant name is read from the plant master. This screen applies only when the batch level is plant. It does not change `OMCS`, create a batch, or post movement `341` or `342`. Restricted use is not blocked stock. `OMAB` and `MSC1N` are not this screen.
+
+**Internal batch number assignment** · `CFG.INV.BATCHNUMBER.DEFINE` · `OMCZ` · `/config/batch-number-assignment`
+
+Leave both settings inactive for this walk. Active is the character `X`, not a label and not `1`. The client flag is not a plant. The plant flag permits a number only for an account-assigned goods receipt, and that receipt is not posted here. This screen does not create `BATCH_CLT` interval `01`, a batch, or a stock receipt. `OMAD` is the number range, and it is not this screen. A closed period does not block it.
+
+**Number ranges for batch numbers** · `CFG.INV.BATCHRANGE.DEFINE` · `OMAD` · `/config/batch-number-ranges`
+
+Do not create an interval on this walk. Opening the screen does not create `01`. The object is `BATCH_CLT` only. From and to are digits, shown with leading zeros. The current number is not moved backwards here. A typed batch number is not drawn from `01`. Interval `02` checks a typed number only when it stands. This screen does not create a batch and does not post. `OMCZ`, `OMCE`, and `MSC1N` are not this screen.
+
 **Create batch** · `INV.BATCH.CREATE` · `MSC1N` · `/inventory/batches/new`
 
-Do not create a batch on this walk. The material must already be batch-managed, and that indicator is not on the material screen yet. Type the batch number. This screen does not post stock. `MSC2N` and `MSC3N` are not this screen.
+Do not create a batch on this walk. The material must already be batch-managed, and that indicator is not on the material screen yet. Type the batch number. This walk leaves OMCZ inactive, so a blank number is not assigned. This screen does not post stock. `MSC2N` and `MSC3N` are not this screen.
 
 **Change batch** · `INV.BATCH.CHANGE` · `MSC2N` · `/inventory/batches/change`
 
@@ -645,7 +665,7 @@ Material `MAT-10001`, plant `1000`, valid `2026-04-01` to `2027-03-31`. `V10000`
 
 **83. Characteristics** · `CFG.PROC.CHARACTERISTIC.DEFINE` · `CT04` · `/config/characteristics`
 
-Characteristic `THICKNESS`, description `Plate thickness`, data type numeric, unit `MM` if offered, one decimal.
+OCHA is not this screen. Characteristic `THICKNESS`, description `Plate thickness`, data type numeric, unit `MM` if offered, one decimal.
 
 **84. Class** · `CFG.PROC.CLASS.DEFINE` · `CL01` · `/config/classes`
 
@@ -1131,6 +1151,10 @@ Material `MAT-10001`, plant `1000`. You should see stock and the reservation. A 
 **186. MRP** · `PROD.MRP.RUN` · `MD01` · `/production/mrp-run`
 
 Plant `1000`. If it refuses because sales demand or planning data is missing, record the message and stop the run. Do not post a planned order by hand.
+
+**Production scheduling profile** · `CFG.PROD.SCHEDPROFILE.DEFINE` · `OPKP` · `/config/scheduling-profiles`
+
+Do not create a profile on this walk. Opening the screen does not select a plant and does not create a profile. The key is stored as typed, at most six characters. Release at creation is the character X or blank. Batch creation in the order is blank, 1, or 2. This screen does not print, schedule, check capacity, or post a goods receipt. CO01 is not this screen. A closed period does not block it.
 
 **187. Production order** · `PROD.ORDER.CREATE` · `CO01` · `/production/orders`
 

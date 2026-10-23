@@ -38,6 +38,10 @@ export default async function ProductionOrdersPage({ searchParams }: {
           <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">{t('nav.launchpad')}</Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('co01.subtitle')}</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
+          OPKP is not this screen. A scheduling profile is read from the material plant view and snapshotted.
+          This screen does not print, schedule, check capacity, or post a goods receipt.
+        </p>
       </header>
 
       {existing && (

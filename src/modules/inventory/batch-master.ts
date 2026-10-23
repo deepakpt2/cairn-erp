@@ -10,17 +10,21 @@
  * is effective. The initial value is read from the material type flag.
  * That flag is the OMAB setting, and OMAB is not this screen.
  *
- * Internal numbering is refused. OMCZ and OMAD are not this screen.
- * MSC2N and MSC3N are not this screen.
+ * A typed number is kept. It does not consume interval 01. Interval 02
+ * judges it only when that interval stands and is external. A blank number
+ * draws BATCH_CLT interval 01 only when OMCZ is active. OMAD is not this
+ * screen. MSC2N and MSC3N are not this screen.
  */
 import { eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { country } from '../../platform/tables/reference';
-import { batchStatusScope } from './batch-status';
+import { allocateInternalBatchNumber, BatchNumberAssignmentError } from './batch-number-assignment';
+import { assertExternalBatchNumber, BatchNumberRangeError } from './batch-number-range';
+import { decideInitialRestrictedUse, InitialBatchStatusError } from './initial-batch-status';
 import { BATCH_LEVELS, type BatchLevelCode } from './batch-level';
-import { batch, batchLevelConfiguration, batchStatusManagement } from './schema';
+import { batch, batchLevelConfiguration } from './schema';
 
 export const ACTIVITY = 'INV.BATCH.CREATE';
 export const ROUTE = '/inventory/batches/new';
@@ -39,6 +43,8 @@ export class BatchMasterError extends Error {
     | 'BATCH_TOO_LONG'
     | 'BATCH_DUPLICATE'
     | 'NUMBERING_REFUSED'
+    | 'RANGE_UNAVAILABLE'
+    | 'EXTERNAL_REFUSED'
     | 'STATUS_NOT_ACTIVE'
     | 'STATUS_UNKNOWN'
     | 'DATE_INVALID'
@@ -117,7 +123,7 @@ function isUniqueViolation(error: unknown): boolean {
   return false;
 }
 
-async function readLevel(tx: Tx, client: string): Promise<BatchLevelCode | null> {
+export async function readLevel(tx: Tx, client: string): Promise<BatchLevelCode | null> {
   const rows = await tx.select({ batchLevel: batchLevelConfiguration.batchLevel })
     .from(batchLevelConfiguration)
     .where(eq(batchLevelConfiguration.client, client))
@@ -129,9 +135,9 @@ async function readLevel(tx: Tx, client: string): Promise<BatchLevelCode | null>
 export async function createBatch(input: CreateBatchInput): Promise<BatchMasterRow> {
   if (input.internalNumbering) {
     throw new BatchMasterError(
-      'Internal batch numbering is refused. OMCZ is not this screen, and OMAD has no BATCH range. No batch was created.',
+      'Do not send an internal-numbering flag. Leave the batch number empty when OMCZ is active. No batch was created.',
       'NUMBERING_REFUSED',
-      'Type the batch number. Leading zeros are kept.',
+      'Type a batch number, or leave it empty only when internal assignment is active.',
     );
   }
   if (input.classification) {
@@ -150,13 +156,6 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
   }
   const materialNumber = input.materialNumber.trim();
   const typedNumber = (input.batchNumber ?? '').trim().toUpperCase();
-  if (!typedNumber) {
-    throw new BatchMasterError(
-      'The batch number is required. Internal assignment is not active. OMCZ and OMAD are not this screen. No batch was created.',
-      'BATCH_REQUIRED',
-      'Type the batch number. OMCZ and OMAD are not this screen. Leading zeros are kept.',
-    );
-  }
   if (typedNumber.length > 10) {
     throw new BatchMasterError(
       `Batch ${typedNumber} is longer than 10 characters. No batch was created.`,
@@ -180,6 +179,8 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
   const plantInput = input.plant?.trim() || null;
 
   return withTenant(input.client, async (tx) => {
+    // Same lock OMAD takes, so a delete cannot pass a batch that is being created.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/range/BATCH_CLT/*`}, 0))`);
     const level = await readLevel(tx, input.client);
     if (!level) {
       throw new BatchMasterError(
@@ -203,7 +204,6 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
       );
     }
     const plant = level === '0' ? plantInput : null;
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.client}), hashtext(${`${materialNumber}/${typedNumber}/${plant ?? ''}`}))`);
 
     if (requestKey) {
       const prior = await tx.execute(sql`
@@ -212,7 +212,7 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
         limit 1
       `) as unknown as Array<{ id: string; batch_number: string }>;
       if (prior[0]) {
-        if (prior[0].batch_number !== typedNumber) {
+        if (typedNumber && prior[0].batch_number !== typedNumber) {
           throw new BatchMasterError(
             'This request key already created a different batch. No second batch was created.',
             'REQUEST_REPLAY',
@@ -263,31 +263,29 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
       );
     }
 
-    const statusRow = await tx.select({ code: batchStatusManagement.statusManagement })
-      .from(batchStatusManagement)
-      .where(eq(batchStatusManagement.client, input.client))
-      .limit(1);
-    const active = statusRow[0]?.code?.trim() === '1';
-    const scope = batchStatusScope({ batchLevel: level, active, plantSelected: false });
+    const decision = await decideInitialRestrictedUse(tx, {
+      client: input.client,
+      materialType: found[0].material_type,
+      batchLevel: level,
+      plant,
+    }).catch((caught) => {
+      if (caught instanceof InitialBatchStatusError) {
+        throw new BatchMasterError(caught.message, 'STATUS_NOT_ACTIVE', caught.remedy);
+      }
+      throw caught;
+    });
     const sentStatus = input.restrictedUse;
     let restrictedUse: 'X' | ' ' | null = null;
-    if (!scope.effective) {
+    if (!decision.effective) {
       if (sentStatus !== undefined && sentStatus.trim() !== '') {
         throw new BatchMasterError(
           'Batch status was sent, and status management is not effective. No batch was created.',
           'STATUS_NOT_ACTIVE',
-          scope.scope === 'PLANT_NOT_SELECTED'
-            ? 'OMCU has not selected this plant. Do not send a status.'
-            : 'Leave the status empty. OMCS is not effective.',
+          decision.explanation,
         );
       }
     } else {
-      const types = await tx.execute(sql`
-        select initial_batch_restricted from material_type
-        where client = ${input.client} and material_type = ${found[0].material_type}
-        limit 1
-      `) as unknown as Array<{ initial_batch_restricted: boolean }>;
-      const initial = types[0]?.initial_batch_restricted ? 'X' : '';
+      const initial = decision.restrictedUse === 'X' ? 'X' : '';
       const chosen = (sentStatus === undefined ? initial : sentStatus).trim().toUpperCase();
       if (chosen !== 'X' && chosen !== '') {
         throw new BatchMasterError(
@@ -310,13 +308,40 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
       }
     }
 
+    let batchNumber = typedNumber;
+    if (batchNumber) {
+      try {
+        await assertExternalBatchNumber(tx, input.client, batchNumber);
+      } catch (error) {
+        if (error instanceof BatchNumberRangeError) {
+          throw new BatchMasterError(error.message, 'EXTERNAL_REFUSED', error.remedy);
+        }
+        throw error;
+      }
+    }
+    if (!batchNumber) {
+      try {
+        batchNumber = await allocateInternalBatchNumber(tx, input.client, input.changedBy);
+      } catch (error) {
+        if (error instanceof BatchNumberAssignmentError) {
+          throw new BatchMasterError(
+            error.message,
+            error.code === 'NUMBERING_INACTIVE' ? 'BATCH_REQUIRED' : 'RANGE_UNAVAILABLE',
+            error.remedy,
+          );
+        }
+        throw error;
+      }
+    }
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.client}), hashtext(${`${materialNumber}/${batchNumber}/${plant ?? ''}`}))`);
+
     const id = crypto.randomUUID();
     const now = new Date();
     try {
       await tx.insert(batch).values({
         id,
         client: input.client,
-        batchNumber: typedNumber,
+        batchNumber,
         materialNumber,
         plant,
         batchLevelAtCreation: level,
@@ -334,7 +359,7 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new BatchMasterError(
-          duplicateMessage(level, typedNumber, materialNumber, plant),
+          duplicateMessage(level, batchNumber, materialNumber, plant),
           'BATCH_DUPLICATE',
           'MSC2N is not this screen. No second batch was created.',
         );
@@ -353,7 +378,7 @@ export async function createBatch(input: CreateBatchInput): Promise<BatchMasterR
       after: {
         materialNumber,
         plant,
-        batchNumber: typedNumber,
+        batchNumber,
         batchLevel: level,
         restrictedUse,
         manufactureDate,

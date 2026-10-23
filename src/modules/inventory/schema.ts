@@ -46,7 +46,7 @@ export const materialType = pgTable('material_type', {
   externalPurchaseOrders: char('external_purchase_orders', { length: 1 }).notNull().default('2'),
   internalPurchaseOrders: char('internal_purchase_orders', { length: 1 }).notNull().default('1'),
   isConfigurable: boolean('is_configurable').notNull().default(false),
-  /** OMAB initial status. False means a new batch is not restricted. No OMAB screen sets this. */
+  /** T134-IZUST. True is X, a new batch is restricted. False is blank. OMAB sets it. An existing batch is not rewritten. */
   initialBatchRestricted: boolean('initial_batch_restricted').notNull().default(false),
   isActive: boolean('is_active').notNull().default(true), ...auditColumns,
 }, (t) => [
@@ -204,6 +204,11 @@ export const materialPlant = pgTable('material_plant', {
   markedForDeletion: boolean('marked_for_deletion').notNull().default(false),
   /** MARC-XCHPF. Used when the batch level is plant. Existing plant views stay non-batch. */
   batchManaged: boolean('batch_managed').notNull().default(false),
+  /**
+   * MARC-SFCPF. The production scheduling profile for this plant.
+   * Blank means no profile. The key is not forced to four-character SAP plant length.
+   */
+  schedulingProfile: varchar('scheduling_profile', { length: 6 }),
   mrpType: varchar('mrp_type', { length: 16 }),
   mrpController: varchar('mrp_controller', { length: 3 }),
   procurementType: varchar('procurement_type', { length: 8 }),
@@ -537,8 +542,14 @@ export const productionOrder = pgTable('production_order', {
   materialNumber: varchar('material_number', { length: 40 }).notNull(),
   plant: varchar('plant', { length: 10 }).notNull(),
   orderQuantity: quantity('order_quantity').notNull(),
-  /** A batch that already stands for the finished good. Blank means the receipt must name one. */
+  /** A batch that already stands, or one the snapshotted profile created. Blank means the receipt must name one. */
   batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
+  /** Profile key snapshotted at create. A later profile change does not rewrite it. */
+  schedulingProfile: varchar('scheduling_profile', { length: 6 }).notNull().default(''),
+  /** TCO43-FLG_REL_CR snapshotted at create. X or blank. Not a boolean. */
+  releaseOnCreate: char('release_on_create', { length: 1 }).notNull().default(' '),
+  /** TCO43-KZBCR snapshotted at create. Blank, 1, or 2. Not a boolean. */
+  batchCreation: char('batch_creation', { length: 1 }).notNull().default(' '),
   unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
   scheduledStart: varchar('scheduled_start', { length: 10 }).notNull(),
   scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
@@ -554,6 +565,32 @@ export const productionOrder = pgTable('production_order', {
   check('production_order_status_ck', sql`${t.status} in ('CREATED', 'RELEASED')`),
   check('production_order_quantity_ck', sql`${t.orderQuantity} > 0`),
   check('production_order_dates_ck', sql`${t.scheduledFinish} >= ${t.scheduledStart}`),
+  check('production_order_release_on_create_ck', sql`${t.releaseOnCreate} in ('X', ' ')`),
+  check('production_order_batch_creation_ck', sql`${t.batchCreation} in (' ', '1', '2')`),
+]);
+
+/**
+ * OPKP — production scheduling profile. TCO43, not T399X.
+ * Key is client, plant, and CO_PRODPRF. The description is the tenant language,
+ * not a TCO43T row per language. Only settings this system executes are stored.
+ */
+export const productionSchedulingProfile = pgTable('production_scheduling_profile', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  profile: varchar('profile', { length: 6 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  releaseOnCreate: char('release_on_create', { length: 1 }).notNull().default(' '),
+  batchCreation: char('batch_creation', { length: 1 }).notNull().default(' '),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant, t.profile] }),
+  foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
+  check('production_scheduling_profile_key_ck', sql`char_length(${t.profile}) between 1 and 6`),
+  check('production_scheduling_profile_description_ck', sql`char_length(${t.description}) between 1 and 40`),
+  check('production_scheduling_profile_release_ck', sql`${t.releaseOnCreate} in ('X', ' ')`),
+  check('production_scheduling_profile_batch_ck', sql`${t.batchCreation} in (' ', '1', '2')`),
+  check('production_scheduling_profile_version_ck', sql`${t.version} > 0`),
 ]);
 
 /** The order's components — the RESB shape its goods issue will consume (SCR-139). */
@@ -881,7 +918,7 @@ export const batch = pgTable('batch', {
   foreignKey({
     columns: [t.client, t.plant],
     foreignColumns: [plant.client, plant.plant],
-  }).onDelete('restrict'),
+  }).onDelete('cascade'),
   uniqueIndex('batch_plant_level_uq')
     .on(t.client, t.materialNumber, t.plant, t.batchNumber)
     .where(sql`${t.batchLevelAtCreation} = '0'`),
@@ -915,4 +952,93 @@ export const batchStatusManagement = pgTable('batch_status_management', {
   primaryKey({ columns: [t.client] }),
   check('batch_status_management_code_ck', sql`${t.statusManagement} in ('1', ' ')`),
   check('batch_status_management_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMCU — T001W-CHAZV, domain XFELD. X means batch status management is
+ * selected for the plant. Blank means it is not. Absence of a row is not
+ * selected. The plant name stays on the plant master. This row does not
+ * post movement 341 or 342.
+ */
+export const batchStatusPlant = pgTable('batch_status_plant', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  statusActive: char('status_active', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('cascade'),
+  check('batch_status_plant_code_ck', sql`${t.statusActive} in ('X', ' ')`),
+  check('batch_status_plant_version_ck', sql`${t.version} > 0`),
+]);
+
+/** A refused plant-status conversion. It never changes the plant flag or stock. */
+export const batchStatusPlantConversion = pgTable('batch_status_plant_conversion', {
+  client: tenant(),
+  conversionRunId: varchar('conversion_run_id', { length: 36 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  priorActive: char('prior_active', { length: 1 }).notNull(),
+  requestedActive: char('requested_active', { length: 1 }).notNull(),
+  status: varchar('status', { length: 24 }).notNull(),
+  batchCount: integer('batch_count').notNull(),
+  stockBatchCount: integer('stock_batch_count').notNull(),
+  documentBatchCount: integer('document_batch_count').notNull(),
+  errorSummary: text('error_summary').notNull(),
+  reason: varchar('reason', { length: 500 }).notNull(),
+  startedBy: varchar('started_by', { length: 60 }).notNull(),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.conversionRunId] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('cascade'),
+  check('batch_status_plant_conversion_status_ck', sql`${t.status} = 'BLOCKED'`),
+  check('batch_status_plant_conversion_code_ck', sql`${t.priorActive} in ('X', ' ') and ${t.requestedActive} in ('X', ' ')`),
+]);
+
+/**
+ * OMCZ — client activation of internal batch number assignment.
+ * TCUBN-AUTBN, historically TCUCH-AUTBN. Domain CHAR1. The screen is a
+ * radio: X is active, blank is not active. It is not a plant and not a
+ * material type. Absence of a row is not active. This row does not create
+ * a BATCH_CLT interval.
+ */
+export const batchNumberAssignment = pgTable('batch_number_assignment', {
+  client: tenant(),
+  internalAssignment: char('internal_assignment', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('batch_number_assignment_code_ck', sql`${t.internalAssignment} in ('X', ' ')`),
+  check('batch_number_assignment_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OMCZ plant view — T159L-XCAUT. XFELD. X permits an internal batch number
+ * on an account-assigned goods receipt. It is not the client activation,
+ * and it does not create a batch for a stock receipt.
+ */
+export const batchAssignedReceipt = pgTable('batch_assigned_receipt', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  assignedReceipt: char('assigned_receipt', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  lastRequestKey: varchar('last_request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+  }).onDelete('restrict'),
+  check('batch_assigned_receipt_code_ck', sql`${t.assignedReceipt} in ('X', ' ')`),
+  check('batch_assigned_receipt_version_ck', sql`${t.version} > 0`),
 ]);

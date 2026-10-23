@@ -28,6 +28,11 @@ export default async function CharacteristicsPage() {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('characteristic.subtitle')}</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
+          OCHA is not this screen. OCHA is the batch management IMG. The description stands in the
+          tenant language. Where-used is the class that names this characteristic. A batch value is
+          not stored here. Class type 023 is not active.
+        </p>
       </header>
 
       <Characteristics rows={rows} canMaintain={can(session, ACTIVITY)} />

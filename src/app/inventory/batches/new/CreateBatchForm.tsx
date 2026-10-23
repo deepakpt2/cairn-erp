@@ -11,10 +11,12 @@ const empty: CreateBatchState = { ok: false };
 export default function CreateBatchForm({
   plantRequired,
   statusActive,
+  internalActive,
   canCreate,
 }: {
   plantRequired: boolean;
   statusActive: boolean;
+  internalActive: boolean;
   canCreate: boolean;
 }) {
   const [materialNumber, setMaterialNumber] = useState('');
@@ -47,15 +49,15 @@ export default function CreateBatchForm({
       )}
       <label className="block text-sm">
         Batch number
-        <input name="batchNumber" required maxLength={10} value={batchNumber} onChange={(event) => setBatchNumber(event.target.value)} disabled={!canCreate} className="mt-1 w-full border border-line px-2 py-1" />
-        <span className="mt-1 block text-xs text-ink-soft">Type the number. Internal assignment is not active. Leading zeros are kept.</span>
+        <input name="batchNumber" required={!internalActive} maxLength={10} value={batchNumber} onChange={(event) => setBatchNumber(event.target.value)} disabled={!canCreate} className="mt-1 w-full border border-line px-2 py-1" />
+        <span className="mt-1 block text-xs text-ink-soft">{internalActive ? 'Leave it empty to draw the next internal number, or type one. Leading zeros are kept.' : 'Type the number. Internal assignment is not active. Leading zeros are kept.'}</span>
       </label>
       {statusActive && (
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">Restricted-use indicator</legend>
           <label className="flex gap-2 text-sm">
             <input type="radio" name="restrictedUse" value="DERIVE" defaultChecked />
-            <span>Material-type initial status. Leave this selected unless you are overriding it.</span>
+            <span>Material-type initial status from OMAB. Leave this selected unless you are overriding it.</span>
           </label>
           <label className="flex gap-2 text-sm">
             <input type="radio" name="restrictedUse" value="" />

@@ -21,7 +21,8 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
-import { batch, batchLevelConfiguration, batchLevelConversion } from './schema';
+import { decideInitialRestrictedUse } from './initial-batch-status';
+import { batch, batchLevelConfiguration, batchLevelConversion, material } from './schema';
 
 export const ACTIVITY = 'CFG.INV.BATCHLEVEL.DEFINE';
 export const ROUTE = '/config/batch-level';
@@ -617,6 +618,18 @@ export async function createBatchIdentity(input: CreateBatchIdentityInput): Prom
         );
       }
     }
+    const [produced] = await tx.select({ materialType: material.materialType }).from(material).where(and(
+      eq(material.client, input.client),
+      eq(material.materialNumber, materialNumber),
+    )).limit(1);
+    const decision = produced
+      ? await decideInitialRestrictedUse(tx, {
+        client: input.client,
+        materialType: produced.materialType,
+        batchLevel: level,
+        plant,
+      })
+      : { restrictedUse: null as 'X' | ' ' | null };
     const id = crypto.randomUUID();
     const now = new Date();
     try {
@@ -627,6 +640,7 @@ export async function createBatchIdentity(input: CreateBatchIdentityInput): Prom
         materialNumber,
         plant,
         batchLevelAtCreation: level,
+        restrictedUse: decision.restrictedUse,
         createdBy: input.changedBy,
         changedBy: input.changedBy,
         createdAt: now,

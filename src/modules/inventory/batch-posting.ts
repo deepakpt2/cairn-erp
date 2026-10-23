@@ -9,6 +9,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import type { Tx } from '../../platform/db/client';
 import { batchStatusScope } from './batch-status';
+import { readPlantBatchStatusActive } from './batch-status-plant';
 import { batchStatusManagement } from './schema';
 
 export class BatchPostingError extends Error {
@@ -79,7 +80,8 @@ export async function resolvePostingBatch(
     .where(eq(batchStatusManagement.client, input.client))
     .limit(1);
   const active = statusRow[0]?.code?.trim() === '1';
-  const scope = batchStatusScope({ batchLevel: code, active, plantSelected: false });
+  const plantSelected = code === '0' ? await readPlantBatchStatusActive(tx, input.client, input.plant) : false;
+  const scope = batchStatusScope({ batchLevel: code, active, plantSelected });
   if (scope.effective && rows[0].restricted_use?.trim() === 'X') {
     throw new BatchPostingError(
       `Batch ${typed} is restricted. No stock was posted.`,

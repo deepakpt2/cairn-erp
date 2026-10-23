@@ -154,6 +154,7 @@ export default function Characteristics({ rows, canMaintain }: {
                 <th className="px-2 py-2">Assignment</th>
                 <th className="px-2 py-2">Values</th>
                 <th className="px-2 py-2">Status</th>
+                <th className="px-2 py-2">Classes</th>
                 {canMaintain && <th className="px-2 py-2">Actions</th>}
               </tr>
             </thead>
@@ -167,6 +168,11 @@ export default function Characteristics({ rows, canMaintain }: {
                   <td className="px-2 py-2">{row.valueAssignment === 'MULTIPLE' ? 'Multiple' : 'Single'}</td>
                   <td className="px-2 py-2">{row.values.join(', ') || '—'}</td>
                   <td className="px-2 py-2">{row.lifecycleStatus}</td>
+                  <td className="px-2 py-2">
+                    {row.whereUsed.length === 0
+                      ? '—'
+                      : row.whereUsed.map((use) => `${use.classType} ${use.className}`).join(', ')}
+                  </td>
                   {canMaintain && (
                     <td className="px-2 py-2">
                       <div className="flex flex-wrap gap-2">
@@ -190,6 +196,9 @@ export default function Characteristics({ rows, canMaintain }: {
             </tbody>
           </table>
         )}
+        <p className="mt-2 text-sm text-ink-soft">
+          Classes is the class assignment. It is not a batch value.
+        </p>
       </section>
 
       {canMaintain && (

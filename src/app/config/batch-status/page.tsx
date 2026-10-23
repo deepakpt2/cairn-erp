@@ -28,7 +28,7 @@ export default async function BatchStatusPage() {
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           One indicator for this client. Active is the character 1. Not active is blank. The batch level is read from OMCE.
-          This screen does not select a plant, set an initial status, create a batch, or post movement 341 or 342.
+          This screen does not select a plant, set an initial status, create a batch, or post movement 341 or 342. Plant selection is OMCU.
           OMCU, OMAB, OMCZ, OMAD, MSC1N, MSC2N, and MSC3N are not this screen. A closed posting period does not block it.
         </p>
       </header>

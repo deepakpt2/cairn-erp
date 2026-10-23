@@ -141,6 +141,8 @@ export default function OrderCreate({
             <div><dt className="field-label">{t('co01.start')}</dt><dd>{order.scheduledStart}</dd></div>
             <div><dt className="field-label">{t('co01.finish')}</dt><dd>{order.scheduledFinish}</dd></div>
             <div><dt className="field-label">{t('co01.status')}</dt><dd data-status={order.status}>{order.status}</dd></div>
+            <div><dt className="field-label">Profile</dt><dd className="code">{order.schedulingProfile || '—'}</dd></div>
+            <div><dt className="field-label">Batch</dt><dd className="code">{order.batch || '—'}</dd></div>
             <div><dt className="field-label">{t('co01.releasedBy')}</dt><dd>{order.releasedBy ?? '—'}{order.releasedAt ? ` · ${order.releasedAt}` : ''}</dd></div>
           </dl>
           <table className="mt-3 w-full text-sm">

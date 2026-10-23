@@ -28,6 +28,9 @@ export default async function ClassesPage() {
           </Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('classificationClass.subtitle')}</p>
+        <p className="mt-1 max-w-3xl text-sm text-ink-soft">
+          OCHA is not this screen. A class assigns a characteristic. It does not store a batch value.
+        </p>
       </header>
 
       <Classes data={choices} canMaintain={can(session, ACTIVITY)} />

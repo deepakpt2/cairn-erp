@@ -13,7 +13,7 @@ import { ConfigError } from './services';
 export const NUMBER_OBJECTS = [
   'RF_BELEG', 'MATDOC', 'PURCHORD', 'PURCHREQ',
   'SALESORD', 'DELIVERY', 'BILLING', 'PRODORDER',
-  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV', 'MRPRUN', 'PLANORD',
+  'PRODCONF', 'PAYRUN', 'VENDINV', 'CUSTINV', 'CUSTDPREQ', 'VENDDPREQ', 'PARKDOC', 'ASSETNR', 'MATERIALNR', 'BUSPARTNR', 'PHYINV', 'INFOREC', 'SOURCELIST', 'QUOTAARR', 'RFQEVENT', 'RFQ', 'QUOTATION', 'PARKINV', 'MRPRUN', 'PLANORD', 'BATCH_CLT',
 ] as const;
 export const NUMBER_RANGE_ACTIVITY = 'CFG.PLT.NUMBERRANGE.DEFINE';
 
@@ -57,6 +57,7 @@ export const NUMBER_OBJECT_DEFAULTS: ReadonlyArray<{
   { objectCode: 'PARKINV', description: 'Parked supplier invoices', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'MRPRUN', description: 'MRP runs', numberLength: 7, yearRelevant: false, subobjectHint: null },
   { objectCode: 'PLANORD', description: 'Planned orders', numberLength: 7, yearRelevant: false, subobjectHint: null },
+  { objectCode: 'BATCH_CLT', description: 'Internal batch numbers', numberLength: 10, yearRelevant: false, subobjectHint: 'Interval 01' },
 ];
 
 /** Seed the object registry for a tenant being provisioned. */
@@ -88,6 +89,9 @@ const maintenanceSchema = z.object({
   mode: z.enum(['CREATE', 'CHANGE']),
   reason: z.string().trim().min(3).max(500),
   changedBy: z.string().min(1).max(60),
+  /** OMAD sends the values it opened. Absent means the general screen. */
+  expectedToNumber: z.number().int().safe().positive().optional(),
+  expectedCurrentNumber: z.number().int().safe().min(0).optional(),
 }).refine((i) => i.toNumber >= i.fromNumber, { message: 'The upper limit must not be below the lower limit.', path: ['toNumber'] })
   .refine((i) => String(i.toNumber).length <= i.numberLength, { message: 'The display width must fit the upper limit.', path: ['numberLength'] });
 
@@ -145,6 +149,24 @@ export async function maintainNumberRange(raw: NumberRangeInput) {
   if ((input.objectCode === 'RF_BELEG') === (input.companyCode === '*')) {
     throw new ConfigError('Accounting intervals require a company code; operational intervals are tenant-wide (*).', 'Choose the correct scope for the object.');
   }
+  if (input.objectCode === 'BATCH_CLT' && (input.isBuffered || input.bufferSize > 0)) {
+    throw new ConfigError(
+      'Buffering is refused for batch numbers. A batch number is not taken from a process-local buffer.',
+      'Leave buffering off. OMAD maintains this object.',
+    );
+  }
+  if (input.objectCode === 'BATCH_CLT' && input.subObject === '01' && input.isExternal) {
+    throw new ConfigError(
+      'Interval 01 of BATCH_CLT is the internal interval. It cannot be external.',
+      'Leave external off. Use interval 02 for an external check.',
+    );
+  }
+  if (input.objectCode === 'BATCH_CLT' && input.subObject === '02' && !input.isExternal) {
+    throw new ConfigError(
+      'Interval 02 of BATCH_CLT is the external check. It cannot be internal.',
+      'Mark interval 02 external. Internal assignment reads 01 only.',
+    );
+  }
 
   return withTenant(client, async (tx) => {
     // Serialise ALL interval definitions within one object/scope, not only one
@@ -159,6 +181,12 @@ export async function maintainNumberRange(raw: NumberRangeInput) {
     const before = existing[0];
     if (input.mode === 'CREATE' && before) throw new ConfigError('This interval already exists.', 'Open its Change action. Creating it again will never reset its counter.');
     if (input.mode === 'CHANGE' && !before) throw new ConfigError('This interval no longer exists.', 'Refresh the monitor and select an existing interval.');
+    if (before && input.expectedToNumber !== undefined && before.toNumber !== input.expectedToNumber) {
+      throw new ConfigError('The interval changed before this save. Nothing was saved.', 'Open the interval again and send the upper limit it shows.');
+    }
+    if (before && input.expectedCurrentNumber !== undefined && before.currentNumber !== input.expectedCurrentNumber) {
+      throw new ConfigError('The interval changed before this save. Nothing was saved.', 'Open the interval again and send the current number it shows.');
+    }
     if (input.isBuffered && input.bufferSize < 1) throw new ConfigError('A buffered interval needs a numbers-in-buffer quantity of at least 1.', 'Enter how many numbers each block reserves.');
     if (before && (input.isExternal !== before.isExternal || input.isBuffered !== before.isBuffered || (before.isBuffered && input.bufferSize !== before.bufferSize))) {
       throw new ConfigError('External assignment and buffering are set when an interval is created and never change under it.', 'Create a new interval with the assignment you need; issued numbers keep the behaviour they were given under.');
@@ -314,6 +342,10 @@ export interface AdjustCurrentInput {
   fiscalYear: number;
   currentNumber: number;
   reason: string;
+  /** OMAD refuses a backwards move. The general screen keeps the warning-only act. */
+  forbidRepeat?: boolean;
+  /** The current number the caller opened. Absent on the general screen. */
+  expectedCurrent?: number;
 }
 
 /**
@@ -333,6 +365,9 @@ export async function adjustNumberRangeCurrent(input: AdjustCurrentInput) {
       eq(numberRange.fiscalYear, input.fiscalYear),
     )).for('update');
     if (!range) throw new ConfigError('This interval no longer exists.', 'Refresh the monitor and select an existing interval.');
+    if (input.expectedCurrent !== undefined && range.currentNumber !== input.expectedCurrent) {
+      throw new ConfigError('The interval changed before this save. Nothing was saved.', 'Open the interval again and send the current number it shows.');
+    }
     if (input.currentNumber < range.fromNumber - 1 || input.currentNumber > range.toNumber) {
       throw new ConfigError(`The current number must stand between ${range.fromNumber - 1} (nothing issued) and ${range.toNumber} (the upper limit).`, 'Enter a value inside the interval.');
     }
@@ -343,6 +378,12 @@ export async function adjustNumberRangeCurrent(input: AdjustCurrentInput) {
     ));
     const lastIssued = allocations.reduce((max, a) => Math.max(max, Number(a.n)), 0);
     const wouldRepeat = input.currentNumber < lastIssued;
+    if (input.forbidRepeat && (input.currentNumber < range.currentNumber || wouldRepeat)) {
+      throw new ConfigError(
+        'The current number cannot move backwards. Issued numbers would be given out again.',
+        'Set a current number at or above the last issued number.',
+      );
+    }
     if (input.currentNumber === range.currentNumber) return { key: rangeKey(range), changed: false, wouldRepeat, lastIssued };
     await tx.update(numberRange).set({ currentNumber: input.currentNumber, changedBy: input.changedBy, changedAt: new Date() }).where(predicate(input.client, {
       objectCode: input.objectCode, companyCode: input.companyCode, subObject: input.subObject, fiscalYear: input.fiscalYear,

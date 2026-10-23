@@ -15,6 +15,7 @@ import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { country } from '../../platform/tables/reference';
 import { batchStatusScope } from './batch-status';
+import { readPlantBatchStatusActive } from './batch-status-plant';
 import { BATCH_LEVELS, type BatchLevelCode } from './batch-level';
 import { batch, batchLevelConfiguration, batchStatusManagement } from './schema';
 
@@ -317,7 +318,8 @@ export async function changeBatch(input: ChangeBatchInput): Promise<BatchChangeR
       .where(eq(batchStatusManagement.client, input.client))
       .limit(1);
     const active = statusRow[0]?.code?.trim() === '1';
-    const scope = batchStatusScope({ batchLevel: level, active, plantSelected: false });
+    const plantSelected = level === '0' ? await readPlantBatchStatusActive(tx, input.client, identity.plant) : false;
+    const scope = batchStatusScope({ batchLevel: level, active, plantSelected });
     const storedIndicator = indicator(current.restricted_use);
     let nextIndicator = storedIndicator;
     if (input.restrictedUse !== undefined) {
