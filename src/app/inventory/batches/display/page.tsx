@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { getBatchLevel } from '@/modules/inventory/batch-level';
 import { ACTIVITY, BatchChangeError, BatchDisplayError, displayBatch } from '@/modules/inventory/batch-display';
+import BatchRelations from '../BatchRelations';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,7 +93,7 @@ export default async function DisplayBatchPage({ searchParams }: {
             <div><dt className="text-ink-soft">Vendor batch number</dt><dd>{opened.vendorBatch ?? 'Not stored'}</dd></div>
             <div><dt className="text-ink-soft">Country of origin</dt><dd>{opened.countryOfOrigin ?? 'Not stored'}</dd></div>
             <div><dt className="text-ink-soft">Deletion</dt><dd>Not stored. This screen does not show a deletion flag.</dd></div>
-            <div><dt className="text-ink-soft">Classification</dt><dd>Not stored. Class type 023 is not active.</dd></div>
+            <div><dt className="text-ink-soft">Classification</dt><dd>Not stored on this batch. A class that stands is not assigned. Class type 023 is not active.</dd></div>
             <div><dt className="text-ink-soft">Created</dt><dd>{opened.createdBy ?? '—'} {opened.createdAt ?? ''}</dd></div>
           </dl>
           <p className="text-xs text-ink-soft">
@@ -105,6 +106,7 @@ export default async function DisplayBatchPage({ searchParams }: {
             {' · '}
             <Link href={`/inventory/batch-cockpit?material=${encodeURIComponent(opened.materialNumber)}&batch=${encodeURIComponent(opened.batchNumber)}`} className="underline">Batch information cockpit</Link>
           </p>
+          <BatchRelations client={session.user.client} />
           <DocumentTab client={session.user.client} />
           {opened.history.length > 0 && (
             <div>

@@ -8,6 +8,7 @@ import {
   PRODUCTION_ORDER_ROUTE,
   getProductionOrder,
 } from '@/modules/inventory/production-orders';
+import { wipBatchActive } from '@/modules/production/wip-batch';
 import OrderCreate from './OrderCreate';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,7 @@ export default async function ProductionOrdersPage({ searchParams }: {
   const existing = params.order
     ? await getProductionOrder(session.user.client, params.order)
     : null;
+  const wipActive = existing ? existing.wipBatchActive === 'X' : await wipBatchActive(session.user.client);
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -41,6 +43,7 @@ export default async function ProductionOrdersPage({ searchParams }: {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           OPKP is not this screen. A scheduling profile is read from the material plant view and snapshotted.
           This screen does not print, schedule, check capacity, or post a goods receipt.
+          OMCWB was read. WIP batch is {wipActive ? 'active' : 'not active'}. A WIP batch was not created.
         </p>
       </header>
 

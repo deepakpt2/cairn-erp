@@ -18,6 +18,7 @@ import { reverseMaterialDocument } from './material-document-reversal';
 import { recomputePostingStatus } from './physical-inventory-posting-status';
 import { recountPostingBlock, syncRecountLink } from './physical-inventory-recount';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import {
@@ -1020,6 +1021,7 @@ export async function postDifferences(input: PostDifferencesInput): Promise<Post
         headerStatus,
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
     return postedView(tx, input.client, number);
   });

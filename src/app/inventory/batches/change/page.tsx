@@ -7,6 +7,7 @@ import { ACTIVITY, BatchChangeError, readBatch } from '@/modules/inventory/batch
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 
+import BatchRelations from '../BatchRelations';
 import DocumentTab from '../DocumentTab';
 import ChangeBatchForm from './ChangeBatchForm';
 
@@ -111,6 +112,7 @@ export default async function ChangeBatchPage({ searchParams }: {
           <ChangeBatchForm key={`${opened.id}-${opened.version}`} batch={opened} statusActive={status.scope.effective} />
         </>
       )}
+      {opened && <BatchRelations client={session.user.client} />}
       {opened && <DocumentTab client={session.user.client} />}
     </div>
   );

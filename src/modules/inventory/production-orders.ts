@@ -32,6 +32,7 @@ import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
+import { readWipBatchFlag } from '../production/wip-batch';
 import {
   ensureOrderBatch,
   readMaterialSchedulingProfile,
@@ -97,6 +98,9 @@ export interface ProductionOrderView {
   releasedAt: string | null;
   createdAt: string;
   components: ProductionOrderComponentView[];
+  /** OMCWB was read. A WIP batch was not created. */
+  wipBatchActive: 'X' | ' ';
+  wipBatchCreated: false;
 }
 
 function requireDate(value: string, what: string): string {
@@ -127,6 +131,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     eq(material.client, client), inArray(material.materialNumber, componentNumbers),
   ));
   const descriptionOf = new Map(descriptions.map((d) => [d.materialNumber, d.description]));
+  const wipBatchActive = await readWipBatchFlag(tx, client);
 
   return {
     orderNumber: header.orderNumber,
@@ -147,6 +152,8 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     status: header.status as 'CREATED' | 'RELEASED',
     releasedBy: header.releasedBy,
     releasedAt: header.releasedAt ? header.releasedAt.toISOString() : null,
+    wipBatchActive,
+    wipBatchCreated: false,
     createdAt: header.createdAt.toISOString(),
     components: rows.map((r) => ({
       itemNumber: r.itemNumber,

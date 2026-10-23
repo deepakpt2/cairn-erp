@@ -428,7 +428,7 @@ Open `101` goods receipt against a purchase order, `201` goods issue to a cost c
 
 **IMG Batch Management** · `CFG.INV.BATCHIMG.DISPLAY` · `OCHA` · `/config/batch-management`
 
-This walk does not change a batch setting here. OCHA opens the batch management index. It is not CT04. It does not define a characteristic, assign a class, create a batch, or post. The index lists OMCE, OMCS, OMCU, OMAB, OMCZ, and OMAD. Opening it writes nothing. Class type 023 is not active. Movements 341 and 342 are not this screen.
+This walk does not change a batch setting here. OCHA opens the batch management index. It is not CT04. It does not define a characteristic, assign a class, create a batch, or post. The index lists OMCE, OMCS, OMCU, OMAB, OMCZ, OMAD, OMCT, ODOC, OMCV, OMCW, OMCX, OMA1, OMCY, OMCG, and OMCWB. It also links MBC1, BMC1, CU70, MB5C, BMBC, MSC2N, and MSC3N. Opening it writes nothing. Class type 023 is not active. Movements 341 and 342 are not this screen.
 
 **Batch level** · `CFG.INV.BATCHLEVEL.DEFINE` · `OMCE` · `/config/batch-level`
 

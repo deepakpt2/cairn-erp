@@ -13,6 +13,7 @@ import {
   NOT_EXECUTED,
   ROUTE,
 } from '@/modules/inventory/batch-search-strategy';
+import { listSortSequences } from '@/modules/inventory/batch-sort-sequence';
 
 import StrategyForm from './StrategyForm';
 
@@ -33,6 +34,8 @@ export default async function BatchSearchStrategyPage({
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
   const current = await listBatchSearchStrategies(session.user.client);
+  const sorts = await listSortSequences(session.user.client);
+  const releasedSorts = sorts.sequences.filter((row) => row.status === '1').map((row) => row.sortSequence);
   const combinations = await listStrategyKeyCombinations(session.user.client);
   const params = await searchParams;
   const query = params.q?.trim().toLowerCase() ?? '';
@@ -58,6 +61,12 @@ export default async function BatchSearchStrategyPage({
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           MBC1 creates a search strategy, MBC2 changes its validity, and MBC3 displays it. The strategy type must already stand, and the key combination is a condition table named by its access sequence.
           A field is required only when that combination names it. Opening this screen does not create a record, select a batch, or post. A closed period does not block it.
+          {' '}
+          {releasedSorts.length > 0
+            ? `Released sort sequences stand: ${releasedSorts.join(', ')}. They are not applied to this strategy.`
+            : 'No released sort sequence stands. A sort is not applied to this strategy.'}
+          {' '}
+          <Link href="/inventory/batch-sort-sequences" className="underline">CU70</Link>
         </p>
       </header>
 

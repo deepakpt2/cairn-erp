@@ -7,6 +7,7 @@ import {
   BATCH_IMG_NODES,
   NOT_OCHA,
   NOT_OPENED,
+  RELATED_BATCH_NODES,
   ROUTE,
 } from '@/modules/inventory/batch-management-img';
 
@@ -47,6 +48,24 @@ export default async function BatchManagementImgPage() {
           </thead>
           <tbody>
             {BATCH_IMG_NODES.map((node) => (
+              <tr key={node.tcode} className="border-b border-line/60">
+                <td className="px-2 py-2">
+                  <Link href={node.route} className="code">{node.tcode}</Link>
+                </td>
+                <td className="px-2 py-2">{node.title}</td>
+                <td className="px-2 py-2 text-ink-soft">{node.note}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="border border-line bg-white p-4">
+        <h2 className="text-sm font-semibold">Related transactions</h2>
+        <p className="mt-1 text-sm text-ink-soft">These are not IMG activities. The routes already exist.</p>
+        <table className="mt-2 w-full text-sm">
+          <tbody>
+            {RELATED_BATCH_NODES.map((node) => (
               <tr key={node.tcode} className="border-b border-line/60">
                 <td className="px-2 py-2">
                   <Link href={node.route} className="code">{node.tcode}</Link>

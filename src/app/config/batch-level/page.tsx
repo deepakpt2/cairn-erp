@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { ACTIVITY, BATCH_LEVELS, getBatchLevel, latestConversion } from '@/modules/inventory/batch-level';
+import { listConversionChecks } from '@/modules/inventory/batch-conversion';
 
 import BatchLevelForm from './BatchLevelForm';
 
@@ -16,10 +17,12 @@ const ROUTE = '/config/batch-level';
 export default async function BatchLevelPage() {
   const session = await requireSession(ROUTE);
   const canMaintain = can(session, ACTIVITY);
-  const [current, conversion] = await Promise.all([
+  const [current, conversion, omct] = await Promise.all([
     getBatchLevel(session.user.client),
     latestConversion(session.user.client),
+    listConversionChecks(session.user.client),
   ]);
+  const finding = omct.checks[0] ?? null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -49,6 +52,16 @@ export default async function BatchLevelPage() {
         conversion={conversion}
         canMaintain={canMaintain}
       />
+      <section className="border border-line bg-white p-4 text-sm">
+        <h2 className="font-medium">OMCT finding</h2>
+        <p className="mt-2 text-ink-soft">
+          {finding
+            ? `The last check is ${finding.result}. ${finding.summary} The batch level was not changed.`
+            : 'No OMCT finding stands. The batch level was not changed.'}
+          {' '}
+          <Link href="/config/batch-conversion" className="underline">Open OMCT</Link>
+        </p>
+      </section>
     </div>
   );
 }

@@ -30,6 +30,7 @@ import { accountDetermination, plant as plantTable } from '../foundation/schema'
 import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { recordOutputsForPostedDocument } from './material-document-output';
@@ -814,6 +815,7 @@ export async function postGoodsIssue(
         company: companyCode,
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     // SCR-135: the issue earns its slip, at the periodic cadence.
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);

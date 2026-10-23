@@ -28,6 +28,7 @@ import {
 import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { batchClassificationRefusal } from './batch-classification';
+import { noteBatchControlUse } from './batch-control-use';
 import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
 import {
   materialDocument, materialDocumentLine, materialValuation, movementType, stockQuantity,
@@ -577,6 +578,7 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         reversedLines: wanted.length,
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     // SCR-135: the cancellation is a document of its own and carries its own slip.
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);

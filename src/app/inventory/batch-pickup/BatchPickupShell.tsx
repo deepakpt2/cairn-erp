@@ -88,6 +88,13 @@ export default function BatchPickupShell({ canUse, selection, result, reportErro
       {result && result.uses.length > 0 ? (
         <section className="panel overflow-x-auto p-4">
           <h2 className="mb-2 text-sm font-medium">{t('mb5c.uses')}</h2>
+          {selection.batch ? (
+            <p className="mb-2 text-sm">
+              <Link className="underline" href={`/inventory/batches/display?material=${encodeURIComponent(selection.material ?? '')}&batch=${encodeURIComponent(selection.batch)}`}>MSC3N</Link>
+              {' · '}
+              <Link className="underline" href={`/inventory/batch-cockpit?material=${encodeURIComponent(selection.material ?? '')}&batch=${encodeURIComponent(selection.batch)}`}>BMBC</Link>
+            </p>
+          ) : null}
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-ink-soft">
@@ -103,7 +110,11 @@ export default function BatchPickupShell({ canUse, selection, result, reportErro
             <tbody>
               {result.uses.map((use) => (
                 <tr key={`${use.materialDocumentNumber}-${use.lineNumber}`} className="border-b border-line">
-                  <td className="code py-2 pr-3">{use.materialDocumentNumber}</td>
+                  <td className="code py-2 pr-3">
+                    <Link className="underline" href={`/inventory/material-documents?document=${encodeURIComponent(use.materialDocumentNumber)}`}>
+                      {use.materialDocumentNumber}
+                    </Link>
+                  </td>
                   <td className="code py-2 pr-3">{use.lineNumber}</td>
                   <td className="code py-2 pr-3">{use.postingDate}</td>
                   <td className="code py-2 pr-3">{use.movementType}</td>

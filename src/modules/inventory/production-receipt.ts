@@ -33,6 +33,7 @@ import {
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { resolveStorageLocation, storageLocationRequired, StorageLocationError } from './storage-location';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
@@ -529,6 +530,7 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
         journal: journal.documentNumber, status: 'POSTED', company: companyCode,
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 

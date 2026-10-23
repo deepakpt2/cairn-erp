@@ -171,6 +171,12 @@ export async function wipBatchActive(client: string): Promise<boolean> {
   return current.code === 'X';
 }
 
+/** Read the stored flag inside an open transaction. This does not create a WIP batch. */
+export async function readWipBatchFlag(tx: Tx, client: string): Promise<'X' | ' '> {
+  const row = await readRow(tx, client);
+  return row?.wipBatchActive === 'X' ? 'X' : ' ';
+}
+
 export async function getWipBatchActivation(client: string): Promise<WipBatchRow> {
   const key = client?.trim() ?? '';
   if (!key) throw new WipBatchError('The tenant is missing.', 'CLIENT_REQUIRED', 'Sign in again.');

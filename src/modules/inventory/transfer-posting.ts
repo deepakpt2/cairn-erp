@@ -29,6 +29,7 @@ import { accountDetermination, plant as plantTable, storageLocation } from '../f
 import { materialPeriodAllows } from './material-period-control';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { recordOutputsForPostedDocument } from './material-document-output';
@@ -1012,6 +1013,7 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
         journal: journalNumber, status: 'POSTED',
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     // SCR-135: the document carries its output with it, determined as it posts.
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
@@ -1214,6 +1216,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
         journal: journalNumber, status: 'POSTED',
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     // SCR-135: the document carries its output with it, determined as it posts.
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);

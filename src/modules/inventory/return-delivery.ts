@@ -42,6 +42,7 @@ import { resolveStorageLocation, StorageLocationError } from './storage-location
 import { postingValuationRefusal } from './valuation-class-definition';
 import { getMaterialPeriodControlInTx } from './goods-issue';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import {
@@ -854,6 +855,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
         journal: journal.documentNumber, status: 'POSTED',
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 

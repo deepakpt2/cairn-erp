@@ -26,6 +26,7 @@ import {
 } from './storage-location';
 import { postingValuationRefusal } from './valuation-class-definition';
 import { assignedReceiptRefusal, readAssignedGoodsReceiptDecision } from './batch-number-assignment';
+import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { assertInventoryCountOpen, lockStockScope, PhysicalInventoryError } from './physical-inventory';
@@ -583,6 +584,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         lines: prepared.length, journal: journal.documentNumber, status: 'POSTED',
       },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     // SCR-135: the document carries its output with it — determined here, and the
     // immediate ones dispatched inside this same transaction.
@@ -843,6 +845,7 @@ export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Prom
       transactionCode: GR_POST_CAPABILITY,
       after: { movement: movement.movementType, reversalOf: input.materialDocumentNumber, status: 'POSTED' },
     });
+    await noteBatchControlUse(tx, input.client, number, input.changedBy);
 
     return (await existingByRequestKey(tx, input.client, input.requestKey))!;
   });

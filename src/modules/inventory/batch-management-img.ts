@@ -60,6 +60,122 @@ export const BATCH_IMG_NODES: readonly BatchImgNode[] = [
     activity: 'CFG.INV.BATCHRANGE.DEFINE',
     note: 'Object BATCH_CLT. Opening it does not create interval 01.',
   },
+  {
+    tcode: 'OMCT',
+    title: 'Batch conversion check',
+    route: '/config/batch-conversion',
+    activity: 'CFG.INV.BATCHCONVERT.DEFINE',
+    note: 'The last finding is read. The check does not change the level or the status.',
+  },
+  {
+    tcode: 'ODOC',
+    title: 'Document management for batches',
+    route: '/config/batch-document-management',
+    activity: 'CFG.INV.BATCHDOCMGMT.DEFINE',
+    note: 'The flag is stored. A file is not stored from this index.',
+  },
+  {
+    tcode: 'OMCV',
+    title: 'Batch classification',
+    route: '/config/batch-classification',
+    activity: 'CFG.INV.BATCHCLASSIFY.DEFINE',
+    note: 'The flag is stored. A class is not assigned here.',
+  },
+  {
+    tcode: 'OMCW',
+    title: 'Strategy types',
+    route: '/config/batch-strategy-types',
+    activity: 'CFG.INV.BATCHSTRATEGY.DEFINE',
+    note: 'Inventory only. A strategy does not select a batch.',
+  },
+  {
+    tcode: 'OMCX',
+    title: 'Access sequences',
+    route: '/config/batch-access-sequences',
+    activity: 'CFG.INV.BATCHACCESS.DEFINE',
+    note: 'The sequence is stored. A condition record is not selected.',
+  },
+  {
+    tcode: 'OMA1',
+    title: 'Condition tables',
+    route: '/config/batch-condition-tables',
+    activity: 'CFG.INV.BATCHCONDTABLE.DEFINE',
+    note: 'The table name is stored. A condition record is not written.',
+  },
+  {
+    tcode: 'OMCY',
+    title: 'Search procedures',
+    route: '/config/batch-search-procedures',
+    activity: 'CFG.INV.BATCHSEARCH.DEFINE',
+    note: 'The procedure is stored. A batch is not searched.',
+  },
+  {
+    tcode: 'OMCG',
+    title: 'Search procedure allocation',
+    route: '/config/batch-search-allocations',
+    activity: 'CFG.INV.BATCHALLOCATE.DEFINE',
+    note: 'A posting reads the check flag and does not perform the check.',
+  },
+  {
+    tcode: 'OMCWB',
+    title: 'WIP batch',
+    route: '/config/wip-batch',
+    activity: 'CFG.PROD.WIPBATCH.DEFINE',
+    note: 'An order reads the flag. A WIP batch is not created.',
+  },
+];
+
+/** Transactions that already exist. Linked, not listed as IMG activities. */
+export const RELATED_BATCH_NODES: readonly BatchImgNode[] = [
+  {
+    tcode: 'MBC1',
+    title: 'Search strategy',
+    route: '/inventory/batch-search-strategies',
+    activity: 'INV.BATCHSTRATEGY.MAINTAIN',
+    note: 'The saved strategy is not consumed by a goods movement.',
+  },
+  {
+    tcode: 'BMC1',
+    title: 'Batch class',
+    route: '/inventory/batch-classes',
+    activity: 'INV.BATCHCLASS.MAINTAIN',
+    note: 'A class that stands is not assigned to a batch from this index.',
+  },
+  {
+    tcode: 'CU70',
+    title: 'Sort sequence',
+    route: '/inventory/batch-sort-sequences',
+    activity: 'INV.BATCHSORT.MAINTAIN',
+    note: 'A released sequence is read and not applied.',
+  },
+  {
+    tcode: 'MB5C',
+    title: 'Batch pick-up list',
+    route: '/inventory/batch-pickup',
+    activity: 'INV.BATCH.PICKUP',
+    note: 'The list names documents that already stand.',
+  },
+  {
+    tcode: 'BMBC',
+    title: 'Batch cockpit',
+    route: '/inventory/batch-cockpit',
+    activity: 'INV.BATCH.COCKPIT',
+    note: 'Genealogy is not inferred.',
+  },
+  {
+    tcode: 'MSC2N',
+    title: 'Change batch',
+    route: '/inventory/batches/change',
+    activity: 'INV.BATCH.CHANGE',
+    note: 'The batch screen. A class is not assigned here.',
+  },
+  {
+    tcode: 'MSC3N',
+    title: 'Display batch',
+    route: '/inventory/batches/display',
+    activity: 'INV.BATCH.DISPLAY',
+    note: 'The batch screen. The last conversion finding is shown and not applied.',
+  },
 ];
 
 /** Different transactions. Linked so they are not mistaken for OCHA. */
