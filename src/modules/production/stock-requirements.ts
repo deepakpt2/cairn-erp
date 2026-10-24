@@ -15,8 +15,10 @@
  * plant has already promised away, dated at its required date. SCR-130 deferred
  * them because no table existed; the deferral is closed.
  *
- * A committed planned order is a receipt. Production orders and sales orders
- * remain deferred. Excess-stock alerts have no stock ceiling.
+ * A committed planned order is a receipt. A committed dependent requirement is
+ * demand. A planning check does not write one, so a preview is not on this list.
+ * A created or released production order is a receipt for the quantity not yet received.
+ * Sales orders remain deferred. Excess-stock alerts have no stock ceiling.
  * Refused by name: MRP area, the one-character special stock indicator, a
  * simulation version, and PR-to-PO conversion (a posting action, not a report).
  */
@@ -35,7 +37,7 @@ export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
 export type ElementType =
-  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'SAFETY_STOCK' | 'RESERVATION';
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -288,6 +290,10 @@ export async function stockRequirementsList(input: {
       select order_number, quantity::text as quantity, finish_date::text as finish_date
       from planned_order
       where client = ${client} and material_number = ${s.material!} and plant = ${s.plant!}
+        and not exists (
+          select 1 from production_order conv
+          where conv.client = planned_order.client and conv.planned_order_number = planned_order.order_number
+        )
       order by finish_date, order_number
     `) as unknown as Array<Record<string, string>>;
 
@@ -367,9 +373,49 @@ export async function stockRequirementsList(input: {
         documentNumber: String(row.order_number),
         documentItem: '',
         quantity: open,
-        drillDown: `/production/mrp-run`,
+        drillDown: `/production/planned-order-display?order=${encodeURIComponent(String(row.order_number))}`,
       });
     }
+    const productionRows = await tx.execute(sql`
+      select o.order_number, o.order_quantity::text as quantity, o.scheduled_finish::text as finish_date,
+             coalesce(gr.received, 0)::text as received
+      from production_order o
+      left join (
+        select l.production_order_number,
+               sum(case when m.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as received
+        from material_document_line l
+        join material_document d
+          on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
+        join movement_type m on m.client = l.client and m.movement_type = l.movement_type
+        where l.client = ${client} and l.production_order_number is not null
+        group by l.production_order_number
+      ) gr on gr.production_order_number = o.order_number
+      where o.client = ${client} and o.material_number = ${s.material!} and o.plant = ${s.plant!}
+        and o.status in ('CREATED', 'RELEASED')
+      order by o.scheduled_finish, o.order_number
+    `) as unknown as Array<Record<string, string>>;
+    for (const row of productionRows) {
+      const open = Number((num(row.quantity) - num(row.received)).toFixed(3));
+      if (open <= 0) continue;
+      elements.push({
+        date: String(row.finish_date),
+        elementType: 'PRODUCTION_ORDER',
+        elementLabel: 'Production order',
+        direction: 'RECEIPT',
+        documentNumber: String(row.order_number),
+        documentItem: '',
+        quantity: open,
+        drillDown: `/production/orders?order=${encodeURIComponent(String(row.order_number))}`,
+      });
+    }
+    const dependentRows = await tx.execute(sql`
+      select parent_order_number, item_number, quantity::text as quantity, requirement_date::text as requirement_date
+      from mrp_dependent_requirement
+      where client = ${client} and plant = ${s.plant!} and material_number = ${s.material!}
+        and status = 'OPEN'
+      order by requirement_date, parent_order_number, item_number
+    `) as unknown as Array<Record<string, unknown>>;
+
     for (const row of reservationRows) {
       const open = Number((num(row.required_quantity) - num(row.withdrawn_quantity)).toFixed(3));
       if (open <= 0) continue;
@@ -382,6 +428,20 @@ export async function stockRequirementsList(input: {
         documentItem: String(row.item_number),
         quantity: open,
         drillDown: `/inventory/reservations?reservation=${encodeURIComponent(String(row.reservation_number))}`,
+      });
+    }
+    for (const row of dependentRows) {
+      const open = num(row.quantity);
+      if (open <= 0) continue;
+      elements.push({
+        date: String(row.requirement_date),
+        elementType: 'DEPENDENT_REQUIREMENT',
+        elementLabel: 'Dependent requirement',
+        direction: 'REQUIREMENT',
+        documentNumber: String(row.parent_order_number),
+        documentItem: String(row.item_number),
+        quantity: open,
+        drillDown: `/production/planned-order-display?order=${encodeURIComponent(String(row.parent_order_number))}`,
       });
     }
 

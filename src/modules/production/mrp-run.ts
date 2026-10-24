@@ -7,8 +7,10 @@
  *
  * The planning file is the net-change marker. There is no second change table.
  * A purchase requisition is the purchasing document. A planned order is not a
- * production order. This run does not explode a bill of material. Dependent demand is
- * the open reservation. An MRP area does not stand.
+ * production order. This plant run does not explode a bill of material. It does not select a production version.
+ * Dependent demand is the open reservation and a committed dependent requirement. An MRP area does not stand.
+ * Single-item planning is a separate entry. It uses this calculation and explodes through a production version.
+ * Single-level planning is a third entry. It plans the named material and does not plan a lower-level component.
  */
 import { sql } from 'drizzle-orm';
 
@@ -16,11 +18,17 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { createRequisition, changeRequisition } from '../purchasing/requisitions';
+import { explodePlannedSupply } from './mrp-explosion';
 
 export const MRP_RUN_CAPABILITY = 'PROD.MRP.RUN';
 export const MRP_REGENERATE_CAPABILITY = 'PROD.MRP.REGENERATE';
 export const MRP_RUN_ROUTE = '/production/mrp-run';
+export const MRP_SINGLE_ROUTE = '/production/single-item-planning';
+export const MRP_SINGLE_LEVEL_ROUTE = '/production/single-level-planning';
+export const MRP_SINGLE_LEVEL_CAPABILITY = 'PROD.MRP.SINGLELEVEL';
 export const MRP_RUN_ALIASES = ['MD01'] as const;
+export const MRP_SINGLE_ALIAS = 'MD02';
+export const MRP_SINGLE_LEVEL_ALIAS = 'MD03';
 export const MRP_FOREGROUND_LIMIT = 40;
 
 const SCALE = 3;
@@ -29,6 +37,13 @@ const PROCESSING_KEYS = ['NETCH', 'NETPL', 'NEUPL'] as const;
 const REFUSED: Record<string, string> = {
   mrpArea: 'An MRP area does not stand. The plant is the planning scope.',
   scheduleLine: 'A scheduling-agreement schedule line is not created by this run.',
+  mrpList: 'An MRP list is not created. MD05 is not implemented. MD04 reads the current stock and requirements.',
+  createMrpList: 'An MRP list is not created. MD05 is not implemented. MD04 reads the current stock and requirements.',
+  md05: 'MD05 is not implemented. An MRP list is not stored.',
+  planningDate: 'A planning date is not a key. The requirement date is the date. Lead time is a number of days.',
+  openingPeriod: 'An opening period is not carried. A bought shortage becomes a purchase requisition. A made shortage becomes a planned order.',
+  purchaseRequisition: 'The proposal type follows the procurement type. It is not entered.',
+  proposalMode: 'The proposal type follows the procurement type. It is not entered.',
   background: 'A background run is not carried. Narrow the scope and plan in the foreground.',
   parallel: 'Parallel processing is not carried. The run plans one material at a time.',
   deleteAndRecreate: 'Delete and recreate is not this planning mode. An existing proposal is not removed.',
@@ -68,6 +83,9 @@ export interface MrpRunRequest {
   executionMode?: string;
   planningMode?: string;
   named?: Record<string, string | undefined>;
+  explode?: boolean;
+  entryPoint?: 'PLANT' | 'SINGLE_ITEM' | 'SINGLE_LEVEL';
+  productionVersion?: string;
 }
 
 export interface MrpProposalView {
@@ -99,6 +117,19 @@ export interface MrpMaterialView {
   proposalsRetained: number;
   diagnosticCode: string | null;
   message: string | null;
+  bomLevel: number;
+}
+
+export interface MrpDependentView {
+  parentOrderNumber: string | null;
+  parentMaterial: string;
+  componentMaterial: string;
+  plant: string;
+  quantity: string;
+  unit: string;
+  requirementDate: string;
+  productionVersion: string | null;
+  bomLevel: number;
 }
 
 export interface MrpDiagnosticView {
@@ -136,6 +167,7 @@ export interface MrpRunView {
   materials: MrpMaterialView[];
   proposals: MrpProposalView[];
   diagnostics: MrpDiagnosticView[];
+  dependents: MrpDependentView[];
 }
 
 interface Selection {
@@ -149,6 +181,10 @@ interface Selection {
   horizonEnd: string | null;
   simulationOnly: boolean;
   confirmRegenerative: boolean;
+  explode: boolean;
+  entryPoint: 'PLANT' | 'SINGLE_ITEM' | 'SINGLE_LEVEL';
+  planningMode: 'ADAPT_EXISTING' | 'REEXPLODE';
+  productionVersion: string | null;
 }
 
 interface Candidate {
@@ -230,9 +266,27 @@ function selectionOf(input: MrpRunRequest): Selection {
   refuseNamed(input.named);
   const execution = clean(input.executionMode).toUpperCase() || 'FOREGROUND';
   if (execution !== 'FOREGROUND') fail(REFUSED.background, 'Narrow the plant or the material range.');
-  const mode = clean(input.planningMode).toUpperCase() || 'ADAPT_EXISTING';
-  if (mode === 'DELETE_AND_RECREATE') fail(REFUSED.deleteAndRecreate, 'Adapt the proposal that stands.');
-  if (mode !== 'ADAPT_EXISTING') fail(REFUSED.recreate, 'Adapt the proposal that stands.');
+  const askedMode = clean(input.planningMode).toUpperCase();
+  let planningMode: Selection['planningMode'] = 'ADAPT_EXISTING';
+  let explode = input.explode === true;
+  if (input.entryPoint === 'SINGLE_LEVEL') {
+    if (askedMode === '3' || askedMode === 'DELETE_AND_RECREATE' || askedMode === 'RECREATE') {
+      fail(REFUSED.deleteAndRecreate, 'Adapt the proposal that stands, or re-explode without deleting it.');
+    }
+    if (askedMode === '2' || askedMode === 'REEXPLODE') {
+      planningMode = 'REEXPLODE';
+      explode = true;
+    } else if (!askedMode || askedMode === '1' || askedMode === 'ADAPT' || askedMode === 'ADAPT_EXISTING') {
+      planningMode = 'ADAPT_EXISTING';
+      explode = false;
+    } else {
+      fail(`The planning mode ${askedMode} does not stand.`, 'Choose adapt existing, or re-explode. Delete and recreate is refused.');
+    }
+  } else if (askedMode === 'DELETE_AND_RECREATE' || askedMode === '3') {
+    fail(REFUSED.deleteAndRecreate, 'Adapt the proposal that stands.');
+  } else if (askedMode && askedMode !== 'ADAPT_EXISTING' && askedMode !== '1' && askedMode !== 'ADAPT') {
+    fail(REFUSED.recreate, 'Adapt the proposal that stands.');
+  }
   const processing = clean(input.processingKey).toUpperCase();
   if (!PROCESSING_KEYS.includes(processing as Selection['processingKey'])) {
     fail(`The processing key ${input.processingKey || 'blank'} does not stand.`, 'Choose net change, net change in the horizon, or regenerative.');
@@ -273,6 +327,10 @@ function selectionOf(input: MrpRunRequest): Selection {
     horizonEnd,
     simulationOnly: input.simulationOnly === true,
     confirmRegenerative: input.confirmRegenerative === true,
+    explode,
+    entryPoint: input.entryPoint === 'SINGLE_ITEM' || input.entryPoint === 'SINGLE_LEVEL' ? input.entryPoint : 'PLANT',
+    planningMode,
+    productionVersion: clean(input.productionVersion).toUpperCase() || null,
   };
 }
 
@@ -286,7 +344,10 @@ function sameSelection(row: Record<string, unknown>, selection: Selection): bool
     && text(row.mrp_controller) === (selection.mrpController ?? '')
     && text(row.horizon_start) === (selection.horizonStart ?? '')
     && text(row.horizon_end) === (selection.horizonEnd ?? '')
-    && Boolean(row.simulation_only) === selection.simulationOnly;
+    && Boolean(row.simulation_only) === selection.simulationOnly
+    && text(row.production_version) === (selection.productionVersion ?? '')
+    && text(row.planning_mode) === selection.planningMode
+    && text(row.entry_point) === selection.entryPoint;
 }
 
 async function rows(tx: Tx, query: ReturnType<typeof sql>): Promise<Array<Record<string, unknown>>> {
@@ -306,7 +367,7 @@ async function viewOf(tx: Tx, client: string, runNumber: string): Promise<MrpRun
   if (!header[0]) return null;
   const h = header[0];
   const materials = await rows(tx, sql`
-    select m.material_number, m.plant, coalesce(p.company_code, '') as company_code, m.status,
+    select m.material_number, m.plant, coalesce(p.company_code, '') as company_code, m.status, m.bom_level,
            m.supply_quantity::text as supply_quantity, m.demand_quantity::text as demand_quantity,
            m.shortage_quantity::text as shortage_quantity, m.proposals_created, m.proposals_changed,
            m.proposals_retained, m.diagnostic_code, m.message
@@ -366,6 +427,7 @@ async function viewOf(tx: Tx, client: string, runNumber: string): Promise<MrpRun
       proposalsRetained: num(row.proposals_retained),
       diagnosticCode: row.diagnostic_code == null ? null : String(row.diagnostic_code),
       message: row.message == null ? null : String(row.message),
+      bomLevel: num(row.bom_level),
     })),
     proposals: proposals.map((row) => ({
       lineNumber: num(row.line_number),
@@ -389,6 +451,23 @@ async function viewOf(tx: Tx, client: string, runNumber: string): Promise<MrpRun
       severity: String(row.severity),
       diagnosticCode: String(row.diagnostic_code),
       message: String(row.message),
+    })),
+    dependents: (await rows(tx, sql`
+      select parent_order_number, parent_material, component_material, plant, quantity::text as quantity, unit,
+             requirement_date::text as requirement_date, production_version, bom_level
+        from mrp_run_dependent
+       where client = ${client} and run_number = ${runNumber}
+       order by bom_level, component_material, line_number
+    `)).map((row) => ({
+      parentOrderNumber: row.parent_order_number == null ? null : String(row.parent_order_number),
+      parentMaterial: String(row.parent_material),
+      componentMaterial: String(row.component_material),
+      plant: String(row.plant),
+      quantity: String(row.quantity),
+      unit: String(row.unit),
+      requirementDate: String(row.requirement_date),
+      productionVersion: row.production_version == null ? null : String(row.production_version),
+      bomLevel: num(row.bom_level),
     })),
   };
 }
@@ -481,7 +560,91 @@ function lotSizes(shortage: bigint, candidate: Candidate): bigint[] | string {
   return lots;
 }
 
-async function calculate(tx: Tx, client: string, selection: Selection, candidate: Candidate): Promise<Calculation> {
+async function dependentDemand(tx: Tx, client: string, candidate: Candidate, runNumber: string | null): Promise<Array<Record<string, unknown>>> {
+  const operational = await rows(tx, sql`
+    select d.requirement_date::text as requirement_date, d.quantity::text as quantity, d.parent_order_number
+      from mrp_dependent_requirement d
+     where d.client = ${client} and d.material_number = ${candidate.materialNumber} and d.plant = ${candidate.plant}
+       and d.status = 'OPEN'
+  `);
+  if (!runNumber) return operational;
+  const header = await rows(tx, sql`
+    select simulation_only from mrp_run where client = ${client} and run_number = ${runNumber}
+  `);
+  const simulation = Boolean(header[0]?.simulation_only);
+  const preview = simulation
+    ? await rows(tx, sql`
+        select requirement_date::text as requirement_date, quantity::text as quantity, parent_material, parent_order_number
+          from mrp_run_dependent
+         where client = ${client} and run_number = ${runNumber}
+           and component_material = ${candidate.materialNumber} and plant = ${candidate.plant}
+      `)
+    : [];
+  if (!simulation) return operational;
+  const replaced = new Set(preview.map((row) => String(row.parent_material)));
+  const kept = [];
+  for (const row of operational) {
+    const parent = await rows(tx, sql`
+      select material_number from planned_order
+       where client = ${client} and order_number = ${String(row.parent_order_number)}
+    `);
+    if (parent[0] && replaced.has(String(parent[0].material_number))) continue;
+    kept.push(row);
+  }
+  return [...kept, ...preview];
+}
+
+async function loadCandidate(tx: Tx, client: string, materialNumber: string, plant: string): Promise<Candidate | null> {
+  const found = await candidates(tx, client, {
+    processingKey: 'NEUPL',
+    plantFrom: plant,
+    plantTo: plant,
+    materialFrom: materialNumber,
+    materialTo: materialNumber,
+    mrpController: null,
+    horizonStart: null,
+    horizonEnd: null,
+    simulationOnly: false,
+    confirmRegenerative: true,
+    explode: false,
+    entryPoint: 'PLANT',
+    planningMode: 'ADAPT_EXISTING',
+    productionVersion: null,
+  });
+  return found[0] ?? null;
+}
+
+async function enqueueComponent(
+  tx: Tx, client: string, runNumber: string, actor: string, component: { materialNumber: string; plant: string; level: number; path: string },
+): Promise<void> {
+  const count = await rows(tx, sql`
+    select count(*) as count from mrp_run_material where client = ${client} and run_number = ${runNumber}
+  `);
+  if (Number(count[0]?.count ?? 0) >= MRP_FOREGROUND_LIMIT) {
+    await tx.execute(sql`
+      insert into mrp_run_diagnostic (client, run_number, line_number, material_number, plant, severity, diagnostic_code, message)
+      values (${client}, ${runNumber}, ${await nextLine(tx, client, runNumber, 'diagnostic')}, ${component.materialNumber},
+              ${component.plant}, 'WARNING', 'FOREGROUND_LIMIT',
+              ${`${component.materialNumber} was not added. The foreground limit is ${MRP_FOREGROUND_LIMIT}.`})
+    `);
+    return;
+  }
+  await tx.execute(sql`
+    insert into mrp_run_material (client, run_number, material_number, plant, status, bom_level, explosion_path, created_by)
+    values (${client}, ${runNumber}, ${component.materialNumber}, ${component.plant}, 'PENDING', ${component.level}, ${component.path}, ${actor})
+    on conflict (client, run_number, material_number, plant) do update set
+      status = case
+        when mrp_run_material.status in ('COMPLETED', 'SKIPPED') and mrp_run_material.replan_count < 3 then 'PENDING'
+        else mrp_run_material.status
+      end,
+      replan_count = case
+        when mrp_run_material.status in ('COMPLETED', 'SKIPPED') and mrp_run_material.replan_count < 3 then mrp_run_material.replan_count + 1
+        else mrp_run_material.replan_count
+      end
+  `);
+}
+
+async function calculate(tx: Tx, client: string, selection: Selection, candidate: Candidate, runNumber: string | null = null): Promise<Calculation> {
   const diagnostics: Calculation['diagnostics'] = [];
   if (candidate.mrpType === 'NONE') {
     return {
@@ -561,6 +724,10 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     select order_number, quantity::text as quantity, finish_date::text as finish_date, firming_status, version
       from planned_order
      where client = ${client} and material_number = ${candidate.materialNumber} and plant = ${candidate.plant}
+       and not exists (
+         select 1 from production_order conv
+          where conv.client = planned_order.client and conv.planned_order_number = planned_order.order_number
+       )
   `);
   const reservations = await rows(tx, sql`
     select (i.required_quantity - i.withdrawn_quantity)::text as quantity, h.base_date
@@ -636,6 +803,13 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     const open = scaled(row.quantity);
     if (open <= 0n) continue;
     elements.push({ date: String(row.base_date), delta: -open });
+    demand += open;
+  }
+  const dependent = await dependentDemand(tx, client, candidate, runNumber);
+  for (const row of dependent) {
+    const open = scaled(row.quantity);
+    if (open <= 0n) continue;
+    elements.push({ date: String(row.requirement_date), delta: -open });
     demand += open;
   }
 
@@ -800,6 +974,10 @@ async function reconcile(
                finish_date::text as receipt_date, firming_status, version
           from planned_order
          where client = ${client} and material_number = ${candidate.materialNumber} and plant = ${candidate.plant}
+           and not exists (
+             select 1 from production_order conv
+              where conv.client = planned_order.client and conv.planned_order_number = planned_order.order_number
+           )
          order by finish_date, order_number
       `);
   const used = new Set<number>();
@@ -1088,8 +1266,9 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
   const selection = selectionOf(input);
   const opened = await withTenant(input.client, async (tx) => {
     const prior = await rows(tx, sql`
-      select run_number, processing_key, plant_from, plant_to, material_from, material_to, mrp_controller,
-             horizon_start::text as horizon_start, horizon_end::text as horizon_end, simulation_only, status
+      select run_number, processing_key, planning_mode, plant_from, plant_to, material_from, material_to, mrp_controller,
+             horizon_start::text as horizon_start, horizon_end::text as horizon_end, simulation_only, status,
+             production_version, entry_point
         from mrp_run
        where client = ${input.client} and request_key = ${clean(input.requestKey)}
        for update
@@ -1134,6 +1313,26 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
         );
       }
     }
+    if ((selection.entryPoint === 'SINGLE_ITEM' || selection.entryPoint === 'SINGLE_LEVEL') && selection.materialFrom) {
+      const named = await rows(tx, sql`
+        select mp.material_number, pf.net_change
+          from material_plant mp
+          left join planning_file pf
+            on pf.client = mp.client and pf.material_number = mp.material_number and pf.plant = mp.plant
+         where mp.client = ${input.client} and mp.material_number = ${selection.materialFrom} and mp.plant = ${selection.plantFrom}
+      `);
+      if (!named[0]) {
+        fail(`Material ${selection.materialFrom} is not extended to plant ${selection.plantFrom}.`, 'Extend the material to the plant before planning it.');
+      }
+      if (selection.processingKey !== 'NEUPL' && named[0].net_change !== true) {
+        fail(
+          named[0].net_change == null
+            ? `Material ${selection.materialFrom} has no planning file, so a net-change run cannot know what changed.`
+            : `Material ${selection.materialFrom} is not marked for net change.`,
+          'Confirm regenerative planning, or save the MRP view.',
+        );
+      }
+    }
     const chosen = selection.processingKey === 'NEUPL'
       ? selected
       : selected.filter((item) => item.netChange === true);
@@ -1156,12 +1355,12 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
       insert into mrp_run (
         client, run_number, processing_key, execution_mode, planning_mode, simulation_only,
         plant_from, plant_to, material_from, material_to, mrp_controller, horizon_start, horizon_end,
-        status, request_key, requested_by, materials_selected, started_at, created_by
+        status, request_key, requested_by, materials_selected, entry_point, production_version, started_at, created_by
       ) values (
-        ${input.client}, ${runNumber}, ${selection.processingKey}, 'FOREGROUND', 'ADAPT_EXISTING', ${selection.simulationOnly},
+        ${input.client}, ${runNumber}, ${selection.processingKey}, 'FOREGROUND', ${selection.planningMode}, ${selection.simulationOnly},
         ${selection.plantFrom}, ${selection.plantTo}, ${selection.materialFrom}, ${selection.materialTo}, ${selection.mrpController},
         ${selection.horizonStart}, ${selection.horizonEnd}, 'RUNNING', ${clean(input.requestKey)}, ${input.requestedBy},
-        ${chosen.length}, now(), ${input.requestedBy}
+        ${chosen.length}, ${selection.entryPoint}, ${selection.productionVersion}, now(), ${input.requestedBy}
       )
     `);
     for (const item of chosen) {
@@ -1175,12 +1374,15 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
 
   if (!opened.resume) return (await getMrpRun(input.client, opened.runNumber))!;
 
-  const pending = await withTenant(input.client, async (tx) => rows(tx, sql`
-    select material_number, plant from mrp_run_material
-     where client = ${input.client} and run_number = ${opened.runNumber} and status = 'PENDING'
-     order by plant, material_number
-  `));
-  for (const item of pending) {
+  for (let step = 0; step < MRP_FOREGROUND_LIMIT * 4; step += 1) {
+    const pending = await withTenant(input.client, async (tx) => rows(tx, sql`
+      select material_number, plant, bom_level, explosion_path from mrp_run_material
+       where client = ${input.client} and run_number = ${opened.runNumber} and status = 'PENDING'
+       order by bom_level, plant, material_number
+       limit 1
+    `));
+    const item = pending[0];
+    if (!item) break;
     const claimed = await withTenant(input.client, async (tx) => {
       const run = await rows(tx, sql`select status from mrp_run where client = ${input.client} and run_number = ${opened.runNumber}`);
       if (String(run[0]?.status) === 'CANCELLING' || String(run[0]?.status) === 'CANCELLED') return false;
@@ -1196,13 +1398,51 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
     if (!claimed) continue;
     try {
       await withTenant(input.client, async (tx) => {
-        const selected = await candidates(tx, input.client, selection);
-        const candidate = selected.find((row) => row.materialNumber === String(item.material_number) && row.plant === String(item.plant));
+        const candidate = await loadCandidate(tx, input.client, String(item.material_number), String(item.plant));
         if (!candidate) fail(`Material ${item.material_number} is no longer in the planning scope.`);
-        const calculation = await calculate(tx, input.client, selection, candidate);
+        const calculation = await calculate(tx, input.client, selection, candidate, opened.runNumber);
         const counts = calculation.status === 'COMPLETED'
           ? await reconcile(tx, input.client, opened.runNumber, input.requestedBy, selection, candidate, calculation)
           : { created: 0, changed: 0, retained: 0 };
+        if (selection.explode && calculation.status !== 'FAILED') {
+          const level = Number(item.bom_level ?? 0);
+          const path = item.explosion_path == null || String(item.explosion_path) === ''
+            ? candidate.materialNumber
+            : String(item.explosion_path);
+          const exploded = await explodePlannedSupply(tx, {
+            client: input.client,
+            runNumber: opened.runNumber,
+            actor: input.requestedBy,
+            materialNumber: candidate.materialNumber,
+            plant: candidate.plant,
+            procurementType: candidate.procurementType,
+            simulationOnly: selection.simulationOnly,
+            productionVersion: level === 0 ? selection.productionVersion : null,
+            level,
+            path,
+          });
+          calculation.diagnostics.push(...exploded.diagnostics);
+          if (selection.entryPoint === 'SINGLE_LEVEL') {
+            for (const component of exploded.components) {
+              calculation.diagnostics.push({
+                severity: 'INFO',
+                code: 'COMPONENT_NOT_PLANNED',
+                message: `${component.materialNumber} was not planned. Single-level planning stops at ${candidate.materialNumber}.`,
+              });
+            }
+          } else {
+            for (const component of exploded.components) {
+              await enqueueComponent(tx, input.client, opened.runNumber, input.requestedBy, component);
+            }
+          }
+        }
+        if (selection.entryPoint === 'SINGLE_LEVEL' && !selection.explode) {
+          calculation.diagnostics.push({
+            severity: 'INFO',
+            code: 'BOM_NOT_EXPLODED',
+            message: 'The bill of material was not exploded. A lower-level component is not planned.',
+          });
+        }
         if (selection.simulationOnly) calculation.acknowledge = false;
         await finishMaterial(tx, input.client, opened.runNumber, input.requestedBy, candidate, calculation, counts);
       });
@@ -1228,6 +1468,16 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
   return withTenant(input.client, async (tx) => {
     const run = await rows(tx, sql`select status from mrp_run where client = ${input.client} and run_number = ${opened.runNumber}`);
     const cancelling = String(run[0]?.status) === 'CANCELLING';
+    const leftover = await rows(tx, sql`
+      select material_number, plant from mrp_run_material
+       where client = ${input.client} and run_number = ${opened.runNumber} and status = 'PENDING'
+    `);
+    if (!cancelling && leftover.length > 0) {
+      await tx.execute(sql`
+        update mrp_run_material set status = 'CANCELLED', message = 'The explosion stopped at the foreground limit.', changed_at = now()
+         where client = ${input.client} and run_number = ${opened.runNumber} and status = 'PENDING'
+      `);
+    }
     if (cancelling) {
       await tx.execute(sql`
         update mrp_run_material set status = 'CANCELLED', message = 'Cancelled before planning.', changed_at = now()
@@ -1236,5 +1486,153 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
     }
     await closeRun(tx, input.client, opened.runNumber, cancelling ? 'CANCELLED' : 'COMPLETED');
     return (await viewOf(tx, input.client, opened.runNumber))!;
+  });
+}
+
+const SINGLE_REFUSED: Record<string, string> = {
+  mrpArea: 'An MRP area does not stand. The plant is the planning scope.',
+  leadTimeScheduling: 'Lead-time scheduling is not carried. Dates use the material lead time. Capacity is not evaluated.',
+  capacity: 'Capacity is not evaluated. Dates use the material lead time.',
+  proposalMode: 'The proposal type follows the procurement type. It is not entered.',
+  changeNumber: 'Engineering change management is not implemented. A change number is refused.',
+  bomAlternative: 'A bill of material is selected through the production version. It is not entered.',
+  bom: 'This run does not explode a bill of material. Dependent demand is the open reservation.',
+  calendar: 'A factory calendar is not carried. Lead time is a number of days.',
+  period: 'A financial period is not read. Planning is not a posting.',
+  background: 'A background run is not carried. Plan this material in the foreground.',
+  parallel: 'Parallel processing is not carried. The run plans one material at a time.',
+  companyCode: 'The company code is read from the plant. It is not a key of the run.',
+  deleteAndRecreate: 'Delete and recreate is not this planning mode. An existing proposal is not removed.',
+  recreate: 'Recreate is not this planning mode. An eligible proposal is adapted, not replaced.',
+};
+
+export function singleItemRefusal(fields: Record<string, string | undefined> | undefined, planningMode?: string): string | null {
+  const mode = clean(planningMode).toUpperCase();
+  if (mode === '2' || mode === 'RECREATE') return SINGLE_REFUSED.recreate;
+  if (mode === '3' || mode === 'DELETE_AND_RECREATE') return SINGLE_REFUSED.deleteAndRecreate;
+  if (!fields) return null;
+  for (const [name, value] of Object.entries(fields)) {
+    if (!value?.trim()) continue;
+    return SINGLE_REFUSED[name] ?? `${name} is not a field of this run.`;
+  }
+  return null;
+}
+
+export async function planSingleItem(input: {
+  client: string;
+  requestedBy: string;
+  requestKey: string;
+  materialNumber: string;
+  plant: string;
+  processingKey: string;
+  planningMode?: string;
+  schedulingMode?: string;
+  horizonStart?: string;
+  horizonEnd?: string;
+  simulationOnly?: boolean;
+  confirmRegenerative?: boolean;
+  productionVersion?: string;
+  named?: Record<string, string | undefined>;
+}): Promise<MrpRunView> {
+  const refused = singleItemRefusal(input.named, input.planningMode);
+  if (refused) fail(refused, 'Plan one material in one plant. A run posts nothing.');
+  const scheduling = clean(input.schedulingMode).toUpperCase();
+  if (scheduling && scheduling !== 'BASIC' && scheduling !== '1') fail(SINGLE_REFUSED.leadTimeScheduling);
+  const materialNumber = clean(input.materialNumber).toUpperCase();
+  const plant = clean(input.plant).toUpperCase();
+  if (!materialNumber) fail('A material is required.', 'Name the material to plan.');
+  if (!plant) fail('A plant is required.', 'Name the plant to plan.');
+  if (materialNumber.length > 40) fail('The material is too long.');
+  if (plant.length > 10) fail('The plant is too long.');
+  const version = clean(input.productionVersion).toUpperCase();
+  if (version && !/^[A-Z0-9]{1,4}$/.test(version)) fail('The production version is not a version code.');
+  let planningMode = clean(input.planningMode).toUpperCase();
+  if (!planningMode || planningMode === '1' || planningMode === 'ADAPT') planningMode = 'ADAPT_EXISTING';
+  return planMaterials({
+    client: input.client,
+    requestedBy: input.requestedBy,
+    requestKey: input.requestKey,
+    processingKey: input.processingKey,
+    plantFrom: plant,
+    plantTo: plant,
+    materialFrom: materialNumber,
+    materialTo: materialNumber,
+    horizonStart: input.horizonStart,
+    horizonEnd: input.horizonEnd,
+    simulationOnly: input.simulationOnly,
+    confirmRegenerative: input.confirmRegenerative,
+    planningMode,
+    explode: true,
+    entryPoint: 'SINGLE_ITEM',
+    productionVersion: version || undefined,
+  });
+}
+
+const SINGLE_LEVEL_REFUSED: Record<string, string> = {
+  ...REFUSED,
+  leadTimeScheduling: 'Lead-time scheduling is not carried. Dates use the material lead time. Capacity is not evaluated.',
+  capacity: 'Capacity is not evaluated. Dates use the material lead time.',
+  changeNumber: 'Engineering change management is not implemented. A change number is refused.',
+  bomAlternative: 'A bill of material is selected through the production version. It is not entered.',
+};
+
+export function singleLevelRefusal(fields: Record<string, string | undefined> | undefined, planningMode?: string): string | null {
+  const mode = clean(planningMode).toUpperCase();
+  if (mode === '3' || mode === 'DELETE_AND_RECREATE' || mode === 'RECREATE') return REFUSED.deleteAndRecreate;
+  if (!fields) return null;
+  for (const [name, value] of Object.entries(fields)) {
+    if (!value?.trim()) continue;
+    return SINGLE_LEVEL_REFUSED[name] ?? `${name} is not a field of this run.`;
+  }
+  return null;
+}
+
+/** MD03. One material, one plant, one level. A component is not planned. */
+export async function planSingleLevel(input: {
+  client: string;
+  requestedBy: string;
+  requestKey: string;
+  materialNumber: string;
+  plant: string;
+  processingKey: string;
+  planningMode?: string;
+  schedulingMode?: string;
+  horizonStart?: string;
+  horizonEnd?: string;
+  simulationOnly?: boolean;
+  confirmRegenerative?: boolean;
+  productionVersion?: string;
+  named?: Record<string, string | undefined>;
+}): Promise<MrpRunView> {
+  const refused = singleLevelRefusal(input.named, input.planningMode);
+  if (refused) fail(refused, 'Plan one material in one plant. A lower-level component is not planned. A run posts nothing.');
+  const scheduling = clean(input.schedulingMode).toUpperCase();
+  if (scheduling && scheduling !== 'BASIC' && scheduling !== '1') fail(SINGLE_LEVEL_REFUSED.leadTimeScheduling);
+  const materialNumber = clean(input.materialNumber).toUpperCase();
+  const plant = clean(input.plant).toUpperCase();
+  if (!materialNumber) fail('A material is required.', 'Name the material to plan.');
+  if (!plant) fail('A plant is required.', 'Name the plant to plan.');
+  if (materialNumber.length > 40) fail('The material is too long.');
+  if (plant.length > 10) fail('The plant is too long.');
+  const version = clean(input.productionVersion).toUpperCase();
+  if (version && !/^[A-Z0-9]{1,4}$/.test(version)) fail('The production version is not a version code.');
+  return planMaterials({
+    client: input.client,
+    requestedBy: input.requestedBy,
+    requestKey: input.requestKey,
+    processingKey: input.processingKey,
+    plantFrom: plant,
+    plantTo: plant,
+    materialFrom: materialNumber,
+    materialTo: materialNumber,
+    horizonStart: input.horizonStart,
+    horizonEnd: input.horizonEnd,
+    simulationOnly: input.simulationOnly,
+    confirmRegenerative: input.confirmRegenerative,
+    planningMode: input.planningMode,
+    explode: false,
+    entryPoint: 'SINGLE_LEVEL',
+    productionVersion: version || undefined,
+    named: input.named,
   });
 }

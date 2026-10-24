@@ -148,8 +148,10 @@ export async function scr163GrIrClearing(ctx: Context) {
   assert.match(await page.locator('[data-grir-no-stock]').innerText(), /does not change stock/);
   console.log('  ✓ MR11 opens the clearing screen, and the alias is not on the page');
 
+  await page.waitForLoadState('networkidle');
   await page.locator('select[name="companyFrom"]').selectOption('1000');
   await page.locator('[name="keyDate"]').fill('2026-10-18');
+  await page.waitForLoadState('networkidle');
   await page.locator('[data-grir-list]').click();
   const row = page.locator(`[data-grir-row="${order.orderNumber}"]`);
   await row.waitFor();

@@ -57,6 +57,14 @@ export default async function ProductionOrdersPage({ searchParams }: {
             {existing.batch ? ` · Batch ${existing.batch}` : ''}
             {' · '}<span data-status={existing.status}>{existing.status}</span>
           </p>
+          {existing.plannedOrderNumber && (
+            <p className="mt-1 text-sm">Converted from planned order {existing.plannedOrderNumber}. The planned order was not deleted.</p>
+          )}
+          <p className="mt-1 text-sm">
+            <Link href={`/production/production-order-display?order=${encodeURIComponent(existing.orderNumber)}`}>Display</Link>
+            {' · '}
+            <Link href={`/production/production-order-change?order=${encodeURIComponent(existing.orderNumber)}`}>Change</Link>
+          </p>
           <table className="mt-2 w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">

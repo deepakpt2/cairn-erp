@@ -1268,6 +1268,58 @@ Open CS01. Define a BOM usage and an item category first if none is listed. No u
 
 Open CA01. This is not the chart of accounts. Define a task list type, a usage, and a control key first if none is listed. None of those is delivered. Plant `1000`, a work center in that plant, base quantity `1`, and a unit. Add two operations. Save. Expect the routing group and counter, the standard sequence only, and no schedule, no confirmation, and no change to a production order. CA02 is this screen with the routing open. The group and counter cannot be changed. A change number is refused. CA03 is `/production/routing-display` and does not save.
 
+**201. Production version** · `PROD.VERSION.CREATE` · `C223` · `/production/production-versions`
+
+Open C223. This is not a BOM and not a routing. Plant `1000`, a material produced in that plant, a BOM alternative, and a routing assigned to that material. Version `0001`, valid from today, lot size `0` to `999`, and the material base unit. Save. Expect the version, a consistency result, and no explosion, no costing document, and no change to a production order. A change number is refused. Display is `/production/production-version-display` and does not save.
+
+**202. Single-item planning** · `PROD.MRP.RUN` · `MD02` · `/production/single-item-planning`
+
+Open MD02. This is not the plant run. Plant `1000` and one material produced there. The material needs a production version that names a BOM. Choose regenerative planning and confirm it. Plan. Expect a planned order for the material, a dependent requirement for the component, and a proposal for the component. A check writes nothing. The run posts nothing. An MRP area is refused. Delete and recreate is refused. MD04 shows the dependent requirement after a plan, not after a check.
+
+**203. Display planned order** · `PROD.PLANNEDORDER.DISPLAY` · `MD13` · `/production/planned-order-display`
+
+Open MD13. Enter the planned order number, or name plant `1000` and choose a number from the list. The first match is not opened. Expect the stored quantity, the stored unit, the start date, the finish date, and the firming indicator. Display does not firm, change, convert, or delete the order, and it does not take a change lock. An MRP area, an order type, and a deletion flag are refused. The order does not store a production version, a bill of material, a routing, or a follow-on document. MD12 and MD11 are not this screen.
+
+**204. Change planned order** · `PROD.PLANNEDORDER.CHANGE` · `MD12` · `/production/planned-order-change`
+
+Open MD12. Enter a planned order number, or name plant `1000` and choose a number from the list. The first match is not opened. Change the quantity or the dates. Save. Expect the same order number, the order firmed, and no production order, no requisition, and no goods movement. A different unit is refused. An MRP area, a production version, a bill of material, a routing, and a deletion flag are refused. Unfirming is a later save. MD13 displays the order and does not save. MD11 is not this screen.
+
+**205. Create planned order** · `PROD.PLANNEDORDER.CREATE` · `MD11` · `/production/planned-order-create`
+
+Open MD11. Plant `1000` and a material produced in that plant. Enter a quantity and a finish date. Leave the number blank. Create. Expect a new planned order number, the material base unit, the order firmed, and the origin created by hand. A bought material is refused. A typed order number is refused. A planned-order profile and an MRP area are refused. Copying a reference creates a new number and does not change the original. No production order, no requisition, and no goods movement is created. Component demand is not written. MD12 and MD13 are not this screen.
+
+**206. Convert planned order** · `PROD.PLANNEDORDER.CONVERT` · `CO40` · `/production/planned-order-conversion`
+
+Open CO40. Plant `1000` and one planned order for a material produced in that plant. The first match is not opened. Review the production version, the bill of material, and the component quantities. Confirm the whole quantity. Expect one production order, the same planned order still standing, and no second order if you convert again. A bought material is refused. A smaller quantity is refused. An MRP area and an opening date are refused. No goods movement and no journal is posted. The order is not released unless its scheduling profile already releases at creation. MD12 does not change a converted planned order.
+
+**207. Collective conversion** · `PROD.PLANNEDORDER.CONVERT.COLLECTIVE` · `CO41` · `/production/planned-order-conversion-collective`
+
+Open CO41. Plant `1000`. Search. The search does not convert. Select more than one planned order and confirm. Expect each order converted on its own. A failure on one order does not remove an order that already converted. An MRP area, a sales order, a WBS element, and availability are refused as filters. CO40 is the same conversion for one order.
+
+**208. Display production order** · `PROD.ORDER.DISPLAY` · `CO03` · `/production/production-order-display`
+
+Open CO03. Enter a production order number, or name plant `1000` and choose a number from the list. The first match is not opened. Expect the stored quantity, the stored unit, the start date, the finish date, the status, and the components. Issued and received quantities come from material documents. An order type, a controlling area, operations, and sequences are refused. Display does not release, change, or post, and it does not take a change lock. CO02 is not this screen.
+
+**209. Change production order** · `PROD.ORDER.CHANGE` · `CO02` · `/production/production-order-change`
+
+Open CO02. Enter a production order number that has no goods movement. Change the quantity or a component quantity. Save. Expect the same order number, the status unchanged, and no goods movement. A different unit is refused. A header quantity change does not rescale the components. An order that already has a goods movement is refused. Technical completion is not a status. CO03 displays the order and does not save.
+
+**210. Single-level planning** · `PROD.MRP.SINGLELEVEL` · `MD03` · `/production/single-level-planning`
+
+Open MD03. This is not MD02 and not the plant run. Plant `1000` and one material. Planning mode 1 adapts the proposal and does not explode. Planning mode 2 re-explodes and writes a dependent requirement. Neither mode plans the component. A check writes nothing. The run posts nothing. An MRP area, a scheduling-agreement schedule line, an MRP list, and delete and recreate are refused. MD05 is not this screen. MD04 shows the current list after a plan, not after a check.
+
+**211. Enter time ticket** · `PROD.CONFIRM.ENTER` · `CO11N` · `/production/time-ticket`
+
+Open CO11N. Enter a released production order. This is not CO15 and not CO03. Choose an operation whose control key allows confirmation. Choose partial or final. Enter a yield. Check writes nothing. Save writes one confirmation and does not change the order status. A second save of the same request returns the same confirmation. A final confirmation blocks another confirmation of that operation. No component is issued and no finished good is received. CO02 does not change an order that already has a confirmation. CO13 and CO14 are not this screen.
+
+**212. Enter order confirmation** · `PROD.CONFIRM.ORDER` · `CO15` · `/production/order-confirmation`
+
+Open CO15. Enter a released production order, or name plant `1000` and choose a number from the list. This is not CO11N and not CO03. Choose partial or final. Enter a yield. Check writes nothing. Save writes one confirmation. Each operation whose control key allows confirmation receives an effect. A separate confirmation number is not created for those operations. A second save of the same request returns the same confirmation. A final confirmation blocks another confirmation of each affected operation and does not change the order status. No component is issued and no finished good is received. An operation that requires an activity is refused. Automatic final confirmation is refused. CO13 and CO14 are not this screen.
+
+**213. Production order information** · `PROD.ORDER.INFO` · `COOIS` · `/production/order-information`
+
+Open COOIS. Choose order headers. Plant `1000`. Execute. The list does not open the first order and does not change one. An order with two components is one header row. Components is a different list, and each component is its own row. Confirmations list each confirmation record. A header confirmation is not given an extra confirmation number for each operation. Documented goods movements list material-document lines. A reversed document is shown and is not added to the delivered quantity. Planned orders are a separate list. Operations, sequences, capacities, automatic goods movements, and cost are not available. Export is the returned rows. CO03, CO02, CO11N, CO15, and MD13 are other screens.
+
 ## What you should have at the end
 
 - Tenant `1000`, company `1000`, INR, April–March, periods open.

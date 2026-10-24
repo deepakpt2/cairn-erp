@@ -13,8 +13,10 @@
  * will be consumed from.
  *
  * The components are a **snapshot**. Creating an order does not read a material BOM.
- * A saved order is not rewritten when a BOM changes. A later issue may consume the
- * snapshot; nothing recomputes it, and nothing here reads a routing or capacity master.
+ * Conversion may pass a snapshot it has already resolved. This function still does not
+ * read the BOM, and a saved order is not rewritten when a BOM changes. A later issue may
+ * consume the snapshot; nothing recomputes it, and nothing here reads a routing, a
+ * production version, or a capacity master.
  *
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
  * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability
@@ -101,6 +103,8 @@ export interface ProductionOrderView {
   /** OMCWB was read. A WIP batch was not created. */
   wipBatchActive: 'X' | ' ';
   wipBatchCreated: false;
+  /** Null unless planned-order conversion created this order. */
+  plannedOrderNumber: string | null;
 }
 
 function requireDate(value: string, what: string): string {
@@ -154,6 +158,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     releasedAt: header.releasedAt ? header.releasedAt.toISOString() : null,
     wipBatchActive,
     wipBatchCreated: false,
+    plannedOrderNumber: header.plannedOrderNumber,
     createdAt: header.createdAt.toISOString(),
     components: rows.map((r) => ({
       itemNumber: r.itemNumber,
@@ -202,7 +207,10 @@ export interface CreateProductionOrderResult extends ProductionOrderView {
   releaseNote: string | null;
 }
 
-export async function createProductionOrder(input: CreateProductionOrderInput): Promise<CreateProductionOrderResult> {
+export async function createProductionOrder(
+  input: CreateProductionOrderInput,
+  options?: { tx?: Tx; plannedOrderNumber?: string | null },
+): Promise<CreateProductionOrderResult> {
   const plant = input.plant.trim();
   const materialNumber = input.materialNumber.trim();
   if (!materialNumber) {
@@ -232,7 +240,7 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
     );
   }
 
-  return withTenant(input.client, async (tx) => {
+  const run = async (tx: Tx): Promise<CreateProductionOrderResult> => {
     if (input.requestKey) {
       const [replay] = await tx.select().from(productionOrder).where(and(
         eq(productionOrder.client, input.client),
@@ -408,6 +416,7 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       scheduledFinish: finish,
       status: 'CREATED',
       requestKey: input.requestKey ?? null,
+      plannedOrderNumber: options?.plannedOrderNumber?.trim() || null,
       createdBy: input.createdBy,
     }).returning();
 
@@ -431,7 +440,7 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
       objectKey: orderNumber,
       changeType: 'CREATE',
       changedBy: input.createdBy,
-      reason: `Order for ${materialNumber} at plant ${plant}, ${prepared.length} component(s)`,
+      reason: `Order for ${materialNumber} at plant ${plant}, ${prepared.length} component(s)${options?.plannedOrderNumber?.trim() ? `. Converted from planned order ${options.plannedOrderNumber.trim()}` : ''}`,
       after: {
         orderNumber,
         materialNumber,
@@ -441,6 +450,7 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
         scheduledStart: start,
         scheduledFinish: finish,
         status: 'CREATED',
+        ...(options?.plannedOrderNumber?.trim() ? { plannedOrderNumber: options.plannedOrderNumber.trim() } : {}),
       },
     });
 
@@ -470,7 +480,8 @@ export async function createProductionOrder(input: CreateProductionOrderInput): 
         releaseNote: `Release at creation did not happen. ${reason} The order stands created.`,
       };
     }
-  });
+  };
+  return options?.tx ? run(options.tx) : withTenant(input.client, run);
 }
 
 /**
@@ -534,6 +545,7 @@ async function releaseProductionOrderInTx(tx: Tx, input: {
     releasedAt: new Date(),
     changedBy: input.releasedBy,
     changedAt: new Date(),
+    version: sql`${productionOrder.version} + 1`,
   }).where(and(
     eq(productionOrder.client, input.client),
     eq(productionOrder.orderNumber, input.orderNumber),

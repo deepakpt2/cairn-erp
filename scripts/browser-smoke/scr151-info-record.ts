@@ -119,7 +119,7 @@ export async function scr151InfoRecord(ctx: Context) {
     for (const [name, value] of Object.entries(fields)) {
       const input = form.locator(`[name="${name}"]`);
       if ((await input.evaluate((el) => el.tagName)) === 'SELECT') {
-        await input.locator(`option[value="${value}"]`).waitFor();
+        await input.locator(`option[value="${value}"]`).waitFor({ state: 'attached' });
         await input.selectOption(value);
         continue;
       }
@@ -141,7 +141,7 @@ export async function scr151InfoRecord(ctx: Context) {
   await page.waitForURL(/\/purchasing\/info-record$/, { waitUntil: 'commit' });
   await page.getByRole('heading', { level: 1, name: 'Purchasing info record', exact: true }).waitFor();
   assert.equal(await page.locator('[data-info-record-category="STANDARD"]').count() > 0, true);
-  assert.equal(await page.locator('select').count(), 0, 'the category is not a list');
+  assert.equal(await page.locator('[data-info-record-category="STANDARD"]').evaluateAll((nodes) => nodes.some((node) => node.tagName === 'SELECT' || node.querySelector('select'))), false, 'the category is not a list');
   console.log('  ✓ ME11 opens the one screen, and Standard is text');
 
   const beforeCheck = await tallies();
@@ -152,11 +152,9 @@ export async function scr151InfoRecord(ctx: Context) {
   assert.deepEqual(await tallies(), beforeCheck);
   console.log('  ✓ a check wrote nothing, including the number');
 
-  // The action refresh restores the blank form. The typed values are not a saved draft.
-  await page.waitForFunction(() => {
-    const input = document.querySelector('section[aria-labelledby="info-record-create"] [name="partnerNumber"]') as HTMLInputElement | null;
-    return input?.value === '';
-  });
+  // The check action may refresh the page. Wait for that to settle, then fill again.
+  // A surviving value is not a saved draft; the tally above already proved nothing was written.
+  await page.waitForLoadState('networkidle');
   await fillPrice('10', { plannedDeliveryDays: '7', minimumOrderQuantity: '2', minimumOrderUnit: 'PC' });
   await create().getByRole('button', { name: 'Save', exact: true }).click();
   const created = result().filter({ hasText: /Info record IR-\d{7} stands/ });

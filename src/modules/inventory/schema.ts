@@ -577,14 +577,20 @@ export const productionOrder = pgTable('production_order', {
   scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
   /** CREATED or RELEASED. A 261 will judge RELEASED and refuse anything else (SCR-139). */
   status: varchar('status', { length: 20 }).notNull().default('CREATED'),
+  /** Bumped on release and on a saved change. Display does not bump it. */
+  version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
+  /** Set only by planned-order conversion. Null on an order created directly. Multiple nulls are allowed. */
+  plannedOrderNumber: varchar('planned_order_number', { length: 12 }),
   releasedBy: varchar('released_by', { length: 64 }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber] }),
+  uniqueIndex('production_order_planned_uq').on(t.client, t.plannedOrderNumber),
   foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
   check('production_order_status_ck', sql`${t.status} in ('CREATED', 'RELEASED')`),
+  check('production_order_version_ck', sql`${t.version} > 0`),
   check('production_order_quantity_ck', sql`${t.orderQuantity} > 0`),
   check('production_order_dates_ck', sql`${t.scheduledFinish} >= ${t.scheduledStart}`),
   check('production_order_release_on_create_ck', sql`${t.releaseOnCreate} in ('X', ' ')`),

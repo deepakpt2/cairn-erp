@@ -3,8 +3,8 @@ import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, pri
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { factoryCalendar, plant } from '../foundation/schema';
-import { material, materialPlant } from '../inventory/schema';
+import { factoryCalendar, plant, storageLocation } from '../foundation/schema';
+import { material, materialPlant, productionOrder } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 const quantity = (name: string) => numeric(name, { precision: 23, scale: 3 }).notNull();
@@ -31,7 +31,7 @@ export const plannedOrder = pgTable('planned_order', {
   check('planned_order_quantity_ck', sql`${t.quantity} > 0`),
   check('planned_order_dates_ck', sql`${t.finishDate} >= ${t.startDate}`),
   check('planned_order_firming_ck', sql`${t.firmingStatus} in ('OPEN', 'FIRMED')`),
-  check('planned_order_origin_ck', sql`${t.origin} in ('MRP')`),
+  check('planned_order_origin_ck', sql`${t.origin} in ('MRP', 'MANUAL')`),
   index('planned_order_material_idx').on(t.client, t.materialNumber, t.plant),
 ]);
 
@@ -59,6 +59,8 @@ export const mrpRun = pgTable('mrp_run', {
   proposalsCreated: integer('proposals_created').notNull().default(0),
   proposalsChanged: integer('proposals_changed').notNull().default(0),
   proposalsRetained: integer('proposals_retained').notNull().default(0),
+  entryPoint: varchar('entry_point', { length: 16 }).notNull().default('PLANT'),
+  productionVersion: varchar('production_version', { length: 4 }),
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   errorSummary: varchar('error_summary', { length: 200 }),
@@ -718,4 +720,289 @@ export const routingComponentAllocation = pgTable('routing_component_allocation'
   }).onDelete('restrict'),
   check('routing_allocation_quantity_ck', sql`${t.allocatedQuantity} is null or ${t.allocatedQuantity} > 0`),
   check('routing_allocation_deletion_ck', sql`${t.deletionFlag} in ('X', ' ')`),
+]);
+
+/**
+ * C223 selection rule. A missing row means overlapping date and lot ranges are allowed.
+ * Selection then refuses to pick the first match. This is not a delivered sample.
+ */
+export const productionVersionRule = pgTable('production_version_rule', {
+  client: tenant(),
+  refuseOverlap: char('refuse_overlap', { length: 1 }).notNull().default(' '),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client] }),
+  check('production_version_rule_overlap_ck', sql`${t.refuseOverlap} in ('X', ' ')`),
+  check('production_version_rule_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * Production version. MKAL identity is material, plant, and version.
+ * It points at one material BOM alternative and one standard routing.
+ * It does not copy either master. Engineering change management is absent.
+ * Repetitive manufacturing, rate routing, and product costing are not stored.
+ */
+export const productionVersion = pgTable('production_version', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  productionVersion: varchar('production_version', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  lotFrom: numeric('lot_from', { precision: 23, scale: 3 }).notNull(),
+  lotTo: numeric('lot_to', { precision: 23, scale: 3 }).notNull(),
+  lotUnit: varchar('lot_unit', { length: 6 }).notNull(),
+  bomUsage: char('bom_usage', { length: 1 }).notNull(),
+  bomAlternative: varchar('bom_alternative', { length: 2 }).notNull(),
+  taskListType: char('task_list_type', { length: 1 }).notNull(),
+  routingGroup: varchar('routing_group', { length: 8 }).notNull(),
+  groupCounter: varchar('group_counter', { length: 2 }).notNull(),
+  receivingStorageLocation: varchar('receiving_storage_location', { length: 10 }),
+  lockIndicator: char('lock_indicator', { length: 1 }).notNull().default(' '),
+  deletionFlag: char('deletion_flag', { length: 1 }).notNull().default(' '),
+  checkStatus: char('check_status', { length: 1 }).notNull().default(' '),
+  checkedAt: timestamp('checked_at', { withTimezone: true }),
+  checkedBy: varchar('checked_by', { length: 60 }),
+  checkedBomVersion: integer('checked_bom_version'),
+  checkedRoutingVersion: integer('checked_routing_version'),
+  checkedPlantVersion: integer('checked_plant_version'),
+  version: integer('version').notNull().default(1),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.productionVersion] }),
+  uniqueIndex('production_version_request_uq').on(t.client, t.requestKey).where(sql`${t.requestKey} is not null`),
+  foreignKey({
+    columns: [t.client, t.materialNumber, t.plant],
+    foreignColumns: [materialPlant.client, materialPlant.materialNumber, materialPlant.plant],
+    name: 'production_version_material_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialNumber, t.plant, t.bomUsage, t.bomAlternative],
+    foreignColumns: [materialBom.client, materialBom.materialNumber, materialBom.plant, materialBom.usage, materialBom.alternative],
+    name: 'production_version_bom_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.taskListType, t.routingGroup, t.groupCounter],
+    foreignColumns: [routing.client, routing.taskListType, routing.routingGroup, routing.groupCounter],
+    name: 'production_version_routing_fk',
+  }).onDelete('restrict'),
+  foreignKey({ columns: [t.lotUnit], foreignColumns: [unitOfMeasure.code] }),
+  foreignKey({
+    columns: [t.client, t.plant, t.receivingStorageLocation],
+    foreignColumns: [storageLocation.client, storageLocation.plant, storageLocation.storageLocation],
+    name: 'production_version_storage_fk',
+  }).onDelete('restrict'),
+  check('production_version_key_ck', sql`${t.productionVersion} ~ '^[A-Z0-9]{1,4}$'`),
+  check('production_version_text_ck', sql`${t.description} is null or char_length(btrim(${t.description})) between 1 and 40`),
+  check('production_version_dates_ck', sql`${t.validTo} >= ${t.validFrom}`),
+  check('production_version_lot_ck', sql`${t.lotFrom} >= 0 and ${t.lotTo} >= ${t.lotFrom}`),
+  check('production_version_lock_ck', sql`${t.lockIndicator} in (' ', '1')`),
+  check('production_version_deletion_ck', sql`${t.deletionFlag} in ('X', ' ')`),
+  check('production_version_check_ck', sql`${t.checkStatus} in (' ', '1', '2', '3')`),
+  check('production_version_version_ck', sql`${t.version} > 0`),
+  index('production_version_lookup_idx').on(t.client, t.plant, t.materialNumber, t.validFrom, t.validTo),
+]);
+
+export const productionVersionFinding = pgTable('production_version_finding', {
+  client: tenant(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  productionVersion: varchar('production_version', { length: 4 }).notNull(),
+  code: varchar('code', { length: 40 }).notNull(),
+  severity: char('severity', { length: 1 }).notNull(),
+  message: varchar('message', { length: 200 }).notNull(),
+  fieldName: varchar('field_name', { length: 40 }),
+  referencedObject: varchar('referenced_object', { length: 80 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.materialNumber, t.plant, t.productionVersion, t.code] }),
+  foreignKey({
+    columns: [t.client, t.materialNumber, t.plant, t.productionVersion],
+    foreignColumns: [productionVersion.client, productionVersion.materialNumber, productionVersion.plant, productionVersion.productionVersion],
+    name: 'production_version_finding_header_fk',
+  }).onDelete('cascade'),
+  check('production_version_finding_severity_ck', sql`${t.severity} in ('E', 'W')`),
+  check('production_version_finding_message_ck', sql`char_length(btrim(${t.message})) between 1 and 200`),
+]);
+
+/**
+ * Dependent requirement of a planned order. This is demand, not stock and not a reservation.
+ * A check does not write a row. A later run adapts the quantity. It is not physically deleted.
+ */
+export const mrpDependentRequirement = pgTable('mrp_dependent_requirement', {
+  client: tenant(),
+  parentOrderNumber: varchar('parent_order_number', { length: 12 }).notNull(),
+  sourceMaterial: varchar('source_material', { length: 40 }).notNull(),
+  itemNumber: varchar('item_number', { length: 4 }).notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  quantity: quantity('quantity'),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  requirementDate: date('requirement_date', { mode: 'string' }).notNull(),
+  parentMaterial: varchar('parent_material', { length: 40 }).notNull(),
+  productionVersion: varchar('production_version', { length: 4 }),
+  bomUsage: char('bom_usage', { length: 1 }),
+  bomAlternative: varchar('bom_alternative', { length: 2 }),
+  status: varchar('status', { length: 8 }).notNull().default('OPEN'),
+  runNumber: varchar('run_number', { length: 12 }),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.parentOrderNumber, t.sourceMaterial, t.itemNumber] }),
+  foreignKey({
+    columns: [t.client, t.parentOrderNumber],
+    foreignColumns: [plannedOrder.client, plannedOrder.orderNumber],
+    name: 'mrp_dependent_requirement_order_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialNumber],
+    foreignColumns: [material.client, material.materialNumber],
+    name: 'mrp_dependent_requirement_material_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+    name: 'mrp_dependent_requirement_plant_fk',
+  }).onDelete('restrict'),
+  check('mrp_dependent_requirement_qty_ck', sql`${t.quantity} > 0`),
+  check('mrp_dependent_requirement_status_ck', sql`${t.status} in ('OPEN', 'CLOSED')`),
+  check('mrp_dependent_requirement_version_ck', sql`${t.version} > 0`),
+  index('mrp_dependent_requirement_demand_idx').on(t.client, t.materialNumber, t.plant, t.status),
+]);
+
+/**
+ * CO11N. A posted time ticket. The production order is not given an operation
+ * row: the routing operation is named here, as it stood when the ticket was entered.
+ * Cancellation is not an update of this row.
+ */
+export const productionConfirmation = pgTable('production_confirmation', {
+  client: tenant(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  operationNumber: varchar('operation_number', { length: 4 }),
+  sequence: char('sequence', { length: 6 }).notNull().default('000000'),
+  taskListType: char('task_list_type', { length: 1 }).notNull(),
+  routingGroup: varchar('routing_group', { length: 8 }).notNull(),
+  groupCounter: varchar('group_counter', { length: 2 }).notNull(),
+  productionVersion: varchar('production_version', { length: 4 }).notNull(),
+  workCenter: varchar('work_center', { length: 8 }),
+  workCenterPlant: varchar('work_center_plant', { length: 10 }),
+  controlKey: varchar('control_key', { length: 4 }),
+  shortText: varchar('short_text', { length: 40 }),
+  confirmationType: varchar('confirmation_type', { length: 8 }).notNull(),
+  confirmationLevel: varchar('confirmation_level', { length: 12 }).notNull().default('OPERATION'),
+  yieldQuantity: quantity('yield_quantity'),
+  scrapQuantity: quantity('scrap_quantity'),
+  reworkQuantity: quantity('rework_quantity'),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  executionStart: timestamp('execution_start', { mode: 'string' }),
+  executionFinish: timestamp('execution_finish', { mode: 'string' }),
+  note: varchar('note', { length: 200 }),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  orderVersion: integer('order_version').notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.confirmationNumber] }),
+  uniqueIndex('production_confirmation_request_uq').on(t.client, t.requestKey),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_confirmation_order_fk',
+  }).onDelete('restrict'),
+  check('production_confirmation_type_ck', sql`${t.confirmationType} in ('PARTIAL', 'FINAL')`),
+  check('production_confirmation_level_ck', sql`${t.confirmationLevel} in ('OPERATION', 'HEADER')`),
+  check('production_confirmation_level_shape_ck', sql`(
+    (${t.confirmationLevel} = 'OPERATION' and ${t.operationNumber} is not null and ${t.controlKey} is not null and ${t.workCenterPlant} is not null)
+    or (${t.confirmationLevel} = 'HEADER' and ${t.operationNumber} is null)
+  )`),
+  uniqueIndex('production_confirmation_header_final_uq').on(t.client, t.orderNumber).where(sql`${t.confirmationLevel} = 'HEADER' and ${t.confirmationType} = 'FINAL'`),
+  check('production_confirmation_sequence_ck', sql`${t.sequence} = '000000'`),
+  check('production_confirmation_quantity_ck', sql`${t.yieldQuantity} >= 0 and ${t.scrapQuantity} >= 0 and ${t.reworkQuantity} >= 0`),
+  check('production_confirmation_version_ck', sql`${t.orderVersion} > 0`),
+  index('production_confirmation_order_idx').on(t.client, t.orderNumber, t.operationNumber),
+]);
+
+export const productionConfirmationActivity = pgTable('production_confirmation_activity', {
+  client: tenant(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  parameter: varchar('parameter', { length: 6 }).notNull(),
+  quantity: quantity('quantity'),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  suggestedQuantity: numeric('suggested_quantity', { precision: 23, scale: 3 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.confirmationNumber, t.parameter] }),
+  foreignKey({
+    columns: [t.client, t.confirmationNumber],
+    foreignColumns: [productionConfirmation.client, productionConfirmation.confirmationNumber],
+    name: 'production_confirmation_activity_fk',
+  }).onDelete('cascade'),
+  check('production_confirmation_activity_qty_ck', sql`${t.quantity} >= 0`),
+]);
+
+/**
+ * CO15. The effect of one header confirmation on one operation.
+ * This is not a second confirmation number and not a time ticket.
+ */
+export const productionConfirmationOperation = pgTable('production_confirmation_operation', {
+  client: tenant(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  operationNumber: varchar('operation_number', { length: 4 }).notNull(),
+  confirmationType: varchar('confirmation_type', { length: 8 }).notNull(),
+  yieldQuantity: quantity('yield_quantity'),
+  scrapQuantity: quantity('scrap_quantity'),
+  reworkQuantity: quantity('rework_quantity'),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  workCenter: varchar('work_center', { length: 8 }),
+  controlKey: varchar('control_key', { length: 4 }).notNull(),
+  shortText: varchar('short_text', { length: 40 }),
+  quantityBasis: varchar('quantity_basis', { length: 24 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.confirmationNumber, t.operationNumber] }),
+  foreignKey({
+    columns: [t.client, t.confirmationNumber],
+    foreignColumns: [productionConfirmation.client, productionConfirmation.confirmationNumber],
+    name: 'production_confirmation_operation_fk',
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_confirmation_operation_order_fk',
+  }).onDelete('restrict'),
+  check('production_confirmation_operation_type_ck', sql`${t.confirmationType} in ('PARTIAL', 'FINAL')`),
+  check('production_confirmation_operation_qty_ck', sql`${t.yieldQuantity} >= 0 and ${t.scrapQuantity} >= 0 and ${t.reworkQuantity} >= 0`),
+  check('production_confirmation_operation_basis_ck', sql`${t.quantityBasis} in ('ORDER_QUANTITY', 'OPERATION_QUANTITY')`),
+  uniqueIndex('production_confirmation_operation_final_uq').on(t.client, t.orderNumber, t.operationNumber).where(sql`${t.confirmationType} = 'FINAL'`),
+  index('production_confirmation_operation_order_idx').on(t.client, t.orderNumber, t.operationNumber),
+]);
+
+/** COOIS. A user's field selection for one list. It does not store report rows. */
+export const reportLayout = pgTable('report_layout', {
+  client: tenant(),
+  layoutId: varchar('layout_id', { length: 36 }).notNull(),
+  owner: varchar('owner', { length: 60 }).notNull(),
+  objectCategory: varchar('object_category', { length: 20 }).notNull(),
+  listType: varchar('list_type', { length: 32 }).notNull(),
+  name: varchar('name', { length: 40 }).notNull(),
+  description: varchar('description', { length: 80 }).notNull().default(''),
+  fieldIds: varchar('field_ids', { length: 400 }).notNull(),
+  sortField: varchar('sort_field', { length: 40 }).notNull(),
+  sortDirection: varchar('sort_direction', { length: 4 }).notNull(),
+  isDefault: boolean('is_default').notNull().default(false),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.layoutId] }),
+  unique('report_layout_name_uq').on(t.client, t.owner, t.objectCategory, t.listType, t.name),
+  check('report_layout_object_ck', sql`${t.objectCategory} in ('PRODUCTION_ORDER', 'PLANNED_ORDER')`),
+  check('report_layout_direction_ck', sql`${t.sortDirection} in ('ASC', 'DESC')`),
+  index('report_layout_owner_idx').on(t.client, t.owner, t.objectCategory, t.listType),
 ]);
