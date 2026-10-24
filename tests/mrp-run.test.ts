@@ -334,6 +334,46 @@ describe('SCR-166 total planning (MD01)', () => {
     })).rejects.toThrow(/no planning file/);
   });
 
+  it('does not store a partial requisition when a plant buy shortage needs more than one lot', async () => {
+    await material('MD01-MULTI', { safety: '25', lot: 'EXACT', netChange: true });
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_plant
+           set maximum_lot_size = 10, minimum_lot_size = 0
+         where client = ${client} and material_number = 'MD01-MULTI' and plant = ${PLANT}
+      `);
+    });
+    const before = await fingerprint();
+    const run = await planMaterials({
+      client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
+      materialFrom: 'MD01-MULTI', materialTo: 'MD01-MULTI',
+    });
+    expect(run.materials).toHaveLength(1);
+    expect(run.materials[0]?.status).toBe('FAILED');
+    expect(run.materials[0]?.diagnosticCode).toBe('MULTI_LOT_NOT_STORED');
+    expect(run.diagnostics.some((row) => row.diagnosticCode === 'MULTI_LOT_NOT_STORED')).toBe(true);
+    expect(run.proposals.filter((row) => row.action === 'CREATE')).toHaveLength(0);
+    expect(run.proposalsCreated).toBe(0);
+    // Existing closeRun: a failed material and no completed material is FAILED. This change does not alter that rule.
+    expect(run.status).toBe('FAILED');
+    const stored = await withTenant(client, async (tx) => {
+      const rows = await tx.execute(sql`
+        select
+          (select count(*) from purchase_requisition_item
+            where client = ${client} and material_number = 'MD01-MULTI')::int as requisitions,
+          (select count(*) from mrp_run_proposal
+            where client = ${client} and run_number = ${run.runNumber} and action = 'CREATE')::int as creates,
+          (select net_change from planning_file
+            where client = ${client} and material_number = 'MD01-MULTI' and plant = ${PLANT}) as net_change
+      `) as unknown as Array<{ requisitions: number; creates: number; net_change: boolean }>;
+      return rows[0];
+    });
+    expect(stored?.requisitions).toBe(0);
+    expect(stored?.creates).toBe(0);
+    expect(stored?.net_change).toBe(true);
+    expect(await fingerprint()).toBe(before);
+  });
+
   it('leaves the other tenant with nothing', async () => {
     const run = await planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,

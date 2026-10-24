@@ -1401,7 +1401,22 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
         const candidate = await loadCandidate(tx, input.client, String(item.material_number), String(item.plant));
         if (!candidate) fail(`Material ${item.material_number} is no longer in the planning scope.`);
         const calculation = await calculate(tx, input.client, selection, candidate, opened.runNumber);
-        const counts = calculation.status === 'COMPLETED'
+        // A plant run can store one planning requisition item for a material. Several lots would
+        // keep the first and drop the rest. Reject the material before any item or proposal is written.
+        const multiLotNotStored = selection.entryPoint === 'PLANT'
+          && calculation.proposalType === 'PURCHASE_REQUISITION'
+          && calculation.lots.length > 1;
+        if (multiLotNotStored) {
+          calculation.status = 'FAILED';
+          calculation.acknowledge = false;
+          calculation.message = 'The shortage needs more than one purchase lot. This run stores one planning item for a material, so none was created.';
+          calculation.diagnostics.unshift({
+            severity: 'ERROR',
+            code: 'MULTI_LOT_NOT_STORED',
+            message: calculation.message,
+          });
+        }
+        const counts = !multiLotNotStored && calculation.status === 'COMPLETED'
           ? await reconcile(tx, input.client, opened.runNumber, input.requestedBy, selection, candidate, calculation)
           : { created: 0, changed: 0, retained: 0 };
         if (selection.explode && calculation.status !== 'FAILED') {
