@@ -3,7 +3,6 @@
 import { useActionState } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { PRODUCTION_ORDER_LOCK } from '@/modules/production/production-order-change';
 import type { ProductionOrderDisplay } from '@/modules/production/production-order-display';
 import {
   changeProductionOrderAction,
@@ -32,7 +31,7 @@ export default function OrderChangeForm({ order }: { order: ProductionOrderDispl
         {technicallyComplete ? ' Quantity, dates, and components are display-only until completion is revoked.' : ''}
       </p>
       <form action={save} className="space-y-3">
-        <ChangeLock lockObject={PRODUCTION_ORDER_LOCK} argument={shown.orderNumber} />
+        <ChangeLock lockObject="PRODUCTION_ORDER" argument={shown.orderNumber} />
         <input type="hidden" name="orderNumber" value={shown.orderNumber} />
         <input type="hidden" name="version" value={String(shown.version)} />
         <input type="hidden" name="materialNumber" value={shown.materialNumber} />

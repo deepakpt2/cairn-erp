@@ -22,6 +22,7 @@ import { type Tx, withTenant } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
 import { characteristic, classAssignment } from '../foundation/characteristic-schema';
 import { BATCH_CLASS_TYPES } from './batch-class';
+import { SORT_STATUS } from './batch-sort-sequence-vocabulary';
 import { batchSortSequence, batchSortSequenceCriterion } from './schema';
 
 export const ACTIVITY = 'INV.BATCHSORT.MAINTAIN';
@@ -33,11 +34,8 @@ export const LOCK_OBJECT = 'BATCH_SORT_SEQUENCE';
 const OBJECT_CLASS = 'batch_sort_sequence';
 const PRODUCTION = process.env.NODE_ENV === 'production';
 
-export const SORT_STATUS = [
-  { code: '0', title: 'In preparation' },
-  { code: '1', title: 'Released' },
-  { code: '2', title: 'Locked' },
-] as const;
+/* The status list the screen renders; it stands in the vocabulary module. */
+export { SORT_STATUS } from './batch-sort-sequence-vocabulary';
 
 const STOCK_EXCEPTIONS: Record<string, { dataFormat: 'CHAR' | 'NUM'; description: string }> = {
   LOBM_LGORT: { dataFormat: 'CHAR', description: 'Storage location' },

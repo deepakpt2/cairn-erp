@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { PLANNED_ORDER_LOCK } from '@/modules/production/planned-order-change';
+
 import type { PlannedOrderView } from '@/modules/production/planned-order-display';
 import { changePlannedOrderAction, type PlannedOrderChangeState } from './actions';
 
@@ -16,7 +16,7 @@ export default function PlannedOrderForm({ document }: { document: PlannedOrderV
 
   return (
     <div className="mt-4 space-y-3">
-      <ChangeLock lockObject={PLANNED_ORDER_LOCK} argument={document.orderNumber} />
+      <ChangeLock lockObject="PLANNED_ORDER" argument={document.orderNumber} />
       {note && <p className={`text-sm ${state.ok ? 'text-ink' : 'text-danger'}`}>{note}{state.remedy ? ` ${state.remedy}` : ''}</p>}
       {state.warnings?.map((warning) => <p key={warning} className="text-sm">{warning}</p>)}
       <form key={shown.version} action={action} className="grid gap-2 sm:grid-cols-2">

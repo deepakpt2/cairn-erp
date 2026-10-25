@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { BOM_LOCK, type MaterialBomView } from '@/modules/production/material-bom';
+import type { MaterialBomView } from '@/modules/production/material-bom';
 import { saveBomAction, type BomActionState } from './actions';
 
 const INITIAL: BomActionState = { ok: false };
@@ -149,7 +149,7 @@ export default function BomForm({
       )}
       {state.warnings?.map((warning) => <p key={warning} className="text-sm text-ink-soft">{warning}</p>)}
       {locked && <p className="text-sm text-ink-soft">This BOM is open for change elsewhere. It is not editable here.</p>}
-      {document && !locked && <ChangeLock lockObject={BOM_LOCK} argument={`${document.plant}/${document.materialNumber}/${document.usage}/${document.alternative}`} />}
+      {document && !locked && <ChangeLock lockObject="MATERIAL_BOM" argument={`${document.plant}/${document.materialNumber}/${document.usage}/${document.alternative}`} />}
 
       <section className="panel space-y-3 p-4">
         <h2 className="text-sm font-semibold">Header</h2>

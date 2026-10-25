@@ -3,7 +3,7 @@
 import { useActionState, useMemo } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { ROUTING_LOCK, type RoutingView } from '@/modules/production/routing';
+import type { RoutingView } from '@/modules/production/routing';
 import { saveRoutingAction, type RoutingActionState } from './actions';
 
 const initial: RoutingActionState = { ok: false };
@@ -53,7 +53,7 @@ export default function RoutingForm({
       )}
       {state.message && <p className={`text-sm ${state.ok ? 'text-ink' : 'text-danger'}`}>{state.message}{state.remedy ? ` ${state.remedy}` : ''}</p>}
       {state.warnings?.map((warning) => <p key={warning} className="text-sm">{warning}</p>)}
-      {document && !locked && <ChangeLock lockObject={ROUTING_LOCK} argument={`${document.taskListType}/${document.routingGroup}/${document.groupCounter}`} />}
+      {document && !locked && <ChangeLock lockObject="ROUTING" argument={`${document.taskListType}/${document.routingGroup}/${document.groupCounter}`} />}
       <div className="grid gap-3 sm:grid-cols-4">
         <label className="text-sm">Task list type
           <select className="input mt-1 w-full" name="taskListType" defaultValue={saved?.taskListType ?? ''} required disabled={mode === 'CHANGE' || locked}>

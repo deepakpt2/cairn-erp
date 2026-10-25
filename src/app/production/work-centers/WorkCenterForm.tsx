@@ -3,10 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import {
-  WORK_CENTER_LOCK,
-  type WorkCenterView,
-} from '@/modules/production/work-center';
+import type { WorkCenterView } from '@/modules/production/work-center';
 import { saveWorkCenterAction, type WorkCenterActionState } from './actions';
 
 const INITIAL: WorkCenterActionState = { ok: false };
@@ -54,7 +51,7 @@ export default function WorkCenterForm({
       )}
       {locked && <p className="text-sm text-ink-soft">This work center is open for change elsewhere. It is not editable here.</p>}
       {document && !locked && (
-        <ChangeLock lockObject={WORK_CENTER_LOCK} argument={`${document.plant}/${document.workCenter}`} />
+        <ChangeLock lockObject="WORK_CENTER" argument={`${document.plant}/${document.workCenter}`} />
       )}
 
       <section className="panel space-y-3 p-4">

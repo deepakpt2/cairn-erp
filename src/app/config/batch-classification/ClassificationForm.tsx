@@ -7,7 +7,7 @@ import {
   CLASSIFICATION_CODES,
   CLASSIFICATION_MEANING,
   type BatchClassificationRow,
-} from '@/modules/inventory/batch-classification';
+} from '@/modules/inventory/batch-classification-vocabulary';
 import { useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { saveBatchClassificationAction, type BatchClassificationActionState } from './actions';

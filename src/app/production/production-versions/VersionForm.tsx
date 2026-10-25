@@ -3,7 +3,7 @@
 import { useActionState, useMemo } from 'react';
 
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { PRODUCTION_VERSION_LOCK, type ProductionVersionView } from '@/modules/production/production-version';
+import type { ProductionVersionView } from '@/modules/production/production-version';
 import { copyVersionAction, saveVersionAction, type VersionActionState } from './actions';
 
 const initial: VersionActionState = { ok: false };
@@ -35,7 +35,7 @@ export default function VersionForm({
   return (
     <div className="mt-4 space-y-4">
       {note && <p className={`text-sm ${state.ok || copyState.ok ? 'text-ink' : 'text-danger'}`}>{note}{state.remedy ? ` ${state.remedy}` : ''}</p>}
-      {document && !locked && <ChangeLock lockObject={PRODUCTION_VERSION_LOCK} argument={`${document.plant}/${document.materialNumber}/${document.productionVersion}`} />}
+      {document && !locked && <ChangeLock lockObject="PRODUCTION_VERSION" argument={`${document.plant}/${document.materialNumber}/${document.productionVersion}`} />}
       <form action={action} className="space-y-3">
         <input type="hidden" name="mode" value={mode} />
         <input type="hidden" name="version" value={saved?.version ?? ''} />

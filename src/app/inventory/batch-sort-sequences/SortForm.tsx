@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import Link from 'next/link';
 
 import type { SortSequenceChoices, SortSequenceRow } from '@/modules/inventory/batch-sort-sequence';
-import { SORT_STATUS } from '@/modules/inventory/batch-sort-sequence';
+import { SORT_STATUS } from '@/modules/inventory/batch-sort-sequence-vocabulary';
 import { useChangeLock } from '@/ui/lock/ChangeLock';
 
 import { deleteSortSequenceAction, saveSortSequenceAction, type SortActionState } from './actions';

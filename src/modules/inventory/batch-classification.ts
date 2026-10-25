@@ -19,23 +19,23 @@ import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { markActivityComplete } from '../../platform/tenancy';
+import {
+  CLASSIFICATION_MEANING,
+  type BatchClassificationRow,
+  type ClassificationCode,
+} from './batch-classification-vocabulary';
 import { movementType } from './schema';
+
+// The words the screen shows live in the vocabulary module, so the client
+// bundle never reaches this file. Re-exported here because the goods-movement
+// writers, the action, and the service tests all read them from this module.
+export { CLASSIFICATION_CODES, CLASSIFICATION_MEANING } from './batch-classification-vocabulary';
+export type { BatchClassificationRow, ClassificationCode } from './batch-classification-vocabulary';
 
 export const ACTIVITY = 'CFG.INV.BATCHCLASSIFY.DEFINE';
 export const ROUTE = '/config/batch-classification';
 export const ALIAS = 'OMCV';
 export const LOCK_OBJECT = 'BATCH_CLASSIFICATION';
-
-export const CLASSIFICATION_CODES = [' ', '1', '2', '3', '4'] as const;
-export type ClassificationCode = (typeof CLASSIFICATION_CODES)[number];
-
-export const CLASSIFICATION_MEANING: Record<ClassificationCode, string> = {
-  ' ': 'No branching to batch classification',
-  '1': 'Classification carried out in background (all batches)',
-  '2': 'Classification only in foreground for mandatory characteristics (all batches)',
-  '3': 'Classification always in foreground (all batches)',
-  '4': 'Classification in foreground for new batches only',
-};
 
 /** Named, not stored, and not offered as a working control. */
 export const NOT_EXECUTED = [
@@ -79,14 +79,6 @@ export class BatchClassificationError extends Error {
     this.name = 'BatchClassificationError';
     this.code = code;
   }
-}
-
-export interface BatchClassificationRow {
-  movementType: string;
-  description: string;
-  classification: ClassificationCode;
-  changedBy: string | null;
-  changedAt: Date | null;
 }
 
 function assertAuthority(capabilities: readonly string[] | undefined): void {
