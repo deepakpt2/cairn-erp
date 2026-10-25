@@ -135,6 +135,7 @@ export const TARGETS = [
   { id: 'scr144-close-the-gaps', client: 'T843', label: 'SCR-144 reconcile, unit conversion and reversal in MIGO: a conversion maintained, a posting converted to base, an unconverted unit refused, a plant reconciled balanced and A03 + R05 reversing in place' },
   { id: 'migo-transfer-posting', client: 'T841', label: 'SCR-141 MIGO A04 transfer posting against Other: 311, 301 across plants, 321, and a wrong pair refused' },
   { id: 'production-order-create', client: 'T838', label: 'SCR-138 CO01 production order: create with components, derived company, release, nothing posted' },
+  { id: 'co11n-movement', client: 'T865', label: 'CO11N time ticket with the goods movements it causes: the marks on the material, the preview, 261, 101 on the final, a replay, a refusal that leaves nothing, and CO13 waiting for a reversal' },
   { id: 'journal-document-display', client: 'T837', label: 'SCR-137 FB03 display accounting document: derived KOART, company cross-check, the anchors that drill here' },
   { id: 'material-document-output', client: 'T835', label: 'SCR-135 MB90 material document output: determine, dispatch, fail and retry' },
   { id: 'material-document-display', client: 'T834', label: 'SCR-134 MB03 display material document' },

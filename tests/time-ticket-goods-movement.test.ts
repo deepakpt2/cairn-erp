@@ -116,6 +116,36 @@ describe('CO11N confirmation goods movement', () => {
     `));
   }
 
+  /** A second backflush-marked component, with the valuation and the stock its issue needs. */
+  async function addRaw(materialNumber: string, stock: number) {
+    await extend(materialNumber, false);
+    await mark(materialNumber, { backflush: true }, false);
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,
+                                        standard_price, moving_average_price, price_unit, currency,
+                                        total_stock_quantity, stock_value, created_by)
+        values (${client}, ${materialNumber}, ${PLANT}, 'RAW_INVENTORY', 'MOVING_AVERAGE', 10, 10, 1, 'USD',
+                ${stock}, ${stock * 10}, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, quantity, created_by)
+        values (${client}, ${materialNumber}, ${PLANT}, ${LOCATION}, 'UNRESTRICTED', ${stock}, ${ACTOR})
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
+          do update set quantity = ${stock}
+      `);
+    });
+  }
+
+  /** A movement carries a journal, so a rolled-back confirmation must not leave one behind. */
+  async function journals(): Promise<number> {
+    return withTenant(client, async (tx) => {
+      const [row] = await rows(tx, sql`select count(*)::text as n from journal_entry where client = ${client}`);
+      return Number(row?.n ?? '0');
+    });
+  }
+
   async function orderVersion(orderNumber: string): Promise<number> {
     return withTenant(client, async (tx) => {
       const [row] = await rows(tx, sql`
@@ -125,12 +155,19 @@ describe('CO11N confirmation goods movement', () => {
     });
   }
 
-  async function newOrder(requestKey: string): Promise<string> {
+  async function newOrder(
+    requestKey: string,
+    shape: {
+      orderQuantity?: number;
+      components?: Array<{ materialNumber: string; requiredQuantity: number }>;
+    } = {},
+  ): Promise<string> {
     const order = await createProductionOrder({
       orderType: 'PP01', client, createdBy: ACTOR,
-      materialNumber: 'MV-FG', plant: PLANT, orderQuantity: 10,
+      materialNumber: 'MV-FG', plant: PLANT, orderQuantity: shape.orderQuantity ?? 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
-      components: [{ materialNumber: 'MV-RM', plant: PLANT, storageLocation: LOCATION, requiredQuantity: 20 }],
+      components: (shape.components ?? [{ materialNumber: 'MV-RM', requiredQuantity: 20 }])
+        .map((component) => ({ ...component, plant: PLANT, storageLocation: LOCATION })),
     });
     await withTenant(client, async (tx) => {
       const copied = await resolveOrderOperationSnapshot(tx, {
@@ -494,6 +531,10 @@ describe('CO11N confirmation goods movement', () => {
     expect(documents).toHaveLength(1);
     const stock = await componentStock();
     const finished = await finishedStock();
+    // The manual receipt left a journal behind, which is what the count below is a witness of:
+    // a refused confirmation had a journal of its own to lose, and lost it.
+    const written = await journals();
+    expect(written).toBeGreaterThan(0);
 
     await expect(save(orderD, { yieldQuantity: '6', confirmationType: 'FINAL', confirmFinal: true }))
       .rejects.toThrow(/expects 2|still expects/i);
@@ -501,6 +542,7 @@ describe('CO11N confirmation goods movement', () => {
     expect(await confirmationsOn(orderD)).toBe(0);
     expect(await componentStock()).toBe(stock);
     expect(await finishedStock()).toBe(finished);
+    expect(await journals()).toBe(written);
     // No document was left behind by the half-posted confirmation.
     expect(await documentsOn(orderD)).toEqual(documents);
   });
@@ -610,6 +652,226 @@ describe('CO11N confirmation goods movement', () => {
     } finally {
       await destroyTenant(other.client);
     }
+  });
+
+  it('draws a share that does not divide at the scale the document keeps', async () => {
+    // Ten of the component are required for an order of seven units, so a yield of three owes
+    // three-sevenths: 4.285714, which the screen and the document both state as 4.285. Nothing
+    // is rounded up, because a rounded-up withdrawal is a component the order never needed.
+    const orderE = await newOrder(nextKey(), {
+      orderQuantity: 7, components: [{ materialNumber: 'MV-RM', requiredQuantity: 10 }],
+    });
+    const before = await componentStock();
+
+    const planned = await check(orderE, { yieldQuantity: '3' });
+    expect(planned.movementPlan?.markedComponents).toBe(1);
+    expect(planned.movements[0]).toMatchObject({
+      quantity: '4.285', unit: 'PC', requiredQuantity: '10.000', openQuantity: '10.000',
+    });
+
+    // A quantity the unit cannot hold is refused rather than carried into a document.
+    await expect(check(orderE, { yieldQuantity: '1.0005' })).rejects.toThrow(/decimal places/i);
+    // A negative yield is refused before anything is read, so nothing can be moved by it.
+    const owed = await confirmationsOn(orderE);
+    await expect(save(orderE, { yieldQuantity: '-1' })).rejects.toThrow(/negative|not a number/i);
+    expect(await confirmationsOn(orderE)).toBe(owed);
+    expect(await componentStock()).toBe(before);
+
+    const saved = await save(orderE, { yieldQuantity: '3' });
+    expect(saved.movementsPosted).toBe(1);
+    const issueKey = await movementRequestKey(saved.requestKey, 'ISSUE');
+    const [line] = await withTenant(client, async (tx) => rows(tx, sql`
+      select l.base_quantity::text as base, l.base_unit, l.entry_unit, l.entry_quantity::text as entry,
+             l.movement_type, l.unit_price::text as price, l.value::text as value, l.production_order_item
+        from material_document d
+        join material_document_line l on l.client = d.client and l.material_document_number = d.material_document_number
+       where d.client = ${client} and d.request_key = ${issueKey}
+    `));
+    expect(line).toBeTruthy();
+    expect(line!.base).toBe('4.285');
+    expect(line!.entry).toBe('4.285');
+    expect(String(line!.base_unit)).toBe('PC');
+    expect(String(line!.entry_unit)).toBe('PC');
+    // The document stores the movement's own code; the screen states its external movement number.
+    expect(String(line!.movement_type)).toBe('PROD_ISSUE_ORDER');
+    expect(String(line!.movement_type)).not.toBe('101');
+    expect(saved.movements[0]).toMatchObject({ movementCode: '261', posted: true, standing: true });
+    // Valuation is the movement service's own work: it prices the withdrawal at the material's
+    // own price, which this fixture sets at ten. The confirmation neither sets nor overrides it.
+    expect(Number(line!.price)).toBe(10);
+    expect(Number(line!.value)).toBeGreaterThan(0);
+
+    // The order's own requirement is not rewritten by what a confirmation drew.
+    const [component] = await withTenant(client, async (tx) => rows(tx, sql`
+      select required_quantity::text as required, unit_of_measure from production_order_component
+       where client = ${client} and order_number = ${orderE} and material_number = 'MV-RM'
+    `));
+    expect(Number(component!.required)).toBe(10);
+    expect(String(component!.unit_of_measure)).toBe('PC');
+    expect(await componentStock()).toBe(before - 4.285);
+  });
+
+  it('turns two postings of one request key into one confirmation and one document', async () => {
+    // Two browsers, one key, at the same moment. The request key is the guard, so one of them
+    // writes the confirmation and its withdrawal and the other is told it had been saved.
+    const orderF = await newOrder(nextKey());
+    const shared = nextKey();
+    const version = await orderVersion(orderF);
+    const before = await componentStock();
+
+    const both = await Promise.all([
+      enterTimeTicket(client, ticket(orderF, version, { requestKey: shared })),
+      enterTimeTicket(client, ticket(orderF, version, { requestKey: shared })),
+    ]);
+    expect(both.filter((result) => result.replayed)).toHaveLength(1);
+    // Both views show the one withdrawal that stands: the replay reports the document the
+    // request caused, it does not cause another one.
+    // Both browsers are shown the one confirmation; neither is told it wrote a second.
+    expect(new Set(both.map((result) => result.confirmationNumber))).toHaveLength(1);
+    expect(await confirmationsOn(orderF)).toBe(1);
+    expect(await documentsOn(orderF)).toHaveLength(1);
+    // Eight of the component, once. A second withdrawal of the same eight is the failure this
+    // key exists to prevent.
+    expect(await componentStock()).toBe(before - 8);
+  });
+
+  it('will not let two confirmations at once draw more than the order still needs', async () => {
+    // Twenty are required. Four were drawn by hand, so sixteen remain, and the two confirmations
+    // of six and four units owe their proportions: twelve and eight. That is twenty, four more
+    // than the order still needs, so whichever confirmation is posted second is stopped at what
+    // remains open, which it can only know because a confirmation is serialized against the order.
+    // The yields stay within the order quantity: eleven of them would be refused as a yield
+    // before a movement was ever considered.
+    const orderG = await newOrder(nextKey());
+    await issueManually(orderG, 4);
+    const version = await orderVersion(orderG);
+    const before = await componentStock();
+    expect(await documentsOn(orderG)).toHaveLength(1);
+
+    const both = await Promise.all([
+      enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '6' })),
+      enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '4' })),
+    ]);
+    expect(both.every((result) => result.movementsPosted === 1)).toBe(true);
+
+    const drawn: string[] = [];
+    for (const result of both) {
+      const issueKey = await movementRequestKey(result.requestKey, 'ISSUE');
+      const [row] = await withTenant(client, async (tx) => rows(tx, sql`
+        select l.base_quantity::text as q
+          from material_document d
+          join material_document_line l on l.client = d.client and l.material_document_number = d.material_document_number
+         where d.client = ${client} and d.request_key = ${issueKey}
+      `));
+      drawn.push(String(row!.q));
+    }
+    const quantities = drawn.map((text) => Number(text));
+    // Whatever order the two took, together they draw exactly the sixteen that were open: the
+    // later one is capped, and nothing is withdrawn twice.
+    expect(quantities.reduce((sum, value) => sum + value, 0)).toBe(16);
+    expect(Math.max(...quantities)).toBeLessThanOrEqual(12);
+    expect(quantities.every((value) => value > 0)).toBe(true);
+    // Quantities are held to three decimal places, so the stock is compared at that scale.
+    expect(Math.abs((await componentStock()) - (before - 16))).toBeLessThan(0.0005);
+    // Two confirmations, two documents, and the manual issue: three, never more.
+    expect(await documentsOn(orderG)).toHaveLength(3);
+  });
+
+  it('will not let another posting reuse the key a confirmation derived', async () => {
+    // The derived key belongs to the movement it stands for. A second posting under it, with
+    // different content, is refused by the goods-movement service itself, which is the guard the
+    // confirmation relies on and does not duplicate.
+    const orderH = await newOrder(nextKey());
+    const saved = await save(orderH, { yieldQuantity: '4' });
+    const issueKey = await movementRequestKey(saved.requestKey, 'ISSUE');
+    expect(issueKey).toBeTruthy();
+    expect(await documentsOn(orderH)).toHaveLength(1);
+
+    await expect(postGoodsIssue({
+      client, changedBy: ACTOR, movementTypeCode: '261', postingDate: '2026-10-24', documentDate: '2026-10-24',
+      headerText: 'A different posting', requestKey: issueKey!,
+      lines: [{
+        materialNumber: 'MV-RM', plant: PLANT, storageLocation: LOCATION, quantity: 3,
+        productionOrderNumber: orderH, productionOrderItem: componentItem,
+      }],
+    }, 'MIGO')).rejects.toThrow(/already posted .*different posting/i);
+
+    expect(await documentsOn(orderH)).toHaveLength(1);
+    // The same key and the same content is a replay, not a second withdrawal.
+    const again = await enterTimeTicket(client, ticket(orderH, await orderVersion(orderH), { requestKey: saved.requestKey }));
+    expect(again.replayed).toBe(true);
+    // The standing document is shown again, and no second one is caused by the replay.
+    expect(again.movementsPosted).toBe(1);
+    expect(again.movementPlan).toBeNull();
+    expect(await documentsOn(orderH)).toHaveLength(1);
+  });
+
+  it('opens again only the component whose line was reversed', async () => {
+    // One withdrawal of two components is one document of two lines. Reversing one line leaves
+    // the document standing, so the confirmation that caused it is still not cancellable, and
+    // only the reversed component is owed again by the next confirmation.
+    await addRaw('MV-RM2', 40);
+    const orderI = await newOrder(nextKey(), {
+      components: [{ materialNumber: 'MV-RM', requiredQuantity: 20 }, { materialNumber: 'MV-RM2', requiredQuantity: 10 }],
+    });
+    const saved = await save(orderI, { yieldQuantity: '5' });
+    // Two marked components are two movements, and they are withdrawn by one document.
+    expect(saved.movementsPosted).toBe(2);
+    expect(await documentsOn(orderI)).toHaveLength(1);
+
+    const issueKey = await movementRequestKey(saved.requestKey, 'ISSUE');
+    const lines = await withTenant(client, async (tx) => rows(tx, sql`
+      select d.material_document_number as number, d.document_year::text as year, d.status,
+             l.line_number, l.material_number
+        from material_document d
+        join material_document_line l on l.client = d.client and l.material_document_number = d.material_document_number
+       where d.client = ${client} and d.request_key = ${issueKey}
+       order by l.line_number
+    `));
+    expect(lines).toHaveLength(2);
+    const [first, second] = lines as [Record<string, unknown>, Record<string, unknown>];
+    const documentNumber = String(first.number);
+    const fiscalYear = Number(first.year);
+
+    await reverseMaterialDocument({
+      client, changedBy: ACTOR, materialDocumentNumber: documentNumber, fiscalYear,
+      postingDate: '2026-10-24', documentDate: '2026-10-24', requestKey: nextKey(),
+      lines: [Number(second.line_number)],
+    });
+    const [header] = await withTenant(client, async (tx) => rows(tx, sql`
+      select status from material_document where client = ${client} and material_document_number = ${documentNumber}
+    `));
+    expect(String(header!.status)).toBe('PARTIALLY_REVERSED');
+
+    // A document with a line still in force is a movement in force.
+    await expect(cancelConfirmation(client, {
+      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
+      confirmed: true, reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+    })).rejects.toThrow(new RegExp(`posted material document ${documentNumber}`));
+
+    const again = await check(orderI, { yieldQuantity: '5' });
+    const owed = again.movements.find((row) => row.materialNumber === 'MV-RM2');
+    const issued = again.movements.find((row) => row.materialNumber === 'MV-RM');
+    // Ten of MV-RM stand issued, so ten remain open and the share is capped at them; MV-RM2 is
+    // open again in full, so its share is drawn as though nothing had been withdrawn.
+    expect(issued).toMatchObject({ requiredQuantity: '20.000', issuedQuantity: '10.000', openQuantity: '10.000', quantity: '10.000' });
+    expect(owed).toMatchObject({ requiredQuantity: '10.000', issuedQuantity: '0.000', openQuantity: '10.000', quantity: '5.000' });
+    expect(again.movementPlan?.skipped ?? []).toHaveLength(0);
+
+    // With the second line reversed too, nothing the confirmation caused stands, and CO13 goes.
+    await reverseMaterialDocument({
+      client, changedBy: ACTOR, materialDocumentNumber: documentNumber, fiscalYear,
+      postingDate: '2026-10-24', documentDate: '2026-10-24', requestKey: nextKey(),
+      lines: [Number(first.line_number)],
+    });
+    const cancelled = await cancelConfirmation(client, {
+      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
+      confirmed: true, reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+    });
+    expect(cancelled.cancellationNumber).toBeTruthy();
+    const movement = await withTenant(client, (tx) => postedMovements(tx, client, saved.requestKey));
+    expect(movement).toHaveLength(2);
+    expect(movement.every((row) => row.posted && !row.standing)).toBe(true);
   });
 
   it('still refuses what this ERP does not do, now that a movement exists', async () => {
