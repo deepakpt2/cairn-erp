@@ -114,7 +114,7 @@ export default async function OrderInformationPage({
           List production orders or planned orders. Execute reads. It does not change an order, confirm one, or post.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-coois-gaps>
-          Operations, sequences, capacities, automatic goods movements, purchase documents, and cost are not this list. CO13 and CO14 are not implemented.
+          Operations, sequences, capacities, automatic goods movements, purchase documents, and cost are not this list. Cancellation is CO13. CO14 is not implemented.
         </p>
       </header>
       {openError && <p role="status" data-coois-refused className="text-sm text-red-700">{openError}</p>}
@@ -144,7 +144,7 @@ export default async function OrderInformationPage({
         <input className="input" name="order" defaultValue={one(params.order)} maxLength={80} placeholder="Production order" />
         <input className="input" name="plannedOrder" defaultValue={one(params.plannedOrder)} maxLength={80} placeholder="Planned order" />
         <input className="input" name="component" defaultValue={one(params.component)} maxLength={40} placeholder="Component" />
-        <input className="input" name="status" defaultValue={one(params.status)} maxLength={20} placeholder="Status" />
+        <input className="input" name="status" defaultValue={one(params.status)} maxLength={32} placeholder="Status" />
         <input className="input" name="mrpController" defaultValue={one(params.mrpController)} maxLength={3} placeholder="MRP controller" />
         <input className="input" name="batch" defaultValue={one(params.batch)} maxLength={40} placeholder="Batch" />
         <input className="input" name="storageLocation" defaultValue={one(params.storageLocation)} maxLength={10} placeholder="Storage location" />

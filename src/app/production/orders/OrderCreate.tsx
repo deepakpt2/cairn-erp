@@ -7,7 +7,6 @@ import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import { createOrderAction, releaseOrderAction, type OrderActionState } from './actions';
 
 const INITIAL: OrderActionState = { ok: false, message: '' };
-const LINES = [1, 2, 3, 4];
 
 export default function OrderCreate({
   canCreate, canRelease, today,
@@ -48,6 +47,11 @@ export default function OrderCreate({
               <input name="plant" className="input w-full" placeholder="1000" required />
             </label>
             <label className="block">
+              <span className="field-label">Order type</span>
+              <input name="orderType" maxLength={4} className="input code w-full" placeholder="PP01" required />
+              <span className="mt-1 block text-xs text-ink-soft">A standing category 10 type is required. A scheduling profile does not propose one. Saving does not run an availability check.</span>
+            </label>
+            <label className="block">
               <span className="field-label">{t('co01.quantity')}</span>
               <input name="orderQuantity" type="number" step="0.001" min="0.001" className="input w-full" required />
             </label>
@@ -63,37 +67,55 @@ export default function OrderCreate({
               <span className="field-label">{t('co01.finish')}</span>
               <input type="date" name="scheduledFinish" className="input w-full" defaultValue={today} required />
             </label>
+            <label className="block">
+              <span className="field-label">{t('co01.version')}</span>
+              <input name="productionVersion" maxLength={4} className="input w-full" placeholder="0001" />
+              <span className="mt-1 block text-xs text-ink-soft">{t('co01.versionHint')}</span>
+            </label>
           </div>
 
           <h3 className="mt-4 text-sm font-semibold">{t('co01.components')}</h3>
           <p className="mt-1 text-xs text-ink-soft">{t('co01.componentsHint')}</p>
-          <table className="mt-2 w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
-                <th className="py-1">{t('co01.columnItem')}</th>
-                <th className="py-1">{t('co01.columnMaterial')}</th>
-                <th className="py-1">{t('co01.columnPlant')}</th>
-                <th className="py-1">{t('co01.columnLocation')}</th>
-                <th className="py-1 text-right">{t('co01.columnQuantity')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {LINES.map((n) => (
-                <tr key={n} className="border-t border-line" data-component-line={n}>
-                  <td className="py-1">{n * 10}</td>
-                  <td className="py-1"><input name={`componentMaterial-${n}`} className="input w-full" placeholder="MAT-RM" /></td>
-                  <td className="py-1"><input name={`componentPlant-${n}`} className="input w-24" placeholder="1000" /></td>
-                  <td className="py-1"><input name={`componentSloc-${n}`} className="input w-24" placeholder="0001" /></td>
-                  <td className="py-1">
-                    <input name={`componentQuantity-${n}`} type="number" step="0.001" min="0.001" className="input w-24 text-right" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {created.preview && (
+            <div className="mt-3" data-preview-version={created.preview.productionVersion}>
+              <p className="text-sm">
+                {t('co01.bom')} {created.preview.bomUsage}/{created.preview.bomAlternative}
+              </p>
+              <table className="mt-2 w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
+                    <th className="py-1">{t('co01.columnItem')}</th>
+                    <th className="py-1">{t('co01.columnBomItem')}</th>
+                    <th className="py-1">{t('co01.columnMaterial')}</th>
+                    <th className="py-1">{t('co01.columnSource')}</th>
+                    <th className="py-1">{t('co01.columnPlant')}</th>
+                    <th className="py-1 text-right">{t('co01.columnQuantity')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {created.preview.components.map((component) => (
+                    <tr key={component.bomItem} className="border-t border-line" data-bom-item={component.bomItem}>
+                      <td className="py-1">{component.orderItemNumber}</td>
+                      <td className="py-1">{component.bomItem}</td>
+                      <td className="py-1">{component.materialNumber}</td>
+                      <td className="py-1">{component.sourceMaterial}</td>
+                      <td className="py-1">{component.plant}</td>
+                      <td className="py-1 text-right tabular">{component.requiredQuantity} {component.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {created.preview.warnings.length > 0 && (
+                <p className="mt-2 text-xs text-ink-soft">{created.preview.warnings.join(' ')}</p>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canCreate || creating}>
+            <button type="submit" name="intent" value="check" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canCreate || creating}>
+              {creating ? t('co01.checking') : t('co01.check')}
+            </button>
+            <button type="submit" name="intent" value="create" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canCreate || creating}>
               {creating ? t('co01.creating') : t('co01.create')}
             </button>
             {!canCreate && <p className="text-sm text-ink-soft">{t('co01.noCreate')}</p>}
@@ -136,11 +158,16 @@ export default function OrderCreate({
           <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="field-label">{t('co01.material')}</dt><dd>{order.materialNumber} · {order.materialDescription ?? '—'}</dd></div>
             <div><dt className="field-label">{t('co01.plant')}</dt><dd>{order.plant}</dd></div>
+            <div><dt className="field-label">Order type</dt><dd className="code" data-order-type={order.orderType ?? ''}>{order.orderType ?? 'Not assigned'}</dd></div>
             <div><dt className="field-label">{t('co01.company')}</dt><dd data-company-code={order.companyCode}>{order.companyCode}</dd></div>
             <div><dt className="field-label">{t('co01.quantity')}</dt><dd>{order.orderQuantity} {order.unit}</dd></div>
             <div><dt className="field-label">{t('co01.start')}</dt><dd>{order.scheduledStart}</dd></div>
             <div><dt className="field-label">{t('co01.finish')}</dt><dd>{order.scheduledFinish}</dd></div>
             <div><dt className="field-label">{t('co01.status')}</dt><dd data-status={order.status}>{order.status}</dd></div>
+            <div>
+              <dt className="field-label">{t('co01.version')}</dt>
+              <dd data-production-version={order.productionVersion ?? ''}>{order.productionVersion ?? '—'}{order.bomUsage ? ` · ${order.bomUsage}/${order.bomAlternative}` : ''}</dd>
+            </div>
             <div><dt className="field-label">Profile</dt><dd className="code">{order.schedulingProfile || '—'}</dd></div>
             <div><dt className="field-label">Batch</dt><dd className="code">{order.batch || '—'}</dd></div>
             <div><dt className="field-label">{t('co01.releasedBy')}</dt><dd>{order.releasedBy ?? '—'}{order.releasedAt ? ` · ${order.releasedAt}` : ''}</dd></div>
@@ -149,6 +176,7 @@ export default function OrderCreate({
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-ink-faint">
                 <th className="py-1">{t('co01.columnItem')}</th>
+                <th className="py-1">{t('co01.columnBomItem')}</th>
                 <th className="py-1">{t('co01.columnMaterial')}</th>
                 <th className="py-1">{t('co01.columnPlant')}</th>
                 <th className="py-1">{t('co01.columnLocation')}</th>
@@ -157,8 +185,9 @@ export default function OrderCreate({
             </thead>
             <tbody>
               {order.components.map((c) => (
-                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber}>
+                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
                   <td className="py-1">{c.itemNumber}</td>
+                  <td className="py-1">{c.bomItem ?? '—'}</td>
                   <td className="py-1">{c.materialNumber} · {c.materialDescription ?? '—'}</td>
                   <td className="py-1">{c.plant}</td>
                   <td className="py-1">{c.storageLocation ?? '—'}</td>

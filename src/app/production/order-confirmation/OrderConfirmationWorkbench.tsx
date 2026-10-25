@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from 'react';
 import Link from 'next/link';
 
 import type { OrderConfirmationLoad } from '@/modules/production/order-confirmation';
+import { productionOrderMayBeCharged } from '@/modules/production/production-order-status';
 import { enterOrderConfirmationAction, type OrderConfirmationActionState } from './actions';
 
 const INITIAL: OrderConfirmationActionState = { ok: false, message: '' };
@@ -21,7 +22,10 @@ export default function OrderConfirmationWorkbench({
 }) {
   const [state, action, pending] = useActionState(enterOrderConfirmationAction, INITIAL);
   const [requestKey, setRequestKey] = useState(newRequestKey);
-  const blocked = loaded.status !== 'RELEASED' || loaded.eligible.length === 0;
+  // Status eligibility is the confirmation-service rule. Created stays blocked.
+  // Technical completion is not blocked merely because it is not released.
+  // An empty eligible list, missing authority, and a pending submit still block.
+  const blocked = !productionOrderMayBeCharged(loaded.status) || loaded.eligible.length === 0;
 
   useEffect(() => {
     if (state.ok && state.confirmation?.written) setRequestKey(newRequestKey());
@@ -55,7 +59,7 @@ export default function OrderConfirmationWorkbench({
                 <td className="py-1">{row.operationNumber} {row.shortText ?? ''}</td>
                 <td>{row.workCenter ?? '—'}</td>
                 <td>{row.yieldQuantity} {loaded.unit}</td>
-                <td>{loaded.eligible.includes(row.operationNumber) ? 'Eligible' : row.blockingReason}</td>
+                <td>{loaded.eligible.includes(row.operationNumber) ? 'Eligible' : row.blockingReason}{row.cancellationNote ? ` ${row.cancellationNote}` : ''}</td>
               </tr>
             ))}
           </tbody>

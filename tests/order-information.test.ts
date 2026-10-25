@@ -60,6 +60,11 @@ describe('COOIS order information', () => {
     other = await createTenant('coois-other');
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${tenant.client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
     });
@@ -105,6 +110,7 @@ describe('COOIS order information', () => {
     });
     await checkProductionVersion(tenant.client, 'FG-16', PLANT, '0001', ACTOR);
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-16', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'coois-order',
       components: [
@@ -113,6 +119,7 @@ describe('COOIS order information', () => {
       ],
     });
     const extra = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-16', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-26', requestKey: 'coois-second',
       components: [{ materialNumber: 'RM-16', plant: PLANT, requiredQuantity: 1 }],

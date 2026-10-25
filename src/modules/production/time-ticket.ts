@@ -3,8 +3,8 @@
  *
  * A confirmation names one operation of a released production order. The
  * operation is read from the production version. It is not copied onto the
- * order, and the order status is not changed. Created and released remain
- * the only statuses.
+ * order, and the order status is not changed. A technically completed order
+ * may still be confirmed. This screen does not complete or revoke it.
  *
  * A posted confirmation is not edited here. Cancellation is not this screen.
  * No component is issued and no finished good is received: backflush and
@@ -13,6 +13,12 @@
 import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
+import {
+  confirmationBlockReason,
+  parseProductionOrderStatus,
+  productionOrderMayBeCharged,
+  type ProductionOrderStatus,
+} from './production-order-status';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { acquireLock } from '../../platform/lock';
@@ -38,7 +44,7 @@ const REFUSED: Record<string, string> = {
   goodsMovement: 'A goods movement is not posted from this confirmation.',
   clearOpenReservations: 'This order has no reservation. Open reservations were not cleared.',
   confirmationNumber: 'A posted confirmation is not overwritten. Cancellation is not this screen.',
-  co13: 'CO13 is not implemented. A posted confirmation was not cancelled.',
+  co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
   co14: 'CO14 is not implemented. Open the confirmation from this result, or the order from CO03.',
   co15: 'CO15 is order confirmation. This screen confirms one operation.',
   cost: 'Activity cost is not calculated. No cost was posted.',
@@ -85,6 +91,7 @@ export interface TimeTicketOperationView {
   reworkQuantity: string;
   remainingQuantity: string;
   finallyConfirmed: boolean;
+  cancellationNote: string | null;
   operationQuantity: string | null;
   operationUnit: string | null;
   baseQuantity: string | null;
@@ -101,7 +108,7 @@ export interface TimeTicketLoad {
   unit: string;
   scheduledStart: string;
   scheduledFinish: string;
-  status: 'CREATED' | 'RELEASED';
+  status: ProductionOrderStatus;
   version: number;
   productionVersion: string | null;
   taskListType: string | null;
@@ -131,7 +138,7 @@ export interface TimeTicketView {
   shortText: string | null;
   note: string | null;
   requestKey: string;
-  orderStatus: 'CREATED' | 'RELEASED';
+  orderStatus: ProductionOrderStatus;
   activities: Array<{ parameter: string; quantity: string; unit: string; suggested: string | null }>;
   movementsPosted: 0;
   movementNote: string;
@@ -144,8 +151,8 @@ const GAPS = [
   'A confirmation profile is not configured. Automatic confirmation is refused.',
   'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
   'Personnel, a shift, and activity cost are not stored.',
-  'CO13 and CO14 are not implemented. A posted confirmation is not edited here.',
-  'The order status stays created or released. Technical completion is not done.',
+  'Cancellation is CO13. This screen does not cancel a posted confirmation. CO14 is not implemented.',
+  'The order status is not changed. Technical completion is a separate CO02 action.',
 ];
 
 const MOVEMENT_NOTE = 'No goods movement was proposed. Backflush is not configured, and automatic goods receipt is not configured. Stock was not changed.';
@@ -259,7 +266,7 @@ export interface OrderHeader {
   unit: string;
   scheduledStart: string;
   scheduledFinish: string;
-  status: 'CREATED' | 'RELEASED';
+  status: ProductionOrderStatus;
   version: number;
 }
 
@@ -274,8 +281,13 @@ export async function headerOf(tx: Tx, client: string, orderNumber: string): Pro
   `);
   const header = found[0];
   if (!header) fail(`Production order ${orderNumber} does not stand.`, 'Enter an order in this tenant.');
-  const status = String(header.status);
-  if (status !== 'CREATED' && status !== 'RELEASED') fail(`Status ${status} is not a production-order status.`);
+  const status = parseProductionOrderStatus(header.status);
+  if (!status) {
+    fail(
+      `Status ${String(header.status)} is not a production-order status.`,
+      'The stored status is unsupported. It was not treated as created.',
+    );
+  }
   return {
     orderNumber: String(header.order_number),
     materialNumber: String(header.material_number),
@@ -346,17 +358,55 @@ export async function operationsOf(
            coalesce(sum(rework_quantity), 0)::text as rework,
            bool_or(confirmation_type = 'FINAL') as final
       from (
-        select operation_number, yield_quantity, scrap_quantity, rework_quantity, confirmation_type
-          from production_confirmation
-         where client = ${client} and order_number = ${header.orderNumber}
-           and confirmation_level = 'OPERATION'
+        select c.operation_number, c.yield_quantity, c.scrap_quantity, c.rework_quantity, c.confirmation_type
+          from production_confirmation c
+         where c.client = ${client} and c.order_number = ${header.orderNumber}
+           and c.confirmation_level = 'OPERATION'
+           and not exists (
+             select 1 from production_confirmation_cancellation x
+              where x.client = c.client and x.confirmation_number = c.confirmation_number
+           )
         union all
-        select operation_number, yield_quantity, scrap_quantity, rework_quantity, confirmation_type
-          from production_confirmation_operation
-         where client = ${client} and order_number = ${header.orderNumber}
+        select e.operation_number, e.yield_quantity, e.scrap_quantity, e.rework_quantity, e.confirmation_type
+          from production_confirmation_operation e
+         where e.client = ${client} and e.order_number = ${header.orderNumber}
+           and not exists (
+             select 1 from production_confirmation_cancellation x
+              where x.client = e.client and x.confirmation_number = e.confirmation_number
+           )
       ) posted
      group by operation_number
   `);
+  const cancelled = await rows(tx, sql`
+    select operation_number, confirmation_number, cancellation_number
+      from (
+        select c.operation_number, c.confirmation_number, x.cancellation_number
+          from production_confirmation c
+          join production_confirmation_cancellation x
+            on x.client = c.client and x.confirmation_number = c.confirmation_number
+         where c.client = ${client} and c.order_number = ${header.orderNumber}
+           and c.confirmation_level = 'OPERATION'
+           and c.confirmation_type = 'FINAL'
+        union all
+        select e.operation_number, e.confirmation_number, x.cancellation_number
+          from production_confirmation_operation e
+          join production_confirmation_cancellation x
+            on x.client = e.client and x.confirmation_number = e.confirmation_number
+         where e.client = ${client} and e.order_number = ${header.orderNumber}
+           and e.confirmation_type = 'FINAL'
+      ) cancelled
+     order by cancellation_number desc
+  `);
+  const cancelledByOperation = new Map<string, { confirmationNumber: string; cancellationNumber: string }>();
+  for (const row of cancelled) {
+    const operationNumber = String(row.operation_number);
+    if (!cancelledByOperation.has(operationNumber)) {
+      cancelledByOperation.set(operationNumber, {
+        confirmationNumber: String(row.confirmation_number),
+        cancellationNumber: String(row.cancellation_number),
+      });
+    }
+  }
   const totals = new Map(posted.map((row) => [String(row.operation_number), row]));
     return Promise.all(found.map(async (row) => {
     const operationNumber = String(row.operation_number);
@@ -382,6 +432,9 @@ export async function operationsOf(
       reworkQuantity: String(prior?.rework ?? '0'),
       remainingQuantity: remainingText(toScaled(header.orderQuantity, 3) - toScaled(yieldQuantity, 3)),
       finallyConfirmed: final,
+      cancellationNote: final || !cancelledByOperation.get(operationNumber)
+        ? null
+        : `Final confirmation ${cancelledByOperation.get(operationNumber)?.confirmationNumber} was cancelled by ${cancelledByOperation.get(operationNumber)?.cancellationNumber}. Another confirmation is allowed.`,
       operationQuantity: row.operation_quantity == null ? null : String(row.operation_quantity),
       operationUnit: row.operation_unit == null ? null : String(row.operation_unit),
       baseQuantity: row.base_quantity == null ? null : String(row.base_quantity),
@@ -411,7 +464,7 @@ export async function loadTimeTicket(client: string, input: {
   return withTenant(client, async (tx) => {
     const header = await headerOf(tx, client, orderNumber);
     const keyDate = postingDate || header.scheduledStart;
-    let blockingReason: string | null = header.status === 'RELEASED' ? null : 'The order is not released. Confirmation does not release it.';
+    let blockingReason: string | null = confirmationBlockReason(header.status);
     let version: { taskListType: string; routingGroup: string; groupCounter: string; productionVersion: string } | null = null;
     if (!blockingReason) {
       try {
@@ -496,7 +549,7 @@ async function prepare(tx: Tx, client: string, input: {
   if (header.version !== input.expectedVersion) {
     fail('The production order was changed by someone else. Nothing was saved.', 'Open the order again, then confirm.');
   }
-  if (header.status !== 'RELEASED') {
+  if (!productionOrderMayBeCharged(header.status)) {
     fail('The order is not released. Nothing was saved.', 'Release the order, then confirm. This screen does not release it.');
   }
   const confirmationType = clean(input.confirmationType).toUpperCase();
@@ -645,7 +698,8 @@ async function storedView(tx: Tx, client: string, confirmationNumber: string): P
      where client = ${client} and confirmation_number = ${confirmationNumber}
      order by parameter
   `);
-  const status = String(header.status) === 'RELEASED' ? 'RELEASED' : 'CREATED';
+  const status = parseProductionOrderStatus(header.status);
+  if (!status) fail(`Status ${String(header.status)} is not a production-order status.`, 'The stored status is unsupported. It was not treated as created.');
   return {
     confirmationNumber: String(header.confirmation_number),
     orderNumber: String(header.order_number),

@@ -12,11 +12,11 @@
  * material, as it must be in SAP, and every component must be extended to the plant it
  * will be consumed from.
  *
- * The components are a **snapshot**. Creating an order does not read a material BOM.
- * Conversion may pass a snapshot it has already resolved. This function still does not
- * read the BOM, and a saved order is not rewritten when a BOM changes. A later issue may
- * consume the snapshot; nothing recomputes it, and nothing here reads a routing, a
- * production version, or a capacity master.
+ * The components are a **snapshot**. The CO01 screen selects a production version and
+ * reads that bill of material. A caller-supplied component list is the conversion snapshot and is not re-read from the BOM.
+ * A saved order is not rewritten when a BOM or production version changes. A later issue
+ * may consume the snapshot; nothing recomputes it. Routing is named and not stored.
+ * Capacity is not read.
  *
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
  * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability
@@ -33,6 +33,11 @@ import { plant as plantTable } from '../foundation/schema';
 import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
+import { parseProductionOrderStatus, type ProductionOrderStatus } from '../production/production-order-status';
+import { OrderBomSnapshotError, resolveOrderBomSnapshot, type OrderBomSnapshot } from '../production/order-bom-snapshot';
+import { productionOrderType } from '../production/schema';
+
+export type { OrderBomSnapshot };
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { readWipBatchFlag } from '../production/wip-batch';
 import {
@@ -77,6 +82,9 @@ export interface ProductionOrderComponentView {
   storageLocation: string | null;
   requiredQuantity: string;
   unit: string;
+  /** Null when the line was supplied rather than copied from a BOM item. */
+  bomItem: string | null;
+  sourceMaterial: string | null;
   createdAt: string;
 }
 
@@ -85,6 +93,8 @@ export interface ProductionOrderView {
   materialNumber: string;
   materialDescription: string | null;
   plant: string;
+  /** Null when the order was created without a type. It is not filled in later. */
+  orderType: string | null;
   /** Derived from the plant, never typed and never stored. */
   companyCode: string;
   orderQuantity: string;
@@ -95,7 +105,7 @@ export interface ProductionOrderView {
   schedulingProfile: string;
   releaseOnCreate: ReleaseOnCreate;
   batchCreation: BatchCreation;
-  status: 'CREATED' | 'RELEASED';
+  status: ProductionOrderStatus;
   releasedBy: string | null;
   releasedAt: string | null;
   createdAt: string;
@@ -105,6 +115,32 @@ export interface ProductionOrderView {
   wipBatchCreated: false;
   /** Null unless planned-order conversion created this order. */
   plannedOrderNumber: string | null;
+  /** Null when the snapshot was supplied. Set when this screen selected a version. */
+  productionVersion: string | null;
+  bomUsage: string | null;
+  bomAlternative: string | null;
+}
+
+function requireAssignedOrderType(raw: string | undefined): string {
+  if (raw == null || raw.trim() === '') {
+    throw new ProductionOrderError(
+      'A production order type is required. Nothing was saved.',
+      'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
+    );
+  }
+  if (raw !== raw.trim()) {
+    throw new ProductionOrderError(
+      'The order type has surrounding spaces. They were not removed. Nothing was saved.',
+      'Type the standing production order type. It was not padded or trimmed.',
+    );
+  }
+  if (!/^[A-Z0-9]{4}$/.test(raw)) {
+    throw new ProductionOrderError(
+      `Order type ${raw} is not four characters, A to Z or 0 to 9. It was not padded. Nothing was saved.`,
+      'Define the production order type first. The first type was not chosen.',
+    );
+  }
+  return raw;
 }
 
 function requireDate(value: string, what: string): string {
@@ -113,6 +149,17 @@ function requireDate(value: string, what: string): string {
     throw new ProductionOrderError(`${what} ${value || '(empty)'} is not a date.`, 'Enter the date as YYYY-MM-DD.');
   }
   return trimmed;
+}
+
+function storedStatus(value: string): ProductionOrderStatus {
+  const status = parseProductionOrderStatus(value);
+  if (!status) {
+    throw new ProductionOrderError(
+      `Status ${value} is not a production-order status.`,
+      'The stored status is unsupported. It was not treated as created.',
+    );
+  }
+  return status;
 }
 
 async function toView(tx: Tx, client: string, header: typeof productionOrder.$inferSelect): Promise<ProductionOrderView> {
@@ -142,6 +189,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     materialNumber: header.materialNumber,
     materialDescription: produced?.description ?? null,
     plant: header.plant,
+    orderType: header.orderType,
     companyCode: plantRow?.companyCode ?? '',
     orderQuantity: header.orderQuantity,
     unit: header.unitOfMeasure,
@@ -153,12 +201,15 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
     batchCreation: header.batchCreation.trim() === '1' || header.batchCreation.trim() === '2'
       ? header.batchCreation.trim() as BatchCreation
       : ' ',
-    status: header.status as 'CREATED' | 'RELEASED',
+    status: storedStatus(header.status),
     releasedBy: header.releasedBy,
     releasedAt: header.releasedAt ? header.releasedAt.toISOString() : null,
     wipBatchActive,
     wipBatchCreated: false,
     plannedOrderNumber: header.plannedOrderNumber,
+    productionVersion: header.productionVersion,
+    bomUsage: header.bomUsage,
+    bomAlternative: header.bomAlternative,
     createdAt: header.createdAt.toISOString(),
     components: rows.map((r) => ({
       itemNumber: r.itemNumber,
@@ -168,6 +219,8 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
       storageLocation: r.storageLocation,
       requiredQuantity: r.requiredQuantity,
       unit: r.unitOfMeasure,
+      bomItem: r.bomItem,
+      sourceMaterial: r.sourceMaterial,
       createdAt: r.createdAt.toISOString(),
     })),
   };
@@ -194,7 +247,19 @@ export interface CreateProductionOrderInput {
   scheduledFinish: string;
   /** A batch that already stands for the finished good. The order does not create it. */
   batch?: string;
-  components: ProductionOrderComponentInput[];
+  /**
+   * Present only for a caller that already resolved the snapshot, including
+   * planned-order conversion. The CO01 screen omits this and derives the lines.
+   */
+  components?: ProductionOrderComponentInput[];
+  /** Named version passed to the selector. Not a BOM alternative. Ignored when components are supplied. */
+  productionVersion?: string;
+  /**
+   * Required. The caller names a standing category-10 type. A blank value is
+   * not a type. Material, plant, profile, and the first standing type are not used.
+   * An order-type parameter is not read.
+   */
+  orderType: string;
   requestKey?: string;
 }
 
@@ -205,6 +270,45 @@ export interface CreateProductionOrderInput {
  */
 export interface CreateProductionOrderResult extends ProductionOrderView {
   releaseNote: string | null;
+  snapshotWarnings?: string[];
+}
+
+export async function previewProductionOrderBom(input: {
+  client: string;
+  materialNumber: string;
+  plant: string;
+  orderQuantity: number;
+  scheduledFinish: string;
+  productionVersion?: string;
+}): Promise<OrderBomSnapshot> {
+  const materialNumber = input.materialNumber.trim();
+  const plant = input.plant.trim();
+  if (!materialNumber) {
+    throw new ProductionOrderError('The material to be produced is required.', 'Enter the material the order will make.');
+  }
+  if (!plant) throw new ProductionOrderError('A plant is required.', 'Enter the plant the order will be produced in.');
+  if (!(input.orderQuantity > 0)) {
+    throw new ProductionOrderError(
+      `The order quantity ${input.orderQuantity} is not a positive quantity.`,
+      'Enter a quantity greater than zero.',
+    );
+  }
+  const finish = requireDate(input.scheduledFinish, 'The scheduled finish');
+  return withTenant(input.client, async (tx) => {
+    try {
+      return await resolveOrderBomSnapshot(tx, {
+        client: input.client,
+        materialNumber,
+        plant,
+        orderQuantity: input.orderQuantity,
+        scheduledFinish: finish,
+        productionVersion: input.productionVersion,
+      });
+    } catch (caught) {
+      if (caught instanceof OrderBomSnapshotError) throw new ProductionOrderError(caught.message, caught.remedy);
+      throw caught;
+    }
+  });
 }
 
 export async function createProductionOrder(
@@ -225,6 +329,7 @@ export async function createProductionOrder(
       'Enter a quantity greater than zero.',
     );
   }
+  const assignedOrderType = requireAssignedOrderType(input.orderType);
   const start = requireDate(input.scheduledStart, 'The scheduled start');
   const finish = requireDate(input.scheduledFinish, 'The scheduled finish');
   if (finish < start) {
@@ -233,7 +338,7 @@ export async function createProductionOrder(
       'Enter a finish on or after the start.',
     );
   }
-  if (input.components.length === 0) {
+  if (input.components && input.components.length === 0) {
     throw new ProductionOrderError(
       'An order needs at least one component.',
       'Enter the components the order will consume, or cancel the order.',
@@ -241,6 +346,7 @@ export async function createProductionOrder(
   }
 
   const run = async (tx: Tx): Promise<CreateProductionOrderResult> => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/production-order`}, 0))`);
     if (input.requestKey) {
       const [replay] = await tx.select().from(productionOrder).where(and(
         eq(productionOrder.client, input.client),
@@ -248,8 +354,6 @@ export async function createProductionOrder(
       ));
       if (replay) return toView(tx, input.client, replay);
     }
-
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/production-order`}, 0))`);
 
     const [produced] = await tx.select().from(material).where(and(
       eq(material.client, input.client), eq(material.materialNumber, materialNumber),
@@ -284,6 +388,22 @@ export async function createProductionOrder(
       eq(materialPlant.materialNumber, materialNumber),
       eq(materialPlant.plant, plant),
     ));
+    const [type] = await tx.select().from(productionOrderType).where(and(
+      eq(productionOrderType.client, input.client),
+      eq(productionOrderType.orderType, assignedOrderType),
+    ));
+    if (!type) {
+      throw new ProductionOrderError(
+        `Order type ${assignedOrderType} does not stand in this tenant. Nothing was saved.`,
+        'Define the production order type first. An order-type parameter is not proof that the type stands.',
+      );
+    }
+    if (type.orderCategory !== '10') {
+      throw new ProductionOrderError(
+        `Order type ${assignedOrderType} is not a production order type. Nothing was saved.`,
+        'Use a category 10 type. Process orders and networks are not assigned here.',
+      );
+    }
     if (!extended) {
       throw new ProductionOrderError(
         `Material ${materialNumber} is not extended to plant ${plant}.`,
@@ -291,12 +411,49 @@ export async function createProductionOrder(
       );
     }
 
+    let derived: OrderBomSnapshot | null = null;
+    if (!input.components) {
+      try {
+        derived = await resolveOrderBomSnapshot(tx, {
+          client: input.client,
+          materialNumber,
+          plant,
+          orderQuantity: input.orderQuantity,
+          scheduledFinish: finish,
+          productionVersion: input.productionVersion,
+        });
+      } catch (caught) {
+        if (caught instanceof OrderBomSnapshotError) throw new ProductionOrderError(caught.message, caught.remedy);
+        throw caught;
+      }
+    }
+    const lines = derived
+      ? derived.components.map((component) => ({
+        materialNumber: component.materialNumber,
+        plant: component.plant,
+        requiredQuantity: Number(component.requiredQuantity),
+        storageLocation: undefined,
+        orderItemNumber: component.orderItemNumber,
+        bomItem: component.bomItem,
+        sourceMaterial: component.sourceMaterial,
+      }))
+      : input.components!.map((component) => ({
+        materialNumber: component.materialNumber,
+        plant: component.plant,
+        storageLocation: component.storageLocation,
+        requiredQuantity: component.requiredQuantity,
+        orderItemNumber: undefined as number | undefined,
+        bomItem: null as string | null,
+        sourceMaterial: null as string | null,
+      }));
+
     // Every component is judged before the header is drawn or written.
     const prepared: Array<{
       materialNumber: string; plant: string; storageLocation: string | null;
       requiredQuantity: number; unit: string;
+      orderItemNumber: number; bomItem: string | null; sourceMaterial: string | null;
     }> = [];
-    for (const [index, component] of input.components.entries()) {
+    for (const [index, component] of lines.entries()) {
       const position = (index + 1) * 10;
       const componentNumber = component.materialNumber.trim();
       if (!componentNumber) {
@@ -360,6 +517,9 @@ export async function createProductionOrder(
         storageLocation: location,
         requiredQuantity: component.requiredQuantity,
         unit: componentMaterial.baseUnit ?? '',
+        orderItemNumber: component.orderItemNumber ?? position,
+        bomItem: component.bomItem,
+        sourceMaterial: component.sourceMaterial,
       });
     }
 
@@ -417,19 +577,25 @@ export async function createProductionOrder(
       status: 'CREATED',
       requestKey: input.requestKey ?? null,
       plannedOrderNumber: options?.plannedOrderNumber?.trim() || null,
+      orderType: assignedOrderType,
+      productionVersion: derived?.productionVersion ?? null,
+      bomUsage: derived?.bomUsage ?? null,
+      bomAlternative: derived?.bomAlternative ?? null,
       createdBy: input.createdBy,
     }).returning();
 
-    for (const [index, component] of prepared.entries()) {
+    for (const component of prepared) {
       await tx.insert(productionOrderComponent).values({
         client: input.client,
         orderNumber,
-        itemNumber: (index + 1) * 10,
+        itemNumber: component.orderItemNumber,
         materialNumber: component.materialNumber,
         plant: component.plant,
         storageLocation: component.storageLocation,
         requiredQuantity: String(component.requiredQuantity),
         unitOfMeasure: component.unit,
+        bomItem: component.bomItem,
+        sourceMaterial: component.sourceMaterial,
         createdBy: input.createdBy,
       });
     }
@@ -450,12 +616,18 @@ export async function createProductionOrder(
         scheduledStart: start,
         scheduledFinish: finish,
         status: 'CREATED',
+        orderType: assignedOrderType,
         ...(options?.plannedOrderNumber?.trim() ? { plannedOrderNumber: options.plannedOrderNumber.trim() } : {}),
+        ...(derived ? {
+          productionVersion: derived.productionVersion,
+          bomUsage: derived.bomUsage,
+          bomAlternative: derived.bomAlternative,
+        } : {}),
       },
     });
 
     if (snapshot.releaseOnCreate !== 'X') {
-      return { ...(await toView(tx, input.client, header)), releaseNote: null };
+      return { ...(await toView(tx, input.client, header)), releaseNote: null, snapshotWarnings: derived?.warnings ?? [] };
     }
     await tx.execute(sql`SAVEPOINT opkp_release`);
     try {
@@ -465,7 +637,7 @@ export async function createProductionOrder(
         releasedBy: input.createdBy,
       });
       await tx.execute(sql`RELEASE SAVEPOINT opkp_release`);
-      return { ...released, releaseNote: null };
+      return { ...released, releaseNote: null, snapshotWarnings: derived?.warnings ?? [] };
     } catch (caught) {
       await tx.execute(sql`ROLLBACK TO SAVEPOINT opkp_release`);
       const reason = caught instanceof ProductionOrderError
@@ -478,6 +650,7 @@ export async function createProductionOrder(
       return {
         ...(await toView(tx, input.client, standing ?? header)),
         releaseNote: `Release at creation did not happen. ${reason} The order stands created.`,
+        snapshotWarnings: derived?.warnings ?? [],
       };
     }
   };
@@ -520,6 +693,18 @@ async function releaseProductionOrderInTx(tx: Tx, input: {
     );
   }
   if (header.status === 'RELEASED') return toView(tx, input.client, header);
+  if (header.status === 'TECHNICALLY_COMPLETED') {
+    throw new ProductionOrderError(
+      `Production order ${input.orderNumber} is technically complete. It was not released.`,
+      'Revoke technical completion before releasing the order.',
+    );
+  }
+  if (header.status !== 'CREATED') {
+    throw new ProductionOrderError(
+      `Status ${header.status} is not a production-order status.`,
+      'The stored status is unsupported. It was not treated as created.',
+    );
+  }
   let batchNumber = header.batchNumber;
   try {
     batchNumber = await ensureOrderBatch(tx, {

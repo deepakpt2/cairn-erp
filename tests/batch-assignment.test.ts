@@ -28,6 +28,11 @@ async function standing(seed: string): Promise<string> {
   await withTenant(client, async (tx) => {
     await defineRange(tx, { client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
     await defineRange(tx, { client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+    await tx.execute(sql`
+      insert into production_order_type (client, order_type, description, order_category, created_by)
+      values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+      on conflict (client, order_type) do nothing
+    `);
     await defineRange(tx, { client, objectCode: 'MATDOC', subObject: '*', prefix: '', numberLength: 10, createdBy: ACTOR });
     await tx.execute(sql`
       insert into purchasing_org (client, purchasing_org, name, company_code, created_by)
@@ -129,17 +134,20 @@ describe('batch assigned on the order', () => {
       client, changedBy: ACTOR, materialNumber: 'MAT-BATCH', batchNumber: '00012', reason: 'Output batch',
     });
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR, materialNumber: 'MAT-BATCH', plant: '1000', orderQuantity: 4,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: '00012',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],
     });
     expect(order.batch).toBe('00012');
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR, materialNumber: 'MAT-BATCH', plant: '1000', orderQuantity: 1,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: 'MISSING',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],
     })).rejects.toThrow(/does not stand/i);
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR, materialNumber: 'MAT-PLAIN', plant: '1000', orderQuantity: 1,
       scheduledStart: '2026-10-18', scheduledFinish: '2026-10-20', batch: '00012',
       components: [{ materialNumber: 'MAT-PLAIN', plant: '1000', requiredQuantity: 1 }],

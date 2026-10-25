@@ -17,6 +17,7 @@ describe('MD02 screen contract', () => {
     expect(seed).toContain("route: '/production/single-item-planning'");
     expect(page).toContain('singleItemRefusal');
     expect(page).not.toContain('name="companyCode"');
-    expect(plant).toContain('This run does not explode a bill of material.');
+    expect(plant).toContain('A bill of material is selected through the production version. It is not entered.');
+    expect(plant).toContain("if (entryPoint === 'PLANT') explode = true;");
   });
 });

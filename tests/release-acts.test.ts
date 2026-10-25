@@ -33,42 +33,52 @@ describe('SCR-060 release acts', () => {
   });
 
   async function standingClient(): Promise<string> {
-    if (!client) {
-      const tenant = await createTenant('scr060-release-acts');
-      client = tenant.client;
-      await withTenant(client, async (tx) => {
-        await defineRange(tx, { client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
-        await defineRange(tx, { client, objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', numberLength: 7, createdBy: ACTOR });
+    if (client) return client;
+    const tenant = await createTenant('scr060-release-acts');
+    const key = tenant.client;
+    try {
+      await withTenant(key, async (tx) => {
+        await defineRange(tx, { client: key, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
+        await defineRange(tx, { client: key, objectCode: 'PURCHREQ', subObject: 'NB', prefix: 'PR', numberLength: 7, createdBy: ACTOR });
+        // These codes are installation catalog rows owned by scripts/seed.ts.
+        // A status row may reference one only when it already stands. Do not
+        // invent a catalog row, and do not insert a status row that the
+        // foreign key would reject. The document acts below do not require
+        // the checklist row: markActivityComplete updates it when present.
         for (const activity of ['CFG.PROC.CHARACTERISTIC.DEFINE', 'CFG.PROC.CLASS.DEFINE', 'CFG.PROC.RELEASE.DEFINE']) {
+          const catalog = await tx.execute(sql`
+            select code from config_activity where code = ${activity}
+          `) as unknown as unknown[];
+          if (catalog.length === 0) continue;
           await tx.execute(sql`
             insert into config_activity_status (client, activity_code, status, created_by)
-            values (${client}, ${activity}, 'NOT_STARTED', ${ACTOR})
+            values (${key}, ${activity}, 'NOT_STARTED', ${ACTOR})
             on conflict (client, activity_code) do nothing
           `);
         }
         await tx.execute(sql`
           insert into purchasing_org (client, purchasing_org, name, company_code, created_by)
-          values (${client}, '1000', 'Test purchasing organization', '1000', ${ACTOR})
+          values (${key}, '1000', 'Test purchasing organization', '1000', ${ACTOR})
           on conflict do nothing
         `);
         await tx.execute(sql`
           insert into business_partner (client, partner_number, category, name, created_by)
-          values (${client}, 'V10000', 'ORGANIZATION', 'Test Supplier', ${ACTOR})
+          values (${key}, 'V10000', 'ORGANIZATION', 'Test Supplier', ${ACTOR})
           on conflict do nothing
         `);
         await tx.execute(sql`
           insert into bp_role (client, partner_number, role_code, created_by)
-          values (${client}, 'V10000', 'SUPPLIER', ${ACTOR})
+          values (${key}, 'V10000', 'SUPPLIER', ${ACTOR})
           on conflict do nothing
         `);
         await tx.execute(sql`
           insert into supplier_purchasing_org (client, partner_number, role_code, purchasing_org, order_currency, created_by)
-          values (${client}, 'V10000', 'SUPPLIER', '1000', 'KWD', ${ACTOR})
+          values (${key}, 'V10000', 'SUPPLIER', '1000', 'KWD', ${ACTOR})
           on conflict do nothing
         `);
       });
       await saveCharacteristic({
-        client, changedBy: ACTOR, mode: 'CREATE',
+        client: key, changedBy: ACTOR, mode: 'CREATE',
         characteristicName: 'TOTAL_VALUE', description: 'Total document value',
         dataFormat: 'NUM', valueLength: 13, decimalPlaces: 2, unit: '', currency: '',
         negativeValuesAllowed: false, caseSensitive: false, intervalsAllowed: true,
@@ -79,17 +89,17 @@ describe('SCR-060 release acts', () => {
         ['PURCHASE_ORDER', 'PO_RELEASE'], ['PURCHASE_REQUISITION', 'PR_RELEASE'],
       ] as const) {
         await saveClass({
-          client, changedBy: ACTOR, mode: 'CREATE',
+          client: key, changedBy: ACTOR, mode: 'CREATE',
           classType, className, description: `${className} release class`,
           assignments: [{ characteristicName: 'TOTAL_VALUE', requiredForClassification: true }],
           reason: 'Stage 5 acceptance',
         });
         await setClassStatus({
-          client, changedBy: ACTOR, classType, className, status: 'ACTIVE', reason: 'Stage 5 acceptance',
+          client: key, changedBy: ACTOR, classType, className, status: 'ACTIVE', reason: 'Stage 5 acceptance',
         });
       }
       await saveReleaseGroup({
-        client, changedBy: ACTOR, mode: 'CREATE',
+        client: key, changedBy: ACTOR, mode: 'CREATE',
         groupCode: 'PO', documentCategory: 'PURCHASE_ORDER', description: 'Purchase order releases',
         codes: [
           { code: 'MGR', description: 'Purchasing manager' },
@@ -98,27 +108,42 @@ describe('SCR-060 release acts', () => {
         reason: 'Stage 5 acceptance',
       });
       await saveReleaseGroup({
-        client, changedBy: ACTOR, mode: 'CREATE',
+        client: key, changedBy: ACTOR, mode: 'CREATE',
         groupCode: 'PR', documentCategory: 'PURCHASE_REQUISITION', description: 'Requisition releases',
         codes: [{ code: 'MGR', description: 'Purchasing manager' }],
         reason: 'Stage 5 acceptance',
       });
       const activate = async (groupCode: string, strategyCode: string, className: string, priority: number, steps: string[]) => {
         await saveReleaseStrategy({
-          client, changedBy: ACTOR, mode: 'CREATE',
+          client: key, changedBy: ACTOR, mode: 'CREATE',
           groupCode, strategyCode, description: `${strategyCode} strategy`, className, priority,
           criteria: [{ characteristicName: 'TOTAL_VALUE', operator: 'GE', valueFrom: priority === 10 ? '10000' : '1000', valueTo: '' }],
           steps, reason: 'Stage 5 acceptance',
         });
         await setReleaseStrategyStatus({
-          client, changedBy: ACTOR, groupCode, strategyCode, status: 'ACTIVE', reason: 'Stage 5 acceptance',
+          client: key, changedBy: ACTOR, groupCode, strategyCode, status: 'ACTIVE', reason: 'Stage 5 acceptance',
         });
       };
       await activate('PO', 'HIGH', 'PO_RELEASE', 100, ['MGR']);
       await activate('PO', 'MEGA', 'PO_RELEASE', 10, ['MGR', 'FIN']);
       await activate('PR', 'STD', 'PR_RELEASE', 100, ['MGR']);
+      const supplier = await withTenant(key, async (tx) => tx.execute(sql`
+        select p.partner_number
+          from business_partner p
+          join bp_role r
+            on r.client = p.client and r.partner_number = p.partner_number and r.role_code = 'SUPPLIER'
+          join supplier_purchasing_org s
+            on s.client = p.client and s.partner_number = p.partner_number
+           and s.role_code = 'SUPPLIER' and s.purchasing_org = '1000'
+         where p.client = ${key} and p.partner_number = 'V10000'
+      `)) as unknown as unknown[];
+      if (supplier.length !== 1) throw new Error('Supplier V10000 fixture is incomplete.');
+      client = key;
+      return client;
+    } catch (error) {
+      await destroyTenant(key).catch(() => undefined);
+      throw error;
     }
-    return client;
   }
 
   const header = {

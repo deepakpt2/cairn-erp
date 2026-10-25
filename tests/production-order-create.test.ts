@@ -65,6 +65,11 @@ describe('SCR-138 production order create (CO01)', () => {
       await defineRange(tx, {
         client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR,
       });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
     });
   }, 180_000);
 
@@ -79,6 +84,7 @@ describe('SCR-138 production order create (CO01)', () => {
 
   it('creates an order on its own number range with its components and a derived company', async () => {
     const view = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 100,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -111,6 +117,7 @@ describe('SCR-138 production order create (CO01)', () => {
 
   it('refuses a plant the produced material is not extended to, by name', async () => {
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: 'QO99', orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -120,6 +127,7 @@ describe('SCR-138 production order create (CO01)', () => {
 
   it('refuses a component that is not extended to its plant, naming the material and plant', async () => {
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -129,6 +137,7 @@ describe('SCR-138 production order create (CO01)', () => {
 
   it('refuses a finish before the start and a non-positive order quantity', async () => {
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-06', scheduledFinish: '2026-11-02',
@@ -136,6 +145,7 @@ describe('SCR-138 production order create (CO01)', () => {
     })).rejects.toThrow(/stands before the scheduled start/);
 
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 0,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -145,6 +155,7 @@ describe('SCR-138 production order create (CO01)', () => {
 
   it('refuses an order with no components, and a storage location of another plant', async () => {
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -152,6 +163,7 @@ describe('SCR-138 production order create (CO01)', () => {
     })).rejects.toThrow(/at least one component/);
 
     await expect(createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -162,6 +174,7 @@ describe('SCR-138 production order create (CO01)', () => {
   it('replays a request key instead of making a second order', async () => {
     const key = 'co01-replay-1';
     const first = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
@@ -169,6 +182,7 @@ describe('SCR-138 production order create (CO01)', () => {
       requestKey: key,
     });
     const second = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'CO01-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',

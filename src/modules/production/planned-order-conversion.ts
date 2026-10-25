@@ -14,6 +14,8 @@
  * Not carried, because the production order does not store them: operations,
  * a reservation, a goods movement, a journal, a confirmation, costing, and
  * settlement. Availability is not checked. Dates are copied, not rescheduled.
+ * An order type is stored only when the caller names one. No scheduling
+ * profile, material, or first standing type is used. Checking control is not read.
  * Release happens only when the scheduling profile snapshotted by order
  * creation already says so.
  */
@@ -28,6 +30,7 @@ import {
   type CreateProductionOrderResult,
 } from '../inventory/production-orders';
 import { material, materialPlant } from '../inventory/schema';
+import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
 import { readMaterialSchedulingProfile, SchedulingProfileError } from '../inventory/scheduling-profile';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
@@ -49,7 +52,7 @@ const REFUSED: Record<string, string> = {
   salesOrder: 'A sales order is not stored on the planned order. It was not used as a filter.',
   wbs: 'A WBS element is not stored on the planned order. It was not used as a filter.',
   availability: 'Component availability is not checked. It was not used as a filter.',
-  orderType: 'An order type is not stored. It was not used as a filter.',
+  orderType: 'An order type is not a search filter. Enter it when converting. The list was not filtered.',
   bomExplosionNumber: 'A BOM explosion number is not stored. It was not used as a filter.',
   partialQuantity: 'Partial conversion is not supported. The quantity was not reduced.',
 };
@@ -122,7 +125,7 @@ export interface PlannedOrderConversionResult {
   status: 'CONVERTED' | 'ALREADY_CONVERTED' | 'FAILED';
   plannedOrderNumber: string;
   productionOrderNumber: string | null;
-  productionOrderStatus: 'CREATED' | 'RELEASED' | null;
+  productionOrderStatus: ProductionOrderStatus | null;
   code: string | null;
   message: string;
   remedy: string | null;
@@ -159,6 +162,17 @@ function fail(code: string, message: string, remedy = ''): never {
 
 function clean(value: string | null | undefined): string {
   return value?.trim() ?? '';
+}
+
+function requiredConversionOrderType(raw: string | null | undefined): string {
+  if (raw == null || raw.trim() === '') {
+    fail(
+      'ORDER_TYPE',
+      'A production order type is required. Nothing was converted.',
+      'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
+    );
+  }
+  return raw;
 }
 
 export function plannedOrderConversionRefusal(fields: Record<string, string | null | undefined> | undefined): string | null {
@@ -398,6 +412,17 @@ async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omi
   };
 }
 
+function productionOrderStatusOf(status: string, orderNumber: string): ProductionOrderStatus {
+  const parsed = parseProductionOrderStatus(status);
+  if (!parsed) {
+    throw new PlannedOrderConversionError(
+      `Status ${status} on production order ${orderNumber} is not a production-order status.`,
+      'The stored status is unsupported. It was not treated as created.',
+    );
+  }
+  return parsed;
+}
+
 function previewOf(
   assessed: Omit<ConversionPreview, 'productionOrderNumber' | 'productionOrderStatus'>,
   link: { orderNumber: string; status: string } | null,
@@ -530,10 +555,16 @@ export async function convertPlannedOrder(input: {
   finishDate?: string | null;
   correlationId?: string | null;
   transactionCode?: string | null;
+  /**
+   * Explicit production order type. Required. A scheduling profile, a material,
+   * and the first standing type are not used.
+   */
+  orderType: string;
   named?: Record<string, string | null | undefined>;
 }): Promise<PlannedOrderConversionResult> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);
+  const orderType = requiredConversionOrderType(input.orderType);
   const actor = clean(input.changedBy);
   if (!actor || actor.length > 60) fail('NOT_FOUND', 'The user who converted the order is required.');
   const orderNumber = orderNumberOf(input.orderNumber);
@@ -551,7 +582,7 @@ export async function convertPlannedOrder(input: {
         status: 'ALREADY_CONVERTED' as const,
         plannedOrderNumber: orderNumber,
         productionOrderNumber: link.orderNumber,
-        productionOrderStatus: link.status === 'RELEASED' ? 'RELEASED' as const : 'CREATED' as const,
+        productionOrderStatus: productionOrderStatusOf(link.status, link.orderNumber),
         code: 'ALREADY_CONVERTED',
         message: `Planned order ${orderNumber} was already converted to production order ${link.orderNumber}. No second order was created.`,
         remedy: 'Open the production order. The planned order was not deleted.',
@@ -585,6 +616,7 @@ export async function convertPlannedOrder(input: {
         orderQuantity: Number(order.quantity),
         scheduledStart: order.startDate,
         scheduledFinish: order.finishDate,
+        orderType,
         components: assessed.components.map((component) => ({
           materialNumber: component.materialNumber,
           plant: order.plant,
@@ -625,10 +657,13 @@ export async function convertPlannedOrders(input: {
   changedBy: string;
   orderNumbers: string[];
   correlationId: string;
+  /** One explicit type for every selected order. Required. Not inferred. */
+  orderType: string;
   named?: Record<string, string | null | undefined>;
 }): Promise<{ correlationId: string; results: PlannedOrderConversionResult[] }> {
   const named = plannedOrderConversionRefusal(input.named);
   if (named) fail('UNSUPPORTED', named);
+  const orderType = requiredConversionOrderType(input.orderType);
   const numbers = input.orderNumbers.map((value) => clean(value)).filter(Boolean);
   if (numbers.length === 0) fail('EMPTY', 'No planned order was selected.', 'Select at least one order. Search writes nothing.');
   if (numbers.length > CONVERSION_LIMIT) {
@@ -641,6 +676,7 @@ export async function convertPlannedOrders(input: {
         client: input.client,
         changedBy: input.changedBy,
         orderNumber,
+        orderType,
         correlationId: input.correlationId,
         transactionCode: PLANNED_ORDER_CONVERT_COLLECTIVE_ALIAS,
       }));

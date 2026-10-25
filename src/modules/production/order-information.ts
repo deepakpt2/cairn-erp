@@ -15,6 +15,7 @@ import { sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
+import { parseProductionOrderStatus } from './production-order-status';
 
 export const ORDER_INFORMATION_CAPABILITY = 'PROD.ORDER.INFO';
 export const ORDER_INFORMATION_ROUTE = '/production/order-information';
@@ -23,7 +24,7 @@ export const ORDER_INFORMATION_DEFAULT_LIMIT = 25;
 export const ORDER_INFORMATION_MAX_LIMIT = 100;
 
 const REFUSED: Record<string, string> = {
-  orderType: 'An order type is not stored. Created and released are the production-order statuses.',
+  orderType: 'An order type is stored on the production order. It is not a search key of this list.',
   productionSupervisor: 'A production supervisor is not stored.',
   productionVersion: 'A production version is not stored on the order. It was not used as a filter.',
   deletionIndicator: 'A deletion flag is not stored. Flagged records were not included, because none are stored.',
@@ -46,9 +47,9 @@ const REFUSED: Record<string, string> = {
   documentLink: 'A document link is not stored.',
   item: 'An order item is not stored. The produced material is the header.',
   productionList: 'A production list is not a separate read model.',
-  co13: 'CO13 is not implemented. This list does not cancel a confirmation.',
+  co13: 'Cancellation is not this list. Open CO13. This list does not cancel a confirmation.',
   co14: 'CO14 is not implemented. A confirmation is listed here. It is not opened on another screen.',
-  teco: 'Technical completion is not a status.',
+  teco: 'Technical completion is filtered as status TECHNICALLY_COMPLETED. It is not a separate list key.',
   closed: 'A closed status is not stored.',
   reducedReading: 'Reduced reading is the reduced flag. A named profile was not applied.',
   overallProfile: 'An overall profile is not stored.',
@@ -125,7 +126,7 @@ const NOTES = [
   'Issued quantity uses the same posted sum as order display. Remaining is required minus issued, and it is not shown below zero.',
   'A component filter on the header list selects orders that have at least one matching component. It does not mean every component matched.',
   'Operations, sequences, and a production version are not stored on the order. Those lists are not available.',
-  'Cancellation of a confirmation is not stored. Every standing confirmation is listed.',
+  'A cancelled confirmation remains listed. Header confirmed yield excludes it. This list does not cancel.',
   'Cost is not carried. Archived records are not included. A plant authorization object is not stored. The tenant is the boundary.',
 ];
 
@@ -417,8 +418,8 @@ function parseQuery(input: {
     if (object === 'PLANNED_ORDER' && status !== 'OPEN' && status !== 'FIRMED') {
       fail(`Status ${status} is not a planned-order firming status.`, 'Use open or firmed. Created and released are production-order statuses.');
     }
-    if (object === 'PRODUCTION_ORDER' && status !== 'CREATED' && status !== 'RELEASED') {
-      fail(`Status ${status} is not a production-order status.`, 'Use created or released. Technical completion and closed are not stored.');
+    if (object === 'PRODUCTION_ORDER' && !parseProductionOrderStatus(status)) {
+      fail(`Status ${status} is not a production-order status.`, 'Use created, released, or technically completed. Closed and delivered are not stored.');
     }
   }
   const orders = numbersOf(clean(input.orderNumber), 'production-order');
@@ -545,7 +546,13 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
       left join material_plant mp
         on mp.client = o.client and mp.material_number = o.material_number and mp.plant = o.plant
       left join lateral (
-        select coalesce(sum(yield_quantity) filter (where confirmation_level = 'HEADER'), 0) as yield,
+        select coalesce(sum(yield_quantity) filter (
+                 where confirmation_level = 'HEADER'
+                   and not exists (
+                     select 1 from production_confirmation_cancellation x
+                      where x.client = c.client and x.confirmation_number = c.confirmation_number
+                   )
+               ), 0) as yield,
                count(*) as records
           from production_confirmation c
          where c.client = o.client and c.order_number = o.order_number

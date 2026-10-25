@@ -60,6 +60,11 @@ export default async function ProductionOrdersPage({ searchParams }: {
           {existing.plannedOrderNumber && (
             <p className="mt-1 text-sm">Converted from planned order {existing.plannedOrderNumber}. The planned order was not deleted.</p>
           )}
+          {existing.productionVersion && (
+            <p className="mt-1 text-sm" data-production-version={existing.productionVersion}>
+              Production version {existing.productionVersion}. Bill of material {existing.bomUsage}/{existing.bomAlternative}. A later change to that master data does not rewrite this snapshot.
+            </p>
+          )}
           <p className="mt-1 text-sm">
             <Link href={`/production/production-order-display?order=${encodeURIComponent(existing.orderNumber)}`}>Display</Link>
             {' · '}
@@ -77,7 +82,7 @@ export default async function ProductionOrdersPage({ searchParams }: {
             </thead>
             <tbody>
               {existing.components.map((c) => (
-                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber}>
+                <tr key={c.itemNumber} className="border-t border-line" data-item={c.itemNumber} data-bom-item={c.bomItem ?? ''}>
                   <td className="py-1">{c.itemNumber}</td>
                   <td className="py-1">{c.materialNumber} · {c.materialDescription ?? '—'}</td>
                   <td className="py-1">{c.plant}</td>

@@ -33,7 +33,8 @@ describe('SCR-166 total planning screen contract', () => {
 
   it('refuses the second path by name and does not post', () => {
     expect(service).toContain('An MRP area does not stand.');
-    expect(service).toContain('This run does not explode a bill of material.');
+    expect(service).toContain('A bill of material is selected through the production version. It is not entered.');
+    expect(service).toContain('explodePlannedSupply');
     expect(service).toContain('A planning run posts nothing.');
     expect(service).toContain('A financial period is not read.');
     expect(service).not.toContain('posting_period');
@@ -46,6 +47,8 @@ describe('SCR-166 total planning screen contract', () => {
   it('shows the company code as context and links to the live list', () => {
     expect(shell).toContain('data-mrp-company');
     expect(shell).toContain('/production/stock-requirements?material=');
+    expect(shell).toContain('data-mrp-dependents');
+    expect(shell).toContain('data-mrp-diagnostics');
     expect(messages).toContain("'md01.nothingPosted'");
   });
 });

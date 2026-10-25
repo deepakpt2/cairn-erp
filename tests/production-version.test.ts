@@ -9,7 +9,7 @@ import { productionOrder, productionOrderComponent } from '../src/modules/invent
 import { changeMaterialBom, createMaterialBom, getMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
-import { productionVersion } from '../src/modules/production/schema';
+import { productionOrderType, productionVersion } from '../src/modules/production/schema';
 import {
   PRODUCTION_VERSION_CREATE_CAPABILITY,
   PRODUCTION_VERSION_DISPLAY_CAPABILITY,
@@ -225,10 +225,13 @@ describe('production version', () => {
 
   it('does not rewrite a production order and does not remove a referenced version', async () => {
     await withTenant(tenant.client, async (tx) => {
+      await tx.insert(productionOrderType).values({
+        client: tenant.client, orderType: 'PP01', description: 'Standard production', orderCategory: '10', createdBy: ACTOR,
+      });
       await tx.insert(productionOrder).values({
         client: tenant.client, orderNumber: '000000000093', materialNumber: 'FG-1', plant: '1000',
         orderQuantity: '1', unitOfMeasure: 'KG', scheduledStart: '2026-01-01', scheduledFinish: '2026-01-02',
-        createdBy: ACTOR,
+        orderType: 'PP01', createdBy: ACTOR,
       });
       await tx.insert(productionOrderComponent).values({
         client: tenant.client, orderNumber: '000000000093', itemNumber: 10, materialNumber: 'COMP-1',
@@ -249,7 +252,8 @@ describe('production version', () => {
     const planningSource = readFileSync('src/modules/production/mrp-run.ts', 'utf8');
     expect(orderSource).not.toMatch(/selectProductionVersion/);
     expect(planningSource).not.toMatch(/selectProductionVersion/);
-    expect(planningSource).toContain('This run does not explode a bill of material.');
+    expect(planningSource).toContain('explodePlannedSupply');
+    expect(planningSource).toContain('A bill of material is selected through the production version. It is not entered.');
   });
 
   it('does not show another tenant the version and refuses costing', async () => {

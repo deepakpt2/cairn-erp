@@ -33,12 +33,21 @@ export async function convertPlannedOrdersAction(
     if (text(form, 'confirm') !== 'X') {
       return { ok: false, message: 'Confirm the collective conversion before it is saved.', remedy: 'Tick the confirmation. Nothing was converted.' };
     }
+    const orderType = text(form, 'orderType');
+    if (!orderType) {
+      return {
+        ok: false,
+        message: 'An order type is required for conversion. None was selected.',
+        remedy: 'Enter a standing production order type. The first type was not chosen.',
+      };
+    }
     const correlationId = text(form, 'correlationId') || crypto.randomUUID();
     const result = await convertPlannedOrders({
       client: session.user.client,
       changedBy: session.user.username,
       orderNumbers: form.getAll('orderNumber').filter((value): value is string => typeof value === 'string'),
       correlationId,
+      orderType,
       named: {
         mrpArea: text(form, 'mrpArea'),
         openingDate: text(form, 'openingDate'),

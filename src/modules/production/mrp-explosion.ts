@@ -1,8 +1,8 @@
 /**
- * Single-item explosion — MD02.
+ * Shared explosion — MD02, and the plant run after a make proposal.
  *
- * The plant run does not call this. A make proposal names a production version.
- * The version names the BOM. Component demand is dated at the planned-order start.
+ * A make proposal names a production version. The version names the BOM.
+ * Component demand is dated at the planned-order start.
  * A buy material is not exploded. A phantom is exploded through and is not proposed.
  * A cycle stops the branch. The first version is never chosen.
  *

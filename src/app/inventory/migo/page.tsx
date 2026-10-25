@@ -13,7 +13,9 @@ export const dynamic = 'force-dynamic';
  *
  * The screen carries SAP's whole action/reference vocabulary and resolves every cell to
  * posts-here, delivered-elsewhere or refused-by-name. This round's posting cell is
- * A07 + R08: the 261 component issue against a released production order.
+ * A07 + R08: the 261 component issue against a released or technically completed
+ * production order. A created order is still refused. Technical completion does
+ * not copy the closed-order ban.
  */
 export default async function MigoPage() {
   const session = await requireSession(MIGO_ROUTE);

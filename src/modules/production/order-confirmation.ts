@@ -35,6 +35,12 @@ import {
   remainingText,
   rows,
 } from './time-ticket';
+import {
+  confirmationBlockReason,
+  parseProductionOrderStatus,
+  productionOrderMayBeCharged,
+  type ProductionOrderStatus,
+} from './production-order-status';
 
 export const ORDER_CONFIRMATION_CAPABILITY = 'PROD.CONFIRM.ORDER';
 export const ORDER_CONFIRMATION_ROUTE = '/production/order-confirmation';
@@ -56,7 +62,7 @@ const REFUSED: Record<string, string> = {
   operation: 'An operation is confirmed on CO11N. This screen confirms every eligible operation. One operation was not selected.',
   operationNumber: 'An operation is confirmed on CO11N. This screen confirms every eligible operation. One operation was not selected.',
   co11n: 'CO11N confirms one operation. This screen confirms the order.',
-  co13: 'CO13 is not implemented. A posted confirmation was not cancelled.',
+  co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
   co14: 'CO14 is not implemented. Open the order from CO03.',
   cost: 'Activity cost is not calculated. No cost was posted.',
   capacity: 'Capacity is not updated by a confirmation.',
@@ -115,7 +121,7 @@ export interface OrderConfirmationView {
   productionVersion: string;
   note: string | null;
   requestKey: string;
-  orderStatus: 'CREATED' | 'RELEASED';
+  orderStatus: ProductionOrderStatus;
   effects: OrderConfirmationEffect[];
   skipped: OrderConfirmationSkipped[];
   movementsPosted: 0;
@@ -132,7 +138,7 @@ export interface OrderConfirmationLoad {
   unit: string;
   scheduledStart: string;
   scheduledFinish: string;
-  status: 'CREATED' | 'RELEASED';
+  status: ProductionOrderStatus;
   version: number;
   productionVersion: string | null;
   previouslyConfirmed: string;
@@ -152,9 +158,9 @@ const GAPS = [
   'An operation without its own quantity is confirmed for the header quantity. That quantity is not split across operations. An operation quantity is scaled by its base quantity, and an inexact scale is refused rather than rounded.',
   'An operation that requires an activity is not given a standard value. Confirm that operation on CO11N.',
   'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
-  'The order status stays created or released. A final confirmation blocks another confirmation of each affected operation. It does not complete the order.',
+  'The order status is not changed. Technical completion is a separate CO02 action. A final confirmation blocks another confirmation of each affected operation. It does not complete the order.',
   'Underdelivery tolerance is stored on the material plant and is not executed here. No financial period is applied, because no document is posted.',
-  'CO11N, CO13, and CO14 are not this screen. A posted confirmation is not edited here.',
+  'CO11N confirms one operation. Cancellation is CO13, not this screen. CO14 is not implemented. A posted confirmation is not edited here.',
 ];
 
 const MOVEMENT_NOTE = 'No goods movement was proposed. Backflush is not configured, and automatic goods receipt is not configured. Stock was not changed.';
@@ -243,8 +249,12 @@ async function headerProgress(tx: Tx, client: string, orderNumber: string): Prom
     select coalesce(sum(yield_quantity), 0)::text as yield,
            coalesce(sum(scrap_quantity), 0)::text as scrap,
            coalesce(sum(rework_quantity), 0)::text as rework
-      from production_confirmation
-     where client = ${client} and order_number = ${orderNumber} and confirmation_level = 'HEADER'
+      from production_confirmation c
+     where c.client = ${client} and c.order_number = ${orderNumber} and c.confirmation_level = 'HEADER'
+       and not exists (
+         select 1 from production_confirmation_cancellation x
+          where x.client = c.client and x.confirmation_number = c.confirmation_number
+       )
   `);
   return {
     yield: String(found[0]?.yield ?? '0'),
@@ -291,7 +301,7 @@ async function prepare(tx: Tx, client: string, input: {
   if (header.version !== input.expectedVersion) {
     fail('The production order was changed by someone else. Nothing was saved.', 'Open the order again, then confirm.');
   }
-  if (header.status !== 'RELEASED') {
+  if (!productionOrderMayBeCharged(header.status)) {
     fail('The order is not released. Nothing was saved.', 'Release the order, then confirm. This screen does not release it.');
   }
   const confirmationType = clean(input.confirmationType).toUpperCase();
@@ -475,7 +485,8 @@ async function storedView(tx: Tx, client: string, confirmationNumber: string): P
      where client = ${client} and confirmation_number = ${confirmationNumber}
      order by operation_number
   `);
-  const status = String(header.status) === 'RELEASED' ? 'RELEASED' : 'CREATED';
+  const status = parseProductionOrderStatus(header.status);
+  if (!status) fail(`Status ${String(header.status)} is not a production-order status.`, 'The stored status is unsupported. It was not treated as created.');
   return {
     confirmationNumber: String(header.confirmation_number),
     confirmationLevel: 'HEADER',
@@ -566,7 +577,7 @@ export async function loadOrderConfirmation(client: string, input: {
       throw error;
     }
     const keyDate = postingDate || header.scheduledStart;
-    let blockingReason: string | null = header.status === 'RELEASED' ? null : 'The order is not released. Confirmation does not release it.';
+    let blockingReason: string | null = confirmationBlockReason(header.status);
     let version: { taskListType: string; routingGroup: string; groupCounter: string; productionVersion: string } | null = null;
     if (!blockingReason) {
       try {

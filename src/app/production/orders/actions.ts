@@ -10,7 +10,9 @@ import {
   PRODUCTION_ORDER_ROUTE,
   ProductionOrderError,
   createProductionOrder,
+  previewProductionOrderBom,
   releaseProductionOrder,
+  type OrderBomSnapshot,
   type ProductionOrderView,
 } from '@/modules/inventory/production-orders';
 
@@ -19,6 +21,7 @@ export interface OrderActionState {
   message: string;
   remedy?: string;
   order?: ProductionOrderView | null;
+  preview?: OrderBomSnapshot | null;
 }
 
 function text(form: FormData, name: string): string {
@@ -26,7 +29,15 @@ function text(form: FormData, name: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-const LINE_COUNT = 4;
+function refusedOverride(form: FormData): string | null {
+  for (const [key, value] of form.entries()) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    if (/^component(Material|Plant|Sloc|Quantity)-\d+$/.test(key) || key === 'bomUsage' || key === 'bomAlternative' || key === 'components') {
+      return key;
+    }
+  }
+  return null;
+}
 
 export async function createOrderAction(
   _previous: OrderActionState,
@@ -36,39 +47,75 @@ export async function createOrderAction(
   if (!can(session, PRODUCTION_ORDER_CAPABILITY)) {
     return { ok: false, message: 'You do not hold the production order create capability.' };
   }
-  const components: Array<{ materialNumber: string; plant: string; storageLocation?: string; requiredQuantity: number }> = [];
-  for (let n = 1; n <= LINE_COUNT; n += 1) {
-    const materialNumber = text(form, `componentMaterial-${n}`);
-    if (!materialNumber) continue;
-    components.push({
-      materialNumber,
-      plant: text(form, `componentPlant-${n}`),
-      storageLocation: text(form, `componentSloc-${n}`) || undefined,
-      requiredQuantity: Number(text(form, `componentQuantity-${n}`) || '0'),
-    });
+  const override = refusedOverride(form);
+  if (override) {
+    return {
+      ok: false,
+      message: `A typed component or BOM alternative (${override}) is not accepted. Components are taken from the selected production version.`,
+      remedy: 'Leave the component list empty. Check the bill of material, then create the order.',
+      order: null,
+      preview: null,
+    };
+  }
+  const header = {
+    client: session.user.client,
+    materialNumber: text(form, 'materialNumber'),
+    plant: text(form, 'plant'),
+    orderQuantity: Number(text(form, 'orderQuantity') || '0'),
+    scheduledFinish: text(form, 'scheduledFinish'),
+    productionVersion: text(form, 'productionVersion') || undefined,
+  };
+  if (text(form, 'intent') === 'check') {
+    try {
+      const preview = await previewProductionOrderBom(header);
+      return {
+        ok: true,
+        message: `Production version ${preview.productionVersion} uses bill of material ${preview.bomUsage}/${preview.bomAlternative}. Nothing was saved.`,
+        preview,
+        order: null,
+      };
+    } catch (caught) {
+      if (caught instanceof ProductionOrderError) {
+        return { ok: false, message: caught.message, remedy: caught.remedy, order: null, preview: null };
+      }
+      return { ok: false, message: 'The bill of material could not be read.', order: null, preview: null };
+    }
+  }
+  const orderType = text(form, 'orderType');
+  if (!orderType) {
+    return {
+      ok: false,
+      message: 'A production order type is required. Nothing was saved.',
+      remedy: 'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
+      order: null,
+      preview: null,
+    };
   }
   try {
     const order = await createProductionOrder({
-      client: session.user.client,
+      client: header.client,
       createdBy: session.user.username,
-      materialNumber: text(form, 'materialNumber'),
-      plant: text(form, 'plant'),
-      orderQuantity: Number(text(form, 'orderQuantity') || '0'),
+      materialNumber: header.materialNumber,
+      plant: header.plant,
+      orderQuantity: header.orderQuantity,
       scheduledStart: text(form, 'scheduledStart'),
-      scheduledFinish: text(form, 'scheduledFinish'),
+      scheduledFinish: header.scheduledFinish,
       batch: text(form, 'batch') || undefined,
-      components,
+      productionVersion: header.productionVersion,
+      orderType,
       requestKey: text(form, 'requestKey') || undefined,
     });
     revalidatePath(PRODUCTION_ORDER_ROUTE);
     const note = order.releaseNote ? ` ${order.releaseNote}` : '';
+    const warnings = order.snapshotWarnings?.length ? ` ${order.snapshotWarnings.join(' ')}` : '';
     const released = order.status === 'RELEASED' ? ' and released by the scheduling profile' : '';
-    return { ok: true, message: `Order ${order.orderNumber} created${released}.${note}`, order };
+    const version = order.productionVersion ? ` Production version ${order.productionVersion}, bill of material ${order.bomUsage}/${order.bomAlternative}.` : '';
+    return { ok: true, message: `Order ${order.orderNumber} created${released}.${version}${note}${warnings}`, order, preview: null };
   } catch (caught) {
     if (caught instanceof ProductionOrderError) {
-      return { ok: false, message: caught.message, remedy: caught.remedy, order: null };
+      return { ok: false, message: caught.message, remedy: caught.remedy, order: null, preview: null };
     }
-    return { ok: false, message: 'The order could not be created.', order: null };
+    return { ok: false, message: 'The order could not be created.', order: null, preview: null };
   }
 }
 

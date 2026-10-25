@@ -10,6 +10,8 @@ import {
   PRODUCTION_ORDER_LOCK,
   ProductionOrderChangeError,
   changeProductionOrder,
+  revokeTechnicalCompletion,
+  technicallyCompleteProductionOrder,
   type ProductionOrderChangeResult,
 } from '@/modules/production/production-order-change';
 import { PRODUCTION_ORDER_DISPLAY_ROUTE } from '@/modules/production/production-order-display';
@@ -85,6 +87,54 @@ export async function changeProductionOrderAction(
       message: result.changed
         ? `Production order ${result.order.orderNumber} was saved. It was not released, and nothing was posted.`
         : `Production order ${result.order.orderNumber} was not changed.`,
+    };
+  } catch (error) {
+    if (error instanceof ProductionOrderChangeError || error instanceof EnqueueError || error instanceof AuthzError) {
+      return { ok: false, message: error.message, remedy: 'remedy' in error ? error.remedy : undefined };
+    }
+    throw error;
+  }
+}
+
+export async function technicallyCompleteProductionOrderAction(
+  _previous: ProductionOrderChangeState,
+  form: FormData,
+): Promise<ProductionOrderChangeState> {
+  return runStatusAction(form, 'complete');
+}
+
+export async function revokeTechnicalCompletionAction(
+  _previous: ProductionOrderChangeState,
+  form: FormData,
+): Promise<ProductionOrderChangeState> {
+  return runStatusAction(form, 'revoke');
+}
+
+async function runStatusAction(form: FormData, kind: 'complete' | 'revoke'): Promise<ProductionOrderChangeState> {
+  try {
+    const session = await requireCapability(PRODUCTION_ORDER_CHANGE_CAPABILITY);
+    const orderNumber = text(form, 'orderNumber');
+    await assertChangeForSession(session, { lockObject: PRODUCTION_ORDER_LOCK, argument: orderNumber });
+    const input = {
+      client: session.user.client,
+      changedBy: session.user.username,
+      orderNumber,
+      expectedVersion: Number(text(form, 'version')),
+      held: session.user.capabilities,
+      confirmed: true,
+    };
+    const result = kind === 'complete'
+      ? await technicallyCompleteProductionOrder(input)
+      : await revokeTechnicalCompletion(input);
+    revalidatePath(PRODUCTION_ORDER_CHANGE_ROUTE);
+    revalidatePath(PRODUCTION_ORDER_DISPLAY_ROUTE);
+    return {
+      ok: true,
+      order: result.order,
+      warnings: result.warnings,
+      message: kind === 'complete'
+        ? `Production order ${result.order.orderNumber} is technically completed. Quantity, dates, and components were not changed, and nothing was posted.`
+        : `Technical completion of ${result.order.orderNumber} was revoked. Status is ${result.order.status}. Nothing was posted.`,
     };
   } catch (error) {
     if (error instanceof ProductionOrderChangeError || error instanceof EnqueueError || error instanceof AuthzError) {

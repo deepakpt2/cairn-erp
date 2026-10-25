@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { productionOrderMayBeCharged } from '../src/modules/production/production-order-status';
+
 const read = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8');
 
 describe('CO15 screen contract', () => {
@@ -23,5 +25,19 @@ describe('CO15 screen contract', () => {
     expect(service).not.toContain('postProductionReceipt');
     expect(service).toContain("confirmation_level, yield_quantity");
     expect(service).toContain("'HEADER'");
+  });
+
+  it('follows the confirmation-service status rule and does not block technical completion by itself', () => {
+    expect(productionOrderMayBeCharged('CREATED')).toBe(false);
+    expect(productionOrderMayBeCharged('RELEASED')).toBe(true);
+    expect(productionOrderMayBeCharged('TECHNICALLY_COMPLETED')).toBe(true);
+    expect(form).toContain('productionOrderMayBeCharged(loaded.status)');
+    expect(form).not.toContain("loaded.status !== 'RELEASED'");
+    expect(form).toContain('loaded.eligible.length === 0');
+    expect(form).toContain('disabled={!canConfirm || blocked || pending} data-co15-check');
+    expect(form).toContain('disabled={!canConfirm || blocked || pending} data-co15-save');
+    expect(service).toContain('productionOrderMayBeCharged(header.status)');
+    expect(service).not.toContain("header.status !== 'RELEASED'");
+    expect(service).toContain('ORDER_CONFIRMATION_CAPABILITY');
   });
 });

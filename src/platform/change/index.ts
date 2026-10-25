@@ -25,7 +25,7 @@ export interface RecordChangeInput {
   objectClass: string;
   /** Business key of the changed object; partner bank/contact callers must use opaque record IDs, never account values. */
   objectKey: string;
-  changeType: 'CREATE' | 'CHANGE' | 'DELETE' | 'BLOCK' | 'UNBLOCK' | 'REVERSE';
+  changeType: 'CREATE' | 'CHANGE' | 'DELETE' | 'BLOCK' | 'UNBLOCK' | 'REVERSE' | 'RELEASE' | 'TECO' | 'REVOKE_TECO';
   changedBy: string;
   transactionCode?: string;
   reason?: string;

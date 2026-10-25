@@ -38,6 +38,11 @@ export default function CollectiveForm({ rows }: { rows: ConversionPreview[] }) 
           ))}
         </tbody>
       </table>
+      <label className="block">
+        Order type
+        <input name="orderType" maxLength={4} className="input code mt-1" required />
+      </label>
+      <p className="text-ink-soft">One type is applied to every selected order. It is not taken from the material or from the first standing type.</p>
       <label className="flex items-center gap-2">
         <input type="checkbox" name="confirm" value="X" />
         Convert the selected orders. Each order is saved on its own. The quantity is not reduced.

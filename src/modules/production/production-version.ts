@@ -12,7 +12,7 @@
  *
  * Not stored, because the system does not execute them: repetitive manufacturing,
  * a rate routing, a separate planning task list, a costing lot size, and a
- * backflush. MD01 does not call this selector. CO01 does not read it, and a
+ * backflush. MD01 calls this selector through the shared explosion. CO01 does not read it, and a
  * saved order is not rewritten. Product costing does not stand.
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
@@ -796,7 +796,7 @@ export async function deleteProductionVersion(client: string, materialNumber: st
   });
 }
 
-/** Shared selector. Does not write. The plant run and CO01 do not call this. Single-item planning does. Conversion may call it inside its own transaction. Costing does not stand. */
+/** Shared selector. Does not write. The plant run calls this through the shared explosion. CO01 calls this when the screen derives the component snapshot. Single-item planning and conversion may call it inside their own transaction. Costing does not stand. */
 export async function selectProductionVersion(client: string, input: {
   materialNumber: string;
   plant: string;

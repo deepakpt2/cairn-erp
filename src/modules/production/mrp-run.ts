@@ -7,9 +7,11 @@
  *
  * The planning file is the net-change marker. There is no second change table.
  * A purchase requisition is the purchasing document. A planned order is not a
- * production order. This plant run does not explode a bill of material. It does not select a production version.
- * Dependent demand is the open reservation and a committed dependent requirement. An MRP area does not stand.
- * Single-item planning is a separate entry. It uses this calculation and explodes through a production version.
+ * production order. A make proposal is exploded by the shared single-item
+ * explosion. The production version selects the bill. A typed bill is refused.
+ * A bought material is not exploded. Dependent demand is a planning record,
+ * not a reservation and not a material document. An MRP area does not stand.
+ * Single-item planning is a separate entry. It uses this calculation and the same explosion.
  * Single-level planning is a third entry. It plans the named material and does not plan a lower-level component.
  */
 import { sql } from 'drizzle-orm';
@@ -19,6 +21,7 @@ import { allocateNumber } from '../../platform/numbering';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { createRequisition, changeRequisition } from '../purchasing/requisitions';
 import { explodePlannedSupply } from './mrp-explosion';
+import { structuralBomLevels } from './mrp-structure';
 
 export const MRP_RUN_CAPABILITY = 'PROD.MRP.RUN';
 export const MRP_REGENERATE_CAPABILITY = 'PROD.MRP.REGENERATE';
@@ -49,7 +52,7 @@ const REFUSED: Record<string, string> = {
   deleteAndRecreate: 'Delete and recreate is not this planning mode. An existing proposal is not removed.',
   recreate: 'Recreate is not this planning mode. An eligible proposal is adapted, not replaced.',
   calendar: 'A factory calendar is not carried. Lead time is a number of days.',
-  bom: 'This run does not explode a bill of material. Dependent demand is the open reservation.',
+  bom: 'A bill of material is selected through the production version. It is not entered.',
   companyCode: 'The company code is read from the plant. It is not a key of the run.',
   uuid: 'A uuid is not the key of the run. The run number is.',
   post: 'A planning run posts nothing.',
@@ -267,9 +270,12 @@ function selectionOf(input: MrpRunRequest): Selection {
   const execution = clean(input.executionMode).toUpperCase() || 'FOREGROUND';
   if (execution !== 'FOREGROUND') fail(REFUSED.background, 'Narrow the plant or the material range.');
   const askedMode = clean(input.planningMode).toUpperCase();
+  const entryPoint: Selection['entryPoint'] = input.entryPoint === 'SINGLE_ITEM' || input.entryPoint === 'SINGLE_LEVEL'
+    ? input.entryPoint
+    : 'PLANT';
   let planningMode: Selection['planningMode'] = 'ADAPT_EXISTING';
   let explode = input.explode === true;
-  if (input.entryPoint === 'SINGLE_LEVEL') {
+  if (entryPoint === 'SINGLE_LEVEL') {
     if (askedMode === '3' || askedMode === 'DELETE_AND_RECREATE' || askedMode === 'RECREATE') {
       fail(REFUSED.deleteAndRecreate, 'Adapt the proposal that stands, or re-explode without deleting it.');
     }
@@ -287,6 +293,8 @@ function selectionOf(input: MrpRunRequest): Selection {
   } else if (askedMode && askedMode !== 'ADAPT_EXISTING' && askedMode !== '1' && askedMode !== 'ADAPT') {
     fail(REFUSED.recreate, 'Adapt the proposal that stands.');
   }
+  // The plant entry always explodes. A caller cannot turn that off with a typed bill.
+  if (entryPoint === 'PLANT') explode = true;
   const processing = clean(input.processingKey).toUpperCase();
   if (!PROCESSING_KEYS.includes(processing as Selection['processingKey'])) {
     fail(`The processing key ${input.processingKey || 'blank'} does not stand.`, 'Choose net change, net change in the horizon, or regenerative.');
@@ -328,7 +336,7 @@ function selectionOf(input: MrpRunRequest): Selection {
     simulationOnly: input.simulationOnly === true,
     confirmRegenerative: input.confirmRegenerative === true,
     explode,
-    entryPoint: input.entryPoint === 'SINGLE_ITEM' || input.entryPoint === 'SINGLE_LEVEL' ? input.entryPoint : 'PLANT',
+    entryPoint,
     planningMode,
     productionVersion: clean(input.productionVersion).toUpperCase() || null,
   };
@@ -633,6 +641,14 @@ async function enqueueComponent(
     insert into mrp_run_material (client, run_number, material_number, plant, status, bom_level, explosion_path, created_by)
     values (${client}, ${runNumber}, ${component.materialNumber}, ${component.plant}, 'PENDING', ${component.level}, ${component.path}, ${actor})
     on conflict (client, run_number, material_number, plant) do update set
+      explosion_path = case
+        when mrp_run_material.explosion_path is null then excluded.explosion_path
+        else mrp_run_material.explosion_path
+      end,
+      bom_level = case
+        when mrp_run_material.explosion_path is null then excluded.bom_level
+        else mrp_run_material.bom_level
+      end,
       status = case
         when mrp_run_material.status in ('COMPLETED', 'SKIPPED') and mrp_run_material.replan_count < 3 then 'PENDING'
         else mrp_run_material.status
@@ -751,6 +767,7 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
       ) gr on gr.production_order_number = o.order_number
      where o.client = ${client} and o.material_number = ${candidate.materialNumber} and o.plant = ${candidate.plant}
        and o.status in ('CREATED', 'RELEASED')
+       -- TECHNICALLY_COMPLETED is not open supply. Do not add it here.
   `);
 
   const day = today();
@@ -1005,7 +1022,7 @@ async function reconcile(
             plant: candidate.plant,
             purchasingGroup: candidate.purchasingGroup!,
           }],
-        });
+        }, tx);
         await recordProposal(tx, client, runNumber, actor, candidate, {
           type: calculation.proposalType, action: 'CREATE', documentNumber: made.requisitionNumber, itemNumber: 10,
           quantity: lot.quantity, receiptDate: lot.receiptDate, startDate: lot.startDate,
@@ -1098,7 +1115,7 @@ async function reconcile(
           plant: candidate.plant,
           purchasingGroup: candidate.purchasingGroup!,
         }],
-      });
+      }, tx);
     } else {
       const updated = await rows(tx, sql`
         update planned_order
@@ -1262,6 +1279,30 @@ export async function cancelMrpRun(client: string, runNumber: string, requestedB
   });
 }
 
+async function storeStructuralLevels(tx: Tx, client: string, runNumber: string): Promise<void> {
+  const existing = await rows(tx, sql`
+    select material_number, plant
+      from mrp_run_material
+     where client = ${client} and run_number = ${runNumber}
+     order by plant, material_number
+  `);
+  if (existing.length === 0) return;
+  const structural = await structuralBomLevels(tx, {
+    client,
+    roots: existing.map((row) => ({ materialNumber: String(row.material_number), plant: String(row.plant) })),
+  });
+  const present = new Set(existing.map((row) => `${String(row.plant)}/${String(row.material_number)}`));
+  for (const level of structural.levels) {
+    if (!present.has(`${level.plant}/${level.materialNumber}`)) continue;
+    await tx.execute(sql`
+      update mrp_run_material
+         set bom_level = ${level.level}
+       where client = ${client} and run_number = ${runNumber}
+         and material_number = ${level.materialNumber} and plant = ${level.plant}
+    `);
+  }
+}
+
 export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
   const selection = selectionOf(input);
   const opened = await withTenant(input.client, async (tx) => {
@@ -1286,10 +1327,13 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
     if (selection.processingKey === 'NEUPL' && !selection.confirmRegenerative) {
       fail('Regenerative planning needs confirmation.', 'Confirm the regenerative run, or choose net change.');
     }
+    // Lock the plants before the overlap check. A second run for the same range waits,
+    // then sees this run, instead of both creating supply and dependent demand.
     const plants = await rows(tx, sql`
       select plant from plant
        where client = ${input.client} and plant >= ${selection.plantFrom} and plant <= ${selection.plantTo}
        order by plant
+       for update
     `);
     if (plants.length === 0) {
       fail(`The plant ${selection.plantFrom} does not stand.`, 'Maintain the plant before planning in it.');
@@ -1401,10 +1445,10 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
         const candidate = await loadCandidate(tx, input.client, String(item.material_number), String(item.plant));
         if (!candidate) fail(`Material ${item.material_number} is no longer in the planning scope.`);
         const calculation = await calculate(tx, input.client, selection, candidate, opened.runNumber);
-        // A plant run can store one planning requisition item for a material. Several lots would
+        // One planning requisition item can be stored for a material. Several purchase lots would
         // keep the first and drop the rest. Reject the material before any item or proposal is written.
-        const multiLotNotStored = selection.entryPoint === 'PLANT'
-          && calculation.proposalType === 'PURCHASE_REQUISITION'
+        // Planned orders are not this guard. The rejection is the same for plant, single-item, and single-level.
+        const multiLotNotStored = calculation.proposalType === 'PURCHASE_REQUISITION'
           && calculation.lots.length > 1;
         if (multiLotNotStored) {
           calculation.status = 'FAILED';
@@ -1499,6 +1543,11 @@ export async function planMaterials(input: MrpRunRequest): Promise<MrpRunView> {
          where client = ${input.client} and run_number = ${opened.runNumber} and status = 'PENDING'
       `);
     }
+    // Quantity explosion already ran inside the loop. This pass stores a structural level
+    // for display. It does not select a version, write a dependent requirement, or change a proposal.
+    if (selection.entryPoint === 'PLANT') {
+      await storeStructuralLevels(tx, input.client, opened.runNumber);
+    }
     await closeRun(tx, input.client, opened.runNumber, cancelling ? 'CANCELLED' : 'COMPLETED');
     return (await viewOf(tx, input.client, opened.runNumber))!;
   });
@@ -1511,7 +1560,7 @@ const SINGLE_REFUSED: Record<string, string> = {
   proposalMode: 'The proposal type follows the procurement type. It is not entered.',
   changeNumber: 'Engineering change management is not implemented. A change number is refused.',
   bomAlternative: 'A bill of material is selected through the production version. It is not entered.',
-  bom: 'This run does not explode a bill of material. Dependent demand is the open reservation.',
+  bom: 'A bill of material is selected through the production version. It is not entered.',
   calendar: 'A factory calendar is not carried. Lead time is a number of days.',
   period: 'A financial period is not read. Planning is not a posting.',
   background: 'A background run is not carried. Plan this material in the foreground.',

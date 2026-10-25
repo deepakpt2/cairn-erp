@@ -13,7 +13,8 @@ describe('COOIS screen contract', () => {
     expect(service).toContain("ORDER_INFORMATION_ALIAS = 'COOIS'");
     expect(page).toContain('orderInformationRefusal');
     expect(page).toContain('data-coois-unavailable');
-    expect(page).toContain('CO14 are not implemented');
+    expect(page).toContain('CO14 is not implemented');
+    expect(page).toContain('Cancellation is CO13');
     expect(page).not.toContain('/production/confirmation-display');
     expect(service).toContain('Operations are not stored on the order');
     expect(service).not.toContain('unit_price');

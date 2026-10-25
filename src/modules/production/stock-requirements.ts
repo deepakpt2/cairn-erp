@@ -392,6 +392,7 @@ export async function stockRequirementsList(input: {
       ) gr on gr.production_order_number = o.order_number
       where o.client = ${client} and o.material_number = ${s.material!} and o.plant = ${s.plant!}
         and o.status in ('CREATED', 'RELEASED')
+        -- TECHNICALLY_COMPLETED is not an open receipt. Do not add it here.
       order by o.scheduled_finish, o.order_number
     `) as unknown as Array<Record<string, string>>;
     for (const row of productionRows) {

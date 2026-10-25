@@ -26,6 +26,7 @@ let other: TestTenant;
 
 async function order(key: string, quantity = 10) {
   return createProductionOrder({
+    orderType: 'PP01',
     client: tenant.client,
     createdBy: ACTOR,
     requestKey: key,
@@ -70,6 +71,11 @@ beforeAll(async () => {
     await defineRange(tx, {
       client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR,
     });
+    await tx.execute(sql`
+      insert into production_order_type (client, order_type, description, order_category, created_by)
+      values (${tenant.client}, 'PP01', 'Standard production', '10', ${ACTOR})
+      on conflict (client, order_type) do nothing
+    `);
   });
 });
 
@@ -95,17 +101,65 @@ describe('CO03 display production order', () => {
       receivedQuantity: '0.000',
       version: 1,
     });
+    expect(shown).toMatchObject({
+      productionVersion: null,
+      bomUsage: null,
+      bomAlternative: null,
+    });
     expect(shown?.components[0]).toMatchObject({
+      itemNumber: 10,
+      bomItem: null,
+      sourceMaterial: null,
       materialNumber: 'CO02-RM', requiredQuantity: '2.000', issuedQuantity: '0.000', remainingQuantity: '2.000',
     });
     expect(shown?.gaps.join(' ')).toMatch(/Operations are not stored/);
+    expect(shown?.gaps.join(' ')).toMatch(/were not recorded/);
+    expect(shown?.gaps.join(' ')).not.toMatch(/is not stored on the order/);
+    expect(shown?.gaps.join(' ')).not.toMatch(/does not read a material BOM/);
     expect(await stamp(created.orderNumber)).toEqual(before);
     expect(await getProductionOrderDisplay(other.client, created.orderNumber)).toBeNull();
     const listed = await listProductionOrders(tenant.client, { plant: PLANT });
     expect(listed.rows.some((row) => row.orderNumber === created.orderNumber)).toBe(true);
     await expect(listProductionOrders(tenant.client, { plant: PLANT, status: 'TECO' })).rejects.toBeInstanceOf(ProductionOrderDisplayError);
-    expect(productionOrderDisplayRefusal({ orderType: 'PP01' })).toMatch(/not stored/);
+    expect(productionOrderDisplayRefusal({ orderType: 'PP01' })).toMatch(/not a search key/);
     expect(productionOrderDisplayRefusal({ operation: '0010' })).toMatch(/not stored/);
+    expect(productionOrderDisplayRefusal({ productionVersion: '0001' })).toMatch(/not a search key/);
+    expect(productionOrderDisplayRefusal({ productionVersion: '0001' })).not.toMatch(/not stored/);
+    expect(productionOrderDisplayRefusal({ productionVersion: '0001' })).not.toMatch(/does not read a material BOM/);
+  });
+
+  it('shows a stored BOM snapshot and does not treat the line number as the BOM item', async () => {
+    const created = await order('display-snapshot');
+    const before = await stamp(created.orderNumber);
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update production_order
+           set production_version = '0001', bom_usage = 'P', bom_alternative = '01'
+         where client = ${tenant.client} and order_number = ${created.orderNumber}
+      `);
+      await tx.execute(sql`
+        update production_order_component
+           set bom_item = 'A010', source_material = 'CO02-FG'
+         where client = ${tenant.client} and order_number = ${created.orderNumber} and item_number = 10
+      `);
+    });
+    const shown = await getProductionOrderDisplay(tenant.client, created.orderNumber);
+    expect(shown).toMatchObject({
+      productionVersion: '0001',
+      bomUsage: 'P',
+      bomAlternative: '01',
+    });
+    expect(shown?.components[0]).toMatchObject({
+      itemNumber: 10,
+      bomItem: 'A010',
+      sourceMaterial: 'CO02-FG',
+      materialNumber: 'CO02-RM',
+    });
+    expect(shown?.components[0]?.bomItem).not.toBe(String(shown?.components[0]?.itemNumber));
+    expect(shown?.gaps.join(' ')).toMatch(/determination that selected this snapshot/);
+    expect(shown?.gaps.join(' ')).toMatch(/not proof|not applied|does not re-read/);
+    expect(shown?.gaps.join(' ')).not.toMatch(/is not stored on the order/);
+    expect(await stamp(created.orderNumber)).toEqual(before);
   });
 });
 
@@ -225,6 +279,16 @@ describe('CO03 screen contract', () => {
     const page = readFileSync('src/app/production/production-order-display/page.tsx', 'utf8');
     const service = readFileSync('src/modules/production/production-order-display.ts', 'utf8');
     expect(page).toContain('The first was not opened.');
+    expect(page).toContain('data-production-version');
+    expect(page).toContain('data-bom-item');
+    expect(page).toContain('BOM item');
+    expect(page).toContain('not recorded');
+    expect(page).not.toContain('A production version is not stored');
+    expect(page).not.toContain('does not read a material BOM');
+    expect(service).toContain('o.production_version');
+    expect(service).toContain('c.bom_item');
+    expect(service).not.toContain('was read at conversion and was not copied');
+    expect(service).not.toContain('does not read a material BOM');
     expect(page).not.toMatch(/changeProductionOrder|releaseProductionOrder|createProductionOrder/);
     expect(service).not.toMatch(/\.insert\(|\.update\(|\.delete\(|sql`\s*(insert|update|delete)/i);
     expect(readFileSync('scripts/seed.ts', 'utf8')).toContain("aliases: ['CO03']");

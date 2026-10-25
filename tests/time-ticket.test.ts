@@ -6,7 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { changeProductionOrder } from '../src/modules/production/production-order-change';
+import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
@@ -51,6 +51,11 @@ describe('CO11N time ticket', () => {
     tenant = await createTenant('co11n-ticket');
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${tenant.client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
     });
     await extend('FG-11');
@@ -103,11 +108,13 @@ describe('CO11N time ticket', () => {
     });
     await checkProductionVersion(tenant.client, 'FG-11', PLANT, '0001', ACTOR);
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-order',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
     });
     const open = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-open',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
@@ -131,7 +138,7 @@ describe('CO11N time ticket', () => {
     expect(timeTicketRefusal({ backflush: 'X' })).toMatch(/backflush/);
     expect(timeTicketRefusal({ automaticGoodsReceipt: 'X' })).toMatch(/not configured/);
     expect(timeTicketRefusal({ personnel: '1' })).toMatch(/not validated/);
-    expect(timeTicketRefusal({ co13: '1' })).toMatch(/not implemented/);
+    expect(timeTicketRefusal({ co13: '1' })).toMatch(/Open CO13/);
     expect(timeTicketRefusal({ automatic: 'X' })).toMatch(/not a stored rule/);
   });
 
@@ -224,5 +231,33 @@ describe('CO11N time ticket', () => {
     await expect(changeProductionOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: released, expectedVersion: version, quantity: '12',
     })).rejects.toThrow(/has a confirmation/);
+  });
+
+  it('confirms a technically completed order and leaves that status', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 4,
+      scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-teco',
+      components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select version from production_order where client = ${tenant.client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ version: number }>;
+    const completed = await technicallyCompleteProductionOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      expectedVersion: Number(standing?.version), held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
+    const posted = await enterTimeTicket(tenant.client, {
+      requestedBy: ACTOR, requestKey: nextKey(), orderNumber: draft.orderNumber, operationNumber: '0010',
+      confirmationType: 'PARTIAL', yieldQuantity: '1', postingDate: '2026-10-24',
+      expectedVersion: completed.order.version,
+      activities: [{ parameter: 'LABOR', quantity: '1', unit: 'HR' }],
+    });
+    expect(posted.orderStatus).toBe('TECHNICALLY_COMPLETED');
+    const [after] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select status from production_order where client = ${tenant.client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ status: string }>;
+    expect(after?.status).toBe('TECHNICALLY_COMPLETED');
   });
 });

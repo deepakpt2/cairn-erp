@@ -10,8 +10,9 @@
  * stored, so dates are not rescheduled. This save does not release, technically
  * complete, close, or post.
  *
- * Created and released are the only statuses. A released order with no goods
- * movement can still be changed. A goods movement freezes the snapshot.
+ * Technical completion and its revocation are separate functions of this
+ * screen. They are not fields of the quantity save. A technically completed
+ * order cannot be edited until that completion is revoked.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
@@ -26,6 +27,7 @@ import {
   getProductionOrderDisplay,
   type ProductionOrderDisplay,
 } from './production-order-display';
+import { parseProductionOrderStatus, priorStatusFromRelease } from './production-order-status';
 
 export const PRODUCTION_ORDER_CHANGE_CAPABILITY = 'PROD.ORDER.CHANGE';
 export const PRODUCTION_ORDER_CHANGE_ROUTE = '/production/production-order-change';
@@ -33,7 +35,7 @@ export const PRODUCTION_ORDER_CHANGE_ALIAS = 'CO02';
 export const PRODUCTION_ORDER_LOCK = 'PRODUCTION_ORDER';
 
 const REFUSED: Record<string, string> = {
-  orderType: 'An order type is not stored. The status stays as it was stored.',
+  orderType: 'An order type is stored. This change does not replace it.',
   controllingArea: 'A controlling area is not a key of the order.',
   scrap: 'A scrap quantity is not stored. It was not applied.',
   productionVersion: 'A production version is not stored on the order. Master data was not re-read.',
@@ -47,7 +49,7 @@ const REFUSED: Record<string, string> = {
   bom: 'The bill of material is not stored on the order. This save does not explode one.',
   routing: 'A routing is not stored on the order.',
   release: 'Change does not release the order. Release is a separate act.',
-  teco: 'Technical completion is not a status and is not done here.',
+  teco: 'Technical completion is not a status field of this save. Use the technical completion action.',
   closed: 'A closed status is not stored. Change does not close the order.',
   delete: 'Change does not delete the production order.',
   confirmation: 'A posted confirmation is not changed here. Cancellation is not this screen.',
@@ -181,9 +183,15 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
     if (Number(header.version) !== input.expectedVersion) {
       fail('The production order was changed by someone else. Nothing was saved.', 'Open it again, then save.');
     }
-    const status = String(header.status);
-    if (status !== 'CREATED' && status !== 'RELEASED') {
-      fail(`Status ${status} is not a production-order status. Nothing was saved.`);
+    const status = parseProductionOrderStatus(header.status);
+    if (!status) {
+      fail(`Status ${String(header.status)} is not a production-order status. Nothing was saved.`, 'The stored status is unsupported. It was not treated as created.');
+    }
+    if (status === 'TECHNICALLY_COMPLETED') {
+      fail(
+        `Production order ${orderNumber} is technically complete. Quantity, dates, and components were not changed.`,
+        'Revoke technical completion before changing the order. This save does not revoke it.',
+      );
     }
     const materialNumber = clean(input.materialNumber).toUpperCase();
     const plant = clean(input.plant).toUpperCase();
@@ -410,4 +418,177 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
   const order = await getProductionOrderDisplay(input.client, orderNumber);
   if (!order) fail(`Production order ${orderNumber} does not stand after the save.`);
   return { order, changed: order.version !== input.expectedVersion, warnings };
+}
+
+export interface ProductionOrderLifecycleInput {
+  client: string;
+  changedBy: string;
+  orderNumber: string;
+  expectedVersion: number;
+  held: readonly string[];
+  confirmed: boolean;
+}
+
+function requireLifecycleActor(input: ProductionOrderLifecycleInput, verb: 'completed' | 'revoked'): string {
+  if (!holdsProductionOrderChangeAuthority(input.held)) {
+    fail(
+      `You do not hold the authority ${PRODUCTION_ORDER_CHANGE_CAPABILITY}.`,
+      'Technical completion is part of production-order change. It is not a separate authority.',
+    );
+  }
+  if (input.confirmed !== true) {
+    fail(
+      verb === 'completed'
+        ? 'Technical completion was not confirmed. Nothing was saved.'
+        : 'Revocation was not confirmed. Nothing was saved.',
+      'Confirm the action. The order was not changed.',
+    );
+  }
+  const orderNumber = clean(input.orderNumber);
+  if (!orderNumber) fail('A production order number is required.');
+  if (!Number.isInteger(input.expectedVersion) || input.expectedVersion < 1) {
+    fail('Open the order again. The record version is required.', 'Display the order, then change it.');
+  }
+  const actor = clean(input.changedBy);
+  if (!actor || actor.length > 60) fail('The user who changed the order is required.');
+  return actor;
+}
+
+async function lockedOrder(tx: Tx, client: string, orderNumber: string, expectedVersion: number) {
+  const found = await rows(tx, sql`
+    select order_number, status, version, released_by, released_at
+      from production_order
+     where client = ${client} and order_number = ${orderNumber}
+     for update
+  `);
+  const header = found[0];
+  if (!header) fail(`Production order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
+  if (Number(header.version) !== expectedVersion) {
+    fail('The production order was changed by someone else. Nothing was saved.', 'Open it again, then save.');
+  }
+  const status = parseProductionOrderStatus(header.status);
+  if (!status) {
+    fail(
+      `Status ${String(header.status)} is not a production-order status. Nothing was saved.`,
+      'The stored status is unsupported. It was not treated as created.',
+    );
+  }
+  return { header, status };
+}
+
+export async function technicallyCompleteProductionOrder(
+  input: ProductionOrderLifecycleInput,
+): Promise<ProductionOrderChangeResult> {
+  const actor = requireLifecycleActor(input, 'completed');
+  const orderNumber = clean(input.orderNumber);
+  await withTenant(input.client, async (tx) => {
+    const { header, status } = await lockedOrder(tx, input.client, orderNumber, input.expectedVersion);
+    if (status === 'TECHNICALLY_COMPLETED') {
+      fail(
+        `Production order ${orderNumber} is already technically complete. It was not completed again.`,
+        'Revoke technical completion if the order must be changed.',
+      );
+    }
+    const completedAt = new Date();
+    const updated = await tx.update(productionOrder).set({
+      status: 'TECHNICALLY_COMPLETED',
+      technicallyCompletedBy: actor,
+      technicallyCompletedAt: completedAt,
+      version: Number(header.version) + 1,
+      changedBy: actor,
+      changedAt: completedAt,
+    }).where(and(
+      eq(productionOrder.client, input.client),
+      eq(productionOrder.orderNumber, orderNumber),
+      eq(productionOrder.version, Number(header.version)),
+      eq(productionOrder.status, status),
+    )).returning({ orderNumber: productionOrder.orderNumber });
+    if (updated.length !== 1) {
+      fail('The production order was changed by someone else. Nothing was saved.', 'Open it again, then save.');
+    }
+    const recorded = await recordChange(tx, {
+      client: input.client,
+      objectClass: 'production_order',
+      objectKey: orderNumber,
+      changeType: 'TECO',
+      changedBy: actor,
+      transactionCode: PRODUCTION_ORDER_CHANGE_ALIAS,
+      reason: `Production order ${orderNumber} technically completed`,
+      before: { status },
+      after: { status: 'TECHNICALLY_COMPLETED', technicallyCompletedBy: actor },
+      fieldLabels: { status: 'Status', technicallyCompletedBy: 'Technically completed by' },
+    });
+    if (!recorded) fail('The technical completion was not recorded. Nothing was saved.');
+  });
+  const order = await getProductionOrderDisplay(input.client, orderNumber);
+  if (!order) fail(`Production order ${orderNumber} does not stand after technical completion.`);
+  return {
+    order,
+    changed: true,
+    warnings: [
+      'The component snapshot was not deleted.',
+      'No reservation, capacity requirement, purchase document, or journal was changed.',
+      'Goods receipt, component issue, and confirmation are not forbidden. The order fields cannot be changed until technical completion is revoked.',
+    ],
+  };
+}
+
+export async function revokeTechnicalCompletion(
+  input: ProductionOrderLifecycleInput,
+): Promise<ProductionOrderChangeResult> {
+  const actor = requireLifecycleActor(input, 'revoked');
+  const orderNumber = clean(input.orderNumber);
+  await withTenant(input.client, async (tx) => {
+    const { header, status } = await lockedOrder(tx, input.client, orderNumber, input.expectedVersion);
+    if (status !== 'TECHNICALLY_COMPLETED') {
+      fail(
+        `Production order ${orderNumber} is not technically complete. Nothing was revoked.`,
+        'Technical completion can be revoked only after it has been set.',
+      );
+    }
+    const prior = priorStatusFromRelease(header.released_by, header.released_at);
+    if (!prior.ok) {
+      fail(
+        'The release record is incomplete. Technical completion was not revoked.',
+        'Released-by and released-at must both stand, or both be empty. Nothing was guessed.',
+      );
+    }
+    const changedAt = new Date();
+    const updated = await tx.update(productionOrder).set({
+      status: prior.status,
+      technicallyCompletedBy: null,
+      technicallyCompletedAt: null,
+      version: Number(header.version) + 1,
+      changedBy: actor,
+      changedAt,
+    }).where(and(
+      eq(productionOrder.client, input.client),
+      eq(productionOrder.orderNumber, orderNumber),
+      eq(productionOrder.version, Number(header.version)),
+      eq(productionOrder.status, 'TECHNICALLY_COMPLETED'),
+    )).returning({ orderNumber: productionOrder.orderNumber });
+    if (updated.length !== 1) {
+      fail('The production order was changed by someone else. Nothing was saved.', 'Open it again, then save.');
+    }
+    const recorded = await recordChange(tx, {
+      client: input.client,
+      objectClass: 'production_order',
+      objectKey: orderNumber,
+      changeType: 'REVOKE_TECO',
+      changedBy: actor,
+      transactionCode: PRODUCTION_ORDER_CHANGE_ALIAS,
+      reason: `Technical completion of production order ${orderNumber} revoked`,
+      before: { status: 'TECHNICALLY_COMPLETED' },
+      after: { status: prior.status, technicallyCompletedBy: null },
+      fieldLabels: { status: 'Status', technicallyCompletedBy: 'Technically completed by' },
+    });
+    if (!recorded) fail('The revocation was not recorded. Nothing was saved.');
+  });
+  const order = await getProductionOrderDisplay(input.client, orderNumber);
+  if (!order) fail(`Production order ${orderNumber} does not stand after revocation.`);
+  return {
+    order,
+    changed: true,
+    warnings: ['The component snapshot was not restored, because technical completion did not delete it.'],
+  };
 }

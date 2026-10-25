@@ -3,7 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
+import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { MrpRunError, getMrpRun, planMaterials } from '../src/modules/production/mrp-run';
+import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant } from './helpers';
 
@@ -102,7 +104,7 @@ describe('SCR-166 total planning (MD01)', () => {
     await expect(planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       named: { bom: 'BOM-1' },
-    })).rejects.toThrow(/does not explode a bill of material/);
+    })).rejects.toThrow(/selected through the production version/);
     await expect(planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       planningMode: 'DELETE_AND_RECREATE',
@@ -374,11 +376,102 @@ describe('SCR-166 total planning (MD01)', () => {
     expect(await fingerprint()).toBe(before);
   });
 
+  it('does not reject a make shortage only because it needs more than one lot', async () => {
+    await material('MD01-MAKE-LOTS', { procurement: 'MAKE', safety: '25', lot: 'EXACT', production: 1, netChange: true });
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_plant
+           set maximum_lot_size = 10, minimum_lot_size = 0
+         where client = ${client} and material_number = 'MD01-MAKE-LOTS' and plant = ${PLANT}
+      `);
+    });
+    const run = await planMaterials({
+      client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
+      materialFrom: 'MD01-MAKE-LOTS', materialTo: 'MD01-MAKE-LOTS',
+    });
+    expect(run.materials[0]?.status).not.toBe('FAILED');
+    expect(run.diagnostics.some((row) => row.diagnosticCode === 'MULTI_LOT_NOT_STORED')).toBe(false);
+    const created = run.proposals.filter((row) => row.proposalType === 'PLANNED_ORDER' && row.action === 'CREATE');
+    expect(created.length).toBeGreaterThan(1);
+    const stored = await withTenant(client, async (tx) => {
+      const rows = await tx.execute(sql`
+        select
+          (select count(*) from planned_order
+            where client = ${client} and material_number = 'MD01-MAKE-LOTS')::int as orders,
+          (select count(*) from purchase_requisition_item
+            where client = ${client} and material_number = 'MD01-MAKE-LOTS')::int as requisitions
+      `) as unknown as Array<{ orders: number; requisitions: number }>;
+      return rows[0];
+    });
+    expect(stored?.orders).toBeGreaterThan(1);
+    expect(stored?.requisitions).toBe(0);
+  });
+
   it('leaves the other tenant with nothing', async () => {
     const run = await planMaterials({
       client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
       materialFrom: 'MD01-COVERED', materialTo: 'MD01-COVERED',
     });
     expect(await getMrpRun(other, run.runNumber)).toBeNull();
+  });
+
+  it('does not count a technically completed order as supply, and still counts a released order', async () => {
+    await material('MD01-TECO', { procurement: 'BUY', safety: '5', netChange: true });
+    await material('MD01-TECO-RM', { procurement: 'BUY', safety: '0', netChange: false });
+    await material('MD01-OPEN', { procurement: 'BUY', safety: '5', netChange: true });
+    await withTenant(client, async (tx) => {
+      await defineRange(tx, { client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
+    });
+    const completedOrder = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR, requestKey: 'md01-teco', materialNumber: 'MD01-TECO', plant: PLANT, orderQuantity: 5,
+      scheduledStart: DAY, scheduledFinish: DAY,
+      components: [{ materialNumber: 'MD01-TECO-RM', plant: PLANT, requiredQuantity: 1 }],
+    });
+    const [beforeComplete] = await withTenant(client, (tx) => tx.execute(sql`
+      select (select count(*) from purchase_requisition_item where client = ${client})::int as requisitions,
+             (select count(*) from reservation_header where client = ${client})::int as reservations,
+             (select count(*) from material_document where client = ${client})::int as documents,
+             (select count(*) from journal_entry where client = ${client})::int as journals
+    `)) as unknown as Array<{ requisitions: number; reservations: number; documents: number; journals: number }>;
+    await technicallyCompleteProductionOrder({
+      client, changedBy: ACTOR, orderNumber: completedOrder.orderNumber, expectedVersion: 1,
+      held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
+    const [afterComplete] = await withTenant(client, (tx) => tx.execute(sql`
+      select (select count(*) from purchase_requisition_item where client = ${client})::int as requisitions,
+             (select count(*) from reservation_header where client = ${client})::int as reservations,
+             (select count(*) from material_document where client = ${client})::int as documents,
+             (select count(*) from journal_entry where client = ${client})::int as journals
+    `)) as unknown as Array<{ requisitions: number; reservations: number; documents: number; journals: number }>;
+    expect(afterComplete).toEqual(beforeComplete);
+    const open = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR, requestKey: 'md01-open', materialNumber: 'MD01-OPEN', plant: PLANT, orderQuantity: 5,
+      scheduledStart: DAY, scheduledFinish: DAY,
+      components: [{ materialNumber: 'MD01-TECO-RM', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: open.orderNumber, releasedBy: ACTOR });
+    const excluded = await planMaterials({
+      client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
+      materialFrom: 'MD01-TECO', materialTo: 'MD01-TECO',
+    });
+    expect(excluded.diagnostics.some((row) => row.diagnosticCode === 'PRODUCTION_ORDER_COUNTED')).toBe(false);
+    expect(excluded.proposals.find((row) => row.materialNumber === 'MD01-TECO')?.quantity).toBe('5.000');
+    const counted = await planMaterials({
+      client, requestedBy: ACTOR, requestKey: nextKey(), processingKey: 'NETCH', plantFrom: PLANT,
+      materialFrom: 'MD01-OPEN', materialTo: 'MD01-OPEN',
+    });
+    expect(counted.diagnostics.some((row) => row.diagnosticCode === 'PRODUCTION_ORDER_COUNTED')).toBe(true);
+    expect(counted.proposals.find((row) => row.materialNumber === 'MD01-OPEN')).toBeUndefined();
+    const list = await stockRequirementsList({ client, today: DAY, selection: { material: 'MD01-TECO', plant: PLANT } });
+    expect(list.rows.filter((row) => row.elementType === 'PRODUCTION_ORDER')).toHaveLength(0);
+    const openList = await stockRequirementsList({ client, today: DAY, selection: { material: 'MD01-OPEN', plant: PLANT } });
+    expect(openList.rows.filter((row) => row.elementType === 'PRODUCTION_ORDER').map((row) => row.documentNumber)).toContain(open.orderNumber);
   });
 });

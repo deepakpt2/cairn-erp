@@ -286,7 +286,14 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
         'Create the order first (CO01), then receive its output.',
       );
     }
-    if (order.status !== 'RELEASED') {
+    // Technical completion does not copy the closed-order posting ban. A created order still cannot receive output.
+    if (order.status !== 'RELEASED' && order.status !== 'TECHNICALLY_COMPLETED') {
+      if (order.status !== 'CREATED') {
+        throw new ProductionReceiptError(
+          `Status ${order.status} is not a production-order status. Nothing was posted.`,
+          'The stored status is unsupported. It was not treated as created.',
+        );
+      }
       throw new ProductionReceiptError(
         `Production order ${orderNumber} stands ${order.status.toLowerCase()}, and only a released order receives output.`,
         'Release the order, then receive the finished good.',

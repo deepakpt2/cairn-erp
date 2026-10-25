@@ -8,7 +8,7 @@ import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { defineUomConversion } from '../src/modules/inventory/unit-conversion';
 import { productionOrder, productionOrderComponent } from '../src/modules/inventory/schema';
-import { materialBom } from '../src/modules/production/schema';
+import { materialBom, productionOrderType } from '../src/modules/production/schema';
 import {
   BOM_CHANGE_CAPABILITY,
   BOM_CREATE_CAPABILITY,
@@ -283,10 +283,13 @@ describe('material BOM', () => {
 
   it('does not rewrite a production-order component when the BOM changes', async () => {
     await withTenant(tenant.client, async (tx) => {
+      await tx.insert(productionOrderType).values({
+        client: tenant.client, orderType: 'PP01', description: 'Standard production', orderCategory: '10', createdBy: ACTOR,
+      });
       await tx.insert(productionOrder).values({
         client: tenant.client, orderNumber: '000000000091', materialNumber: 'FG-1', plant: '1000',
         orderQuantity: '1', unitOfMeasure: 'KG', scheduledStart: '2026-01-01', scheduledFinish: '2026-01-02',
-        createdBy: ACTOR,
+        orderType: 'PP01', createdBy: ACTOR,
       });
       await tx.insert(productionOrderComponent).values({
         client: tenant.client, orderNumber: '000000000091', itemNumber: 10, materialNumber: 'COMP-1',

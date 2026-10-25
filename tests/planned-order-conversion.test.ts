@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { getProductionOrder } from '../src/modules/inventory/production-orders';
+import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { mrpController } from '../src/modules/inventory/schema';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
@@ -78,6 +79,11 @@ beforeAll(async () => {
     }).onConflictDoNothing();
     await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
     await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+    await tx.execute(sql`
+      insert into production_order_type (client, order_type, description, order_category, created_by)
+      values (${tenant.client}, 'PP01', 'Standard production', '10', ${ACTOR})
+      on conflict (client, order_type) do nothing
+    `);
   });
   await materialOf(tenant.client, 'FG-40', 'MAKE');
   await materialOf(tenant.client, 'COMP-40');
@@ -150,12 +156,14 @@ describe('planned order conversion', () => {
   it('converts the whole order once and does not post', async () => {
     const created = await planned('convert-1');
     const result = await convertPlannedOrder({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, expectedVersion: created.order.version,
     });
     expect(result.status).toBe('CONVERTED');
     expect(result.productionOrderStatus).toBe('CREATED');
     const production = await getProductionOrder(tenant.client, result.productionOrderNumber!);
     expect(production?.plannedOrderNumber).toBe(created.order.orderNumber);
+    expect(production?.orderType).toBe('PP01');
     expect(production?.orderQuantity).toBe('10.000');
     expect(production?.components).toEqual([
       expect.objectContaining({ materialNumber: 'COMP-40', requiredQuantity: '20.000' }),
@@ -166,6 +174,7 @@ describe('planned order conversion', () => {
     expect(standing?.converted).toBe(true);
     expect(standing?.productionOrderNumber).toBe(result.productionOrderNumber);
     const again = await convertPlannedOrder({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
     });
     expect(again.status).toBe('ALREADY_CONVERTED');
@@ -204,9 +213,11 @@ describe('planned order conversion', () => {
     const created = await planned('partial-1');
     const before = await counts();
     await expect(convertPlannedOrder({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, quantity: '4',
     })).rejects.toThrow(/Partial conversion is not supported/);
     await expect(convertPlannedOrder({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, orderNumber: 'PL-BUY40',
     })).rejects.toThrow(/externally procured/);
     expect(await counts()).toEqual(before);
@@ -215,6 +226,7 @@ describe('planned order conversion', () => {
   it('lets one collective failure stand beside one committed order', async () => {
     const created = await planned('collective-1');
     const result = await convertPlannedOrders({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, correlationId: 'batch-1',
       orderNumbers: [created.order.orderNumber, 'MISSING', 'PL-BUY40'],
     });
@@ -227,6 +239,7 @@ describe('planned order conversion', () => {
   it('refuses more than 25 orders before writing', async () => {
     const before = await counts();
     await expect(convertPlannedOrders({
+      orderType: 'PP01',
       client: tenant.client, changedBy: ACTOR, correlationId: 'too-many',
       orderNumbers: Array.from({ length: 26 }, (_, index) => `PL-${index}`),
     })).rejects.toThrow(/at most 25/);
@@ -236,8 +249,8 @@ describe('planned order conversion', () => {
   it('returns one production order when two conversions race', async () => {
     const created = await planned('race-1');
     const [first, second] = await Promise.all([
-      convertPlannedOrder({ client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
-      convertPlannedOrder({ client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
+      convertPlannedOrder({ orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
+      convertPlannedOrder({ orderType: 'PP01', client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber }),
     ]);
     const statuses = [first.status, second.status].sort();
     expect(statuses).toEqual(['ALREADY_CONVERTED', 'CONVERTED']);
@@ -247,5 +260,53 @@ describe('planned order conversion', () => {
        where client = ${tenant.client} and planned_order_number = ${created.order.orderNumber}
     `)) as unknown as Array<{ total: number }>;
     expect(linked[0].total).toBe(1);
+  });
+
+  it('rejects a missing conversion type before creating an order', async () => {
+    const created = await planned('no-type');
+    const before = await counts();
+    await expect(convertPlannedOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
+      orderType: '',
+    })).rejects.toThrow(/production order type is required/);
+    await expect(convertPlannedOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber,
+      orderType: undefined as unknown as string,
+    })).rejects.toThrow(/production order type is required/);
+    await expect(convertPlannedOrders({
+      client: tenant.client, changedBy: ACTOR, correlationId: 'no-type-batch',
+      orderNumbers: [created.order.orderNumber],
+      orderType: '   ',
+    })).rejects.toThrow(/production order type is required/);
+    expect(await counts()).toEqual(before);
+    const standing = await getPlannedOrder(tenant.client, created.order.orderNumber);
+    expect(standing?.converted).toBe(false);
+  });
+
+  it('stores an explicit order type and does not invent one', async () => {
+    await saveProductionOrderType({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PP40',
+      description: 'Conversion type', version: 0, reason: 'Type for conversion',
+    });
+    const created = await planned('typed-1');
+    const result = await convertPlannedOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: created.order.orderNumber, orderType: 'PP40',
+    });
+    expect(result.status).toBe('CONVERTED');
+    const production = await getProductionOrder(tenant.client, result.productionOrderNumber!);
+    expect(production?.orderType).toBe('PP40');
+    const before = await counts();
+    await expect(convertPlannedOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: (await planned('bad-type')).order.orderNumber, orderType: 'ZZ99',
+    })).rejects.toThrow(/does not stand/);
+    expect(await counts()).toEqual(before);
+    const collective = await planned('collective-type');
+    const batch = await convertPlannedOrders({
+      client: tenant.client, changedBy: ACTOR, correlationId: 'typed-batch',
+      orderNumbers: [collective.order.orderNumber], orderType: 'PP40',
+    });
+    expect(batch.results[0]?.status).toBe('CONVERTED');
+    const copied = await getProductionOrder(tenant.client, batch.results[0]!.productionOrderNumber!);
+    expect(copied?.orderType).toBe('PP40');
   });
 });

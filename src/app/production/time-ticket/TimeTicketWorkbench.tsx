@@ -61,7 +61,7 @@ export default function TimeTicketWorkbench({
                 <td>{row.workCenter ?? '—'}</td>
                 <td>{row.yieldQuantity} {loaded.unit}</td>
                 <td>{row.remainingQuantity}</td>
-                <td>{row.confirmable ? 'Confirmable' : row.blockingReason}</td>
+                <td>{row.confirmable ? 'Confirmable' : row.blockingReason}{row.cancellationNote ? ` ${row.cancellationNote}` : ''}</td>
               </tr>
             ))}
           </tbody>
@@ -78,6 +78,7 @@ export default function TimeTicketWorkbench({
           <input type="hidden" name="unit" value={loaded.unit} />
           <p className="text-sm">Operation {operation.operationNumber} {operation.shortText ?? ''}. Control key {operation.controlKey}. Work center {operation.workCenter ?? '—'} is not changed here.</p>
           <p className="mt-1 text-sm text-ink-soft">Previously confirmed yield {operation.yieldQuantity}, scrap {operation.scrapQuantity}, rework {operation.reworkQuantity}. Remaining {operation.remainingQuantity} {loaded.unit}.</p>
+          {operation.cancellationNote && <p className="mt-1 text-sm" data-co11n-cancellation>{operation.cancellationNote}</p>}
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <label className="block text-sm">
               <span className="mb-1 block text-ink-soft">Confirmation type</span>
@@ -172,6 +173,7 @@ export default function TimeTicketWorkbench({
                 Order {state.ticket.orderNumber}
               </Link>
               {' '}still has status {state.ticket.orderStatus}.
+              {' '}<Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(state.ticket.confirmationNumber)}`}>Cancel is CO13</Link>
             </p>
           )}
         </form>

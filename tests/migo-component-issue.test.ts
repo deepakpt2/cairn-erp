@@ -14,6 +14,7 @@ import {
   createProductionOrder,
   releaseProductionOrder,
 } from '../src/modules/inventory/production-orders';
+import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -117,6 +118,11 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       await defineRange(tx, {
         client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR,
       });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
       await defineRange(tx, {
         client, objectCode: 'MATDOC', subObject: '*', prefix: 'MD', numberLength: 8, createdBy: ACTOR,
       });
@@ -126,6 +132,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       });
     });
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -205,6 +212,7 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
 
   it('refuses an order that is not released, and one that does not exist', async () => {
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -253,5 +261,35 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
   it('refuses 261 posted from the MB1A screen', async () => {
     const error = await postGoodsIssue(input()).catch((e: unknown) => e as GoodsIssueError);
     expect(error.message).toMatch(/Movement 261 is posted from MIGO/);
+  });
+
+  it('still issues a component after technical completion and does not change the status', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR,
+      materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 2,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'MIGO-RM', plant: PLANT, requiredQuantity: 2 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const [standing] = await withTenant(client, (tx) => tx.execute(sql`
+      select version from production_order where client = ${client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ version: number }>;
+    await technicallyCompleteProductionOrder({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber, expectedVersion: Number(standing?.version),
+      held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
+    const posted = await postGoodsIssue(input({
+      requestKey: 'migo-after-teco',
+      lines: [{
+        materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
+        productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
+      }],
+    }), 'MIGO');
+    expect(posted.materialDocumentNumber).toBeTruthy();
+    const [after] = await withTenant(client, (tx) => tx.execute(sql`
+      select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ status: string }>;
+    expect(after?.status).toBe('TECHNICALLY_COMPLETED');
   });
 });

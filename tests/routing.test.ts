@@ -8,7 +8,7 @@ import { saveMaterialView } from '../src/modules/inventory/materials';
 import { productionOrder, productionOrderComponent } from '../src/modules/inventory/schema';
 import { createMaterialBom, getMaterialBom } from '../src/modules/production/material-bom';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
-import { routing } from '../src/modules/production/schema';
+import { productionOrderType, routing } from '../src/modules/production/schema';
 import {
   ROUTING_CHANGE_CAPABILITY,
   ROUTING_CREATE_CAPABILITY,
@@ -280,10 +280,13 @@ describe('standard routing', () => {
 
   it('does not rewrite a production order and is not read by order creation or planning', async () => {
     await withTenant(tenant.client, async (tx) => {
+      await tx.insert(productionOrderType).values({
+        client: tenant.client, orderType: 'PP01', description: 'Standard production', orderCategory: '10', createdBy: ACTOR,
+      });
       await tx.insert(productionOrder).values({
         client: tenant.client, orderNumber: '000000000092', materialNumber: 'FG-1', plant: '1000',
         orderQuantity: '1', unitOfMeasure: 'KG', scheduledStart: '2026-01-01', scheduledFinish: '2026-01-02',
-        createdBy: ACTOR,
+        orderType: 'PP01', createdBy: ACTOR,
       });
       await tx.insert(productionOrderComponent).values({
         client: tenant.client, orderNumber: '000000000092', itemNumber: 10, materialNumber: 'COMP-1',

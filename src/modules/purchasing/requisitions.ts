@@ -337,6 +337,7 @@ export async function getRequisition(client: string, requisitionNumber: string):
 
 export async function createRequisition(
   raw: CreateRequisitionInput,
+  externalTx?: Tx,
 ): Promise<{ requisitionNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
@@ -349,7 +350,7 @@ export async function createRequisition(
   const warnings: string[] = [];
   const requisitionDate = today();
 
-  const requisitionNumber = await withTenant(input.client, async (tx) => {
+  const run = async (tx: Tx) => {
     if (input.planningRunNumber && input.items[0]?.materialNumber && input.items[0]?.plant) {
       const already = await tx.execute(sql`
         select requisition_number
@@ -419,12 +420,15 @@ export async function createRequisition(
       await requisitionAttributes(tx, input.client, number), input.changedBy,
     );
     return number;
-  });
+  };
+  // A supplied handle is the caller's transaction. It is not nested and its tenant scope is not changed.
+  const requisitionNumber = externalTx ? await run(externalTx) : await withTenant(input.client, run);
   return { requisitionNumber, warnings };
 }
 
 export async function changeRequisition(
   raw: CreateRequisitionInput & { requisitionNumber: string },
+  externalTx?: Tx,
 ): Promise<{ requisitionNumber: string; warnings: string[] }> {
   const parsed = documentInput.safeParse(raw);
   if (!parsed.success) {
@@ -434,7 +438,7 @@ export async function changeRequisition(
   const input = parsed.data;
   const warnings: string[] = [];
 
-  await withTenant(input.client, async (tx) => {
+  const run = async (tx: Tx) => {
     const before = await loadDocument(tx, input.client, raw.requisitionNumber);
     if (!before) throw new PurchaseRequisitionError(`Requisition ${raw.requisitionNumber} does not exist.`);
     try {
@@ -508,7 +512,10 @@ export async function changeRequisition(
       before: { items: before.items.map((i) => ({ item: i.itemNumber, qty: i.quantity, deleted: i.markedForDeletion })) },
       after: { items: after?.items.map((i) => ({ item: i.itemNumber, qty: i.quantity, deleted: i.markedForDeletion })) },
     });
-  });
+  };
+  // A supplied handle is the caller's transaction. It is not nested and its tenant scope is not changed.
+  if (externalTx) await run(externalTx);
+  else await withTenant(input.client, run);
   return { requisitionNumber: raw.requisitionNumber, warnings };
 }
 

@@ -128,6 +128,35 @@ export default function MrpRunWorkbench({
               ))}
             </tbody>
           </table>
+          {shown.dependents.length > 0 && (
+            <table className="mt-3 w-full text-sm" data-mrp-dependents>
+              <thead>
+                <tr className="text-left text-ink-faint">
+                  <th>{t('md01.dependents')}</th>
+                  <th>{t('md01.component')}</th>
+                  <th>{t('md01.created')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.dependents.map((row) => (
+                  <tr key={`${row.parentOrderNumber ?? row.parentMaterial}/${row.componentMaterial}/${row.requirementDate}`} data-mrp-dependent={row.componentMaterial}>
+                    <td className="py-1">{row.parentMaterial} {row.parentOrderNumber ?? '—'}</td>
+                    <td>{row.componentMaterial} {row.quantity} {row.unit}</td>
+                    <td>{row.requirementDate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {shown.diagnostics.some((row) => row.severity === 'WARNING' || row.severity === 'ERROR') && (
+            <ul className="mt-3 space-y-1 text-sm" data-mrp-diagnostics>
+              {shown.diagnostics.filter((row) => row.severity === 'WARNING' || row.severity === 'ERROR').map((row) => (
+                <li key={row.lineNumber} data-mrp-diagnostic={row.diagnosticCode}>
+                  {row.materialNumber ?? '—'} {row.message}
+                </li>
+              ))}
+            </ul>
+          )}
           {shown.proposals.length > 0 && (
             <table className="mt-3 w-full text-sm" data-mrp-proposals>
               <thead>

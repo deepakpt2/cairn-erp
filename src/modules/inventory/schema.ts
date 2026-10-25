@@ -225,6 +225,11 @@ export const materialPlant = pgTable('material_plant', {
    * Blank means no profile. The key is not forced to four-character SAP plant length.
    */
   schedulingProfile: varchar('scheduling_profile', { length: 6 }),
+  /**
+   * MARC-MTVFP. Null means no checking group is assigned.
+   * It is not a checking rule, not a default, and not an ATP result.
+   */
+  checkingGroup: varchar('checking_group', { length: 2 }),
   mrpType: varchar('mrp_type', { length: 16 }),
   mrpController: varchar('mrp_controller', { length: 3 }),
   procurementType: varchar('procurement_type', { length: 8 }),
@@ -575,13 +580,29 @@ export const productionOrder = pgTable('production_order', {
   unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
   scheduledStart: varchar('scheduled_start', { length: 10 }).notNull(),
   scheduledFinish: varchar('scheduled_finish', { length: 10 }).notNull(),
-  /** CREATED or RELEASED. A 261 will judge RELEASED and refuse anything else (SCR-139). */
-  status: varchar('status', { length: 20 }).notNull().default('CREATED'),
+  /** CREATED, RELEASED, or TECHNICALLY_COMPLETED. Closed and delivered are not stored. */
+  status: varchar('status', { length: 32 }).notNull().default('CREATED'),
+  /** Set together when the order is technically completed. Cleared together on revocation. */
+  technicallyCompletedBy: varchar('technically_completed_by', { length: 64 }),
+  technicallyCompletedAt: timestamp('technically_completed_at', { withTimezone: true }),
   /** Bumped on release and on a saved change. Display does not bump it. */
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   /** Set only by planned-order conversion. Null on an order created directly. Multiple nulls are allowed. */
   plannedOrderNumber: varchar('planned_order_number', { length: 12 }),
+  /**
+   * Production order type. Null only on an order stored before the type was
+   * required. New service creates store a caller-named type. It is not backfilled.
+   */
+  orderType: varchar('order_type', { length: 4 }),
+  /**
+   * Production version that selected the component snapshot. Null when a caller
+   * supplied the snapshot, including planned-order conversion. A later version
+   * change does not rewrite it.
+   */
+  productionVersion: varchar('production_version', { length: 4 }),
+  bomUsage: char('bom_usage', { length: 1 }),
+  bomAlternative: varchar('bom_alternative', { length: 2 }),
   releasedBy: varchar('released_by', { length: 64 }),
   releasedAt: timestamp('released_at', { withTimezone: true }),
   ...auditColumns,
@@ -589,12 +610,17 @@ export const productionOrder = pgTable('production_order', {
   primaryKey({ columns: [t.client, t.orderNumber] }),
   uniqueIndex('production_order_planned_uq').on(t.client, t.plannedOrderNumber),
   foreignKey({ columns: [t.client, t.plant], foreignColumns: [plant.client, plant.plant] }).onDelete('restrict'),
-  check('production_order_status_ck', sql`${t.status} in ('CREATED', 'RELEASED')`),
+  check('production_order_status_ck', sql`${t.status} in ('CREATED', 'RELEASED', 'TECHNICALLY_COMPLETED')`),
+  check('production_order_technical_completion_ck', sql`(
+    (${t.status} = 'TECHNICALLY_COMPLETED' and ${t.technicallyCompletedBy} is not null and ${t.technicallyCompletedAt} is not null)
+    or (${t.status} <> 'TECHNICALLY_COMPLETED' and ${t.technicallyCompletedBy} is null and ${t.technicallyCompletedAt} is null)
+  )`),
   check('production_order_version_ck', sql`${t.version} > 0`),
   check('production_order_quantity_ck', sql`${t.orderQuantity} > 0`),
   check('production_order_dates_ck', sql`${t.scheduledFinish} >= ${t.scheduledStart}`),
   check('production_order_release_on_create_ck', sql`${t.releaseOnCreate} in ('X', ' ')`),
   check('production_order_batch_creation_ck', sql`${t.batchCreation} in (' ', '1', '2')`),
+  check('production_order_type_ck', sql`${t.orderType} is null or ${t.orderType} ~ '^[A-Z0-9]{4}$'`),
 ]);
 
 /**
@@ -631,6 +657,10 @@ export const productionOrderComponent = pgTable('production_order_component', {
   storageLocation: varchar('storage_location', { length: 10 }),
   requiredQuantity: quantity('required_quantity').notNull(),
   unitOfMeasure: varchar('unit_of_measure', { length: 10 }).notNull(),
+  /** Original BOM item. Null when the line was supplied rather than derived. */
+  bomItem: varchar('bom_item', { length: 4 }),
+  /** Material whose BOM the item came from. Null on a supplied snapshot line. */
+  sourceMaterial: varchar('source_material', { length: 40 }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),

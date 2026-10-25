@@ -33,6 +33,14 @@ export async function convertPlannedOrderAction(
     if (text(form, 'confirm') !== 'X') {
       return { ok: false, message: 'Confirm the conversion before it is saved.', remedy: 'Tick the confirmation. Nothing was converted.' };
     }
+    const orderType = text(form, 'orderType');
+    if (!orderType) {
+      return {
+        ok: false,
+        message: 'An order type is required for conversion. None was selected.',
+        remedy: 'Enter a standing production order type. The first type was not chosen.',
+      };
+    }
     const result = await convertPlannedOrder({
       client: session.user.client,
       changedBy: session.user.username,
@@ -40,6 +48,7 @@ export async function convertPlannedOrderAction(
       expectedVersion: Number(text(form, 'expectedVersion')),
       quantity: text(form, 'quantity'),
       unit: text(form, 'unit'),
+      orderType,
       named: {
         mrpArea: text(form, 'mrpArea'),
         openingDate: text(form, 'openingDate'),
@@ -47,7 +56,6 @@ export async function convertPlannedOrderAction(
         salesOrder: text(form, 'salesOrder'),
         wbs: text(form, 'wbs'),
         availability: text(form, 'availability'),
-        orderType: text(form, 'orderType'),
         partialQuantity: text(form, 'partialQuantity'),
       },
       transactionCode: PLANNED_ORDER_CONVERT_ALIAS,

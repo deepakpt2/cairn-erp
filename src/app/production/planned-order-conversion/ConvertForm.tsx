@@ -18,6 +18,11 @@ export default function ConvertForm({
     <form action={action} className="mt-4 space-y-3 text-sm">
       <input type="hidden" name="orderNumber" value={orderNumber} />
       <input type="hidden" name="expectedVersion" value={String(expectedVersion)} />
+      <label className="block">
+        Order type
+        <input name="orderType" maxLength={4} className="input code mt-1" required />
+      </label>
+      <p className="text-ink-soft">No scheduling profile, scheduler, MRP group, or plant parameter supplies a type. The material does not imply one. The first type is not chosen.</p>
       <label className="flex items-center gap-2">
         <input type="checkbox" name="confirm" value="X" />
         Convert the whole planned order. The quantity is not reduced.

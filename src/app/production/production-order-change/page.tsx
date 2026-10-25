@@ -23,7 +23,7 @@ function one(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value)?.trim() ?? '';
 }
 
-/** CO02. Change quantity, dates, or components. This page does not release or post. */
+/** CO02. Change quantity, dates, or components, or technically complete and revoke. This page does not release or post. */
 export default async function ProductionOrderChangePage({
   searchParams,
 }: {
@@ -82,8 +82,8 @@ export default async function ProductionOrderChangePage({
       <p className="text-sm text-ink-faint">PROD.ORDER.CHANGE · CO02</p>
       <h1 className="mt-1 text-xl font-semibold">Change production order</h1>
       <p className="mt-2 max-w-3xl text-sm text-ink-soft">
-        Change the quantity, the dates, or the component snapshot. The number, material, plant, and status stay fixed.
-        A goods movement freezes the order. This screen does not release it or post.
+        Change the quantity, the dates, or the component snapshot, or technically complete the order and revoke that completion.
+        Technical completion is not a field on the quantity save. A goods movement freezes ordinary edits. This screen does not release the order or post.
         <Link className="ml-2" href={PRODUCTION_ORDER_DISPLAY_ROUTE}>Display writes nothing.</Link>
       </p>
       {openError && <p role="status" className="mt-3 text-sm text-danger">{openError}</p>}
@@ -101,7 +101,7 @@ export default async function ProductionOrderChangePage({
             {listed.rows.map((row) => (
               <li key={row.orderNumber}>
                 <Link href={`${PRODUCTION_ORDER_CHANGE_ROUTE}?order=${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</Link>
-                {' · '}{row.materialNumber} · {row.status}
+                {' · '}{row.materialNumber} · {row.orderType ?? 'no type'} · {row.status}
               </li>
             ))}
           </ul>
@@ -109,7 +109,7 @@ export default async function ProductionOrderChangePage({
       )}
       {document && !locked && <OrderChangeForm order={document} />}
       {document && locked && (
-        <p className="mt-4 text-sm">{document.orderNumber} is open for display only. Nothing was saved.</p>
+        <p className="mt-4 text-sm" data-order-type={document.orderType ?? ''}>Order type {document.orderType ?? 'not assigned'}. {document.orderNumber} is open for display only. Nothing was saved.</p>
       )}
     </main>
   );

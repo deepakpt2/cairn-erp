@@ -115,6 +115,11 @@ export async function migoProductionReceipt(ctx: Context) {
 
   await withTenant(client, async (tx) => {
     await defineRange(tx, { client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: 'browser.admin' });
+    await tx.execute(sql`
+      insert into production_order_type (client, order_type, description, order_category, created_by)
+      values (${client}, 'PP01', 'Standard production', '10', ${'browser.admin'})
+      on conflict (client, order_type) do nothing
+    `);
     await defineRange(tx, { client, objectCode: 'MATDOC', subObject: '*', prefix: 'MD', numberLength: 8, createdBy: 'browser.admin' });
     await defineRange(tx, {
       client, objectCode: 'RF_BELEG', companyCode: company, subObject: 'GENERAL',
@@ -123,6 +128,7 @@ export async function migoProductionReceipt(ctx: Context) {
   });
 
   const order = await createProductionOrder({
+    orderType: 'PP01',
     client, createdBy: 'browser.admin',
     materialNumber: 'MGR-FG', plant: 'QG02', orderQuantity: 10,
     scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',

@@ -91,10 +91,14 @@ describe('batch information cockpit', () => {
         ) values (${client}, '4500000091', 'SUP-1', '1000', '001', '1000', 'INR', '2026-10-18', ${ACTOR})
       `);
       await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+      `);
+      await tx.execute(sql`
         insert into production_order (
           client, order_number, material_number, plant, order_quantity, unit_of_measure,
-          scheduled_start, scheduled_finish, status, created_by
-        ) values (${client}, '1000001', 'RM-BMBC', '1000', 1, 'PC', '2026-10-01', '2026-10-31', 'RELEASED', ${ACTOR})
+          scheduled_start, scheduled_finish, status, order_type, created_by
+        ) values (${client}, '1000001', 'RM-BMBC', '1000', 1, 'PC', '2026-10-01', '2026-10-31', 'RELEASED', 'PP01', ${ACTOR})
       `);
       await tx.execute(sql`
         insert into material_document (client, material_document_number, document_year, document_date, posting_date, status, created_by)

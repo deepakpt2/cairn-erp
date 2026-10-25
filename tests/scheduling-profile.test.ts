@@ -55,6 +55,11 @@ describe('OPKP production scheduling profile', () => {
       await defineRange(tx, {
         client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR,
       });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
     });
   }, 180_000);
 
@@ -64,6 +69,7 @@ describe('OPKP production scheduling profile', () => {
 
   async function order(materialNumber: string, batch = '') {
     return createProductionOrder({
+      orderType: 'PP01',
       client,
       createdBy: ACTOR,
       materialNumber,

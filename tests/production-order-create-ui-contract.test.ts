@@ -4,13 +4,15 @@ import { describe, expect, it } from 'vitest';
 /**
  * SCR-138 / CO01 UI contract: one screen creates an order and releases it, under two
  * capabilities. The header asks for what is produced, where, how much and when; the
- * component grid is entered, never exploded; the company code is shown as derived from
- * the plant. Nothing on the screen posts, and nothing moves stock.
+ * component list is derived from the production version, never typed; the company
+ * code is shown as derived from the plant. Nothing on the screen posts, and nothing
+ * moves stock.
  */
 const page = readFileSync('src/app/production/orders/page.tsx', 'utf8');
 const shell = readFileSync('src/app/production/orders/OrderCreate.tsx', 'utf8');
 const actions = readFileSync('src/app/production/orders/actions.ts', 'utf8');
 const service = readFileSync('src/modules/inventory/production-orders.ts', 'utf8');
+const snapshot = readFileSync('src/modules/production/order-bom-snapshot.ts', 'utf8');
 const messages = readFileSync('src/platform/i18n/index.ts', 'utf8');
 const registry = readFileSync('scripts/seed.ts', 'utf8');
 
@@ -33,13 +35,25 @@ describe('SCR-138 production order create UI contract', () => {
     expect(page).toContain('toISOString().slice(0, 10)');
   });
 
-  it('takes components as a stated grid, with no bill of materials in sight', () => {
-    for (const field of ['componentMaterial', 'componentPlant', 'componentSloc', 'componentQuantity']) {
-      expect(shell).toContain(`name={\`${field}-\${n}\`}`);
-    }
-    expect(shell).toContain('data-component-line={n}');
+  it('derives components from the production version and does not take a typed grid', () => {
+    expect(shell).toContain('name="productionVersion"');
+    expect(shell).toContain('name="intent" value="check"');
+    expect(shell).toContain('name="intent" value="create"');
+    expect(shell).toContain('data-preview-version');
+    expect(shell).toContain('data-production-version');
     expect(shell).toContain('co01.componentsHint');
-    expect(service).toContain('does not read a material BOM');
+    expect(shell).not.toContain('componentMaterial-');
+    expect(shell).not.toContain('name="bomAlternative"');
+    expect(shell).not.toContain('name="bomUsage"');
+    expect(service).toContain('resolveOrderBomSnapshot');
+    expect(service).toContain('A caller-supplied component list is the conversion snapshot');
+    expect(service).not.toContain('does not read a material BOM');
+    expect(snapshot).toContain('selectProductionVersion');
+    expect(snapshot).toContain('componentRequirementQuantity');
+    expect(snapshot).toContain('does not explode through a phantom');
+    expect(actions).toContain('bomAlternative');
+    expect(actions).toContain('not accepted');
+    expect(actions).not.toContain('components,');
   });
 
   it('shows the company code as derived from the plant, and the status as an attribute', () => {

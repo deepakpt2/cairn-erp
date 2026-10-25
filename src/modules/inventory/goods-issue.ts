@@ -450,7 +450,7 @@ export async function postGoodsIssue(
         throw new GoodsIssueError(`Material ${materialNumber} carries no base unit.`, 'Maintain the base unit of measure.');
       }
 
-      // SCR-139: a 261 consumes for a released order, and no more than the component still needs.
+      // SCR-139: a 261 consumes for a released or technically completed order, and no more than the component still needs.
       let productionOrderNumber: string | null = null;
       let productionOrderItem: number | null = null;
       let orderOpenAfter: string | null = null;
@@ -479,7 +479,14 @@ export async function postGoodsIssue(
             'Create the order first (CO01), then issue its components.',
           );
         }
-        if (order.status !== 'RELEASED') {
+        // Technical completion does not copy the closed-order posting ban. A created order still cannot be charged.
+        if (order.status !== 'RELEASED' && order.status !== 'TECHNICALLY_COMPLETED') {
+          if (order.status !== 'CREATED') {
+            throw new GoodsIssueError(
+              `Status ${order.status} is not a production-order status. Nothing was posted.`,
+              'The stored status is unsupported. It was not treated as created.',
+            );
+          }
           throw new GoodsIssueError(
             `Production order ${orderNumber} stands ${order.status.toLowerCase()}, and only a released order may be charged.`,
             'Release the order, then post the component issue.',

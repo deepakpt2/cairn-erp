@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { mrpController, productionOrder } from '../src/modules/inventory/schema';
-import { mrpDependentRequirement, plannedOrder } from '../src/modules/production/schema';
+import { mrpDependentRequirement, plannedOrder, productionOrderType } from '../src/modules/production/schema';
 import {
   PlannedOrderDisplayError,
   getPlannedOrder,
@@ -61,10 +61,13 @@ beforeAll(async () => {
       materialNumber: 'COMP-13', plant: '1000', quantity: '25.000', unit: 'KG', requirementDate: '2026-10-01',
       parentMaterial: 'FG-13', status: 'OPEN', createdBy: ACTOR,
     });
+    await tx.insert(productionOrderType).values({
+      client: tenant.client, orderType: 'PP01', description: 'Standard production', orderCategory: '10', createdBy: ACTOR,
+    });
     await tx.insert(productionOrder).values({
       client: tenant.client, orderNumber: '1000001', materialNumber: 'FG-13', plant: '1000',
       orderQuantity: '12.500', unitOfMeasure: 'KG', scheduledStart: '2026-10-01', scheduledFinish: '2026-10-05',
-      status: 'CREATED', requestKey: 'md13-po', createdBy: ACTOR,
+      status: 'CREATED', requestKey: 'md13-po', orderType: 'PP01', createdBy: ACTOR,
     });
   });
 });

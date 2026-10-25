@@ -6,7 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
-import { changeProductionOrder } from '../src/modules/production/production-order-change';
+import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
@@ -89,6 +89,7 @@ describe('CO15 order confirmation', () => {
     });
     await checkProductionVersion(tenant.client, materialNumber, PLANT, '0001', ACTOR);
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber, plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       components: [{ materialNumber: component, plant: PLANT, requiredQuantity: 1 }],
@@ -106,6 +107,11 @@ describe('CO15 order confirmation', () => {
     tenant = await createTenant('co15-order');
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${tenant.client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
     });
     for (const material of ['FG-15', 'RM-15', 'FG-15A', 'RM-15A', 'FG-15S', 'RM-15S', 'FG-15T', 'RM-15T']) {
@@ -140,6 +146,7 @@ describe('CO15 order confirmation', () => {
       { operationNumber: '0020', shortText: 'Skip', workCenter: 'WC15', controlKey: 'PP02' },
     ], 'co15-order', true);
     const open = await createProductionOrder({
+      orderType: 'PP01',
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-15', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co15-open',
       components: [{ materialNumber: 'RM-15', plant: PLANT, requiredQuantity: 1 }],
@@ -187,7 +194,7 @@ describe('CO15 order confirmation', () => {
     expect(orderConfirmationRefusal({ automaticFinal: 'X' })).toMatch(/not a stored rule/);
     expect(orderConfirmationRefusal({ personnel: '1' })).toMatch(/not validated/);
     expect(orderConfirmationRefusal({ operation: '0010' })).toMatch(/CO11N/);
-    expect(orderConfirmationRefusal({ co13: '1' })).toMatch(/not implemented/);
+    expect(orderConfirmationRefusal({ co13: '1' })).toMatch(/Open CO13/);
   });
 
   it('does not confirm an unreleased order or invent an activity', async () => {
@@ -372,5 +379,33 @@ describe('CO15 order confirmation', () => {
     expect(Number(standing.find((row) => row.confirmation_level === 'OPERATION')?.yield)).toBe(4);
     const progress = await loadTimeTicket(tenant.client, { orderNumber: ticketOrder, postingDate: '2026-10-24' });
     expect(Number(progress.operations[0]?.yieldQuantity)).toBe(6);
+  });
+
+  it('confirms a technically completed order and leaves that status', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-15', plant: PLANT, orderQuantity: 4,
+      scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co15-teco',
+      components: [{ materialNumber: 'RM-15', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select version from production_order where client = ${tenant.client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ version: number }>;
+    const completed = await technicallyCompleteProductionOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      expectedVersion: Number(standing?.version), held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
+    const posted = await enterOrderConfirmation(tenant.client, {
+      requestedBy: ACTOR, requestKey: nextKey(), orderNumber: draft.orderNumber,
+      confirmationType: 'PARTIAL', yieldQuantity: '1', postingDate: '2026-10-24',
+      expectedVersion: completed.order.version,
+    });
+    expect(posted.orderStatus).toBe('TECHNICALLY_COMPLETED');
+    expect(posted.confirmationNumber).toMatch(/^CNF/);
+    const [after] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select status, version from production_order where client = ${tenant.client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ status: string; version: number }>;
+    expect(after).toMatchObject({ status: 'TECHNICALLY_COMPLETED', version: completed.order.version });
   });
 });

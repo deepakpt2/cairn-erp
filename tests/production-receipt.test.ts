@@ -12,6 +12,7 @@ import {
   receivedQuantityFor,
 } from '../src/modules/inventory/production-receipt';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
+import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getBatchLevel, saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -124,6 +125,11 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
     });
     await withTenant(client, async (tx) => {
       await defineRange(tx, { client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
+      await tx.execute(sql`
+        insert into production_order_type (client, order_type, description, order_category, created_by)
+        values (${client}, 'PP01', 'Standard production', '10', ${ACTOR})
+        on conflict (client, order_type) do nothing
+      `);
       await defineRange(tx, { client, objectCode: 'MATDOC', subObject: '*', prefix: 'MD', numberLength: 8, createdBy: ACTOR });
       await defineRange(tx, {
         client, objectCode: 'RF_BELEG', companyCode: COMPANY, subObject: 'GENERAL',
@@ -131,6 +137,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       });
     });
     const order = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -208,6 +215,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('refuses an order that is not released, and one that does not exist', async () => {
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 5,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -252,6 +260,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('refuses when production output resolves to the inventory account', async () => {
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 1,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -282,6 +291,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       alternativeUnit: 'BOX', numerator: 2, denominator: 1,
     });
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -302,6 +312,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('refuses a receipt in a unit with no conversion, naming the unit', async () => {
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -325,6 +336,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
     await saveBatchLevel({ client, changedBy: ACTOR, batchLevel: '1', version: 0, reason: 'Material level' });
     await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00012', reason: 'Output batch' });
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -370,6 +382,7 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
     }
     await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00013', reason: 'Order batch' });
     const draft = await createProductionOrder({
+      orderType: 'PP01',
       client, createdBy: ACTOR,
       materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 3, batch: '00013',
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
@@ -384,5 +397,35 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       requestKey: 'gr-order-batch',
     });
     expect(receipt.lines[0]?.batch).toBe('00013');
+  });
+
+  it('still receives output after technical completion and does not change the status', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 2,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 2 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    const [standing] = await withTenant(client, (tx) => tx.execute(sql`
+      select version from production_order where client = ${client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ version: number }>;
+    await technicallyCompleteProductionOrder({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber, expectedVersion: Number(standing?.version),
+      held: ['PROD.ORDER.CHANGE'], confirmed: true,
+    });
+    await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00014', reason: 'Completion batch' });
+    const receipt = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 1, batch: '00014' }],
+      requestKey: 'gr-after-teco',
+    });
+    expect(receipt.materialDocumentNumber).toBeTruthy();
+    const [after] = await withTenant(client, (tx) => tx.execute(sql`
+      select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
+    `)) as unknown as Array<{ status: string }>;
+    expect(after?.status).toBe('TECHNICALLY_COMPLETED');
   });
 });

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { t } from '@/platform/i18n';
 import { listTenants } from '@/platform/tenancy';
 import { requireSession } from '@/platform/auth/current';
+import { SCREEN_AREAS } from '@/ui/shell/screen-catalog';
+import { screenHref, screensInArea } from '@/ui/shell/screen-links';
 
 /**
  * Launchpad — CAIRN.md §19.3.
@@ -99,6 +101,33 @@ export default async function LaunchpadPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section id="screens" className="mt-8">
+        <h2 className="text-lg font-semibold tracking-tight">{t('nav.allScreens')}</h2>
+        <p className="mt-1 max-w-3xl text-sm text-ink-soft">{t('nav.screensLead')}</p>
+        {SCREEN_AREAS.map((area) => {
+          const rows = screensInArea(area);
+          if (rows.length === 0) return null;
+          return (
+            <section key={area} id={`screens-${area}`} className="mt-5">
+              <h3 className="border-b border-line pb-1 text-sm font-semibold">{t(`nav.area.${area}`)}</h3>
+              <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                {rows.map((screen) => (
+                  <li key={screen.id}>
+                    <Link
+                      href={screenHref(screen)}
+                      className="flex min-h-11 flex-col justify-center border border-transparent px-2 py-1 hover:border-line hover:bg-surface"
+                    >
+                      {screen.code ? <span className="code text-2xs text-ink-faint">{screen.code}</span> : null}
+                      <span className="text-sm">{screen.title}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
       </section>
     </div>
   );

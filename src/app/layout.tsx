@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import './globals.css';
 import { CommandBar } from '@/ui/shell/CommandBar';
+import { RelatedScreens } from '@/ui/shell/RelatedScreens';
 import { StatusBar } from '@/ui/shell/StatusBar';
 import { SessionBar } from '@/ui/shell/SessionBar';
 import { t, DEFAULT_LOCALE, LOCALE_DIRECTION } from '@/platform/i18n';
@@ -26,6 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="ledger-frame">
           <CommandBar />
           <SessionBar />
+          <Suspense fallback={null}>
+            <RelatedScreens />
+          </Suspense>
           <main className="flex-1">{children}</main>
           <StatusBar />
         </div>

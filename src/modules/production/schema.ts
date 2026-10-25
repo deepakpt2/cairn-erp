@@ -919,7 +919,6 @@ export const productionConfirmation = pgTable('production_confirmation', {
     (${t.confirmationLevel} = 'OPERATION' and ${t.operationNumber} is not null and ${t.controlKey} is not null and ${t.workCenterPlant} is not null)
     or (${t.confirmationLevel} = 'HEADER' and ${t.operationNumber} is null)
   )`),
-  uniqueIndex('production_confirmation_header_final_uq').on(t.client, t.orderNumber).where(sql`${t.confirmationLevel} = 'HEADER' and ${t.confirmationType} = 'FINAL'`),
   check('production_confirmation_sequence_ck', sql`${t.sequence} = '000000'`),
   check('production_confirmation_quantity_ck', sql`${t.yieldQuantity} >= 0 and ${t.scrapQuantity} >= 0 and ${t.reworkQuantity} >= 0`),
   check('production_confirmation_version_ck', sql`${t.orderVersion} > 0`),
@@ -980,8 +979,40 @@ export const productionConfirmationOperation = pgTable('production_confirmation_
   check('production_confirmation_operation_type_ck', sql`${t.confirmationType} in ('PARTIAL', 'FINAL')`),
   check('production_confirmation_operation_qty_ck', sql`${t.yieldQuantity} >= 0 and ${t.scrapQuantity} >= 0 and ${t.reworkQuantity} >= 0`),
   check('production_confirmation_operation_basis_ck', sql`${t.quantityBasis} in ('ORDER_QUANTITY', 'OPERATION_QUANTITY')`),
-  uniqueIndex('production_confirmation_operation_final_uq').on(t.client, t.orderNumber, t.operationNumber).where(sql`${t.confirmationType} = 'FINAL'`),
   index('production_confirmation_operation_order_idx').on(t.client, t.orderNumber, t.operationNumber),
+]);
+
+
+/**
+ * CO13. One cancellation of one posted confirmation.
+ * The original row is not updated. Active-final uniqueness is the trigger in
+ * drizzle/9172, not a partial index, because the index cannot see this table.
+ */
+export const productionConfirmationCancellation = pgTable('production_confirmation_cancellation', {
+  client: tenant(),
+  cancellationNumber: varchar('cancellation_number', { length: 12 }).notNull(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  reason: varchar('reason', { length: 200 }),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.cancellationNumber] }),
+  unique('production_confirmation_cancellation_original_uq').on(t.client, t.confirmationNumber),
+  unique('production_confirmation_cancellation_request_uq').on(t.client, t.requestKey),
+  foreignKey({
+    columns: [t.client, t.confirmationNumber],
+    foreignColumns: [productionConfirmation.client, productionConfirmation.confirmationNumber],
+    name: 'production_confirmation_cancellation_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_confirmation_cancellation_order_fk',
+  }).onDelete('restrict'),
+  check('production_confirmation_cancellation_reason_ck', sql`${t.reason} is null or char_length(btrim(${t.reason})) between 1 and 200`),
+  index('production_confirmation_cancellation_order_idx').on(t.client, t.orderNumber),
 ]);
 
 /** COOIS. A user's field selection for one list. It does not store report rows. */
@@ -1005,4 +1036,192 @@ export const reportLayout = pgTable('report_layout', {
   check('report_layout_object_ck', sql`${t.objectCategory} in ('PRODUCTION_ORDER', 'PLANNED_ORDER')`),
   check('report_layout_direction_ck', sql`${t.sortDirection} in ('ASC', 'DESC')`),
   index('report_layout_owner_idx').on(t.client, t.owner, t.objectCategory, t.listType),
+]);
+
+/**
+ * OVZ2 / TMVF. Client customizing for a future availability check.
+ * Sales accumulation, replenishment lead time, and a material block are not stored.
+ * The description is the tenant language, not a TMVFT row per language.
+ */
+export const availabilityCheckingGroup = pgTable('availability_checking_group', {
+  client: tenant(),
+  checkingGroup: varchar('checking_group', { length: 2 }).notNull(),
+  description: varchar('description', { length: 20 }).notNull(),
+  noCheck: char('no_check', { length: 1 }).notNull().default(' '),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.checkingGroup] }),
+  check('availability_checking_group_key_ck', sql`${t.checkingGroup} ~ '^[A-Z0-9]{2}$'`),
+  check('availability_checking_group_text_ck', sql`char_length(btrim(${t.description})) between 1 and 20`),
+  check('availability_checking_group_no_check_ck', sql`${t.noCheck} in ('X', ' ')`),
+  check('availability_checking_group_version_ck', sql`${t.version} > 0`),
+]);
+
+/** OPJL / T441R. A business-context key. It is not a checking group and not a material field. */
+export const availabilityCheckingRule = pgTable('availability_checking_rule', {
+  client: tenant(),
+  checkingRule: varchar('checking_rule', { length: 2 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.checkingRule] }),
+  check('availability_checking_rule_key_ck', sql`${t.checkingRule} ~ '^[A-Z0-9]{2}$'`),
+  check('availability_checking_rule_text_ck', sql`char_length(btrim(${t.description})) between 1 and 40`),
+  check('availability_checking_rule_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OVZ9 / T441V. The pair of one checking group and one checking rule.
+ * Flags name future participation. No check reads them, and no ATP quantity is stored.
+ */
+export const availabilityCheckScope = pgTable('availability_check_scope', {
+  client: tenant(),
+  checkingGroup: varchar('checking_group', { length: 2 }).notNull(),
+  checkingRule: varchar('checking_rule', { length: 2 }).notNull(),
+  includeSafetyStock: char('include_safety_stock', { length: 1 }).notNull(),
+  includeQualityStock: char('include_quality_stock', { length: 1 }).notNull(),
+  includeBlockedStock: char('include_blocked_stock', { length: 1 }).notNull(),
+  includeRestrictedUse: char('include_restricted_use', { length: 1 }).notNull(),
+  purchaseOrders: char('purchase_orders', { length: 1 }).notNull(),
+  purchaseRequisitions: char('purchase_requisitions', { length: 1 }).notNull(),
+  plannedOrders: char('planned_orders', { length: 1 }).notNull(),
+  productionOrders: char('production_orders', { length: 1 }).notNull(),
+  dependentRequirements: char('dependent_requirements', { length: 1 }).notNull(),
+  reservations: char('reservations', { length: 1 }).notNull(),
+  receiptsInPast: char('receipts_in_past', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.checkingGroup, t.checkingRule] }),
+  foreignKey({
+    columns: [t.client, t.checkingGroup],
+    foreignColumns: [availabilityCheckingGroup.client, availabilityCheckingGroup.checkingGroup],
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.checkingRule],
+    foreignColumns: [availabilityCheckingRule.client, availabilityCheckingRule.checkingRule],
+  }).onDelete('restrict'),
+  check('availability_check_scope_xfeld_ck', sql`
+    ${t.includeSafetyStock} in ('X', ' ')
+    and ${t.includeQualityStock} in ('X', ' ')
+    and ${t.includeBlockedStock} in ('X', ' ')
+    and ${t.includeRestrictedUse} in ('X', ' ')
+    and ${t.purchaseOrders} in ('X', ' ')
+    and ${t.purchaseRequisitions} in ('X', ' ')
+    and ${t.dependentRequirements} in ('X', ' ')
+    and ${t.reservations} in ('X', ' ')
+  `),
+  check('availability_check_scope_planned_ck', sql`${t.plannedOrders} in ('X', 'A', ' ')`),
+  check('availability_check_scope_production_ck', sql`${t.productionOrders} in ('X', 'F', ' ')`),
+  check('availability_check_scope_past_ck', sql`${t.receiptsInPast} in ('B', ' ')`),
+  check('availability_check_scope_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OPJH / T003O for production orders only. The key is the client and the order
+ * type. It is not a plant key. Order category is fixed at 10. Number range,
+ * settlement, status profile, and checking control are not stored.
+ */
+export const productionOrderType = pgTable('production_order_type', {
+  client: tenant(),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  /** AUFTYP 10. Other categories are not this customizing. */
+  orderCategory: char('order_category', { length: 2 }).notNull().default('10'),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderType] }),
+  check('production_order_type_key_ck', sql`${t.orderType} ~ '^[A-Z0-9]{4}$'`),
+  check('production_order_type_text_ck', sql`char_length(btrim(${t.description})) between 1 and 40`),
+  check('production_order_type_category_ck', sql`${t.orderCategory} = '10'`),
+  check('production_order_type_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OPL8 / T399X for production orders. The key is the client, the plant, and the
+ * order type. Order category is fixed at 10. A task list type, when named, must
+ * already stand. Production version selection is blank, 0, or 1. Costing,
+ * settlement, and release are not stored. Checking control is a separate record.
+ */
+export const productionOrderTypeParameter = pgTable('production_order_type_parameter', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  orderCategory: char('order_category', { length: 2 }).notNull().default('10'),
+  taskListType: char('task_list_type', { length: 1 }),
+  productionVersionSelection: char('production_version_selection', { length: 1 }).notNull().default(' '),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant, t.orderType] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+    name: 'production_order_type_parameter_plant_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.orderType],
+    foreignColumns: [productionOrderType.client, productionOrderType.orderType],
+    name: 'production_order_type_parameter_type_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.taskListType],
+    foreignColumns: [routingTaskListType.client, routingTaskListType.taskListType],
+    name: 'production_order_type_parameter_task_list_fk',
+  }).onDelete('restrict'),
+  check('production_order_type_parameter_type_ck', sql`${t.orderType} ~ '^[A-Z0-9]{4}$'`),
+  check('production_order_type_parameter_plant_ck', sql`char_length(${t.plant}) between 1 and 10`),
+  check('production_order_type_parameter_category_ck', sql`${t.orderCategory} = '10'`),
+  check('production_order_type_parameter_task_ck', sql`${t.taskListType} is null or ${t.taskListType} ~ '^[A-Z0-9]$'`),
+  check('production_order_type_parameter_version_sel_ck', sql`${t.productionVersionSelection} in (' ', '0', '1')`),
+  check('production_order_type_parameter_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * OPJK / TCO11 for production orders. The key is the client, the plant, the
+ * order type, and the business function. Only functions 1 and 2 are stored.
+ * The no-check and check-on-save indicators have no database default: a missing
+ * row is unconfigured. A checking rule, when named, must already stand.
+ * Release, PRT, capacity, and creation control are not stored. No check runs.
+ *
+ * The indicators are varchar rather than CHAR so an omitted value is rejected
+ * instead of being padded to blank.
+ */
+export const productionCheckingControl = pgTable('production_checking_control', {
+  client: tenant(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  businessFunction: varchar('business_function', { length: 1 }).notNull(),
+  noCheck: varchar('no_check', { length: 1 }).notNull(),
+  checkingRule: varchar('checking_rule', { length: 2 }),
+  checkOnSave: varchar('check_on_save', { length: 1 }).notNull(),
+  version: integer('version').notNull().default(1),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.plant, t.orderType, t.businessFunction] }),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+    name: 'production_checking_control_plant_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.orderType],
+    foreignColumns: [productionOrderType.client, productionOrderType.orderType],
+    name: 'production_checking_control_type_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.checkingRule],
+    foreignColumns: [availabilityCheckingRule.client, availabilityCheckingRule.checkingRule],
+    name: 'production_checking_control_rule_fk',
+  }).onDelete('restrict'),
+  check('production_checking_control_function_ck', sql`${t.businessFunction} in ('1', '2')`),
+  check('production_checking_control_no_check_ck', sql`${t.noCheck} in ('X', ' ')`),
+  check('production_checking_control_save_ck', sql`${t.checkOnSave} in ('X', ' ')`),
+  check('production_checking_control_rule_ck', sql`${t.checkingRule} is null or ${t.checkingRule} ~ '^[A-Z0-9]{2}$'`),
+  check('production_checking_control_type_ck', sql`${t.orderType} ~ '^[A-Z0-9]{4}$'`),
+  check('production_checking_control_plant_ck', sql`char_length(${t.plant}) between 1 and 10`),
+  check('production_checking_control_version_ck', sql`${t.version} > 0`),
 ]);

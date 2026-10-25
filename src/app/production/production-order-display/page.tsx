@@ -92,7 +92,7 @@ export default async function ProductionOrderDisplayPage({
             {listed.rows.map((row) => (
               <li key={row.orderNumber}>
                 <Link href={`${PRODUCTION_ORDER_DISPLAY_ROUTE}?order=${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</Link>
-                {' · '}{row.materialNumber} · {row.quantity} {row.unit} · {row.status}
+                {' · '}{row.materialNumber} · {row.orderType ?? 'no type'} · {row.quantity} {row.unit} · {row.status}
               </li>
             ))}
           </ul>
@@ -102,17 +102,24 @@ export default async function ProductionOrderDisplayPage({
         <section className="mt-4 space-y-2 text-sm" data-co03-order={document.orderNumber}>
           <p>{document.orderNumber} · {document.materialNumber} {document.materialDescription}</p>
           <p>Plant {document.plant} {document.plantName}. Company code of the plant {document.companyCode || '—'}. It is not a key of the order.</p>
+          <p data-order-type={document.orderType ?? ''}>Order type {document.orderType ?? 'not assigned'}. A missing type was not filled in. Display does not run an availability check.</p>
           <p>Quantity {document.quantity} {document.unit}. Received {document.receivedQuantity}, read from material documents.</p>
           <p>Start {document.scheduledStart}. Finish {document.scheduledFinish}. Actual start and finish stand on a confirmation, not on the order.</p>
-          <p>Status {document.status}. Display did not change it. {document.releasedBy ? `Released by ${document.releasedBy}.` : 'Not released.'}</p>
+          <p>Status {document.status}. Display did not change it. {document.releasedBy ? `Released by ${document.releasedBy}.` : 'Not released.'} {document.technicallyCompletedBy ? `Technically completed by ${document.technicallyCompletedBy} at ${document.technicallyCompletedAt ?? '—'}. It is not an open order.` : 'Technical completion has not been recorded.'}</p>
           <p>Batch {document.batch || '—'}. Scheduling profile {document.schedulingProfile || '—'}. Those were snapshotted at creation.</p>
           <p>{document.plannedOrderNumber ? `Converted from planned order ${document.plannedOrderNumber}.` : 'No planned order is stored. None was inferred.'}</p>
           <p>Created by {document.createdBy} at {document.createdAt}. Changed by {document.changedBy ?? '—'} at {document.changedAt ?? '—'}. Record version {document.version}.</p>
+          <p data-production-version={document.productionVersion ?? ''} data-bom-usage={document.bomUsage ?? ''} data-bom-alternative={document.bomAlternative ?? ''}>
+            Production version {document.productionVersion ?? 'not recorded'}. BOM usage {document.bomUsage ?? 'not recorded'}. BOM alternative {document.bomAlternative ?? 'not recorded'}.
+            These are the values stored with the snapshot. Display does not re-read the bill of material, and they are not proof that the current bill of material still matches these components.
+          </p>
           {document.gaps.map((gap) => <p key={gap}>{gap}</p>)}
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-ink-faint">
-                <th>Item</th>
+                <th>Line</th>
+                <th>BOM item</th>
+                <th>Source material</th>
                 <th>Component</th>
                 <th>Required</th>
                 <th>Issued</th>
@@ -122,8 +129,10 @@ export default async function ProductionOrderDisplayPage({
             </thead>
             <tbody>
               {document.components.map((component) => (
-                <tr key={component.itemNumber}>
+                <tr key={component.itemNumber} data-bom-item={component.bomItem ?? ''} data-source-material={component.sourceMaterial ?? ''}>
                   <td>{component.itemNumber}</td>
+                  <td>{component.bomItem ?? 'not recorded'}</td>
+                  <td>{component.sourceMaterial ?? 'not recorded'}</td>
                   <td>{component.materialNumber} {component.materialDescription}</td>
                   <td>{component.requiredQuantity} {component.unit}</td>
                   <td>{component.issuedQuantity}</td>
@@ -136,8 +145,10 @@ export default async function ProductionOrderDisplayPage({
           {document.confirmations.length > 0 && (
             <ul data-co03-confirmations>
               {document.confirmations.map((row) => (
-                <li key={row.confirmationNumber}>
+                <li key={row.confirmationNumber} data-co03-confirmation={row.confirmationNumber}>
                   Confirmation {row.confirmationNumber} · {row.confirmationLevel === 'HEADER' ? 'header' : `operation ${row.operationNumber}`} · {row.confirmationType} · yield {row.yieldQuantity} {row.unit}
+                  {row.cancelled ? ` · cancelled by ${row.cancellationNumber}` : ' · not cancelled'}
+                  {' '}<Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(row.confirmationNumber)}`}>CO13 is a different screen.</Link>
                 </li>
               ))}
             </ul>
