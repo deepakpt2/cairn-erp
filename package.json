@@ -11,6 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:migrate": "tsx src/platform/db/migrate.ts",
+    "db:verify": "sh -c 'set -a; test -f .env.local && . ./.env.local; set +a; vitest run tests/migration-grant-policy.test.ts tests/default-privilege-audit.test.ts'",
     "db:reset": "tsx scripts/reset-db.ts",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run",
