@@ -119,3 +119,27 @@ Staged exactly as the repository's standing order (UI → DB/schema → backend 
 
 - `docs/production-tcode-order.md` currently says CO09 "was deferred by name". That stays true, but the deferral now has a specification: this file. The "Not in this sequence" bullet should point here when CO09 is scheduled.
 - The refusals in `availability-check.ts` and `checking-control.ts` are **the contract**; any implementation that removes one must be told to remove it explicitly by the owner, per decision 5 above.
+
+## 9. Slice 1 as delivered (2026-10-25)
+
+Route `/production/order-availability`, read-only, one order per run. Files, and why each one exists:
+
+| File | Why |
+| --- | --- |
+| `src/modules/production/order-availability.ts` | The whole answer: resolves the order's own components, then the checking group, the rule the order's control names, and the scope row for that pair; calls `stockRequirementsList` per component and *selects* from the elements it returned. Refuses by name before reading anything, for any selection this slice cannot honour. Writes nothing. |
+| `src/app/production/order-availability/page.tsx` | Server component: session, the two capabilities, refusals turned into a message and a remedy, and the limits stated before the run. |
+| `src/app/production/order-availability/OrderAvailabilityWorkbench.tsx` | The client shell: order field, the resolved control/rule/scope summary, one explicit run action, the dated element list per component, and nine distinct states. No control that could be read as a save. |
+| `src/platform/i18n/index.ts` | 76 `co09.*` keys, so no string is rendered as a key and none is hard-coded in the shell. |
+| `src/ui/shell/screen-catalog.ts`, `src/ui/shell/screen-links.ts` | Registers `PROD.ORDER.AVAILABILITY` (`PROD.ORDER.DISPLAY`, business function read) and the `ALSO` links from CO03, the stock/requirements list and the availability configuration screens. |
+| `tests/order-availability.test.ts` | 28 runtime cases against a fixture tenant: valid check, every missing-config case, each scope switch moving the figures, committed-vs-ATP, requirement-date and same-day behaviour, tenant isolation, capability refusal, and before/after row counts plus a per-table hash over 20 watched tables proving no write. |
+| `tests/order-availability-ui-contract.test.ts` | 7 cases: read-only wiring, the literal `data-co09-state` hooks, the committed-vs-ATP hooks, exactly one submit button, the refusal list rendered from the module, every key resolving at runtime, catalog/link registration. |
+| `scripts/browser-smoke/co09-availability.ts` + the three registration points | A guarded target on a disposable local database (fixture T866): the configuration is built through its own maintaining services, then 15 assertion groups read the browser and the rows behind it, including two identical runs and a change-document count that is not vacuously zero. |
+
+**Two readings this slice settled, both in the module's header:**
+
+- Every scope switch whose meaning `availability-check.ts` defines is *honoured*, not refused — `plannedOrders` `A` (firmed only) and `X`, `productionOrders` `X`/`F`, `receiptsInPast` `B`, `purchaseRequisitions`, `purchaseOrders`, `reservations`, `dependentRequirements` (which also governs dated component demand, the same element the list treats as one demand stream), `includeSafetyStock`, and the quality/blocked/restricted-stock indicators as a *set*. A flag the engine cannot express at all — a stock split by type — leaves the component unanswered rather than answered with a different meaning.
+- The balance is taken to the component's requirement date with the line's own demand excluded (it is the demand being checked, so it cannot cover itself) while another document's demand dated that same day *is* counted against it. The list has no order within a day, so the check does not guess who stands first in line; it states the competing rows instead. `committedQuantity` is `null` on every line, always, because no commitment record exists.
+
+**Verification, all on the owner's test box:** `tests/order-availability.test.ts` and `tests/order-availability-ui-contract.test.ts` 35 passed; `npm run db:verify` 13 passed; `npx tsc --noEmit` 161 errors, the baseline count, none in these files; `npm run lint:ip` 138 findings, the baseline count; `npm run build` exit 0 with `/production/order-availability` in the route table; the guarded browser target `co09-availability` exit 0 against a loopback server on :3111 with `SMOKE_BASE_URL` set and echoed. `tests/browser-targets.test.ts` reports one failure — six `scr160`–`scr165` targets carry no `ACCEPTANCE_DATABASE_GUARDS` entry. That gap stands at `HEAD` (six such targets, zero guard entries) and is not this slice's.
+
+**Still not here, and where it belongs:** any commitment (write to dependent requirements, or a record of its own, plus reset and replay) is slice 2; collective check and the missing-parts list slice 3; storage-location and batch sections, special stock, product allocation and advanced ATP remain refused by name. `docs/production-tcode-order.md`'s deferral note should now point at this file.

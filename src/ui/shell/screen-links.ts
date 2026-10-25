@@ -48,6 +48,7 @@ export const ALSO: Record<string, readonly string[]> = {
     '/production/boms',
   ],
   'production-orders': [
+    '/production/order-availability',
     '/production/planned-order-display',
     '/production/stock-requirements',
     '/production/single-item-planning',
@@ -56,6 +57,7 @@ export const ALSO: Record<string, readonly string[]> = {
     '/config/scheduling-profiles',
   ],
   planning: [
+    '/production/order-availability',
     '/production/planned-order-display',
     '/production/boms',
     '/inventory/materials',

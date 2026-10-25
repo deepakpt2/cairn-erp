@@ -2129,6 +2129,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["material", "plant"],
   },
   {
+    id: "/production/order-availability",
+    path: "/production/order-availability",
+    query: {},
+    code: "PROD.ORDER.DISPLAY",
+    title: "Availability check for an order",
+    area: "production",
+    family: "planning",
+    accepts: ["order"],
+  },
+  {
     id: "/production/time-ticket",
     path: "/production/time-ticket",
     query: {},

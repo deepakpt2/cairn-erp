@@ -90,6 +90,7 @@ import { journalDocumentDisplay } from './journal-document-display';
 import { productionOrderCreate } from './production-order-create';
 import { migoComponentIssue } from './migo-component-issue';
 import { co11nMovement } from './co11n-movement';
+import { co09Availability } from './co09-availability';
 import { migoProductionReceipt } from './migo-production-receipt';
 import { migoTransferPosting } from './migo-transfer-posting';
 import { physicalInventoryCount } from './physical-inventory';
@@ -5108,6 +5109,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'production-order-create': productionOrderCreate,
   'migo-component-issue': migoComponentIssue,
   'co11n-movement': co11nMovement,
+  'co09-availability': co09Availability,
   'migo-production-receipt': migoProductionReceipt,
   'migo-transfer-posting': migoTransferPosting,
   'physical-inventory': physicalInventoryCount,
