@@ -387,7 +387,14 @@ export async function createSession(
 export interface SessionContext {
   user: AuthenticatedUser;
   expiresAt: Date;
-  /** The server session that holds a dialog enqueue. Absent only on a fixture. */
+  /**
+ * The `user_session` primary key, which is the enqueue owner (`owner_session_id`).
+ *
+ * A session resolved from a cookie always carries it. It is absent only on a
+ * hand-built fixture context, which is why the no-session branches of
+ * `openChangeForSession` and `assertChangeForSession` fail closed instead of
+ * turning an entitled user's opening quietly display-only.
+ */
   sessionId?: string;
   /** True when this request extended the session, so the caller refreshes the cookie. */
   renewed: boolean;
@@ -419,7 +426,7 @@ export async function resolveSession(
   input: { client: string; token: string },
 ): Promise<SessionContext | null> {
   const rows = (await tx.execute(sql`
-    select s.user_id, s.expires_at, s.revoked_at, s.token_hash,
+    select s.id as session_id, s.user_id, s.expires_at, s.revoked_at, s.token_hash,
            u.username, u.full_name, u.email, u.is_active, u.is_locked,
            u.must_change_password, u.preferences
       from user_session s
@@ -428,6 +435,8 @@ export async function resolveSession(
        and s.token_hash = ${hashToken(input.token)}
      limit 1
   `)) as unknown as Array<{
+    /** The `user_session` primary key — the enqueue owner. Selected above under this
+     *  name so both returns below read one verified column, never an inference. */
     session_id: string;
     user_id: string;
     expires_at: string | Date;

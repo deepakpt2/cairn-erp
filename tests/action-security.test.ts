@@ -5,6 +5,7 @@ import type { SessionContext } from '@/platform/auth/session';
 import { openForChange } from '@/platform/lock/enqueue';
 import { createTenant, destroyTenant, withTenant, closeDb, type TestTenant } from './helpers';
 import { maintainNumberRange, listNumberRanges } from '@/modules/foundation/number-ranges';
+import { defineRange } from '@/platform/numbering';
 
 const request = vi.hoisted(() => ({ session: null as SessionContext | null }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
@@ -35,6 +36,8 @@ import { getSupplierPurchasing } from '@/modules/foundation/supplier-purchasing'
 import { saveCustomerCompanyAction } from '@/app/foundation/partners/customer-company-actions';
 import { getCustomerCompany } from '@/modules/foundation/customer-companies';
 import { saveCustomerSalesAreaAction } from '@/app/foundation/partners/customer-sales-area-actions';
+import { completeAction, parkAction } from '@/app/finance/journal/park/actions';
+import { changeAction } from '@/app/finance/assets/change/actions';
 import { getCustomerSalesArea } from '@/modules/foundation/customer-sales-areas';
 
 let alpha: TestTenant; let beta: TestTenant;
@@ -315,5 +318,95 @@ describe('server action security', () => {
     await expect(savePeriodRule(periodForm())).rejects.toThrow('AUTH_REDIRECT');
     await expect(saveNumberRange({ ok: true }, rangeForm())).rejects.toThrow('AUTH_REDIRECT');
     await expect(saveMaterialAction({ ok: true }, form({ view: 'BASIC' }))).rejects.toThrow('AUTH_REDIRECT');
+  });
+});
+
+/**
+ * Two of the screens whose saves are judged by the dialog enqueue, asserted at the
+ * guard the action itself calls. `tests/dialog-enqueue.test.ts` proves the lock
+ * rules and `tests/session-change-lock.test.ts` proves that a resolved session
+ * carries the id the lock is owned by; the cases below pin the last link — that a
+ * write path reads that identity — for a screen that has to park a document first
+ * and one that must not touch a document to be refused.
+ */
+describe('a save is judged by the session that opened the record', () => {
+  // The parked-document number range is the one thing the standard package does not
+  // deliver for this fixture tenant, and parking cannot allocate a number without it.
+  beforeAll(async () => {
+    await withTenant(alpha.client, (tx) =>
+      defineRange(tx, {
+        client: alpha.client, objectCode: 'PARKDOC', subObject: '*', prefix: 'PK',
+        numberLength: 7, createdBy: 'TEST',
+      }),
+    );
+  });
+
+  /** The context `signedIn` hands the actions, with the session identity removed. */
+  function signedInWithoutSessionIdentity(capabilities = ['*']) {
+    request.session = {
+      user: {
+        client: alpha.client, userId: 'action-user', username: 'real.operator',
+        fullName: 'Real Operator', email: null, mustChangePassword: false, capabilities,
+      },
+      expiresAt: new Date(Date.now() + 100000),
+      renewed: false,
+    };
+  }
+
+  function parkForm(parkedNumber?: string) {
+    return form({
+      ...(parkedNumber ? { parkedNumber } : {}),
+      requestKey: 'security-park-1',
+      companyCode: '1000',
+      documentDate: `${year}-04-15`,
+      postingDate: `${year}-04-15`,
+      documentType: 'SA',
+      currency: 'USD',
+      reference: 'SECURITY-PARK',
+      headerText: 'Parked by the action security test',
+      lines: JSON.stringify([
+        { glAccount: '100000', debitCredit: 'S', amount: '50.0000' },
+        { glAccount: '200000', debitCredit: 'H', amount: '50.0000' },
+      ]),
+    });
+  }
+
+  it('refuses to complete a parked document this session never opened', async () => {
+    signedIn();
+    const parked = await parkAction({ ok: true, message: '' }, parkForm());
+    expect(parked.ok).toBe(true);
+    const parkedNumber = /Document parked as (\S+):/.exec(parked.message)?.[1] ?? '';
+    expect(parkedNumber).toBeTruthy();
+
+    const refused = await completeAction({ ok: true, message: '' }, parkForm(parkedNumber));
+    expect(refused.ok).toBe(false);
+    expect(refused.message).toContain('is not open for change in this session.');
+
+    // Opening it in change through the enqueue is what unlocks the act — nothing else.
+    await hold('PARKED_JOURNAL', parkedNumber);
+    const completed = await completeAction({ ok: true, message: '' }, parkForm(parkedNumber));
+    expect(completed.ok).toBe(true);
+    expect(completed.message).toContain('stands COMPLETED');
+  });
+
+  it('refuses an asset change the session did not open, naming the object', async () => {
+    signedIn();
+    const result = await changeAction({ ok: true, message: '' }, form({
+      companyCode: '1000', assetNumber: 'ASSET-SEC-LOCKED', subNumber: '0000', version: '1', description1: 'Unlocked change',
+    }));
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('ASSET 1000/ASSET-SEC-LOCKED/0000 is not open for change in this session.');
+  });
+
+  it('refuses both acts when the request cannot name its session', async () => {
+    signedInWithoutSessionIdentity();
+    const asset = await changeAction({ ok: true, message: '' }, form({
+      companyCode: '1000', assetNumber: 'ASSET-SEC-BLIND', subNumber: '0000', version: '1', description1: 'Blind session',
+    }));
+    expect(asset).toMatchObject({ ok: false, message: 'The session is missing.' });
+
+    const parked = await completeAction({ ok: true, message: '' }, parkForm('PARK-SEC-NONE'));
+    expect(parked.ok).toBe(false);
+    expect(parked.message).toBe('The session is missing.');
   });
 });

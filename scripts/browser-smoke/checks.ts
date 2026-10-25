@@ -656,6 +656,19 @@ async function controllingAreaDefinition(ctx: BrowserContext) {
   console.log('  ✓ Currency Key and Fiscal Year Variant become read-only only for areas assigned to posted activity');
 }
 
+/**
+ * The view form on a material screen, and only that form.
+ *
+ * A material opened in change also carries the deletion-flag act above it, and that
+ * act has its own `reason` field and its own submit button. Before a session could
+ * hold the change lock the act never rendered for these fixtures, so a bare name
+ * locator was unambiguous; it is not now, and scoping to the form is the honest
+ * reading of what the leg types into.
+ */
+function viewForm(page: Page) {
+  return page.locator('form').filter({ has: page.locator('[name="expectedVersion"]') });
+}
+
 async function basic(ctx: BrowserContext) {
   const { page, BASE, CLIENT } = scope(ctx);
   await page.goto(`${BASE}/inventory/materials?new=1`, { waitUntil: 'domcontentloaded' });
@@ -663,8 +676,8 @@ async function basic(ctx: BrowserContext) {
   await page.locator('input[name="description"]').fill('Browser raw material');
   await page.locator('[name="materialGroup"]').selectOption('RAW');
   await page.locator('[name="baseUnit"]').selectOption('KG');
-  await page.locator('[name="reason"]').fill('Browser basic creation');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser basic creation');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   await page.getByRole('link', { name: 'Open material and its views', exact: true }).click();
   await page.locator('input[name="materialNumber"][readonly]').waitFor();
@@ -687,13 +700,13 @@ async function basicLifecycle(ctx: BrowserContext) {
   await page.locator('[name="materialGroup"]').selectOption('RAW');
   await page.locator('input[name="description"]').fill('');
   await page.locator('[name="baseUnit"]').selectOption('');
-  await page.locator('[name="reason"]').fill('Browser incomplete basic creation');
+  await viewForm(page).locator('[name="reason"]').fill('Browser incomplete basic creation');
   await page.locator('form').filter({ has: page.locator('[name="expectedVersion"]') }).evaluate((form) => {
     for (const [name, value] of [['client', '0100'], ['changedBy', 'FORGED']]) {
       const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; form.appendChild(input);
     }
   });
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
   const incomplete = await getMaterialDetail(CLIENT, 'RAW-STAGED');
   assert.equal(incomplete?.base.basicStatus, 'INCOMPLETE');
@@ -705,11 +718,11 @@ async function basicLifecycle(ctx: BrowserContext) {
 
   await page.locator('input[name="description"]').fill('Completed staged material');
   await page.locator('[name="baseUnit"]').selectOption('KG');
-  await page.locator('[name="reason"]').fill('Browser staged completion');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser staged completion');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-STAGED'))?.base.version, 2);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-STAGED'))?.base.version, 2);
   console.log('  ✓ completion promotes the status; unchanged resave preserves its version');
@@ -717,8 +730,8 @@ async function basicLifecycle(ctx: BrowserContext) {
   await page.locator('[name="grossWeight"]').fill('3.500');
   await page.locator('[name="netWeight"]').fill('3.250');
   await page.locator('[name="weightUnit"]').selectOption('KG');
-  await page.locator('[name="reason"]').fill('Browser basic weight maintenance');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser basic weight maintenance');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
   const maintained = await getMaterialDetail(CLIENT, 'RAW-STAGED');
   assert.equal(maintained?.base.version, 3);
@@ -742,7 +755,7 @@ async function basicLifecycle(ctx: BrowserContext) {
   assert.equal(await page.locator('[name="materialNumber"]').inputValue(), '');
   assert.equal(await page.locator('[name="grossWeight"]').inputValue(), '3.500');
   await page.locator('[name="materialNumber"]').fill('RAW-STAGED-COPY');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   const copy = await getMaterialDetail(CLIENT, 'RAW-STAGED-COPY');
   assert.equal(copy?.base.description, 'Completed staged material');
@@ -760,8 +773,8 @@ async function purchasing(ctx: BrowserContext) {
   await page.locator('[name="orderUnit"]').waitFor();
   assert.equal(await page.locator('[name="orderUnit"]').inputValue(), 'KG');
   await page.locator('[name="purchasingGroup"]').selectOption('');
-  await page.locator('[name="reason"]').fill('Browser staged purchasing creation');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser staged purchasing creation');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
   const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(staged?.plants[0].purchasingStatus, 'INCOMPLETE');
@@ -773,8 +786,8 @@ async function purchasing(ctx: BrowserContext) {
   await page.locator('[name="overdeliveryTolerance"]').fill('5.25');
   await page.locator('[name="underdeliveryTolerance"]').fill('1.75');
   await page.locator('[name="manufacturerPartNumber"]').fill('MFG-PURCH-001');
-  await page.locator('[name="reason"]').fill('Browser purchasing completion');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser purchasing completion');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(completed?.plants[0].version, 2);
@@ -782,18 +795,18 @@ async function purchasing(ctx: BrowserContext) {
   assert.equal(completed?.plants[0].overdeliveryTolerance, '5.25');
   assert.equal(completed?.plants[0].underdeliveryTolerance, '1.75');
   assert.equal(completed?.plants[0].manufacturerPartNumber, 'MFG-PURCH-001');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 2);
   console.log('  ✓ completion stores exact tolerances; unchanged resave preserves values/version');
 
   await page.locator('[name="purchasingGroup"]').selectOption('002');
   await page.locator('[name="manufacturerPartNumber"]').fill('MFG-PURCH-002');
-  await page.locator('[name="reason"]').fill('Browser purchasing maintenance');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser purchasing maintenance');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
   await page.locator('[name="orderUnit"]').selectOption('LB');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('A different order unit requires a material-specific conversion.', { exact: true }).waitFor();
   const maintained = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(maintained?.base.version, 1, 'Plant editing must not alter global basic data');
@@ -827,7 +840,7 @@ async function purchasing(ctx: BrowserContext) {
   await page.waitForURL(/\/$/);
   await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=PURCHASING`, { waitUntil: 'domcontentloaded' });
   await page.getByText(/PROC.MATERIAL.PURCHASING.MAINTAIN/).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.equal(await viewForm(page).getByRole('button', { name: 'Save', exact: true }).count(), 0);
   console.log('  ✓ warehouse-only authority can read, but has no purchasing save form');
 }
 
@@ -837,14 +850,14 @@ async function mrp(ctx: BrowserContext) {
   await page.getByRole('link', { name: /^MRP/ }).click();
   await page.locator('[name="mrpController"]').waitFor();
   await page.locator('[name="mrpController"]').selectOption('');
-  await page.locator('[name="reason"]').fill('Browser incomplete planning setup');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser incomplete planning setup');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
   const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(staged?.plants[0].mrpController, null);
   assert.equal(staged?.plants[0].mrpStatus, 'INCOMPLETE');
   assert.equal(staged?.plants[0].version, 1);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Incomplete.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 1);
   console.log('  ✓ missing controller stages correctly; untouched resave cannot auto-complete it');
@@ -856,15 +869,15 @@ async function mrp(ctx: BrowserContext) {
   await page.locator('[name="maximumLotSize"]').fill('200');
   await page.locator('[name="safetyStock"]').fill('12.375');
   await page.locator('[name="plannedDeliveryDays"]').fill('7');
-  await page.locator('[name="reason"]').fill('Browser planning completion');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser planning completion');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(completed?.plants[0].version, 2);
   assert.equal(completed?.plants[0].safetyStock, '12.375');
   assert.equal(completed?.plants[0].fixedLotSize, '100.000');
   assert.equal(completed?.plants[0].plannedDeliveryDays, 7);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].version, 2);
   console.log('  ✓ fixed-lot sizing/exact safety stock complete and preserve the committed view');
@@ -874,14 +887,14 @@ async function mrp(ctx: BrowserContext) {
   await page.locator('[name="mrpType"]').selectOption('REORDER');
   await page.locator('[name="reorderPoint"]').fill('25.500');
   await page.locator('[name="safetyStock"]').fill('13.125');
-  await page.locator('[name="reason"]').fill('Browser planning maintenance');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser planning maintenance');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
   const flags = await withTenant(CLIENT, (tx) => tx.execute(sql`select net_change, last_changed_by from planning_file where material_number = 'RAW-BROWSER' and plant = '1000'`));
   assert.equal((flags as unknown as Array<{ net_change: boolean }>)[0].net_change, true);
   assert.equal((flags as unknown as Array<{ last_changed_by: string }>)[0].last_changed_by, 'browser.admin');
   await page.locator('[name="maximumLotSize"]').fill('5');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('Maximum lot size must not be below minimum lot size.', { exact: true }).waitFor();
   const maintained = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(maintained?.plants[0].version, 3);
@@ -893,6 +906,41 @@ async function mrp(ctx: BrowserContext) {
   assert.equal(maintained?.base.version, 1);
   assert.equal(maintained?.valuations.length, 0);
   console.log('  ✓ reorder changes reflag net-change; invalid lot bounds cannot mutate the record');
+
+  // The two production marks a CO11N posting reads live on this same view. Changing
+  // them here is the supported workflow: this session already holds the material's
+  // enqueue, so nothing bypasses the lock and no fixture writes these columns
+  // behind the screen's back.
+  const mrpRoute = `${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=MRP`;
+  await page.goto(mrpRoute, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="mrpController"]').waitFor();
+  assert.equal(await page.locator('[name="backflush"]').isChecked(), false, 'a material without explicit configuration offers no mark');
+  assert.equal(await page.locator('[name="automaticGoodsReceipt"]').isChecked(), false);
+  await page.locator('[name="backflush"]').check();
+  await viewForm(page).locator('[name="reason"]').fill('Browser backflush mark');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
+  const marked = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(marked?.plants[0].backflush, true);
+  assert.equal(marked?.plants[0].automaticGoodsReceipt, false, 'one mark cannot set the other');
+  console.log('  ✓ each mark is set on its own through the view and persisted');
+
+  await page.goto(mrpRoute, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="mrpController"]').waitFor();
+  assert.equal(await page.locator('[name="backflush"]').isChecked(), true, 'reopening the view shows the saved mark');
+  await page.locator('[name="backflush"]').uncheck();
+  await page.locator('[name="automaticGoodsReceipt"]').check();
+  await viewForm(page).locator('[name="reason"]').fill('Browser goods receipt mark');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
+  const remarked = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
+  assert.equal(remarked?.plants[0].backflush, false, 'a mark cleared in change is saved as false');
+  assert.equal(remarked?.plants[0].automaticGoodsReceipt, true);
+  await page.goto(mrpRoute, { waitUntil: 'domcontentloaded' });
+  await page.locator('[name="mrpController"]').waitFor();
+  assert.equal(await page.locator('[name="backflush"]').isChecked(), false);
+  assert.equal(await page.locator('[name="automaticGoodsReceipt"]').isChecked(), true, 'the reopened view carries the saved goods-receipt mark');
+  console.log('  ✓ marks are reloaded as saved, in both directions, on a reopened view');
 
   await page.getByRole('link', { name: 'Change history', exact: true }).click();
   await page.getByText('Browser planning completion', { exact: true }).waitFor();
@@ -917,7 +965,10 @@ async function mrp(ctx: BrowserContext) {
   await page.waitForURL(/\/$/);
   await page.goto(`${BASE}/inventory/materials?material=RAW-BROWSER&plant=1000&view=MRP`, { waitUntil: 'domcontentloaded' });
   await page.getByText(/PROD.MATERIAL.MRP.MAINTAIN/).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.equal(await viewForm(page).getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  // The record is left exactly as the entitled session saved it: an opening without
+  // the authority neither mutates the marks nor takes the change lock from anyone.
+  assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.plants[0].automaticGoodsReceipt, true);
   console.log('  ✓ warehouse authority cannot edit production-planning fields');
 }
 
@@ -934,8 +985,8 @@ async function valuation(ctx: BrowserContext) {
       const input = document.createElement('input'); input.type = 'hidden'; input.name = name; input.value = value; element.appendChild(input);
     }
   });
-  await page.locator('[name="reason"]').fill('Browser incomplete valuation setup');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser incomplete valuation setup');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Incomplete.', { exact: true }).waitFor();
   const staged = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(staged?.valuations[0].currency, 'KWD');
@@ -943,7 +994,7 @@ async function valuation(ctx: BrowserContext) {
   assert.equal(staged?.valuations[0].stockValue, '0.0000');
   assert.equal(staged?.valuations[0].valuationClass, null);
   assert.equal(staged?.valuations[0].version, 1);
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Incomplete.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 1);
   console.log('  ✓ incomplete valuation preserves unset class; forged currency/stock values are ignored');
@@ -951,33 +1002,33 @@ async function valuation(ctx: BrowserContext) {
   await page.locator('[name="valuationClass"]').selectOption('RAW_INVENTORY');
   await page.locator('[name="movingAveragePrice"]').fill('12.3456');
   await page.locator('[name="priceUnit"]').fill('10');
-  await page.locator('[name="reason"]').fill('Browser valuation completion');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser valuation completion');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Created.', { exact: true }).waitFor();
   const completed = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(completed?.valuations[0].version, 2);
   assert.equal(completed?.valuations[0].movingAveragePrice, '12.3456');
   assert.equal(completed?.valuations[0].priceUnit, '10.000');
   assert.equal(completed?.valuations[0].currency, 'KWD');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('No data changed. Status: Created.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 2);
   console.log('  ✓ exact moving-average price/unit complete and survive an unchanged resave');
 
   await page.locator('[name="priceControl"]').selectOption('STANDARD');
   await page.locator('[name="standardPrice"]').fill('25.6789');
-  await page.locator('[name="reason"]').fill('Browser valuation maintenance');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).locator('[name="reason"]').fill('Browser valuation maintenance');
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('View saved. Status: Maintained.', { exact: true }).waitFor();
   await page.locator('[name="priceUnit"]').fill('0');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('priceUnit: Price unit must be positive.', { exact: true }).waitFor();
   assert.equal((await getMaterialDetail(CLIENT, 'RAW-BROWSER'))?.valuations[0].version, 3);
 
   // Isolated guard fixture only: represent existing book stock; this is not a goods posting.
   await withTenant(CLIENT, (tx) => tx.execute(sql`update material_valuation set total_stock_quantity = '10.000', stock_value = '25.6789' where material_number = 'RAW-BROWSER' and valuation_area = '1000'`));
   await page.locator('[name="standardPrice"]').fill('30.0000');
-  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await viewForm(page).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByText('Valuation settings cannot be changed here while stock exists.', { exact: true }).waitFor();
   const preserved = await getMaterialDetail(CLIENT, 'RAW-BROWSER');
   assert.equal(preserved?.valuations[0].version, 3);
@@ -1019,7 +1070,7 @@ async function valuation(ctx: BrowserContext) {
   await signInAs('finance.viewer');
   await page.getByText(/FIN.MATERIAL.VALUATION.MAINTAIN/).waitFor();
   await page.getByText('Browser valuation maintenance', { exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Save', exact: true }).count(), 0);
+  assert.equal(await viewForm(page).getByRole('button', { name: 'Save', exact: true }).count(), 0);
   assert.match(await page.locator('body').innerText(), /25\.6789/);
   console.log('  ✓ finance display authority can review valuation/history but cannot maintain');
 

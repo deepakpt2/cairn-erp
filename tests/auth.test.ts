@@ -5,6 +5,7 @@
  * written to the user row has not happened, and an audit trail that exists only in
  * an object has not been kept.
  */
+import { createHash } from 'node:crypto';
 import { describe, expect, it, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';
 import { withTenant, closeDb } from '@/platform/db/client';
@@ -249,6 +250,54 @@ describe('sessions', () => {
 
     expect(renewed?.renewed).toBe(true);
     expect(renewed!.expiresAt.getTime()).toBeGreaterThan(Date.now() + 60 * 60_000);
+  });
+
+  /**
+   * The session identity is not decoration: it is the enqueue owner, so a resolve
+   * that cannot name `user_session.id` leaves every change-gated screen display-only
+   * for a user who is signed in and entitled. That failure is silent — a page that
+   * reads fine and will not save — so the mapping is asserted against the row.
+   */
+  it('resolves to the persisted session id on both of its returns', async () => {
+    const { token } = await newSession();
+
+    const stored = (await withTenant(tenant.client, (tx) =>
+      tx.execute(sql`
+        select id from user_session where token_hash = ${createHash('sha256').update(token).digest('hex')}
+      `),
+    )) as unknown as Array<{ id: string }>;
+    expect(stored.length).toBe(1);
+
+    const opened = await withTenant(tenant.client, (tx) =>
+      resolveSession(tx, { client: tenant.client, token }),
+    );
+    expect(opened?.renewed).toBe(false);
+    expect(opened?.sessionId).toBe(stored[0].id);
+
+    // The second return — the sliding renewal — reads the same column and must hand
+    // over the same session, or a renewal would move the lock to nobody.
+    await withTenant(tenant.client, (tx) =>
+      tx.execute(sql`update user_session set expires_at = now() + interval '10 minutes' where id = ${stored[0].id}`),
+    );
+    const renewedSession = await withTenant(tenant.client, (tx) =>
+      resolveSession(tx, { client: tenant.client, token }),
+    );
+    expect(renewedSession?.renewed).toBe(true);
+    expect(renewedSession?.sessionId).toBe(stored[0].id);
+    expect(renewedSession?.user.userId).toBe(opened?.user.userId);
+  });
+
+  it('gives each session of one user its own id, so a lock belongs to one opening', async () => {
+    const first = await newSession();
+    const second = await newSession();
+
+    const ids = await Promise.all([first.token, second.token].map((token) =>
+      withTenant(tenant.client, (tx) => resolveSession(tx, { client: tenant.client, token })),
+    ));
+    expect(ids[0]?.sessionId).toBeTruthy();
+    expect(ids[1]?.sessionId).toBeTruthy();
+    expect(ids[0]!.sessionId).not.toBe(ids[1]!.sessionId);
+    expect(ids[0]!.user.userId).toBe(ids[1]!.user.userId);
   });
 });
 
