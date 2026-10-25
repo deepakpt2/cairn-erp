@@ -15,6 +15,8 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getBatchLevel, saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
+import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
+import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -427,5 +429,41 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
     `)) as unknown as Array<{ status: string }>;
     expect(after?.status).toBe('TECHNICALLY_COMPLETED');
+  });
+
+  it('restores the open receipt after the goods receipt is reversed', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR,
+      materialNumber: 'GR-FG', plant: PLANT, orderQuantity: 3,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    await createBatch({ client, changedBy: ACTOR, materialNumber: 'GR-FG', batchNumber: '00015', reason: 'Reversal batch' });
+    const posted = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 2, batch: '00015' }],
+      requestKey: 'gr-then-reverse',
+    });
+    expect(await receivedQuantityFor(client, draft.orderNumber)).toBe(2);
+    const reversed = await reverseMaterialDocument({
+      client, changedBy: ACTOR, materialDocumentNumber: posted.materialDocumentNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16', requestKey: 'gr-then-reverse-mbst',
+    });
+    expect(reversed.materialDocumentNumber).not.toBe(posted.materialDocumentNumber);
+    expect(await receivedQuantityFor(client, draft.orderNumber)).toBe(0);
+    const again = await postProductionReceipt({
+      client, changedBy: ACTOR, orderNumber: draft.orderNumber,
+      postingDate: '2026-10-16', documentDate: '2026-10-16',
+      lines: [{ storageLocation: 'SG01', quantity: 3, batch: '00015' }],
+      requestKey: 'gr-after-reverse',
+    });
+    expect(again.receivedAfter).toBe('3.000');
+    const list = await stockRequirementsList({
+      client, today: '2026-10-01', selection: { material: 'GR-FG', plant: PLANT },
+    });
+    expect(list.rows.find((row) => row.documentNumber === draft.orderNumber && row.elementType === 'PRODUCTION_ORDER')).toBeUndefined();
   });
 });

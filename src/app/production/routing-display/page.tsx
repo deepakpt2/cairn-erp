@@ -90,7 +90,7 @@ export default async function RoutingDisplayPage({ searchParams }: {
           <ul>
             {document.operations.map((operation) => (
               <li key={operation.operationNumber}>
-                {operation.operationNumber} {operation.shortText ?? ''} work center {operation.workCenter ?? 'none'} control {operation.controlKey ?? 'none'}
+                order {operation.executionOrder} operation {operation.operationNumber} sequence {operation.sequence} {operation.shortText ?? ''} work center {operation.workCenter ?? 'none'} control {operation.controlKey ?? 'none'}
                 {operation.deletionFlag === 'X' ? ' deleted' : ''}
                 {operation.values.map((value) => ` ${value.parameter} ${value.quantity} ${value.unit}`)}
                 {operation.schedulingFormula ? ` formula ${operation.schedulingFormula} not calculated` : ''}

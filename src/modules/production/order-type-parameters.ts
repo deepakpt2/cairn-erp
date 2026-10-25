@@ -3,15 +3,16 @@
  *
  * The SAP key is the plant and the order type. The plant must already stand,
  * and the order type must already stand. The category is production order only.
- * A task list type and a production version selection may be stored. Neither
- * value selects a master. Saving does not create an order, change numbering,
- * or define checking control.
+ * A task list type and a production version selection may be stored. Saving
+ * does not create an order, change numbering, or define checking control.
+ * Order creation and planned-order conversion read the stored selection for
+ * the same plant and order type. A row here is not proof that the type stands.
  */
 import { and, asc, eq } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
-import { withTenant } from '../../platform/db/client';
+import { withTenant, type Tx } from '../../platform/db/client';
 import { plant } from '../foundation/schema';
 import { markActivityComplete } from '../../platform/tenancy';
 import { productionOrderType, productionOrderTypeParameter, routingTaskListType } from './schema';
@@ -25,9 +26,9 @@ export const PRODUCTION_ORDER_CATEGORY = '10';
 export const ORDER_PARAMETER_GAPS = [
   'The key is a standing plant and a standing production order type. The plant key is not shortened.',
   'A task list type is optional. Naming it does not select a routing.',
-  'Production version selection stores the indicator only. The documented values are 0, automatic selection, and 1, manual selection. Blank is the initial value, not a documented selection method. Saving it does not select a version, and MRP does not read it.',
+  'Production version selection is read when a production version is resolved for the same plant and order type. The documented values are 0, automatic selection, and 1, manual selection. Blank is the initial value, not a documented selection method. Saving it does not select a version, and MRP does not read it.',
   'Routing selection is not stored. A BOM application and a routing selection ID are not stored, because those masters do not stand.',
-  'Costing, settlement, release, a status profile, and scheduling are not stored. Checking control is not stored on these parameters. It is a separate record. Creating this record does not create an order. Order creation and conversion do not read it.',
+  'Costing, settlement, release, a status profile, and scheduling are not stored. Checking control is not stored on these parameters. It is a separate record. Creating this record does not create an order. Order creation and conversion read the stored production version selection for the same plant and order type. They do not use another plant or order type.',
 ] as const;
 
 const REFUSED: Record<string, string> = {
@@ -285,4 +286,78 @@ export async function saveOrderTypeParameter(input: {
       version: input.mode === 'CREATE' ? 1 : existing!.version + 1,
     };
   });
+}
+
+/**
+ * Read T399X-PVSEL for one plant and one order type.
+ * Only 0 and 1 are selection methods. Blank is not treated as either.
+ * A missing row is not replaced by another plant, order type, or tenant.
+ * This does not prove that the order type stands.
+ */
+export function productionVersionSelectionOf(
+  value: string | null | undefined,
+  plant: string,
+  orderType: string,
+): '0' | '1' {
+  if (value === '0' || value === '1') return value;
+  if (value == null || value === ' ' || value === '') {
+    fail(
+      `Production version selection for plant ${plant} and order type ${orderType} is blank. Blank is not a selection method. A production version was not selected.`,
+      'Set the selection to 0 or 1. It was not treated as either.',
+    );
+  }
+  fail(
+    `Production version selection ${value} for plant ${plant} and order type ${orderType} is not 0 or 1. A production version was not selected.`,
+    'Use 0 for automatic selection or 1 for manual selection. The value was not guessed.',
+  );
+}
+
+export async function readProductionVersionSelection(
+  tx: Tx,
+  client: string,
+  plant: string,
+  orderType: string,
+): Promise<'0' | '1'> {
+  const found = await tx.select({
+    productionVersionSelection: productionOrderTypeParameter.productionVersionSelection,
+  }).from(productionOrderTypeParameter).where(and(
+    eq(productionOrderTypeParameter.client, client),
+    eq(productionOrderTypeParameter.plant, plant),
+    eq(productionOrderTypeParameter.orderType, orderType),
+  ));
+  if (found.length === 0) {
+    fail(
+      `Order type parameters do not stand for plant ${plant} and order type ${orderType}. A production version was not selected.`,
+      'Define the parameters for this plant and order type. Another plant or order type was not used.',
+    );
+  }
+  if (found.length > 1) {
+    fail(
+      `More than one order type parameter row stands for plant ${plant} and order type ${orderType}. None was used.`,
+      'Correct the parameters. The first row was not chosen.',
+    );
+  }
+  return productionVersionSelectionOf(found[0]?.productionVersionSelection, plant, orderType);
+}
+
+/**
+ * Manual selection requires the caller's version. Automatic selection does not.
+ * A version the caller did supply is returned either way, so the selector can
+ * validate it. Automatic selection does not discard that name and does not
+ * invent one.
+ */
+export function productionVersionForSelection(
+  selection: '0' | '1',
+  requested: string | null | undefined,
+  plant: string,
+  orderType: string,
+): string | undefined {
+  const named = requested?.trim() ? requested.trim() : undefined;
+  if (selection === '1' && !named) {
+    fail(
+      `Plant ${plant} and order type ${orderType} require a production version. None was entered.`,
+      'Enter a production version for this material and plant. The first version was not chosen.',
+    );
+  }
+  return named;
 }

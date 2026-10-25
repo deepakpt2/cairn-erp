@@ -85,4 +85,23 @@ describe('SCR-132 material document reversal UI contract', () => {
       expect(messages).toContain(`'${key}'`);
     }
   });
+
+  it('does not call accounting reversed before the journal reversal is posted', () => {
+    expect(messages).toContain('Accounting is not reversed before that journal reversal is posted.');
+    expect(messages).not.toContain('the stock, the value, the journal and the order\'s open quantity all return');
+    for (const key of [
+      'mbst.accountingNone', 'mbst.accountingPosted', 'mbst.accountingPartial',
+      'mbst.accountingComplete', 'mbst.accountingMissing', 'mbst.accountingMismatch',
+      'mbst.accountingDeferred', 'mbst.accountingAbsent',
+    ]) {
+      expect(shell).toContain(key.replace('mbst.accounting', ''));
+      expect(messages).toContain(`'${key}'`);
+    }
+    expect(shell).toContain('data-accounting={document.journalAccounting.state}');
+    expect(shell).toContain("document.journalAccounting.state === 'NONE'");
+    expect(actions).toContain('The journal is still posted.');
+    expect(actions).toContain('The journal reversal is posted.');
+    expect(actions).toContain('Accounting is not reversed.');
+    expect(service).toContain('cannot be marked reversed');
+  });
 });

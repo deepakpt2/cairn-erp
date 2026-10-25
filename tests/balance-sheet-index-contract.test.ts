@@ -33,8 +33,12 @@ describe('SCR-107 stage 2: canonical aggregation indexes stand aligned', () => {
 
   it('the statement aggregates the posted journal and persists no totals', () => {
     expect(service).toContain('from journal_entry_line l');
-    expect(service).toContain("e.status = 'POSTED'");
+    expect(service).toContain("ledgerJournalStatus('e')");
     expect(service).not.toMatch(/insert into|update journal|create table/i);
+    const ledger = readFileSync('src/modules/finance/ledger-journal.ts', 'utf8');
+    expect(ledger).toContain("'POSTED'");
+    expect(ledger).toContain("'REVERSED'");
+    expect(ledger).toContain('PARKED');
   });
 });
 

@@ -198,11 +198,13 @@ async function detailOf(tx: Tx, client: string, confirmationNumber: string): Pro
      order by parameter
   `);
   const effects = await rows(tx, sql`
-    select operation_number, confirmation_type, yield_quantity::text as yield, scrap_quantity::text as scrap,
-           rework_quantity::text as rework, unit
-      from production_confirmation_operation
-     where client = ${client} and confirmation_number = ${confirmationNumber}
-     order by operation_number
+    select e.operation_number, e.confirmation_type, e.yield_quantity::text as yield, e.scrap_quantity::text as scrap,
+           e.rework_quantity::text as rework, e.unit
+      from production_confirmation_operation e
+      left join production_order_operation op
+        on op.client = e.client and op.order_number = e.order_number and op.operation_number = e.operation_number
+     where e.client = ${client} and e.confirmation_number = ${confirmationNumber}
+     order by op.execution_order nulls last, e.operation_number
   `);
   const cancellationNumber = header.cancellation_number == null ? null : String(header.cancellation_number);
   return {

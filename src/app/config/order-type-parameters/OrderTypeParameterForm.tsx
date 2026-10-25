@@ -100,7 +100,7 @@ export default function OrderTypeParameterForm({
               <option value="1">1 — Manual selection of production version</option>
             </select>
           </label>
-          <p className="text-sm text-ink-soft">Blank is the initial value, not a documented selection method. Saving a value does not select a version or create an order.</p>
+          <p className="text-sm text-ink-soft">Blank is the initial value, not a documented selection method. Saving a value does not select a version or create an order. Order creation and conversion read the stored value for this plant and order type.</p>
           <label className="block text-sm">
             Reason
             <input name="reason" className="field-input mt-1 w-full" required />

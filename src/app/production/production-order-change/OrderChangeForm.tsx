@@ -48,12 +48,14 @@ export default function OrderChangeForm({ order }: { order: ProductionOrderDispl
         <label className="block">Finish
           <input className="input mt-1" name="finishDate" defaultValue={shown.scheduledFinish} disabled={editsLocked} />
         </label>
+        <p>A component requirement date is not moved when the start or finish changes. No scheduling calculation exists. The finish is the receipt date and is separate from component demand.</p>
         <table className="w-full">
           <thead>
             <tr className="text-left text-ink-faint">
               <th>Item</th>
               <th>Component</th>
               <th>Quantity</th>
+              <th>Requirement date</th>
               <th>Location</th>
               <th>Remove</th>
             </tr>
@@ -64,6 +66,7 @@ export default function OrderChangeForm({ order }: { order: ProductionOrderDispl
                 <td><input type="hidden" name="itemNumber" value={String(component.itemNumber)} />{component.itemNumber}</td>
                 <td><input type="hidden" name="componentMaterial" value={component.materialNumber} />{component.materialNumber}</td>
                 <td><input className="input" name="componentQuantity" defaultValue={component.requiredQuantity} disabled={editsLocked} /></td>
+                <td data-requirement-date={component.requirementDate ?? ''}>{component.requirementDate ?? 'not established'}</td>
                 <td>
                   <input type="hidden" name="componentUnit" value={component.unit} />
                   <input className="input" name="componentLocation" defaultValue={component.storageLocation ?? ''} disabled={editsLocked} />
@@ -75,6 +78,7 @@ export default function OrderChangeForm({ order }: { order: ProductionOrderDispl
               <td>New</td>
               <td><input type="hidden" name="itemNumber" value="" /><input className="input" name="componentMaterial" placeholder="Material" disabled={editsLocked} /></td>
               <td><input className="input" name="componentQuantity" placeholder="Quantity" disabled={editsLocked} /></td>
+              <td>not established</td>
               <td><input type="hidden" name="componentUnit" value="" /><input className="input" name="componentLocation" placeholder="Location" disabled={editsLocked} /></td>
               <td></td>
             </tr>

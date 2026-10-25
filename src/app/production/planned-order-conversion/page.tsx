@@ -107,7 +107,10 @@ export default async function PlannedOrderConversionPage({
           <p>
             Production version {preview.productionVersion ?? 'not selected'}.
             Bill of material {preview.bomUsage ?? '—'} / {preview.bomAlternative ?? '—'}.
-            Routing {preview.routingGroup ?? '—'} / {preview.groupCounter ?? '—'}. Operations are not stored on the production order.
+            Routing {preview.routingGroup ?? '—'} / {preview.groupCounter ?? '—'}.
+            {preview.operationCount > 0
+              ? ` ${preview.operationCount} operation(s) in effect will be copied when the order is saved. A later routing change does not rewrite them.`
+              : ' No operation snapshot was prepared.'}
           </p>
           {preview.productionOrderNumber && (
             <p>Already converted to production order {preview.productionOrderNumber}. No second order will be created.</p>

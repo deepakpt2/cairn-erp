@@ -10,11 +10,15 @@
  * production order. A make proposal is exploded by the shared single-item
  * explosion. The production version selects the bill. A typed bill is refused.
  * A bought material is not exploded. Dependent demand is a planning record,
- * not a reservation and not a material document. An MRP area does not stand.
+ * not a reservation and not a material document. A production-order component
+ * is demand only when conversion stored a requirement date on it. That date is
+ * not the order start. An MRP area does not stand.
  * Single-item planning is a separate entry. It uses this calculation and the same explosion.
  * Single-level planning is a third entry. It plans the named material and does not plan a lower-level component.
  */
 import { sql } from 'drizzle-orm';
+
+import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
 
 import { withTenant, type Tx } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
@@ -660,6 +664,37 @@ async function enqueueComponent(
   `);
 }
 
+async function productionComponentDemand(tx: Tx, client: string, candidate: Candidate): Promise<Array<Record<string, unknown>>> {
+  // Dated component demand. A null date is not counted. A goods receipt does
+  // not reduce this quantity. A posted component issue does. A reversed issue
+  // does not. The order start is not substituted. Technical completion is not open demand.
+  return rows(tx, sql`
+    select c.requirement_date::text as requirement_date,
+           greatest(0, c.required_quantity - case
+             when c.unit_of_measure = m.base_unit then coalesce(issued.issued, 0)
+             else 0
+           end)::text as quantity,
+           c.order_number, c.item_number
+      from production_order_component c
+      join production_order o on o.client = c.client and o.order_number = c.order_number
+      left join material m on m.client = c.client and m.material_number = c.material_number
+      left join lateral (
+        select coalesce(sum(l.base_quantity), 0) as issued
+          from material_document_line l
+          join material_document d
+            on d.client = l.client and d.material_document_number = l.material_document_number
+           and ${OPEN_PRODUCTION_DOCUMENT}
+         where l.client = c.client and l.production_order_number = c.order_number
+           and l.production_order_item = c.item_number
+           and l.material_number = c.material_number
+           and ${lineNotReversed('l')}
+      ) issued on true
+     where c.client = ${client} and c.material_number = ${candidate.materialNumber} and c.plant = ${candidate.plant}
+       and c.requirement_date is not null
+       and o.status in ('CREATED', 'RELEASED')
+  `);
+}
+
 async function calculate(tx: Tx, client: string, selection: Selection, candidate: Candidate, runNumber: string | null = null): Promise<Calculation> {
   const diagnostics: Calculation['diagnostics'] = [];
   if (candidate.mrpType === 'NONE') {
@@ -756,15 +791,17 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     select o.order_number, o.order_quantity::text as quantity, o.scheduled_finish,
            coalesce(gr.received, 0)::text as received
       from production_order o
-      left join (
-        select l.production_order_number,
-               sum(case when m.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as received
+      left join lateral (
+        select coalesce(sum(l.base_quantity), 0) as received
           from material_document_line l
-          join material_document d on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-          join movement_type m on m.client = l.client and m.movement_type = l.movement_type
-         where l.client = ${client} and l.production_order_number is not null
-         group by l.production_order_number
-      ) gr on gr.production_order_number = o.order_number
+          join material_document d
+            on d.client = l.client and d.material_document_number = l.material_document_number
+           and ${OPEN_PRODUCTION_DOCUMENT}
+         where l.client = o.client and l.production_order_number = o.order_number
+           and l.material_number = o.material_number
+           and l.production_order_item is null
+           and ${lineNotReversed('l')}
+      ) gr on true
      where o.client = ${client} and o.material_number = ${candidate.materialNumber} and o.plant = ${candidate.plant}
        and o.status in ('CREATED', 'RELEASED')
        -- TECHNICALLY_COMPLETED is not open supply. Do not add it here.
@@ -809,6 +846,7 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
   for (const row of production) {
     const open = scaled(row.quantity) - scaled(row.received);
     if (open <= 0n) continue;
+    // Receipt supply is the scheduled finish. It is not a component requirement date.
     elements.push({ date: String(row.scheduled_finish), delta: open });
     supply += open;
     diagnostics.push({
@@ -828,6 +866,37 @@ async function calculate(tx: Tx, client: string, selection: Selection, candidate
     if (open <= 0n) continue;
     elements.push({ date: String(row.requirement_date), delta: -open });
     demand += open;
+    diagnostics.push({
+      severity: 'INFO', code: 'DEPENDENT_REQUIREMENT_OPEN',
+      message: `Dependent requirement ${row.parent_order_number} is active planning demand on ${String(row.requirement_date)}. It has not been reconciled to a dated production-order component.`,
+    });
+  }
+  const reversalDisagreement = await rows(tx, sql`
+    select 1 as hit
+      from material_document_line l
+     where l.client = ${client}
+       and l.material_number = ${candidate.materialNumber}
+       and l.plant = ${candidate.plant}
+       and l.production_order_number is not null
+       and ${lineReversalDisagreement('l')}
+     limit 1
+  `);
+  if (reversalDisagreement.length > 0) {
+    diagnostics.push({
+      severity: 'WARNING', code: 'REVERSAL_QUANTITY_DISAGREEMENT',
+      message: REVERSAL_QUANTITY_DISAGREEMENT,
+    });
+  }
+  const productionComponents = await productionComponentDemand(tx, client, candidate);
+  for (const row of productionComponents) {
+    const open = scaled(row.quantity);
+    if (open <= 0n) continue;
+    elements.push({ date: String(row.requirement_date), delta: -open });
+    demand += open;
+    diagnostics.push({
+      severity: 'INFO', code: 'PRODUCTION_COMPONENT_DEMAND',
+      message: `Production order ${row.order_number} item ${row.item_number} requires ${shown(open)} on ${String(row.requirement_date)}. That dated component is the active demand. It is not also an open dependent requirement. A goods receipt does not reduce it.`,
+    });
   }
 
   const walk = (source: Array<{ date: string; delta: bigint }>) => {

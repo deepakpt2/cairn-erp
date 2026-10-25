@@ -32,6 +32,13 @@ export async function reverseMaterialDocumentAction(
   if (!can(session, REVERSE_CAPABILITY)) {
     return { ok: false, message: 'You do not hold the material document reversal capability.' };
   }
+  if (text(form, 'quantity')) {
+    return {
+      ok: false,
+      message: 'A reversal quantity cannot be entered. A line is reversed in full or not at all.',
+      remedy: 'Select the lines to reverse. Do not enter a quantity.',
+    };
+  }
   const lines = form.getAll('lines')
     .map((value) => Number(value))
     .filter((value) => Number.isInteger(value) && value > 0);
@@ -56,7 +63,11 @@ export async function reverseMaterialDocumentAction(
     revalidatePath(ROUTE);
     return {
       ok: true,
-      message: `Reversal posted as material document ${doc.materialDocumentNumber}.`,
+      message: doc.journalAccounting.state === 'DEFERRED'
+        ? `Reversal posted as material document ${doc.materialDocumentNumber}. Stock and value of the selected lines moved. The journal is still posted.`
+        : doc.journalAccounting.state === 'COMPLETE'
+          ? `Reversal posted as material document ${doc.materialDocumentNumber}. The journal reversal is posted.`
+          : `Reversal posted as material document ${doc.materialDocumentNumber}. Accounting is not reversed.`,
       documentNumber: doc.materialDocumentNumber,
     };
   } catch (error) {

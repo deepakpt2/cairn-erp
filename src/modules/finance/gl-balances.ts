@@ -8,7 +8,8 @@
  * document's stored posting period; closing chains opening plus
  * cumulative net change. Special periods stand apart, only when
  * the caller includes them and the company's variant configures
- * them. Only documents standing POSTED count. Closed periods
+ * them. A posted document counts, including one later marked
+ * reversed; PARKED does not. Closed periods
  * remain reportable — period locks govern posting, not inquiry.
  *
  * Stage 1 carries the vocabulary only; derivation lands in stage 3.
@@ -48,7 +49,8 @@ export interface GlBalanceView {
   yearClosing: number;
 }
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
+import { LEDGER_JOURNAL_STATUSES, ledgerJournalStatus } from './ledger-journal';
 
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
@@ -97,7 +99,7 @@ export async function getGlBalances(client: string, input: {
         eq(journalEntryLine.client, client),
         eq(journalEntryLine.companyCode, input.companyCode),
         eq(journalEntryLine.glAccount, input.glAccount),
-        eq(journalEntry.status, 'POSTED'),
+        inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
       ));
 
     const carried = [...new Set(rows.map((r) => r.currency))];
@@ -283,7 +285,7 @@ export async function getGlBalanceReport(
       where l.client = ${client}
         and l.company_code in (${sql.join(companyCodes.map((c) => sql`${c}`), sql`, `)})
         and l.gl_account between ${accountFrom} and ${accountTo}
-        and e.status = 'POSTED'
+        and ${ledgerJournalStatus('e')}
       group by l.company_code, l.gl_account
       order by l.company_code, l.gl_account
     `) as unknown as Array<Record<string, string>>;

@@ -18,12 +18,20 @@
  * A committed planned order is a receipt. A committed dependent requirement is
  * demand. A planning check does not write one, so a preview is not on this list.
  * A created or released production order is a receipt for the quantity not yet received.
+ * That receipt is dated at the scheduled finish. A dated production-order component is
+ * a requirement on its own requirement date. A header date change does not move it.
+ * It is not the receipt, and a goods receipt does not reduce it. A posted component
+ * issue reduces the open component quantity. A reversed issue does not. A component with no
+ * requirement date is omitted. An open dependent requirement that conversion did not
+ * match stays on this list. A later planning run may refresh that open row. A closed
+ * dependent requirement is not listed.
  * Sales orders remain deferred. Excess-stock alerts have no stock ceiling.
  * Refused by name: MRP area, the one-character special stock indicator, a
  * simulation version, and PR-to-PO conversion (a posting action, not a report).
  */
 import { sql } from 'drizzle-orm';
 
+import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 
@@ -37,7 +45,7 @@ export const PERIOD_SPLITS = ['DAILY', 'WEEKLY'] as const;
 export type PeriodSplit = (typeof PERIOD_SPLITS)[number];
 
 export type ElementType =
-  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
+  | 'STOCK' | 'PURCHASE_REQUISITION' | 'PURCHASE_ORDER' | 'PLANNED_ORDER' | 'PRODUCTION_ORDER' | 'PRODUCTION_COMPONENT' | 'SAFETY_STOCK' | 'RESERVATION' | 'DEPENDENT_REQUIREMENT';
 export type ElementDirection = 'RECEIPT' | 'REQUIREMENT';
 export type ExceptionCode = 'SHORTAGE' | 'SAFETY_BREACH' | 'PAST_DUE';
 
@@ -380,16 +388,17 @@ export async function stockRequirementsList(input: {
       select o.order_number, o.order_quantity::text as quantity, o.scheduled_finish::text as finish_date,
              coalesce(gr.received, 0)::text as received
       from production_order o
-      left join (
-        select l.production_order_number,
-               sum(case when m.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as received
-        from material_document_line l
-        join material_document d
-          on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-        join movement_type m on m.client = l.client and m.movement_type = l.movement_type
-        where l.client = ${client} and l.production_order_number is not null
-        group by l.production_order_number
-      ) gr on gr.production_order_number = o.order_number
+      left join lateral (
+        select coalesce(sum(l.base_quantity), 0) as received
+          from material_document_line l
+          join material_document d
+            on d.client = l.client and d.material_document_number = l.material_document_number
+           and ${OPEN_PRODUCTION_DOCUMENT}
+         where l.client = o.client and l.production_order_number = o.order_number
+           and l.material_number = o.material_number
+           and l.production_order_item is null
+           and ${lineNotReversed('l')}
+      ) gr on true
       where o.client = ${client} and o.material_number = ${s.material!} and o.plant = ${s.plant!}
         and o.status in ('CREATED', 'RELEASED')
         -- TECHNICALLY_COMPLETED is not an open receipt. Do not add it here.
@@ -406,7 +415,7 @@ export async function stockRequirementsList(input: {
         documentNumber: String(row.order_number),
         documentItem: '',
         quantity: open,
-        drillDown: `/production/orders?order=${encodeURIComponent(String(row.order_number))}`,
+        drillDown: `/production/production-order-display?order=${encodeURIComponent(String(row.order_number))}`,
       });
     }
     const dependentRows = await tx.execute(sql`
@@ -437,7 +446,7 @@ export async function stockRequirementsList(input: {
       elements.push({
         date: String(row.requirement_date),
         elementType: 'DEPENDENT_REQUIREMENT',
-        elementLabel: 'Dependent requirement',
+        elementLabel: 'Open dependent requirement · active demand, not reconciled',
         direction: 'REQUIREMENT',
         documentNumber: String(row.parent_order_number),
         documentItem: String(row.item_number),
@@ -445,7 +454,50 @@ export async function stockRequirementsList(input: {
         drillDown: `/production/planned-order-display?order=${encodeURIComponent(String(row.parent_order_number))}`,
       });
     }
-
+    const productionComponentRows = await tx.execute(sql`
+      select c.order_number, c.item_number, c.required_quantity::text as required_quantity,
+             c.unit_of_measure, m.base_unit,
+             coalesce(issued.issued, 0)::text as issued,
+             c.requirement_date::text as requirement_date
+        from production_order_component c
+        join production_order o on o.client = c.client and o.order_number = c.order_number
+        left join material m on m.client = c.client and m.material_number = c.material_number
+        left join lateral (
+          select coalesce(sum(l.base_quantity), 0) as issued
+            from material_document_line l
+            join material_document d
+              on d.client = l.client and d.material_document_number = l.material_document_number
+             and ${OPEN_PRODUCTION_DOCUMENT}
+           where l.client = c.client and l.production_order_number = c.order_number
+             and l.production_order_item = c.item_number
+             and l.material_number = c.material_number
+             and ${lineNotReversed('l')}
+        ) issued on true
+       where c.client = ${client} and c.plant = ${s.plant!} and c.material_number = ${s.material!}
+         and c.requirement_date is not null
+         and o.status in ('CREATED', 'RELEASED')
+       order by c.requirement_date, c.order_number, c.item_number
+    `) as unknown as Array<Record<string, unknown>>;
+    let componentIssueReducedDemand = false;
+    let componentIssueUnitBlocked = false;
+    for (const row of productionComponentRows) {
+      const issued = num(row.issued);
+      const sameUnit = String(row.unit_of_measure ?? '') !== '' && String(row.unit_of_measure) === String(row.base_unit ?? '');
+      if (issued > 0 && sameUnit) componentIssueReducedDemand = true;
+      if (issued > 0 && !sameUnit) componentIssueUnitBlocked = true;
+      const open = Number((num(row.required_quantity) - (sameUnit ? issued : 0)).toFixed(3));
+      if (open <= 0) continue;
+      elements.push({
+        date: String(row.requirement_date),
+        elementType: 'PRODUCTION_COMPONENT',
+        elementLabel: 'Dated production component · replacement demand',
+        direction: 'REQUIREMENT',
+        documentNumber: String(row.order_number),
+        documentItem: String(row.item_number),
+        quantity: open,
+        drillDown: `/production/production-order-display?order=${encodeURIComponent(String(row.order_number))}`,
+      });
+    }
     // Chronological: receipts before requirements on the same date, so a receipt
     // landing that day is available to meet the demand of that day.
     elements.sort((a, b) => (a.date === b.date
@@ -453,6 +505,29 @@ export async function stockRequirementsList(input: {
       : a.date < b.date ? -1 : 1));
 
     const withinHorizon = elements.filter((e) => !s.horizonEnd || e.date <= s.horizonEnd);
+    if (withinHorizon.some((row) => row.elementType === 'DEPENDENT_REQUIREMENT')) {
+      warnings.push('An open dependent requirement on this list is active planning demand. It has not been reconciled to a dated production-order component. A later planning run may refresh it. It is not the order receipt.');
+    }
+    if (withinHorizon.some((row) => row.elementType === 'PRODUCTION_COMPONENT')) {
+      warnings.push('A dated production-order component on this list is the active component demand. A closed dependent requirement is not listed and is not counted again. It is not the order receipt.');
+    }
+    if (componentIssueReducedDemand) {
+      warnings.push('A posted component issue is already subtracted from dated production-order component demand. It is not counted again. A reversal of that issue restores the open quantity.');
+    }
+    if (componentIssueUnitBlocked) {
+      warnings.push('A posted component issue uses a different unit from the component requirement. It was not subtracted from planning demand.');
+    }
+    const reversalDisagreement = await tx.execute(sql`
+      select 1 as hit
+        from material_document_line l
+       where l.client = ${client}
+         and l.material_number = ${s.material!}
+         and l.plant = ${s.plant!}
+         and l.production_order_number is not null
+         and ${lineReversalDisagreement('l')}
+       limit 1
+    `) as unknown as Array<{ hit: number }>;
+    if (reversalDisagreement.length > 0) warnings.push(REVERSAL_QUANTITY_DISAGREEMENT);
 
     // Running balance, then exceptions.
     let balance = 0;

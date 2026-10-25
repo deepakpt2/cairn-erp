@@ -81,6 +81,7 @@ import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
 import { accountDetermination } from '@/modules/foundation/schema';
 import { postGlDocument } from './gl-document';
+import { ledgerJournalStatus } from './ledger-journal';
 
 function newRunId(): string {
   return `CF${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 46656).toString(36).toUpperCase().padStart(3, '0')}`.slice(0, 24);
@@ -108,7 +109,7 @@ async function companyBalances(client: string, companyCode: string, chart: strin
       left join gl_account a
         on a.client = l.client and a.chart_of_accounts = ${chart} and a.account_number = l.gl_account
       where l.client = ${client} and e.company_code = ${companyCode}
-        and e.fiscal_year <= ${sourceYear} and e.status = 'POSTED'
+        and e.fiscal_year <= ${sourceYear} and ${ledgerJournalStatus('e')}
       group by l.gl_account, coalesce(l.profit_center, ''), a.gl_account_type, coalesce(a.retained_earnings_indicator, '')
       order by l.gl_account, profit_center
     `);

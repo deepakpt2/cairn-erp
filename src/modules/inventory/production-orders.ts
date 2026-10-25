@@ -13,9 +13,13 @@
  * will be consumed from.
  *
  * The components are a **snapshot**. The CO01 screen selects a production version and
- * reads that bill of material. A caller-supplied component list is the conversion snapshot and is not re-read from the BOM.
+ * reads that bill of material. A caller-supplied component list is not re-read from the BOM
+ * and is not given a production version. Conversion derives its snapshot and persists that version.
  * A saved order is not rewritten when a BOM or production version changes. A later issue
- * may consume the snapshot; nothing recomputes it. Routing is named and not stored.
+ * may consume the snapshot; nothing recomputes it. When a version selects the
+ * snapshot, that routing's operations are copied in the same save. An
+ * independent component list is not given operations. A later routing edit
+ * does not rewrite either snapshot.
  * Capacity is not read.
  *
  * Deferred by name: TECO / technically complete, order closure, deletion flags, the
@@ -35,6 +39,7 @@ import { resolveStorageLocation, StorageLocationError } from './storage-location
 import { productionOrder, productionOrderComponent } from './schema';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from '../production/production-order-status';
 import { OrderBomSnapshotError, resolveOrderBomSnapshot, type OrderBomSnapshot } from '../production/order-bom-snapshot';
+import { OrderOperationSnapshotError, insertOrderOperationSnapshot } from '../production/order-operation-snapshot';
 import { productionOrderType } from '../production/schema';
 
 export type { OrderBomSnapshot };
@@ -85,6 +90,8 @@ export interface ProductionOrderComponentView {
   /** Null when the line was supplied rather than copied from a BOM item. */
   bomItem: string | null;
   sourceMaterial: string | null;
+  /** Null when no matching dependent requirement established a date. */
+  requirementDate: string | null;
   createdAt: string;
 }
 
@@ -115,7 +122,7 @@ export interface ProductionOrderView {
   wipBatchCreated: false;
   /** Null unless planned-order conversion created this order. */
   plannedOrderNumber: string | null;
-  /** Null when the snapshot was supplied. Set when this screen selected a version. */
+  /** Null when an independent snapshot was supplied. Set when a version selected the snapshot. */
   productionVersion: string | null;
   bomUsage: string | null;
   bomAlternative: string | null;
@@ -221,6 +228,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
       unit: r.unitOfMeasure,
       bomItem: r.bomItem,
       sourceMaterial: r.sourceMaterial,
+      requirementDate: r.requirementDate,
       createdAt: r.createdAt.toISOString(),
     })),
   };
@@ -252,7 +260,10 @@ export interface CreateProductionOrderInput {
    * planned-order conversion. The CO01 screen omits this and derives the lines.
    */
   components?: ProductionOrderComponentInput[];
-  /** Named version passed to the selector. Not a BOM alternative. Ignored when components are supplied. */
+  /**
+   * Named version passed to the selector. Not a BOM alternative.
+   * Refused when components are supplied, so it is not attached to an independent snapshot.
+   */
   productionVersion?: string;
   /**
    * Required. The caller names a standing category-10 type. A blank value is
@@ -279,14 +290,22 @@ export async function previewProductionOrderBom(input: {
   plant: string;
   orderQuantity: number;
   scheduledFinish: string;
+  orderType: string;
   productionVersion?: string;
 }): Promise<OrderBomSnapshot> {
   const materialNumber = input.materialNumber.trim();
   const plant = input.plant.trim();
+  const orderType = input.orderType.trim();
   if (!materialNumber) {
     throw new ProductionOrderError('The material to be produced is required.', 'Enter the material the order will make.');
   }
   if (!plant) throw new ProductionOrderError('A plant is required.', 'Enter the plant the order will be produced in.');
+  if (!orderType) {
+    throw new ProductionOrderError(
+      'A production order type is required. Nothing was saved.',
+      'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
+    );
+  }
   if (!(input.orderQuantity > 0)) {
     throw new ProductionOrderError(
       `The order quantity ${input.orderQuantity} is not a positive quantity.`,
@@ -295,6 +314,22 @@ export async function previewProductionOrderBom(input: {
   }
   const finish = requireDate(input.scheduledFinish, 'The scheduled finish');
   return withTenant(input.client, async (tx) => {
+    const [type] = await tx.select().from(productionOrderType).where(and(
+      eq(productionOrderType.client, input.client),
+      eq(productionOrderType.orderType, orderType),
+    ));
+    if (!type) {
+      throw new ProductionOrderError(
+        `Order type ${orderType} does not stand in this tenant. Nothing was saved.`,
+        'Define the production order type first. An order-type parameter is not proof that the type stands.',
+      );
+    }
+    if (type.orderCategory !== '10') {
+      throw new ProductionOrderError(
+        `Order type ${orderType} is not a production order type. Nothing was saved.`,
+        'Use a category 10 type. Process orders and networks are not assigned here.',
+      );
+    }
     try {
       return await resolveOrderBomSnapshot(tx, {
         client: input.client,
@@ -302,6 +337,7 @@ export async function previewProductionOrderBom(input: {
         plant,
         orderQuantity: input.orderQuantity,
         scheduledFinish: finish,
+        orderType,
         productionVersion: input.productionVersion,
       });
     } catch (caught) {
@@ -411,6 +447,12 @@ export async function createProductionOrder(
       );
     }
 
+    if (input.components && input.productionVersion?.trim()) {
+      throw new ProductionOrderError(
+        'A production version cannot be attached to a component snapshot that was supplied separately. Nothing was saved.',
+        'Leave the version blank when the components are already supplied, or omit the components and let the selected version supply the bill of material.',
+      );
+    }
     let derived: OrderBomSnapshot | null = null;
     if (!input.components) {
       try {
@@ -420,6 +462,7 @@ export async function createProductionOrder(
           plant,
           orderQuantity: input.orderQuantity,
           scheduledFinish: finish,
+          orderType: assignedOrderType,
           productionVersion: input.productionVersion,
         });
       } catch (caught) {
@@ -585,6 +628,9 @@ export async function createProductionOrder(
     }).returning();
 
     for (const component of prepared) {
+      // requirement_date stays null. CO01 has no component scheduling date.
+      // Conversion may set it later in this same transaction, and only by
+      // copying a matching dependent requirement. The order dates are not used.
       await tx.insert(productionOrderComponent).values({
         client: input.client,
         orderNumber,
@@ -598,6 +644,22 @@ export async function createProductionOrder(
         sourceMaterial: component.sourceMaterial,
         createdBy: input.createdBy,
       });
+    }
+
+    if (derived) {
+      try {
+        await insertOrderOperationSnapshot(tx, {
+          client: input.client,
+          orderNumber,
+          createdBy: input.createdBy,
+          operations: derived.operations,
+        });
+      } catch (caught) {
+        if (caught instanceof OrderOperationSnapshotError) {
+          throw new ProductionOrderError(`${caught.message} No order was saved.`, caught.remedy);
+        }
+        throw caught;
+      }
     }
 
     await recordChange(tx, {
@@ -622,6 +684,7 @@ export async function createProductionOrder(
           productionVersion: derived.productionVersion,
           bomUsage: derived.bomUsage,
           bomAlternative: derived.bomAlternative,
+          operations: derived.operations.map((operation) => operation.operationNumber),
         } : {}),
       },
     });

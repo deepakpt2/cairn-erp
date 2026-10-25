@@ -23,6 +23,7 @@ export default async function OrderTypeParametersPage() {
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           The key is a standing plant and a standing production order type.
           Saving does not create an order, select a routing or a production version, or run an availability check.
+          Order creation and planned-order conversion read the stored production version selection for this plant and order type.
         </p>
       </header>
       {!canMaintain && (

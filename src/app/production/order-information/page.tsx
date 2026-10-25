@@ -42,7 +42,7 @@ export default async function OrderInformationPage({
   const refusal = orderInformationRefusal({
     orderType: one(params.orderType),
     productionSupervisor: one(params.productionSupervisor),
-    productionVersion: one(params.productionVersion),
+
     deletionIndicator: one(params.deletionIndicator),
     workCenter: one(params.workCenter),
     operation: one(params.operation),
@@ -76,6 +76,7 @@ export default async function OrderInformationPage({
         componentMaterial: one(params.component),
         storageLocation: one(params.storageLocation),
         batch: one(params.batch),
+        productionVersion: one(params.productionVersion),
         movementType: one(params.movementType),
         confirmationType: one(params.confirmationType),
         dateBasis: one(params.dateBasis),
@@ -114,7 +115,7 @@ export default async function OrderInformationPage({
           List production orders or planned orders. Execute reads. It does not change an order, confirm one, or post.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-coois-gaps>
-          Operations, sequences, capacities, automatic goods movements, purchase documents, and cost are not this list. Cancellation is CO13. CO14 is not implemented.
+          The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. Sequences other than the copied standard sequence, capacities, automatic goods movements, purchase documents, and cost are not this list. Cancellation is CO13. CO14 is not implemented.
         </p>
       </header>
       {openError && <p role="status" data-coois-refused className="text-sm text-red-700">{openError}</p>}
@@ -147,6 +148,7 @@ export default async function OrderInformationPage({
         <input className="input" name="status" defaultValue={one(params.status)} maxLength={32} placeholder="Status" />
         <input className="input" name="mrpController" defaultValue={one(params.mrpController)} maxLength={3} placeholder="MRP controller" />
         <input className="input" name="batch" defaultValue={one(params.batch)} maxLength={40} placeholder="Batch" />
+        <input className="input" name="productionVersion" defaultValue={one(params.productionVersion)} maxLength={4} placeholder="Production version" />
         <input className="input" name="storageLocation" defaultValue={one(params.storageLocation)} maxLength={10} placeholder="Storage location" />
         <input className="input" name="movementType" defaultValue={one(params.movementType)} maxLength={20} placeholder="Movement type" />
         <input className="input" name="confirmationType" defaultValue={one(params.confirmationType)} maxLength={8} placeholder="Partial or final" />

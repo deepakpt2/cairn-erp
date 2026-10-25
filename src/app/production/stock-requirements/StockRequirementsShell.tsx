@@ -25,6 +25,7 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
           : type === 'PLANNED_ORDER' ? t('md04.plannedElement')
             : type === 'PRODUCTION_ORDER' ? t('md04.productionElement')
             : type === 'DEPENDENT_REQUIREMENT' ? t('md04.dependentElement')
+            : type === 'PRODUCTION_COMPONENT' ? t('md04.productionComponentElement')
             : t('md04.safetyElement');
   const exceptionLabel = (code: string) => code === 'SHORTAGE' ? t('md04.shortage')
     : code === 'SAFETY_BREACH' ? t('md04.safetyBreach')
@@ -152,7 +153,7 @@ export default function StockRequirementsShell({ canUse, selection, result, repo
                 className={row.projectedBalance < 0 ? 'text-red-700 dark:text-red-300' : undefined}>
                 <td className="code">{row.date}</td>
                 <td className="code text-ink-faint">{row.periodEnd}</td>
-                <td>{elementLabel(row.elementType)}</td>
+                <td title={row.elementLabel} data-demand={row.elementType === 'DEPENDENT_REQUIREMENT' ? 'active' : row.elementType === 'PRODUCTION_COMPONENT' ? 'replaced' : ''}>{elementLabel(row.elementType)}</td>
                 <td className="code">{row.documentNumber}</td>
                 <td className="text-end">{row.documentItem}</td>
                 <td className="text-end">{row.direction === 'RECEIPT' ? row.quantity.toFixed(3) : ''}</td>

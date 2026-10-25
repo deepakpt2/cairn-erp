@@ -9,9 +9,19 @@
  * while some lines stand open, REVERSED when none does.
  *
  * A document may be reversed in whole or by line, but never by part of a line.
- * Downstream orders need no write-back: delivered quantities are derived from
- * the document lines, and a reversal line signed by a REVERSAL movement
- * subtracts itself from the open quantity the moment it exists.
+ * The reversal line copies the original line's quantity, unit, material, and
+ * production-order reference. A second reversal of that line is refused, even
+ * when an earlier reversal covered only part of the quantity: posting the
+ * original quantity again would cancel more than was posted.
+ *
+ * A journal entry cannot be reversed in part. Stock and value follow the
+ * reversed line. The journal stays posted until every line is reversed, then
+ * it is reversed once. A document is not marked reversed unless that journal
+ * reversal stands. Displays must not call accounting reversed before then.
+ *
+ * Downstream orders need no write-back. Open quantities are derived from the
+ * original lines. A full-line reversal removes that line. The counter line is
+ * not subtracted again, and a partial quantity is not netted.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
@@ -29,6 +39,9 @@ import { materialPeriodAllows } from './material-period-control';
 import { recordOutputsForPostedDocument } from './material-document-output';
 import { batchClassificationRefusal } from './batch-classification';
 import { noteBatchControlUse } from './batch-control-use';
+import {
+  accountingForOriginal, readJournalStatus, type JournalAccounting,
+} from './material-document-accounting';
 import { releaseDifferenceAllocations } from './physical-inventory-posting-status';
 import {
   materialDocument, materialDocumentLine, materialValuation, movementType, stockQuantity,
@@ -78,6 +91,8 @@ export interface ReversalDocumentView {
   journalDocumentNumber: string | null;
   reversalOf: string | null;
   reversedBy: string | null;
+  /** Read from the journal row, not from the material-document status. */
+  journalAccounting: JournalAccounting;
   lines: ReversalLineView[];
 }
 
@@ -121,6 +136,16 @@ async function toView(
   )).orderBy(materialDocumentLine.lineNumber);
   const reversed = await reversedQuantities(tx, client, header.materialDocumentNumber);
   const counters = await counterMovements(tx, client);
+  const linesOpen = lines.some((line) => Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0) > 1e-9);
+  const journalStatus = await readJournalStatus(tx, client, header.journalDocumentNumber);
+  let originalJournalStatus: Awaited<ReturnType<typeof readJournalStatus>> | null = null;
+  if (header.reversalOf) {
+    const [original] = await tx.select({ journalDocumentNumber: materialDocument.journalDocumentNumber }).from(materialDocument).where(and(
+      eq(materialDocument.client, client),
+      eq(materialDocument.materialDocumentNumber, header.reversalOf),
+    ));
+    originalJournalStatus = await readJournalStatus(tx, client, original?.journalDocumentNumber ?? null);
+  }
   return {
     materialDocumentNumber: header.materialDocumentNumber,
     documentYear: header.documentYear,
@@ -131,6 +156,14 @@ async function toView(
     journalDocumentNumber: header.journalDocumentNumber,
     reversalOf: header.reversalOf,
     reversedBy: header.reversedBy,
+    journalAccounting: accountingForOriginal({
+      status: header.status,
+      reversalOf: header.reversalOf,
+      journalNumber: header.journalDocumentNumber,
+      journalStatus,
+      originalJournalStatus,
+      linesOpen,
+    }),
     lines: lines.map((l) => {
       const done = reversed[l.lineNumber] ?? 0;
       return {
@@ -146,7 +179,8 @@ async function toView(
         unit: l.baseUnit,
         value: l.value,
         reversedQuantity: done.toFixed(3),
-        remainingQuantity: Math.max(0, Number(l.baseQuantity) - done).toFixed(3),
+        // Not clamped. An excess reversal stays visible as a negative remainder.
+        remainingQuantity: (Number(l.baseQuantity) - done).toFixed(3),
         counterMovementType: counters.get(l.movementType) ?? null,
       };
     }),
@@ -170,6 +204,8 @@ export interface PostReversalInput {
   fiscalYear?: number;
   /** The lines to reverse; omitted means every line that still stands open. */
   lines?: number[];
+  /** Refused. A line is reversed in full. A quantity is not a reversal input. */
+  quantity?: number;
   postingDate: string;
   documentDate: string;
   headerText?: string;
@@ -295,6 +331,18 @@ async function moveValuation(
   tx: Tx, client: string, changedBy: string, materialNumber: string, plant: string,
   quantityDelta: number, valueDelta: number,
 ) {
+  if (Math.abs(valueDelta) > 0.0001) {
+    const rows = await tx.execute(sql`
+      select 1 as hit from material_valuation
+       where client = ${client} and material_number = ${materialNumber} and valuation_area = ${plant}
+    `) as unknown as Array<{ hit: number }>;
+    if (rows.length === 0) {
+      throw new MaterialReversalError(
+        `Material ${materialNumber} in plant ${plant} has no valuation, so the reversal value cannot be posted.`,
+        'The reversal was not posted. Restore the valuation, then reverse the line.',
+      );
+    }
+  }
   await applyValuationDelta(tx, client, changedBy, materialNumber, plant, quantityDelta, valueDelta);
 }
 
@@ -323,6 +371,12 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     throw new MaterialReversalError(
       `Reversal reason ${input.reason} cannot be recorded: this canon carries no reversal-reason table.`,
       'Leave the reason empty and write it in the header text.',
+    );
+  }
+  if (input.quantity != null) {
+    throw new MaterialReversalError(
+      'A reversal quantity cannot be entered. A line is reversed in full or not at all.',
+      'Select the lines to reverse. Do not enter a quantity.',
     );
   }
 
@@ -393,6 +447,16 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     );
     const reversed = await reversedQuantities(tx, input.client, input.materialDocumentNumber);
     const counters = await counterMovements(tx, input.client);
+    if (input.lines && input.lines.length > 0) {
+      const known = new Set(lines.map((line) => line.lineNumber));
+      const missing = input.lines.filter((lineNumber) => !known.has(lineNumber));
+      if (missing.length > 0) {
+        throw new MaterialReversalError(
+          `Line ${missing[0]} of material document ${input.materialDocumentNumber} does not exist.`,
+          'Choose a line that stands on the document. A missing line was not reversed.',
+        );
+      }
+    }
 
     const wanted = input.lines && input.lines.length > 0
       ? lines.filter((l) => input.lines!.includes(l.lineNumber))
@@ -422,10 +486,20 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     }
 
     for (const line of wanted) {
-      if (Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0) <= 1e-9) {
+      const already = reversed[line.lineNumber] ?? 0;
+      const posted = Number(line.baseQuantity);
+      // Scale 3 is exact in the database. 1e-9 covers only binary dust from Number().
+      // A 0.001 difference is a real discrepancy and is not treated as equal.
+      if (already > 1e-9 && posted - already <= 1e-9) {
         throw new MaterialReversalError(
           `Line ${line.lineNumber} of material document ${input.materialDocumentNumber} is already reversed in full.`,
           'Choose a line that still stands open.',
+        );
+      }
+      if (already > 1e-9) {
+        throw new MaterialReversalError(
+          `Line ${line.lineNumber} of material document ${input.materialDocumentNumber} already has ${already.toFixed(3)} ${line.baseUnit} reversed of ${posted.toFixed(3)}. A line is reversed in full or not at all.`,
+          'A partial quantity is not supported. Reversing the line again would cancel more than was posted, so it was refused.',
         );
       }
       if (!counters.get(line.movementType)) {
@@ -471,22 +545,39 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     });
     const number = allocated.display;
 
+    // A journal is one entry. It is reversed only when this reversal leaves no
+    // material line open. A partial line reversal does not split it or consume it.
+    const finishesDocument = lines.every((line) => {
+      const open = Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0);
+      return open <= 1e-9 || wanted.some((item) => item.lineNumber === line.lineNumber);
+    });
     let journalNumber: string | null = null;
-    if (original.journalDocumentNumber) {
+    if (finishesDocument && original.journalDocumentNumber) {
       const [journalYear] = splitJournalKey(original.journalDocumentNumber);
-      const reversedJournal = await reverseJournalEntry(tx, {
-        client: input.client,
-        documentNumber: original.journalDocumentNumber,
-        fiscalYear: journalYear,
-        reversalDate: input.postingDate,
-        reason: `Reversal of material document ${input.materialDocumentNumber}`,
-        reversedBy: input.changedBy,
-        transactionCode: REVERSE_CAPABILITY,
-      }).catch((error: unknown) => {
-        if (error instanceof PostingError) throw new MaterialReversalError(error.message, error.remedy);
-        throw error;
-      });
-      journalNumber = reversedJournal.documentNumber;
+      const journalRows = await tx.execute(sql`
+        select status from journal_entry
+         where client = ${input.client}
+           and document_number = ${original.journalDocumentNumber}
+           and fiscal_year = ${journalYear}
+      `) as unknown as Array<{ status: string }>;
+      if (journalRows[0]?.status === 'REVERSED') {
+        // An earlier partial reversal already consumed the journal. Do not reverse it again.
+        journalNumber = null;
+      } else {
+        const reversedJournal = await reverseJournalEntry(tx, {
+          client: input.client,
+          documentNumber: original.journalDocumentNumber,
+          fiscalYear: journalYear,
+          reversalDate: input.postingDate,
+          reason: `Reversal of material document ${input.materialDocumentNumber}`,
+          reversedBy: input.changedBy,
+          transactionCode: REVERSE_CAPABILITY,
+        }).catch((error: unknown) => {
+          if (error instanceof PostingError) throw new MaterialReversalError(error.message, error.remedy);
+          throw error;
+        });
+        journalNumber = reversedJournal.documentNumber;
+      }
     }
 
     await tx.insert(materialDocument).values({
@@ -531,6 +622,8 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
         value: line.value,
         purchaseOrderNumber: line.purchaseOrderNumber,
         purchaseOrderItem: line.purchaseOrderItem,
+        productionOrderNumber: line.productionOrderNumber,
+        productionOrderItem: line.productionOrderItem,
         reversalOfDocument: input.materialDocumentNumber,
         reversalOfLine: line.lineNumber,
         itemText: `Reversal of ${input.materialDocumentNumber}`,
@@ -543,6 +636,21 @@ export async function reverseMaterialDocument(input: PostReversalInput): Promise
     // The header flag follows the arithmetic: every line reversed or some left open.
     const nowReversed = await reversedQuantities(tx, input.client, input.materialDocumentNumber);
     const allDone = lines.every((l) => Number(l.baseQuantity) - (nowReversed[l.lineNumber] ?? 0) <= 1e-9);
+    if (allDone !== finishesDocument) {
+      throw new MaterialReversalError(
+        `Material document ${input.materialDocumentNumber} was not left in the reversal state the journal was judged on.`,
+        'The reversal was not posted. Reverse the open lines again.',
+      );
+    }
+    if (allDone && original.journalDocumentNumber) {
+      const journalAfter = await readJournalStatus(tx, input.client, original.journalDocumentNumber);
+      if (journalAfter !== 'REVERSED') {
+        throw new MaterialReversalError(
+          `Material document ${input.materialDocumentNumber} cannot be marked reversed. Journal ${original.journalDocumentNumber} is ${journalAfter}.`,
+          'The reversal was not posted. Accounting is not reversed.',
+        );
+      }
+    }
     await tx.update(materialDocument).set({
       status: allDone ? 'REVERSED' : 'PARTIALLY_REVERSED',
       reversedBy: allDone ? number : original.reversedBy ?? number,

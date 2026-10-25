@@ -3,6 +3,9 @@
  *
  * A make proposal names a production version. The version names the BOM.
  * Component demand is dated at the planned-order start.
+ * A converted order is skipped only when a dated component already replaced its
+ * demand and no open dependent requirement remains. An open row is refreshed.
+ * A closed row is not reopened, so that dated component is not counted twice.
  * A buy material is not exploded. A phantom is exploded through and is not proposed.
  * A cycle stops the branch. The first version is never chosen.
  *
@@ -119,6 +122,29 @@ async function parentLots(
               and material_number = ${materialNumber} and plant = ${plant}
               and proposal_type = 'PLANNED_ORDER' and document_number is not null
               and action in ('CREATE', 'UPDATE', 'RETAIN', 'CONFLICT')
+         )
+       )
+       -- Skip a converted order only when a dated component already replaced its
+       -- demand and no open dependent requirement remains. An open row is still
+       -- a parent, so unmatched demand can refresh. The upsert does not reopen
+       -- a closed row, so the dated component is not counted twice.
+       and not (
+         exists (
+           select 1
+             from production_order converted
+             join production_order_component component
+               on component.client = converted.client
+              and component.order_number = converted.order_number
+              and component.requirement_date is not null
+            where converted.client = planned_order.client
+              and converted.planned_order_number = planned_order.order_number
+         )
+         and not exists (
+           select 1
+             from mrp_dependent_requirement open_demand
+            where open_demand.client = planned_order.client
+              and open_demand.parent_order_number = planned_order.order_number
+              and open_demand.status = 'OPEN'
          )
        )
   `);
@@ -346,6 +372,7 @@ async function explodeLot(
           version = mrp_dependent_requirement.version + 1,
           changed_by = excluded.created_by,
           changed_at = now()
+        where mrp_dependent_requirement.status = 'OPEN'
       `);
     }
     const key = `${input.plant}/${component}`;
@@ -488,6 +515,7 @@ async function explodePhantom(
           material_number = excluded.material_number, quantity = excluded.quantity, unit = excluded.unit,
           requirement_date = excluded.requirement_date, status = 'OPEN', run_number = excluded.run_number,
           version = mrp_dependent_requirement.version + 1, changed_by = excluded.created_by, changed_at = now()
+        where mrp_dependent_requirement.status = 'OPEN'
       `);
     }
     const key = `${input.plant}/${component}`;

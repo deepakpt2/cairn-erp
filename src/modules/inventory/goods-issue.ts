@@ -41,6 +41,7 @@ import {
   REQUEST_MISMATCH_REMEDY,
 } from './balance-update';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
+import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from './production-document-quantity';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, productionOrder, productionOrderComponent, reservationItem, stockQuantity,
@@ -510,27 +511,48 @@ export async function postGoodsIssue(
             'Issue the component the order states, from the plant it states.',
           );
         }
-        // What the component still needs: required minus everything already issued against it.
+        // What the component still needs: required minus issues that still stand.
+        // A reversed issue is not still issued. The comparison is in the component unit.
         const issuedRows = await tx.execute(sql`
-          select coalesce(sum(entry_quantity), 0)::text as issued
-          from material_document_line
-          where client = ${input.client}
-            and production_order_number = ${orderNumber}
-            and production_order_item = ${itemNumber}
-            and movement_type = ${scenario.movementType}
+          select coalesce(sum(l.base_quantity), 0)::text as issued
+            from material_document_line l
+            join material_document d
+              on d.client = l.client and d.material_document_number = l.material_document_number
+             and ${OPEN_PRODUCTION_DOCUMENT}
+           where l.client = ${input.client}
+             and l.production_order_number = ${orderNumber}
+             and l.production_order_item = ${itemNumber}
+             and l.material_number = ${materialNumber}
+             and ${lineNotReversed('l')}
         `) as unknown as Array<{ issued: string }>;
         const required = Number(component.requiredQuantity);
         const issued = Number(issuedRows[0]?.issued ?? 0);
-        const open = Math.max(0, required - issued);
-        if (line.quantity > open + 1e-9) {
+        const demanded = await toBaseQuantity(tx, input.client, {
+          materialNumber, quantity: line.quantity, entryUnit: line.entryUnit,
+        }).catch((caught: unknown) => {
+          if (caught instanceof UnitConversionError) throw new GoodsIssueError(caught.message, caught.remedy);
+          throw caught;
+        });
+        const sameUnit = !component.unitOfMeasure || component.unitOfMeasure === mat.baseUnit;
+        const requiredBase = sameUnit
+          ? required
+          : (await toBaseQuantity(tx, input.client, {
+            materialNumber, quantity: required, entryUnit: component.unitOfMeasure,
+          }).catch((caught: unknown) => {
+            if (caught instanceof UnitConversionError) throw new GoodsIssueError(caught.message, caught.remedy);
+            throw caught;
+          })).baseQuantity;
+        const openBase = Math.max(0, requiredBase - issued);
+        if (demanded.baseQuantity > openBase + 1e-9) {
+          const unit = sameUnit ? component.unitOfMeasure : mat.baseUnit;
           throw new GoodsIssueError(
-            `Order ${orderNumber} item ${itemNumber} still requires ${open.toFixed(3)} ${component.unitOfMeasure} of ${materialNumber}, and ${line.quantity.toFixed(3)} was entered.`,
+            `Order ${orderNumber} item ${itemNumber} still requires ${openBase.toFixed(3)} ${unit} of ${materialNumber}, and ${demanded.baseQuantity.toFixed(3)} was entered.`,
             'Reduce the quantity to what the component still requires; a tolerance master does not stand in canon.',
           );
         }
         productionOrderNumber = orderNumber;
         productionOrderItem = itemNumber;
-        orderOpenAfter = (open - line.quantity).toFixed(3);
+        orderOpenAfter = Math.max(0, openBase - demanded.baseQuantity).toFixed(3);
       } else if ((line.productionOrderNumber ?? '').trim()) {
         throw new GoodsIssueError(
           `Movement ${scenario.code} consumes for no production order, and ${line.productionOrderNumber} was named on ${materialNumber}.`,

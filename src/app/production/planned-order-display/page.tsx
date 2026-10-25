@@ -126,6 +126,16 @@ export default async function PlannedOrderDisplayPage({
             {' · '}
             <Link href={`/production/planned-order-conversion?order=${encodeURIComponent(document.orderNumber)}&plant=${encodeURIComponent(document.plant)}`}>Convert</Link>
           </p>
+          {document.dependents.some((row) => row.status === 'OPEN') && (
+            <p data-md13-demand="active" data-md13-reconciliation={document.productionOrderNumber ? 'incomplete' : 'open'}>
+              An open dependent requirement is active planning demand. It has not been reconciled to a dated production-order component. This display does not close it.
+            </p>
+          )}
+          {document.dependents.some((row) => row.status === 'CLOSED') && (
+            <p data-md13-demand="replaced">
+              A closed dependent requirement is not planning demand. The dated production-order component is the replacement. This display does not reopen it. The closed row is not counted again.
+            </p>
+          )}
           {document.dependents.length > 0 && (
             <table className="w-full text-sm">
               <thead>
@@ -142,7 +152,7 @@ export default async function PlannedOrderDisplayPage({
                     <td className="py-1">{row.componentMaterial} {row.componentDescription}</td>
                     <td>{row.quantity} {row.unit}</td>
                     <td>{row.requirementDate}</td>
-                    <td>{row.status}</td>
+                    <td data-md13-requirement={row.status}>{row.status === 'OPEN' ? 'OPEN · active demand, not reconciled' : row.status === 'CLOSED' ? 'CLOSED · not demand' : row.status}</td>
                   </tr>
                 ))}
               </tbody>

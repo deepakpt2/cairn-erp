@@ -15,6 +15,9 @@ import {
   releaseProductionOrder,
 } from '../src/modules/inventory/production-orders';
 import { technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
+import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -291,5 +294,61 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       select status from production_order where client = ${client} and order_number = ${draft.orderNumber}
     `)) as unknown as Array<{ status: string }>;
     expect(after?.status).toBe('TECHNICALLY_COMPLETED');
+  });
+
+  it('does not treat a component issue as a receipt, and a reversal restores the open quantity', async () => {
+    const draft = await createProductionOrder({
+      orderType: 'PP01',
+      client, createdBy: ACTOR,
+      materialNumber: 'MIGO-FG', plant: PLANT, orderQuantity: 4,
+      scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
+      components: [{ materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', requiredQuantity: 5 }],
+    });
+    await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
+    await withTenant(client, (tx) => tx.execute(sql`
+      update production_order_component
+         set requirement_date = '2026-10-18'
+       where client = ${client} and order_number = ${draft.orderNumber} and item_number = 10
+    `));
+    const issued = await postGoodsIssue(input({
+      requestKey: 'migo-open-demand',
+      lines: [{
+        materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 2,
+        productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
+      }],
+    }), 'MIGO');
+    const list = await stockRequirementsList({
+      client, today: '2026-10-01', selection: { material: 'MIGO-RM', plant: PLANT },
+    });
+    expect(list.rows.filter((row) => row.documentNumber === draft.orderNumber && row.elementType === 'PRODUCTION_COMPONENT')).toEqual([
+      expect.objectContaining({ quantity: 3, date: '2026-10-18', direction: 'REQUIREMENT' }),
+    ]);
+    expect(list.warnings.join(' ')).toMatch(/already subtracted/);
+    const receipt = await stockRequirementsList({
+      client, today: '2026-10-01', selection: { material: 'MIGO-FG', plant: PLANT },
+    });
+    const receiptRow = receipt.rows.find((row) => row.documentNumber === draft.orderNumber && row.elementType === 'PRODUCTION_ORDER');
+    expect(receiptRow).toEqual(expect.objectContaining({ quantity: 4, direction: 'RECEIPT' }));
+    expect(receiptRow?.drillDown).toBe(`/production/production-order-display?order=${encodeURIComponent(draft.orderNumber)}`);
+    const reversed = await reverseMaterialDocument({
+      client, changedBy: ACTOR, materialDocumentNumber: issued.materialDocumentNumber,
+      postingDate: '2026-10-15', documentDate: '2026-10-15', requestKey: 'migo-open-demand-rev',
+    });
+    const reversalLine = await withTenant(client, (tx) => tx.execute(sql`
+      select production_order_number, production_order_item
+        from material_document_line
+       where client = ${client} and material_document_number = ${reversed.materialDocumentNumber}
+    `)) as unknown as Array<{ production_order_number: string; production_order_item: number }>;
+    expect(reversalLine[0]).toEqual({ production_order_number: draft.orderNumber, production_order_item: 10 });
+    const again = await postGoodsIssue(input({
+      requestKey: 'migo-open-demand-again',
+      lines: [{
+        materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 5,
+        productionOrderNumber: draft.orderNumber, productionOrderItem: 10,
+      }],
+    }), 'MIGO');
+    expect(again.materialDocumentNumber).not.toBe(issued.materialDocumentNumber);
+    const shown = await getProductionOrderDisplay(client, draft.orderNumber);
+    expect(shown?.components.find((row) => row.itemNumber === 10)?.issuedQuantity).toBe('5.000');
   });
 });

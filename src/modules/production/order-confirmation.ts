@@ -1,11 +1,33 @@
 /**
  * Enter order confirmation — CO15.
  *
- * One confirmation number is drawn for the order. Each operation whose
- * control key allows confirmation, and which is not already finally
- * confirmed, receives an effect. That effect is not a time ticket and is
- * not given its own confirmation number. A posted time ticket is not
- * overwritten.
+ * One confirmation number is drawn for the order. The header row stores the
+ * entered yield, scrap, and rework once. That row is the confirmed production
+ * quantity. It is not the sum of operation effects.
+ *
+ * Each operation whose control key allows confirmation, and which is not
+ * already finally confirmed, receives one effect. The effect is not a time
+ * ticket and is not given its own confirmation number. A posted time ticket
+ * is not overwritten.
+ *
+ * Allocation, and only this allocation:
+ * - No operation quantity on the snapshot: the effect quantity equals the
+ *   header quantity (ORDER_QUANTITY). It is not split across operations, and
+ *   it is not a second receipt. Copying it onto every such operation does not
+ *   add it again to the header yield.
+ * - Operation quantity and base quantity stored in the order unit, and the
+ *   header quantity divides exactly by the base: the effect is
+ *   header * operation quantity / base quantity (OPERATION_QUANTITY). The
+ *   ratio is the one stored on the operation. It is not an equal split and
+ *   not a guessed routing rule. An inexact division is refused. A unit that
+ *   differs from the order unit is refused. The scaled quantity is not added
+ *   to the header yield.
+ * - A time ticket already standing on that operation is an order-unit
+ *   quantity. A scaled effect is not added to it, and a time ticket is not
+ *   added to a scaled effect. No conversion between those quantities exists.
+ * - An operation that requires an activity is not given a standard value.
+ *   Times are not allocated. The whole confirmation is refused.
+ * - No operation snapshot: nothing is saved. The live routing is not read.
  *
  * No confirmation profile is stored, so automatic final is refused. No
  * component is marked for backflush, and automatic goods receipt is not
@@ -20,8 +42,8 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { toScaled } from '../../platform/posting/decimal';
-import { ProductionVersionError, selectProductionVersion } from './production-version';
 import {
+  ORDER_OPERATION_SNAPSHOT_MISSING,
   TIME_TICKET_LOCK,
   TimeTicketError,
   type TimeTicketOperationView,
@@ -31,7 +53,6 @@ import {
   headerOf,
   operationsOf,
   orderQuantityOf,
-  plainQuantity,
   remainingText,
   rows,
 } from './time-ticket';
@@ -50,7 +71,7 @@ const REFUSED: Record<string, string> = {
   confirmationProfile: 'A confirmation profile is not configured. Choose partial or final. Automatic final is not a stored rule.',
   automatic: 'Automatic confirmation is not a stored rule. Choose partial or final.',
   automaticFinal: 'Automatic final confirmation is not a stored rule. No confirmation profile stands. Choose partial or final.',
-  sequence: 'Only the standard sequence is stored. An alternative or parallel sequence is refused.',
+  sequence: 'Only standard sequence 000000 is stored. Execution order is not written into the confirmation. An alternative or parallel sequence is refused.',
   suboperation: 'A suboperation is not stored.',
   personnel: 'A personnel number is not validated. None was stored.',
   shift: 'A shift is not stored.',
@@ -153,14 +174,16 @@ export interface OrderConfirmationLoad {
 }
 
 const GAPS = [
-  'The order does not store an operation. Eligible operations are read from the production version. Each receives an effect. A time-ticket number is not created.',
+  'Eligible operations are the ones stored on the order. Each receives an effect. A time-ticket number is not created. A later routing edit is not read.',
   'No confirmation profile is stored. Automatic final confirmation is refused. Partial and final are the only types.',
-  'An operation without its own quantity is confirmed for the header quantity. That quantity is not split across operations. An operation quantity is scaled by its base quantity, and an inexact scale is refused rather than rounded.',
+  'The header row stores the entered quantity once. That is the confirmed production quantity. Operation effects are not added to it, and they are not added across operations.',
+  'An operation without its own quantity receives the header quantity as an effect. That quantity is not split, and it is not a second receipt. An operation quantity is scaled by its stored base quantity. An inexact scale is refused rather than rounded. A time ticket is not added to a scaled effect.',
   'An operation that requires an activity is not given a standard value. Confirm that operation on CO11N.',
   'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
   'The order status is not changed. Technical completion is a separate CO02 action. A final confirmation blocks another confirmation of each affected operation. It does not complete the order.',
   'Underdelivery tolerance is stored on the material plant and is not executed here. No financial period is applied, because no document is posted.',
   'CO11N confirms one operation. Cancellation is CO13, not this screen. CO14 is not implemented. A posted confirmation is not edited here.',
+  'Effects follow the stored execution order. The confirmation sequence stays 000000. It is not the execution order, and an earlier operation does not have to be confirmed first.',
 ];
 
 const MOVEMENT_NOTE = 'No goods movement was proposed. Backflush is not configured, and automatic goods receipt is not configured. Stock was not changed.';
@@ -210,6 +233,20 @@ export function operationEffectQuantity(
     );
   }
   return { quantity: remainingText(header * operation / base), basis: 'OPERATION_QUANTITY' };
+}
+
+/** Same stored ratio as the effect. No rounding, and no addition of an order-unit time ticket. */
+export function scaledEffectWithinLimit(
+  priorOperationYield: string,
+  effectQuantity: string,
+  operationQuantity: string,
+  baseQuantity: string,
+  orderLimit: bigint,
+): boolean {
+  const base = toScaled(baseQuantity, 3);
+  const operation = toScaled(operationQuantity, 3);
+  if (base === 0n || operation === 0n) return false;
+  return (toScaled(priorOperationYield, 3) + toScaled(effectQuantity, 3)) * base <= orderLimit * operation;
 }
 
 function activityBlock(operations: TimeTicketOperationView[]): string | null {
@@ -324,28 +361,25 @@ async function prepare(tx: Tx, client: string, input: {
     if (error instanceof TimeTicketError) fail(error.message, error.remedy);
     throw error;
   }
-  let version;
-  try {
-    version = await selectProductionVersion(client, {
-      materialNumber: header.materialNumber,
-      plant: header.plant,
-      keyDate: postingDate,
-      quantity: plainQuantity(header.orderQuantity),
-      unit: header.unit,
-      productionVersion: clean(input.productionVersion) || null,
-      context: 'ORDER',
-    }, tx);
-  } catch (error) {
-    if (error instanceof ProductionVersionError) fail(error.message, error.remedy);
-    throw error;
-  }
   let operations;
   try {
-    operations = await operationsOf(tx, client, header, version, postingDate);
+    operations = await operationsOf(tx, client, header);
   } catch (error) {
     if (error instanceof TimeTicketError) fail(error.message, error.remedy);
     throw error;
   }
+  if (operations.length === 0) {
+    fail(
+      ORDER_OPERATION_SNAPSHOT_MISSING,
+      'Create the order from a production version so the routing is copied. A header confirmation was not saved against the live routing.',
+    );
+  }
+  const version = {
+    taskListType: operations[0].taskListType,
+    routingGroup: operations[0].routingGroup,
+    groupCounter: operations[0].groupCounter,
+    productionVersion: operations[0].productionVersion,
+  };
   const activity = activityBlock(operations);
   if (activity) {
     fail(activity, 'Confirm that operation on CO11N. This screen does not invent an actual.');
@@ -392,7 +426,20 @@ async function prepare(tx: Tx, client: string, input: {
     const yieldEffect = operationEffectQuantity(yieldQuantity, operation.operationQuantity, operation.baseQuantity, operation.operationNumber);
     const scrapEffect = operationEffectQuantity(scrapQuantity, operation.operationQuantity, operation.baseQuantity, operation.operationNumber);
     const reworkEffect = operationEffectQuantity(reworkQuantity, operation.operationQuantity, operation.baseQuantity, operation.operationNumber);
-    if (toScaled(operation.yieldQuantity, 3) + toScaled(yieldEffect.quantity, 3) > limit) {
+    if (yieldEffect.basis === 'OPERATION_QUANTITY') {
+      if (toScaled(operation.orderUnitYield, 3) > 0n) {
+        fail(
+          `Operation ${operation.operationNumber} already has a confirmation in the order unit. The operation quantity was not added to it.`,
+          'Cancel that time ticket on CO13 before confirming the order, or confirm an operation that has no time ticket. The quantities were not converted.',
+        );
+      }
+      if (!scaledEffectWithinLimit(operation.operationQuantityYield, yieldEffect.quantity, operation.operationQuantity ?? '0', operation.baseQuantity ?? '0', limit)) {
+        fail(
+          `Yield ${yieldEffect.quantity} ${header.unit} would take operation ${operation.operationNumber} above the order quantity at its stored operation quantity. It was not reduced.`,
+          'Enter a yield within the tolerance. A posted confirmation was not changed.',
+        );
+      }
+    } else if (toScaled(operation.orderUnitYield, 3) + toScaled(yieldEffect.quantity, 3) > limit) {
       fail(
         `Yield ${yieldEffect.quantity} ${header.unit} would take operation ${operation.operationNumber} above the order quantity and the overdelivery tolerance. It was not reduced.`,
         'Enter a yield within the tolerance. A posted confirmation was not changed.',
@@ -479,11 +526,13 @@ async function storedView(tx: Tx, client: string, confirmationNumber: string): P
   const header = found[0];
   if (!header) return null;
   const effects = await rows(tx, sql`
-    select operation_number, short_text, work_center, control_key, quantity_basis,
-           yield_quantity::text as yield, scrap_quantity::text as scrap, rework_quantity::text as rework
-      from production_confirmation_operation
-     where client = ${client} and confirmation_number = ${confirmationNumber}
-     order by operation_number
+    select e.operation_number, e.short_text, e.work_center, e.control_key, e.quantity_basis,
+           e.yield_quantity::text as yield, e.scrap_quantity::text as scrap, e.rework_quantity::text as rework
+      from production_confirmation_operation e
+      left join production_order_operation op
+        on op.client = e.client and op.order_number = e.order_number and op.operation_number = e.operation_number
+     where e.client = ${client} and e.confirmation_number = ${confirmationNumber}
+     order by op.execution_order nulls last, e.operation_number
   `);
   const status = parseProductionOrderStatus(header.status);
   if (!status) fail(`Status ${String(header.status)} is not a production-order status.`, 'The stored status is unsupported. It was not treated as created.');
@@ -567,7 +616,7 @@ export async function loadOrderConfirmation(client: string, input: {
   const orderNumber = clean(input.orderNumber).toUpperCase();
   if (!orderNumber) fail('A production order is required.', 'Enter the order to confirm.');
   const askedDate = clean(input.postingDate);
-  const postingDate = askedDate ? dateOf(askedDate, 'The posting date') : '';
+  if (askedDate) dateOf(askedDate, 'The posting date');
   return withTenant(client, async (tx) => {
     let header;
     try {
@@ -576,36 +625,25 @@ export async function loadOrderConfirmation(client: string, input: {
       if (error instanceof TimeTicketError) fail(error.message, error.remedy);
       throw error;
     }
-    const keyDate = postingDate || header.scheduledStart;
     let blockingReason: string | null = confirmationBlockReason(header.status);
-    let version: { taskListType: string; routingGroup: string; groupCounter: string; productionVersion: string } | null = null;
-    if (!blockingReason) {
-      try {
-        version = await selectProductionVersion(client, {
-          materialNumber: header.materialNumber,
-          plant: header.plant,
-          keyDate,
-          quantity: plainQuantity(header.orderQuantity),
-          unit: header.unit,
-          productionVersion: clean(input.productionVersion) || null,
-          context: 'ORDER',
-        }, tx);
-      } catch (error) {
-        if (error instanceof ProductionVersionError) blockingReason = error.message;
-        else throw error;
-      }
-    }
-    const operations = version ? await operationsOf(tx, client, header, version, keyDate) : [];
+    const operations = await operationsOf(tx, client, header);
+    const identity = operations[0] ?? null;
+    if (!blockingReason && operations.length === 0) blockingReason = ORDER_OPERATION_SNAPSHOT_MISSING;
     const activity = activityBlock(operations);
     if (!blockingReason && activity) blockingReason = activity;
     const progress = await headerProgress(tx, client, header.orderNumber);
     const eligible = activity ? [] : operations.filter((row) => row.confirmable).map((row) => row.operationNumber);
-    if (!blockingReason && version && eligible.length === 0) {
+    if (!blockingReason && operations.length > 0 && eligible.length === 0) {
       blockingReason = 'No operation can be confirmed from the header.';
+    }
+    const gaps = [...GAPS];
+    const namedVersion = clean(input.productionVersion).toUpperCase();
+    if (namedVersion && identity && namedVersion !== identity.productionVersion) {
+      gaps.push(`Production version ${namedVersion} was not used. The order stores ${identity.productionVersion}. The routing was not re-read.`);
     }
     return {
       ...header,
-      productionVersion: version?.productionVersion ?? null,
+      productionVersion: identity?.productionVersion ?? null,
       previouslyConfirmed: progress.yield,
       previouslyScrapped: progress.scrap,
       previouslyReworked: progress.rework,
@@ -614,7 +652,7 @@ export async function loadOrderConfirmation(client: string, input: {
       eligible,
       skipped: skippedOf(operations),
       blockingReason,
-      gaps: GAPS,
+      gaps,
     };
   });
 }

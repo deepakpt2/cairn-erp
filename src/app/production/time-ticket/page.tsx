@@ -65,7 +65,7 @@ export default async function TimeTicketPage({
           No goods movement is posted.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co11n-gaps>
-          A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. Cancellation is CO13. CO14 is not implemented. CO15 confirms the order, not one operation.
+          The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. Cancellation is CO13. CO14 is not implemented. CO15 confirms the order, not one operation.
         </p>
       </header>
       {openError && <p role="status" data-co11n-refused className="text-sm text-red-700">{openError}</p>}

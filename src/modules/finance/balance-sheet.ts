@@ -75,6 +75,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
+import { ledgerJournalStatus } from './ledger-journal';
 import { STATEMENT_LEDGERS, TrialBalanceError } from './trial-balance';
 
 function fail(message: string, remedy?: string): never {
@@ -192,7 +193,7 @@ export async function calculateBalanceSheet(input: {
       from journal_entry_line l
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
-      where l.client = ${client} and e.company_code = ${s.companyCode} and e.status = 'POSTED'
+      where l.client = ${client} and e.company_code = ${s.companyCode} and ${ledgerJournalStatus('e')}
       group by l.gl_account
       order by l.gl_account
     `);

@@ -38,7 +38,7 @@ export default function OrderConfirmationWorkbench({
         <p>Plant {loaded.plant}. Quantity {loaded.orderQuantity} {loaded.unit}. Status {loaded.status}. Record version {loaded.version}.</p>
         <p>Previously confirmed at header {loaded.previouslyConfirmed} {loaded.unit}. Remaining {loaded.remainingQuantity} {loaded.unit}. Scrap {loaded.previouslyScrapped}. Rework {loaded.previouslyReworked}.</p>
         <p>Start {loaded.scheduledStart}. Finish {loaded.scheduledFinish}. Those dates are not rewritten by a confirmation.</p>
-        {loaded.productionVersion && <p>Production version {loaded.productionVersion}. It is not stored on the order.</p>}
+        {loaded.productionVersion && <p>Production version {loaded.productionVersion} is the one copied onto this order. A different version was not read.</p>}
         {loaded.blockingReason && <p className="text-red-700">{loaded.blockingReason}</p>}
         {loaded.gaps.map((gap) => <p key={gap} className="text-ink-soft">{gap}</p>)}
       </section>
@@ -47,6 +47,7 @@ export default function OrderConfirmationWorkbench({
         <table className="w-full text-sm" data-co15-operations>
           <thead>
             <tr className="text-left text-ink-faint">
+              <th>Execution order</th>
               <th>Operation</th>
               <th>Work center</th>
               <th>Confirmed</th>
@@ -56,6 +57,7 @@ export default function OrderConfirmationWorkbench({
           <tbody>
             {loaded.operations.map((row) => (
               <tr key={row.operationNumber} data-co15-operation={row.operationNumber}>
+                <td className="py-1">{row.executionOrder}</td>
                 <td className="py-1">{row.operationNumber} {row.shortText ?? ''}</td>
                 <td>{row.workCenter ?? '—'}</td>
                 <td>{row.yieldQuantity} {loaded.unit}</td>
@@ -72,7 +74,7 @@ export default function OrderConfirmationWorkbench({
         <input type="hidden" name="productionVersion" value={loaded.productionVersion ?? ''} />
         <input type="hidden" name="expectedVersion" value={loaded.version} />
         <input type="hidden" name="unit" value={loaded.unit} />
-        <p className="text-sm">The header quantity is applied to every eligible operation. It is not split across them, and a time-ticket number is not created.</p>
+        <p className="text-sm">The header confirmation stores the entered quantity once. An eligible operation with no operation quantity receives that quantity as an effect. It is not split, and it is not a second receipt. An operation quantity is scaled by its stored base quantity, or the confirmation is refused. Effects are not added back into the header yield. A time-ticket number is not created.</p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <label className="block text-sm">
             <span className="mb-1 block text-ink-soft">Confirmation type</span>

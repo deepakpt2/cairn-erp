@@ -11,6 +11,21 @@ import {
 
 export const dynamic = 'force-dynamic';
 
+const ACCOUNTING_CAPTION: Record<string, string> = {
+  NONE: 'mbst.accountingNone',
+  POSTED: 'mbst.accountingPosted',
+  PARTIAL: 'mbst.accountingPartial',
+  COMPLETE: 'mbst.accountingComplete',
+  MISSING: 'mbst.accountingMissing',
+  MISMATCH: 'mbst.accountingMismatch',
+  DEFERRED: 'mbst.accountingDeferred',
+  ABSENT: 'mbst.accountingAbsent',
+};
+
+function accountingCaption(state: string): string {
+  return ACCOUNTING_CAPTION[state] ?? 'mbst.accountingMissing';
+}
+
 /**
  * Display material document — SCR-134 / INV.DISPLAY (MB03 as a search alias only).
  *
@@ -177,7 +192,12 @@ export default async function MaterialDocumentPage({ searchParams }: {
                     {document.journalDocumentNumber}
                   </Link>
                 )
-                : t('mdDoc.noJournal')}
+                : document.journalAccounting.state === 'NONE'
+                  ? t('mbst.noJournal')
+                  : t(accountingCaption(document.journalAccounting.state))}
+            </p>
+            <p className="mt-1 text-xs text-ink-soft" data-accounting={document.journalAccounting.state}>
+              {t(accountingCaption(document.journalAccounting.state))}
             </p>
           </section>
 

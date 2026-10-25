@@ -508,6 +508,7 @@ export const routingStandardValueParameter = pgTable('routing_standard_value_par
  * Material assignment is separate, so one routing can be named by more than one material.
  * Valid-to is stored because engineering change management is absent.
  * Only sequence 000000 of type 0 is stored. Alternative and parallel sequences are refused.
+ * Execution order is a separate column on the operation. It is not another sequence.
  */
 export const routing = pgTable('routing', {
   client: tenant(),
@@ -616,6 +617,8 @@ export const routingOperation = pgTable('routing_operation', {
   groupCounter: varchar('group_counter', { length: 2 }).notNull(),
   operationNumber: varchar('operation_number', { length: 4 }).notNull(),
   sequence: char('sequence', { length: 6 }).notNull().default('000000'),
+  /** Display and copy order of the single standard sequence. Not the operation number. */
+  executionOrder: integer('execution_order').notNull(),
   shortText: varchar('short_text', { length: 40 }),
   plant: varchar('plant', { length: 10 }).notNull(),
   workCenter: varchar('work_center', { length: 8 }),
@@ -656,6 +659,8 @@ export const routingOperation = pgTable('routing_operation', {
   foreignKey({ columns: [t.baseUnit], foreignColumns: [unitOfMeasure.code] }),
   check('routing_operation_number_ck', sql`${t.operationNumber} ~ '^[A-Z0-9]{4}$'`),
   check('routing_operation_sequence_ck', sql`${t.sequence} = '000000'`),
+  check('routing_operation_execution_order_ck', sql`${t.executionOrder} > 0`),
+  uniqueIndex('routing_operation_execution_order_uq').on(t.client, t.taskListType, t.routingGroup, t.groupCounter, t.sequence, t.executionOrder),
   check('routing_operation_text_ck', sql`${t.shortText} is null or char_length(btrim(${t.shortText})) between 1 and 40`),
   check('routing_operation_text_key_ck', sql`${t.standardTextKey} is null or ${t.standardTextKey} ~ '^[A-Z0-9]{1,7}$'`),
   check('routing_operation_quantity_ck', sql`${t.operationQuantity} is null or ${t.operationQuantity} > 0`),
@@ -1013,6 +1018,82 @@ export const productionConfirmationCancellation = pgTable('production_confirmati
   }).onDelete('restrict'),
   check('production_confirmation_cancellation_reason_ck', sql`${t.reason} is null or char_length(btrim(${t.reason})) between 1 and 200`),
   index('production_confirmation_cancellation_order_idx').on(t.client, t.orderNumber),
+]);
+
+/**
+ * Operations copied onto a production order when a production version selects it.
+ * A later routing edit does not update these rows. An order with no rows was
+ * not given a routing snapshot. Predecessor and successor are not columns.
+ * Sequence stays 000000. execution_order is the copied display order.
+ */
+export const productionOrderOperation = pgTable('production_order_operation', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  operationNumber: varchar('operation_number', { length: 4 }).notNull(),
+  sequence: char('sequence', { length: 6 }).notNull(),
+  executionOrder: integer('execution_order').notNull(),
+  taskListType: char('task_list_type', { length: 1 }).notNull(),
+  routingGroup: varchar('routing_group', { length: 8 }).notNull(),
+  groupCounter: varchar('group_counter', { length: 2 }).notNull(),
+  productionVersion: varchar('production_version', { length: 4 }).notNull(),
+  sourceOperationNumber: varchar('source_operation_number', { length: 4 }).notNull(),
+  routingVersion: integer('routing_version').notNull(),
+  workCenter: varchar('work_center', { length: 8 }),
+  workCenterPlant: varchar('work_center_plant', { length: 10 }).notNull(),
+  controlKey: varchar('control_key', { length: 4 }),
+  shortText: varchar('short_text', { length: 40 }),
+  standardValueKey: varchar('standard_value_key', { length: 4 }),
+  operationQuantity: numeric('operation_quantity', { precision: 23, scale: 3 }),
+  operationUnit: varchar('operation_unit', { length: 6 }),
+  baseQuantity: numeric('base_quantity', { precision: 23, scale: 3 }),
+  baseUnit: varchar('base_unit', { length: 6 }),
+  validFrom: date('valid_from', { mode: 'string' }).notNull(),
+  validTo: date('valid_to', { mode: 'string' }).notNull(),
+  confirmation: char('confirmation', { length: 1 }).notNull(),
+  externalProcessing: char('external_processing', { length: 1 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.operationNumber] }),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_order_operation_order_fk',
+  }).onDelete('cascade'),
+  check('production_order_operation_number_ck', sql`${t.operationNumber} ~ '^[A-Z0-9]{4}$'`),
+  check('production_order_operation_source_ck', sql`${t.sourceOperationNumber} ~ '^[A-Z0-9]{4}$'`),
+  check('production_order_operation_sequence_ck', sql`${t.sequence} = '000000'`),
+  check('production_order_operation_execution_order_ck', sql`${t.executionOrder} > 0`),
+  uniqueIndex('production_order_operation_execution_order_uq').on(t.client, t.orderNumber, t.executionOrder),
+  check('production_order_operation_routing_ck', sql`${t.taskListType} ~ '^[A-Z0-9]$' and ${t.routingGroup} ~ '^[A-Z0-9]{1,8}$' and ${t.groupCounter} ~ '^[A-Z0-9]{1,2}$' and ${t.productionVersion} ~ '^[A-Z0-9]{1,4}$'`),
+  check('production_order_operation_version_ck', sql`${t.routingVersion} > 0`),
+  check('production_order_operation_dates_ck', sql`${t.validTo} >= ${t.validFrom}`),
+  check('production_order_operation_flags_ck', sql`${t.confirmation} in ('X', ' ') and ${t.externalProcessing} in ('X', ' ')`),
+  check('production_order_operation_text_ck', sql`${t.shortText} is null or char_length(btrim(${t.shortText})) between 1 and 40`),
+  index('production_order_operation_order_idx').on(t.client, t.orderNumber),
+]);
+
+/** Standard values copied with the operation. A later value-key edit does not rewrite them. */
+export const productionOrderOperationValue = pgTable('production_order_operation_value', {
+  client: tenant(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  operationNumber: varchar('operation_number', { length: 4 }).notNull(),
+  parameter: varchar('parameter', { length: 6 }).notNull(),
+  description: varchar('description', { length: 40 }).notNull(),
+  quantity: numeric('quantity', { precision: 23, scale: 3 }),
+  unit: varchar('unit', { length: 6 }).notNull(),
+  required: char('required', { length: 1 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.operationNumber, t.parameter] }),
+  foreignKey({
+    columns: [t.client, t.orderNumber, t.operationNumber],
+    foreignColumns: [productionOrderOperation.client, productionOrderOperation.orderNumber, productionOrderOperation.operationNumber],
+    name: 'production_order_operation_value_fk',
+  }).onDelete('cascade'),
+  check('production_order_operation_value_parameter_ck', sql`${t.parameter} ~ '^[A-Z0-9]{1,6}$'`),
+  check('production_order_operation_value_description_ck', sql`char_length(btrim(${t.description})) between 1 and 40`),
+  check('production_order_operation_value_quantity_ck', sql`${t.quantity} is null or ${t.quantity} > 0`),
+  check('production_order_operation_value_required_ck', sql`${t.required} in ('X', ' ')`),
 ]);
 
 /** COOIS. A user's field selection for one list. It does not store report rows. */

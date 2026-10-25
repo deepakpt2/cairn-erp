@@ -7,11 +7,12 @@
  * valid-to is stored as 9999-12-31.
  *
  * Only sequence 000000 of type 0 is stored. Alternative and parallel sequences
- * are refused, not partially stored. A standard value is a parameter of the
- * selected key, not a fixed setup/machine/labor column. A formula key on the
- * work center is read and not calculated. Saving does not confirm, schedule,
- * cost, or rewrite a production order. External processing does not create a
- * purchase order.
+ * are refused, not partially stored. Execution order is a separate positive
+ * number. It is not taken from the operation number and it is not a second
+ * sequence. A standard value is a parameter of the selected key, not a fixed
+ * setup/machine/labor column. A formula key on the work center is read and not
+ * calculated. Saving does not confirm, schedule, cost, or rewrite a production
+ * order. External processing does not create a purchase order.
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
@@ -50,6 +51,78 @@ export const ROUTING_LOCK = 'ROUTING';
 export const ROUTING_OBJECT = 'routing';
 const OPEN_ENDED = '9999-12-31';
 const STANDARD_SEQUENCE = '000000';
+
+function executionOrderOf(value: string | number | null | undefined, operationNumber: string): number | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  if (!/^[1-9][0-9]{0,3}$/.test(text)) {
+    fail(
+      `Operation ${operationNumber} has execution order ${text}. It must be a positive whole number from 1 to 9999. It was not taken from the operation number.`,
+    );
+  }
+  return Number(text);
+}
+
+function assignExecutionOrders(
+  operations: Array<{ operationNumber: string; executionOrder?: string | number | null }>,
+  stored: Map<string, number>,
+  omitted: Array<{ operationNumber: string; executionOrder: number }>,
+): Map<string, number> {
+  const specified = operations.map((row) => executionOrderOf(row.executionOrder, row.operationNumber));
+  const present = specified.filter((value) => value != null).length;
+  if (present > 0 && present !== operations.length) {
+    fail(
+      'Execution order was entered for some operations and omitted for others. Nothing was saved.',
+      'Enter an order for every operation in this save, or omit it for all of them. The operation number was not used.',
+    );
+  }
+  const assigned = new Map<string, number>();
+  if (present === operations.length && operations.length > 0) {
+    operations.forEach((row, index) => assigned.set(row.operationNumber, specified[index]!));
+  } else {
+    const used = new Set(omitted.map((row) => row.executionOrder));
+    for (const row of operations) {
+      const kept = stored.get(row.operationNumber);
+      if (kept == null) continue;
+      assigned.set(row.operationNumber, kept);
+      used.add(kept);
+    }
+    // A new operation appends after every stored order, including a deletion-flagged
+    // order. A gap is not filled: that would place it before an operation that
+    // already has a later order, and it would not be the submitted list order.
+    let next = used.size === 0 ? 1 : Math.max(...used) + 1;
+    for (const row of operations) {
+      if (assigned.has(row.operationNumber)) continue;
+      while (used.has(next)) next += 1;
+      if (next > 9999) fail(`Operation ${row.operationNumber} has no free execution order from 1 to 9999. Nothing was saved.`);
+      assigned.set(row.operationNumber, next);
+      used.add(next);
+      next += 1;
+    }
+  }
+  const seen = new Map<number, string>();
+  for (const [operationNumber, order] of assigned) {
+    const other = seen.get(order);
+    if (other) {
+      fail(
+        `Execution order ${order} is used by operation ${other} and operation ${operationNumber}. Nothing was saved.`,
+        'Give each operation its own order. The operation number was not used.',
+      );
+    }
+    seen.set(order, operationNumber);
+  }
+  for (const row of omitted) {
+    const other = seen.get(row.executionOrder);
+    if (other) {
+      fail(
+        `Execution order ${row.executionOrder} is already used by operation ${row.operationNumber}, which is not in this save. It was not reassigned.`,
+        'Include that operation and give it another order, or choose an order that is free.',
+      );
+    }
+  }
+  return assigned;
+}
 
 export class RoutingError extends Error {
   remedy?: string;
@@ -105,6 +178,8 @@ export interface RoutingOperationInput {
   deletionFlag?: string | null;
   suboperation?: string | null;
   sequenceType?: string | null;
+  /** Positive whole number. Omitted means list order on create, stored order on change. */
+  executionOrder?: string | number | null;
   values?: RoutingValueInput[];
   allocations?: RoutingAllocationInput[];
 }
@@ -163,6 +238,7 @@ export interface RoutingOperationView {
   operationNumber: string;
   sequence: string;
   sequenceType: '0';
+  executionOrder: number;
   shortText: string | null;
   workCenter: string | null;
   workCenterDescription: string | null;
@@ -343,7 +419,7 @@ async function readInTx(
     eq(routingOperation.taskListType, taskListType),
     eq(routingOperation.routingGroup, routingGroup),
     eq(routingOperation.groupCounter, groupCounter),
-  )).orderBy(asc(routingOperation.operationNumber));
+  )).orderBy(asc(routingOperation.executionOrder), asc(routingOperation.operationNumber));
   const centers = await tx.select().from(workCenter).where(and(eq(workCenter.client, client), eq(workCenter.plant, header.plant)));
   const centerByKey = new Map(centers.map((row) => [row.workCenter, row]));
   const values = await tx.select().from(routingOperationValue).where(and(
@@ -404,6 +480,7 @@ async function readInTx(
         operationNumber: row.operationNumber,
         sequence: STANDARD_SEQUENCE,
         sequenceType: '0' as const,
+        executionOrder: row.executionOrder,
         shortText: row.shortText,
         workCenter: row.workCenter,
         workCenterDescription: center?.description ?? null,
@@ -464,6 +541,7 @@ function snapshot(view: RoutingView): Record<string, unknown> {
   for (const operation of view.operations) {
     const prefix = `operation.${operation.operationNumber}`;
     flat[`${prefix}.text`] = operation.shortText;
+    flat[`${prefix}.executionOrder`] = operation.executionOrder;
     flat[`${prefix}.workCenter`] = operation.workCenter;
     flat[`${prefix}.controlKey`] = operation.controlKey;
     flat[`${prefix}.deletion`] = operation.deletionFlag;
@@ -704,6 +782,7 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
         validFrom: operationFrom,
         validTo: operationTo,
         deletionFlag: mode === 'CHANGE' ? flag(raw.deletionFlag, 'Operation deletion flag') : ' ' as const,
+        executionOrder: raw.executionOrder,
         values,
         allocations: raw.allocations ?? [],
       });
@@ -749,6 +828,11 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
         });
       }
     }
+    const storedOrders = new Map((before?.operations ?? []).map((row) => [row.operationNumber, row.executionOrder]));
+    const omitted = (before?.operations ?? [])
+      .filter((row) => !preparedOperations.some((operation) => operation.operationNumber === row.operationNumber))
+      .map((row) => ({ operationNumber: row.operationNumber, executionOrder: row.executionOrder }));
+    const executionOrders = assignExecutionOrders(preparedOperations, storedOrders, omitted);
     const deletionFlag = mode === 'CREATE' ? ' ' : flag(input.deletionFlag, 'Deletion flag');
     if (mode === 'CREATE') {
       await tx.insert(routing).values({
@@ -787,6 +871,7 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
         operationQuantity: operation.operationQuantity, operationUnit: operation.operationUnit,
         baseQuantity: operation.baseQuantity, baseUnit: operation.baseUnit, validFrom: operation.validFrom,
         validTo: operation.validTo, deletionFlag: operation.deletionFlag, sequence: STANDARD_SEQUENCE,
+        executionOrder: executionOrders.get(operation.operationNumber)!,
       };
       if (existingOperations.some((row) => row.operationNumber === operation.operationNumber)) {
         await tx.update(routingOperation).set({ ...values, changedBy: input.changedBy, changedAt: new Date() })

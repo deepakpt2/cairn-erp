@@ -3,19 +3,41 @@
  *
  * One service. CO41 calls it once per order, each in its own transaction.
  * The production order is created by the existing order service. The BOM
- * quantity uses the shared component-quantity function. The production
- * version is chosen by the shared selector. This file does not insert a
- * production order itself and does not explode through MRP.
+ * quantity uses the shared component-quantity function. Conversion reads
+ * the order type's production version selection, then calls the shared
+ * selector. The saved order is derived again by the order service from that
+ * version, so the version and bill of material are stored with the snapshot.
+ * An independent component list is not given that version. The convertible
+ * list has no order type, so it does not read the setting and does not invent
+ * one. This file does not insert a production order itself and does not
+ * explode through MRP. A component requirement date is copied only from an
+ * open dependent requirement that matches the tenant, planned order, source
+ * material, BOM item, component, plant, unit, and quantity. The order start,
+ * order finish, bill of material date, and today are not used. That dependent
+ * requirement is closed only after the date is stored, in this transaction.
+ * A line that cannot be matched stays undated, and its dependent requirement
+ * stays open. A reservation is not created in its place.
  *
  * Full conversion is one-to-one. The planned order is not deleted and its
- * quantity is not reduced. A second conversion returns the existing order.
- * External procurement is refused. Partial quantity is refused.
+ * quantity is not reduced. A second conversion returns the existing order
+ * and does not reconcile again. External procurement is refused. Partial
+ * quantity is refused.
  *
- * Not carried, because the production order does not store them: operations,
+ * A created order is not the same as complete demand reconciliation. The
+ * result says COMPLETE only when every open dependent requirement was closed
+ * after its date was stored, PARTIAL when one stayed open, and NONE when none
+ * stood open. A failure throws inside the conversion transaction, so the
+ * order and the planning rows are unchanged. That result is ROLLED_BACK, not
+ * a partial reconciliation. An already-converted order is NOT_RERUN: reconciliation
+ * is not repeated and the prior result is not revalidated. A request that never
+ * reaches conversion is NOT_ATTEMPTED. A mismatch reason is reported only from
+ * the stored rows. A date is not invented to make a row match.
+ *
+ * The selected routing's operations are copied by the order service in this
+ * same transaction. A later routing edit does not rewrite them. Not carried:
  * a reservation, a goods movement, a journal, a confirmation, costing, and
  * settlement. Availability is not checked. Dates are copied, not rescheduled.
- * An order type is stored only when the caller names one. No scheduling
- * profile, material, or first standing type is used. Checking control is not read.
+ * An order type is required. It is not inferred. Checking control is not read.
  * Release happens only when the scheduling profile snapshotted by order
  * creation already says so.
  */
@@ -34,7 +56,19 @@ import { parseProductionOrderStatus, type ProductionOrderStatus } from './produc
 import { readMaterialSchedulingProfile, SchedulingProfileError } from '../inventory/scheduling-profile';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
-import { materialBom, materialBomItem } from './schema';
+import { materialBom, materialBomItem, productionOrderType } from './schema';
+import {
+  OrderTypeParameterError,
+  productionVersionForSelection,
+  readProductionVersionSelection,
+} from './order-type-parameters';
+import { OrderOperationSnapshotError, resolveOrderOperationSnapshot } from './order-operation-snapshot';
+import {
+  conversionOutcomeText,
+  pairedConversion,
+  type ConversionStatus,
+  type DemandReconciliation,
+} from './conversion-outcome';
 import { ProductionVersionError, selectProductionVersion, type ProductionVersionView } from './production-version';
 
 export const PLANNED_ORDER_CONVERT_CAPABILITY = 'PROD.PLANNEDORDER.CONVERT';
@@ -60,11 +94,14 @@ const REFUSED: Record<string, string> = {
 export class PlannedOrderConversionError extends Error {
   readonly code: string;
   readonly remedy: string;
-  constructor(code: string, message: string, remedy = '') {
+  /** A thrown error is never a created order. ROLLED_BACK refused a conversion. NOT_ATTEMPTED stopped before one. */
+  readonly reconciliation: 'ROLLED_BACK' | 'NOT_ATTEMPTED';
+  constructor(code: string, message: string, remedy = '', reconciliation: 'ROLLED_BACK' | 'NOT_ATTEMPTED' = 'ROLLED_BACK') {
     super(message);
     this.name = 'PlannedOrderConversionError';
     this.code = code;
     this.remedy = remedy;
+    this.reconciliation = reconciliation;
   }
 }
 
@@ -75,6 +112,18 @@ export interface ConversionComponentPreview {
   bomUnit: string;
   requiredQuantity: string;
   unit: string;
+  /** BOM item the line was copied from. Null only when a line was not derived. */
+  bomItem: string | null;
+  /** Material whose bill of material supplied the line. */
+  sourceMaterial: string | null;
+}
+
+export interface ConversionSuppliedComponent {
+  materialNumber: string;
+  plant?: string | null;
+  requiredQuantity: number;
+  bomItem?: string | null;
+  sourceMaterial?: string | null;
 }
 
 export interface ConversionPreview {
@@ -96,6 +145,8 @@ export interface ConversionPreview {
   bomAlternative: string | null;
   routingGroup: string | null;
   groupCounter: string | null;
+  /** Operations that will be copied. Zero when the routing could not be copied. */
+  operationCount: number;
   productionOrderNumber: string | null;
   productionOrderStatus: string | null;
   components: ConversionComponentPreview[];
@@ -121,8 +172,10 @@ export interface ConversionList {
   truncated: boolean;
 }
 
+export type { ConversionStatus, DemandReconciliation } from './conversion-outcome';
+
 export interface PlannedOrderConversionResult {
-  status: 'CONVERTED' | 'ALREADY_CONVERTED' | 'FAILED';
+  status: ConversionStatus;
   plannedOrderNumber: string;
   productionOrderNumber: string | null;
   productionOrderStatus: ProductionOrderStatus | null;
@@ -130,6 +183,7 @@ export interface PlannedOrderConversionResult {
   message: string;
   remedy: string | null;
   warnings: string[];
+  reconciliation: DemandReconciliation;
 }
 
 export interface ConversionLogEntry {
@@ -157,7 +211,8 @@ interface StandingOrder {
 }
 
 function fail(code: string, message: string, remedy = ''): never {
-  throw new PlannedOrderConversionError(code, message, remedy);
+  const beforeConversion = code === 'EMPTY' || code === 'TOO_MANY' || code === 'UNSUPPORTED' || code === 'UNSUPPORTED_FILTER';
+  throw new PlannedOrderConversionError(code, message, remedy, beforeConversion ? 'NOT_ATTEMPTED' : 'ROLLED_BACK');
 }
 
 function clean(value: string | null | undefined): string {
@@ -199,8 +254,22 @@ function orderNumberOf(value: string): string {
   return number;
 }
 
-function sameQuantity(left: string, right: string): boolean {
+function sameQuantity(left: string | number, right: string | number): boolean {
   return Number(left).toFixed(3) === Number(right).toFixed(3);
+}
+
+function textOf(value: unknown): string {
+  return value == null ? '' : String(value).trim();
+}
+
+/** A stored calendar date. An empty or impossible value is not a requirement date. */
+function calendarDate(value: unknown): string | null {
+  const text = textOf(value).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const [year, month, day] = text.split('-').map(Number);
+  const date = new Date(Date.UTC(year!, month! - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month! - 1 || date.getUTCDate() !== day) return null;
+  return text;
 }
 
 async function rows(tx: Tx, query: ReturnType<typeof sql>): Promise<Array<Record<string, unknown>>> {
@@ -250,7 +319,12 @@ async function linkedOrder(tx: Tx, client: string, orderNumber: string): Promise
   return { orderNumber: String(found[0].order_number), status: String(found[0].status) };
 }
 
-async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omit<ConversionPreview, 'productionOrderNumber' | 'productionOrderStatus'>> {
+async function assess(
+  tx: Tx,
+  client: string,
+  order: StandingOrder,
+  selection?: { orderType: string; productionVersion?: string | null },
+): Promise<Omit<ConversionPreview, 'productionOrderNumber' | 'productionOrderStatus'>> {
   const warnings = [
     'Component availability is not checked.',
     'Dates are copied. They are not rescheduled.',
@@ -261,6 +335,7 @@ async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omi
   let blocked: string | null = null;
   let selected: ProductionVersionView | null = null;
   let procurementType: string | null = null;
+  let operationCount = 0;
   const components: ConversionComponentPreview[] = [];
 
   const [plantView] = await tx.select({
@@ -296,22 +371,47 @@ async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omi
 
   if (!blocked) {
     try {
+      // Search has no order type. It keeps the existing automatic selector and does not guess a type.
+      let requested: string | undefined;
+      if (selection) {
+        const mode = await readProductionVersionSelection(tx, client, order.plant, selection.orderType);
+        requested = productionVersionForSelection(mode, selection.productionVersion, order.plant, selection.orderType);
+      }
       selected = await selectProductionVersion(client, {
         materialNumber: order.materialNumber,
         plant: order.plant,
         keyDate: order.finishDate,
         quantity: order.quantity,
         unit: order.unit,
+        productionVersion: requested,
         context: 'ORDER',
       }, tx);
     } catch (caught) {
-      if (caught instanceof ProductionVersionError) blocked = caught.message;
+      if (caught instanceof ProductionVersionError || caught instanceof OrderTypeParameterError) blocked = caught.message;
+      else throw caught;
+    }
+  }
+
+  if (selected && !blocked) {
+    try {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client,
+        plant: order.plant,
+        finishDate: order.finishDate,
+        taskListType: selected.taskListType,
+        routingGroup: selected.routingGroup,
+        groupCounter: selected.groupCounter,
+        productionVersion: selected.productionVersion,
+      });
+      operationCount = copied.operations.length;
+      warnings.push(...copied.warnings);
+    } catch (caught) {
+      if (caught instanceof OrderOperationSnapshotError) blocked = caught.message;
       else throw caught;
     }
   }
 
   if (selected) {
-    warnings.push(`Routing ${selected.taskListType} ${selected.routingGroup} ${selected.groupCounter} is named by production version ${selected.productionVersion}. The production order does not store operations, so none were copied.`);
     const [header] = await tx.select().from(materialBom).where(and(
       eq(materialBom.client, client),
       eq(materialBom.materialNumber, order.materialNumber),
@@ -376,6 +476,8 @@ async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omi
                 bomUnit: item.unit,
                 requiredQuantity: Number(base.baseQuantity).toFixed(3),
                 unit: base.baseUnit,
+                bomItem: item.itemNumber,
+                sourceMaterial: order.materialNumber,
               });
             } catch (caught) {
               blocked = caught instanceof UnitConversionError
@@ -407,6 +509,7 @@ async function assess(tx: Tx, client: string, order: StandingOrder): Promise<Omi
     bomAlternative: selected?.bomAlternative ?? null,
     routingGroup: selected?.routingGroup ?? null,
     groupCounter: selected?.groupCounter ?? null,
+    operationCount: blocked ? 0 : operationCount,
     components: blocked ? [] : components,
     warnings,
   };
@@ -444,7 +547,17 @@ export async function previewPlannedOrderConversion(client: string, orderNumber:
     const order = await loadOrder(tx, client, number, false);
     if (!order) return null;
     const link = await linkedOrder(tx, client, number);
-    return previewOf(await assess(tx, client, order), link);
+    const assessed = await assess(tx, client, order);
+    const standing = await rows(tx, sql`
+      select count(*)::int as open_count
+        from mrp_dependent_requirement
+       where client = ${client} and parent_order_number = ${number} and status = 'OPEN'
+    `);
+    const openCount = Number(standing[0]?.open_count ?? 0);
+    if (openCount > 0) {
+      assessed.warnings.push(`${openCount} open dependent requirement(s) stand. Conversion closes a row only when the source material, bill of material item, component, plant, unit, quantity, and a calendar date match one component. A row that does not match stays open.`);
+    }
+    return previewOf(assessed, link);
   });
 }
 
@@ -531,7 +644,233 @@ export async function listConvertiblePlannedOrders(client: string, input: Conver
   });
 }
 
-function outcomeOf(created: CreateProductionOrderResult, warnings: string[], status: 'CONVERTED' | 'ALREADY_CONVERTED', message: string): PlannedOrderConversionResult {
+function suppliedSnapshotMatches(
+  supplied: ConversionSuppliedComponent[],
+  derived: ConversionComponentPreview[],
+  plant: string,
+): boolean {
+  if (supplied.length !== derived.length) return false;
+  const used = new Set<number>();
+  for (const line of supplied) {
+    const materialNumber = line.materialNumber.trim();
+    const linePlant = (line.plant ?? plant).trim();
+    const index = derived.findIndex((row, position) => !used.has(position)
+      && row.materialNumber === materialNumber
+      && linePlant === plant
+      && sameQuantity(line.requiredQuantity, row.requiredQuantity)
+      && (line.bomItem == null || line.bomItem.trim() === '' || line.bomItem.trim() === row.bomItem)
+      && (line.sourceMaterial == null || line.sourceMaterial.trim() === '' || line.sourceMaterial.trim() === row.sourceMaterial));
+    if (index < 0) return false;
+    used.add(index);
+  }
+  return true;
+}
+
+function dependentKey(row: Record<string, unknown>): string {
+  return `${textOf(row.source_material)}/${textOf(row.item_number)}`;
+}
+
+/** Established differences only. An empty list means the open row is a safe match. */
+function mismatchOf(component: Record<string, unknown>, dependent: Record<string, unknown>): string[] {
+  const found: string[] = [];
+  if (!calendarDate(dependent.requirement_date)) found.push('no authoritative requirement date');
+  if (textOf(dependent.material_number) !== textOf(component.material_number)) {
+    found.push(`material ${textOf(dependent.material_number)} is not ${textOf(component.material_number)}`);
+  }
+  if (textOf(dependent.plant) !== textOf(component.plant)) {
+    found.push(`plant ${textOf(dependent.plant)} is not ${textOf(component.plant)}`);
+  }
+  if (textOf(dependent.unit) !== textOf(component.unit_of_measure)) {
+    found.push(`unit ${textOf(dependent.unit)} is not ${textOf(component.unit_of_measure)}`);
+  }
+  if (!sameQuantity(textOf(dependent.quantity), textOf(component.required_quantity))) {
+    found.push(`quantity ${textOf(dependent.quantity)} is not ${textOf(component.required_quantity)}`);
+  }
+  return found;
+}
+
+/**
+ * Copy a component requirement date from a matching dependent requirement, then
+ * close only that row. The order start, finish, bill of material date, and
+ * today are not read. A line that does not match is left undated and its
+ * dependent requirement stays open. A write that does not land rolls the
+ * conversion back, so a dependent requirement is never closed without its
+ * replacement. A reason is reported only when the stored rows establish it.
+ */
+async function replaceMatchedDependentDemand(
+  tx: Tx,
+  client: string,
+  plannedOrderNumber: string,
+  productionOrderNumber: string,
+  actor: string,
+): Promise<{ warnings: string[]; reconciliation: 'COMPLETE' | 'PARTIAL' | 'NONE' }> {
+  const components = await rows(tx, sql`
+    select item_number, material_number, plant, required_quantity::text as required_quantity,
+           unit_of_measure, bom_item, source_material
+      from production_order_component
+     where client = ${client} and order_number = ${productionOrderNumber}
+     for update
+  `);
+  const dependents = await rows(tx, sql`
+    select source_material, item_number, material_number, plant, quantity::text as quantity,
+           unit, requirement_date::text as requirement_date, status
+      from mrp_dependent_requirement
+     where client = ${client} and parent_order_number = ${plannedOrderNumber}
+     for update
+  `);
+  const open = dependents.filter((row) => textOf(row.status) === 'OPEN');
+  const closed = dependents.filter((row) => textOf(row.status) === 'CLOSED');
+  const warnings: string[] = [];
+  const explained = new Set<string>();
+  if (open.length === 0 && closed.length === 0) {
+    warnings.push('No open dependent requirement stood for this planned order. No component requirement date was invented.');
+    return { warnings, reconciliation: 'NONE' };
+  }
+  const claims = new Map<string, number>();
+  for (const component of components) {
+    const source = textOf(component.source_material);
+    const bomItem = textOf(component.bom_item);
+    if (!source || !bomItem) continue;
+    const key = `${source}/${bomItem}`;
+    claims.set(key, (claims.get(key) ?? 0) + 1);
+  }
+  const matched: Array<{ component: Record<string, unknown>; dependent: Record<string, unknown>; date: string }> = [];
+  const skipped: string[] = [];
+  for (const component of components) {
+    const label = `Item ${textOf(component.item_number)}`;
+    const source = textOf(component.source_material);
+    const bomItem = textOf(component.bom_item);
+    if (!source || !bomItem) {
+      skipped.push(`${label} has no bill-of-material identity. No requirement date was invented.`);
+      continue;
+    }
+    const key = `${source}/${bomItem}`;
+    if ((claims.get(key) ?? 0) !== 1) {
+      skipped.push(`${label} is not the only line for ${key}. No requirement date was copied.`);
+      explained.add(key);
+      continue;
+    }
+    const candidates = open.filter((row) => textOf(row.source_material) === source && textOf(row.item_number) === bomItem);
+    if (candidates.length > 1) {
+      skipped.push(`${label} has more than one open dependent requirement for ${key}. None was closed.`);
+      explained.add(key);
+      continue;
+    }
+    if (candidates.length === 0) {
+      const prior = closed.filter((row) => textOf(row.source_material) === source && textOf(row.item_number) === bomItem);
+      if (prior.length === 1) {
+        skipped.push(`Dependent requirement ${textOf(prior[0]!.item_number)} is already closed. It was not reopened, and ${label} was not dated from it.`);
+        explained.add(key);
+      } else {
+        skipped.push(`No dependent requirement stands for ${key}. ${label} was not dated. The order start, finish, bill of material date, and today were not used.`);
+      }
+      continue;
+    }
+    const dependent = candidates[0]!;
+    const diffs = mismatchOf(component, dependent);
+    if (diffs.length > 0) {
+      skipped.push(`${label} does not match dependent requirement ${textOf(dependent.item_number)}: ${diffs.join('; ')}. It stayed open.`);
+      explained.add(key);
+      continue;
+    }
+    const date = calendarDate(dependent.requirement_date);
+    if (!date) {
+      skipped.push(`${label} has no authoritative requirement date. It stayed open.`);
+      explained.add(key);
+      continue;
+    }
+    matched.push({ component, dependent, date });
+  }
+  for (const match of matched) {
+    const dated = await rows(tx, sql`
+      update production_order_component
+         set requirement_date = ${match.date}::date,
+             changed_by = ${actor},
+             changed_at = now()
+       where client = ${client}
+         and order_number = ${productionOrderNumber}
+         and item_number = ${Number(match.component.item_number)}
+         and requirement_date is null
+         and bom_item = ${String(match.component.bom_item)}
+         and source_material = ${String(match.component.source_material)}
+         and material_number = ${String(match.component.material_number)}
+         and plant = ${String(match.component.plant)}
+         and unit_of_measure = ${String(match.component.unit_of_measure)}
+         and required_quantity = ${String(match.component.required_quantity)}::numeric
+      returning item_number
+    `);
+    if (dated.length !== 1) {
+      fail(
+        'DEMAND',
+        `The requirement date for component item ${textOf(match.component.item_number)} was not stored. Nothing was converted.`,
+        'The dependent requirement was not closed.',
+      );
+    }
+    const closed = await rows(tx, sql`
+      update mrp_dependent_requirement
+         set status = 'CLOSED', version = version + 1, changed_by = ${actor}, changed_at = now()
+       where client = ${client}
+         and parent_order_number = ${plannedOrderNumber}
+         and source_material = ${String(match.dependent.source_material)}
+         and item_number = ${String(match.dependent.item_number)}
+         and material_number = ${String(match.dependent.material_number)}
+         and plant = ${String(match.dependent.plant)}
+         and unit = ${String(match.dependent.unit)}
+         and quantity = ${String(match.dependent.quantity)}::numeric
+         and requirement_date = ${match.date}::date
+         and status = 'OPEN'
+      returning item_number
+    `);
+    if (closed.length !== 1) {
+      fail(
+        'DEMAND',
+        `Dependent requirement ${textOf(match.dependent.item_number)} could not be closed after its replacement date was stored. Nothing was converted.`,
+        'No dependent requirement of another planned order was closed.',
+      );
+    }
+  }
+  if (matched.length > 0) {
+    warnings.push(`${matched.length} dependent requirement(s) were closed after the same requirement date and quantity were stored on the production order. They are not counted twice.`);
+  }
+  const matchedKeys = new Set(matched.map((match) => dependentKey(match.dependent)));
+  const untouched = open.filter((row) => !matchedKeys.has(dependentKey(row)));
+  for (const row of untouched) {
+    const key = dependentKey(row);
+    if (explained.has(key)) continue;
+    warnings.push(`Dependent requirement ${textOf(row.item_number)} has no production-order component for ${key}. It stayed open.`);
+  }
+  for (const row of closed) {
+    const key = dependentKey(row);
+    if (explained.has(key)) continue;
+    warnings.push(`Dependent requirement ${textOf(row.item_number)} for ${key} is already closed. It was not reopened.`);
+  }
+  if (untouched.length > 0) {
+    warnings.push(`${untouched.length} dependent requirement(s) stayed open. No replacement date was established for them. The order start, finish, bill of material date, and today were not used.`);
+  }
+  if (open.length === 0) {
+    warnings.push('No open dependent requirement stood for this planned order. No component requirement date was invented.');
+  }
+  if (skipped.length > 0) {
+    warnings.push(`These component lines were not dated: ${skipped.join(' ')}`);
+  }
+  const reconciliation: 'COMPLETE' | 'PARTIAL' | 'NONE' = open.length === 0
+    ? 'NONE'
+    : untouched.length === 0
+      ? 'COMPLETE'
+      : 'PARTIAL';
+  return { warnings, reconciliation };
+}
+
+function outcomeOf(
+  created: CreateProductionOrderResult,
+  warnings: string[],
+  status: 'CONVERTED',
+  message: string,
+  reconciliation: 'COMPLETE' | 'PARTIAL' | 'NONE',
+): PlannedOrderConversionResult {
+  if (!pairedConversion(status, reconciliation)) {
+    fail('OUTCOME', 'The conversion outcome is not a known pair. Nothing was reported as a successful reconciliation.');
+  }
   return {
     status,
     plannedOrderNumber: created.plannedOrderNumber ?? '',
@@ -541,6 +880,7 @@ function outcomeOf(created: CreateProductionOrderResult, warnings: string[], sta
     message,
     remedy: null,
     warnings,
+    reconciliation,
   };
 }
 
@@ -560,6 +900,17 @@ export async function convertPlannedOrder(input: {
    * and the first standing type are not used.
    */
   orderType: string;
+  /**
+   * Named production version. Required when this plant and order type use manual selection.
+   * Not a search filter. Automatic selection does not require it.
+   */
+  productionVersion?: string | null;
+  /**
+   * An independent component snapshot. It is not stored as the order snapshot.
+   * It is accepted only when it matches the selected version's bill of material.
+   * A mismatch fails and does not attach the version to the supplied lines.
+   */
+  components?: ConversionSuppliedComponent[] | null;
   named?: Record<string, string | null | undefined>;
 }): Promise<PlannedOrderConversionResult> {
   const named = plannedOrderConversionRefusal(input.named);
@@ -584,9 +935,13 @@ export async function convertPlannedOrder(input: {
         productionOrderNumber: link.orderNumber,
         productionOrderStatus: productionOrderStatusOf(link.status, link.orderNumber),
         code: 'ALREADY_CONVERTED',
-        message: `Planned order ${orderNumber} was already converted to production order ${link.orderNumber}. No second order was created.`,
+        message: `Planned order ${orderNumber} was already converted to production order ${link.orderNumber}. No second order was created. ${conversionOutcomeText('ALREADY_CONVERTED', 'NOT_RERUN')}`,
         remedy: 'Open the production order. The planned order was not deleted.',
-        warnings: ['Partial conversion was not performed.'],
+        warnings: [
+          'The quantity was not reduced. Partial conversion was not performed.',
+          'Dependent requirements were not reconciled again. The prior reconciliation was not revalidated. The existing production order was returned.',
+        ],
+        reconciliation: 'NOT_RERUN',
       };
     }
     if (input.expectedVersion != null && order.version !== input.expectedVersion) {
@@ -601,9 +956,44 @@ export async function convertPlannedOrder(input: {
     if ((requestedStart && requestedStart !== order.startDate) || (requestedFinish && requestedFinish !== order.finishDate)) {
       fail('DATE', 'The dates were not changed during conversion.', 'Change the dates on MD12, then convert. Conversion copies the stored dates.');
     }
-    const assessed = await assess(tx, input.client, order);
+    const [type] = await tx.select().from(productionOrderType).where(and(
+      eq(productionOrderType.client, input.client),
+      eq(productionOrderType.orderType, orderType),
+    ));
+    if (!type) {
+      fail(
+        'ORDER_TYPE',
+        `Order type ${orderType} does not stand in this tenant. Nothing was converted.`,
+        'Define the production order type first. An order-type parameter is not proof that the type stands.',
+      );
+    }
+    if (type.orderCategory !== '10') {
+      fail(
+        'ORDER_TYPE',
+        `Order type ${orderType} is not a production order type. Nothing was converted.`,
+        'Use a category 10 type. Process orders and networks are not assigned here.',
+      );
+    }
+    const assessed = await assess(tx, input.client, order, {
+      orderType,
+      productionVersion: input.productionVersion,
+    });
     if (!assessed.eligible) {
       fail('INELIGIBLE', assessed.blockedReason ?? 'The planned order cannot be converted.', 'Correct the master data, then convert again. Nothing was saved.');
+    }
+    if (!assessed.productionVersion || !assessed.bomUsage || !assessed.bomAlternative) {
+      fail(
+        'VERSION',
+        'Conversion did not select a production version. Nothing was converted.',
+        'The first version was not chosen. Correct the order type parameters or name a version.',
+      );
+    }
+    if (input.components != null && !suppliedSnapshotMatches(input.components, assessed.components, order.plant)) {
+      fail(
+        'SNAPSHOT',
+        `The supplied component snapshot does not match production version ${assessed.productionVersion}. Nothing was converted.`,
+        'Remove the supplied snapshot, or supply the lines from that version. The version was not attached to the supplied lines.',
+      );
     }
     let created: CreateProductionOrderResult;
     try {
@@ -617,11 +1007,7 @@ export async function convertPlannedOrder(input: {
         scheduledStart: order.startDate,
         scheduledFinish: order.finishDate,
         orderType,
-        components: assessed.components.map((component) => ({
-          materialNumber: component.materialNumber,
-          plant: order.plant,
-          requiredQuantity: Number(component.requiredQuantity),
-        })),
+        productionVersion: assessed.productionVersion,
       }, { tx, plannedOrderNumber: order.orderNumber });
     } catch (caught) {
       if (caught instanceof ProductionOrderError) fail('ORDER', caught.message, caught.remedy);
@@ -643,13 +1029,59 @@ export async function convertPlannedOrder(input: {
       after: { productionOrderNumber: created.orderNumber },
       fieldLabels: { productionOrderNumber: 'Production order' },
     });
-    return outcomeOf(
-      created,
-      assessed.warnings,
-      'CONVERTED',
-      `Planned order ${order.orderNumber} was converted to production order ${created.orderNumber}. The planned order was not deleted.`,
+    const demand = await replaceMatchedDependentDemand(
+      tx,
+      input.client,
+      order.orderNumber,
+      created.orderNumber,
+      actor,
     );
+    const converted = `Planned order ${order.orderNumber} was converted to production order ${created.orderNumber}. The planned order was not deleted.`;
+    const outcome = conversionOutcomeText('CONVERTED', demand.reconciliation);
+    const message = demand.reconciliation === 'PARTIAL'
+      ? `${converted} Conversion succeeded. ${outcome}`
+      : demand.reconciliation === 'NONE'
+        ? `${converted} No open dependent requirement was reconciled. ${outcome}`
+        : `${converted} ${outcome}`;
+    return outcomeOf(created, [...assessed.warnings, ...demand.warnings], 'CONVERTED', message, demand.reconciliation);
   });
+}
+
+export function notAttemptedConversion(input: {
+  message: string;
+  remedy?: string;
+  plannedOrderNumber?: string;
+}): PlannedOrderConversionResult {
+  return {
+    status: 'NOT_ATTEMPTED',
+    plannedOrderNumber: input.plannedOrderNumber ?? '',
+    productionOrderNumber: null,
+    productionOrderStatus: null,
+    code: 'NOT_ATTEMPTED',
+    message: input.message,
+    remedy: input.remedy ?? 'Nothing was converted.',
+    warnings: [conversionOutcomeText('NOT_ATTEMPTED', 'NOT_ATTEMPTED')],
+    reconciliation: 'NOT_ATTEMPTED',
+  };
+}
+
+export function rolledBackConversion(input: {
+  plannedOrderNumber: string;
+  code: string;
+  message: string;
+  remedy?: string;
+}): PlannedOrderConversionResult {
+  return {
+    status: 'FAILED',
+    plannedOrderNumber: input.plannedOrderNumber,
+    productionOrderNumber: null,
+    productionOrderStatus: null,
+    code: input.code,
+    message: input.message,
+    remedy: input.remedy || null,
+    warnings: [`${conversionOutcomeText('FAILED', 'ROLLED_BACK')} Dependent requirements were not closed.`],
+    reconciliation: 'ROLLED_BACK',
+  };
 }
 
 export async function convertPlannedOrders(input: {
@@ -659,6 +1091,10 @@ export async function convertPlannedOrders(input: {
   correlationId: string;
   /** One explicit type for every selected order. Required. Not inferred. */
   orderType: string;
+  /** One named version for every selected order. Required when selection is manual. */
+  productionVersion?: string | null;
+  /** One supplied snapshot, checked against each selected order. It is not stored unless it matches. */
+  components?: ConversionSuppliedComponent[] | null;
   named?: Record<string, string | null | undefined>;
 }): Promise<{ correlationId: string; results: PlannedOrderConversionResult[] }> {
   const named = plannedOrderConversionRefusal(input.named);
@@ -677,6 +1113,8 @@ export async function convertPlannedOrders(input: {
         changedBy: input.changedBy,
         orderNumber,
         orderType,
+        productionVersion: input.productionVersion,
+        components: input.components,
         correlationId: input.correlationId,
         transactionCode: PLANNED_ORDER_CONVERT_COLLECTIVE_ALIAS,
       }));
@@ -684,16 +1122,12 @@ export async function convertPlannedOrders(input: {
       const error = caught instanceof PlannedOrderConversionError
         ? caught
         : new PlannedOrderConversionError('FAILED', caught instanceof Error ? caught.message : 'The order could not be converted.');
-      results.push({
-        status: 'FAILED',
+      results.push(rolledBackConversion({
         plannedOrderNumber: orderNumber,
-        productionOrderNumber: null,
-        productionOrderStatus: null,
         code: error.code,
         message: error.message,
-        remedy: error.remedy || null,
-        warnings: [],
-      });
+        remedy: error.remedy,
+      }));
     }
   }
   return { correlationId: input.correlationId, results };

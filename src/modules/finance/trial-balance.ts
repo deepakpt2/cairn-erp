@@ -2,8 +2,11 @@
  * Trial balance / F.01 financial statement (SCR-106 /
  * FIN.RPT.TRIALBALANCE).
  *
- * Read-only: balances derive from the posted journal in one
- * snapshot — opening from every earlier year, turnover from the
+ * Read-only: balances derive from the ledger journal in one
+ * snapshot — a posted document, including one later marked
+ * reversed, because its reversal is a separate document and the
+ * pair must net. PARKED is not in the ledger. Opening comes from
+ * every earlier year, turnover from the
  * selected period range, balance at cutoff as opening plus
  * turnover through the cutoff, never double-counted. The
  * financial statement version (hierarchy, account ranges,
@@ -84,6 +87,7 @@ export class TrialBalanceError extends Error {
 
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
+import { ledgerJournalStatus } from './ledger-journal';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
 import { getCompanyCode } from '@/platform/periods';
 
@@ -177,7 +181,7 @@ export async function calculateTrialBalance(input: {
       from journal_entry_line l
       join journal_entry e
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
-      where l.client = ${client} and e.company_code = ${s.companyCode} and e.status = 'POSTED'
+      where l.client = ${client} and e.company_code = ${s.companyCode} and ${ledgerJournalStatus('e')}
       group by l.gl_account
       order by l.gl_account
     `);

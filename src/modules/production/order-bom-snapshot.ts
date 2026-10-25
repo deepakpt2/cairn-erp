@@ -1,10 +1,16 @@
 /**
  * Component snapshot for a production order created from a production version.
  *
- * CO01 calls this. CO40 keeps its own copy of the same rules and is not edited
- * here. Both call selectProductionVersion with context ORDER and scale quantities
- * with componentRequirementQuantity. This file does not walk a plant explosion,
- * does not explode through a phantom, and does not write an order.
+ * CO01 calls this. Conversion saves through it as well, so the stored version
+ * and bill of material are the ones this resolver selected. The convertible
+ * list has no order type, so its preview keeps a separate read and does not
+ * write. Both selection paths call selectProductionVersion with context ORDER
+ * after reading production-version selection when an order type is known.
+ * Blank is not a selection method. This file does not walk a plant explosion,
+ * does not explode through a phantom, and does not write an order. It also
+ * resolves the selected routing's operations. The order service writes that
+ * copy in the same transaction. A routing with no operation in effect fails
+ * the snapshot, so no order is created.
  *
  * A phantom, bulk item, co-product, special procurement, different issuing plant,
  * or follow-up material blocks the snapshot. The item is not dropped and not
@@ -18,6 +24,12 @@ import { material, materialPlant } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
 import { materialBom, materialBomItem } from './schema';
+import {
+  OrderTypeParameterError,
+  productionVersionForSelection,
+  readProductionVersionSelection,
+} from './order-type-parameters';
+import { OrderOperationSnapshotError, resolveOrderOperationSnapshot, type OrderOperationSnapshot } from './order-operation-snapshot';
 import { ProductionVersionError, selectProductionVersion } from './production-version';
 
 export class OrderBomSnapshotError extends Error {
@@ -52,6 +64,8 @@ export interface OrderBomSnapshot {
   bomAlternative: string;
   routingGroup: string;
   groupCounter: string;
+  /** Copied with the selected routing. Never empty: a routing with no operation in effect fails the snapshot. */
+  operations: OrderOperationSnapshot[];
   components: OrderBomComponentSnapshot[];
   warnings: string[];
 }
@@ -62,6 +76,7 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
   plant: string;
   orderQuantity: number;
   scheduledFinish: string;
+  orderType: string;
   productionVersion?: string | null;
 }): Promise<OrderBomSnapshot> {
   const materialNumber = input.materialNumber.trim();
@@ -91,6 +106,25 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
     fail('UNIT', `Material ${materialNumber} carries no base unit. No order was created.`, 'Complete the material master, then create the order.');
   }
 
+  const orderType = input.orderType.trim();
+  if (!orderType) {
+    fail(
+      'ORDER_TYPE',
+      'A production order type is required. No order was created.',
+      'Enter a standing category 10 production order type. Parameters for another type were not used.',
+    );
+  }
+  let requested: string | undefined;
+  try {
+    const selection = await readProductionVersionSelection(tx, input.client, plant, orderType);
+    requested = productionVersionForSelection(selection, input.productionVersion, plant, orderType);
+  } catch (caught) {
+    if (caught instanceof OrderTypeParameterError) {
+      fail('VERSION_SELECTION', `${caught.message} No order was created.`, caught.remedy);
+    }
+    throw caught;
+  }
+
   let selected;
   try {
     selected = await selectProductionVersion(input.client, {
@@ -99,7 +133,7 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
       keyDate: finish,
       quantity,
       unit: produced.baseUnit,
-      productionVersion: input.productionVersion,
+      productionVersion: requested,
       context: 'ORDER',
     }, tx);
   } catch (caught) {
@@ -110,7 +144,6 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
   }
 
   const warnings = [
-    `Routing ${selected.taskListType} ${selected.routingGroup} ${selected.groupCounter} is named by production version ${selected.productionVersion}. The production order does not store operations, so none were copied.`,
     'A later bill of material or production version change does not rewrite this snapshot.',
   ];
 
@@ -199,12 +232,31 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
     }
   }
 
+  let operations: OrderOperationSnapshot[] = [];
+  try {
+    const copied = await resolveOrderOperationSnapshot(tx, {
+      client: input.client,
+      plant,
+      finishDate: finish,
+      taskListType: selected.taskListType,
+      routingGroup: selected.routingGroup,
+      groupCounter: selected.groupCounter,
+      productionVersion: selected.productionVersion,
+    });
+    operations = copied.operations;
+    warnings.push(...copied.warnings);
+  } catch (caught) {
+    if (caught instanceof OrderOperationSnapshotError) fail(caught.code, caught.message, caught.remedy);
+    throw caught;
+  }
+
   return {
     productionVersion: selected.productionVersion,
     bomUsage: selected.bomUsage,
     bomAlternative: selected.bomAlternative,
     routingGroup: selected.routingGroup,
     groupCounter: selected.groupCounter,
+    operations,
     components,
     warnings,
   };

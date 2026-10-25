@@ -88,7 +88,7 @@ export default async function OrderConfirmationPage({
           No goods movement is posted.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co15-gaps>
-          A confirmation profile, automatic final confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO11N confirms one operation. Cancellation is CO13. CO14 is not implemented.
+          Eligible operations are the ones stored on the order. This screen still confirms the order, not one operation. A confirmation profile, automatic final confirmation, backflush, automatic goods receipt, and personnel are not this screen. CO11N confirms one operation. Cancellation is CO13. CO14 is not implemented.
         </p>
       </header>
       {openError && <p role="status" data-co15-refused className="text-sm text-red-700">{openError}</p>}

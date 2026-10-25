@@ -29,7 +29,7 @@ export const LOCK_OBJECT = 'AVAILABILITY_CHECK';
 export const AVAILABILITY_CHECK_GAPS = [
   'Replenishment lead time is not stored. Planned delivery days and in-house production days are MRP master data. Goods-receipt processing time is not stored, and no rule selects which time applies. Check-without-RLT is not stored, because either value would pretend the lead time is defined.',
   'Purchase requisitions, purchase orders, planned orders, and dependent requirements keep their own unit. Stock, reservations, and production orders keep the base unit. This configuration does not convert one into the other.',
-  'A production-order component has no requirement date and is not a reservation. Conversion does not close the planned-order dependent requirement. Dependent requirements and production-order components are not reconciled here, so neither is invented as the other.',
+  'A production-order component is not a reservation. A requirement date is stored only when conversion copied it from a matching dependent requirement. This configuration does not reconcile those rows, does not invent one as the other, and does not calculate ATP.',
   'Storage-location inspection is not stored. Planned orders and dependent requirements have no storage location. A location check would omit them or invent a location.',
   'Sales orders, deliveries, shipping notifications, stock in transfer, stock-transport releases, subcontracting, independent requirements, and a special-stock indicator are not stored. Their scope flags are refused.',
   'Unrestricted-use stock has no inclusion switch in this scope. It is not treated as available.',

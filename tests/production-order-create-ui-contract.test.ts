@@ -46,7 +46,7 @@ describe('SCR-138 production order create UI contract', () => {
     expect(shell).not.toContain('name="bomAlternative"');
     expect(shell).not.toContain('name="bomUsage"');
     expect(service).toContain('resolveOrderBomSnapshot');
-    expect(service).toContain('A caller-supplied component list is the conversion snapshot');
+    expect(service).toContain('A caller-supplied component list is not re-read from the BOM');
     expect(service).not.toContain('does not read a material BOM');
     expect(snapshot).toContain('selectProductionVersion');
     expect(snapshot).toContain('componentRequirementQuantity');

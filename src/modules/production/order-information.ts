@@ -6,12 +6,16 @@
  * component rows and one header row. Header confirmed yield is the sum of
  * header confirmations only. Operation confirmations are not added to it.
  *
- * Operations, sequences, capacities, automatic goods movements, and purchase
- * documents are not stored for this list. They are refused, not shown as
- * empty data.
+ * Operations are listed from the order snapshot. An order with no snapshot
+ * is omitted from that list; operations are not invented for it. Sequences
+ * other than the copied standard sequence, capacities, automatic goods
+ * movements, and purchase documents are not stored. They are refused, not
+ * shown as empty data.
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+
+import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from '../inventory/production-document-quantity';
 
 import { hasCapability } from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
@@ -26,14 +30,14 @@ export const ORDER_INFORMATION_MAX_LIMIT = 100;
 const REFUSED: Record<string, string> = {
   orderType: 'An order type is stored on the production order. It is not a search key of this list.',
   productionSupervisor: 'A production supervisor is not stored.',
-  productionVersion: 'A production version is not stored on the order. It was not used as a filter.',
+
   deletionIndicator: 'A deletion flag is not stored. Flagged records were not included, because none are stored.',
   archived: 'Archived records are not retrieved.',
   relativeDate: 'A relative date is not configured. Enter a from date, a to date, or both.',
-  workCenter: 'Operations are not stored on the order. A work center does not select orders.',
-  operation: 'Operations are not stored on the order. An operation is not a filter of this list.',
+  workCenter: 'Operations are not stored on the order as a work-center search. A work center does not select orders.',
+  operation: 'Operations are not stored on the order as a filter of this list. Open the operations list and read the stored operation number.',
   operationStatus: 'An operation status is not stored.',
-  sequence: 'Sequences are not stored.',
+  sequence: 'Only standard sequence 000000 is stored. It is not a filter of this list. Execution order is a column, not a search key.',
   capacity: 'Capacity is not stored. No capacity row was invented.',
   cost: 'Cost is not carried. It is not a column of this list.',
   price: 'A price is not a column of this list.',
@@ -86,6 +90,7 @@ export interface OrderOverview {
   orderNumber: string;
   header: OrderInformationRow;
   components: OrderInformationRow[];
+  operations: OrderInformationRow[];
   confirmations: OrderInformationRow[];
   movements: OrderInformationRow[];
   dependents: OrderInformationRow[];
@@ -121,11 +126,11 @@ export interface OrderInformationLayout {
 
 const NOTES = [
   'This list writes nothing. It does not change an order, a confirmation, or a material document.',
-  'Header confirmed yield is the sum of header confirmations. An operation confirmation is not added to it, because each operation is not a share of one yield.',
-  'Delivered quantity is the posted material-document quantity of the produced material, net of a reversal direction, and only while the document is posted. It is not the confirmed yield.',
-  'Issued quantity uses the same posted sum as order display. Remaining is required minus issued, and it is not shown below zero.',
+  'Header confirmed yield is the sum of active header confirmations. An operation confirmation and a header confirmation effect are not added to it, because each operation is not a share of one yield. Summing operation rows does not produce the confirmed production quantity.',
+  'Delivered quantity is the posted receipt of the produced material. A component issue is not a receipt. A reversed line is not included. It is not the confirmed yield.',
+  'Issued quantity uses the same posted sum as order display. A reversed issue is not included. Remaining is required minus issued, and it is not shown below zero.',
   'A component filter on the header list selects orders that have at least one matching component. It does not mean every component matched.',
-  'Operations, sequences, and a production version are not stored on the order. Those lists are not available.',
+  'The operations list reads the snapshot stored on the order. An order with no snapshot is omitted. An unconfirmed stored operation is not the same as a missing snapshot. Sequences other than the copied standard sequence are not stored. The stored production version can be shown and used as a filter.',
   'A cancelled confirmation remains listed. Header confirmed yield excludes it. This list does not cancel.',
   'Cost is not carried. Archived records are not included. A plant authorization object is not stored. The tenant is the boundary.',
 ];
@@ -146,6 +151,8 @@ const HEADER_FIELDS: OrderInformationField[] = [
   { id: 'deliveredQuantity', label: 'Delivered quantity' },
   { id: 'confirmationCount', label: 'Confirmation records' },
   { id: 'plannedOrderNumber', label: 'Planned order' },
+  { id: 'productionVersion', label: 'Production version' },
+  { id: 'orderType', label: 'Order type' },
 ];
 
 const COMPONENT_FIELDS: OrderInformationField[] = [
@@ -160,6 +167,23 @@ const COMPONENT_FIELDS: OrderInformationField[] = [
   { id: 'remainingQuantity', label: 'Remaining' },
   { id: 'unit', label: 'Unit' },
   { id: 'orderStatus', label: 'Order status' },
+];
+
+const OPERATION_FIELDS: OrderInformationField[] = [
+  { id: 'orderNumber', label: 'Order' },
+  { id: 'operationNumber', label: 'Operation' },
+  { id: 'sequence', label: 'Sequence' },
+  { id: 'executionOrder', label: 'Execution order' },
+  { id: 'shortText', label: 'Description' },
+  { id: 'workCenter', label: 'Work center' },
+  { id: 'controlKey', label: 'Control key' },
+  { id: 'routingGroup', label: 'Routing group' },
+  { id: 'groupCounter', label: 'Group counter' },
+  { id: 'productionVersion', label: 'Production version' },
+  { id: 'confirmedYield', label: 'Operation confirmed yield' },
+  { id: 'confirmedScrap', label: 'Confirmed scrap' },
+  { id: 'confirmedRework', label: 'Confirmed rework' },
+  { id: 'progress', label: 'Progress' },
 ];
 
 const CONFIRMATION_FIELDS: OrderInformationField[] = [
@@ -223,7 +247,6 @@ const DEPENDENT_FIELDS: OrderInformationField[] = [
 
 const UNAVAILABLE: OrderInformationListType[] = [
   { id: 'ITEMS', label: 'Items', available: false, objects: ['PRODUCTION_ORDER'], reason: 'An order item is not stored. The produced material is the header.' },
-  { id: 'OPERATIONS', label: 'Operations', available: false, objects: ['PRODUCTION_ORDER'], reason: 'Operations are not stored on the order. A confirmation names a routing operation. It is not copied here.' },
   { id: 'AUTOMATIC_GOODS_MOVEMENTS', label: 'Automatic goods movements', available: false, objects: ['PRODUCTION_ORDER'], reason: 'Automatic goods movements are not configured.' },
   { id: 'GOODS_MOVEMENT_ERRORS', label: 'Goods movements with errors', available: false, objects: ['PRODUCTION_ORDER'], reason: 'A goods-movement error queue is not stored.' },
   { id: 'CAPACITIES', label: 'Capacities', available: false, objects: ['PRODUCTION_ORDER'], reason: 'Capacity is not stored.' },
@@ -243,6 +266,7 @@ export function orderInformationLists(): OrderInformationListType[] {
     { id: 'COMPONENTS', label: 'Components', available: true, objects: ['PRODUCTION_ORDER', 'PLANNED_ORDER'], reason: null },
     { id: 'CONFIRMATIONS', label: 'Confirmations', available: true, objects: ['PRODUCTION_ORDER'], reason: null },
     { id: 'GOODS_MOVEMENTS', label: 'Documented goods movements', available: true, objects: ['PRODUCTION_ORDER'], reason: null },
+    { id: 'OPERATIONS', label: 'Operations', available: true, objects: ['PRODUCTION_ORDER'], reason: null },
     ...UNAVAILABLE,
   ];
 }
@@ -253,6 +277,7 @@ export function orderInformationFields(object: OrderObject, listType: string): O
   if (object === 'PLANNED_ORDER' && listType === 'OVERVIEW') return PLANNED_FIELDS;
   if (listType === 'HEADERS' || listType === 'OVERVIEW') return HEADER_FIELDS;
   if (listType === 'COMPONENTS') return COMPONENT_FIELDS;
+  if (listType === 'OPERATIONS') return OPERATION_FIELDS;
   if (listType === 'CONFIRMATIONS') return CONFIRMATION_FIELDS;
   if (listType === 'GOODS_MOVEMENTS') return MOVEMENT_FIELDS;
   return [];
@@ -316,6 +341,7 @@ interface ParsedQuery {
   componentMaterial: string;
   storageLocation: string;
   batch: string;
+  productionVersion: string;
   movementType: string;
   confirmationType: string;
   dateBasis: string;
@@ -343,6 +369,7 @@ function parseQuery(input: {
   componentMaterial?: string | null;
   storageLocation?: string | null;
   batch?: string | null;
+  productionVersion?: string | null;
   movementType?: string | null;
   confirmationType?: string | null;
   dateBasis?: string | null;
@@ -381,6 +408,11 @@ function parseQuery(input: {
   const componentMaterial = clean(input.componentMaterial).toUpperCase();
   const storageLocation = clean(input.storageLocation).toUpperCase();
   const batch = clean(input.batch).toUpperCase();
+  const productionVersion = clean(input.productionVersion).toUpperCase();
+  if (productionVersion.length > 4) fail('The production version is too long.');
+  if (productionVersion && object === 'PLANNED_ORDER') {
+    fail('A production version is not stored on a planned order. It was not used as a filter.', 'List production orders to filter by the stored version.');
+  }
   const movementType = clean(input.movementType).toUpperCase();
   const confirmationType = clean(input.confirmationType).toUpperCase();
   const dateBasis = clean(input.dateBasis).toUpperCase();
@@ -466,6 +498,7 @@ function parseQuery(input: {
     componentMaterial,
     storageLocation,
     batch,
+    productionVersion,
     movementType,
     confirmationType,
     dateBasis,
@@ -537,7 +570,7 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
     select o.order_number, o.material_number, coalesce(m.description, '') as material_description, o.plant,
            (count(*) over ())::int as total_count,
            o.order_quantity::text as order_quantity, o.unit_of_measure, o.scheduled_start, o.scheduled_finish,
-           o.status, o.batch_number, mp.mrp_controller, o.planned_order_number,
+           o.status, o.order_type, o.production_version, o.batch_number, mp.mrp_controller, o.planned_order_number,
            coalesce(confirmed.yield, 0)::text as header_yield,
            coalesce(confirmed.records, 0)::text as confirmation_count,
            coalesce(delivered.received, 0)::text as delivered
@@ -558,13 +591,15 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
          where c.client = o.client and c.order_number = o.order_number
       ) confirmed on true
       left join lateral (
-        select coalesce(sum(case when mt.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end), 0) as received
+        select coalesce(sum(l.base_quantity), 0) as received
           from material_document_line l
           join material_document d
-            on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-          join movement_type mt on mt.client = l.client and mt.movement_type = l.movement_type
+            on d.client = l.client and d.material_document_number = l.material_document_number
+           and ${OPEN_PRODUCTION_DOCUMENT}
          where l.client = o.client and l.production_order_number = o.order_number
            and l.material_number = o.material_number
+           and l.production_order_item is null
+           and ${lineNotReversed('l')}
       ) delivered on true
      where o.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
@@ -572,6 +607,7 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
        and (${description} = '' or m.description ilike ${description})
        and (${query.mrpController} = '' or mp.mrp_controller = ${query.mrpController})
        and (${query.batch} = '' or o.batch_number = ${query.batch})
+       and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
        and (${anyStatus} = 'Y' or o.status in (${sql.join(query.statuses.length ? query.statuses.map((status) => sql`${status}`) : [sql`''`], sql`, `)}))
        and ${inList(sql`o.order_number`, query.orders)}
        and ${inList(sql`o.planned_order_number`, query.plannedOrders)}
@@ -610,6 +646,8 @@ async function productionHeaders(tx: Tx, client: string, query: ParsedQuery): Pr
     deliveredQuantity: String(row.delivered),
     confirmationCount: String(row.confirmation_count),
     plannedOrderNumber: text(row.planned_order_number),
+    productionVersion: text(row.production_version),
+    orderType: text(row.order_type),
   }));
   return { rows: mapped, total: found[0] ? Number(found[0].total_count) : 0 };
 }
@@ -634,18 +672,21 @@ async function productionComponents(tx: Tx, client: string, query: ParsedQuery):
       join production_order o on o.client = c.client and o.order_number = c.order_number
       left join material m on m.client = c.client and m.material_number = c.material_number
       left join lateral (
-        select sum(case when mt.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as issued
+        select coalesce(sum(l.base_quantity), 0) as issued
           from material_document_line l
           join material_document d
-            on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-          join movement_type mt on mt.client = l.client and mt.movement_type = l.movement_type
+            on d.client = l.client and d.material_document_number = l.material_document_number
+           and ${OPEN_PRODUCTION_DOCUMENT}
          where l.client = c.client and l.production_order_number = c.order_number
            and l.production_order_item = c.item_number
+           and l.material_number = c.material_number
+           and ${lineNotReversed('l')}
       ) issued on true
      where c.client = ${client}
        and (${query.plant} = '' or c.plant = ${query.plant})
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.componentMaterial} = '' or c.material_number = ${query.componentMaterial})
+       and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
        and (${query.storageLocation} = '' or c.storage_location = ${query.storageLocation})
        and (${anyStatus} = 'Y' or o.status in (${sql.join(query.statuses.length ? query.statuses.map((status) => sql`${status}`) : [sql`''`], sql`, `)}))
        and ${inList(sql`c.order_number`, query.orders)}
@@ -682,14 +723,17 @@ async function confirmations(tx: Tx, client: string, query: ParsedQuery): Promis
       from production_confirmation c
       join production_order o on o.client = c.client and o.order_number = c.order_number
       left join lateral (
-        select string_agg(operation_number, ', ' order by operation_number) as operations
+        select string_agg(e.operation_number, ', ' order by op.execution_order, e.operation_number) as operations
           from production_confirmation_operation e
+          left join production_order_operation op
+            on op.client = e.client and op.order_number = e.order_number and op.operation_number = e.operation_number
          where e.client = c.client and e.confirmation_number = c.confirmation_number
       ) effects on true
      where c.client = ${client}
        and (${query.plant} = '' or o.plant = ${query.plant})
        and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
        and (${query.confirmationType} = '' or c.confirmation_type = ${query.confirmationType})
+       and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
        and (${query.dateFrom} = '' or c.posting_date >= nullif(${query.dateFrom}, '')::date)
        and (${query.dateTo} = '' or c.posting_date <= nullif(${query.dateTo}, '')::date)
        and ${inList(sql`c.order_number`, query.orders)}
@@ -709,6 +753,91 @@ async function confirmations(tx: Tx, client: string, query: ParsedQuery): Promis
     unit: String(row.unit),
     postingDate: String(row.posting_date),
     productionVersion: String(row.production_version),
+  }));
+  return { rows: mapped, total: found[0] ? Number(found[0].total_count) : 0 };
+}
+
+async function productionOperations(tx: Tx, client: string, query: ParsedQuery): Promise<{ rows: OrderInformationRow[]; total: number }> {
+  const anyStatus = query.statuses.length === 0 ? 'Y' : '';
+  const found = await rows(tx, sql`
+    select op.order_number, op.operation_number, op.sequence, op.execution_order, op.short_text, op.work_center, op.control_key,
+           (count(*) over ())::int as total_count,
+           op.routing_group, op.group_counter, op.production_version,
+           coalesce(progress.yield, 0)::text as yield,
+           coalesce(progress.scrap, 0)::text as scrap,
+           coalesce(progress.rework, 0)::text as rework,
+           case
+             when coalesce(progress.final, false) then 'FINAL'
+             when coalesce(progress.yield, 0) + coalesce(progress.scrap, 0) + coalesce(progress.rework, 0) > 0 then 'PARTIAL'
+             else 'UNCONFIRMED'
+           end as progress
+      from production_order_operation op
+      join production_order o on o.client = op.client and o.order_number = op.order_number
+     left join lateral (
+        select coalesce(sum(yield_quantity), 0) as yield,
+               coalesce(sum(scrap_quantity), 0) as scrap,
+               coalesce(sum(rework_quantity), 0) as rework,
+               bool_or(confirmation_type = 'FINAL') as final
+          from (
+            select c.yield_quantity, c.scrap_quantity, c.rework_quantity, c.confirmation_type
+              from production_confirmation c
+             where c.client = op.client and c.order_number = op.order_number
+               and c.confirmation_level = 'OPERATION' and c.operation_number = op.operation_number
+               and not exists (
+                 select 1 from production_confirmation_cancellation x
+                  where x.client = c.client and x.confirmation_number = c.confirmation_number
+               )
+            union all
+            select e.yield_quantity, e.scrap_quantity, e.rework_quantity, e.confirmation_type
+              from production_confirmation_operation e
+             where e.client = op.client and e.order_number = op.order_number
+               and e.operation_number = op.operation_number
+               and not exists (
+                 select 1 from production_confirmation_cancellation x
+                  where x.client = e.client and x.confirmation_number = e.confirmation_number
+               )
+          ) posted
+      ) progress on true
+     where op.client = ${client}
+       and (${query.plant} = '' or o.plant = ${query.plant})
+       and (${query.materialNumber} = '' or o.material_number = ${query.materialNumber})
+       and (${query.productionVersion} = '' or op.production_version = ${query.productionVersion})
+       and (${anyStatus} = 'Y' or o.status in (${sql.join(query.statuses.length ? query.statuses.map((status) => sql`${status}`) : [sql`''`], sql`, `)}))
+       and ${inList(sql`op.order_number`, query.orders)}
+       and (${query.componentMaterial} = '' or exists (
+         select 1 from production_order_component c
+          where c.client = o.client and c.order_number = o.order_number and c.material_number = ${query.componentMaterial}
+       ))
+       and (${query.dateBasis} <> 'SCHEDULED_START' or (
+         (${query.dateFrom} = '' or o.scheduled_start >= ${query.dateFrom})
+         and (${query.dateTo} = '' or o.scheduled_start <= ${query.dateTo})
+       ))
+       and (${query.dateBasis} <> 'SCHEDULED_FINISH' or (
+         (${query.dateFrom} = '' or o.scheduled_finish >= ${query.dateFrom})
+         and (${query.dateTo} = '' or o.scheduled_finish <= ${query.dateTo})
+       ))
+       and (${query.dateBasis} <> 'CREATED' or (
+         (${query.dateFrom} = '' or o.created_at::date >= nullif(${query.dateFrom}, '')::date)
+         and (${query.dateTo} = '' or o.created_at::date <= nullif(${query.dateTo}, '')::date)
+       ))
+     order by op.order_number, op.execution_order, op.operation_number
+     limit ${query.limit} offset ${query.offset}
+  `);
+  const mapped = found.map((row) => ({
+    orderNumber: String(row.order_number),
+    operationNumber: String(row.operation_number),
+    sequence: String(row.sequence),
+    executionOrder: String(row.execution_order),
+    shortText: text(row.short_text),
+    workCenter: text(row.work_center),
+    controlKey: text(row.control_key),
+    routingGroup: String(row.routing_group),
+    groupCounter: String(row.group_counter),
+    productionVersion: String(row.production_version),
+    confirmedYield: String(row.yield),
+    confirmedScrap: String(row.scrap),
+    confirmedRework: String(row.rework),
+    progress: String(row.progress),
   }));
   return { rows: mapped, total: found[0] ? Number(found[0].total_count) : 0 };
 }
@@ -738,6 +867,7 @@ async function movements(tx: Tx, client: string, query: ParsedQuery): Promise<{ 
        and (${query.dateFrom} = '' or d.posting_date::date >= nullif(${query.dateFrom}, '')::date)
        and (${query.dateTo} = '' or d.posting_date::date <= nullif(${query.dateTo}, '')::date)
        and ${inList(sql`l.production_order_number`, query.orders)}
+       and (${query.productionVersion} = '' or o.production_version = ${query.productionVersion})
      order by d.posting_date, l.material_document_number, l.line_number
      limit ${query.limit} offset ${query.offset}
   `);
@@ -851,6 +981,9 @@ function notesFor(query: ParsedQuery): string[] {
   if (query.listType === 'GOODS_MOVEMENTS') {
     notes.push('A reversed document is listed with its status. It is not included in the delivered quantity.');
   }
+  if (query.listType === 'OPERATIONS') {
+    notes.push('Progress UNCONFIRMED means the operation is stored and has no active confirmation. An order with no operation snapshot is not listed. Operations were not read from the routing. The list order is the stored execution order. Sequence 000000 is the standard sequence, not that order. A row filled in when the column was added used operation-number display order. That is not proof of an earlier routing order. Operation confirmed yield is not added across operations and is not the header confirmed yield.');
+  }
   return notes;
 }
 
@@ -867,6 +1000,7 @@ export async function runOrderInformation(client: string, input: {
   componentMaterial?: string | null;
   storageLocation?: string | null;
   batch?: string | null;
+  productionVersion?: string | null;
   movementType?: string | null;
   confirmationType?: string | null;
   dateBasis?: string | null;
@@ -914,6 +1048,7 @@ export async function runOrderInformation(client: string, input: {
         orderNumber: String(headers.rows[0].orderNumber),
         header: project(headers.rows[0], query.fields),
         components: [],
+        operations: [],
         confirmations: [],
         movements: [],
         dependents: [],
@@ -921,6 +1056,7 @@ export async function runOrderInformation(client: string, input: {
       };
       if (!query.reduced && query.object === 'PRODUCTION_ORDER') {
         overview.components = (await productionComponents(tx, client, children)).rows.map((row) => project(row, COMPONENT_FIELDS.map((field) => field.id)));
+        overview.operations = (await productionOperations(tx, client, children)).rows.map((row) => project(row, OPERATION_FIELDS.map((field) => field.id)));
         overview.confirmations = (await confirmations(tx, client, children)).rows.map((row) => project(row, CONFIRMATION_FIELDS.map((field) => field.id)));
         overview.movements = (await movements(tx, client, children)).rows.map((row) => project(row, MOVEMENT_FIELDS.map((field) => field.id)));
       }
@@ -941,7 +1077,9 @@ export async function runOrderInformation(client: string, input: {
         : await plannedHeaders(tx, client, query)
       : query.listType === 'COMPONENTS'
         ? await productionComponents(tx, client, query)
-        : query.listType === 'CONFIRMATIONS'
+        : query.listType === 'OPERATIONS'
+          ? await productionOperations(tx, client, query)
+          : query.listType === 'CONFIRMATIONS'
           ? await confirmations(tx, client, query)
           : query.listType === 'GOODS_MOVEMENTS'
             ? await movements(tx, client, query)

@@ -33,7 +33,7 @@ export default function TimeTicketWorkbench({
         <p>{loaded.orderNumber} · {loaded.materialNumber} {loaded.materialDescription}</p>
         <p>Plant {loaded.plant}. Quantity {loaded.orderQuantity} {loaded.unit}. Status {loaded.status}. Record version {loaded.version}.</p>
         <p>Start {loaded.scheduledStart}. Finish {loaded.scheduledFinish}. Those dates are not rewritten by a confirmation.</p>
-        {loaded.productionVersion && <p>Production version {loaded.productionVersion}. It is not stored on the order.</p>}
+        {loaded.productionVersion && <p>Production version {loaded.productionVersion} is the one copied onto this order. A later routing edit is not read.</p>}
         {loaded.blockingReason && <p className="text-red-700">{loaded.blockingReason}</p>}
         {loaded.gaps.map((gap) => <p key={gap} className="text-ink-soft">{gap}</p>)}
       </section>
@@ -42,6 +42,7 @@ export default function TimeTicketWorkbench({
         <table className="w-full text-sm" data-co11n-operations>
           <thead>
             <tr className="text-left text-ink-faint">
+              <th>Execution order</th>
               <th>Operation</th>
               <th>Work center</th>
               <th>Confirmed</th>
@@ -52,6 +53,7 @@ export default function TimeTicketWorkbench({
           <tbody>
             {loaded.operations.map((row) => (
               <tr key={row.operationNumber} data-co11n-operation={row.operationNumber}>
+                <td className="py-1">{row.executionOrder}</td>
                 <td className="py-1">
                   <Link href={`/production/time-ticket?order=${encodeURIComponent(loaded.orderNumber)}&operation=${encodeURIComponent(row.operationNumber)}${loaded.productionVersion ? `&version=${encodeURIComponent(loaded.productionVersion)}` : ''}`}>
                     {row.operationNumber}

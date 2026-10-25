@@ -29,6 +29,7 @@ import {
   consolidationGroupAccount, consolidationTaskStatus, consolidationUnit,
   consolidationUnitAssignment, consolidationVersion, glAccount,
 } from './schema';
+import { ledgerJournalStatus } from './ledger-journal';
 
 export class ConsolidatedStatementsError extends Error {
   remedy?: string;
@@ -231,7 +232,7 @@ export async function calculateConsolidatedStatements(input: {
         join journal_entry_line l
           on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
         where e.client = ${client} and e.company_code = ${unit.companyCode}
-          and e.fiscal_year = ${selection.fiscalYear} and e.status = 'POSTED'
+          and e.fiscal_year = ${selection.fiscalYear} and ${ledgerJournalStatus('e')}
         group by l.gl_account
       `) as unknown as Array<{ account: string; ytd: string; movement: string; lines: number }>;
       let comparativeByAccount = new Map<string, string>();
@@ -244,7 +245,7 @@ export async function calculateConsolidatedStatements(input: {
           join journal_entry_line l
             on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
           where e.client = ${client} and e.company_code = ${unit.companyCode}
-            and e.fiscal_year = ${selection.fiscalYear - 1} and e.status = 'POSTED'
+            and e.fiscal_year = ${selection.fiscalYear - 1} and ${ledgerJournalStatus('e')}
           group by l.gl_account
         `) as unknown as Array<{ account: string; ytd: string }>;
         comparativeByAccount = new Map(comp.map((row) => [row.account, row.ytd]));

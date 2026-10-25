@@ -14,6 +14,8 @@ import {
 } from '../src/modules/production/order-information';
 import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
 import { createPlannedOrder } from '../src/modules/production/planned-order-create';
+import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
+import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicket } from '../src/modules/production/time-ticket';
@@ -68,6 +70,10 @@ describe('COOIS order information', () => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client: tenant.client, objectCode: 'PLANORD', subObject: '*', prefix: 'PL', numberLength: 7, createdBy: ACTOR });
     });
+    await saveOrderTypeParameter({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Automatic selection for COOIS',
+    });
     for (const material of ['FG-16', 'RM-16', 'RM-16B']) await extend(material);
     await saveBomUsage({
       client: tenant.client, changedBy: ACTOR, usage: 'P', description: 'Production',
@@ -117,6 +123,15 @@ describe('COOIS order information', () => {
         { materialNumber: 'RM-16', plant: PLANT, requiredQuantity: 2 },
         { materialNumber: 'RM-16B', plant: PLANT, requiredQuantity: 1 },
       ],
+    });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup: '50000016', groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: order.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
     });
     const extra = await createProductionOrder({
       orderType: 'PP01',
@@ -180,14 +195,19 @@ describe('COOIS order information', () => {
   it('names unavailable lists instead of inventing their rows', () => {
     expect(orderInformationRefusal({ cost: '1' })).toMatch(/not carried/);
     expect(orderInformationRefusal({ workCenter: 'WC16' })).toMatch(/not stored/);
-    expect(orderInformationLists().find((row) => row.id === 'OPERATIONS')?.available).toBe(false);
+    expect(orderInformationLists().find((row) => row.id === 'OPERATIONS')?.available).toBe(true);
     expect(orderInformationLists().find((row) => row.id === 'HEADERS')?.available).toBe(true);
   });
 
   it('keeps header, component, and confirmation rows at their own grain', async () => {
-    await expect(runOrderInformation(tenant.client, {
+    const operations = await runOrderInformation(tenant.client, {
       listType: 'OPERATIONS', plant: PLANT,
-    })).rejects.toThrow(/not stored/);
+    });
+    expect(operations.written).toBe(false);
+    expect(operations.rows.filter((row) => row.orderNumber === released).map((row) => row.operationNumber)).toEqual(['0010', '0020']);
+    expect(operations.rows.find((row) => row.orderNumber === released && row.operationNumber === '0010')?.progress).toBe('PARTIAL');
+    expect(operations.rows.find((row) => row.orderNumber === released && row.operationNumber === '0020')?.progress).toBe('UNCONFIRMED');
+    expect(operations.notes.join(' ')).toMatch(/no operation snapshot/i);
     await expect(runOrderInformation(tenant.client, {
       listType: 'HEADERS', plant: PLANT, dateBasis: 'POSTING', dateFrom: '2026-10-24',
     })).rejects.toThrow(/not a date of this list/);

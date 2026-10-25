@@ -596,9 +596,10 @@ export const productionOrder = pgTable('production_order', {
    */
   orderType: varchar('order_type', { length: 4 }),
   /**
-   * Production version that selected the component snapshot. Null when a caller
-   * supplied the snapshot, including planned-order conversion. A later version
-   * change does not rewrite it.
+   * Production version that selected the component snapshot. Null when the
+   * components were supplied independently and no version was selected. Set
+   * when creation or conversion derived the snapshot from a selected version.
+   * A later version change does not rewrite it.
    */
   productionVersion: varchar('production_version', { length: 4 }),
   bomUsage: char('bom_usage', { length: 1 }),
@@ -661,6 +662,12 @@ export const productionOrderComponent = pgTable('production_order_component', {
   bomItem: varchar('bom_item', { length: 4 }),
   /** Material whose BOM the item came from. Null on a supplied snapshot line. */
   sourceMaterial: varchar('source_material', { length: 40 }),
+  /**
+   * Component requirement date. Null until conversion copies it from a matching
+   * dependent requirement. It is not the order start, the order finish, the
+   * bill of material date, or today. A null date is not planning demand.
+   */
+  requirementDate: date('requirement_date', { mode: 'string' }),
   ...auditColumns,
 }, (t) => [
   primaryKey({ columns: [t.client, t.orderNumber, t.itemNumber] }),

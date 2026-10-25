@@ -37,6 +37,7 @@ import { noteBatchControlUse } from './batch-control-use';
 import { BatchPostingError, resolvePostingBatch } from './batch-posting';
 import { batchClassificationRefusal } from './batch-classification';
 import { toBaseQuantity, UnitConversionError } from './unit-conversion';
+import { lineNotReversed, OPEN_PRODUCTION_DOCUMENT } from './production-document-quantity';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 /** WE — the document type a goods receipt posts under (as MB01 does). */
 const JOURNAL_DOCUMENT_TYPE = 'WE';
@@ -168,11 +169,17 @@ async function resolveAccount(tx: Tx, client: string, chart: string, event: stri
 /** What the order has already received, read from the documents — never a stored counter. */
 async function receivedFor(tx: Tx, client: string, orderNumber: string) {
   const rows = await tx.execute(sql`
-    select coalesce(sum(entry_quantity), 0)::text as received
-    from material_document_line
-    where client = ${client}
-      and production_order_number = ${orderNumber}
-      and movement_type = ${PRODUCTION_RECEIPT_SCENARIO.movementType}
+    select coalesce(sum(l.base_quantity), 0)::text as received
+      from material_document_line l
+      join material_document d
+        on d.client = l.client and d.material_document_number = l.material_document_number
+       and ${OPEN_PRODUCTION_DOCUMENT}
+      join production_order o on o.client = l.client and o.order_number = l.production_order_number
+     where l.client = ${client}
+       and l.production_order_number = ${orderNumber}
+       and l.material_number = o.material_number
+       and l.production_order_item is null
+       and ${lineNotReversed('l')}
   `) as unknown as Array<{ received: string }>;
   return Number(rows[0]?.received ?? 0);
 }

@@ -29,6 +29,7 @@ import {
   accountDetermination, bankAccount,
   companyCode as foundationCompanyCode, fiscalYearPeriod, fiscalYearVariant,
 } from '../foundation/schema';
+import { ledgerJournalStatus } from './ledger-journal';
 import { assetClass, glAccount } from './schema';
 
 export class CashflowError extends Error {
@@ -200,7 +201,7 @@ async function deriveCompany(
     from journal_entry e
     join journal_entry_line l
       on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
-    where e.client = ${client} and e.company_code = ${ctx.companyCode} and e.status = 'POSTED'
+    where e.client = ${client} and e.company_code = ${ctx.companyCode} and ${ledgerJournalStatus('e')}
     group by l.gl_account
   `) as unknown as BalanceRow[];
 
@@ -236,7 +237,7 @@ async function deriveCompany(
       from journal_entry e
       join journal_entry_line l
         on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
-      where e.client = ${client} and e.company_code = ${ctx.companyCode} and e.status = 'POSTED'
+      where e.client = ${client} and e.company_code = ${ctx.companyCode} and ${ledgerJournalStatus('e')}
         and e.fiscal_year = ${fiscalYear}
         and e.posting_period between ${selection.periodFrom} and ${selection.periodTo}
       order by e.document_number, l.line_number

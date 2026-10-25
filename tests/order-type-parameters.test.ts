@@ -5,9 +5,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { saveProductionOrderType } from '../src/modules/production/production-order-type';
 import {
+  OrderTypeParameterError,
   holdsOrderTypeParameterAuthority,
   listOrderTypeParameters,
   orderTypeParameterRefusal,
+  productionVersionSelectionOf,
   saveOrderTypeParameter,
 } from '../src/modules/production/order-type-parameters';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -132,7 +134,7 @@ describe('order type-dependent parameters', () => {
     `))).rejects.toThrow();
   });
 
-  it('authorizes the configuration and does not read order creation', () => {
+  it('authorizes the configuration and does not itself create an order', () => {
     expect(holdsOrderTypeParameterAuthority(['CFG.PROD.ORDERPARAM.DEFINE'])).toBe(true);
     expect(holdsOrderTypeParameterAuthority(['PROD.ORDER.CREATE'])).toBe(false);
     expect(holdsOrderTypeParameterAuthority(['CFG.PROD.ORDERTYPE.DEFINE'])).toBe(false);
@@ -140,14 +142,41 @@ describe('order type-dependent parameters', () => {
     expect(actions.indexOf('await requireCapability(ACTIVITY, session)')).toBeLessThan(actions.indexOf('await saveOrderTypeParameter'));
     const service = readFileSync('src/modules/production/order-type-parameters.ts', 'utf8');
     expect(service).not.toMatch(/production-orders|planned-order-conversion|stock-requirements|availability-check/);
-    expect(readFileSync('src/modules/inventory/production-orders.ts', 'utf8')).not.toContain('order-type-parameters');
-    expect(readFileSync('src/modules/production/planned-order-conversion.ts', 'utf8')).not.toContain('order-type-parameters');
+    expect(service).toContain('readProductionVersionSelection');
+    expect(service).toContain('Blank is not a selection method');
+    const snapshot = readFileSync('src/modules/production/order-bom-snapshot.ts', 'utf8');
+    const conversion = readFileSync('src/modules/production/planned-order-conversion.ts', 'utf8');
+    expect(snapshot).toContain('readProductionVersionSelection');
+    expect(conversion).toContain('readProductionVersionSelection');
+    expect(readFileSync('src/modules/inventory/production-orders.ts', 'utf8')).toContain('An order-type parameter is not proof that the type stands.');
     expect(readFileSync('src/app/production/orders/actions.ts', 'utf8')).not.toContain('order-type-parameters');
-    expect(readFileSync('src/app/production/planned-order-conversion/actions.ts', 'utf8')).not.toContain('order-type-parameters');
-    expect(readFileSync('src/app/production/planned-order-conversion-collective/actions.ts', 'utf8')).not.toContain('order-type-parameters');
+    expect(readFileSync('src/app/production/planned-order-conversion/actions.ts', 'utf8')).toContain('productionVersion: text(form, \'productionVersion\')');
+    expect(readFileSync('src/app/production/planned-order-conversion/actions.ts', 'utf8')).not.toContain('productionVersion: text(form, \'productionVersion\'),\n');
+    expect(readFileSync('src/app/production/planned-order-conversion-collective/actions.ts', 'utf8')).toContain('productionVersion: text(form, \'productionVersion\')');
     const page = readFileSync('src/app/config/order-type-parameters/page.tsx', 'utf8');
     expect(page).toContain('can(session, ACTIVITY)');
     expect(page).toContain('does not create an order');
     expect(readFileSync('scripts/seed.ts', 'utf8')).toContain("aliases: ['OPL8']");
+  });
+});
+
+describe('production version selection values', () => {
+  it('accepts only 0 and 1 and does not guess blank or an unsupported value', () => {
+    expect(productionVersionSelectionOf('0', '1000', 'PP01')).toBe('0');
+    expect(productionVersionSelectionOf('1', '1000', 'PP01')).toBe('1');
+    expect(() => productionVersionSelectionOf(' ', '1000', 'PP01')).toThrow(OrderTypeParameterError);
+    expect(() => productionVersionSelectionOf(' ', '1000', 'PP01')).toThrow(/not a selection method/);
+    expect(() => productionVersionSelectionOf('', '1000', 'PP01')).toThrow(/not a selection method/);
+    expect(() => productionVersionSelectionOf(null, '1000', 'PP01')).toThrow(/not a selection method/);
+    expect(() => productionVersionSelectionOf('2', '1000', 'PP01')).toThrow(/not 0 or 1/);
+    let thrown = false;
+    try {
+      productionVersionSelectionOf('2', '1000', 'PP01');
+    } catch (caught) {
+      thrown = true;
+      expect(caught).toBeInstanceOf(OrderTypeParameterError);
+      expect((caught as OrderTypeParameterError).remedy).toMatch(/not guessed/);
+    }
+    expect(thrown).toBe(true);
   });
 });

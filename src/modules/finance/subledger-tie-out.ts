@@ -72,6 +72,7 @@ export interface SubledgerTieResult {
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
+import { ledgerJournalStatus } from './ledger-journal';
 
 export class SubledgerTieError extends Error {
   remedy?: string;
@@ -138,7 +139,7 @@ export async function calculateSubledgerTie(input: {
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
       where l.client = ${client} and l.company_code = ${s.companyCode}
         and l.fiscal_year = ${s.fiscalYear} and e.posting_period <= ${s.periodTo}
-        and e.status = 'POSTED' and l.gl_account in (${accountList})
+        and ${ledgerJournalStatus('e')} and l.gl_account in (${accountList})
       group by l.gl_account
     `) as unknown as Array<{
       gl_account: string; gl_total: string; sub_total: string;
@@ -155,7 +156,7 @@ export async function calculateSubledgerTie(input: {
         on e.client = l.client and e.document_number = l.document_number and e.fiscal_year = l.fiscal_year
       where l.client = ${client} and l.company_code = ${s.companyCode}
         and l.fiscal_year = ${s.fiscalYear} and e.posting_period <= ${s.periodTo}
-        and e.status = 'POSTED' and l.gl_account in (${accountList})
+        and ${ledgerJournalStatus('e')} and l.gl_account in (${accountList})
         and l.business_partner is not null
       group by l.gl_account, l.business_partner
       order by l.gl_account, l.business_partner

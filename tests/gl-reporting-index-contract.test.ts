@@ -44,7 +44,8 @@ describe('SCR-108 stage 2: canonical reporting indexes stand aligned', () => {
   });
 
   it('both reports read the posted journal and persist nothing', () => {
-    expect(balances).toContain("eq(journalEntry.status, 'POSTED')");
+    expect(balances).toContain('LEDGER_JOURNAL_STATUSES');
+    expect(balances).toContain("ledgerJournalStatus('e')");
     expect(items).toContain('from journal_entry_line l');
     for (const source of [balances, items]) {
       expect(source).not.toMatch(/insert into|create table|\.insert\(|\.update\(/i);

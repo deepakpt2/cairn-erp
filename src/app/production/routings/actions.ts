@@ -121,13 +121,14 @@ export async function saveStandardValueKeyAction(_previous: RoutingActionState, 
 function operationsOf(formData: FormData): RoutingOperationInput[] {
   const rows = String(formData.get('operations') ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
   return rows.map((line) => {
-    const [operationNumber, shortText, workCenter, controlKey, standardValueKey, values, allocations] = line.split('|');
+    const [operationNumber, shortText, workCenter, controlKey, standardValueKey, values, allocations, executionOrder] = line.split('|');
     return {
       operationNumber,
       shortText,
       workCenter,
       controlKey,
       standardValueKey,
+      ...(executionOrder?.trim() ? { executionOrder: executionOrder.trim() } : {}),
       values: (values ?? '').split(';').filter(Boolean).map((part) => {
         const [parameter, quantity, unit] = part.split(',');
         return { parameter: parameter ?? '', quantity: quantity ?? '', unit };

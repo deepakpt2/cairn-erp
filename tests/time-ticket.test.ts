@@ -8,8 +8,10 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
+import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { enterTimeTicket, loadTimeTicket, previewTimeTicket, timeTicketRefusal } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -57,6 +59,10 @@ describe('CO11N time ticket', () => {
         on conflict (client, order_type) do nothing
       `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
+    });
+    await saveOrderTypeParameter({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Automatic selection for CO11N',
     });
     await extend('FG-11');
     await extend('RM-11');
@@ -112,6 +118,15 @@ describe('CO11N time ticket', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 10,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-order',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup: '50000011', groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: order.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
     });
     const open = await createProductionOrder({
       orderType: 'PP01',
@@ -226,7 +241,8 @@ describe('CO11N time ticket', () => {
     const shown = await getProductionOrderDisplay(tenant.client, released);
     expect(shown?.status).toBe('RELEASED');
     expect(shown?.confirmations).toHaveLength(2);
-    expect(shown?.gaps.join(' ')).toMatch(/Operations are not stored/);
+    expect(shown?.operations.map((row) => row.operationNumber)).toEqual(['0010', '0020']);
+    expect(shown?.gaps.join(' ')).toMatch(/were copied onto this order/);
     expect(shown?.version).toBe(version);
     await expect(changeProductionOrder({
       client: tenant.client, changedBy: ACTOR, orderNumber: released, expectedVersion: version, quantity: '12',
@@ -239,6 +255,15 @@ describe('CO11N time ticket', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-11', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co11n-teco',
       components: [{ materialNumber: 'RM-11', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup: '50000011', groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: draft.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
     });
     await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
     const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`

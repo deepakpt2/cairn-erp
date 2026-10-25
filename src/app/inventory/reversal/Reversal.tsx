@@ -8,6 +8,21 @@ import { reverseMaterialDocumentAction, type ReversalActionState } from './actio
 
 const INITIAL: ReversalActionState = { ok: false, message: '' };
 
+const ACCOUNTING_CAPTION: Record<string, string> = {
+  NONE: 'mbst.accountingNone',
+  POSTED: 'mbst.accountingPosted',
+  PARTIAL: 'mbst.accountingPartial',
+  COMPLETE: 'mbst.accountingComplete',
+  MISSING: 'mbst.accountingMissing',
+  MISMATCH: 'mbst.accountingMismatch',
+  DEFERRED: 'mbst.accountingDeferred',
+  ABSENT: 'mbst.accountingAbsent',
+};
+
+function accountingCaption(state: string): string {
+  return ACCOUNTING_CAPTION[state] ?? 'mbst.accountingMissing';
+}
+
 function newRequestKey() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -50,7 +65,11 @@ export default function Reversal({ document, canPost, displayOnly = false, today
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
             {document.postingDate} · <span data-status={document.status}>{document.status}</span>
-            {document.journalDocumentNumber ? ` · ${t('mbst.journal')} ${document.journalDocumentNumber}` : ` · ${t('mbst.noJournal')}`}
+            {document.journalDocumentNumber
+              ? ` · ${t('mbst.journal')} ${document.journalDocumentNumber}`
+              : document.journalAccounting.state === 'NONE'
+                ? ` · ${t('mbst.noJournal')}`
+                : ''}
             {document.reversalOf ? ` · ${t('mbst.reversalOf')} ${document.reversalOf}` : ''}
             {document.reversedBy ? ` · ${t('mbst.reversedBy')} ${document.reversedBy}` : ''}
           </p>
@@ -137,6 +156,9 @@ export default function Reversal({ document, canPost, displayOnly = false, today
               </div>
             </form>
           )}
+          <p className="mt-2 text-sm text-ink-soft" data-accounting={document.journalAccounting.state}>
+            {t(accountingCaption(document.journalAccounting.state))}
+          </p>
           {!reversible && (
             <p className="mt-2 text-sm text-ink-soft">
               {document.reversalOf ? t('mbst.isReversal') : t('mbst.nothingOpen')}

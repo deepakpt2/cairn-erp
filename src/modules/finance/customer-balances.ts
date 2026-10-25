@@ -1,18 +1,20 @@
 /**
  * Customer balances — SCR-069 / R-117.
  *
- * Read-only. Period balances derive at read time from the posted
- * journal — no balance table stands to drift from the ledger.
+ * Read-only. Period balances derive at read time from the ledger
+ * journal, including a document later marked reversed — no balance
+ * table stands to drift from the ledger.
  * Opening is the signed sum of every earlier year, turnover the
  * period's debits and credits, closing opening plus movement,
  * chained period by period. A period drill lists the line items
  * behind it. This module posts nothing.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
 import { customerCompany } from '../foundation/customer-company-schema';
+import { LEDGER_JOURNAL_STATUSES } from './ledger-journal';
 import { journalEntry, journalEntryLine } from './schema';
 
 export const CUSTOMER_BALANCE_CAPABILITY = 'FIN.AR.BALANCE';
@@ -116,7 +118,7 @@ export async function getCustomerBalances(client: string, input: {
         eq(journalEntryLine.client, client),
         eq(journalEntryLine.companyCode, input.companyCode),
         eq(journalEntryLine.businessPartner, input.customer),
-        eq(journalEntry.status, 'POSTED'),
+        inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
       ));
 
     // Display currency: company currency shows local amounts; a currency
@@ -198,7 +200,7 @@ export async function getCustomerBalances(client: string, input: {
           eq(journalEntryLine.client, client),
           eq(journalEntryLine.companyCode, input.companyCode),
           eq(journalEntryLine.businessPartner, input.customer),
-          eq(journalEntry.status, 'POSTED'),
+          inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
           eq(journalEntry.fiscalYear, input.fiscalYear),
           eq(journalEntry.postingPeriod, input.selectedPeriod),
         ))

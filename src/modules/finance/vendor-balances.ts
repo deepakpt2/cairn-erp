@@ -1,18 +1,20 @@
 /**
  * Vendor balances and due items — SCR-065 / R-113.
  *
- * Read-only. Period balances derive at read time from the posted
- * journal — no balance table stands to drift from the ledger.
+ * Read-only. Period balances derive at read time from the ledger
+ * journal, including a document later marked reversed — no balance
+ * table stands to drift from the ledger.
  * Opening is the signed sum of every earlier year, turnover the
  * period's debits and credits, closing opening plus movement,
  * chained period by period. A period drill lists the line items
  * behind it. This module posts nothing.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { getCompanyCode, getVariant } from '../../platform/periods';
 import { supplierCompany } from '../foundation/supplier-company-schema';
+import { LEDGER_JOURNAL_STATUSES } from './ledger-journal';
 import { journalEntry, journalEntryLine } from './schema';
 
 export const VENDOR_BALANCE_CAPABILITY = 'FIN.AP.BALANCE';
@@ -116,7 +118,7 @@ export async function getVendorBalances(client: string, input: {
         eq(journalEntryLine.client, client),
         eq(journalEntryLine.companyCode, input.companyCode),
         eq(journalEntryLine.businessPartner, input.supplier),
-        eq(journalEntry.status, 'POSTED'),
+        inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
       ));
 
     // Display currency: company currency shows local amounts; a currency
@@ -198,7 +200,7 @@ export async function getVendorBalances(client: string, input: {
           eq(journalEntryLine.client, client),
           eq(journalEntryLine.companyCode, input.companyCode),
           eq(journalEntryLine.businessPartner, input.supplier),
-          eq(journalEntry.status, 'POSTED'),
+          inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
           eq(journalEntry.fiscalYear, input.fiscalYear),
           eq(journalEntry.postingPeriod, input.selectedPeriod),
         ))

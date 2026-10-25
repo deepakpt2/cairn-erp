@@ -57,12 +57,23 @@ export async function createOrderAction(
       preview: null,
     };
   }
+  const orderType = text(form, 'orderType');
+  if (!orderType) {
+    return {
+      ok: false,
+      message: 'A production order type is required. Nothing was saved.',
+      remedy: 'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
+      order: null,
+      preview: null,
+    };
+  }
   const header = {
     client: session.user.client,
     materialNumber: text(form, 'materialNumber'),
     plant: text(form, 'plant'),
     orderQuantity: Number(text(form, 'orderQuantity') || '0'),
     scheduledFinish: text(form, 'scheduledFinish'),
+    orderType,
     productionVersion: text(form, 'productionVersion') || undefined,
   };
   if (text(form, 'intent') === 'check') {
@@ -80,16 +91,6 @@ export async function createOrderAction(
       }
       return { ok: false, message: 'The bill of material could not be read.', order: null, preview: null };
     }
-  }
-  const orderType = text(form, 'orderType');
-  if (!orderType) {
-    return {
-      ok: false,
-      message: 'A production order type is required. Nothing was saved.',
-      remedy: 'Enter a standing category 10 production order type. A scheduling profile does not propose one.',
-      order: null,
-      preview: null,
-    };
   }
   try {
     const order = await createProductionOrder({

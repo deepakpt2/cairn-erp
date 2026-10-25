@@ -8,6 +8,8 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
+import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import {
@@ -94,6 +96,15 @@ describe('CO15 order confirmation', () => {
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       components: [{ materialNumber: component, plant: PLANT, requiredQuantity: 1 }],
     });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup, groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: order.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
+    });
     if (!release) return { orderNumber: order.orderNumber, version: 1 };
     const releasedOrder = await releaseProductionOrder({ client: tenant.client, orderNumber: order.orderNumber, releasedBy: ACTOR });
     const stamped = await withTenant(tenant.client, async (tx) => {
@@ -113,6 +124,10 @@ describe('CO15 order confirmation', () => {
         on conflict (client, order_type) do nothing
       `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
+    });
+    await saveOrderTypeParameter({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Automatic selection for CO15',
     });
     for (const material of ['FG-15', 'RM-15', 'FG-15A', 'RM-15A', 'FG-15S', 'RM-15S', 'FG-15T', 'RM-15T']) {
       await extend(material);
@@ -387,6 +402,15 @@ describe('CO15 order confirmation', () => {
       client: tenant.client, createdBy: ACTOR, materialNumber: 'FG-15', plant: PLANT, orderQuantity: 4,
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey: 'co15-teco',
       components: [{ materialNumber: 'RM-15', plant: PLANT, requiredQuantity: 1 }],
+    });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup: '50000015', groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: draft.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
     });
     await releaseProductionOrder({ client: tenant.client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
     const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`

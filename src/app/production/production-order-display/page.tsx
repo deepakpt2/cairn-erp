@@ -104,6 +104,7 @@ export default async function ProductionOrderDisplayPage({
           <p>Plant {document.plant} {document.plantName}. Company code of the plant {document.companyCode || '—'}. It is not a key of the order.</p>
           <p data-order-type={document.orderType ?? ''}>Order type {document.orderType ?? 'not assigned'}. A missing type was not filled in. Display does not run an availability check.</p>
           <p>Quantity {document.quantity} {document.unit}. Received {document.receivedQuantity}, read from material documents.</p>
+          <p data-header-confirmed-yield={document.headerConfirmedYield}>Header confirmed yield {document.headerConfirmedYield} {document.unit}. Scrap {document.headerConfirmedScrap}. Rework {document.headerConfirmedRework}. Active header confirmations are counted once. Operation confirmed yields are not added.</p>
           <p>Start {document.scheduledStart}. Finish {document.scheduledFinish}. Actual start and finish stand on a confirmation, not on the order.</p>
           <p>Status {document.status}. Display did not change it. {document.releasedBy ? `Released by ${document.releasedBy}.` : 'Not released.'} {document.technicallyCompletedBy ? `Technically completed by ${document.technicallyCompletedBy} at ${document.technicallyCompletedAt ?? '—'}. It is not an open order.` : 'Technical completion has not been recorded.'}</p>
           <p>Batch {document.batch || '—'}. Scheduling profile {document.schedulingProfile || '—'}. Those were snapshotted at creation.</p>
@@ -122,6 +123,7 @@ export default async function ProductionOrderDisplayPage({
                 <th>Source material</th>
                 <th>Component</th>
                 <th>Required</th>
+                <th>Requirement date</th>
                 <th>Issued</th>
                 <th>Remaining</th>
                 <th>Location</th>
@@ -135,6 +137,7 @@ export default async function ProductionOrderDisplayPage({
                   <td>{component.sourceMaterial ?? 'not recorded'}</td>
                   <td>{component.materialNumber} {component.materialDescription}</td>
                   <td>{component.requiredQuantity} {component.unit}</td>
+                  <td data-requirement-date={component.requirementDate ?? ''}>{component.requirementDate ?? 'not established'}</td>
                   <td>{component.issuedQuantity}</td>
                   <td>{component.remainingQuantity}</td>
                   <td>{component.storageLocation ?? '—'}</td>
@@ -142,6 +145,42 @@ export default async function ProductionOrderDisplayPage({
               ))}
             </tbody>
           </table>
+          {document.operations.length > 0 ? (
+            <table className="w-full text-sm" data-co03-operations>
+              <thead>
+                <tr className="text-left text-ink-faint">
+                  <th>Operation</th>
+                  <th>Execution order</th>
+                  <th>Sequence</th>
+                  <th>Description</th>
+                  <th>Work center</th>
+                  <th>Control key</th>
+                  <th>Progress</th>
+                  <th>Operation confirmed yield</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {document.operations.map((operation) => (
+                  <tr key={operation.operationNumber} data-co03-operation={operation.operationNumber} data-operation-progress={operation.progress}>
+                    <td>{operation.operationNumber}</td>
+                    <td>{operation.executionOrder}</td>
+                    <td>{operation.sequence}</td>
+                    <td>{operation.shortText ?? '—'}</td>
+                    <td>{operation.workCenter ?? '—'}</td>
+                    <td>{operation.controlKey ?? '—'}</td>
+                    <td>{operation.progress}</td>
+                    <td>{operation.confirmedYield}</td>
+                    <td>
+                      <Link href={`/production/time-ticket?order=${encodeURIComponent(document.orderNumber)}&operation=${encodeURIComponent(operation.operationNumber)}`}>CO11N</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p data-co03-operations-missing>No operation snapshot is stored on this order. Operations were not read from a routing.</p>
+          )}
           {document.confirmations.length > 0 && (
             <ul data-co03-confirmations>
               {document.confirmations.map((row) => (

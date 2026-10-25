@@ -32,6 +32,7 @@ import {
   consolidationTask, consolidationTaskStatus, consolidationUnit,
   consolidationUnitAssignment, consolidationVersion,
 } from './schema';
+import { ledgerJournalStatus } from './ledger-journal';
 
 export class ConsolidationMonitorError extends Error {
   remedy?: string;
@@ -466,7 +467,7 @@ async function runAdapter(client: string, scope: ScopeData, task: TaskRow, unitR
           on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
         where e.client = ${client} and e.company_code = ${unitRow.companyCode}
           and e.fiscal_year = ${scope.selection.fiscalYear} and e.posting_period = ${scope.selection.period}
-          and e.status = 'POSTED'
+          and ${ledgerJournalStatus('e')}
       `) as unknown as Array<{ documents: number; lines: number }>;
       const documents = rows[0]?.documents ?? 0;
       const lines = rows[0]?.lines ?? 0;
@@ -501,7 +502,7 @@ async function runAdapter(client: string, scope: ScopeData, task: TaskRow, unitR
         on l.client = e.client and l.document_number = e.document_number and l.fiscal_year = e.fiscal_year
       where e.client = ${client} and e.company_code = ${unitRow.companyCode}
         and e.fiscal_year = ${scope.selection.fiscalYear} and e.posting_period = ${scope.selection.period}
-        and e.status = 'POSTED'
+        and ${ledgerJournalStatus('e')}
     `) as unknown as Array<{ lines: number; unmapped: number }>;
     const mappings = await tx.select({ sourceFrom: consolidationAccountMapping.sourceFrom })
       .from(consolidationAccountMapping).where(and(

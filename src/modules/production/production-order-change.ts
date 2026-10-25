@@ -6,9 +6,25 @@
  * the quantity, the dates, and the component snapshot while no goods movement
  * cites the order.
  *
- * A header quantity change does not rescale components. Operations are not
- * stored, so dates are not rescheduled. This save does not release, technically
- * complete, close, or post.
+ * A header quantity change does not rescale components. Stored operations are
+ * not added, changed, or deleted, and dates are not rescheduled. This save
+ * does not release, technically complete, close, or post.
+ *
+ * A component requirement date stays only when the line's material, plant,
+ * unit, BOM item, and source material stay. A quantity or storage-location
+ * change does not invalidate it, and the order start, finish, bill of material
+ * date, and today are not written onto it. A new line has no requirement date.
+ * A removed line is no longer demand. This save does not close, reopen, or
+ * rewrite a dependent requirement.
+ *
+ * scheduled_start and scheduled_finish are the order's basic dates. Creation
+ * and conversion set them. This save is the only path that changes them.
+ * MD01 and MD04 use the finish as the receipt date. A stored component
+ * requirement date is the date copied from a matching dependent requirement.
+ * It is not derived from these header dates, and it can already differ from
+ * both. Lead-time scheduling, operation offsets, and a factory calendar are
+ * not carried, so a header date change does not recalculate it. The copied
+ * date stays. The receipt date and the component demand date remain separate.
  *
  * Technical completion and its revocation are separate functions of this
  * screen. They are not fields of the quantity save. A technically completed
@@ -38,16 +54,16 @@ const REFUSED: Record<string, string> = {
   orderType: 'An order type is stored. This change does not replace it.',
   controllingArea: 'A controlling area is not a key of the order.',
   scrap: 'A scrap quantity is not stored. It was not applied.',
-  productionVersion: 'A production version is not stored on the order. Master data was not re-read.',
+  productionVersion: 'The stored production version is not replaced by this change. Master data was not re-read.',
   schedulingType: 'A scheduling type is not stored. The dates are stored as entered.',
   priority: 'A priority is not stored.',
-  operation: 'Operations are not stored. None were added, changed, or deleted.',
-  sequence: 'Sequences are not stored.',
+  operation: 'Stored operations are not changed here. None were added, changed, or deleted.',
+  sequence: 'The copied sequence is not replaced here. An alternative sequence was not stored.',
   reschedule: 'Lead-time scheduling is not carried. The dates were not recalculated.',
   availability: 'Component availability is not checked on this change.',
   reread: 'Re-reading the bill of material is not this save. The component snapshot was not replaced.',
   bom: 'The bill of material is not stored on the order. This save does not explode one.',
-  routing: 'A routing is not stored on the order.',
+  routing: 'The stored routing snapshot is not replaced by this change. Master data was not re-read.',
   release: 'Change does not release the order. Release is a separate act.',
   teco: 'Technical completion is not a status field of this save. Use the technical completion action.',
   closed: 'A closed status is not stored. Change does not close the order.',
@@ -57,6 +73,10 @@ const REFUSED: Record<string, string> = {
   reservation: 'A reservation is not created or changed here.',
   post: 'A production-order change posts nothing.',
   status: 'Status is not changed by this save. Created and released stay as they stand.',
+  requirementDate: 'A component requirement date is not entered on this change. A new line does not receive one, and the order start is not used.',
+  bomItem: 'The bill-of-material item is not changed here. Remove the line and add another. The old requirement date is not copied.',
+  sourceMaterial: 'The source material is not changed here. Remove the line and add another. The old requirement date is not copied.',
+  componentPlant: 'The component plant is not changed here. It stays the plant stored on the line.',
 };
 
 export class ProductionOrderChangeError extends Error {
@@ -150,6 +170,37 @@ interface StandingComponent {
   storageLocation: string | null;
   requiredQuantity: string;
   unit: string;
+  bomItem: string | null;
+  sourceMaterial: string | null;
+  requirementDate: string | null;
+}
+
+/**
+ * The date belongs to this material, plant, unit, BOM item, and source
+ * material. Quantity and storage location are not part of that identity.
+ * A different identity does not keep the old date, and no other date is made.
+ */
+function preservedRequirementDate(before: StandingComponent, after: StandingComponent): string | null {
+  if (before.materialNumber !== after.materialNumber) return null;
+  if (before.plant !== after.plant) return null;
+  if (before.unit !== after.unit) return null;
+  if ((before.bomItem ?? null) !== (after.bomItem ?? null)) return null;
+  if ((before.sourceMaterial ?? null) !== (after.sourceMaterial ?? null)) return null;
+  return before.requirementDate;
+}
+
+function componentFingerprint(row: StandingComponent): string {
+  return [
+    row.itemNumber,
+    row.materialNumber,
+    row.plant,
+    row.unit,
+    row.requiredQuantity,
+    row.storageLocation ?? '',
+    row.bomItem ?? '',
+    row.sourceMaterial ?? '',
+    row.requirementDate ?? '',
+  ].join(':');
 }
 
 export async function changeProductionOrder(input: ProductionOrderChangeInput): Promise<ProductionOrderChangeResult> {
@@ -165,7 +216,7 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
 
   const warnings = [
     'Component quantities were not rescaled from the header quantity.',
-    'Operations are not stored, so the dates were not rescheduled.',
+    'Operation dates are not stored, so the dates were not rescheduled. Stored operations were not changed.',
     'No goods movement, reservation, journal, or confirmation was posted.',
     'The order was not released by this save.',
   ];
@@ -213,6 +264,11 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
     const finish = clean(input.finishDate) ? dateOf(clean(input.finishDate), 'The scheduled finish') : String(header.scheduled_finish);
     if (finish < start) fail(`The scheduled finish ${finish} stands before the scheduled start ${start}.`, 'Enter a finish on or after the start.');
 
+    await tx.execute(sql`
+      select item_number from production_order_component
+       where client = ${input.client} and order_number = ${orderNumber}
+       for update
+    `);
     const standing = await tx.select().from(productionOrderComponent).where(and(
       eq(productionOrderComponent.client, input.client),
       eq(productionOrderComponent.orderNumber, orderNumber),
@@ -224,8 +280,11 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
       storageLocation: row.storageLocation,
       requiredQuantity: String(row.requiredQuantity),
       unit: row.unitOfMeasure,
+      bomItem: row.bomItem,
+      sourceMaterial: row.sourceMaterial,
+      requirementDate: row.requirementDate,
     }]));
-    const beforeComponents = [...components.values()].map((row) => `${row.itemNumber}:${row.materialNumber}:${row.requiredQuantity}:${row.storageLocation ?? ''}`).join('|');
+    const beforeComponents = [...components.values()].map(componentFingerprint).join('|');
     let nextItem = standing.reduce((max, row) => Math.max(max, row.itemNumber), 0);
     const removed: number[] = [];
     for (const edit of input.components ?? []) {
@@ -280,6 +339,9 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
           storageLocation: location,
           requiredQuantity: required,
           unit: componentUnit,
+          bomItem: null,
+          sourceMaterial: null,
+          requirementDate: null,
         });
         continue;
       }
@@ -292,6 +354,7 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
       if (componentUnit !== current.unit) fail(`Component item ${itemNumber} is stored in ${current.unit}. A different unit was not substituted.`);
       const [componentUnitRow] = await tx.select({ decimalPlaces: unitOfMeasure.decimalPlaces }).from(unitOfMeasure).where(eq(unitOfMeasure.code, current.unit));
       const required = quantityOf(clean(edit.requiredQuantity) || current.requiredQuantity, componentUnitRow?.decimalPlaces ?? 3, `Component item ${itemNumber}`);
+      const requiredQuantity = sameQuantity(required, current.requiredQuantity) ? current.requiredQuantity : required;
       let location = current.storageLocation;
       if (edit.storageLocation !== undefined) {
         if (!clean(edit.storageLocation)) location = null;
@@ -312,10 +375,10 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
           }
         }
       }
-      components.set(itemNumber, { ...current, requiredQuantity: required, storageLocation: location });
+      components.set(itemNumber, { ...current, requiredQuantity, storageLocation: location });
     }
     if (components.size === 0) fail('An order needs at least one component.', 'Leave one component, or cancel the change.');
-    const afterComponents = [...components.values()].map((row) => `${row.itemNumber}:${row.materialNumber}:${row.requiredQuantity}:${row.storageLocation ?? ''}`).join('|');
+    const afterComponents = [...components.values()].map(componentFingerprint).join('|');
     const headerSame = sameQuantity(quantity, String(header.quantity)) && start === String(header.scheduled_start) && finish === String(header.scheduled_finish);
     const componentsSame = beforeComponents === afterComponents;
     if (headerSame && componentsSame) return;
@@ -343,6 +406,8 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
       );
     }
 
+    // Header dates are not a component requirement date. This update does not
+    // read or write production_order_component.requirement_date.
     await tx.update(productionOrder).set({
       orderQuantity: quantity,
       scheduledStart: start,
@@ -352,16 +417,25 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
       changedAt: new Date(),
     }).where(and(eq(productionOrder.client, input.client), eq(productionOrder.orderNumber, orderNumber), eq(productionOrder.version, Number(header.version))));
 
+    // A new line stores no requirement date and no BOM identity. An existing
+    // line keeps its date only while material, plant, unit, BOM item, and
+    // source material are unchanged. The order dates are not copied. A
+    // dependent requirement is not closed or reopened.
+    const removedDates = removed.filter((itemNumber) => standing.some((row) => row.itemNumber === itemNumber && row.requirementDate));
     for (const itemNumber of removed) {
-      await tx.delete(productionOrderComponent).where(and(
+      const deleted = await tx.delete(productionOrderComponent).where(and(
         eq(productionOrderComponent.client, input.client),
         eq(productionOrderComponent.orderNumber, orderNumber),
         eq(productionOrderComponent.itemNumber, itemNumber),
-      ));
+      )).returning({ itemNumber: productionOrderComponent.itemNumber });
+      if (deleted.length !== 1) fail(`Component item ${itemNumber} was not removed. Nothing was saved.`);
     }
+    let addedLine = false;
+    let keptDatedQuantity = false;
     for (const component of components.values()) {
       const existing = standing.find((row) => row.itemNumber === component.itemNumber);
       if (!existing) {
+        addedLine = true;
         await tx.insert(productionOrderComponent).values({
           client: input.client,
           orderNumber,
@@ -371,26 +445,71 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
           storageLocation: component.storageLocation,
           requiredQuantity: component.requiredQuantity,
           unitOfMeasure: component.unit,
+          bomItem: null,
+          sourceMaterial: null,
+          requirementDate: null,
           createdBy: actor,
         });
-      } else if (
-        !sameQuantity(String(existing.requiredQuantity), component.requiredQuantity)
-        || (existing.storageLocation ?? '') !== (component.storageLocation ?? '')
-      ) {
-        await tx.update(productionOrderComponent).set({
-          requiredQuantity: component.requiredQuantity,
-          storageLocation: component.storageLocation,
-          changedBy: actor,
-          changedAt: new Date(),
-        }).where(and(
-          eq(productionOrderComponent.client, input.client),
-          eq(productionOrderComponent.orderNumber, orderNumber),
-          eq(productionOrderComponent.itemNumber, component.itemNumber),
-        ));
+        continue;
+      }
+      const quantityChanged = !sameQuantity(String(existing.requiredQuantity), component.requiredQuantity);
+      const locationChanged = (existing.storageLocation ?? '') !== (component.storageLocation ?? '');
+      if (!quantityChanged && !locationChanged) continue;
+      const original: StandingComponent = {
+        itemNumber: existing.itemNumber,
+        materialNumber: existing.materialNumber,
+        plant: existing.plant,
+        storageLocation: existing.storageLocation,
+        requiredQuantity: String(existing.requiredQuantity),
+        unit: existing.unitOfMeasure,
+        bomItem: existing.bomItem,
+        sourceMaterial: existing.sourceMaterial,
+        requirementDate: existing.requirementDate,
+      };
+      const requirementDate = preservedRequirementDate(original, component);
+      if (requirementDate) keptDatedQuantity = true;
+      if (quantityChanged && !original.requirementDate) {
+        warnings.push(`Component item ${component.itemNumber} had no requirement date. None was added.`);
+      }
+      const updated = await tx.update(productionOrderComponent).set({
+        requiredQuantity: component.requiredQuantity,
+        storageLocation: component.storageLocation,
+        bomItem: existing.bomItem,
+        sourceMaterial: existing.sourceMaterial,
+        requirementDate,
+        changedBy: actor,
+        changedAt: new Date(),
+      }).where(and(
+        eq(productionOrderComponent.client, input.client),
+        eq(productionOrderComponent.orderNumber, orderNumber),
+        eq(productionOrderComponent.itemNumber, component.itemNumber),
+        eq(productionOrderComponent.materialNumber, existing.materialNumber),
+        eq(productionOrderComponent.plant, existing.plant),
+        eq(productionOrderComponent.unitOfMeasure, existing.unitOfMeasure),
+      )).returning({ itemNumber: productionOrderComponent.itemNumber });
+      if (updated.length !== 1) {
+        fail(
+          `Component item ${component.itemNumber} was not saved. Nothing was saved.`,
+          'The material, plant, and unit were not replaced, and the requirement date was not moved to another line.',
+        );
       }
     }
+    if (keptDatedQuantity) {
+      warnings.push('A component requirement date was kept because the material, plant, unit, and bill-of-material identity did not change. It was not taken from the order start, finish, or today.');
+    }
+    if (start !== String(header.scheduled_start) || finish !== String(header.scheduled_finish)) {
+      warnings.push(standing.some((row) => row.requirementDate)
+        ? 'The scheduled dates changed. Component requirement dates were not recalculated. Each copied date was kept. It is not the order start or finish. The receipt date is the scheduled finish and is separate.'
+        : 'The scheduled dates changed. No component requirement date was created from the order start, finish, or today.');
+    }
+    if (addedLine) {
+      warnings.push('A new component has no requirement date. None was copied from a removed line, the order dates, or today.');
+    }
+    if (removedDates.length > 0) {
+      warnings.push('A removed component is no longer planning demand. Its dependent requirement was not changed.');
+    }
 
-    await recordChange(tx, {
+    const recorded = await recordChange(tx, {
       client: input.client,
       objectClass: 'production_order',
       objectKey: orderNumber,
@@ -413,6 +532,7 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
         components: 'Components',
       },
     });
+    if (!recorded) fail('The component change was not recorded. Nothing was saved.');
   });
 
   const order = await getProductionOrderDisplay(input.client, orderNumber);

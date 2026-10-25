@@ -89,7 +89,7 @@ export default async function RoutingsPage({ searchParams }: {
     <main className="mx-auto max-w-5xl p-6">
       <p className="text-sm"><Link href="/config">Configuration</Link></p>
       <h1 className="mt-2 text-xl font-semibold">Routing</h1>
-      <p className="mt-2 text-sm text-ink-soft">CA01 creates and CA02 changes a standard routing. The chart-of-accounts key CA01 is not this transaction. A material assignment is separate. Only sequence 000000 of type 0 is stored. A formula is not calculated. A production order is not rewritten. <Link href={ROUTING_DISPLAY_ROUTE}>CA03 displays and does not save.</Link></p>
+      <p className="mt-2 text-sm text-ink-soft">CA01 creates and CA02 changes a standard routing. The chart-of-accounts key CA01 is not this transaction. A material assignment is separate. Only sequence 000000 of type 0 is stored. Execution order is a separate number and is not taken from the operation number. Alternative and parallel sequences are not stored. A formula is not calculated. A production order is not rewritten. <Link href={ROUTING_DISPLAY_ROUTE}>CA03 displays and does not save.</Link></p>
       {openError && <p className="mt-3 text-sm text-danger">{openError}</p>}
       {listed.length > 1 && !routingGroup && (
         <ul className="mt-3 space-y-1 text-sm">

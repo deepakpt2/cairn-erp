@@ -4,7 +4,8 @@
  * One derivation serves vendor ageing (FIN.AP.AGEING) and, as the
  * same-defect mirror repair, customer ageing (FIN.AR.AGEING):
  *
- *  - an item is a POSTED journal line in the company, on an account
+ *  - an item is a ledger journal line in the company — posted,
+ *    including one later marked reversed — on an account
  *    of the company's chart carrying the side's reconciliation type
  *    (VENDORS / CUSTOMERS), with a business partner — customer lines,
  *    expense lines and every other partner line never age here;
@@ -22,6 +23,7 @@
  * Read-only. Vendor/customer balances are never written here.
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
+import { LEDGER_JOURNAL_STATUSES } from './ledger-journal';
 
 import type { Tx } from '../../platform/db/client';
 import { getCompanyCode } from '../../platform/periods';
@@ -188,7 +190,7 @@ export async function deriveAgeingItems(
       eq(journalEntryLine.client, client),
       eq(journalEntryLine.companyCode, input.companyCode),
       eq(journalEntry.companyCode, input.companyCode),
-      eq(journalEntry.status, 'POSTED'),
+      inArray(journalEntry.status, [...LEDGER_JOURNAL_STATUSES]),
       inArray(journalEntryLine.glAccount, [...eligible.keys()]),
       sql`${journalEntryLine.businessPartner} is not null`,
       ...(input.partnerFrom ? [sql`${journalEntryLine.businessPartner} >= ${input.partnerFrom}`] : []),

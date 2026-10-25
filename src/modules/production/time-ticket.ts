@@ -25,7 +25,6 @@ import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { toScaled } from '../../platform/posting/decimal';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
-import { ProductionVersionError, selectProductionVersion } from './production-version';
 
 export const TIME_TICKET_CAPABILITY = 'PROD.CONFIRM.ENTER';
 export const TIME_TICKET_ROUTE = '/production/time-ticket';
@@ -35,7 +34,7 @@ export const TIME_TICKET_LOCK = 'PRODUCTION_ORDER';
 const REFUSED: Record<string, string> = {
   confirmationProfile: 'A confirmation profile is not configured. Choose partial or final. Automatic is not a stored rule.',
   automatic: 'Automatic confirmation is not a stored rule. Choose partial or final.',
-  sequence: 'Only the standard sequence is stored. An alternative or parallel sequence is refused.',
+  sequence: 'Only standard sequence 000000 is stored. Execution order is not written into the confirmation. Confirm the operation number. An alternative or parallel sequence is refused.',
   suboperation: 'A suboperation is not stored.',
   personnel: 'A personnel number is not validated. None was stored.',
   shift: 'A shift is not stored.',
@@ -78,15 +77,28 @@ export interface TimeTicketActivityView {
   actual: string | null;
 }
 
+export const ORDER_OPERATION_SNAPSHOT_MISSING = 'This order has no operation snapshot. Operations were not copied, and the routing was not read.';
+
 export interface TimeTicketOperationView {
   operationNumber: string;
+  sequence: string;
+  executionOrder: number;
   shortText: string | null;
   workCenter: string | null;
   workCenterPlant: string;
   controlKey: string;
+  taskListType: string;
+  routingGroup: string;
+  groupCounter: string;
+  productionVersion: string;
   confirmable: boolean;
   blockingReason: string | null;
+  /** Active CO11N yield plus header effects. A scaled effect is included here and is not header production. */
   yieldQuantity: string;
+  /** Active yield stored in the order unit: a time ticket, or a header effect with basis ORDER_QUANTITY. */
+  orderUnitYield: string;
+  /** Active yield from a header effect with basis OPERATION_QUANTITY. Not added to header yield. */
+  operationQuantityYield: string;
   scrapQuantity: string;
   reworkQuantity: string;
   remainingQuantity: string;
@@ -146,8 +158,8 @@ export interface TimeTicketView {
 }
 
 const GAPS = [
-  'The order does not store an operation. The operation is read from the production version at entry and snapshotted on the confirmation.',
-  'Only the standard sequence is stored.',
+  'The operation is the one stored on the production order. A later routing edit is not read, and it does not change this confirmation.',
+  'Only standard sequence 000000 is stored on the confirmation. Execution order is not written there. Predecessor and successor are not stored. An earlier operation does not have to be confirmed first.',
   'A confirmation profile is not configured. Automatic confirmation is refused.',
   'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
   'Personnel, a shift, and activity cost are not stored.',
@@ -305,22 +317,14 @@ export async function headerOf(tx: Tx, client: string, orderNumber: string): Pro
 async function activitiesOf(
   tx: Tx,
   client: string,
-  taskListType: string,
-  routingGroup: string,
-  groupCounter: string,
+  orderNumber: string,
   operationNumber: string,
 ): Promise<TimeTicketActivityView[]> {
   const found = await rows(tx, sql`
-    select p.parameter, p.description, p.unit, p.required, v.quantity::text as suggested
-      from routing_operation o
-      join routing_standard_value_parameter p
-        on p.client = o.client and p.standard_value_key = o.standard_value_key
-      left join routing_operation_value v
-        on v.client = o.client and v.task_list_type = o.task_list_type and v.routing_group = o.routing_group
-       and v.group_counter = o.group_counter and v.operation_number = o.operation_number and v.parameter = p.parameter
-     where o.client = ${client} and o.task_list_type = ${taskListType} and o.routing_group = ${routingGroup}
-       and o.group_counter = ${groupCounter} and o.operation_number = ${operationNumber}
-     order by p.parameter
+    select parameter, description, unit, required, quantity::text as suggested
+      from production_order_operation_value
+     where client = ${client} and order_number = ${orderNumber} and operation_number = ${operationNumber}
+     order by parameter
   `);
   return found.map((row) => ({
     parameter: String(row.parameter),
@@ -336,29 +340,27 @@ export async function operationsOf(
   tx: Tx,
   client: string,
   header: OrderHeader,
-  version: { taskListType: string; routingGroup: string; groupCounter: string; productionVersion: string },
-  keyDate: string,
 ): Promise<TimeTicketOperationView[]> {
   const found = await rows(tx, sql`
-    select o.operation_number, o.short_text, o.work_center, o.plant, o.control_key, k.confirmation, k.external_processing,
-           o.operation_quantity::text as operation_quantity, o.operation_unit,
-           o.base_quantity::text as base_quantity, o.base_unit
-      from routing_operation o
-      left join routing_control_key k on k.client = o.client and k.control_key = o.control_key
-     where o.client = ${client} and o.task_list_type = ${version.taskListType}
-       and o.routing_group = ${version.routingGroup} and o.group_counter = ${version.groupCounter}
-       and o.sequence = '000000' and o.deletion_flag = ' '
-       and o.valid_from <= ${keyDate}::date and o.valid_to >= ${keyDate}::date
-     order by o.operation_number
+    select operation_number, sequence, execution_order, short_text, work_center, work_center_plant, control_key,
+           confirmation, external_processing, task_list_type, routing_group, group_counter, production_version,
+           operation_quantity::text as operation_quantity, operation_unit,
+           base_quantity::text as base_quantity, base_unit
+      from production_order_operation
+     where client = ${client} and order_number = ${header.orderNumber}
+     order by execution_order, operation_number
   `);
   const posted = await rows(tx, sql`
     select operation_number,
            coalesce(sum(yield_quantity), 0)::text as yield,
            coalesce(sum(scrap_quantity), 0)::text as scrap,
            coalesce(sum(rework_quantity), 0)::text as rework,
+           coalesce(sum(yield_quantity) filter (where quantity_basis = 'ORDER_QUANTITY'), 0)::text as order_yield,
+           coalesce(sum(yield_quantity) filter (where quantity_basis = 'OPERATION_QUANTITY'), 0)::text as operation_yield,
            bool_or(confirmation_type = 'FINAL') as final
       from (
-        select c.operation_number, c.yield_quantity, c.scrap_quantity, c.rework_quantity, c.confirmation_type
+        select c.operation_number, c.yield_quantity, c.scrap_quantity, c.rework_quantity, c.confirmation_type,
+               'ORDER_QUANTITY'::text as quantity_basis
           from production_confirmation c
          where c.client = ${client} and c.order_number = ${header.orderNumber}
            and c.confirmation_level = 'OPERATION'
@@ -367,7 +369,8 @@ export async function operationsOf(
               where x.client = c.client and x.confirmation_number = c.confirmation_number
            )
         union all
-        select e.operation_number, e.yield_quantity, e.scrap_quantity, e.rework_quantity, e.confirmation_type
+        select e.operation_number, e.yield_quantity, e.scrap_quantity, e.rework_quantity, e.confirmation_type,
+               e.quantity_basis
           from production_confirmation_operation e
          where e.client = ${client} and e.order_number = ${header.orderNumber}
            and not exists (
@@ -421,13 +424,21 @@ export async function operationsOf(
     }
     return {
       operationNumber,
+      sequence: String(row.sequence),
+      executionOrder: Number(row.execution_order),
       shortText: row.short_text == null ? null : String(row.short_text),
       workCenter: row.work_center == null ? null : String(row.work_center),
-      workCenterPlant: String(row.plant),
+      workCenterPlant: String(row.work_center_plant),
       controlKey: String(row.control_key ?? ''),
+      taskListType: String(row.task_list_type),
+      routingGroup: String(row.routing_group),
+      groupCounter: String(row.group_counter),
+      productionVersion: String(row.production_version),
       confirmable: blockingReason == null,
       blockingReason,
       yieldQuantity,
+      orderUnitYield: String(prior?.order_yield ?? '0'),
+      operationQuantityYield: String(prior?.operation_yield ?? '0'),
       scrapQuantity: String(prior?.scrap ?? '0'),
       reworkQuantity: String(prior?.rework ?? '0'),
       remainingQuantity: remainingText(toScaled(header.orderQuantity, 3) - toScaled(yieldQuantity, 3)),
@@ -439,7 +450,7 @@ export async function operationsOf(
       operationUnit: row.operation_unit == null ? null : String(row.operation_unit),
       baseQuantity: row.base_quantity == null ? null : String(row.base_quantity),
       baseUnit: row.base_unit == null ? null : String(row.base_unit),
-      activities: await activitiesOf(tx, client, version.taskListType, version.routingGroup, version.groupCounter, operationNumber),
+      activities: await activitiesOf(tx, client, header.orderNumber, operationNumber),
     };
   }));
 }
@@ -460,45 +471,33 @@ export async function loadTimeTicket(client: string, input: {
   const orderNumber = clean(input.orderNumber).toUpperCase();
   if (!orderNumber) fail('A production order is required.', 'Enter the order to confirm.');
   const askedDate = clean(input.postingDate);
-  const postingDate = askedDate ? dateOf(askedDate, 'The posting date') : '';
+  if (askedDate) dateOf(askedDate, 'The posting date');
   return withTenant(client, async (tx) => {
     const header = await headerOf(tx, client, orderNumber);
-    const keyDate = postingDate || header.scheduledStart;
     let blockingReason: string | null = confirmationBlockReason(header.status);
-    let version: { taskListType: string; routingGroup: string; groupCounter: string; productionVersion: string } | null = null;
-    if (!blockingReason) {
-      try {
-        const selected = await selectProductionVersion(client, {
-          materialNumber: header.materialNumber,
-          plant: header.plant,
-          keyDate,
-          quantity: plainQuantity(header.orderQuantity),
-          unit: header.unit,
-          productionVersion: clean(input.productionVersion) || null,
-          context: 'ORDER',
-        }, tx);
-        version = selected;
-      } catch (error) {
-        if (error instanceof ProductionVersionError) blockingReason = error.message;
-        else throw error;
-      }
-    }
-    const operations = version ? await operationsOf(tx, client, header, version, keyDate) : [];
+    const operations = await operationsOf(tx, client, header);
+    const identity = operations[0] ?? null;
+    if (!blockingReason && operations.length === 0) blockingReason = ORDER_OPERATION_SNAPSHOT_MISSING;
     const asked = clean(input.operationNumber).toUpperCase();
     const selected = asked ? operations.find((row) => row.operationNumber === asked) ?? null : null;
-    if (asked && version && !selected) {
-      blockingReason = `Operation ${asked} does not stand on production version ${version.productionVersion}.`;
+    if (asked && operations.length > 0 && !selected) {
+      blockingReason = `Operation ${asked} does not stand on production order ${header.orderNumber}. The routing was not read.`;
+    }
+    const gaps = [...GAPS];
+    const namedVersion = clean(input.productionVersion).toUpperCase();
+    if (namedVersion && identity && namedVersion !== identity.productionVersion) {
+      gaps.push(`Production version ${namedVersion} was not used. The order stores ${identity.productionVersion}. The routing was not re-read.`);
     }
     return {
       ...header,
-      productionVersion: version?.productionVersion ?? null,
-      taskListType: version?.taskListType ?? null,
-      routingGroup: version?.routingGroup ?? null,
-      groupCounter: version?.groupCounter ?? null,
+      productionVersion: identity?.productionVersion ?? null,
+      taskListType: identity?.taskListType ?? null,
+      routingGroup: identity?.routingGroup ?? null,
+      groupCounter: identity?.groupCounter ?? null,
       operations,
       selected,
       blockingReason,
-      gaps: GAPS,
+      gaps,
     };
   });
 }
@@ -564,25 +563,33 @@ async function prepare(tx: Tx, client: string, input: {
     );
   }
   const postingDate = dateOf(input.postingDate, 'The posting date');
-  let version;
-  try {
-    version = await selectProductionVersion(client, {
-      materialNumber: header.materialNumber,
-      plant: header.plant,
-      keyDate: postingDate,
-      quantity: plainQuantity(header.orderQuantity),
-      unit: header.unit,
-      productionVersion: clean(input.productionVersion) || null,
-      context: 'ORDER',
-    }, tx);
-  } catch (error) {
-    if (error instanceof ProductionVersionError) fail(error.message, error.remedy);
-    throw error;
+  const operations = await operationsOf(tx, client, header);
+  if (operations.length === 0) {
+    fail(
+      ORDER_OPERATION_SNAPSHOT_MISSING,
+      'Create the order from a production version so the routing is copied. A later routing change is not applied to this order.',
+    );
   }
-  const operations = await operationsOf(tx, client, header, version, postingDate);
   const operation = operations.find((row) => row.operationNumber === input.operationNumber);
-  if (!operation) fail(`Operation ${input.operationNumber} does not stand on production version ${version.productionVersion}.`);
+  if (!operation) {
+    fail(
+      `Operation ${input.operationNumber} does not stand on production order ${header.orderNumber}. The routing was not read.`,
+      'Choose an operation stored on the order.',
+    );
+  }
+  const version = {
+    taskListType: operation.taskListType,
+    routingGroup: operation.routingGroup,
+    groupCounter: operation.groupCounter,
+    productionVersion: operation.productionVersion,
+  };
   if (!operation.confirmable) fail(operation.blockingReason ?? 'The operation is not confirmable.', 'Choose an operation whose control key allows confirmation.');
+  if (toScaled(operation.operationQuantityYield, 3) > 0n) {
+    fail(
+      `Operation ${operation.operationNumber} already has an operation-quantity effect from a header confirmation. A time-ticket quantity was not added to it.`,
+      'Cancel that header confirmation on CO13, or confirm this operation only when no scaled effect stands. The two quantities were not converted.',
+    );
+  }
   const orderDecimals = await decimalsOf(tx, header.unit);
   const entryUnit = clean(input.unit).toUpperCase() || header.unit;
   const entryDecimals = entryUnit === header.unit ? orderDecimals : await decimalsOf(tx, entryUnit);
@@ -823,6 +830,7 @@ export async function enterTimeTicket(client: string, input: {
     const prepared = await prepare(tx, client, { ...input, orderNumber, operationNumber, confirmFinal: input.confirmFinal });
     const allocated = await allocateNumber(tx, { client, objectCode: 'PRODCONF', allocatedBy: input.requestedBy });
     const confirmationNumber = allocated.display;
+    // sequence is the standard-sequence identity 000000. Execution order is not stored on the confirmation.
     await tx.execute(sql`
       insert into production_confirmation (
         client, confirmation_number, order_number, operation_number, sequence, task_list_type, routing_group,

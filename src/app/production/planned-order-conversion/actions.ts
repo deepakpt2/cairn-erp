@@ -9,6 +9,8 @@ import {
   PLANNED_ORDER_CONVERT_ROUTE,
   PlannedOrderConversionError,
   convertPlannedOrder,
+  notAttemptedConversion,
+  rolledBackConversion,
   type PlannedOrderConversionResult,
 } from '@/modules/production/planned-order-conversion';
 
@@ -31,15 +33,21 @@ export async function convertPlannedOrderAction(
   try {
     const session = await requireCapability(PLANNED_ORDER_CONVERT_CAPABILITY);
     if (text(form, 'confirm') !== 'X') {
-      return { ok: false, message: 'Confirm the conversion before it is saved.', remedy: 'Tick the confirmation. Nothing was converted.' };
+      const result = notAttemptedConversion({
+        plannedOrderNumber: text(form, 'orderNumber'),
+        message: 'Confirm the conversion before it is saved.',
+        remedy: 'Tick the confirmation. Nothing was converted.',
+      });
+      return { ok: false, message: result.message, remedy: result.remedy ?? undefined, result };
     }
     const orderType = text(form, 'orderType');
     if (!orderType) {
-      return {
-        ok: false,
+      const result = notAttemptedConversion({
+        plannedOrderNumber: text(form, 'orderNumber'),
         message: 'An order type is required for conversion. None was selected.',
         remedy: 'Enter a standing production order type. The first type was not chosen.',
-      };
+      });
+      return { ok: false, message: result.message, remedy: result.remedy ?? undefined, result };
     }
     const result = await convertPlannedOrder({
       client: session.user.client,
@@ -49,10 +57,10 @@ export async function convertPlannedOrderAction(
       quantity: text(form, 'quantity'),
       unit: text(form, 'unit'),
       orderType,
+      productionVersion: text(form, 'productionVersion') || undefined,
       named: {
         mrpArea: text(form, 'mrpArea'),
         openingDate: text(form, 'openingDate'),
-        productionVersion: text(form, 'productionVersion'),
         salesOrder: text(form, 'salesOrder'),
         wbs: text(form, 'wbs'),
         availability: text(form, 'availability'),
@@ -62,14 +70,34 @@ export async function convertPlannedOrderAction(
     });
     revalidatePath(PLANNED_ORDER_CONVERT_ROUTE);
     return {
-      ok: result.status !== 'FAILED',
+      ok: result.status === 'CONVERTED' || result.status === 'ALREADY_CONVERTED',
       message: result.message,
       remedy: result.remedy ?? undefined,
       result,
     };
   } catch (error) {
-    if (error instanceof PlannedOrderConversionError) return { ok: false, message: error.message, remedy: error.remedy };
-    if (error instanceof AuthzError) return { ok: false, message: 'You do not hold planned-order conversion.' };
+    if (error instanceof PlannedOrderConversionError) {
+      const result = error.reconciliation === 'NOT_ATTEMPTED'
+        ? notAttemptedConversion({
+          plannedOrderNumber: text(form, 'orderNumber'),
+          message: error.message,
+          remedy: error.remedy,
+        })
+        : rolledBackConversion({
+          plannedOrderNumber: text(form, 'orderNumber'),
+          code: error.code,
+          message: error.message,
+          remedy: error.remedy,
+        });
+      return { ok: false, message: result.message, remedy: result.remedy ?? undefined, result };
+    }
+    if (error instanceof AuthzError) {
+      const result = notAttemptedConversion({
+        message: 'You do not hold planned-order conversion.',
+        remedy: 'Conversion was not attempted.',
+      });
+      return { ok: false, message: result.message, remedy: result.remedy ?? undefined, result };
+    }
     throw error;
   }
 }

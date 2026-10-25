@@ -92,6 +92,18 @@ export default function OrderInformationResultView({
                   {row.orderNumber && result.object === 'PRODUCTION_ORDER' && (
                     <Link href={`/production/production-order-display?order=${encodeURIComponent(row.orderNumber)}`}>CO03</Link>
                   )}
+                  {row.orderNumber && row.operationNumber && result.object === 'PRODUCTION_ORDER' && (
+                    <>
+                      {' · '}
+                      <Link href={`/production/time-ticket?order=${encodeURIComponent(row.orderNumber)}&operation=${encodeURIComponent(row.operationNumber)}`}>CO11N</Link>
+                    </>
+                  )}
+                  {row.confirmationNumber && (
+                    <>
+                      {' · '}
+                      <Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(row.confirmationNumber)}`}>CO13</Link>
+                    </>
+                  )}
                   {row.orderNumber && result.object === 'PLANNED_ORDER' && canDisplayPlanned && (
                     <Link href={`/production/planned-order-display?order=${encodeURIComponent(row.orderNumber)}`}>MD13</Link>
                   )}
@@ -119,8 +131,9 @@ export default function OrderInformationResultView({
             {result.object === 'PRODUCTION_ORDER' && canConfirm && <> · <Link href={`/production/time-ticket?order=${encodeURIComponent(result.overview.orderNumber)}`}>CO11N</Link></>}
             {result.object === 'PRODUCTION_ORDER' && canConfirmOrder && <> · <Link href={`/production/order-confirmation?order=${encodeURIComponent(result.overview.orderNumber)}`}>CO15</Link></>}
           </p>
-          <p>Components {result.overview.components.length}. Confirmations {result.overview.confirmations.length}. Goods movements {result.overview.movements.length}. Dependent requirements {result.overview.dependents.length}.</p>
+          <p>Components {result.overview.components.length}. Operations {result.overview.operations.length}. Confirmations {result.overview.confirmations.length}. Goods movements {result.overview.movements.length}. Dependent requirements {result.overview.dependents.length}.</p>
           <ChildTable title="Components" rows={result.overview.components} />
+          <ChildTable title="Operations" rows={result.overview.operations} />
           <ChildTable title="Confirmations" rows={result.overview.confirmations} />
           <ChildTable title="Goods movements" rows={result.overview.movements} />
           <ChildTable title="Dependent requirements" rows={result.overview.dependents} />

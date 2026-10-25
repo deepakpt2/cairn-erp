@@ -218,7 +218,9 @@ describe('standard routing', () => {
     expect(changed.routingGroup).toBe('50000001');
     expect(changed.groupCounter).toBe('01');
     expect(changed.operations.find((row) => row.operationNumber === '0010')?.shortText).toBe('Cut again');
+    expect(changed.operations.find((row) => row.operationNumber === '0010')?.executionOrder).toBe(1);
     expect(changed.operations.find((row) => row.operationNumber === '0020')?.deletionFlag).toBe('X');
+    expect(changed.operations.find((row) => row.operationNumber === '0020')?.executionOrder).toBe(2);
     expect(changed.version).toBe((before?.version ?? 1) + 1);
   });
 
@@ -346,6 +348,72 @@ describe('standard routing', () => {
     )));
     expect(rows.some((row) => row.transactionCode === 'CA01')).toBe(true);
     expect(rows.some((row) => row.transactionCode === 'CA02')).toBe(true);
+  });
+
+
+  it('stores execution order separately from the operation number', async () => {
+    const listed = await createRouting(header({
+      routingGroup: '50000020',
+      operations: [operation({ operationNumber: '0030', shortText: 'Third number' }), operation({ operationNumber: '0010', shortText: 'First number' })],
+    }));
+    expect(listed.sequence).toBe('000000');
+    expect(listed.operations.map((row) => [row.operationNumber, row.executionOrder, row.sequence])).toEqual([
+      ['0030', 1, '000000'],
+      ['0010', 2, '000000'],
+    ]);
+    const explicit = await createRouting(header({
+      routingGroup: '50000021',
+      operations: [
+        operation({ operationNumber: '0020', shortText: 'Later number', executionOrder: 1 }),
+        operation({ operationNumber: '0010', shortText: 'Earlier number', executionOrder: 2 }),
+      ],
+    }));
+    expect(explicit.operations.map((row) => [row.operationNumber, row.executionOrder])).toEqual([['0020', 1], ['0010', 2]]);
+    const swapped = await changeRouting(header({
+      routingGroup: '50000021', groupCounter: '01', version: explicit.version,
+      operations: [
+        operation({ operationNumber: '0020', shortText: 'Later number', executionOrder: 2 }),
+        operation({ operationNumber: '0010', shortText: 'Earlier number', executionOrder: 1 }),
+      ],
+    }));
+    expect(swapped.operations.map((row) => [row.operationNumber, row.executionOrder])).toEqual([['0010', 1], ['0020', 2]]);
+    const otherCounter = await createRouting(header({
+      routingGroup: '50000021', groupCounter: '02',
+      operations: [operation({ operationNumber: '0010', executionOrder: 4 })],
+    }));
+    expect(otherCounter.operations).toEqual([expect.objectContaining({ operationNumber: '0010', executionOrder: 4, sequence: '000000' })]);
+    await expect(createRouting(header({
+      routingGroup: '50000022',
+      operations: [operation({ operationNumber: '0010', executionOrder: 1 }), operation({ operationNumber: '0010', executionOrder: 2 })],
+    }))).rejects.toThrow(/Operation number 0010 is repeated/);
+    await expect(createRouting(header({
+      routingGroup: '50000022',
+      operations: [operation({ operationNumber: '0010', executionOrder: 1 }), operation({ operationNumber: '0020', executionOrder: 1 })],
+    }))).rejects.toThrow(/Execution order 1 is used/);
+    await expect(createRouting(header({
+      routingGroup: '50000022',
+      operations: [operation({ operationNumber: '0010', executionOrder: 1 }), operation({ operationNumber: '0020' })],
+    }))).rejects.toThrow(/some operations and omitted/);
+    await expect(createRouting(header({
+      routingGroup: '50000022',
+      operations: [operation({ operationNumber: '0010', executionOrder: 0 })],
+    }))).rejects.toThrow(/not taken from the operation number/);
+    expect((await listRoutings(tenant.client)).some((row) => row.routingGroup === '50000022')).toBe(false);
+    const held = await createRouting(header({
+      routingGroup: '50000023',
+      operations: [operation({ operationNumber: '0010', executionOrder: 1 }), operation({ operationNumber: '0020', executionOrder: 2 })],
+    }));
+    await expect(changeRouting(header({
+      routingGroup: '50000023', groupCounter: '01', version: held.version,
+      operations: [operation({ operationNumber: '0010', executionOrder: 2 })],
+    }))).rejects.toThrow(/not in this save/);
+    const appended = await changeRouting(header({
+      routingGroup: '50000023', groupCounter: '01', version: held.version,
+      operations: [operation({ operationNumber: '0010' }), operation({ operationNumber: '0020' }), operation({ operationNumber: '0030', shortText: 'Added' })],
+    }));
+    expect(appended.operations.filter((row) => row.deletionFlag !== 'X').map((row) => [row.operationNumber, row.executionOrder])).toEqual([
+      ['0010', 1], ['0020', 2], ['0030', 3],
+    ]);
   });
 
   it('does not show another tenant the routing and checks the named capability', async () => {

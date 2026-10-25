@@ -222,8 +222,10 @@ describe('production order type assignment', () => {
     const co41 = readFileSync('src/app/production/planned-order-conversion-collective/actions.ts', 'utf8');
     for (const source of [create, conversion, co01, co40, co41]) {
       expect(source).not.toContain('checking-control');
-      expect(source).not.toContain('order-type-parameters');
     }
+    expect(conversion).toContain('readProductionVersionSelection');
+    expect(readFileSync('src/modules/production/order-bom-snapshot.ts', 'utf8')).toContain('readProductionVersionSelection');
+    expect(create).toContain('An order-type parameter is not proof that the type stands.');
     expect(co01).toContain('A production order type is required. Nothing was saved.');
     expect(co01).not.toContain("orderType: text(form, 'orderType') || undefined");
     expect(readFileSync('src/app/production/orders/OrderCreate.tsx', 'utf8')).toMatch(/name="orderType"[^>]*required/);

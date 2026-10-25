@@ -11,15 +11,20 @@
  * proof that the current bill of material still matches the components.
  * A production version is not a search key. An order type is stored on the
  * order and is not a search key. A controlling area, scrap, a scheduling
- * type, a priority, operations, and sequences are not stored. They are
- * refused as keys. Issued and received quantities
+ * type, a priority, and a sequence are not search keys. Operations are
+ * listed when they were copied onto the order. An order with none was not
+ * given a routing snapshot. Issued and received quantities
  * are read from material documents. Confirmations are listed when they
  * stand. This display does not enter or cancel one.
  */
 import { sql } from 'drizzle-orm';
 
+import { JOURNAL_ACCOUNTING_NOTE } from '../inventory/material-document-accounting';
+import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
+
 import { hasCapability } from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
+import { toScaled } from '../../platform/posting/decimal';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
 
 export const PRODUCTION_ORDER_DISPLAY_CAPABILITY = 'PROD.ORDER.DISPLAY';
@@ -34,8 +39,8 @@ const REFUSED: Record<string, string> = {
   productionVersion: 'A production version is not a search key. When one was stored, it is shown on the order as the version that selected the snapshot. Display does not re-read the bill of material.',
   schedulingType: 'A scheduling type is not stored. The start and finish dates are.',
   priority: 'A priority is not stored on the production order.',
-  operation: 'Operations are not stored on the production order.',
-  sequence: 'Sequences are not stored. There is no standard, alternative, or parallel sequence to display.',
+  operation: 'An operation is not a search key. Stored operations are listed on the order. A missing snapshot is not stored as a search.',
+  sequence: 'Only the copied standard sequence is stored. An alternative or parallel sequence is not a search key.',
   availability: 'Component availability is not checked on this display.',
   cost: 'Cost is not carried on the production order.',
   confirmation: 'A confirmation number is not the key of this display. Confirmations that stand are listed with the order.',
@@ -66,6 +71,8 @@ export interface ProductionOrderComponentDisplay {
   storageLocation: string | null;
   requiredQuantity: string;
   unit: string;
+  /** Null when conversion did not copy a matching dependent requirement date. */
+  requirementDate: string | null;
   issuedQuantity: string;
   remainingQuantity: string;
 }
@@ -107,6 +114,27 @@ export interface ProductionOrderHistoryDisplay {
   reason: string | null;
 }
 
+export interface ProductionOrderOperationDisplay {
+  operationNumber: string;
+  sequence: string;
+  executionOrder: number;
+  shortText: string | null;
+  workCenter: string | null;
+  controlKey: string | null;
+  taskListType: string;
+  routingGroup: string;
+  groupCounter: string;
+  productionVersion: string;
+  routingVersion: number;
+  confirmation: string;
+  confirmedYield: string;
+  confirmedScrap: string;
+  confirmedRework: string;
+  /** UNCONFIRMED is a stored operation with no active confirmation. It is not a missing snapshot. */
+  progress: 'UNCONFIRMED' | 'PARTIAL' | 'FINAL';
+  values: Array<{ parameter: string; description: string; quantity: string | null; unit: string; required: string }>;
+}
+
 export interface ProductionOrderDisplay {
   orderNumber: string;
   materialNumber: string;
@@ -135,12 +163,17 @@ export interface ProductionOrderDisplay {
   releasedBy: string | null;
   releasedAt: string | null;
   receivedQuantity: string;
+  /** Active header confirmations only. Operation yields are not added. Cancelled header confirmations are excluded. */
+  headerConfirmedYield: string;
+  headerConfirmedScrap: string;
+  headerConfirmedRework: string;
   version: number;
   createdBy: string;
   createdAt: string;
   changedBy: string | null;
   changedAt: string | null;
   components: ProductionOrderComponentDisplay[];
+  operations: ProductionOrderOperationDisplay[];
   documents: ProductionOrderDocumentDisplay[];
   confirmations: ProductionOrderConfirmationDisplay[];
   history: ProductionOrderHistoryDisplay[];
@@ -191,6 +224,118 @@ async function rows(tx: Tx, query: ReturnType<typeof sql>): Promise<Array<Record
   return await tx.execute(query) as unknown as Array<Record<string, unknown>>;
 }
 
+/** A partial material reversal does not reverse the journal. CO03 must say so. */
+async function journalAccountingGaps(tx: Tx, client: string, number: string): Promise<string[]> {
+  const found = await rows(tx, sql`
+    select distinct d.status, coalesce(j.status, 'ABSENT') as journal_status
+      from material_document_line l
+      join material_document d
+        on d.client = l.client and d.material_document_number = l.material_document_number
+      left join journal_entry j
+        on d.journal_document_number is not null
+       and split_part(d.journal_document_number, '/', 2) ~ '^[0-9]+$'
+       and j.client = d.client
+       and j.document_number = d.journal_document_number
+       and j.fiscal_year = split_part(d.journal_document_number, '/', 2)::int
+     where l.client = ${client}
+       and l.production_order_number = ${number}
+       and d.reversal_of is null
+       and d.journal_document_number is not null
+       and (
+         (d.status = 'PARTIALLY_REVERSED' and coalesce(j.status, 'ABSENT') = 'POSTED')
+         or (d.status = 'REVERSED' and coalesce(j.status, 'ABSENT') <> 'REVERSED')
+         or (d.status <> 'REVERSED' and j.status = 'REVERSED')
+       )
+  `);
+  const notes = new Set<string>();
+  for (const row of found) {
+    const status = String(row.status);
+    const journalStatus = String(row.journal_status);
+    if (status === 'PARTIALLY_REVERSED' && journalStatus === 'POSTED') notes.add(JOURNAL_ACCOUNTING_NOTE.partial);
+    else if (status === 'REVERSED' && journalStatus !== 'REVERSED') notes.add(JOURNAL_ACCOUNTING_NOTE.missing);
+    else if (status !== 'REVERSED' && journalStatus === 'REVERSED') notes.add(JOURNAL_ACCOUNTING_NOTE.mismatch);
+  }
+  return [...notes];
+}
+
+async function operationDisplays(tx: Tx, client: string, orderNumber: string): Promise<ProductionOrderOperationDisplay[]> {
+  const found = await rows(tx, sql`
+    select op.operation_number, op.sequence, op.execution_order, op.short_text, op.work_center, op.control_key,
+           op.task_list_type, op.routing_group, op.group_counter, op.production_version,
+           op.routing_version, op.confirmation,
+           coalesce(progress.yield, 0)::text as yield,
+           coalesce(progress.scrap, 0)::text as scrap,
+           coalesce(progress.rework, 0)::text as rework,
+           coalesce(progress.final, false) as final
+      from production_order_operation op
+      left join lateral (
+        select coalesce(sum(yield_quantity), 0) as yield,
+               coalesce(sum(scrap_quantity), 0) as scrap,
+               coalesce(sum(rework_quantity), 0) as rework,
+               bool_or(confirmation_type = 'FINAL') as final
+          from (
+            select c.yield_quantity, c.scrap_quantity, c.rework_quantity, c.confirmation_type
+              from production_confirmation c
+             where c.client = op.client and c.order_number = op.order_number
+               and c.confirmation_level = 'OPERATION' and c.operation_number = op.operation_number
+               and not exists (
+                 select 1 from production_confirmation_cancellation x
+                  where x.client = c.client and x.confirmation_number = c.confirmation_number
+               )
+            union all
+            select e.yield_quantity, e.scrap_quantity, e.rework_quantity, e.confirmation_type
+              from production_confirmation_operation e
+             where e.client = op.client and e.order_number = op.order_number
+               and e.operation_number = op.operation_number
+               and not exists (
+                 select 1 from production_confirmation_cancellation x
+                  where x.client = e.client and x.confirmation_number = e.confirmation_number
+               )
+          ) posted
+      ) progress on true
+     where op.client = ${client} and op.order_number = ${orderNumber}
+     order by op.execution_order, op.operation_number
+  `);
+  const values = await rows(tx, sql`
+    select operation_number, parameter, description, quantity::text as quantity, unit, required
+      from production_order_operation_value
+     where client = ${client} and order_number = ${orderNumber}
+     order by operation_number, parameter
+  `);
+  return found.map((row) => {
+    const final = row.final === true || row.final === 't' || row.final === 'true';
+    const yieldQuantity = String(row.yield ?? '0');
+    const scrapQuantity = String(row.scrap ?? '0');
+    const reworkQuantity = String(row.rework ?? '0');
+    const active = Number(yieldQuantity) + Number(scrapQuantity) + Number(reworkQuantity) > 0;
+    return {
+      operationNumber: String(row.operation_number),
+      sequence: String(row.sequence),
+      executionOrder: Number(row.execution_order),
+      shortText: recorded(row.short_text),
+      workCenter: recorded(row.work_center),
+      controlKey: recorded(row.control_key),
+      taskListType: String(row.task_list_type),
+      routingGroup: String(row.routing_group),
+      groupCounter: String(row.group_counter),
+      productionVersion: String(row.production_version),
+      routingVersion: Number(row.routing_version),
+      confirmation: String(row.confirmation),
+      confirmedYield: yieldQuantity,
+      confirmedScrap: scrapQuantity,
+      confirmedRework: reworkQuantity,
+      progress: final ? 'FINAL' : active ? 'PARTIAL' : 'UNCONFIRMED',
+      values: values.filter((value) => String(value.operation_number) === String(row.operation_number)).map((value) => ({
+        parameter: String(value.parameter),
+        description: String(value.description),
+        quantity: value.quantity == null ? null : String(value.quantity),
+        unit: String(value.unit),
+        required: String(value.required),
+      })),
+    };
+  });
+}
+
 function stamp(value: unknown): string | null {
   if (value == null) return null;
   return value instanceof Date ? value.toISOString() : String(value);
@@ -202,13 +347,29 @@ function recorded(value: unknown): string | null {
   return text ? text : null;
 }
 
-function gapsOf(versionRecorded: boolean): string[] {
+function quantitySum(rows: Array<Record<string, unknown>>, field: string): string {
+  const total = rows.reduce((sum, row) => sum + toScaled(String(row[field] ?? '0'), 3), 0n);
+  const absolute = total.toString().padStart(4, '0');
+  return `${absolute.slice(0, -3)}.${absolute.slice(-3)}`;
+}
+
+function gapsOf(versionRecorded: boolean, undatedComponents: number, operationCount: number): string[] {
   return [
-    'Operations are not stored on the production order. A confirmation names a routing operation. It is not copied here.',
-    'Sequences are not stored.',
+    operationCount > 0
+      ? `${operationCount} operation(s) were copied onto this order. A later routing change does not rewrite them. Predecessor and successor are not stored.`
+      : 'Operations are not stored on the production order. None were copied, and none were read from a routing.',
+    operationCount > 0
+      ? 'The stored sequence is standard sequence 000000. Execution order is stored separately and is not the operation number. An order created with this column copies the routing execution order. A row that had no execution order received the operation-number display order instead. That assignment is not proof of an earlier routing order. A later routing change does not rewrite either value. Another sequence was not invented.'
+      : 'Sequences are not stored.',
+    'A confirmation is posted against the operation number. Its sequence stays 000000. Execution order is not written there, and an earlier operation does not have to be confirmed first.',
     versionRecorded
       ? 'The stored production version and bill of material are the determination that selected this snapshot. Display does not re-read the bill of material. A later BOM change or component edit is not applied here.'
       : 'A production version and bill of material were not recorded on this order. None was inferred.',
+    undatedComponents > 0
+      ? `${undatedComponents} component line(s) have no requirement date. They are not planning demand. The order start, the order finish, the bill of material date, and today were not used.`
+      : 'Each component requirement date was copied from a matching dependent requirement. That dated component is the active demand. The closed dependent requirement is not counted again. Planning counts the copied date. It was not taken from the order start or finish.',
+    'Changing the scheduled start or finish does not move a component requirement date. No component scheduling calculation exists. The receipt uses the scheduled finish and is separate from component demand.',
+    'Header confirmed yield counts each active header confirmation once. A cancelled header confirmation is excluded. Operation confirmed yields are not added to it, and they are not added across operations.',
     'Confirmations are listed when they stand, including a cancellation reference. This display does not enter or cancel one. Actual start and finish stand on the confirmation, not on the order.',
     'Cost is not carried.',
     'Component availability is not checked.',
@@ -237,30 +398,34 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
     const components = await rows(tx, sql`
       select c.item_number, c.bom_item, c.source_material, c.material_number, coalesce(m.description, '') as description, c.plant,
              c.storage_location, c.required_quantity::text as required_quantity, c.unit_of_measure,
+             c.requirement_date::text as requirement_date,
              coalesce(issued.issued, 0)::text as issued
         from production_order_component c
         left join material m on m.client = c.client and m.material_number = c.material_number
-        left join (
-          select l.production_order_item,
-                 sum(case when mt.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as issued
+        left join lateral (
+          select coalesce(sum(l.base_quantity), 0) as issued
             from material_document_line l
             join material_document d
-              on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-            join movement_type mt on mt.client = l.client and mt.movement_type = l.movement_type
-           where l.client = ${client} and l.production_order_number = ${number} and l.production_order_item is not null
-           group by l.production_order_item
-        ) issued on issued.production_order_item = c.item_number
+              on d.client = l.client and d.material_document_number = l.material_document_number
+             and ${OPEN_PRODUCTION_DOCUMENT}
+           where l.client = c.client and l.production_order_number = c.order_number
+             and l.production_order_item = c.item_number
+             and l.material_number = c.material_number
+             and ${lineNotReversed('l')}
+        ) issued on true
        where c.client = ${client} and c.order_number = ${number}
        order by c.item_number
     `);
     const received = await rows(tx, sql`
-      select coalesce(sum(case when mt.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end), 0)::text as received
+      select coalesce(sum(l.base_quantity), 0)::text as received
         from material_document_line l
         join material_document d
-          on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
-        join movement_type mt on mt.client = l.client and mt.movement_type = l.movement_type
+          on d.client = l.client and d.material_document_number = l.material_document_number
+         and ${OPEN_PRODUCTION_DOCUMENT}
        where l.client = ${client} and l.production_order_number = ${number}
          and l.material_number = ${String(header.material_number)}
+         and l.production_order_item is null
+         and ${lineNotReversed('l')}
     `);
     const documents = await rows(tx, sql`
       select l.material_document_number, l.line_number, l.movement_type, l.material_number,
@@ -282,6 +447,7 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
        where c.client = ${client} and c.order_number = ${number}
        order by c.confirmation_number
     `);
+    const operations = await operationDisplays(tx, client, number);
     const history = await rows(tx, sql`
       select changed_at, change_type, transaction_code, changed_by, reason
         from change_document
@@ -321,6 +487,9 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
       technicallyCompletedBy: header.technically_completed_by == null ? null : String(header.technically_completed_by),
       technicallyCompletedAt: stamp(header.technically_completed_at),
       receivedQuantity: Number(received[0]?.received ?? 0).toFixed(3),
+      headerConfirmedYield: quantitySum(confirmations.filter((row) => String(row.confirmation_level) === 'HEADER' && row.cancellation_number == null), 'yield'),
+      headerConfirmedScrap: quantitySum(confirmations.filter((row) => String(row.confirmation_level) === 'HEADER' && row.cancellation_number == null), 'scrap'),
+      headerConfirmedRework: quantitySum(confirmations.filter((row) => String(row.confirmation_level) === 'HEADER' && row.cancellation_number == null), 'rework'),
       version: Number(header.version ?? 1),
       createdBy: String(header.created_by),
       createdAt: stamp(header.created_at) ?? '',
@@ -339,10 +508,12 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
           storageLocation: row.storage_location == null ? null : String(row.storage_location),
           requiredQuantity: String(row.required_quantity),
           unit: String(row.unit_of_measure),
+          requirementDate: recorded(row.requirement_date),
           issuedQuantity: issued.toFixed(3),
           remainingQuantity: Math.max(0, required - issued).toFixed(3),
         };
       }),
+      operations,
       confirmations: confirmations.map((row) => ({
         confirmationNumber: String(row.confirmation_number),
         confirmationLevel: String(row.confirmation_level) === 'HEADER' ? 'HEADER' : 'OPERATION',
@@ -377,7 +548,21 @@ export async function getProductionOrderDisplay(client: string, orderNumber: str
         changedBy: String(row.changed_by),
         reason: row.reason == null ? null : String(row.reason),
       })),
-      gaps: gapsOf(recorded(header.production_version) != null),
+      gaps: [
+        ...gapsOf(
+          recorded(header.production_version) != null,
+          components.filter((row) => recorded(row.requirement_date) == null).length,
+          operations.length,
+        ),
+        ...((await rows(tx, sql`
+          select 1 as hit
+            from material_document_line l
+           where l.client = ${client} and l.production_order_number = ${number}
+             and ${lineReversalDisagreement('l')}
+           limit 1
+        `)).length > 0 ? [REVERSAL_QUANTITY_DISAGREEMENT] : []),
+        ...(await journalAccountingGaps(tx, client, number)),
+      ],
     };
   });
 }

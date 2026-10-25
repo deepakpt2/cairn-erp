@@ -34,7 +34,7 @@ export default function RoutingForm({
   const mode = document ? 'CHANGE' : 'CREATE';
   const requestKey = useMemo(() => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `routing-${Date.now()}`), []);
   const operationText = saved?.operations.filter((row) => row.deletionFlag !== 'X').map((row) => (
-    `${row.operationNumber}|${row.shortText ?? ''}|${row.workCenter ?? ''}|${row.controlKey ?? ''}|${row.standardValueKey ?? ''}|${row.values.map((value) => `${value.parameter},${value.quantity},${value.unit}`).join(';')}|${row.allocations.filter((item) => item.deletionFlag !== 'X').map((item) => `${item.materialNumber},${item.bomUsage},${item.alternative},${item.itemNumber},${item.allocatedQuantity ?? ''}`).join(';')}`
+    `${row.operationNumber}|${row.shortText ?? ''}|${row.workCenter ?? ''}|${row.controlKey ?? ''}|${row.standardValueKey ?? ''}|${row.values.map((value) => `${value.parameter},${value.quantity},${value.unit}`).join(';')}|${row.allocations.filter((item) => item.deletionFlag !== 'X').map((item) => `${item.materialNumber},${item.bomUsage},${item.alternative},${item.itemNumber},${item.allocatedQuantity ?? ''}`).join(';')}|${row.executionOrder}`
   )).join('\n') ?? '';
   const assignmentText = saved?.assignments.filter((row) => row.deletionFlag !== 'X').map((row) => `${row.materialNumber}|${row.plant}`).join('\n') ?? '';
 
@@ -116,7 +116,7 @@ export default function RoutingForm({
       <label className="block text-sm">Material assignments, one per line: material|plant. A routing may have none.
         <textarea className="input mt-1 w-full font-mono" name="assignments" rows={3} defaultValue={assignmentText} disabled={locked} />
       </label>
-      <label className="block text-sm">Operations, one per line: number|text|work center|control key|value key|parameter,quantity,unit|material,usage,alternative,item,quantity. An omitted saved operation is marked deleted. Sequence type 0 only.
+      <label className="block text-sm">Operations, one per line: number|text|work center|control key|value key|parameter,quantity,unit|material,usage,alternative,item,quantity|execution order. The operation number is not the execution order. If every line omits the last field, create uses the line order and change keeps the stored order. A new operation with no order is placed after the highest stored order. A gap is not filled. If any line has it, every line must have it. An omitted saved operation is marked deleted and keeps its stored order. Sequence 000000 of type 0 only.
         <textarea className="input mt-1 w-full font-mono" name="operations" rows={6} defaultValue={operationText} disabled={locked} />
       </label>
       <datalist id="routing-materials">{materials.map((row) => <option key={row.materialNumber} value={row.materialNumber}>{row.description}</option>)}</datalist>

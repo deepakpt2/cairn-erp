@@ -14,6 +14,8 @@ import {
 } from '../src/modules/production/confirmation-cancel';
 import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
+import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
@@ -61,6 +63,15 @@ describe('CO13 cancel confirmation', () => {
       scheduledStart: '2026-10-24', scheduledFinish: '2026-10-25', requestKey,
       components: [{ materialNumber: 'RM-13', plant: PLANT, requiredQuantity: 1 }],
     });
+    await withTenant(tenant.client, async (tx) => {
+      const copied = await resolveOrderOperationSnapshot(tx, {
+        client: tenant.client, plant: PLANT, finishDate: '2026-10-25',
+        taskListType: 'N', routingGroup: '50000013', groupCounter: '01', productionVersion: '0001',
+      });
+      await insertOrderOperationSnapshot(tx, {
+        client: tenant.client, orderNumber: created.orderNumber, createdBy: ACTOR, operations: copied.operations,
+      });
+    });
     const released = await releaseProductionOrder({ client: tenant.client, orderNumber: created.orderNumber, releasedBy: ACTOR });
     const stamped = await withTenant(tenant.client, async (tx) => {
       const found = await tx.execute(sql`select version from production_order where client = ${tenant.client} and order_number = ${released.orderNumber}`) as unknown as Array<{ version: number }>;
@@ -100,6 +111,10 @@ describe('CO13 cancel confirmation', () => {
         on conflict (client, order_type) do nothing
       `);
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
+    });
+    await saveOrderTypeParameter({
+      client: tenant.client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Automatic selection for CO13',
     });
     await extend(tenant.client, 'FG-13');
     await extend(tenant.client, 'RM-13');

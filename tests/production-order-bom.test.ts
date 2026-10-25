@@ -15,6 +15,9 @@ import { changeMaterialBom, createMaterialBom, saveBomItemCategory, saveBomUsage
 import { createRouting, saveRoutingControlKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { createProductionVersion } from '../src/modules/production/production-version';
+import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
+import { saveProductionOrderType } from '../src/modules/production/production-order-type';
+import { savePlantDefinition } from '../src/modules/foundation/plant-maintenance';
 import { createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder } from '../src/modules/production/planned-order-conversion';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -30,6 +33,7 @@ const FINISH = '2026-10-30';
 const START = '2026-10-24';
 
 let tenant: TestTenant;
+let other: TestTenant | undefined;
 let client = '';
 
 async function finished(materialNumber: string) {
@@ -115,6 +119,10 @@ describe('CO01 production version and BOM snapshot', () => {
         on conflict (client, order_type) do nothing
       `);
     });
+    await saveOrderTypeParameter({
+      client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Automatic selection for CO01',
+    });
     await saveBomUsage({
       client, changedBy: ACTOR, usage: 'P', description: 'Production',
       productionRelevance: '.', engineeringRelevance: '.', costingRelevance: '.', salesRelevance: '.',
@@ -171,6 +179,7 @@ describe('CO01 production version and BOM snapshot', () => {
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
+    if (other) await destroyTenant(other.client);
   }, 180_000);
 
   it('stores the selected version and scales the BOM snapshot', async () => {
@@ -182,7 +191,8 @@ describe('CO01 production version and BOM snapshot', () => {
       ['0020', 'CO01-RM2', '3.000', 'CO01-FG'],
       ['0030', 'CO01-RM3', '11.000', 'CO01-FG'],
     ]);
-    expect(preview.warnings.join(' ')).toMatch(/does not store operations/i);
+    expect(preview.warnings.join(' ')).toMatch(/copied onto the order/i);
+    expect(preview.operations.map((row) => row.operationNumber)).toEqual(['0010']);
     expect(await counts()).toEqual(before);
 
     const view = await createProductionOrder({ orderType: 'PP01', ...orderInput('CO01-FG', 'fg-create'), });
@@ -214,11 +224,15 @@ describe('CO01 production version and BOM snapshot', () => {
     });
     const direct = await createProductionOrder(orderInput('CO01-FG', 'fg-compare'));
     const fromConversion = await getProductionOrder(client, converted.productionOrderNumber!);
-    expect(fromConversion?.productionVersion).toBeNull();
-    expect(direct.components.map((row) => ({
-      itemNumber: row.itemNumber, materialNumber: row.materialNumber, requiredQuantity: row.requiredQuantity, unit: row.unit, plant: row.plant,
-    }))).toEqual(fromConversion?.components.map((row) => ({
-      itemNumber: row.itemNumber, materialNumber: row.materialNumber, requiredQuantity: row.requiredQuantity, unit: row.unit, plant: row.plant,
+    expect(fromConversion?.productionVersion).toBe(direct.productionVersion);
+    expect(fromConversion?.bomUsage).toBe(direct.bomUsage);
+    expect(fromConversion?.bomAlternative).toBe(direct.bomAlternative);
+    expect(fromConversion?.components.map((row) => ({
+      itemNumber: row.itemNumber, bomItem: row.bomItem, sourceMaterial: row.sourceMaterial,
+      materialNumber: row.materialNumber, requiredQuantity: row.requiredQuantity, unit: row.unit, plant: row.plant,
+    }))).toEqual(direct.components.map((row) => ({
+      itemNumber: row.itemNumber, bomItem: row.bomItem, sourceMaterial: row.sourceMaterial,
+      materialNumber: row.materialNumber, requiredQuantity: row.requiredQuantity, unit: row.unit, plant: row.plant,
     })));
   });
 
@@ -287,6 +301,15 @@ describe('CO01 production version and BOM snapshot', () => {
     expect(await counts()).toEqual(before);
   });
 
+  it('does not attach a named version to an independent component snapshot', async () => {
+    const before = await counts();
+    await expect(createProductionOrder({
+      ...orderInput('CO01-FG', 'supplied-version', '0001'),
+      components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
+    })).rejects.toThrow(/cannot be attached/);
+    expect(await counts()).toEqual(before);
+  });
+
   it('keeps a caller-supplied snapshot without recording a production version', async () => {
     const view = await createProductionOrder({
       orderType: 'PP01',
@@ -306,5 +329,110 @@ describe('CO01 production version and BOM snapshot', () => {
       select count(*)::int as total from production_order where order_number = ${view.orderNumber}
     `)) as unknown as Array<{ total: number }>;
     expect(hidden.total).toBe(0);
+  });
+
+  it('reads automatic selection and still rejects a missing order type', async () => {
+    const before = await counts();
+    const view = await createProductionOrder(orderInput('CO01-FG', 'auto-0'));
+    expect(view.productionVersion).toBe('0001');
+    await expect(createProductionOrder({ ...orderInput('CO01-FG', 'missing-type'), orderType: 'ZZ99' })).rejects.toThrow(/does not stand/);
+    await expect(previewProductionOrderBom({ ...orderInput('CO01-FG'), orderType: 'ZZ99' })).rejects.toThrow(/does not stand/);
+    expect((await counts()).orders).toBe(before.orders + 1);
+  });
+
+  it('requires a named version for manual selection and does not choose one', async () => {
+    await saveProductionOrderType({
+      client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PP11',
+      description: 'Manual selection', version: 0, reason: 'Manual production version',
+    });
+    await saveOrderTypeParameter({
+      client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP11',
+      taskListType: '', productionVersionSelection: '1', version: 0, reason: 'Manual selection',
+    });
+    const before = await counts();
+    await expect(createProductionOrder({ ...orderInput('CO01-AMB', 'manual-missing'), orderType: 'PP11' })).rejects.toThrow(/require a production version/);
+    await expect(previewProductionOrderBom({ ...orderInput('CO01-AMB'), orderType: 'PP11' })).rejects.toThrow(/require a production version/);
+    const named = await createProductionOrder({
+      ...orderInput('CO01-AMB', 'manual-named', '0002'), orderType: 'PP11',
+    });
+    expect(named.productionVersion).toBe('0002');
+    expect(named.bomAlternative).toBe('02');
+    await expect(createProductionOrder({
+      ...orderInput('CO01-FG', 'manual-bad', 'ZZZZ'), orderType: 'PP11',
+    })).rejects.toThrow(/No order was created/);
+    expect((await counts()).orders).toBe(before.orders + 1);
+  });
+
+  it('does not treat blank parameters as automatic or manual', async () => {
+    await saveProductionOrderType({
+      client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PPBL',
+      description: 'Blank selection', version: 0, reason: 'Blank production version selection',
+    });
+    await saveOrderTypeParameter({
+      client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PPBL',
+      taskListType: '', productionVersionSelection: ' ', version: 0, reason: 'Blank selection',
+    });
+    const before = await counts();
+    await expect(createProductionOrder({ ...orderInput('CO01-FG', 'blank-selection'), orderType: 'PPBL' })).rejects.toThrow(/not a selection method/);
+    await expect(createProductionOrder({
+      ...orderInput('CO01-FG', 'blank-named', '0001'), orderType: 'PPBL',
+    })).rejects.toThrow(/not a selection method/);
+    expect(await counts()).toEqual(before);
+  });
+
+  it('fails when parameters are missing and does not use another plant or tenant', async () => {
+    await saveProductionOrderType({
+      client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PP03',
+      description: 'No parameters', version: 0, reason: 'Type without parameters',
+    });
+    other = await createTenant('co01-pvsel-other');
+    await saveProductionOrderType({
+      client: other.client, changedBy: ACTOR, mode: 'CREATE', orderType: 'PP03',
+      description: 'Other tenant type', version: 0, reason: 'Other tenant type',
+    });
+    await saveOrderTypeParameter({
+      client: other.client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP03',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Other tenant parameters',
+    });
+    await savePlantDefinition({
+      client, changedBy: ACTOR, mode: 'CREATE', plant: '2000', expectedVersion: 0,
+      reason: 'Other plant', values: { name: 'Other plant', country: 'KW' },
+    });
+    await saveOrderTypeParameter({
+      client, changedBy: ACTOR, mode: 'CREATE', plant: '2000', orderType: 'PP03',
+      taskListType: '', productionVersionSelection: '0', version: 0, reason: 'Other plant parameters',
+    });
+    const before = await counts();
+    await expect(createProductionOrder({ ...orderInput('CO01-FG', 'missing-param'), orderType: 'PP03' })).rejects.toMatchObject({
+      message: expect.stringMatching(/do not stand for plant 1000 and order type PP03/),
+      remedy: expect.stringMatching(/Another plant or order type was not used/),
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  it('rejects a version that is out of date or belongs to another material', async () => {
+    await createProductionVersion({
+      client, changedBy: ACTOR, materialNumber: 'CO01-FG', plant: PLANT, productionVersion: '0009',
+      validFrom: '2026-01-01', validTo: '2026-01-31', lotFrom: '0', lotTo: '999999', lotUnit: 'KG',
+      bomUsage: 'P', bomAlternative: '01', taskListType: 'N', routingGroup: '50000051', groupCounter: '01',
+    });
+    const before = await counts();
+    await expect(createProductionOrder({
+      ...orderInput('CO01-FG', 'date-miss', '0009'), orderType: 'PP11',
+    })).rejects.toThrow(/not valid on 2026-10-30/);
+    await expect(createProductionOrder({
+      ...orderInput('CO01-FG', 'other-material', '0002'), orderType: 'PP11',
+    })).rejects.toThrow(/not valid on 2026-10-30/);
+    expect(await counts()).toEqual(before);
+  });
+
+  it('does not read parameters when the caller already supplies the component snapshot', async () => {
+    const view = await createProductionOrder({
+      ...orderInput('CO01-FG', 'supplied-no-param'),
+      orderType: 'PP03',
+      components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
+    });
+    expect(view.productionVersion).toBeNull();
+    expect(view.orderType).toBe('PP03');
   });
 });

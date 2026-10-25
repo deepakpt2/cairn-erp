@@ -30,8 +30,9 @@
  */
 import { and, eq, inArray } from 'drizzle-orm';
 
-import { withTenant } from '../../platform/db/client';
+import { type Tx, withTenant } from '../../platform/db/client';
 import { plant as plantTable } from '../foundation/schema';
+import { accountingForOriginal, readJournalStatus, type JournalAccounting } from './material-document-accounting';
 import { material, materialDocument, materialDocumentLine, movementType } from './schema';
 
 export const MATERIAL_DOC_DISPLAY_CAPABILITY = 'INV.DISPLAY';
@@ -84,6 +85,7 @@ export interface DisplayedDocument {
   /** CPUTM — when the ledger took it. */
   enteredAt: string;
   journalDocumentNumber: string | null;
+  journalAccounting: JournalAccounting;
   reversalOf: string | null;
   reversedBy: string | null;
   /** Derived from the plants the lines stand in; never typed and never stored. */
@@ -242,6 +244,7 @@ export async function displayMaterialDocument(input: {
         ? header.createdAt.toISOString()
         : String(header.createdAt),
       journalDocumentNumber: header.journalDocumentNumber,
+      journalAccounting: await journalAccountingFor(tx, input.client, header, lines),
       reversalOf: header.reversalOf,
       reversedBy: header.reversedBy,
       companyCodes,
@@ -254,5 +257,45 @@ export async function displayMaterialDocument(input: {
         ISO_DATE.test(header.postingDate) ? header.postingDate : '',
       )}`,
     };
+  });
+}
+
+async function journalAccountingFor(
+  tx: Tx,
+  client: string,
+  header: typeof materialDocument.$inferSelect,
+  lines: Array<typeof materialDocumentLine.$inferSelect>,
+): Promise<JournalAccounting> {
+  const journalStatus = await readJournalStatus(tx, client, header.journalDocumentNumber);
+  let originalJournalStatus: Awaited<ReturnType<typeof readJournalStatus>> | null = null;
+  if (header.reversalOf) {
+    const [original] = await tx.select({
+      journalDocumentNumber: materialDocument.journalDocumentNumber,
+    }).from(materialDocument).where(and(
+      eq(materialDocument.client, client),
+      eq(materialDocument.materialDocumentNumber, header.reversalOf),
+    ));
+    originalJournalStatus = await readJournalStatus(tx, client, original?.journalDocumentNumber ?? null);
+  }
+  const counters = await tx.select({
+    line: materialDocumentLine.reversalOfLine,
+    quantity: materialDocumentLine.baseQuantity,
+  }).from(materialDocumentLine).where(and(
+    eq(materialDocumentLine.client, client),
+    eq(materialDocumentLine.reversalOfDocument, header.materialDocumentNumber),
+  ));
+  const reversed: Record<number, number> = {};
+  for (const counter of counters) {
+    if (counter.line == null) continue;
+    reversed[counter.line] = (reversed[counter.line] ?? 0) + Number(counter.quantity);
+  }
+  const linesOpen = lines.some((line) => Number(line.baseQuantity) - (reversed[line.lineNumber] ?? 0) > 1e-9);
+  return accountingForOriginal({
+    status: header.status,
+    reversalOf: header.reversalOf,
+    journalNumber: header.journalDocumentNumber,
+    journalStatus,
+    originalJournalStatus,
+    linesOpen,
   });
 }
