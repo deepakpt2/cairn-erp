@@ -39,6 +39,6 @@ Each step is what the next step reads. Change and display belong with the create
 These are real, and they are not the next wire.
 
 - `MD04` must show the production order. That is a gap in the existing list, not a new transaction.
-- `CO09` availability was deferred by name. It is not required to connect the bill of material, the order, the confirmation, and the receipt.
+- `CO09` availability was deferred by name. It is not required to connect the bill of material, the order, the confirmation, and the receipt. `docs/co09-availability-audit.md` now holds the audit, the gap matrix and the first-slice specification; the deferral itself stands until that is scheduled.
 - Mass release, printing, and the order information system are not required to make one order flow.
 - Process-order transactions are a different module. They are not this list.

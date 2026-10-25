@@ -510,6 +510,28 @@ export async function co11nMovement(ctx: Context) {
   await page.goto(ticketUrl2, { waitUntil: 'domcontentloaded' });
   await page.locator('[data-co11n-cancellation]').waitFor();
   console.log('  ✓ CO13 waits for the reversal, then cancels, and the ticket states the cancellation');
+
+  // 8 · The two marks are then read on the material screen itself: what CO11N posted from is what
+  //     the plant view now shows. The screen renders a stored record either as a read-only list or
+  //     as its own checkboxes, depending on who holds the change, so both renderings are accepted.
+  async function renderedMarks(material: string): Promise<{ backflush: boolean; receipt: boolean }> {
+    await page.goto(`${base}/inventory/materials?material=${material}&plant=${PLANT}&view=MRP`, { waitUntil: 'domcontentloaded' });
+    const box = page.locator('[name="backflush"]');
+    if (await box.count()) {
+      return {
+        backflush: await box.isChecked(),
+        receipt: await page.locator('[name="automaticGoodsReceipt"]').isChecked(),
+      };
+    }
+    // The list is rendered through CSS uppercase, so the comparison ignores case.
+    const text = await page.locator('dl').filter({ hasText: /backflush/i }).first().innerText();
+    return { backflush: /backflush\s+true/i.test(text), receipt: /automaticgoodsreceipt\s+true/i.test(text) };
+  }
+  assert.deepEqual(await renderedMarks('CO11-RM'), { backflush: true, receipt: false },
+    'the component screen shows the mark that withdrew it, and no receipt mark');
+  assert.deepEqual(await renderedMarks('CO11-FG'), { backflush: false, receipt: true },
+    'and the finished good screen shows the mark that received it');
+  console.log('  ✓ the marks the material screen shows are the marks this confirmation posted from');
 }
 
 /** The request key stored with a confirmation, which is what the movement keys are drawn from. */

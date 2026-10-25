@@ -26,6 +26,9 @@ describe('CO11N screen contract', () => {
     // services MIGO uses, so a refused movement takes the confirmation with it.
     expect(service).toContain('postGoodsIssue({');
     expect(service).toContain("}, 'MIGO', { tx })");
+    // The header states the same truth, and the sentence that denied any movement is gone.
+    expect(page).toContain('A movement follows the marks on the material, and it posts with the confirmation.');
+    expect(page).not.toContain('No goods movement is posted');
     expect(service).toContain('postProductionReceipt({');
     expect(service).toContain('}, { tx })');
     // One key per document, derived from the confirmation's own request key.

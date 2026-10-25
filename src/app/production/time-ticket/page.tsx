@@ -62,7 +62,7 @@ export default async function TimeTicketPage({
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
           Confirm one operation of a released production order. A check writes nothing.
           A posted confirmation is not edited here. The order status is not changed.
-          No goods movement is posted.
+          A movement follows the marks on the material, and it posts with the confirmation.
         </p>
         <p className="mt-2 max-w-3xl text-sm text-ink-soft" data-co11n-gaps>
           The operation is the one stored on the order. A later routing edit is not read. A confirmation profile, automatic confirmation, backflush, automatic goods receipt, and personnel are not this screen. Cancellation is CO13. CO14 is not implemented. CO15 confirms the order, not one operation.
