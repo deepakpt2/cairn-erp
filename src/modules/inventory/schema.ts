@@ -230,6 +230,18 @@ export const materialPlant = pgTable('material_plant', {
    * It is not a checking rule, not a default, and not an ATP result.
    */
   checkingGroup: varchar('checking_group', { length: 2 }),
+  /**
+   * MARC-SBDKZ, held as a flag rather than a character. A component marked here is
+   * withdrawn against the order when a confirmation is posted. False is the whole
+   * difference: an unmarked material's issue stays a manual posting on MIGO.
+   */
+  backflush: boolean('backflush').notNull().default(false),
+  /**
+   * MARC-DOLFB, held as a flag. Only a final confirmation of the order's own
+   * material receives; a partial never does, and this flag is not an order-type
+   * override, a storage location, or a special-stock indicator.
+   */
+  automaticGoodsReceipt: boolean('automatic_goods_receipt').notNull().default(false),
   mrpType: varchar('mrp_type', { length: 16 }),
   mrpController: varchar('mrp_controller', { length: 3 }),
   procurementType: varchar('procurement_type', { length: 8 }),

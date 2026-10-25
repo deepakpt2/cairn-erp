@@ -205,7 +205,7 @@ describe('CO15 order confirmation', () => {
 
   it('refuses an unimplemented confirmation control by name', () => {
     expect(orderConfirmationRefusal({ backflush: 'X' })).toMatch(/backflush/);
-    expect(orderConfirmationRefusal({ automaticGoodsReceipt: 'X' })).toMatch(/not configured/);
+    expect(orderConfirmationRefusal({ automaticGoodsReceipt: 'X' })).toMatch(/carries no automatic receipt mark/);
     expect(orderConfirmationRefusal({ automaticFinal: 'X' })).toMatch(/not a stored rule/);
     expect(orderConfirmationRefusal({ personnel: '1' })).toMatch(/not validated/);
     expect(orderConfirmationRefusal({ operation: '0010' })).toMatch(/CO11N/);

@@ -7,8 +7,15 @@
  * may still be confirmed. This screen does not complete or revoke it.
  *
  * A posted confirmation is not edited here. Cancellation is not this screen.
- * No component is issued and no finished good is received: backflush and
- * automatic goods receipt are not configured, so none is proposed.
+ *
+ * The confirmation and the goods movements it causes are one unit of work. A component
+ * whose material is marked for backflush is withdrawn against the order, and a final
+ * confirmation of a material marked for automatic goods receipt receives the finished
+ * good. Both are posted by the goods-movement services MIGO uses, inside the
+ * transaction this screen already holds: a movement that is refused takes the
+ * confirmation with it, and a confirmation never stands beside a movement it was owed.
+ * A material that carries neither mark behaves exactly as this screen always did — a
+ * confirmation and no movement.
  */
 import { sql } from 'drizzle-orm';
 
@@ -25,6 +32,20 @@ import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { toScaled } from '../../platform/posting/decimal';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
+import { postGoodsIssue } from '../inventory/goods-issue';
+import { postProductionReceipt } from '../inventory/production-receipt';
+import {
+  CONFIRMATION_MOVEMENT_CODES,
+  movementRequestKey,
+  movementConfiguration,
+  planConfirmationMovements,
+  plannedMovements,
+  postedMovements,
+  type ConfirmationMovement,
+  type MovementPlan,
+} from './confirmation-movements';
+
+export type { ConfirmationMovement } from './confirmation-movements';
 
 export const TIME_TICKET_CAPABILITY = 'PROD.CONFIRM.ENTER';
 export const TIME_TICKET_ROUTE = '/production/time-ticket';
@@ -38,10 +59,12 @@ const REFUSED: Record<string, string> = {
   suboperation: 'A suboperation is not stored.',
   personnel: 'A personnel number is not validated. None was stored.',
   shift: 'A shift is not stored.',
-  backflush: 'No component is marked for backflush. Nothing was issued.',
-  automaticGoodsReceipt: 'Automatic goods receipt is not configured. A final confirmation does not receive the finished good.',
-  goodsMovement: 'A goods movement is not posted from this confirmation.',
-  clearOpenReservations: 'This order has no reservation. Open reservations were not cleared.',
+  // The marks are read from the material. A caller cannot set one on a confirmation, and
+  // cannot ask this screen to move stock it has not been told to move.
+  backflush: 'A confirmation carries no backflush mark. The mark belongs to the component material in the plant. No material was changed here.',
+  automaticGoodsReceipt: 'A confirmation carries no automatic receipt mark. The mark belongs to the material in the plant. No material was changed here.',
+  goodsMovement: 'A goods movement is not entered on this screen. A movement is caused by the material mark, never by a line typed here.',
+  clearOpenReservations: 'This order has no reservation. Open reservations were not cleared, and a backflush does not withdraw one.',
   confirmationNumber: 'A posted confirmation is not overwritten. Cancellation is not this screen.',
   co13: 'Cancellation is not this screen. Open CO13. A posted confirmation was not cancelled.',
   co14: 'CO14 is not implemented. Open the confirmation from this result, or the order from CO03.',
@@ -52,7 +75,7 @@ const REFUSED: Record<string, string> = {
   progress: 'A progress confirmation is not configured.',
   wipBatch: 'A WIP batch is not created by a confirmation.',
   batch: 'A batch is not determined by a confirmation. The order batch, if one stands, is not posted here.',
-  storageLocation: 'A storage location is not a confirmation field. No goods movement was proposed.',
+  storageLocation: 'A storage location is not a confirmation field. The component is issued from the location on the order, and a receipt takes the plant default.',
 };
 
 export class TimeTicketError extends Error {
@@ -126,6 +149,8 @@ export interface TimeTicketLoad {
   taskListType: string | null;
   routingGroup: string | null;
   groupCounter: string | null;
+  /** The marks this order's materials carry. Nothing is posted by reading them. */
+  movementConfig: Awaited<ReturnType<typeof movementConfiguration>>;
   operations: TimeTicketOperationView[];
   selected: TimeTicketOperationView | null;
   blockingReason: string | null;
@@ -152,22 +177,35 @@ export interface TimeTicketView {
   requestKey: string;
   orderStatus: ProductionOrderStatus;
   activities: Array<{ parameter: string; quantity: string; unit: string; suggested: string | null }>;
-  movementsPosted: 0;
+  /**
+   * One row per movement the confirmation causes or would cause. A preview row carries no
+   * document number; a saved row names the material document that stands behind it.
+   */
+  movements: ConfirmationMovement[];
+  /**
+   * The reading the movements were derived from, on a preview. Null once a confirmation is
+   * stored: the documents are the record then, and what is outstanding has changed with them.
+   */
+  movementPlan: TimeTicketMovementPlan | null;
+  movementsPosted: number;
   movementNote: string;
   written: boolean;
+  /** True when this request had already been saved. Nothing new was written. */
+  replayed: boolean;
 }
+
+/** What the screen may state about the marks it read, without restating the movement rows. */
+export type TimeTicketMovementPlan = Omit<MovementPlan, 'issues' | 'receipt'>;
 
 const GAPS = [
   'The operation is the one stored on the production order. A later routing edit is not read, and it does not change this confirmation.',
   'Only standard sequence 000000 is stored on the confirmation. Execution order is not written there. Predecessor and successor are not stored. An earlier operation does not have to be confirmed first.',
   'A confirmation profile is not configured. Automatic confirmation is refused.',
-  'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
+  'A movement follows the material marks only. Scrap is not grossed into a component quantity, no order type switches a receipt on or off, and a reservation is not cleared.',
   'Personnel, a shift, and activity cost are not stored.',
   'Cancellation is CO13. This screen does not cancel a posted confirmation. CO14 is not implemented.',
   'The order status is not changed. Technical completion is a separate CO02 action.',
 ];
-
-const MOVEMENT_NOTE = 'No goods movement was proposed. Backflush is not configured, and automatic goods receipt is not configured. Stock was not changed.';
 
 function fail(message: string, remedy?: string): never {
   throw new TimeTicketError(message, remedy);
@@ -484,6 +522,7 @@ export async function loadTimeTicket(client: string, input: {
       blockingReason = `Operation ${asked} does not stand on production order ${header.orderNumber}. The routing was not read.`;
     }
     const gaps = [...GAPS];
+    const movementConfig = await movementConfiguration(tx, client, header);
     const namedVersion = clean(input.productionVersion).toUpperCase();
     if (namedVersion && identity && namedVersion !== identity.productionVersion) {
       gaps.push(`Production version ${namedVersion} was not used. The order stores ${identity.productionVersion}. The routing was not re-read.`);
@@ -498,6 +537,7 @@ export async function loadTimeTicket(client: string, input: {
       selected,
       blockingReason,
       gaps,
+      movementConfig,
     };
   });
 }
@@ -522,6 +562,7 @@ interface Prepared {
   executionFinish: string | null;
   note: string | null;
   activities: PreparedActivity[];
+  movements: MovementPlan;
 }
 
 async function prepare(tx: Tx, client: string, input: {
@@ -642,6 +683,15 @@ async function prepare(tx: Tx, client: string, input: {
   }
   const note = clean(input.note);
   if (note.length > 200) fail('The note is too long.');
+  const movements = await planConfirmationMovements(tx, client, {
+    orderNumber: header.orderNumber,
+    materialNumber: header.materialNumber,
+    plant: header.plant,
+    orderQuantity: header.orderQuantity,
+    unit: header.unit,
+    yieldQuantity,
+    confirmationType,
+  });
   return {
     header,
     operation,
@@ -655,6 +705,7 @@ async function prepare(tx: Tx, client: string, input: {
     executionFinish,
     note: note || null,
     activities,
+    movements,
   };
 }
 
@@ -679,13 +730,24 @@ function viewOf(number: string, requestKey: string, prepared: Prepared, written:
     requestKey,
     orderStatus: prepared.header.status,
     activities: prepared.activities,
+    movements: plannedMovements(prepared.movements),
+    movementPlan: {
+      markedComponents: prepared.movements.markedComponents,
+      automaticGoodsReceipt: prepared.movements.automaticGoodsReceipt,
+      skipped: prepared.movements.skipped,
+      note: prepared.movements.note,
+    },
     movementsPosted: 0,
-    movementNote: MOVEMENT_NOTE,
+    movementNote: prepared.movements.note,
     written,
+    replayed: false,
   };
 }
 
-async function storedView(tx: Tx, client: string, confirmationNumber: string): Promise<TimeTicketView | null> {
+/** `replayed` is stated by the caller: only the write path can tell a re-issued request from a new one. */
+async function storedView(
+  tx: Tx, client: string, confirmationNumber: string, replayed = false,
+): Promise<TimeTicketView | null> {
   const found = await rows(tx, sql`
     select c.confirmation_number, c.order_number, c.operation_number, c.confirmation_type,
            c.yield_quantity::text as yield, c.scrap_quantity::text as scrap, c.rework_quantity::text as rework,
@@ -707,6 +769,7 @@ async function storedView(tx: Tx, client: string, confirmationNumber: string): P
   `);
   const status = parseProductionOrderStatus(header.status);
   if (!status) fail(`Status ${String(header.status)} is not a production-order status.`, 'The stored status is unsupported. It was not treated as created.');
+  const movements = await postedMovements(tx, client, String(header.request_key));
   return {
     confirmationNumber: String(header.confirmation_number),
     orderNumber: String(header.order_number),
@@ -732,10 +795,29 @@ async function storedView(tx: Tx, client: string, confirmationNumber: string): P
       unit: String(row.unit),
       suggested: row.suggested == null ? null : String(row.suggested),
     })),
-    movementsPosted: 0,
-    movementNote: MOVEMENT_NOTE,
+    movements,
+    movementPlan: null,
+    movementsPosted: movements.filter((row) => row.posted).length,
+    movementNote: movementNoteFor(movements),
     written: true,
+    replayed,
   };
+}
+
+/**
+ * What a saved confirmation moved, in its own words: the material documents its request
+ * caused. A document reversed on the goods-movement screen is reported as not standing, so
+ * a confirmation read back after that reversal does not claim a movement that is gone.
+ */
+function movementNoteFor(movements: ConfirmationMovement[]): string {
+  const posted = movements.filter((row) => row.posted);
+  if (!posted.length) return 'No goods movement was caused by this confirmation.';
+  const standing = posted.filter((row) => row.standing);
+  const numbers = [...new Set(posted.map((row) => row.materialDocumentNumber))].join(' and ');
+  const kinds = [...new Set(posted.map((row) => row.kind === 'ISSUE' ? 'issue' : 'receipt'))].join(' and ');
+  if (!standing.length) return `The ${kinds} material document ${numbers} posted with this confirmation was reversed. Stock is not changed by reading this confirmation.`;
+  const suffix = standing.length === posted.length ? '' : ' A reversal stands among them.';
+  return `The ${kinds} material document ${numbers} was posted with this confirmation.${suffix}`;
 }
 
 function matches(stored: TimeTicketView, prepared: Prepared): boolean {
@@ -819,7 +901,7 @@ export async function enterTimeTicket(client: string, input: {
       if (String(existing[0].confirmation_level) === 'HEADER') {
         fail('This request was already saved as an order confirmation. It was not posted again.', 'Use a new request on CO11N.');
       }
-      const stored = await storedView(tx, client, String(existing[0].confirmation_number));
+      const stored = await storedView(tx, client, String(existing[0].confirmation_number), true);
       if (!stored) fail('The earlier confirmation could not be read.');
       const prepared = await prepare(tx, client, { ...input, orderNumber, operationNumber });
       if (!matches(stored, prepared)) {
@@ -857,6 +939,52 @@ export async function enterTimeTicket(client: string, input: {
         )
       `);
     }
+    // The movements, inside the transaction that inserted the confirmation and before its
+    // change document. Each kind carries its own request key, derived from this one, so the
+    // two documents are distinct, replay finds both, and neither can be posted twice. Every
+    // rule the goods-movement screen enforces — the open amount on the order, the period,
+    // stock, a batch, the component and plant, the order status, a locked inventory count —
+    // applies unchanged, and its refusal aborts the confirmation with it.
+    const documents: string[] = [];
+    // A request key is required above, so a derived key always exists. The guard is the
+    // type's, not a rule: no movement is ever posted under an empty key.
+    const issueKey = movementRequestKey(requestKey, 'ISSUE');
+    if (prepared.movements.issues.length && issueKey) {
+      const issued = await postGoodsIssue({
+        client,
+        changedBy: input.requestedBy,
+        movementTypeCode: CONFIRMATION_MOVEMENT_CODES.issue,
+        postingDate: prepared.postingDate,
+        documentDate: prepared.postingDate,
+        headerText: `CO11N ${confirmationNumber}`.slice(0, 25),
+        requestKey: issueKey,
+        lines: prepared.movements.issues.map((line) => ({
+          materialNumber: line.materialNumber,
+          plant: line.plant,
+          storageLocation: line.storageLocation ?? undefined,
+          // Held in the material's base unit, which is what the service measures an order
+          // line in. No entry unit is claimed, so no conversion is invented here.
+          quantity: Number(line.quantity),
+          productionOrderNumber: orderNumber,
+          productionOrderItem: line.itemNumber,
+        })),
+      }, 'MIGO', { tx });
+      documents.push(issued.materialDocumentNumber);
+    }
+    const receiptKey = movementRequestKey(requestKey, 'RECEIPT');
+    if (prepared.movements.receipt && receiptKey) {
+      const received = await postProductionReceipt({
+        client,
+        changedBy: input.requestedBy,
+        orderNumber,
+        postingDate: prepared.postingDate,
+        documentDate: prepared.postingDate,
+        headerText: `CO11N ${confirmationNumber}`.slice(0, 25),
+        requestKey: receiptKey,
+        lines: [{ quantity: Number(prepared.movements.receipt.quantity) }],
+      }, { tx });
+      documents.push(received.materialDocumentNumber);
+    }
     await recordChange(tx, {
       client,
       objectClass: 'production_confirmation',
@@ -873,6 +1001,7 @@ export async function enterTimeTicket(client: string, input: {
         scrapQuantity: prepared.scrapQuantity,
         reworkQuantity: prepared.reworkQuantity,
         postingDate: prepared.postingDate,
+        goodsMovementDocuments: documents,
       },
     });
     const stored = await storedView(tx, client, confirmationNumber);

@@ -29,10 +29,10 @@
  *   Times are not allocated. The whole confirmation is refused.
  * - No operation snapshot: nothing is saved. The live routing is not read.
  *
- * No confirmation profile is stored, so automatic final is refused. No
- * component is marked for backflush, and automatic goods receipt is not
- * configured, so no goods movement is proposed. The order status is not
- * changed.
+ * No confirmation profile is stored, so automatic final is refused. An
+ * order-header confirmation posts no goods movement: a movement follows the
+ * material's own mark on an operation confirmation (CO11N), and the operation
+ * effects written here are not a movement. The order status is not changed.
  */
 import { sql } from 'drizzle-orm';
 
@@ -75,9 +75,9 @@ const REFUSED: Record<string, string> = {
   suboperation: 'A suboperation is not stored.',
   personnel: 'A personnel number is not validated. None was stored.',
   shift: 'A shift is not stored.',
-  backflush: 'No component is marked for backflush. Nothing was issued.',
-  automaticGoodsReceipt: 'Automatic goods receipt is not configured. A final confirmation does not receive the finished good.',
-  goodsMovement: 'A goods movement is not posted from this confirmation.',
+  backflush: 'An order confirmation carries no backflush mark. Confirm the operation on CO11N, where the mark is read from the component material.',
+  automaticGoodsReceipt: 'An order confirmation carries no automatic receipt mark. Confirm the operation on CO11N, where a final confirmation reads the mark from the material.',
+  goodsMovement: 'A goods movement is not posted by an order confirmation. The movement a material asks for belongs to the operation confirmation on CO11N.',
   clearOpenReservations: 'This order has no reservation. Open reservations were not cleared.',
   confirmationNumber: 'A posted confirmation is not overwritten. Cancellation is not this screen.',
   operation: 'An operation is confirmed on CO11N. This screen confirms every eligible operation. One operation was not selected.',
@@ -90,7 +90,7 @@ const REFUSED: Record<string, string> = {
   quality: 'A quality inspection is not stored. None was created.',
   serial: 'A serial number is not confirmed here.',
   batch: 'A batch is not determined by a confirmation. The order batch, if one stands, is not posted here.',
-  storageLocation: 'A storage location is not a confirmation field. No goods movement was proposed.',
+  storageLocation: 'A storage location is not a confirmation field. An order confirmation proposes no goods movement.',
   orderType: 'An order type is not stored. Confirmation was not defaulted from one.',
   referenceConfirmation: 'A reference confirmation is not copied. Enter the quantities. The earlier confirmation was not posted again.',
   longText: 'A long text is not stored. The note is limited to the confirmation text.',
@@ -179,14 +179,14 @@ const GAPS = [
   'The header row stores the entered quantity once. That is the confirmed production quantity. Operation effects are not added to it, and they are not added across operations.',
   'An operation without its own quantity receives the header quantity as an effect. That quantity is not split, and it is not a second receipt. An operation quantity is scaled by its stored base quantity. An inexact scale is refused rather than rounded. A time ticket is not added to a scaled effect.',
   'An operation that requires an activity is not given a standard value. Confirm that operation on CO11N.',
-  'No component is marked for backflush. Automatic goods receipt is not configured. No goods movement is proposed.',
+  'A header confirmation posts no goods movement. A movement follows the mark on the material and belongs to the operation confirmation on CO11N.',
   'The order status is not changed. Technical completion is a separate CO02 action. A final confirmation blocks another confirmation of each affected operation. It does not complete the order.',
   'Underdelivery tolerance is stored on the material plant and is not executed here. No financial period is applied, because no document is posted.',
   'CO11N confirms one operation. Cancellation is CO13, not this screen. CO14 is not implemented. A posted confirmation is not edited here.',
   'Effects follow the stored execution order. The confirmation sequence stays 000000. It is not the execution order, and an earlier operation does not have to be confirmed first.',
 ];
 
-const MOVEMENT_NOTE = 'No goods movement was proposed. Backflush is not configured, and automatic goods receipt is not configured. Stock was not changed.';
+const MOVEMENT_NOTE = 'An order confirmation posts no goods movement. Stock was not changed. The movements a material asks for are caused by an operation confirmation.';
 
 function fail(message: string, remedy?: string): never {
   throw new OrderConfirmationError(message, remedy);

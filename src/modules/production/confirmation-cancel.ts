@@ -5,10 +5,13 @@
  * activities are not updated and are not deleted. The cancellation is a
  * linked record, not a negative quantity to be summed with the original.
  *
- * This is not an SAP table copy. No goods movement is created or reversed:
- * a confirmation in this ERP has no material document, and a document posted
- * separately is not touched here. The order status, reservations, and
- * planning records are not changed. CO14 is not this screen.
+ * This is not an SAP table copy. No goods movement is reversed here. A
+ * confirmation that caused one cannot be cancelled while that document still
+ * stands, and the material-document screen is named as the way to reverse it;
+ * once the document no longer stands, the cancellation is allowed and the
+ * confirmation stays as posted. A document posted separately on MIGO is not
+ * touched here. The order status, reservations, and planning records are not
+ * changed. CO14 is not this screen.
  */
 import { sql } from 'drizzle-orm';
 
@@ -19,6 +22,7 @@ import { withTenant, type Tx } from '../../platform/db/client';
 import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { TIME_TICKET_LOCK, rows } from './time-ticket';
+import { movementStands } from './confirmation-movements';
 
 export const CONFIRMATION_CANCEL_CAPABILITY = 'PROD.CONFIRM.CANCEL';
 export const CONFIRMATION_CANCEL_ROUTE = '/production/confirmation-cancel';
@@ -337,7 +341,7 @@ export async function cancelConfirmation(client: string, input: {
   if (!requestedBy) fail('The user is required.');
   return withTenant(client, async (tx) => {
     const standing = await rows(tx, sql`
-      select order_number from production_confirmation
+      select order_number, request_key from production_confirmation
        where client = ${client} and confirmation_number = ${confirmationNumber}
     `);
     if (!standing[0]) {
@@ -368,6 +372,19 @@ export async function cancelConfirmation(client: string, input: {
       fail(
         `Confirmation ${confirmationNumber} is already cancelled by ${String(existing[0].cancellation_number)}. It was not cancelled again.`,
         'Open the confirmation to see the cancellation. A second cancellation was not written.',
+      );
+    }
+    // A confirmation that moved stock cannot be cancelled out from under the movement.
+    // CO13 holds no reversal of its own, and none is attempted here: the material-document
+    // screen reverses the movement, and once no document of this confirmation stands, the
+    // cancellation is allowed and the original confirmation stays exactly as posted.
+    const caused = await movementStands(
+      tx, client, standing[0].request_key == null ? '' : String(standing[0].request_key),
+    );
+    if (caused.length) {
+      fail(
+        `Confirmation ${confirmationNumber} posted material document ${caused.map((d) => d.materialDocumentNumber).join(' and ')}, and it still stands. Nothing was cancelled.`,
+        'Reverse the goods movement on the material-document screen. A cancellation is then allowed. The original confirmation was not changed.',
       );
     }
     if (input.confirmed !== true) {

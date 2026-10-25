@@ -237,7 +237,16 @@ async function toView(
  * valuation commit together or not at all. The order itself is never written — its received
  * quantity is derived from exactly these documents.
  */
-export async function postProductionReceipt(input: PostProductionReceiptInput): Promise<ProductionReceiptView> {
+/**
+ * `options.tx` runs the receipt inside a transaction the caller already holds, so a
+ * final confirmation and the goods receipt it causes are one unit of work. The caller's
+ * transaction must already be scoped to `input.client`, as `withTenant` arranges and as
+ * `createProductionOrder` already requires of its caller.
+ */
+export async function postProductionReceipt(
+  input: PostProductionReceiptInput,
+  options?: { tx?: Tx },
+): Promise<ProductionReceiptView> {
   const orderNumber = input.orderNumber.trim();
   if (!orderNumber) {
     throw new ProductionReceiptError('A production order is required.', 'Enter the order whose output is received.');
@@ -263,7 +272,7 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
     }),
   ]);
 
-  return withTenant(input.client, async (tx) => {
+  const run = async (tx: Tx): Promise<ProductionReceiptView> => {
     await lockRequestKey(tx, input.client, input.requestKey);
     const [replay] = await tx.select().from(materialDocument).where(and(
       eq(materialDocument.client, input.client),
@@ -553,7 +562,8 @@ export async function postProductionReceipt(input: PostProductionReceiptInput): 
       [{ quantity, value, location: location || null, unit: order.unitOfMeasure, materialNumber, plant }],
       orderQuantity, received + quantity,
     );
-  });
+  };
+  return options?.tx ? run(options.tx) : withTenant(input.client, run);
 }
 
 /** How much of the order has been received — for the order screen and the tests. */

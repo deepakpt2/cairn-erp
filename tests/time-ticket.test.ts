@@ -150,8 +150,10 @@ describe('CO11N time ticket', () => {
   });
 
   it('refuses an unimplemented confirmation control by name', () => {
-    expect(timeTicketRefusal({ backflush: 'X' })).toMatch(/backflush/);
-    expect(timeTicketRefusal({ automaticGoodsReceipt: 'X' })).toMatch(/not configured/);
+    // The marks exist on the material, not on the confirmation: a caller cannot set one here.
+    expect(timeTicketRefusal({ backflush: 'X' })).toMatch(/component material in the plant/);
+    expect(timeTicketRefusal({ automaticGoodsReceipt: 'X' })).toMatch(/material in the plant/);
+    expect(timeTicketRefusal({ goodsMovement: 'X' })).toMatch(/not entered on this screen/);
     expect(timeTicketRefusal({ personnel: '1' })).toMatch(/not validated/);
     expect(timeTicketRefusal({ co13: '1' })).toMatch(/Open CO13/);
     expect(timeTicketRefusal({ automatic: 'X' })).toMatch(/not a stored rule/);

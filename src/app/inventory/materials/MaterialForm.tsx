@@ -72,7 +72,13 @@ export function MaterialForm({ view, number, plant, initial, choices, creating }
           {decimal('maximumLotSize', 'material.maximumLot')}{decimal('safetyStock', 'material.safetyStock')}{decimal('reorderPoint', 'material.reorderPoint')}
           <Field label={t('material.deliveryDays')}><input name="plannedDeliveryDays" type="number" min={0} max={3650} defaultValue={value('plannedDeliveryDays', '0')} required className="field-input tabular" /></Field>
           <Field label={t('material.productionDays')}><input name="inHouseProductionDays" type="number" min={0} max={3650} defaultValue={value('inHouseProductionDays', '0')} required className="field-input tabular" /></Field>
-        </div><p className="text-2xs text-ink-soft">{t('material.mrpNote')}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="backflush" defaultChecked={initial.backflush === true} className="accent-accent" />{t('material.backflush')}</label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="automaticGoodsReceipt" defaultChecked={initial.automaticGoodsReceipt === true} className="accent-accent" />{t('material.autoGoodsReceipt')}</label>
+        </div>
+        <p className="text-2xs text-ink-soft">{t('material.mrpMovementNote')}</p>
+        <p className="text-2xs text-ink-soft">{t('material.mrpNote')}</p>
       </>}
       {view === 'ACCOUNTING' && <>
         <div className="grid gap-3 sm:grid-cols-3">

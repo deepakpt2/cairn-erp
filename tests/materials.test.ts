@@ -48,6 +48,40 @@ describe('material master', () => {
     expect((planning as unknown as Array<Record<string, unknown>>)[0]).toEqual({ net_change: true, last_changed_by: 'MASTER_OPERATOR' });
   });
 
+  it('maintains the two marks a production confirmation reads, and defaults them to false', async () => {
+    await saveMaterialView(basic()); await saveMaterialView(purchasing()); await saveMaterialView(mrp({ expectedVersion: 1 }));
+    const untouched = (await detail()).plants[0];
+    expect(untouched.backflush).toBe(false); expect(untouched.automaticGoodsReceipt).toBe(false);
+
+    // The marks are stored on the plant view of the material, which is where a confirmation
+    // reads them from. One mark at a time, and the other stays as it stands.
+    const marked = await saveMaterialView(mrp({ expectedVersion: 2, backflush: true }));
+    expect(marked.changed).toBe(true);
+    const after = (await detail()).plants[0];
+    expect(after.backflush).toBe(true); expect(after.automaticGoodsReceipt).toBe(false);
+
+    // Repeating the marks changes nothing, so the change log is not filled with no-ops: the
+    // plant segment was written three times and is documented three times.
+    const logged = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select count(*)::int as n from change_document where object_class = 'material_plant'
+    `));
+    expect((logged as unknown as Array<{ n: number }>)[0].n).toBe(3);
+    const repeated = await saveMaterialView(mrp({ expectedVersion: after.version, backflush: true }));
+    expect(repeated.changed).toBe(false);
+    const afterRepeat = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select count(*)::int as n from change_document where object_class = 'material_plant'
+    `));
+    expect((afterRepeat as unknown as Array<{ n: number }>)[0].n).toBe(3);
+    const items = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select i.field_name, i.old_value, i.new_value, d.transaction_code
+        from change_document_item i join change_document d on d.id = i.change_document_id
+       where d.object_class = 'material_plant' and i.field_name = 'backflush'
+    `));
+    expect((items as unknown as Array<Record<string, string>>).map((row) => `${row.field_name}:${row.old_value}->${row.new_value}`))
+      .toEqual(['backflush:false->true']);
+
+  });
+
   it('records exact prices and derives valuation currency from the company', async () => {
     await saveMaterialView(basic()); await saveMaterialView({ ...accounting(), currency: 'EUR', totalStockQuantity: '999', stockValue: '999' } as unknown as MaterialInput);
     const v = (await detail()).valuations[0];

@@ -36,7 +36,11 @@ const materialInput = z.discriminatedUnion('view', [
   common.extend({ view: z.literal('MRP'), plant: z.string().min(1).max(10), mrpType: z.enum(MRP_TYPES), mrpController: z.string().max(3),
     procurementType: z.enum(PROCUREMENT_TYPES), lotSizing: z.enum(LOT_PROCEDURES), fixedLotSize: quantity,
     minimumLotSize: quantity, maximumLotSize: quantity, safetyStock: quantity, reorderPoint: quantity,
-    plannedDeliveryDays: z.number().int().min(0).max(3650), inHouseProductionDays: z.number().int().min(0).max(3650) }),
+    plannedDeliveryDays: z.number().int().min(0).max(3650), inHouseProductionDays: z.number().int().min(0).max(3650),
+    // The two marks a production confirmation reads. Absent means false, so a material saved
+    // before they existed keeps its behaviour and an untouched view writes no change.
+    backflush: z.boolean().optional().default(false),
+    automaticGoodsReceipt: z.boolean().optional().default(false) }),
   common.extend({ view: z.literal('ACCOUNTING'), plant: z.string().min(1).max(10), valuationClass: z.string().max(20),
     priceControl: z.enum(PRICE_CONTROLS), standardPrice: money, movingAveragePrice: money, priceUnit: quantity.refine((s) => toScaled(s, 3) > 0n, 'Price unit must be positive.') }),
 ]);
@@ -227,7 +231,9 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
         'Cancel the client-level deletion flag on the material first, then extend it.',
       );
     }
-    let values: Record<string, string | number | null>;
+    // The plant views write text, a number, and the two marks a confirmation reads, which
+    // are held as booleans with a default. `same` and `subset` accept both shapes.
+    let values: Record<string, string | number | boolean | null>;
     let statusColumn: 'purchasingStatus' | 'mrpStatus'; let complete: boolean;
     if (view === 'PURCHASING') {
       if (input.purchasingGroup) {
@@ -250,7 +256,8 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       if (max > 0n && max < min) throw new MaterialError('Maximum lot size must not be below minimum lot size.');
       values = { mrpType: input.mrpType, mrpController: input.mrpController || null, procurementType: input.procurementType,
         lotSizing: input.lotSizing, fixedLotSize: input.fixedLotSize, minimumLotSize: input.minimumLotSize, maximumLotSize: input.maximumLotSize,
-        safetyStock: input.safetyStock, reorderPoint: input.reorderPoint, plannedDeliveryDays: input.plannedDeliveryDays, inHouseProductionDays: input.inHouseProductionDays };
+        safetyStock: input.safetyStock, reorderPoint: input.reorderPoint, plannedDeliveryDays: input.plannedDeliveryDays, inHouseProductionDays: input.inHouseProductionDays,
+        backflush: input.backflush, automaticGoodsReceipt: input.automaticGoodsReceipt };
       statusColumn = 'mrpStatus'; complete = !!base.baseUnit && (input.mrpType === 'NONE' || (!!input.mrpController
         && (input.lotSizing !== 'FIXED' || toScaled(input.fixedLotSize, 3) > 0n)
         && (input.mrpType !== 'REORDER' || toScaled(input.reorderPoint, 3) > 0n)));

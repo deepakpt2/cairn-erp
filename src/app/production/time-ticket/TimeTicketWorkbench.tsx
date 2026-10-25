@@ -155,7 +155,80 @@ export default function TimeTicketWorkbench({
           ) : (
             <p className="mt-3 text-sm text-ink-soft">No activity is configured on this operation. Setup, machine, and labor are not invented.</p>
           )}
-          <p className="mt-3 text-sm text-ink-soft">A final confirmation does not clear a reservation and does not post a goods movement. Leaving the screen saves nothing.</p>
+          <p className="mt-3 text-sm text-ink-soft" data-co11n-movement-config>
+            {loaded.movementConfig.note} A final confirmation does not clear a reservation. Leaving the screen saves nothing.
+          </p>
+          {state.ticket && (
+            <section className="mt-3 border-t border-line pt-3" aria-label="Goods movements caused by this confirmation" data-co11n-movements>
+              <p className="text-sm font-medium">
+                {state.ticket.written
+                  ? 'Goods movements posted with this confirmation'
+                  : 'Goods movements this confirmation would cause'}
+              </p>
+              <p className="mt-1 text-2xs text-ink-soft" role="status">{state.ticket.movementNote}</p>
+              {state.ticket.replayed && (
+                <p className="mt-1 text-2xs" data-co11n-replay>
+                  This request was already saved. The confirmation and the documents it caused were not changed and nothing was posted again.
+                </p>
+              )}
+              {state.ticket.movements.length === 0 ? (
+                <p className="mt-1 text-2xs text-ink-soft">
+                  No goods movement stands behind this confirmation. Stock was not changed.
+                </p>
+              ) : (
+                <table className="mt-1 w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-ink-faint">
+                      <th scope="col">Movement</th>
+                      <th scope="col">Material</th>
+                      <th scope="col">Quantity</th>
+                      <th scope="col">Location</th>
+                      <th scope="col">Order item</th>
+                      <th scope="col">Material document</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.ticket.movements.map((row) => (
+                      <tr key={`${row.kind}-${row.materialNumber}-${row.itemNumber ?? 0}`} data-co11n-movement={row.kind}>
+                        <td className="py-1">
+                          {row.kind === 'ISSUE' ? `Goods issue ${row.movementCode}` : `Goods receipt ${row.movementCode}`}
+                          {row.kind === 'ISSUE' && !row.posted && row.requiredQuantity !== null && (
+                            <span className="block text-2xs text-ink-soft">
+                              {row.issuedQuantity} already issued of {row.requiredQuantity} required. {row.openQuantity} is open.
+                            </span>
+                          )}
+                        </td>
+                        <td>{row.materialNumber}</td>
+                        <td>{row.quantity} {row.unit}</td>
+                        <td>{row.kind === 'ISSUE' ? row.storageLocation ?? 'No location on the component' : 'Plant default'}</td>
+                        <td>{row.itemNumber ?? '—'}</td>
+                        <td>
+                          {row.materialDocumentNumber ? (
+                            <Link href={`/inventory/material-documents?document=${encodeURIComponent(row.materialDocumentNumber)}&fiscalYear=${encodeURIComponent(String(row.documentYear ?? ''))}`}>
+                              {row.materialDocumentNumber}
+                            </Link>
+                          ) : 'not posted yet'}
+                          {row.materialDocumentNumber && !row.standing ? ' — reversed' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {state.ticket.movementPlan && state.ticket.movementPlan.skipped.length > 0 && (
+                <ul className="mt-1 space-y-1 text-2xs text-ink-soft" data-co11n-movement-skipped>
+                  {state.ticket.movementPlan.skipped.map((row) => (
+                    <li key={`${row.itemNumber}-${row.materialNumber}`}>
+                      Item {row.itemNumber} {row.materialNumber}: {row.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-1 text-2xs text-ink-soft">
+                A quantity is drawn from what the component still needs on this order. Scrap is not grossed into it, and a reservation is not cleared by it.
+              </p>
+            </section>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="submit" name="intent" value="check" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canConfirm || !operation.confirmable || pending} data-co11n-check>
               {pending ? 'Checking…' : 'Check'}
@@ -171,10 +244,12 @@ export default function TimeTicketWorkbench({
           )}
           {state.ticket?.confirmationNumber && (
             <p className="mt-2 text-sm" data-co11n-confirmation={state.ticket.confirmationNumber}>
-              <Link href={`/production/production-order-display?order=${encodeURIComponent(state.ticket.orderNumber)}`}>
-                Order {state.ticket.orderNumber}
-              </Link>
+              Confirmation <span className="font-medium">{state.ticket.confirmationNumber}</span> stands for order {state.ticket.orderNumber} operation {state.ticket.operationNumber}.
+              {' '}Order {state.ticket.orderNumber}
               {' '}still has status {state.ticket.orderStatus}.
+              {' '}{state.ticket.movementsPosted === 0
+                ? 'No goods movement was posted with it.'
+                : `${state.ticket.movementsPosted} goods-movement line${state.ticket.movementsPosted === 1 ? '' : 's'} posted with it.`}
               {' '}<Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(state.ticket.confirmationNumber)}`}>Cancel is CO13</Link>
             </p>
           )}

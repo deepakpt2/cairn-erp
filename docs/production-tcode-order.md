@@ -14,6 +14,8 @@ Do not rebuild these.
 - `OPKP` stores a scheduling profile. The order snapshots it.
 - `OMCWB` stores the WIP-batch activation flag. It does not create a batch.
 - Goods issue to the order and goods receipt from the order already post from MIGO. A second receipt transaction is not required.
+- `CO11N` confirms one operation, and it now posts what the material asks for: a component marked for backflush is withdrawn and a final confirmation of a marked finished good is received, in the confirmation's own transaction, through the MIGO services. `CO13` cancels the confirmation and refuses while a document it caused still stands. `CO15` confirms the order header and posts no movement.
+- The two marks live on the material's plant view, on the MRP screen. A material carries neither mark by default, so a confirmation posts no movement until someone maintains it there. No order type, scheduling profile, or confirmation profile overrides that decision.
 
 ## Order to wire
 
@@ -28,8 +30,8 @@ Each step is what the next step reads. Change and display belong with the create
 7. `CO40` — convert one planned order into a production order. This is the missing link between `MD01` and `CO01`. The order it creates should carry the components from the bill of material, not a second typed list.
 8. `CO41` — convert the selected planned orders together. Only after one conversion is right.
 9. `CO03`, `CO02` — display, then change, the production order. Create and release already exist. Quantity, dates, and components cannot be changed. Technical completion is a later use of `CO02`, after confirmation and receipt. It is not a separate transaction.
-10. `CO11N` — confirm yield, scrap, and time against the operations. It needs a released order and the routing. `CO13` cancels that confirmation and should follow immediately, or a wrong confirmation cannot be undone. `CO15` is the header confirmation. It is not required if `CO11N` is the confirmation that gets wired.
-11. MIGO issue and receipt stay the goods movements. Wire the order and the confirmation to them. Do not add a second goods-receipt transaction.
+10. `CO11N` — confirm yield, scrap, and time against the operations. Done, with `CO13` and `CO15` beside it. The time ticket stores no activity cost, no personnel, and no shift, and it does not change the order status.
+11. MIGO issue and receipt stay the goods movements. Wired: the order and the confirmation now reach them, and no second goods-receipt transaction was added. What is still not wired is named on the confirmation screen — scrap is not grossed into a component quantity, no order type switches a receipt on or off, a batch is not determined, and a reservation is not cleared by an issue.
 12. `CO88` — settle the production order. Last. It is not started. It should run only after the order can be technically completed. A cost estimate has no transaction in this application, and none is assigned here.
 
 ## Not in this sequence

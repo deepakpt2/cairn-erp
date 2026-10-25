@@ -317,9 +317,17 @@ async function toView(
  * material document, the reservation's withdrawn quantity and the document's
  * output all commit together or not at all.
  */
+/**
+ * `options.tx` runs the posting inside a transaction the caller already holds — the
+ * shape CO11N needs so a confirmation and the movements it caused commit together.
+ * The caller's transaction must already be scoped to `input.client`; that is what
+ * `withTenant` does for a caller that holds none, and it is the same contract
+ * `createProductionOrder` follows.
+ */
 export async function postGoodsIssue(
   input: PostGoodsIssueInput,
   screen: 'MB1A' | 'MIGO' = 'MB1A',
+  options?: { tx?: Tx },
 ): Promise<GoodsIssueView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
@@ -341,7 +349,7 @@ export async function postGoodsIssue(
     ].join(':')).sort(),
   ]);
 
-  return withTenant(input.client, async (tx) => {
+  const run = async (tx: Tx): Promise<GoodsIssueView> => {
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
     if (replay) {
@@ -850,7 +858,8 @@ export async function postGoodsIssue(
     await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
 
     return toViewWithReservations(tx, input.client, number, prepared);
-  });
+  };
+  return options?.tx ? run(options.tx) : withTenant(input.client, run);
 }
 
 async function toViewWithReservations(
