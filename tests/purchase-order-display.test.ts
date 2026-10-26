@@ -163,6 +163,139 @@ describe('SCR-164 purchase order display', () => {
     expect(await counts(client)).toEqual(before);
     expect(assignedShare('100.00', '33.33')).toBe('33.33');
   });
+
+  it('reads an alternative-unit receipt back in the unit the order line counts in', async () => {
+    // Two writing shapes sit in the same table: the converted pair a receipt posts today, and
+    // the pair a receipt posted while the base figure was copied from the entry. A purchase-order
+    // screen has to read both as three boxes and as two boxes, and the stock figure has to keep
+    // saying thirty-six pieces.
+    const ALT = 'PO-DISP2';
+    const ONE = 'PO-DISP3';   // a single open line, for the search list's own state CTE
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into unit_of_measure (code, name) values ('BOX', 'Box'), ('PAL', 'Pallet') on conflict do nothing
+      `);
+    });
+    // The alternative unit is whichever code the material does not count in, so the fixture does
+    // not depend on what the reference catalogue happens to hold.
+    const [master] = await withTenant(client, (tx) => tx.execute(sql`
+      select base_unit from material where client = ${client} and material_number = 'MAT-DISP'
+    `)) as unknown as Array<{ base_unit: string }>;
+    const alt = master.base_unit === 'BOX' ? 'PAL' : 'BOX';
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into material_uom_conversion (client, material_number, alternative_unit, base_unit,
+                                            numerator, denominator, created_by)
+        values (${client}, 'MAT-DISP', ${alt}, ${master.base_unit}, 12, 1, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order
+          (client, order_number, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+           document_date, created_by)
+        select ${client}, ${ALT}, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+               '2026-10-24', ${ACTOR}
+          from purchase_order where client = ${client} and order_number = ${ORDER}
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order
+          (client, order_number, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+           document_date, created_by)
+        select ${client}, ${ONE}, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+               '2026-10-27', ${ACTOR}
+          from purchase_order where client = ${client} and order_number = ${ORDER}
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item
+          (client, order_number, item_number, material_number, short_text, quantity, unit, net_price, price_unit,
+           net_value, plant, created_by)
+        values
+          (${client}, ${ALT}, 10, 'MAT-DISP', 'Converted, full', 3, ${alt}, 40, 1, 120, '1000', ${ACTOR}),
+          (${client}, ${ALT}, 20, 'MAT-DISP', 'Legacy, open', 3, ${alt}, 40, 1, 120, '1000', ${ACTOR}),
+          (${client}, ${ALT}, 30, 'MAT-DISP', 'Converted, part', 3, ${alt}, 40, 1, 120, '1000', ${ACTOR}),
+          (${client}, ${ALT}, 40, 'MAT-DISP', 'Reversed once', 3, ${alt}, 40, 1, 120, '1000', ${ACTOR}),
+          (${client}, ${ONE}, 10, 'MAT-DISP', 'Open in the search list', 3, ${alt}, 40, 1, 120, '1000', ${ACTOR})
+      `);
+      await tx.execute(sql`
+        insert into material_document
+          (client, material_document_number, document_year, document_date, posting_date, status, reversal_of, created_by)
+        values
+          (${client}, '5000000106', 2026, '2026-10-27', '2026-10-27', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000101', 2026, '2026-10-24', '2026-10-24', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000102', 2026, '2026-10-24', '2026-10-24', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000103', 2026, '2026-10-25', '2026-10-25', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000104', 2026, '2026-10-26', '2026-10-26', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000105', 2026, '2026-10-26', '2026-10-26', 'POSTED', '5000000104', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, value,
+          purchase_order_number, purchase_order_item, created_by
+        ) values
+          (${client}, '5000000101', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 3, ${alt}, 36, ${master.base_unit}, 40, 1, 120, ${ALT}, 10, ${ACTOR}),
+          (${client}, '5000000102', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 2, ${alt}, 2, ${alt}, 40, 1, 80, ${ALT}, 20, ${ACTOR}),
+          (${client}, '5000000103', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 1, ${alt}, 12, ${master.base_unit}, 40, 1, 40, ${ALT}, 30, ${ACTOR}),
+          (${client}, '5000000104', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 2, ${alt}, 24, ${master.base_unit}, 40, 1, 80, ${ALT}, 40, ${ACTOR}),
+          (${client}, '5000000105', 1, 'RECEIPT_REVERSAL', 'MAT-DISP', '1000', 'UNRESTRICTED', 1, ${alt}, 12, ${master.base_unit}, 40, 1, 40, ${ALT}, 40, ${ACTOR}),
+          (${client}, '5000000106', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 1, ${alt}, 12, ${master.base_unit}, 40, 1, 40, ${ONE}, 10, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    const before = await counts(client);
+    try {
+      const shown = await displayPurchaseOrder(client, ALT);
+      expect(shown.found).toBe(true);
+      if (!shown.found) return;
+      const item = (number: number) => shown.order.items.find((row) => row.itemNumber === number);
+
+      // The converted line says three boxes, not the thirty-six pieces the material is stocked in.
+      expect(item(10)).toMatchObject({
+        receivedQuantity: '3.000', state: 'DELIVERED', unit: alt,
+        conversion: { sameUnit: false, baseUnit: master.base_unit, numerator: 12, denominator: 1 },
+      });
+      // The legacy line's base figure already counted boxes, so no factor is applied to it.
+      expect(item(20)?.receivedQuantity).toBe('2.000');
+      expect(item(20)?.state).toBe('PARTIALLY_DELIVERED');
+      // A partial receipt of one box is one box of three ordered, not twelve pieces of three.
+      expect(item(30)?.receivedQuantity).toBe('1.000');
+      expect(item(30)?.state).toBe('PARTIALLY_DELIVERED');
+      // A reversal copied its original's pair, so two received less one reversed is one.
+      expect(item(40)?.receivedQuantity).toBe('1.000');
+      expect(item(40)?.state).toBe('PARTIALLY_DELIVERED');
+      // The history rows keep the material's base figure: only the order-facing reading changed.
+      expect(shown.order.goods.find((row) => row.documentNumber === '5000000101')?.baseQuantity).toBe('36.000');
+      expect(shown.order.goods.find((row) => row.documentNumber === '5000000101')?.entryQuantity).toBe('3.000');
+
+      // The search list derives the state from its own aggregate over the same figure, so an
+      // order whose only line is one box of three has to be found under "partially delivered" and
+      // not as delivered. Twelve pieces against three ordered is what the old reading reported.
+      const searched = await searchPurchaseOrders(client, { order: ONE, itemState: 'PARTIALLY_DELIVERED' });
+      expect(searched.rows.map((row) => row.orderNumber)).toEqual([ONE]);
+      const delivered = await searchPurchaseOrders(client, { order: ONE, itemState: 'DELIVERED' });
+      expect(delivered.rows).toEqual([]);
+
+      expect(await counts(client)).toEqual(before);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          delete from material_document_line
+           where client = ${client} and purchase_order_number in (${ALT}, ${ONE})
+        `);
+        await tx.execute(sql`
+          delete from material_document
+           where client = ${client} and material_document_number like '50000001%'
+        `);
+        await tx.execute(sql`delete from purchase_order_item where client = ${client} and order_number in (${ALT}, ${ONE})`);
+        await tx.execute(sql`delete from purchase_order where client = ${client} and order_number in (${ALT}, ${ONE})`);
+        await tx.execute(sql`delete from material_uom_conversion where client = ${client} and material_number = 'MAT-DISP'`);
+      });
+    }
+  });
 });
 
 async function counts(client: string) {

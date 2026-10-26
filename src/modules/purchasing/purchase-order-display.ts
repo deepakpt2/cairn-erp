@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { getDocumentRelease, type DocumentReleaseState } from './release';
+import { receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
 export const PO_DISPLAY_CAPABILITY = 'PROC.PO.DISPLAY';
 export const PO_DISPLAY_ROUTE = '/purchasing/purchase-order-display';
@@ -352,11 +353,14 @@ export async function displayPurchaseOrder(client: string, orderNumber: string):
         from purchase_order_item i
         left join (
           select l.purchase_order_item,
-                 sum(case when mv.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as delivered
+                 -- Received is read in the unit the order line counts in, not in the material's
+                 -- base unit, so an alternative-unit receipt is not twelve times its order figure.
+                 sum(case when mv.direction = 'REVERSAL' then -(${receiptQuantityInOrderUnit}) else (${receiptQuantityInOrderUnit}) end) as delivered
             from material_document_line l
             join material_document d
               on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
             join movement_type mv on mv.client = l.client and mv.movement_type = l.movement_type
+           ${receiptUnitJoins}
            where l.client = ${client} and l.purchase_order_number = ${number}
            group by l.purchase_order_item
         ) gr on gr.purchase_order_item = i.item_number
@@ -624,11 +628,12 @@ export async function searchPurchaseOrders(
     const rows = await tx.execute(sql`
       with gr as (
         select l.purchase_order_number, l.purchase_order_item,
-               sum(case when mv.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as delivered
+               sum(case when mv.direction = 'REVERSAL' then -(${receiptQuantityInOrderUnit}) else (${receiptQuantityInOrderUnit}) end) as delivered
           from material_document_line l
           join material_document d
             on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
           join movement_type mv on mv.client = l.client and mv.movement_type = l.movement_type
+          ${receiptUnitJoins}
          where l.client = ${client} and l.purchase_order_number is not null
          group by l.purchase_order_number, l.purchase_order_item
       ),

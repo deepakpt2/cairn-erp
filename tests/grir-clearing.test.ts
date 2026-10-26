@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { checkPostingAllowed, derivePosition, getCompanyCode } from '../src/platform/periods';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+import { postGoodsReceipt, reverseGoodsReceipt } from '../src/modules/inventory/goods-receipt';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
@@ -277,5 +277,161 @@ describe('SCR-163 maintain GR/IR clearing', () => {
     expect(original.reversed_by).toBe(reversed.documentNumber);
     expect((await counts(c)).stock).toBe(before.stock);
     expect((await counts(c)).documents).toBe(before.documents);
+  });
+
+  /**
+   * The material is stocked in pieces, so an order line can only be placed in boxes with a
+   * conversion standing: twelve pieces to a box. Inserted per test and removed again, because a
+   * conversion left on the material would change what every later receipt in this file posts.
+   */
+  async function ensureBoxConversion(c: string): Promise<string> {
+    await withTenant(c, async (tx) => {
+      await tx.execute(sql`
+        insert into unit_of_measure (code, name) values ('BOX', 'Box') on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_uom_conversion (client, material_number, alternative_unit, base_unit,
+                                            numerator, denominator, created_by)
+        values (${c}, 'MAT-10001', 'BOX', 'PC', 12, 1, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+    return 'BOX';
+  }
+
+  it('clears an alternative-unit receipt at the order-unit value, not at the base quantity', async () => {
+    const c = await standingClient();
+    const box = await ensureBoxConversion(c);
+    try {
+      const order = await createOrder({
+        client: c, changedBy: ACTOR,
+        supplierNumber: 'V10000', purchasingOrg: '1000', purchasingGroup: '001', companyCode: '1000', currency: '',
+        items: [{
+          materialNumber: 'MAT-10001', shortText: 'Boxed steel', quantity: 3, unit: box,
+          netPrice: 40, priceUnit: 1, taxCode: '', plant: '1000', storageLocation: '',
+          markedForDeletion: false, scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 3 }], assignments: [],
+        }],
+      });
+      await postGoodsReceipt({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+        documentDate: '2026-10-18', postingDate: '2026-10-18', requestKey: 'gr-alt-1',
+        lines: [{ itemNumber: 10, quantity: 3 }],
+      });
+      await postSupplierInvoice({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+        supplierReference: 'INV-ALT-1', invoiceDate: '2026-10-18', postingDate: '2026-10-18',
+        grossAmount: 80, requestKey: 'iv-alt-1',
+        lines: [{ itemNumber: 10, quantity: 2, netAmount: 80 }],
+      });
+
+      // The document keeps what the posting converted: three boxes entered, thirty-six pieces
+      // of stock. Read as text the scale of the column would leak into the assertion, so the
+      // figures are compared as numbers.
+      const [line] = await withTenant(c, async (tx) => tx.execute(sql`
+        select l.entry_quantity::float8 as entered, l.entry_unit, l.base_quantity::float8 as based,
+               l.base_unit, l.unit_price::float8 as unit_price, l.price_unit::float8 as price_unit
+          from material_document_line l
+         where l.client = ${c} and l.purchase_order_number = ${order.orderNumber} and l.purchase_order_item = 10
+      `)) as unknown as Array<{
+        entered: number; entry_unit: string; based: number; base_unit: string; unit_price: number; price_unit: number;
+      }>;
+      expect(line).toEqual({ entered: 3, entry_unit: box, based: 36, base_unit: 'PC', unit_price: 40, price_unit: 1 });
+
+      const listed = await listGrIrResiduals({
+        client: c, companyFrom: '1000', keyDate: '2026-10-18',
+        orderFrom: order.orderNumber, orderTo: order.orderNumber,
+      });
+      expect(listed.map((row) => row.itemNumber)).toEqual([10]);
+      // Three boxes received, two invoiced: the residual is one box at the order price. Priced
+      // on the base quantity the same documents would say thirty-six boxes and a value of 1440.
+      expect(listed[0]).toMatchObject({
+        unit: box, orderedQuantity: 3, receivedQuantity: 3, invoicedQuantity: 2, openQuantity: 1,
+        grIrValue: 40, remaining: 40, surplus: 'DELIVERY', category: 'QUANTITY', eligible: true,
+      });
+      expect(listed[0].furtherActivity).toMatch(/Further invoice/);
+
+      const before = await counts(c);
+      const posted = await postGrIrClearing({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber, itemNumber: 10,
+        keyDate: '2026-10-18', postingDate: '2026-10-18', fingerprint: listed[0].fingerprint,
+        comment: 'clear the open box', requestKey: 'alt-post-1', acknowledgeFurtherActivity: true,
+      });
+      expect(posted.wrote).toBe(true);
+      const ledger = await withTenant(c, async (tx) => tx.execute(sql`
+        select sum(case when debit_credit = 'S' then amount_document else -amount_document end)::float8 as net,
+               count(*)::int as lines, max(amount_document)::float8 as amount
+          from journal_entry_line
+         where client = ${c} and document_number = ${posted.documentNumber}
+      `)) as unknown as Array<{ net: number; lines: number; amount: number }>;
+      expect(ledger[0]).toEqual({ net: 0, lines: 2, amount: 40 });
+      const after = await counts(c);
+      expect(Number(after.journals)).toBe(Number(before.journals) + 1);
+      expect(after.documents).toBe(before.documents);
+      expect(after.stock).toBe(before.stock);
+    } finally {
+      await withTenant(c, async (tx) => {
+        await tx.execute(sql`
+          delete from material_uom_conversion where client = ${c} and material_number = 'MAT-10001' and alternative_unit = ${box}
+        `);
+      });
+    }
+  });
+
+  it('nets a reversed alternative-unit receipt to no residual at all', async () => {
+    const c = await standingClient();
+    const box = await ensureBoxConversion(c);
+    try {
+      const order = await createOrder({
+        client: c, changedBy: ACTOR,
+        supplierNumber: 'V10000', purchasingOrg: '1000', purchasingGroup: '001', companyCode: '1000', currency: '',
+        items: [{
+          materialNumber: 'MAT-10001', shortText: 'Reboxed steel', quantity: 3, unit: box,
+          netPrice: 40, priceUnit: 1, taxCode: '', plant: '1000', storageLocation: '',
+          markedForDeletion: false, scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 3 }], assignments: [],
+        }],
+      });
+      const reversedOut = await postGoodsReceipt({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+        documentDate: '2026-10-18', postingDate: '2026-10-18', requestKey: 'gr-altrev-1',
+        lines: [{ itemNumber: 10, quantity: 2 }],
+      });
+      await reverseGoodsReceipt({
+        client: c, changedBy: ACTOR, materialDocumentNumber: reversedOut.materialDocumentNumber,
+        documentDate: '2026-10-18', postingDate: '2026-10-18', requestKey: 'gr-altrev-rev',
+      });
+      await postGoodsReceipt({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+        documentDate: '2026-10-19', postingDate: '2026-10-19', requestKey: 'gr-altrev-2',
+        lines: [{ itemNumber: 10, quantity: 3 }],
+      });
+      await postSupplierInvoice({
+        client: c, changedBy: ACTOR, orderNumber: order.orderNumber,
+        supplierReference: 'INV-ALTREV-1', invoiceDate: '2026-10-19', postingDate: '2026-10-19',
+        grossAmount: 120, requestKey: 'iv-altrev-1',
+        lines: [{ itemNumber: 10, quantity: 3, netAmount: 120 }],
+      });
+
+      // Two boxes received and reversed, then three received against an invoice of three: the
+      // account is square. The reversal copied its original's pair, so it nets only if the
+      // order unit is read off the lines rather than assumed from the material's base.
+      const rows = await listGrIrResiduals({
+        client: c, companyFrom: '1000', keyDate: '2026-10-19',
+        orderFrom: order.orderNumber, orderTo: order.orderNumber,
+      });
+      expect(rows).toEqual([]);
+      const [totals] = await withTenant(c, async (tx) => tx.execute(sql`
+        select sum(l.base_quantity)::float8 as base, sum(l.entry_quantity)::float8 as entered
+          from material_document_line l
+         where l.client = ${c} and l.purchase_order_number = ${order.orderNumber} and l.purchase_order_item = 10
+      `)) as unknown as Array<{ base: number; entered: number }>;
+      // 2 + 2 + 3 boxes entered against 24 + 24 + 36 pieces stored: the documents stand as posted.
+      expect(totals).toEqual({ base: 84, entered: 7 });
+    } finally {
+      await withTenant(c, async (tx) => {
+        await tx.execute(sql`
+          delete from material_uom_conversion where client = ${c} and material_number = 'MAT-10001' and alternative_unit = ${box}
+        `);
+      });
+    }
   });
 });

@@ -281,4 +281,74 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
     const result = await list({ orderFrom: '4500000001', orderTo: '4500000001' });
     expect(result.rows[0]?.drillDown).toBe('/purchasing/orders?order=4500000001');
   });
+
+  it('measures an alternative-unit receipt against the order line in the order unit', async () => {
+    // The order counts 3 boxes of M100, which the material counts as 36 pieces. A receipt of one
+    // box leaves two boxes open, and the line still belongs to "still to be delivered" — neither
+    // of which the reader says when it measures the stored base figure against the ordered one.
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into unit_of_measure (code, name) values ('BOX', 'Box') on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_uom_conversion (client, material_number, alternative_unit, base_unit,
+                                            numerator, denominator, created_by)
+        values (${client}, 'M100', 'BOX', 'PC', 12, 1, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org,
+                                    purchasing_group, company_code, currency, document_date, release_status, created_by)
+        values (${client}, '4500000009', 'STANDARD', 'V10000', 'O100', 'G01', '1000', 'USD', '2026-02-20',
+                'RELEASED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item (client, order_number, item_number, item_category, material_number,
+                                         short_text, quantity, unit, net_price, price_unit, net_value, plant,
+                                         material_group, requisition_number, requisition_item, marked_for_deletion, created_by)
+        values (${client}, '4500000009', 10, 'STANDARD', 'M100', 'Boxed line', 3, 'BOX', 40, 1, 120, 'P100',
+                'MG01', null, null, false, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date, posting_date,
+                                       status, created_by)
+        values (${client}, '5000000009', 2026, '2026-02-21', '2026-02-21', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, value,
+          purchase_order_number, purchase_order_item, created_by
+        ) values
+          (${client}, '5000000009', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 1, 'BOX', 12, 'PC',
+           40, 1, 40, '4500000009', 10, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    try {
+      const rows = await list({ orderFrom: '4500000009', orderTo: '4500000009' });
+      const row = rows.rows.find((entry) => entry.orderNumber === '4500000009' && entry.itemNumber === 10);
+      expect(row).toMatchObject({
+        quantity: 3, deliveredQuantity: 1, openDeliveryQuantity: 2, status: 'PARTIALLY_DELIVERED',
+      });
+
+      const open = await list({ scope: 'STILL_TO_BE_DELIVERED', orderFrom: '4500000009', orderTo: '4500000009' });
+      expect(open.rows.map((entry) => entry.orderNumber)).toEqual(['4500000009']);
+
+      const completed = await list({ scope: 'COMPLETED', orderFrom: '4500000009', orderTo: '4500000009' });
+      expect(completed.rows).toEqual([]);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`delete from material_document_line where client = ${client} and material_document_number = '5000000009'`);
+        await tx.execute(sql`delete from material_document where client = ${client} and material_document_number = '5000000009'`);
+        await tx.execute(sql`delete from purchase_order_item where client = ${client} and order_number = '4500000009'`);
+        await tx.execute(sql`delete from purchase_order where client = ${client} and order_number = '4500000009'`);
+        await tx.execute(sql`delete from material_uom_conversion where client = ${client} and material_number = 'M100'`);
+      });
+    }
+  });
 });

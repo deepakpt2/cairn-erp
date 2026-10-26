@@ -18,6 +18,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../platform/db/client';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { receiptQuantityInOrderUnit, receiptUnitJoins } from './receipt-unit-basis';
 
 export const PO_ACCOUNT_ASSIGN_CAPABILITY = 'PROC.PO.ACCOUNTASSIGN';
 export const PO_ACCOUNT_ASSIGN_ALIAS = 'ME2K';
@@ -255,11 +256,14 @@ export async function purchaseOrdersByAccountAssignment(input: {
     const rows = await tx.execute(sql`
       with gr as (
         select l.purchase_order_number, l.purchase_order_item,
-               sum(case when m.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as delivered
+               -- The order line is counted in its own unit; the material's base unit is the stock
+               -- figure, which this screen does not compare the ordered quantity with.
+               sum(case when m.direction = 'REVERSAL' then -(${receiptQuantityInOrderUnit}) else (${receiptQuantityInOrderUnit}) end) as delivered
         from material_document_line l
         join material_document d
           on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
         join movement_type m on m.client = l.client and m.movement_type = l.movement_type
+        ${receiptUnitJoins}
         where l.client = ${client} and l.purchase_order_number is not null
         group by l.purchase_order_number, l.purchase_order_item
       ), ir as (

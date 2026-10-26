@@ -23,6 +23,7 @@ import { postJournalEntry, reverseJournalEntry, PostingError } from '../../platf
 import { getMaterialPeriodControlInTx } from '../inventory/goods-issue';
 import { postingValuationRefusal } from '../inventory/valuation-class-definition';
 import { materialPeriodAllows } from '../inventory/material-period-control';
+import { receiptQuantityInOrderUnit, receiptQuantityUnstateable, receiptUnitJoins } from './receipt-unit-basis';
 
 export const GRIR_CLEARING_CAPABILITY = 'PROC.GRIR.MAINTAIN';
 export const GRIR_CLEARING_POST_CAPABILITY = 'PROC.GRIR.MAINTAIN.POST';
@@ -214,7 +215,9 @@ interface MoveLine {
   line_direction: string;
   reversal_of_document: string | null;
   reversal_of_line: number | null;
-  quantity: string;
+  /** The quantity in the unit the order line counts in, or null when the line cannot be stated in it. */
+  quantity: string | null;
+  unstateable: boolean;
   unit_price: string;
   price_unit: string;
 }
@@ -274,12 +277,14 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     select l.purchase_order_number as order_number, l.purchase_order_item as item_number,
            l.material_document_number as document_number, l.line_number,
            l.movement_type, l.line_direction, l.reversal_of_document, l.reversal_of_line,
-           l.base_quantity as quantity, l.unit_price, l.price_unit
+           (${receiptQuantityInOrderUnit}) as quantity, l.unit_price, l.price_unit,
+           ${receiptQuantityUnstateable} as unstateable
       from material_document_line l
       join material_document h
         on h.client = l.client and h.material_document_number = l.material_document_number
       join purchase_order po
         on po.client = l.client and po.order_number = l.purchase_order_number
+      ${receiptUnitJoins}
      where l.client = ${client}
        and l.purchase_order_number is not null
        and h.posting_date <= ${selection.keyDate}
@@ -306,9 +311,14 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
       -(sign.get(`${row.reversal_of_document}/${row.reversal_of_line}`) ?? 1),
     );
   }
+  // A line the material's own records cannot place in the order unit is counted, not guessed at:
+  // the item is reported as unresolved below rather than cleared on a figure nobody stated.
+  const unresolved = new Map<string, number>();
   const received = new Map<string, { qty: number; value: number }>();
   for (const row of moves) {
     if (row.item_number == null) continue;
+    const id = keyOf(row.order_number, row.item_number);
+    if (row.unstateable) unresolved.set(id, (unresolved.get(id) ?? 0) + 1);
     const rowSign = sign.get(`${row.document_number}/${row.line_number}`) ?? 1;
     const qty = rowSign * Number(row.quantity);
     const value = rowSign * postedValue(Number(row.quantity), Number(row.unit_price), Number(row.price_unit));
@@ -375,8 +385,11 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     const history = round2(got.value - billed.value);
     const remaining = round2(history - (cleared.get(id) ?? 0));
     const openQuantity = round3(got.qty - billed.qty);
-    if (Math.abs(remaining) <= MONEY && Math.abs(history) <= MONEY) continue;
-    if (Math.abs(remaining) <= MONEY) continue;
+    const unstateable = unresolved.get(id) ?? 0;
+    // Only an item with no residual at all is dropped. With an unreadable line the sum says
+    // nothing, so the item stays listed and is refused instead.
+    if (!unstateable && Math.abs(remaining) <= MONEY && Math.abs(history) <= MONEY) continue;
+    if (!unstateable && Math.abs(remaining) <= MONEY) continue;
 
     const surplus: 'DELIVERY' | 'INVOICE' = remaining > 0 ? 'DELIVERY' : 'INVOICE';
     if (selection.surplus !== 'BOTH' && selection.surplus !== surplus) continue;
@@ -393,6 +406,7 @@ async function loadResiduals(tx: Tx, client: string, selection: ReturnType<typeo
     else if (item.account_assignment_category) refusal = 'Account-assigned items do not post GR/IR.';
     else if (!item.material_number) refusal = 'A text item has no GR/IR residual.';
     else if (billed.other) refusal = 'A credit memo is not a GR/IR posting this round.';
+    else if (unstateable) refusal = `${unstateable} receipt line(s) on this item stand in a unit the material's records cannot place in ${item.unit}, so no residual is answered for the item.`;
     else if (item.currency !== item.company_currency) refusal = `The order currency ${item.currency} does not agree with the company currency ${item.company_currency}.`;
     else if (!grIr) refusal = `Account determination for GR_IR_CLEARING does not stand in chart ${item.chart_of_accounts}.`;
     else if (!item.valuation_class) refusal = `Material ${item.material_number} carries no valuation class in plant ${item.plant}.`;
