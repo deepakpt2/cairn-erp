@@ -306,7 +306,6 @@ async function settleOne(
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   row: typeof internalOrder.$inferSelect,
 ): Promise<{ order: SettlementOrderResult; document: SettlementDocumentRef | null; eligible: boolean }> {
-  const blocked = blockedReasons(row);
   const base = {
     orderNumber: row.orderNumber,
     orderType: row.orderType,
@@ -316,6 +315,36 @@ async function settleOne(
     amount: null,
     receivers: [] as SettlementReceiverResult[],
   };
+  // The header was selected before this transaction opened — a collective run reads its whole range
+  // first and settles each order afterwards — so the copy handed down is a starting point, not the
+  // state to be judged. What may be settled is what the header says when the document is posted, so
+  // the two refusal flags are read again, and while an update is being posted the header save waits
+  // behind that read the way the configuration paths wait behind it. A test run decides nothing, so
+  // it reads without locking.
+  const header = tx.select({
+    statistical: internalOrder.statistical,
+    markedForDeletion: internalOrder.markedForDeletion,
+  }).from(internalOrder).where(and(
+    eq(internalOrder.client, input.client),
+    eq(internalOrder.orderNumber, row.orderNumber),
+  ));
+  const [current] = run.testRun ? await header : await header.for('share');
+  if (!current) {
+    return {
+      eligible: false,
+      document: null,
+      order: {
+        ...base,
+        outcome: 'NOT_SETTLED',
+        reasons: [`Internal order ${row.orderNumber} does not exist any more. Nothing was posted.`],
+      },
+    };
+  }
+  const blocked = blockedReasons({
+    orderNumber: row.orderNumber,
+    statistical: current.statistical,
+    markedForDeletion: current.markedForDeletion,
+  });
   if (blocked.length > 0) {
     return {
       eligible: false,
