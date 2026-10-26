@@ -369,6 +369,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/config/settlement-configuration",
+    path: "/config/settlement-configuration",
+    query: {},
+    code: "CFG.COST.SETTLEMENT.DEFINE",
+    title: "Define settlement configuration",
+    area: "configuration",
+    family: "cost-config",
+    accepts: [],
+  },
+  {
     id: "/config/distribution-channels",
     path: "/config/distribution-channels",
     query: {},
