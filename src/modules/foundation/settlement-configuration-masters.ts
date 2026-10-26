@@ -34,11 +34,22 @@ import {
   settlementProfile,
 } from './schema';
 
-export const SETTLEMENT_CONFIG_CAPABILITY = 'CFG.COST.SETTLEMENT.DEFINE';
-export const SETTLEMENT_CONFIG_ROUTE = '/config/settlement-configuration';
+import {
+  SETTLEMENT_CONFIG_ACTIVITY,
+  settlementConfigAdvisoryKey,
+} from './settlement-configuration-keys';
 
-/** The workbench step these four masters complete. */
-export const SETTLEMENT_CONFIG_ACTIVITY = SETTLEMENT_CONFIG_CAPABILITY;
+/** The capability, the route and the change-session keys live in one DB-free file the screen shares. */
+export {
+  SETTLEMENT_CONFIG_ACTIVITY,
+  SETTLEMENT_CONFIG_LOCKS,
+  SETTLEMENT_CONFIG_ROUTE,
+  settlementConfigLock,
+  type SettlementConfigLockKind,
+} from './settlement-configuration-keys';
+
+/** The workbench step these four masters complete, and the capability that maintains them. */
+export const SETTLEMENT_CONFIG_CAPABILITY = SETTLEMENT_CONFIG_ACTIVITY;
 
 const PROFILE_CLASS = 'settlement_profile';
 const STRUCTURE_CLASS = 'allocation_structure';
@@ -1170,16 +1181,21 @@ function sameProfileValues(
     && before.isActive === after.isActive;
 }
 
-/** One shared key per master object. The rule key stays with the rule screen. */
+/**
+ * One key per master object, shared by three callers: the advisory lock this module takes inside its
+ * transaction, the change session the screen opens before it submits, and the settlement run's read of
+ * the same rows. A screen that locked a different string than the writer would let two users edit one
+ * row and let the second save stand. The order rule keeps its own key at `lockSettlementRuleForOrder`.
+ */
 async function lockStructure(tx: Tx, client: string, structureCode: string): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/allocation-structure/${structureCode}`}, 0))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${settlementConfigAdvisoryKey(client, 'structure', structureCode)}, 0))`);
 }
 
 async function lockProfile(tx: Tx, client: string, profileCode: string): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/settlement-profile/${profileCode}`}, 0))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${settlementConfigAdvisoryKey(client, 'profile', profileCode)}, 0))`);
 }
 
 async function lockOrderType(tx: Tx, client: string, orderType: string): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/order-type-settlement/${orderType}`}, 0))`);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${settlementConfigAdvisoryKey(client, 'orderType', orderType)}, 0))`);
 }
 
