@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { requireCapability } from '@/platform/auth/current';
+import { assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   changeOriginalBudget,
   InternalOrderBudgetError,
@@ -36,11 +37,16 @@ export async function saveOriginalBudgetAction(
         return [{ fiscalYear: Number(value.fiscalYear), amount }];
       })
     : undefined;
+  // The budget is written on the order, under the order's own advisory key in the module, which is
+  // why both screens lock `INTERNAL_ORDER/<order>`. The key the page locked is therefore the key this
+  // write is checked against, and the identity below is the one shared by the guard and the write.
+  const orderNumber = String(input.orderNumber ?? '');
   try {
+    await assertChangeForSession(session, { lockObject: 'INTERNAL_ORDER', argument: orderNumber });
     const saved = await changeOriginalBudget({
       client: session.user.client,
       changedBy: session.user.username,
-      orderNumber: String(input.orderNumber ?? ''),
+      orderNumber,
       documentDate: String(input.documentDate ?? ''),
       overallAmount: String(input.overallAmount ?? '').trim() || undefined,
       annual,

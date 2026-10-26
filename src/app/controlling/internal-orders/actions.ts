@@ -2,10 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { requireSession } from '@/platform/auth/current';
+import { requireCapability } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   changeInternalOrder,
   createInternalOrder,
+  INTERNAL_ORDER_MAINTAIN_CAPABILITY,
   INTERNAL_ORDER_ROUTE,
   InternalOrderError,
 } from '@/modules/foundation/internal-order';
@@ -20,7 +22,9 @@ export async function saveInternalOrderAction(
   _previous: OrderActionState,
   formData: FormData,
 ): Promise<OrderActionState> {
-  const session = await requireSession(INTERNAL_ORDER_ROUTE);
+  // The screen asks for the maintain capability and the module does not check it, so the action has
+  // to: otherwise any signed-in session could post this form directly.
+  const session = await requireCapability(INTERNAL_ORDER_MAINTAIN_CAPABILITY);
   const payload = String(formData.get('payload') ?? '');
   let input: Record<string, unknown>;
   try {
@@ -30,6 +34,13 @@ export async function saveInternalOrderAction(
   }
   const existing = String(input.orderNumber ?? '').trim();
   try {
+    // A change of a standing order goes to the session the screen granted the order lock to — the
+    // one lock this order has, under the same key both screens and the module's own advisory lock
+    // use. Whoever was told to display, or never opened the order, writes nothing. Creating an order
+    // is not under the lock, and never was.
+    if (existing) {
+      await assertChangeForSession(session, { lockObject: 'INTERNAL_ORDER', argument: existing });
+    }
     const saved = existing
       ? await changeInternalOrder({
           client: session.user.client,
@@ -69,7 +80,9 @@ export async function saveInternalOrderAction(
     revalidatePath(INTERNAL_ORDER_ROUTE);
     return { ok: true, orderNumber: saved.orderNumber, message: `Internal order ${saved.orderNumber} saved. Nothing was posted.` };
   } catch (error) {
-    const message = error instanceof InternalOrderError ? error.message : 'The order could not be saved.';
+    const message = error instanceof InternalOrderError || error instanceof EnqueueError
+      ? error.message
+      : 'The order could not be saved.';
     return { ok: false, message };
   }
 }
