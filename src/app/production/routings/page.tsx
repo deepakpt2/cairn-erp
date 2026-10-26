@@ -7,6 +7,7 @@ import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueu
 import { plant as plantTable } from '@/modules/foundation/schema';
 import { material as materialTable } from '@/modules/inventory/schema';
 import {
+  ROUTING_ACTIVITY,
   ROUTING_CHANGE_CAPABILITY,
   ROUTING_CREATE_CAPABILITY,
   ROUTING_DISPLAY_ROUTE,
@@ -82,8 +83,20 @@ export default async function RoutingsPage({ searchParams }: {
       openError = error instanceof RoutingError ? error.message : 'The routing could not be opened.';
     }
   }
-  const lock = document ? await openChangeForSession(session, ROUTING_LOCK, `${document.taskListType}/${document.routingGroup}/${document.groupCounter}`) : null;
-  const locked = Boolean(lock && !lock.acquired);
+  // The routing screen writes an existing routing through one action, and that action requires the
+  // change capability, so only a session holding it takes the lock. A create-only session takes
+  // none: it cannot block an editor with a lock it cannot use. Creating stays lock-free.
+  // Only a lock this session was actually given grants change: another holder, or no lock at all,
+  // reads and never writes.
+  const lock = document && canChange
+    ? await openChangeForSession(session, {
+      lockObject: ROUTING_LOCK,
+      argument: `${document.taskListType}/${document.routingGroup}/${document.groupCounter}`,
+      transactionCode: ROUTING_ACTIVITY,
+    })
+    : null;
+  const locked = Boolean(document) && lock?.mode !== 'CHANGE';
+  const displayNotice = lock ? displayOnlyMessage(lock) : null;
 
   return (
     <main className="mx-auto max-w-5xl p-6">
@@ -111,7 +124,7 @@ export default async function RoutingsPage({ searchParams }: {
         <button className="btn" type="submit">Open</button>
         <Link className="btn" href={`${ROUTING_ROUTE}?create=1`}>New routing</Link>
       </form>
-      {locked && <p className="mt-3 text-sm">{displayOnlyMessage(lock)}</p>}
+      {displayNotice && <p className="mt-3 text-sm">{displayNotice}</p>}
       {(creating || document) && (
         <RoutingForm
           document={document}

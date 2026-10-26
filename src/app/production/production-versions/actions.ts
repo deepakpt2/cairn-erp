@@ -4,12 +4,14 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
 import { requireCapability } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   PRODUCTION_VERSION_CHANGE_CAPABILITY,
   PRODUCTION_VERSION_CHECK_CAPABILITY,
   PRODUCTION_VERSION_CREATE_CAPABILITY,
   PRODUCTION_VERSION_DELETE_CAPABILITY,
   PRODUCTION_VERSION_LOCK_CAPABILITY,
+  PRODUCTION_VERSION_LOCK,
   PRODUCTION_VERSION_ROUTE,
   ProductionVersionError,
   changeProductionVersion,
@@ -30,7 +32,7 @@ export interface VersionActionState {
 }
 
 function fail(error: unknown): VersionActionState {
-  if (error instanceof ProductionVersionError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof ProductionVersionError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   return { ok: false, message: error instanceof Error ? error.message : 'The production version was not saved.' };
 }
 
@@ -59,10 +61,27 @@ function inputOf(session: { user: { client: string; username: string } }, formDa
   };
 }
 
+/**
+ * The change lock the screen took on the row this form writes. The argument is built from the same
+ * three fields the write itself is keyed on, so a request cannot present a row it holds a lock for
+ * while changing another; ownership is read from the `enqueue` row, never from the form.
+ */
+function versionLockInput(formData: FormData) {
+  const read = (name: string) => String(formData.get(name) ?? '');
+  return {
+    lockObject: PRODUCTION_VERSION_LOCK,
+    argument: `${read('plant')}/${read('materialNumber')}/${read('productionVersion')}`,
+  };
+}
+
 export async function saveVersionAction(_previous: VersionActionState, formData: FormData): Promise<VersionActionState> {
   const mode = String(formData.get('mode') ?? 'CREATE');
   const session = await requireCapability(mode === 'CHANGE' ? PRODUCTION_VERSION_CHANGE_CAPABILITY : PRODUCTION_VERSION_CREATE_CAPABILITY);
   try {
+    // A new version belongs to no one yet; changing one belongs to whoever holds the lock.
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, versionLockInput(formData));
+    }
     const version = mode === 'CHANGE'
       ? await changeProductionVersion(inputOf(session, formData))
       : await createProductionVersion(inputOf(session, formData));
@@ -94,6 +113,7 @@ function back(formData: FormData, notice: string): never {
 export async function checkVersionAction(formData: FormData): Promise<void> {
   const session = await requireCapability(PRODUCTION_VERSION_CHECK_CAPABILITY);
   try {
+    await assertChangeForSession(session, versionLockInput(formData));
     const version = await checkProductionVersion(
       session.user.client,
       String(formData.get('materialNumber') ?? ''),
@@ -103,13 +123,14 @@ export async function checkVersionAction(formData: FormData): Promise<void> {
     );
     back(formData, `The check is ${version.checkStatus}. A previous result was not reused.`);
   } catch (error) {
-    back(formData, error instanceof ProductionVersionError ? error.message : 'The consistency check was not saved.');
+    back(formData, error instanceof ProductionVersionError || error instanceof EnqueueError ? error.message : 'The consistency check was not saved.');
   }
 }
 
 export async function lockVersionAction(formData: FormData): Promise<void> {
   const session = await requireCapability(PRODUCTION_VERSION_LOCK_CAPABILITY);
   try {
+    await assertChangeForSession(session, versionLockInput(formData));
     const version = await lockProductionVersion(
       session.user.client,
       String(formData.get('materialNumber') ?? ''),
@@ -121,13 +142,14 @@ export async function lockVersionAction(formData: FormData): Promise<void> {
     );
     back(formData, version.lockIndicator === '1' ? 'The version is locked. It will not be selected.' : 'The version is unlocked.');
   } catch (error) {
-    back(formData, error instanceof ProductionVersionError ? error.message : 'The lock was not saved.');
+    back(formData, error instanceof ProductionVersionError || error instanceof EnqueueError ? error.message : 'The lock was not saved.');
   }
 }
 
 export async function deleteVersionAction(formData: FormData): Promise<void> {
   const session = await requireCapability(PRODUCTION_VERSION_DELETE_CAPABILITY);
   try {
+    await assertChangeForSession(session, versionLockInput(formData));
     const result = await deleteProductionVersion(
       session.user.client,
       String(formData.get('materialNumber') ?? ''),
@@ -140,7 +162,7 @@ export async function deleteVersionAction(formData: FormData): Promise<void> {
       ? 'The unused production version was deleted. The change document remains.'
       : 'A production or planned order exists for this material and plant. The version was marked inactive and was not removed.');
   } catch (error) {
-    back(formData, error instanceof ProductionVersionError ? error.message : 'The production version was not deleted.');
+    back(formData, error instanceof ProductionVersionError || error instanceof EnqueueError ? error.message : 'The production version was not deleted.');
   }
 }
 

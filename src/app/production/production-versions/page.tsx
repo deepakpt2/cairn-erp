@@ -7,6 +7,7 @@ import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueu
 import { plant as plantTable } from '@/modules/foundation/schema';
 import { material as materialTable } from '@/modules/inventory/schema';
 import {
+  PRODUCTION_VERSION_ACTIVITY,
   PRODUCTION_VERSION_CHANGE_CAPABILITY,
   PRODUCTION_VERSION_CHECK_CAPABILITY,
   PRODUCTION_VERSION_CREATE_CAPABILITY,
@@ -90,8 +91,25 @@ export default async function ProductionVersionsPage({ searchParams }: {
       baseUnit: materialTable.baseUnit,
     }).from(materialTable).where(eq(materialTable.client, session.user.client))),
   ]);
-  const lock = document ? await openChangeForSession(session, PRODUCTION_VERSION_LOCK, `${document.plant}/${document.materialNumber}/${document.productionVersion}`) : null;
-  const locked = Boolean(lock && !lock.acquired);
+  // A change lock is only worth taking to someone who can write the row. The change save and the
+  // check, lock-indicator and delete acts all stand under it, so a session holding any of those
+  // takes the lock; a create-only session takes none, and so cannot shut an editor out of a standing
+  // version it is not entitled to change. Creating stays lock-free.
+  const mayWrite = canChange
+    || can(session, PRODUCTION_VERSION_CHECK_CAPABILITY)
+    || can(session, PRODUCTION_VERSION_LOCK_CAPABILITY)
+    || can(session, PRODUCTION_VERSION_DELETE_CAPABILITY);
+  // Only a lock this session was actually given grants change: another holder, or no lock at all,
+  // reads and never writes.
+  const lock = document && mayWrite
+    ? await openChangeForSession(session, {
+      lockObject: PRODUCTION_VERSION_LOCK,
+      argument: `${document.plant}/${document.materialNumber}/${document.productionVersion}`,
+      transactionCode: PRODUCTION_VERSION_ACTIVITY,
+    })
+    : null;
+  const locked = Boolean(document) && lock?.mode !== 'CHANGE';
+  const displayNotice = lock ? displayOnlyMessage(lock) : null;
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -143,9 +161,9 @@ export default async function ProductionVersionsPage({ searchParams }: {
         </table>
       )}
       {listed.total > listed.rows.length && <p className="mt-2 text-sm">{listed.total} versions. This page shows {listed.rows.length}.</p>}
-      {locked && <p className="mt-3 text-sm">{displayOnlyMessage(lock)}</p>}
+      {displayNotice && <p className="mt-3 text-sm">{displayNotice}</p>}
       {(creating || document) && (
-        <VersionForm document={document} locked={locked} plants={plants} materials={materials} choices={choices} />
+        <VersionForm document={document} locked={locked} canCopy={canCreate} plants={plants} materials={materials} choices={choices} />
       )}
       {document && (
         <section className="mt-4 space-y-2 text-sm">

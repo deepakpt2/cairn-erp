@@ -11,12 +11,15 @@ const initial: VersionActionState = { ok: false };
 export default function VersionForm({
   document,
   locked,
+  canCopy,
   plants,
   materials,
   choices,
 }: {
   document: ProductionVersionView | null;
   locked: boolean;
+  /** Whether this session may create a version. A copy is a create, so it stands outside the change lock. */
+  canCopy: boolean;
   plants: Array<{ plant: string; name: string }>;
   materials: Array<{ materialNumber: string; description: string; baseUnit: string }>;
   choices: {
@@ -103,15 +106,15 @@ export default function VersionForm({
         <p className="text-sm text-ink-soft">BOM alternatives: {choices.boms.map((row) => `${row.usage}/${row.alternative}`).join(', ') || 'none'}. Routings: {choices.routings.map((row) => `${row.taskListType} ${row.routingGroup}/${row.groupCounter}`).join(', ') || 'none'}. This screen does not maintain either master.</p>
         <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit" disabled={pending || locked}>{pending ? 'Saving' : mode === 'CHANGE' ? 'Save change' : 'Create version'}</button>
       </form>
-      {document && (
+      {document && canCopy && (
         <form action={copyAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="materialNumber" value={document.materialNumber} />
           <input type="hidden" name="plant" value={document.plant} />
           <input type="hidden" name="productionVersion" value={document.productionVersion} />
           <label className="text-sm">Copy to a new version
-            <input className="input mt-1" name="newProductionVersion" maxLength={4} required disabled={locked} />
+            <input className="input mt-1" name="newProductionVersion" maxLength={4} required />
           </label>
-          <button className="btn" type="submit" disabled={copyPending || locked}>Copy</button>
+          <button className="btn" type="submit" disabled={copyPending}>Copy</button>
         </form>
       )}
       <datalist id="version-materials">{materials.map((row) => <option key={row.materialNumber} value={row.materialNumber}>{row.description} {row.baseUnit}</option>)}</datalist>

@@ -1,9 +1,11 @@
 'use server';
 
 import { requireCapability } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   ROUTING_CHANGE_CAPABILITY,
   ROUTING_CREATE_CAPABILITY,
+  ROUTING_LOCK,
   RoutingError,
   changeRouting,
   createRouting,
@@ -25,7 +27,7 @@ export interface RoutingActionState {
 }
 
 function fail(error: unknown): RoutingActionState {
-  if (error instanceof RoutingError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof RoutingError || error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   return { ok: false, message: error instanceof Error ? error.message : 'The routing was not saved.' };
 }
 
@@ -141,6 +143,19 @@ function operationsOf(formData: FormData): RoutingOperationInput[] {
   });
 }
 
+/**
+ * The change lock the routing screen took on the group counter it opened. The argument carries the
+ * task list type, group and counter the write itself is keyed on, so the lock and the routing cannot
+ * be pointed at different rows; ownership comes from the `enqueue` row, not from the form.
+ */
+function routingLockInput(formData: FormData) {
+  const read = (name: string) => String(formData.get(name) ?? '');
+  return {
+    lockObject: ROUTING_LOCK,
+    argument: `${read('taskListType')}/${read('routingGroup')}/${read('groupCounter')}`,
+  };
+}
+
 export async function saveRoutingAction(_previous: RoutingActionState, formData: FormData): Promise<RoutingActionState> {
   const mode = String(formData.get('mode') ?? 'CREATE');
   const session = await requireCapability(mode === 'CHANGE' ? ROUTING_CHANGE_CAPABILITY : ROUTING_CREATE_CAPABILITY);
@@ -149,6 +164,10 @@ export async function saveRoutingAction(_previous: RoutingActionState, formData:
     return { materialNumber: materialNumber ?? '', plant };
   });
   try {
+    // Creating a routing takes no lock; changing one that is already open elsewhere does not go through.
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, routingLockInput(formData));
+    }
     const input = {
       client: session.user.client,
       changedBy: session.user.username,
