@@ -439,6 +439,16 @@ export async function reverseDocument(input: {
         'Reverse it from Asset Retirement, where the retirement record and asset eligibility are restored with its journal.',
       );
     }
+    // Settlement journals are refused for the same reason and with the same remedy shape: an order
+    // settlement writes a journal and a settlement document that stands on it, and the order's stored
+    // rule stays frozen while that document exists. This screen mirrors the journal only, so the
+    // settlement record would keep pointing at a posting that no longer settles anything.
+    if (header.originClass === 'order_settlement') {
+      throw new DocumentReversalError(
+        `Document ${input.documentNumber} is an internal-order settlement; reversing it here would orphan its settlement document.`,
+        'Settlement reversal stands unconfigured, so the settlement document and the order rule keep standing as they are.',
+      );
+    }
     const lines = await loadLines(tx, input.client, input.documentNumber, input.fiscalYear);
     const clearsItemCount = await loadClearsCount(tx, input.client, input.companyCode, input.documentNumber);
     const gate = eligibility(header, lines, clearsItemCount, standing);

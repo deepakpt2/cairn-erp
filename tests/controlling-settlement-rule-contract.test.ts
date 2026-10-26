@@ -370,12 +370,15 @@ describe('a settlement rule and the run that reads it', () => {
       reason: 'Settlement reversed',
       reversedBy: ACTOR,
     }));
-    // Reversing the journal gives the balance back, so a later run settles the order again...
+    // Reversing the journal gives the balance back, so a later run settles the order again. The general
+    // reversal screen refuses a settlement document rather than mirroring it, which is why the posting
+    // engine is called directly here: what follows stands for what a reversal does to the balance.
     const again = await settleOrder(run(tenant, number));
     expect(again.posted).toBe(true);
     expect(again.documents[0]?.documentNumber).not.toBe(document?.documentNumber);
     // ...while the rule stays frozen by the settlement document that was never removed. Whether a
-    // reversed settlement should release the rule is the decision recorded in the step report.
+    // reversed settlement should release the rule is the decision recorded in the step report, and the
+    // screen-level refusal is pinned in the reversal-contract file beside it.
     await expect(rule(tenant, number, 'CC200')).rejects.toThrow(/already has settlement document/);
     const rows = await withTenant(tenant.client, async (tx) => tx.execute(sql`
       select count(*)::int as n from settlement_document where client = ${tenant.client} and order_number = ${number}
