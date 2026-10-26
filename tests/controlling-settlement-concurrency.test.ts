@@ -19,6 +19,7 @@ import { changeInternalOrder, createInternalOrder } from '../src/modules/foundat
 import { settleOrder, settleOrdersCollective } from '../src/modules/foundation/order-settlement';
 import { createPlanRevaluationOrder } from '../src/modules/foundation/plan-revaluation';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
+import { ensureSettlementMasters } from './settlement-masters';
 import { internalOrder } from '../src/modules/foundation/schema';
 
 const ACTOR = 'CONCUR_TEST';
@@ -80,6 +81,7 @@ async function standing(seed: string): Promise<Place> {
     insert into cost_center (client, controlling_area, cost_center, valid_from, valid_to, name, category, company_code, created_by)
     values (${place.client}, ${place.area}, 'CC100', '2020-01-01', '9999-12-31', 'Overhead', 'ADMINISTRATION', ${place.company}, ${ACTOR})
   `));
+  await ensureSettlementMasters(place.client);
   return place;
 }
 
@@ -131,13 +133,6 @@ async function settleable(tenant: Place, description: string, amount = '80.0000'
     client: tenant.client,
     changedBy: ACTOR,
     orderNumber: saved.orderNumber,
-    profileCode: 'SP01',
-    profileDescription: 'Order settlement',
-    documentType: 'SA',
-    structureCode: 'AS01',
-    structureDescription: 'Original account',
-    sourceAccount: '410000',
-    byOriginalAccount: true,
     receiverCategory: 'COST_CENTER',
     receiver: 'CC100',
     percentage: '100',
@@ -395,13 +390,6 @@ describe('the rule and the definition that a settlement run reads', () => {
       client: tenant.client,
       changedBy: ACTOR,
       orderNumber,
-      profileCode: 'SP01',
-      profileDescription: 'Order settlement',
-      documentType: 'SA',
-      structureCode: 'AS01',
-      structureDescription: 'Original account',
-      sourceAccount: '410000',
-      byOriginalAccount: true,
       receiverCategory: 'COST_CENTER',
       receiver,
       percentage,

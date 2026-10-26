@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import {
   getSettlementConfiguration,
-  listSettlementDocumentTypes,
   SETTLEMENT_RULE_CAPABILITY,
   SETTLEMENT_RULE_ROUTE,
 } from '@/modules/foundation/settlement-configuration';
@@ -29,10 +28,7 @@ export default async function SettlementRulePage({ searchParams }: {
     );
   }
   const orderNumber = last((await searchParams).order);
-  const [documentTypes, stored] = await Promise.all([
-    listSettlementDocumentTypes(session.user.client),
-    orderNumber ? getSettlementConfiguration(session.user.client, orderNumber) : Promise.resolve(null),
-  ]);
+  const stored = orderNumber ? await getSettlementConfiguration(session.user.client, orderNumber) : null;
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 p-3 sm:p-4 lg:p-6">
@@ -43,10 +39,16 @@ export default async function SettlementRulePage({ searchParams }: {
           <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">Launchpad</Link>
         </div>
         <p className="mt-1 max-w-3xl text-sm text-ink-soft">
-          Store the rule KO88 and KO8G read. Saving does not post. No receiver, percentage, or account is filled in. This screen has no SAP transaction code. KO02 and KO8B are not this screen.
+          Store the rule KO88 and KO8G read. Saving does not post. No receiver, percentage, or account is filled in. This screen has no SAP transaction code.
+        </p>
+        <p className="mt-2 max-w-3xl text-sm text-ink-soft">
+          The profile, the allocation structure and its account assignments are shared by every order of the order type, so they are not
+          maintained here.{' '}
+          <Link href="/config/settlement-configuration" className="underline">Settlement configuration</Link>
+          {' '}holds them.
         </p>
       </header>
-      <RuleForm documentTypes={documentTypes} orderNumber={orderNumber} stored={stored} />
+      <RuleForm orderNumber={orderNumber} stored={stored} />
     </main>
   );
 }

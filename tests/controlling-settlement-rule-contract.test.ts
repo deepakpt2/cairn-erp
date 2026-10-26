@@ -22,6 +22,12 @@ import { postJournalEntry, reverseJournalEntry } from '../src/platform/posting';
 import { createInternalOrder } from '../src/modules/foundation/internal-order';
 import { settleOrder } from '../src/modules/foundation/order-settlement';
 import { lockSettlementRuleForOrder, saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
+import {
+  removeOrderTypeSettlementProfile,
+  saveAllocationStructureAssignment,
+  saveSettlementProfile,
+} from '../src/modules/foundation/settlement-configuration-masters';
+import { ensureSettlementMasters } from './settlement-masters';
 
 const ACTOR = 'RULE_TEST';
 const clients: string[] = [];
@@ -71,6 +77,7 @@ async function standing(seed: string, startDate = '2026-01-01'): Promise<Place> 
       values (${place.client}, ${place.area}, ${code}, '2020-01-01', '9999-12-31', ${name}, 'ADMINISTRATION', ${place.company}, ${ACTOR})
     `));
   }
+  await ensureSettlementMasters(place.client);
   return place;
 }
 
@@ -103,13 +110,6 @@ function rule(tenant: Place, orderNumber: string, receiver: string) {
     client: tenant.client,
     changedBy: ACTOR,
     orderNumber,
-    profileCode: 'SP01',
-    profileDescription: 'Order settlement',
-    documentType: 'SA',
-    structureCode: 'AS01',
-    structureDescription: 'Original account',
-    sourceAccount: '410000',
-    byOriginalAccount: true,
     receiverCategory: 'COST_CENTER',
     receiver,
     percentage: '100',
@@ -170,6 +170,26 @@ function storedReceiver(client: string, orderNumber: string) {
     select receiver from settlement_distribution_rule
      where client = ${client} and order_number = ${orderNumber}
   `) as unknown as Array<{ receiver: string }>).then((rows) => rows[0]?.receiver ?? null);
+}
+
+/**
+ * A digest of every row of the four shared tables, timestamps included. Two snapshots that differ mean
+ * one of the masters was written — which is what the rule screen must never do.
+ */
+function sharedSnapshot(client: string) {
+  return withTenant(client, async (tx) => tx.execute(sql`
+    select 'settlement_profile' as object, md5(coalesce(string_agg(t::text, '|' order by t::text), '')) as digest
+      from (select * from settlement_profile where client = ${client}) t
+    union all
+    select 'allocation_structure', md5(coalesce(string_agg(t::text, '|' order by t::text), ''))
+      from (select * from allocation_structure where client = ${client}) t
+    union all
+    select 'allocation_structure_assignment', md5(coalesce(string_agg(t::text, '|' order by t::text), ''))
+      from (select * from allocation_structure_assignment where client = ${client}) t
+    union all
+    select 'internal_order_type_settlement_profile', md5(coalesce(string_agg(t::text, '|' order by t::text), ''))
+      from (select * from internal_order_type_settlement_profile where client = ${client}) t
+  `)) as unknown as Array<{ object: string; digest: string }>;
 }
 
 /**
@@ -264,77 +284,163 @@ describe('a settlement rule and the run that reads it', () => {
     expect(lines).toHaveLength(settled.posted ? 1 : 0);
   });
 
-  it('keeps the shared rows consistent when two orders of one type are saved at once', async () => {
+  it('leaves every shared row untouched while two orders of one type store their rules', async () => {
     const tenant = await standing('ko88-rule-shared');
     const first = await createInternalOrder(order(tenant, 'Shared first'));
     const second = await createInternalOrder(order(tenant, 'Shared second'));
+    const before = await sharedSnapshot(tenant.client);
+
     const [left, right] = await Promise.all([
-      saveOrderSettlementConfiguration({
-        client: tenant.client,
-        changedBy: ACTOR,
-        orderNumber: first.orderNumber,
-        profileCode: 'SP01',
-        profileDescription: 'Order settlement',
-        documentType: 'SA',
-        structureCode: 'AS01',
-        structureDescription: 'Original account',
-        sourceAccount: '410000',
-        byOriginalAccount: true,
-        receiverCategory: 'COST_CENTER',
-        receiver: 'CC100',
-        percentage: '100',
-        settlementType: 'PER',
-        validFromYear: 2026,
-        validFromPeriod: 1,
-        validToYear: 2026,
-        validToPeriod: 12,
-      }),
-      saveOrderSettlementConfiguration({
-        client: tenant.client,
-        changedBy: ACTOR,
-        orderNumber: second.orderNumber,
-        profileCode: 'SP02',
-        profileDescription: 'Second profile',
-        documentType: 'SA',
-        structureCode: 'AS02',
-        structureDescription: 'Second structure',
-        sourceAccount: '410000',
-        byOriginalAccount: true,
-        receiverCategory: 'COST_CENTER',
-        receiver: 'CC200',
-        percentage: '100',
-        settlementType: 'PER',
-        validFromYear: 2026,
-        validFromPeriod: 1,
-        validToYear: 2026,
-        validToPeriod: 12,
-      }),
+      rule(tenant, first.orderNumber, 'CC100'),
+      rule(tenant, second.orderNumber, 'CC200'),
     ]);
     expect(left.orderNumber).toBe(first.orderNumber);
     expect(right.orderNumber).toBe(second.orderNumber);
-    // Both orders keep their own rule, and whatever the shared rows end up saying, they say it about
-    // something that exists: no assignment points at a profile or a structure that is not stored.
-    const state = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+
+    // The four shared tables are not written at all — not one timestamp, not one description. Two
+    // orders of a type no longer create two profiles, and a rule save cannot repoint what the whole
+    // type settles against.
+    expect(await sharedSnapshot(tenant.client)).toEqual(before);
+    const counts = await withTenant(tenant.client, async (tx) => tx.execute(sql`
       select
         (select count(*)::int from settlement_distribution_rule where client = ${tenant.client}) as rules,
         (select count(*)::int from settlement_profile where client = ${tenant.client}) as profiles,
         (select count(*)::int from allocation_structure where client = ${tenant.client}) as structures,
-        (select count(*)::int
-           from internal_order_type_settlement_profile t
-           join settlement_profile p on p.client = t.client and p.profile_code = t.profile_code
-          where t.client = ${tenant.client}) as assigned_profiles,
-        (select count(*)::int
-           from settlement_profile p
-           join allocation_structure a on a.client = p.client and a.structure_code = p.allocation_structure
-          where p.client = ${tenant.client}) as profiles_with_structure
-    `) as unknown as Array<{ rules: number; profiles: number; structures: number; assigned_profiles: number; profiles_with_structure: number }>);
-    expect(state[0]).toMatchObject({
-      rules: 2,
-      profiles: 2,
-      structures: 2,
-      assigned_profiles: 1,
-      profiles_with_structure: 2,
+        (select count(*)::int from allocation_structure_assignment where client = ${tenant.client}) as assignments,
+        (select count(*)::int from internal_order_type_settlement_profile where client = ${tenant.client}) as links
+    `) as unknown as Array<{ rules: number; profiles: number; structures: number; assignments: number; links: number }>);
+    expect(counts[0]).toMatchObject({ rules: 2, profiles: 1, structures: 1, assignments: 1, links: 1 });
+  });
+
+  it('refuses a payload that still names a shared master field', async () => {
+    const tenant = await standing('ko88-rule-legacy');
+    const number = await settleable(tenant, 'Legacy payload');
+    const before = await sharedSnapshot(tenant.client);
+    // An older caller, or a form that kept its fields: the value is refused by name, never quietly
+    // dropped, because a field nobody read would still look like a setting the user had stored.
+    const legacy = {
+      client: tenant.client,
+      changedBy: ACTOR,
+      orderNumber: number,
+      receiverCategory: 'COST_CENTER' as const,
+      receiver: 'CC200',
+      percentage: '100',
+      settlementType: 'PER' as const,
+      validFromYear: 2026,
+      validFromPeriod: 1,
+      validToYear: 2026,
+      validToPeriod: 12,
+      profileCode: 'SP99',
+      sourceAccount: '500000',
+      byOriginalAccount: true,
+      structureDescription: 'Guessed from an old screen',
+    };
+    await expect(saveOrderSettlementConfiguration(legacy)).rejects.toThrow(/settlement masters, not part of an order's rule/);
+    // The refusal names every offending field, in the order the master fields are declared.
+    await expect(saveOrderSettlementConfiguration(legacy)).rejects.toThrow(/profileCode, structureDescription, sourceAccount, byOriginalAccount/);
+    expect(await sharedSnapshot(tenant.client)).toEqual(before);
+    // The rule that was already stored stands, untouched by the refused call.
+    expect(await storedReceiver(tenant.client, number)).toBe('CC100');
+  });
+
+  it('refuses a rule whose method the profile does not allow', async () => {
+    const tenant = await standing('ko88-rule-method');
+    const number = await createInternalOrder(order(tenant, 'Method the profile forbids'));
+    await cost(tenant, number.orderNumber);
+    await saveSettlementProfile({
+      client: tenant.client,
+      changedBy: ACTOR,
+      mode: 'CHANGE',
+      expectedVersion: 1,
+      profileCode: 'SP01',
+      description: 'Order settlement',
+      allocationStructure: 'AS01',
+      documentType: 'SA',
+      percentageAllowed: false,
+      equivalenceAllowed: true,
+      amountAllowed: true,
+      isActive: true,
     });
+
+    await expect(rule(tenant, number.orderNumber, 'CC100')).rejects.toThrow(/does not allow distribution by percentage/);
+    expect(await storedReceiver(tenant.client, number.orderNumber)).toBeNull();
+
+    // An amount is allowed, so the same order is storable with that method.
+    const stored = await saveOrderSettlementConfiguration({
+      client: tenant.client,
+      changedBy: ACTOR,
+      orderNumber: number.orderNumber,
+      receiverCategory: 'COST_CENTER',
+      receiver: 'CC100',
+      amount: '80.0000',
+      settlementType: 'FUL',
+      validFromYear: 2026,
+      validFromPeriod: 1,
+      validToYear: 2026,
+      validToPeriod: 12,
+    });
+    expect(stored.rules[0]).toMatchObject({ receiver: 'CC100', settlementType: 'FUL', amount: '80.0000' });
+    expect(stored.settlementProfile).toMatchObject({ profileCode: 'SP01', percentageAllowed: false, allocationStructure: 'AS01' });
+  });
+
+  it('refuses a rule for an order type that reads no profile', async () => {
+    const tenant = await standing('ko88-rule-nolink');
+    const number = await createInternalOrder(order(tenant, 'Type with no profile'));
+    await cost(tenant, number.orderNumber);
+    await removeOrderTypeSettlementProfile({ client: tenant.client, changedBy: ACTOR, orderType: 'IO01' });
+
+    await expect(rule(tenant, number.orderNumber, 'CC100')).rejects.toThrow(/reads no settlement profile/);
+    expect(await storedReceiver(tenant.client, number.orderNumber)).toBeNull();
+  });
+
+  it('refuses a receiver category the allocation structure has no assignment for', async () => {
+    const tenant = await standing('ko88-rule-category');
+    const number = await createInternalOrder(order(tenant, 'Category with no assignment'));
+    const other = await createInternalOrder(order(tenant, 'Receiver order'));
+    await cost(tenant, number.orderNumber);
+
+    await expect(saveOrderSettlementConfiguration({
+      client: tenant.client,
+      changedBy: ACTOR,
+      orderNumber: number.orderNumber,
+      receiverCategory: 'INTERNAL_ORDER',
+      receiver: other.orderNumber,
+      percentage: '100',
+      settlementType: 'PER',
+      validFromYear: 2026,
+      validFromPeriod: 1,
+      validToYear: 2026,
+      validToPeriod: 12,
+    })).rejects.toThrow(/has no assignment for receiver category INTERNAL_ORDER/);
+    expect(await storedReceiver(tenant.client, number.orderNumber)).toBeNull();
+
+    // Store the assignment through its own screen and the rule becomes storable, with nothing else moved.
+    const before = await sharedSnapshot(tenant.client);
+    await saveAllocationStructureAssignment({
+      client: tenant.client,
+      changedBy: ACTOR,
+      expectedVersion: 0,
+      structureCode: 'AS01',
+      sourceAccount: '410000',
+      receiverCategory: 'INTERNAL_ORDER',
+      byOriginalAccount: true,
+      settlementAccount: '',
+    });
+    expect(await sharedSnapshot(tenant.client)).not.toEqual(before);
+    const stored = await saveOrderSettlementConfiguration({
+      client: tenant.client,
+      changedBy: ACTOR,
+      orderNumber: number.orderNumber,
+      receiverCategory: 'INTERNAL_ORDER',
+      receiver: other.orderNumber,
+      percentage: '100',
+      settlementType: 'PER',
+      validFromYear: 2026,
+      validFromPeriod: 1,
+      validToYear: 2026,
+      validToPeriod: 12,
+    });
+    expect(stored.rules[0]).toMatchObject({ receiverCategory: 'INTERNAL_ORDER', receiver: other.orderNumber });
   });
 
   it('settles on the period end it was given, which is not the order validity the budget follows', async () => {

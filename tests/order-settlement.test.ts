@@ -6,6 +6,7 @@ import { defineRange } from '../src/platform/numbering';
 import { postJournalEntry } from '../src/platform/posting';
 import { closeDb, createTenant, defineTestRanges, destroyTenant } from './helpers';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
+import { ensureSettlementMasters } from './settlement-masters';
 import { internalOrder } from '../src/modules/foundation/schema';
 import { changeInternalOrder, createInternalOrder } from '../src/modules/foundation/internal-order';
 import {
@@ -65,6 +66,7 @@ async function standing(seed: string): Promise<Place> {
     place.currency = assignment.currency.trim();
     place.periods = Number(assignment.periods);
   });
+  await ensureSettlementMasters(place.client);
   return place;
 }
 
@@ -279,13 +281,6 @@ function rule(tenant: Place, orderNumber: string, receiver: string, percentage =
     client: tenant.client,
     changedBy: ACTOR,
     orderNumber,
-    profileCode: 'SP01',
-    profileDescription: 'Order settlement',
-    documentType: 'SA',
-    structureCode: 'AS01',
-    structureDescription: 'Original account',
-    sourceAccount: '410000',
-    byOriginalAccount: true,
     receiverCategory: 'COST_CENTER',
     receiver,
     percentage,

@@ -16,6 +16,7 @@ import { postJournalEntry } from '../src/platform/posting';
 import { createInternalOrder } from '../src/modules/foundation/internal-order';
 import { settleOrder } from '../src/modules/foundation/order-settlement';
 import { saveOrderSettlementConfiguration } from '../src/modules/foundation/settlement-configuration';
+import { ensureSettlementMasters } from './settlement-masters';
 import { reverseDocument } from '../src/modules/finance/document-reversal';
 
 const ACTOR = 'REVS_TEST';
@@ -62,6 +63,7 @@ async function standing(seed: string): Promise<Place> {
     insert into cost_center (client, controlling_area, cost_center, valid_from, valid_to, name, category, company_code, created_by)
     values (${place.client}, ${place.area}, 'CC100', '2020-01-01', '9999-12-31', 'Overhead', 'ADMINISTRATION', ${place.company}, ${ACTOR})
   `));
+  await ensureSettlementMasters(place.client);
   return place;
 }
 
@@ -103,13 +105,6 @@ function rule(tenant: Place, orderNumber: string) {
     client: tenant.client,
     changedBy: ACTOR,
     orderNumber,
-    profileCode: 'SP01',
-    profileDescription: 'Order settlement',
-    documentType: 'SA',
-    structureCode: 'AS01',
-    structureDescription: 'Original account',
-    sourceAccount: '410000',
-    byOriginalAccount: true,
     receiverCategory: 'COST_CENTER',
     receiver: 'CC100',
     percentage: '100',

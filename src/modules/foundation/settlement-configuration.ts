@@ -1,9 +1,14 @@
 /**
- * Settlement configuration read by KO88 and KO8G.
+ * The settlement rule of one order, read by KO88 and KO8G.
  *
- * Saving a profile, an allocation assignment, or a distribution rule does not
- * post. No receiver, percentage, document type, or account is assumed. KO02 and
- * KO8B are not this service.
+ * This screen stores what belongs to the order: which receiver takes the balance, by what share, over
+ * which period range. The profile, the allocation structure and its account assignments are shared by
+ * every order of the order's type and are maintained at `/config/settlement-configuration`; here they
+ * are read and refused against, never written. A payload that still carries one of those fields is
+ * rejected rather than quietly dropped, because a field nobody read would look like a saved setting.
+ *
+ * Saving does not post. No receiver, share, document type, or account is assumed. KO02 and KO8B are
+ * not this service.
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
@@ -11,11 +16,9 @@ import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { glAccount } from '../finance/schema';
 import {
-  allocationStructure,
   allocationStructureAssignment,
   companyCode,
   costCenter,
-  documentType,
   internalOrder,
   internalOrderTypeSettlementProfile,
   settlementDistributionRule,
@@ -25,6 +28,21 @@ import {
 
 export const SETTLEMENT_RULE_CAPABILITY = 'CO.SETTLE.RULE';
 export const SETTLEMENT_RULE_ROUTE = '/controlling/settlement-rules';
+
+/**
+ * The fields this screen used to write into the shared masters. They are still refused by name: an
+ * integration that sends them must learn the row is not stored here, not watch it disappear.
+ */
+export const SHARED_MASTER_FIELDS = [
+  'profileCode',
+  'profileDescription',
+  'documentType',
+  'structureCode',
+  'structureDescription',
+  'sourceAccount',
+  'byOriginalAccount',
+  'settlementAccount',
+] as const;
 
 export class SettlementConfigurationError extends Error {
   readonly remedy?: string;
@@ -43,14 +61,6 @@ export interface SaveSettlementConfigurationInput {
   client: string;
   changedBy: string;
   orderNumber: string;
-  profileCode: string;
-  profileDescription: string;
-  documentType: string;
-  structureCode: string;
-  structureDescription: string;
-  sourceAccount: string;
-  byOriginalAccount: boolean;
-  settlementAccount?: string;
   receiverCategory: ReceiverCategory;
   receiver: string;
   percentage?: string;
@@ -69,6 +79,20 @@ export interface SettlementConfigurationView {
   profileCode: string | null;
   documentType: string | null;
   structureCode: string | null;
+  /**
+   * The shared configuration this order reads, as the masters hold it. The rule screen shows it and
+   * refuses against it; it never changes it.
+   */
+  settlementProfile: {
+    profileCode: string;
+    description: string;
+    allocationStructure: string;
+    documentType: string;
+    percentageAllowed: boolean;
+    equivalenceAllowed: boolean;
+    amountAllowed: boolean;
+    isActive: boolean;
+  } | null;
   rules: Array<{
     ruleNumber: number;
     receiverCategory: string;
@@ -85,23 +109,18 @@ function blank(value: string | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function requireCode(value: string, label: string, pattern: RegExp): string {
-  const code = value.trim().toUpperCase();
-  if (!pattern.test(code)) throw new SettlementConfigurationError(`${label} ${value.trim() || '(blank)'} is not valid.`);
-  return code;
-}
-
-export async function listSettlementDocumentTypes(client: string) {
-  return withTenant(client, async (tx) => {
-    const rows = await tx.select({
-      documentType: documentType.documentType,
-      name: documentType.name,
-    }).from(documentType).where(and(
-      eq(documentType.client, client),
-      eq(documentType.isActive, true),
-    )).orderBy(asc(documentType.documentType));
-    return rows.map((row) => ({ documentType: row.documentType, name: row.name }));
+/** A field with a value in it counts as sent; an empty form field carries no intent. */
+function refuseSharedMasterFields(raw: SaveSettlementConfigurationInput): void {
+  const sent = raw as unknown as Record<string, unknown>;
+  const present = SHARED_MASTER_FIELDS.filter((field) => {
+    const value = sent[field];
+    return typeof value === 'boolean' ? true : blank(typeof value === 'string' ? value : undefined) !== null;
   });
+  if (present.length === 0) return;
+  throw new SettlementConfigurationError(
+    `These fields are settlement masters, not part of an order's rule: ${present.join(', ')}.`,
+    'Maintain the profile, the allocation structure and its account assignments at /config/settlement-configuration. Nothing was stored here.',
+  );
 }
 
 async function loadConfiguration(tx: Tx, client: string, orderNumber: string): Promise<SettlementConfigurationView | null> {
@@ -130,6 +149,16 @@ async function loadConfiguration(tx: Tx, client: string, orderNumber: string): P
     profileCode: profile?.profileCode ?? null,
     documentType: profile?.documentType ?? null,
     structureCode: profile?.allocationStructure ?? null,
+    settlementProfile: profile ? {
+      profileCode: profile.profileCode,
+      description: profile.description,
+      allocationStructure: profile.allocationStructure,
+      documentType: profile.documentType,
+      percentageAllowed: profile.percentageAllowed,
+      equivalenceAllowed: profile.equivalenceAllowed,
+      amountAllowed: profile.amountAllowed,
+      isActive: profile.isActive,
+    } : null,
     rules: rules.map((rule) => ({
       ruleNumber: rule.ruleNumber,
       receiverCategory: rule.receiverCategory,
@@ -177,28 +206,9 @@ export async function lockSettlementRuleForOrder(tx: Tx, client: string, orderNu
 export async function saveOrderSettlementConfiguration(
   input: SaveSettlementConfigurationInput,
 ): Promise<SettlementConfigurationView> {
+  refuseSharedMasterFields(input);
   const orderNumber = input.orderNumber.trim();
   if (!orderNumber) throw new SettlementConfigurationError('An order number is required.');
-  const profileCode = requireCode(input.profileCode, 'Profile', /^[A-Z0-9]{2,6}$/);
-  const structureCode = requireCode(input.structureCode, 'Allocation structure', /^[A-Z0-9]{2,6}$/);
-  const documentTypeCode = input.documentType.trim().toUpperCase();
-  if (!documentTypeCode) {
-    throw new SettlementConfigurationError('A document type is required. SA is not assumed.');
-  }
-  const description = input.profileDescription.trim();
-  const structureDescription = input.structureDescription.trim();
-  if (!description || description.length > 40 || !structureDescription || structureDescription.length > 40) {
-    throw new SettlementConfigurationError('The profile and allocation descriptions must be 1 to 40 characters.');
-  }
-  const sourceAccount = input.sourceAccount.trim().toUpperCase();
-  const settlementAccount = blank(input.settlementAccount)?.toUpperCase() ?? null;
-  const usesOriginal = input.byOriginalAccount === true;
-  const usesSettlement = settlementAccount !== null;
-  if (usesOriginal === usesSettlement) {
-    throw new SettlementConfigurationError(
-      'Choose the original account or a settlement account, not both and not neither.',
-    );
-  }
   const percentage = blank(input.percentage);
   const equivalence = blank(input.equivalence);
   const amount = blank(input.amount);
@@ -206,6 +216,7 @@ export async function saveOrderSettlementConfiguration(
   if (shares.length !== 1) {
     throw new SettlementConfigurationError('A rule uses a percentage, an equivalence number, or an amount, not a mix.');
   }
+  const usedMethod = percentage !== null ? 'percentage' : equivalence !== null ? 'equivalence number' : 'amount';
   if (!['PER', 'FUL'].includes(input.settlementType)) {
     throw new SettlementConfigurationError('The settlement type must be periodic or full. A processing type is not assumed.');
   }
@@ -237,12 +248,55 @@ export async function saveOrderSettlementConfiguration(
         'The posted journal is not deleted, and the rule is not rewritten.',
       );
     }
-    const [type] = await tx.select().from(documentType).where(and(
-      eq(documentType.client, input.client),
-      eq(documentType.documentType, documentTypeCode),
-      eq(documentType.isActive, true),
+
+    // The configuration this rule will be settled against, read as the masters hold it.
+    const [link] = await tx.select().from(internalOrderTypeSettlementProfile).where(and(
+      eq(internalOrderTypeSettlementProfile.client, input.client),
+      eq(internalOrderTypeSettlementProfile.orderType, order.orderType),
     ));
-    if (!type) throw new SettlementConfigurationError(`Document type ${documentTypeCode} is not active. SA is not assumed.`);
+    if (!link) {
+      throw new SettlementConfigurationError(
+        `Order type ${order.orderType} reads no settlement profile.`,
+        'Assign the profile to the order type at /config/settlement-configuration. This screen stores the rule of one order only.',
+      );
+    }
+    const [profile] = await tx.select().from(settlementProfile).where(and(
+      eq(settlementProfile.client, input.client),
+      eq(settlementProfile.profileCode, link.profileCode),
+    ));
+    if (!profile) {
+      throw new SettlementConfigurationError(
+        `Order type ${order.orderType} reads settlement profile ${link.profileCode}, which does not exist.`,
+        'Repair the assignment at /config/settlement-configuration.',
+      );
+    }
+    if (!profile.isActive) {
+      throw new SettlementConfigurationError(
+        `Settlement profile ${profile.profileCode} is inactive.`,
+        'Activate it or assign another profile at /config/settlement-configuration.',
+      );
+    }
+    const methodAllowed = percentage !== null
+      ? profile.percentageAllowed
+      : equivalence !== null ? profile.equivalenceAllowed : profile.amountAllowed;
+    if (!methodAllowed) {
+      throw new SettlementConfigurationError(
+        `Settlement profile ${profile.profileCode} does not allow distribution by ${usedMethod}.`,
+        'Allow the method on the profile at /config/settlement-configuration, or store the rule with a method it allows.',
+      );
+    }
+    const mapped = await tx.select({ count: sql<number>`count(*)::int` }).from(allocationStructureAssignment).where(and(
+      eq(allocationStructureAssignment.client, input.client),
+      eq(allocationStructureAssignment.structureCode, profile.allocationStructure),
+      eq(allocationStructureAssignment.receiverCategory, input.receiverCategory),
+    ));
+    if ((mapped[0]?.count ?? 0) === 0) {
+      throw new SettlementConfigurationError(
+        `Allocation structure ${profile.allocationStructure} has no assignment for receiver category ${input.receiverCategory}.`,
+        'Store that assignment at /config/settlement-configuration. A settlement run stops on the same condition.',
+      );
+    }
+
     const [company] = await tx.select().from(companyCode).where(and(
       eq(companyCode.client, input.client),
       eq(companyCode.companyCode, order.companyCode),
@@ -250,8 +304,6 @@ export async function saveOrderSettlementConfiguration(
     if (!company?.chartOfAccounts) {
       throw new SettlementConfigurationError(`Company code ${order.companyCode} has no chart of accounts.`);
     }
-    await accountExists(tx, input.client, company.chartOfAccounts, sourceAccount);
-    if (settlementAccount) await accountExists(tx, input.client, company.chartOfAccounts, settlementAccount);
     if (input.receiverCategory === 'COST_CENTER') {
       const centers = await tx.select().from(costCenter).where(and(
         eq(costCenter.client, input.client),
@@ -281,63 +333,6 @@ export async function saveOrderSettlementConfiguration(
       throw new SettlementConfigurationError(`Receiver category ${input.receiverCategory} cannot be posted.`);
     }
 
-    await tx.insert(allocationStructure).values({
-      client: input.client,
-      structureCode,
-      description: structureDescription,
-      createdBy: input.changedBy,
-    }).onConflictDoUpdate({
-      target: [allocationStructure.client, allocationStructure.structureCode],
-      set: { description: structureDescription, changedBy: input.changedBy, changedAt: new Date() },
-    });
-    await tx.delete(allocationStructureAssignment).where(and(
-      eq(allocationStructureAssignment.client, input.client),
-      eq(allocationStructureAssignment.structureCode, structureCode),
-      eq(allocationStructureAssignment.sourceAccount, sourceAccount),
-      eq(allocationStructureAssignment.receiverCategory, input.receiverCategory),
-    ));
-    await tx.insert(allocationStructureAssignment).values({
-      client: input.client,
-      structureCode,
-      sourceAccount,
-      receiverCategory: input.receiverCategory,
-      byOriginalAccount: input.byOriginalAccount,
-      settlementAccount,
-      createdBy: input.changedBy,
-    });
-    await tx.insert(settlementProfile).values({
-      client: input.client,
-      profileCode,
-      description,
-      allocationStructure: structureCode,
-      documentType: documentTypeCode,
-      percentageAllowed: percentage !== null,
-      equivalenceAllowed: equivalence !== null,
-      amountAllowed: amount !== null,
-      isActive: true,
-      createdBy: input.changedBy,
-    }).onConflictDoUpdate({
-      target: [settlementProfile.client, settlementProfile.profileCode],
-      set: {
-        description,
-        allocationStructure: structureCode,
-        documentType: documentTypeCode,
-        percentageAllowed: percentage !== null,
-        equivalenceAllowed: equivalence !== null,
-        amountAllowed: amount !== null,
-        changedBy: input.changedBy,
-        changedAt: new Date(),
-      },
-    });
-    await tx.insert(internalOrderTypeSettlementProfile).values({
-      client: input.client,
-      orderType: order.orderType,
-      profileCode,
-      createdBy: input.changedBy,
-    }).onConflictDoUpdate({
-      target: [internalOrderTypeSettlementProfile.client, internalOrderTypeSettlementProfile.orderType],
-      set: { profileCode, changedBy: input.changedBy, changedAt: new Date() },
-    });
     await tx.delete(settlementDistributionRule).where(and(
       eq(settlementDistributionRule.client, input.client),
       eq(settlementDistributionRule.orderNumber, orderNumber),
@@ -362,9 +357,15 @@ export async function saveOrderSettlementConfiguration(
       client: input.client,
       objectClass: 'settlement_distribution_rule',
       objectKey: orderNumber,
-      changeType: 'UPDATE',
+      changeType: 'CHANGE',
       changedBy: input.changedBy,
-      after: { profileCode, structureCode, receiver, receiverCategory: input.receiverCategory },
+      after: {
+        profileCode: profile.profileCode,
+        receiver,
+        receiverCategory: input.receiverCategory,
+        settlementType: input.settlementType,
+        [usedMethod]: shares[0],
+      },
     });
     const saved = await loadConfiguration(tx, input.client, orderNumber);
     if (!saved) throw new SettlementConfigurationError('The settlement rule was not stored.');

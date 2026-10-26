@@ -34,14 +34,6 @@ export async function saveSettlementRuleAction(
       client: session.user.client,
       changedBy: session.user.username,
       orderNumber: String(input.orderNumber ?? ''),
-      profileCode: String(input.profileCode ?? ''),
-      profileDescription: String(input.profileDescription ?? ''),
-      documentType: String(input.documentType ?? ''),
-      structureCode: String(input.structureCode ?? ''),
-      structureDescription: String(input.structureDescription ?? ''),
-      sourceAccount: String(input.sourceAccount ?? ''),
-      byOriginalAccount: input.byOriginalAccount === true,
-      settlementAccount: String(input.settlementAccount ?? ''),
       receiverCategory: String(input.receiverCategory ?? '') as 'COST_CENTER' | 'INTERNAL_ORDER' | 'GL_ACCOUNT',
       receiver: String(input.receiver ?? ''),
       percentage: method === 'PERCENT' ? String(input.share ?? '') : '',
@@ -54,6 +46,7 @@ export async function saveSettlementRuleAction(
       validToPeriod: Number(input.validToPeriod),
     });
     revalidatePath(SETTLEMENT_RULE_ROUTE);
+    revalidatePath('/config/settlement-configuration');
     return { ok: true, result, message: `Settlement rule stored for ${result.orderNumber}. Nothing was posted.` };
   } catch (error) {
     const message = error instanceof SettlementConfigurationError || error instanceof Error

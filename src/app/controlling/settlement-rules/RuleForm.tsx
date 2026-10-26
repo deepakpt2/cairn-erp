@@ -2,34 +2,28 @@
 
 import { useActionState, useState } from 'react';
 
+import Link from 'next/link';
+
 import { saveSettlementRuleAction, type SettlementRuleActionState } from './actions';
+import type { SettlementConfigurationView } from '@/modules/foundation/settlement-configuration';
 
 const INITIAL: SettlementRuleActionState = { ok: false };
 
+/**
+ * The rule of one order: a receiver, a share, and the period it is valid over. What the order settles
+ * against — its profile, its document type, the allocation structure and its account assignments — is
+ * read here and edited at `/config/settlement-configuration`, because those rows belong to the order
+ * type and to every other order of it.
+ */
 export default function RuleForm({
-  documentTypes,
   orderNumber,
   stored,
 }: {
-  documentTypes: { documentType: string; name: string }[];
   orderNumber: string;
-  stored: {
-    orderType: string;
-    profileCode: string | null;
-    documentType: string | null;
-    rules: Array<{ receiver: string; percentage: string | null; settlementType: string }>;
-  } | null;
+  stored: SettlementConfigurationView | null;
 }) {
   const [state, action, pending] = useActionState(saveSettlementRuleAction, INITIAL);
   const [order, setOrder] = useState(orderNumber);
-  const [profileCode, setProfileCode] = useState('');
-  const [profileDescription, setProfileDescription] = useState('');
-  const [documentType, setDocumentType] = useState('');
-  const [structureCode, setStructureCode] = useState('');
-  const [structureDescription, setStructureDescription] = useState('');
-  const [sourceAccount, setSourceAccount] = useState('');
-  const [byOriginalAccount, setByOriginalAccount] = useState(true);
-  const [settlementAccount, setSettlementAccount] = useState('');
   const [receiverCategory, setReceiverCategory] = useState('COST_CENTER');
   const [receiver, setReceiver] = useState('');
   const [method, setMethod] = useState('PERCENT');
@@ -41,14 +35,6 @@ export default function RuleForm({
   const [validToPeriod, setValidToPeriod] = useState('12');
   const payload = JSON.stringify({
     orderNumber: order,
-    profileCode,
-    profileDescription,
-    documentType,
-    structureCode,
-    structureDescription,
-    sourceAccount,
-    byOriginalAccount,
-    settlementAccount,
     receiverCategory,
     receiver,
     method,
@@ -59,6 +45,10 @@ export default function RuleForm({
     validToYear: Number(validToYear),
     validToPeriod: Number(validToPeriod),
   });
+  const profile = stored?.settlementProfile ?? null;
+  const allowed = profile
+    ? method === 'PERCENT' ? profile.percentageAllowed : method === 'EQUIVALENCE' ? profile.equivalenceAllowed : profile.amountAllowed
+    : true;
 
   return (
     <form action={action} className="space-y-3">
@@ -66,52 +56,45 @@ export default function RuleForm({
       {state.message && (
         <p className={state.ok ? 'text-sm' : 'text-sm text-red-700'} role={state.ok ? 'status' : 'alert'}>{state.message}</p>
       )}
-      {stored && (
-        <p className="text-sm">
-          Order type {stored.orderType}. Stored profile {stored.profileCode ?? 'none'}. Stored document type {stored.documentType ?? 'none'}.
-        </p>
-      )}
+
+      <section className="border border-line p-3 text-sm" aria-label="Settlement configuration this order reads">
+        {stored ? (
+          <>
+            <p className="text-ink-soft">
+              Order type {stored.orderType}. {' '}
+              {profile ? (
+                <>Profile <span className="code">{profile.profileCode}</span> · document type <span className="code">{profile.documentType}</span> · allocation structure <span className="code">{profile.allocationStructure}</span>{profile.isActive ? '' : ' · inactive'}</>
+              ) : (
+                <>Order type {stored.orderType} reads no settlement profile, so a rule cannot be stored yet.</>
+              )}
+            </p>
+            {stored.rules.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {stored.rules.map((rule) => (
+                  <li key={rule.ruleNumber}>
+                    Rule {rule.ruleNumber}: <span className="code">{rule.receiver}</span> ({rule.receiverCategory}) ·{' '}
+                    {rule.percentage ? `${rule.percentage}%` : rule.equivalence ? `equivalence ${rule.equivalence}` : `amount ${rule.amount}`}
+                    {' '}· {rule.settlementType === 'PER' ? 'periodic' : 'full'}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-2 text-ink-soft">
+              These rows are shared by every order of the type. Change them at{' '}
+              <Link href="/config/settlement-configuration" className="underline">Settlement configuration</Link>, not here.
+            </p>
+          </>
+        ) : (
+          <p className="text-ink-soft">
+            Enter an order number to see the profile its order type reads and the rule it already stores.
+          </p>
+        )}
+      </section>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-ink-soft">Internal order</span>
           <input className="input w-full" value={order} maxLength={20} onChange={(event) => setOrder(event.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Profile</span>
-          <input className="input w-full" value={profileCode} maxLength={6} onChange={(event) => setProfileCode(event.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Profile description</span>
-          <input className="input w-full" value={profileDescription} maxLength={40} onChange={(event) => setProfileDescription(event.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Document type</span>
-          <select className="input w-full" value={documentType} onChange={(event) => setDocumentType(event.target.value)}>
-            <option value="">Choose a document type</option>
-            {documentTypes.map((row) => (
-              <option key={row.documentType} value={row.documentType}>{row.documentType} · {row.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Allocation structure</span>
-          <input className="input w-full" value={structureCode} maxLength={6} onChange={(event) => setStructureCode(event.target.value)} />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="mb-1 block text-ink-soft">Allocation description</span>
-          <input className="input w-full" value={structureDescription} maxLength={40} onChange={(event) => setStructureDescription(event.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Source account</span>
-          <input className="input w-full" value={sourceAccount} maxLength={10} onChange={(event) => setSourceAccount(event.target.value)} />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Settlement account, if not the original</span>
-          <input className="input w-full" value={settlementAccount} maxLength={10} disabled={byOriginalAccount} onChange={(event) => setSettlementAccount(event.target.value)} />
-        </label>
-        <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" checked={byOriginalAccount} onChange={(event) => setByOriginalAccount(event.target.checked)} />
-          Settle by the original account
         </label>
         <label className="block text-sm">
           <span className="mb-1 block text-ink-soft">Receiver category</span>
@@ -161,6 +144,11 @@ export default function RuleForm({
           <input className="input w-full" value={validToPeriod} onChange={(event) => setValidToPeriod(event.target.value)} />
         </label>
       </div>
+      {profile && !allowed && (
+        <p className="text-sm text-red-700" role="status">
+          Profile {profile.profileCode} does not allow distribution by this method, so the rule will be refused until the profile allows it.
+        </p>
+      )}
       <p className="text-sm text-ink-soft">Saving does not post. A percentage is not filled in. KO88 is a different screen.</p>
       <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit" disabled={pending}>
         {pending ? 'Saving' : 'Store rule'}
