@@ -1,9 +1,11 @@
 'use server';
 
 import { requireCapability } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   WORK_CENTER_CHANGE_CAPABILITY,
   WORK_CENTER_CREATE_CAPABILITY,
+  WORK_CENTER_LOCK,
   WorkCenterError,
   changeWorkCenter,
   createWorkCenter,
@@ -21,7 +23,9 @@ export interface WorkCenterActionState {
 }
 
 function fail(error: unknown): WorkCenterActionState {
-  if (error instanceof WorkCenterError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof WorkCenterError || error instanceof EnqueueError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
   return { ok: false, message: error instanceof Error ? error.message : 'The work center was not saved.' };
 }
 
@@ -89,6 +93,16 @@ export async function saveWorkCenterAction(
       : null,
   };
   try {
+    // The work center screen holds a change lock on the centre it opened, and a centre is edited in
+    // one write, so that lock is what decides here: the session it was granted to, on the same
+    // plant and centre the screen locked and this write is keyed on. Creating is not under it, and
+    // the category master has none.
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: WORK_CENTER_LOCK,
+        argument: `${input.plant}/${input.workCenter}`,
+      });
+    }
     const saved = mode === 'CHANGE' ? await changeWorkCenter(input) : await createWorkCenter(input);
     return {
       ok: true,

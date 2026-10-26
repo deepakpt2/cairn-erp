@@ -1,9 +1,11 @@
 'use server';
 
 import { requireCapability } from '@/platform/auth/current';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   BOM_CHANGE_CAPABILITY,
   BOM_CREATE_CAPABILITY,
+  BOM_LOCK,
   MaterialBomError,
   changeMaterialBom,
   createMaterialBom,
@@ -23,7 +25,9 @@ export interface BomActionState {
 }
 
 function fail(error: unknown): BomActionState {
-  if (error instanceof MaterialBomError) return { ok: false, message: error.message, remedy: error.remedy };
+  if (error instanceof MaterialBomError || error instanceof EnqueueError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
   return { ok: false, message: error instanceof Error ? error.message : 'The BOM was not saved.' };
 }
 
@@ -125,6 +129,16 @@ export async function saveBomAction(_previous: BomActionState, formData: FormDat
     } : null,
   };
   try {
+    // A change of a standing BOM is only allowed to the session the screen granted the lock to, on
+    // the same identity the screen locked and this write is keyed on: plant, material, usage and
+    // alternative. Whoever was told to display — or never opened the row at all — writes nothing.
+    // Creating is not under the lock, and the usage, status and item-category masters have none.
+    if (mode === 'CHANGE') {
+      await assertChangeForSession(session, {
+        lockObject: BOM_LOCK,
+        argument: `${input.plant}/${input.materialNumber}/${input.usage}/${input.alternative}`,
+      });
+    }
     const bom = mode === 'CHANGE' ? await changeMaterialBom(input) : await createMaterialBom(input);
     return {
       ok: true,
