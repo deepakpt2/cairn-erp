@@ -34,7 +34,7 @@ Follow-on links that are missing in the page itself:
 | Planning run | The production order screen, or the requisition the run created. It does open the stock/requirements list. |
 | Stock/requirements list | A production order. It drills to stock, a requisition, a purchase order, the planning run, and a reservation. |
 | Internal order create | Original budget, the settlement-rule screen, or individual settlement. It does open the display. |
-| Individual settlement and the rule screen | Each other, or the order. Each links only to the launchpad. |
+| Individual settlement and the rule screen | Each other, or the order. Each links only to the launchpad. The rule screen and `/config/settlement-configuration` do open each other: the rule of one order and the masters a whole order type shares are deliberately two paths. |
 | Purchase order | Goods receipt or invoice verification. |
 
 Physical-inventory count does link to differences and recount. That chain is not in the gap list.
