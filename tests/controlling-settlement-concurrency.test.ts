@@ -222,6 +222,27 @@ async function waitingOnTheHeader(secs = 6): Promise<boolean> {
   return false;
 }
 
+/**
+ * Whether the settlement update is right now waiting on a shared settlement master. Same detector as the
+ * header's, on the profile row: the run's read carries `for share`, so a pending lock wait on that read
+ * is the run deciding while the master change is still undecided.
+ */
+async function waitingOnASettlementMaster(secs = 6): Promise<boolean> {
+  const attempts = Math.ceil((secs * 1000) / 20);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const [row] = await db().execute(sql`
+      select count(*)::int as n
+        from pg_stat_activity
+       where wait_event_type = 'Lock'
+         and state = 'active'
+         and query ilike '%settlement_profile%for share%'
+    `) as unknown as Array<{ n: number }>;
+    if (Number(row.n) > 0) return true;
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+  }
+  return false;
+}
+
 function headerChange(tenant: Place, orderNumber: string, change: Record<string, unknown> = {}) {
   return changeInternalOrder({
     ...order(tenant, 'Header changed during a settlement'),
@@ -344,6 +365,35 @@ describe('settlement judged at the moment it posts', () => {
       markedForDeletion: false,
       statistical: false,
     });
+  });
+
+  it('waits for a settlement profile that is being changed, and posts on the row that stands afterwards', async () => {
+    const tenant = await standing('ko88-master-wait');
+    const number = await settleable(tenant, 'Profile changed during the run');
+    // A master save, held open the way /config/settlement-configuration makes one: the profile row is
+    // taken for update while its description is written. The run reads that same row for share, so the
+    // decision and the commit cannot straddle a change.
+    const held = await holding(tenant.client, (tx) => tx.execute(sql`
+      update settlement_profile set description = 'Changed mid-flight', changed_at = now(), changed_by = ${ACTOR}
+       where client = ${tenant.client} and profile_code = 'SP01'
+    `));
+    const running = settleOrder(run(tenant, number));
+    expect(await waitingOnASettlementMaster(), 'the update read the shared profile while it was being changed').toBe(true);
+
+    // A test run reports rather than decides, so the same row does not hold it up at all.
+    const reported = await settleOrder(run(tenant, number, true));
+    expect(reported).toMatchObject({ posted: false });
+    expect(reported.orders[0]?.outcome).toBe('SIMULATED');
+
+    held.commit();
+    const posted = await running;
+    await held.task;
+    expect(posted.posted).toBe(true);
+    const after = await withTenant(tenant.client, async (tx) => tx.execute(sql`
+      select (select description from settlement_profile where client = ${tenant.client} and profile_code = 'SP01') as description,
+             (select count(*)::int from settlement_document where client = ${tenant.client} and order_number = ${number}) as documents
+    `)) as unknown as Array<{ description: string; documents: number }>;
+    expect(after[0]).toMatchObject({ description: 'Changed mid-flight', documents: 1 });
   });
 });
 

@@ -360,16 +360,23 @@ async function settleOne(
       order: { ...base, outcome: 'NOT_SETTLED', reasons: [...blocked, MISSING_PROFILE, MISSING_RULE, MISSING_ALLOCATION, MISSING_STATUS] },
     };
   }
-  const [assignment] = await tx.select().from(internalOrderTypeSettlementProfile).where(and(
+  // The three shared rows are read for share, exactly as the header above is: an update that is about
+  // to post must not have the order type's profile, the profile, or the allocation mapping change under
+  // it between the decision and the commit, while two runs — and a test run, which decides nothing and
+  // takes no lock — keep reading them side by side. A master save takes `for update` on the same rows,
+  // so it waits for the run rather than slipping into it.
+  const typeLink = tx.select().from(internalOrderTypeSettlementProfile).where(and(
     eq(internalOrderTypeSettlementProfile.client, input.client),
     eq(internalOrderTypeSettlementProfile.orderType, row.orderType),
   ));
+  const [assignment] = run.testRun ? await typeLink : await typeLink.for('share');
+  const profileRows = tx.select().from(settlementProfile).where(and(
+    eq(settlementProfile.client, input.client),
+    eq(settlementProfile.profileCode, assignment?.profileCode ?? ''),
+    eq(settlementProfile.isActive, true),
+  ));
   const [profile] = assignment
-    ? await tx.select().from(settlementProfile).where(and(
-      eq(settlementProfile.client, input.client),
-      eq(settlementProfile.profileCode, assignment.profileCode),
-      eq(settlementProfile.isActive, true),
-    ))
+    ? run.testRun ? await profileRows : await profileRows.for('share')
     : [];
   if (!profile) {
     return {
@@ -441,10 +448,11 @@ async function settleOne(
       };
     }
   }
-  const assignments = await tx.select().from(allocationStructureAssignment).where(and(
+  const assignmentRows = tx.select().from(allocationStructureAssignment).where(and(
     eq(allocationStructureAssignment.client, input.client),
     eq(allocationStructureAssignment.structureCode, profile.allocationStructure),
   ));
+  const assignments = run.testRun ? await assignmentRows : await assignmentRows.for('share');
   if (assignments.length === 0) {
     return {
       eligible: false,
