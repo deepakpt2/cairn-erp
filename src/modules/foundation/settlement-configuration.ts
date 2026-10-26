@@ -162,6 +162,18 @@ async function accountExists(tx: Tx, client: string, chart: string, account: str
   return row;
 }
 
+/**
+ * The key for one order's settlement rule. The profile assignment, the allocation assignment and the
+ * distribution rule are one condition rather than three — an update posts only when all three agree
+ * on where the balance goes — so whoever stores the rule holds this key for the whole transaction,
+ * and so does a settlement update that is about to read it. A test run decides nothing and does not
+ * take it. The shape is the platform's own shared-seam convention: `lockControllingAreaForCompanyCode`
+ * is a module lock that posting calls.
+ */
+export async function lockSettlementRuleForOrder(tx: Tx, client: string, orderNumber: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${client}/settlement-rule/${orderNumber.trim()}`}, 0))`);
+}
+
 export async function saveOrderSettlementConfiguration(
   input: SaveSettlementConfigurationInput,
 ): Promise<SettlementConfigurationView> {
@@ -209,7 +221,7 @@ export async function saveOrderSettlementConfiguration(
   if (!receiver) throw new SettlementConfigurationError('A receiver is required. None is assumed.');
 
   return withTenant(input.client, async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${input.client}/settlement-rule/${orderNumber}`}, 0))`);
+    await lockSettlementRuleForOrder(tx, input.client, orderNumber);
     const [order] = await tx.select().from(internalOrder).where(and(
       eq(internalOrder.client, input.client),
       eq(internalOrder.orderNumber, orderNumber),

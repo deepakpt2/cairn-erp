@@ -31,6 +31,7 @@ import {
   settlementDocument,
   settlementProfile,
 } from './schema';
+import { lockSettlementRuleForOrder } from './settlement-configuration';
 
 export const ORDER_SETTLEMENT_CAPABILITY = 'CO.SETTLE.ORDER';
 export const ORDER_SETTLEMENT_COLLECTIVE_CAPABILITY = 'CO.SETTLE.COLLECTIVE';
@@ -306,6 +307,13 @@ async function settleOne(
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   row: typeof internalOrder.$inferSelect,
 ): Promise<{ order: SettlementOrderResult; document: SettlementDocumentRef | null; eligible: boolean }> {
+  // The profile assignment, the allocation assignment and the distribution rule are one condition, so
+  // they are read under the key the rule screen holds while it writes them: an update cannot post
+  // against a profile from one save and a rule from the next. A test run reports rather than decides,
+  // so it does not take the key.
+  if (!run.testRun) {
+    await lockSettlementRuleForOrder(tx, input.client, row.orderNumber);
+  }
   const base = {
     orderNumber: row.orderNumber,
     orderType: row.orderType,
