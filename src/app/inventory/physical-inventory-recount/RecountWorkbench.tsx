@@ -314,7 +314,7 @@ export default function RecountWorkbench({
             <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('recount.reason')}</span>
             <input name="reason" className="input" required />
           </label>
-          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} />
+          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} remedy={cancelLock?.remedy} />
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={!canRecount || cancelling || cancelLock?.mode !== 'CHANGE'}>
             {cancelling ? t('recount.cancelling') : t('recount.cancel')}
           </button>

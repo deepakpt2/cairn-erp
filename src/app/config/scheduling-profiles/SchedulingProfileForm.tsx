@@ -91,7 +91,7 @@ export default function SchedulingProfileForm({
       {canMaintain && (
         <form action={saveAction} className="space-y-3 border border-line bg-white p-4">
           <h2 className="text-sm font-semibold">{row ? 'Change profile' : 'Create profile'}</h2>
-          {row && <LockNotice message={lock?.message} />}
+          {row && <LockNotice message={lock?.message} remedy={lock?.remedy} />}
           <input type="hidden" name="mode" value={row ? 'CHANGE' : 'CREATE'} />
           <input type="hidden" name="version" value={row?.version ?? 0} />
           {row && (

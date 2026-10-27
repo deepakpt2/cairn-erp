@@ -8,6 +8,7 @@ import { calculatePaymentSchedule, type BaselineSource } from '@/modules/foundat
 import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { TermsForm } from './TermsForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 export const dynamic='force-dynamic';
 export default async function PaymentTermsPage({searchParams}:{searchParams:Promise<{code?:string;new?:string;q?:string;baseline?:string;history?:string}>}){
   const session=await requireSession('/config/payment-terms');const client=session.user.client;const params=await searchParams;
@@ -24,7 +25,7 @@ export default async function PaymentTermsPage({searchParams}:{searchParams:Prom
   return <div className="mx-auto max-w-6xl space-y-4 p-3 sm:p-4 lg:p-6">
     <header className="border-b border-line pb-4"><span className="code text-ink-faint">CFG.FIN.PAYTERMS.DEFINE</span><div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-xl font-semibold">{t('pt.title')}</h1><div className="flex gap-2"><Link className="btn btn-default" href="/config">{t('nav.workbench')}</Link><Link className="btn btn-default" href="/config/payment-terms">{t('pt.list')}</Link>{editable&&!creating&&<Link className="btn btn-primary" href="/config/payment-terms?new=1">{t('pt.create')}</Link>}</div></div><p className="mt-1 text-sm text-ink-soft">{t('pt.subtitle')}</p></header>
     {detail&&changeLock?.mode==='CHANGE'&&<ChangeLock lockObject="PAYMENT_TERMS" argument={detail.termsCode} />}
-    <LockNotice message={changeLock?.mode==='DISPLAY'?displayOnlyMessage(changeLock):null} />
+    <LockNotice message={changeLock?.mode==='DISPLAY'?displayOnlyMessage(changeLock):null} remedy={displayOnlyRemedy(changeLock)} />
     {params.code&&!detail&&<p className="panel p-4 text-signal-error">{t('pt.notFound')}</p>}
     {(creating||detail)&&(editable&&held?<TermsForm key={creating?'new':detail!.termsCode} initial={initial} version={detail?.version??0} creating={creating}/>:<section className="panel p-4"><p>{t('auth.readOnly',{authority:'CFG.FIN.PAYTERMS.DEFINE'})}</p>{detail&&<dl className="mt-3 grid gap-2 sm:grid-cols-3">{Object.entries(initial).filter(([k])=>!['client','createdBy','changedBy','createdAt','changedAt'].includes(k)).map(([key,value])=><div key={key}><dt className="field-label">{t(`pt.field.${key}`)}</dt><dd>{String(value??'—')}</dd></div>)}</dl>}</section>)}
     {!creating&&!detail&&<><form method="get" className="flex items-end gap-2"><label><span className="field-label">{t('pt.search')}</span><input name="q" defaultValue={params.q} className="field-input" /></label><button className="btn btn-default">{t('registry.search')}</button></form><section className="panel overflow-x-auto"><table className="grid-table"><thead><tr>{['pt.code','pt.description','pt.baseline','pt.netDays','pt.active','pt.version'].map((key)=><th key={key}>{t(key)}</th>)}</tr></thead><tbody>{rows.map((row)=><tr key={row.termsCode}><td><Link className="code text-accent underline" href={`/config/payment-terms?code=${encodeURIComponent(row.termsCode)}`}>{row.termsCode}</Link></td><td>{row.description}</td><td>{t(`pt.baseline.${row.baselineSource}`)}</td><td>{row.netDays}</td><td>{t(row.isActive?'pt.yes':'pt.no')}</td><td>{row.version}</td></tr>)}</tbody></table>{!rows.length&&<p className="p-4">{t('pt.empty')}</p>}</section></>}

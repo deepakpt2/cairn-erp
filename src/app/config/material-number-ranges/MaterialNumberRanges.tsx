@@ -240,7 +240,7 @@ export default function MaterialNumberRanges({
               </p>
             )}
             <div className="flex gap-2">
-              <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+              <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} remedy={groupLock?.remedy} />
               <button type="submit" className="btn btn-primary" disabled={savePending || (Boolean(selected) && groupLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define number range group'}
               </button>
@@ -312,7 +312,7 @@ export default function MaterialNumberRanges({
                 : `${deleting.assignedTypes.join(', ')} carr${deleting.assignedTypes.length === 1 ? 'ies' : 'y'} it now.`}
             </p>
             <ReasonInput id="dlg-range-group-delete-reason" />
-            <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+            <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={deleteLock?.mode !== 'CHANGE'}>
               Delete
             </button>

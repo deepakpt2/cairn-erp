@@ -270,6 +270,8 @@ function usePeriodLock(argument: string) {
     setOpen,
     held: lock?.mode === 'CHANGE',
     notice: lock?.mode === 'DISPLAY' ? lock.message : null,
+    // the same state, read the same way: only a display-only opening has a path back
+    remedy: lock?.remedy,
   };
 }
 
@@ -291,7 +293,7 @@ function ChangeDialog({
   const period = usePeriodLock(periodArgument(row));
   return (
     <DialogShell summary="Change" title={`Change ${label}`} code={label} onToggle={period.setOpen}>
-      <LockNotice message={period.notice} />
+      <LockNotice message={period.notice} remedy={period.remedy} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="mode" value="CHANGE" />
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
@@ -319,7 +321,7 @@ function LockDialog({ row }: { row: CostCenterRow }) {
   const period = usePeriodLock(periodArgument(row));
   return (
     <DialogShell summary={verb} title={`${verb} ${label}`} code={label} onToggle={period.setOpen}>
-      <LockNotice message={period.notice} />
+      <LockNotice message={period.notice} remedy={period.remedy} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="costCenter" value={row.costCenter} />
@@ -351,7 +353,7 @@ function DeleteDialog({ row }: { row: CostCenterRow }) {
   const period = usePeriodLock(periodArgument(row));
   return (
     <DialogShell summary="Delete" title={`Delete ${label}`} code={label} onToggle={period.setOpen}>
-      <LockNotice message={period.notice} />
+      <LockNotice message={period.notice} remedy={period.remedy} />
       <form className="space-y-3" action={formAction}>
         <input type="hidden" name="controllingArea" value={row.controllingArea} />
         <input type="hidden" name="costCenter" value={row.costCenter} />

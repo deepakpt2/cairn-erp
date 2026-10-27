@@ -10,6 +10,7 @@ import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import BatchRelations from '../BatchRelations';
 import DocumentTab from '../DocumentTab';
 import ChangeBatchForm from './ChangeBatchForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,7 +101,7 @@ export default async function ChangeBatchPage({ searchParams }: {
       )}
       {opened && changeLock?.mode === 'DISPLAY' && (
         <>
-          <LockNotice message={displayOnlyMessage(changeLock)} />
+          <LockNotice message={displayOnlyMessage(changeLock)} remedy={displayOnlyRemedy(changeLock)} />
           <p className="border border-line bg-white p-3 text-sm">
             Batch <span className="code">{opened.batchNumber}</span> stands for material <span className="code">{opened.materialNumber}</span>. This opening is display only.
           </p>

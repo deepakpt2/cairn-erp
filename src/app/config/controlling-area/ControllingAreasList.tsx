@@ -229,7 +229,7 @@ function ControllingAreaItem({
               </div>
 
               <p className="text-xs text-ink-soft">{t('controllingArea.changeHistoryNote')}</p>
-              <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} />
+              <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} remedy={areaLock?.remedy} />
               {state.message && <ActionMessage state={state} />}
               <button type="submit" className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto" disabled={pending || areaLock?.mode !== 'CHANGE'}>
                 {pending ? t('common.saving') : t('controllingArea.saveButton')}

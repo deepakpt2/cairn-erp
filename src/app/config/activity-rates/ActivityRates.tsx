@@ -47,11 +47,13 @@ function DeleteDialog({
   period,
   blocked,
   lockMessage,
+  lockRemedy,
 }: {
   selection: RateSelection;
   period: number;
   blocked: boolean;
   lockMessage: string | null;
+  lockRemedy: string | null;
 }) {
   const [state, formAction, pending] = useActionState<ActivityRateActionState, FormData>(
     deleteActivityRateAction,
@@ -113,7 +115,7 @@ function DeleteDialog({
                 />
               </div>
               <Message state={state} />
-              <LockNotice message={lockMessage} />
+              <LockNotice message={lockMessage} remedy={lockRemedy} />
               <button type="submit" className="btn-primary" disabled={pending || blocked}>
                 Delete activity rate
               </button>
@@ -340,6 +342,7 @@ export default function ActivityRates({
                             period={period.period}
                             blocked={planBlocked}
                             lockMessage={planLock?.mode === 'DISPLAY' ? planLock.message : null}
+                            lockRemedy={planLock?.remedy ?? null}
                           />
                         ) : (
                           '—'
@@ -369,7 +372,7 @@ export default function ActivityRates({
               />
             </div>
             <Message state={state} />
-            <LockNotice message={planLock?.mode === 'DISPLAY' ? planLock.message : null} />
+            <LockNotice message={planLock?.mode === 'DISPLAY' ? planLock.message : null} remedy={planLock?.remedy} />
             <button type="submit" form="act-rate-form" className="btn-primary" disabled={pending || planBlocked}>
               Save plan
             </button>

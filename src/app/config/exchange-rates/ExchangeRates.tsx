@@ -265,7 +265,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                   />
                 </div>
                 <RateMessage state={changeState} />
-                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} />
+                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} remedy={rateLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || rateLock?.mode !== 'CHANGE'}>
                   {t('exRate.save')}
                 </button>
@@ -310,7 +310,7 @@ function RowDialogs({ row }: { row: ExchangeRateRow }) {
                   />
                 </div>
                 <RateMessage state={deleteState} />
-                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} />
+                <LockNotice message={rateLock?.mode === 'DISPLAY' ? rateLock.message : null} remedy={rateLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim() || rateLock?.mode !== 'CHANGE'}>
                   {t('exRate.delete')}
                 </button>

@@ -182,7 +182,7 @@ export default function ReturnDeliveryShell({
             </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <LockNotice message={returnLock?.mode === 'DISPLAY' ? returnLock.message : null} />
+              <LockNotice message={returnLock?.mode === 'DISPLAY' ? returnLock.message : null} remedy={returnLock?.remedy} />
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canPost || posting || returnLock?.mode !== 'CHANGE'}>
                 {posting ? t('mbrl.posting') : t('mbrl.post')}
               </button>

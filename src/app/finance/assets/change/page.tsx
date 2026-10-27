@@ -6,6 +6,7 @@ import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { t } from '@/platform/i18n';
 import { ASSET_CHANGE_CAPABILITY, getAsset } from '@/modules/finance/asset-master';
 import AssetChange from './AssetChange';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,7 @@ export default async function ChangeAssetPage({ searchParams }: {
           No asset stands under this key. Choose one from the asset list.
         </p>
       ) : changeLock?.mode === 'DISPLAY' ? (
-        <LockNotice message={displayOnlyMessage(changeLock)} />
+        <LockNotice message={displayOnlyMessage(changeLock)} remedy={displayOnlyRemedy(changeLock)} />
       ) : (
         <>
           <ChangeLock lockObject="ASSET" argument={assetKey} />

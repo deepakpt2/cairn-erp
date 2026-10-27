@@ -156,7 +156,7 @@ function AssignmentControl({
               </div>
 
               <AssignmentMessage state={state} />
-              <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
+              <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} remedy={companyLock?.remedy} />
 
               <button type="submit" className="btn-primary" disabled={!canSave}>
                 {t('ppvAssign.save')}

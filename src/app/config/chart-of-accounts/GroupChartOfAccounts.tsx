@@ -315,7 +315,7 @@ function GroupChangeDialog({
               {t('common.close')}
             </button>
           </div>
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <section className="panel overflow-hidden">
             <GroupChartOfAccountsForm
               key={entry.groupChartOfAccounts}

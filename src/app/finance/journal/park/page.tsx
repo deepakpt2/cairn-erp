@@ -8,6 +8,7 @@ import {
   PARKED_JOURNAL_CAPABILITY, getParkedJournal, listParkedJournals,
 } from '@/modules/finance/parked-journal';
 import ParkedJournal from './ParkedJournal';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,7 +51,7 @@ export default async function ParkedJournalPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && editing && (
         <ChangeLock lockObject="PARKED_JOURNAL" argument={editing.parkedNumber} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <ParkedJournal
         key={editing?.parkedNumber ?? 'new'}
         parked={parked}

@@ -38,7 +38,7 @@ export function CoaAssignmentForm({
 
   return (
     <div className="space-y-4">
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       <form action={action} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block">
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">

@@ -121,7 +121,7 @@ export default function VendorClearing({ view, loadError, canClear, today }: {
                 Assigned {assigned.toFixed(2)}{currencies.length === 1 ? ` ${currencies[0]}` : ''} ·
                 difference {difference.toFixed(2)}. The difference must stand at zero before posting.
               </p>
-              <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
+              <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} remedy={accountLock?.remedy} />
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="block">
                   <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Clearing date</span>

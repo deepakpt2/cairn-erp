@@ -12,6 +12,7 @@ import {
   getPostingHistory,
 } from '@/modules/inventory/physical-inventory-posting';
 import PostingWorkbench from './PostingWorkbench';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +79,7 @@ export default async function PhysicalInventoryPostingPage({ searchParams }: {
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={postingKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <PostingWorkbench
         document={document}
         history={history}

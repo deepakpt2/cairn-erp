@@ -11,6 +11,7 @@ import {
   openQuotation,
 } from '@/modules/purchasing/quotation';
 import Quotation from './Quotation';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,7 +62,7 @@ export default async function PurchasingQuotationPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="SUPPLIER_QUOTATION" argument={requested} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <Quotation
         key={requested}
         opened={opened}

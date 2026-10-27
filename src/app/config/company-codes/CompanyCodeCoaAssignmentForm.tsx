@@ -27,7 +27,7 @@ export function CompanyCodeCoaAssignmentForm({
 
   return (
     <div className="min-w-72 space-y-2">
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       <form action={action} className="flex items-end gap-2">
         <input type="hidden" name="companyCode" value={companyCode} />
         <label className="min-w-0 flex-1">

@@ -54,7 +54,7 @@ function ReversePosting({
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('diffpost.headerText')}</span>
           <input name="headerText" className="input w-44" />
         </label>
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={reversing || !held}>
           {reversing ? t('diffpost.reversing') : t('diffpost.reverse')}
         </button>

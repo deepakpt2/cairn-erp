@@ -10,6 +10,7 @@ import { division as divisionTable } from '@/modules/foundation/schema';
 import { getDivisionDefinitionVersion } from '@/modules/foundation/distribution-channel-division-maintenance';
 import { DeactivateDivisionForm } from './DeactivateDivisionForm';
 import { DivisionDefinitionForm, type DivisionDraft } from './DivisionDefinitionForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DIVISION.DEFINE';
@@ -136,7 +137,7 @@ export default async function DivisionsPage({ searchParams }: { searchParams: Pr
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="DIVISION" argument={selected.division} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {creating && <DivisionDefinitionForm key={`CREATE:${copySource?.division ?? 'new'}`} mode="CREATE" initial={initial} version={0} />}
       {editing && selected && <DivisionDefinitionForm key={`CHANGE:${selected.division}`} mode="CHANGE" initial={initial} version={version} />}
 

@@ -231,7 +231,7 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                 )}
                 <ReasonField id={`tax-code-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <TaxMessage state={changeState} />
-                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('taxCode.save')}
                 </button>
@@ -261,7 +261,7 @@ function RowDialogs({ row }: { row: TaxCodeRow }) {
                 )}
                 <ReasonField id={`tax-code-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <TaxMessage state={deleteState} />
-                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('taxCode.delete')}
                 </button>

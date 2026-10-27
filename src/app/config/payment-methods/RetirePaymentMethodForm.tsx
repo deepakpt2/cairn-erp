@@ -56,7 +56,7 @@ export function RetirePaymentMethodForm({ country, methodCode, version, active }
           <input type="checkbox" name="confirmRetirement" required className="mt-0.5 accent-accent" />
           <span>{t('pm.retireAcknowledge')}</span>
         </label>
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button className="btn border border-signal-error/40 text-signal-error hover:bg-signal-error-soft" disabled={pending || lock?.mode !== 'CHANGE'}>
           {pending ? t('common.saving') : t('pm.retireAction')}
         </button>

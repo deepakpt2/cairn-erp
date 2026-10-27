@@ -107,7 +107,7 @@ export function SalesOrgDistributionChannelAssignmentsList({
                                 distributionChannel: item.distributionChannel,
                               })}
                             </p>
-                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} />
+                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} remedy={removeLock?.remedy} />
                             <div className="flex flex-wrap gap-2 sm:justify-end">
                               <button
                                 type="submit"

@@ -208,7 +208,7 @@ function ChangeDialog({ row }: { row: EmployeeToleranceGroupRow }) {
               <LimitFields idPrefix={`tol-group-${keySuffix}`} row={row} />
               <ReasonField id={`tol-group-change-reason-${keySuffix}`} value={reason} onChange={setReason} />
               <TolMessage state={state} />
-              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
               <button type="submit" className="btn-primary" disabled={pending || !reason.trim() || lock?.mode !== 'CHANGE'}>
                 {t('tolGroup.save')}
               </button>

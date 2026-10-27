@@ -10,6 +10,7 @@ import { distributionChannel as distributionChannelTable } from '@/modules/found
 import { getDistributionChannelDefinitionVersion } from '@/modules/foundation/distribution-channel-division-maintenance';
 import { DeactivateDistributionChannelForm } from './DeactivateDistributionChannelForm';
 import { DistributionChannelDefinitionForm, type DistributionChannelDraft } from './DistributionChannelDefinitionForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 const ACTIVITY = 'CFG.ORG.DISTCHANNEL.DEFINE';
@@ -133,7 +134,7 @@ export default async function DistributionChannelsPage({ searchParams }: { searc
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="DISTRIBUTION_CHANNEL" argument={selected.distributionChannel} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {creating && <DistributionChannelDefinitionForm key={`CREATE:${copySource?.distributionChannel ?? 'new'}`} mode="CREATE" initial={initial} version={0} />}
       {editing && selected && <DistributionChannelDefinitionForm key={`CHANGE:${selected.distributionChannel}`} mode="CHANGE" initial={initial} version={version} />}
 

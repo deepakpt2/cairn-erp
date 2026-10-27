@@ -232,7 +232,7 @@ export default function MaterialPeriodControl({
               </div>
             </div>
             <ReasonInput id="mp-init-reason" />
-            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} remedy={periodLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Initialize
             </button>
@@ -283,7 +283,7 @@ export default function MaterialPeriodControl({
             </label>
             <input type="hidden" name="disallowBackpostingAfterChange" value="" />
             <ReasonInput id="mp-ind-reason" />
-            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} remedy={periodLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Save indicators
             </button>
@@ -307,7 +307,7 @@ export default function MaterialPeriodControl({
                 ' Backposting is disallowed after a change, so this shift also closes the previous period for good.'}
             </p>
             <ReasonInput id="mp-shift-reason" />
-            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} />
+            <LockNotice message={periodLock?.mode === 'DISPLAY' ? periodLock.message : null} remedy={periodLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={periodLock?.mode !== 'CHANGE'}>
               Shift period
             </button>

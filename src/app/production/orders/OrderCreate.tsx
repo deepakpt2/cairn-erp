@@ -130,7 +130,7 @@ export default function OrderCreate({
           <p role="status" className={`mt-2 text-sm ${released.ok ? 'text-ink' : 'text-red-700'}`}>
             {released.message}{released.remedy ? ` ${released.remedy}` : ''}
           </p>
-          <LockNotice message={releaseLock?.mode === 'DISPLAY' ? releaseLock.message : null} />
+          <LockNotice message={releaseLock?.mode === 'DISPLAY' ? releaseLock.message : null} remedy={releaseLock?.remedy} />
           <form action={releaseAction} className="mt-2 flex flex-wrap items-end gap-3">
             <label className="block">
               <span className="field-label">{t('co01.orderNumber')}</span>

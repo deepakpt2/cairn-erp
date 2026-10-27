@@ -94,7 +94,7 @@ function DeletePair({
       <form action={action} className="mt-2 space-y-2">
         <input type="hidden" name="sendingCompanyCode" value={pair.sendingCompanyCode} />
         <input type="hidden" name="receivingCompanyCode" value={pair.receivingCompanyCode} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button
           type="submit"
           className="btn btn-default min-h-11 sm:min-h-8"
@@ -154,7 +154,7 @@ function DefinePair({
           <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">{t('icCfg.currency')}</span>
           <input name="defaultCurrency" className="input w-24" maxLength={3} placeholder={t('icCfg.optional')} />
         </label>
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || blocked}>
           {t('icCfg.save')}
         </button>

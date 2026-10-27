@@ -190,7 +190,7 @@ export default function NumberRangeObjects({
               this form maintains the facts applications and interval screens read.
             </p>
             <div className="flex gap-2">
-              <LockNotice message={objectLock?.mode === 'DISPLAY' ? objectLock.message : null} />
+              <LockNotice message={objectLock?.mode === 'DISPLAY' ? objectLock.message : null} remedy={objectLock?.remedy} />
               <button type="submit" className="btn btn-primary" disabled={pending || objectLock?.mode !== 'CHANGE'}>
                 Save changes
               </button>

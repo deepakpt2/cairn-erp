@@ -114,7 +114,7 @@ function ChartChangeDialog({
             <div><span className="code text-xs text-ink-faint">OB13 · {chart.chartOfAccounts}</span><p className="font-semibold">{t('chartOfAccounts.changeTitle')}</p></div>
             <button type="button" className="btn btn-default min-h-11 sm:min-h-9" onClick={(event) => { const details = event.currentTarget.closest('details'); if (details) details.open = false; }}>{t('common.close')}</button>
           </div>
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <ChartOfAccountsForm key={chart.chartOfAccounts} mode="CHANGE" initial={chart} languages={languages} groupCharts={groupCharts} canMaintain={canMaintain} submitDisabled={lock?.mode !== 'CHANGE'} />
         </div>
       </div>

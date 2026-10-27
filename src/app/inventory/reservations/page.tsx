@@ -10,6 +10,7 @@ import {
   getReservation,
 } from '@/modules/inventory/reservations';
 import Reservations from './Reservations';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,7 +59,7 @@ export default async function ReservationsPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && reservationKey && (
         <ChangeLock lockObject="RESERVATION" argument={reservationKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <Reservations
         reservation={reservation}
         scenarios={RESERVATION_SCENARIOS.map((s) => ({ code: s.code, description: s.description }))}

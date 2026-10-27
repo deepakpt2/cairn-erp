@@ -10,6 +10,7 @@ import { getStorageLocationVersion } from '@/modules/foundation/storage-location
 import { plant as plantTable, storageLocation as storageLocationTable } from '@/modules/foundation/schema';
 import { StorageLocationForm, type StorageLocationDraft } from './StorageLocationForm';
 import { DeactivateStorageLocationForm } from './DeactivateStorageLocationForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,7 +128,7 @@ export default async function StorageLocationsPage({
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="STORAGE_LOCATION" argument={locationKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {editing && selectedDraft && (
         <StorageLocationForm mode="CHANGE" plants={[]} initial={selectedDraft} version={version} />
       )}

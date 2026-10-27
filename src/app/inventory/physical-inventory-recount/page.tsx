@@ -10,6 +10,7 @@ import {
   getRecountSource,
 } from '@/modules/inventory/physical-inventory-recount';
 import RecountWorkbench from './RecountWorkbench';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,7 @@ export default async function PhysicalInventoryRecountPage({ searchParams }: {
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={recountKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <RecountWorkbench
         document={document}
         requestedNumber={documentNumber}

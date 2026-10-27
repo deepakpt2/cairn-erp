@@ -33,7 +33,7 @@ export function ResetForm({
         <input name="reason" className="input w-full" maxLength={500} required />
       </label>
       <div className="flex flex-wrap items-end gap-3">
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={lock?.mode !== 'CHANGE'}>
           Reset clearing
         </button>

@@ -236,7 +236,7 @@ function ReverseAccrual({ doc }: { doc: AccrualDocumentView }) {
       <input type="hidden" name="companyCode" value={doc.companyCode} />
       <input type="hidden" name="documentNumber" value={doc.documentNumber} />
       <input type="hidden" name="fiscalYear" value={doc.fiscalYear} />
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       {state.message && !state.ok && <p className="text-2xs text-signal-error">{state.message}</p>}
       <button type="submit" className="btn btn-default min-h-8 px-2 text-2xs" disabled={pending || lock?.mode === 'DISPLAY'}>
         {pending ? t('common.saving') : t('accrual.reverseNow')}

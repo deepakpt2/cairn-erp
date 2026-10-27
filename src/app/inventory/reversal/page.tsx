@@ -6,6 +6,7 @@ import { t } from '@/platform/i18n';
 import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
 import { REVERSE_CAPABILITY, getReversalDocument } from '@/modules/inventory/material-document-reversal';
 import Reversal from './Reversal';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,7 +53,7 @@ export default async function ReversalPage({ searchParams }: {
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="MATERIAL_DOCUMENT" argument={reversalKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <Reversal document={document} canPost={canReverse} displayOnly={changeLock?.mode === 'DISPLAY'} today={today} />
     </div>
   );

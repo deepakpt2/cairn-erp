@@ -248,7 +248,7 @@ export default function Classes({ data, canMaintain }: {
                 <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
                   onClick={() => setEditor(EMPTY_EDITOR)}>New class</button>
               )}
-              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || (changing && changeLock?.mode !== 'CHANGE')}>
                 Save class
               </button>
@@ -271,7 +271,7 @@ export default function Classes({ data, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>
                 {dialog.status === 'ACTIVE' ? 'Activate' : 'Block'}
               </button>
@@ -290,7 +290,7 @@ export default function Classes({ data, canMaintain }: {
               <input name="reason" className="input w-full" required />
             </label>
             <div className="mt-3 flex justify-end">
-              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+              <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>Delete</button>
             </div>
           </form>

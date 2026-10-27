@@ -209,7 +209,7 @@ function PeriodRuleEditor({
         </label>
       </td>
       <td className="text-end">
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button
           type="button"
           onMouseDown={() => setEngaged(true)}

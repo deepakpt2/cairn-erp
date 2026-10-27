@@ -82,7 +82,7 @@ export function ChartLifecycleControl({
               <h3 className="font-semibold">{t('chartOfAccounts.lifecycleRule')}</h3>
             </div>
             {state.message && <ActionMessage state={state} />}
-            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
             <form action={formAction} className="space-y-4 p-3 sm:p-5">
               <input type="hidden" name={codeField} value={code} />
               <input type="hidden" name="isActive" value={isActive ? 'false' : 'true'} />

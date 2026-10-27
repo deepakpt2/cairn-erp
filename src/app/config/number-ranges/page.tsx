@@ -8,6 +8,7 @@ import { withTenant } from '@/platform/db/client';
 import { changeHistory } from '@/platform/change';
 import { formatNumber } from '@/platform/numbering';
 import { AdjustCurrentForm, RangeForm } from './RangeForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,7 @@ export default async function NumberRangesPage({ searchParams }: {
     </section>
 
     {selected && changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="NUMBER_RANGE" argument={rangeArgument} />}
-    <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+    <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
     {(params.new === '1' || (selected && held)) && editable && !legacy && <RangeForm key={selected ? rangeKey(selected) : 'new'}
       initial={selected ?? { objectCode: 'RF_BELEG', companyCode: companies[0]?.companyCode ?? '', subObject: 'GENERAL', fiscalYear: 0, prefix: 'JE', fromNumber: 1, toNumber: 999999, currentNumber: 0, numberLength: 6, displayStyle: 'READABLE', status: 'ACTIVE' }}
       companies={companies.filter((c) => c.isActive).map(({ companyCode, name }) => ({ companyCode, name }))} objects={NUMBER_OBJECTS} editing={!!selected} />}

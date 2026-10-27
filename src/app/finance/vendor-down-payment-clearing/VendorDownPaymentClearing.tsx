@@ -215,7 +215,7 @@ export default function VendorDownPaymentClearing({ view, loadError, canEnter, t
               The applied totals of both sides must agree — a clearing transfers, it never creates or
               destroys value. Items applied in full clear in place; remainders stand open by the partial model.
             </p>
-            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
+            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} remedy={accountLock?.remedy} />
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit" className="btn btn-primary min-h-11 sm:min-h-8"

@@ -15,6 +15,7 @@ import {
   type VendorEvaluation,
 } from '@/modules/purchasing/vendor-evaluation';
 import { ManualScoreForm } from './ManualScoreForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -179,7 +180,7 @@ export default async function VendorEvaluationPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && evaluationKey && (
         <ChangeLock lockObject="VENDOR_EVALUATION" argument={evaluationKey} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {evaluation && <EvaluationView evaluation={evaluation} canScore={changeLock?.mode === 'CHANGE'} />}
     </div>
   );

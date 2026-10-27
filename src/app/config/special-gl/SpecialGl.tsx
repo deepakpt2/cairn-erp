@@ -119,7 +119,7 @@ function MaintainIndicator({ rows }: { rows: SpecialGlRow[] }) {
             <input name="reason" className="input w-full" placeholder="Why this changes" required />
           </label>
         </div>
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={maintaining || blocked}>
             Save indicator
@@ -170,7 +170,7 @@ function DeleteIndicator() {
             <input name="reason" className="input w-full" placeholder="Why this goes" required />
           </label>
         </div>
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={deleting || !held}>
             Delete indicator

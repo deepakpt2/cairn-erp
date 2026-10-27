@@ -76,7 +76,7 @@ export function PurchasingOrgCompanyCodeAssignmentForm({
             ))}
           </select>
         </label>
-        <LockNotice message={orgLock?.mode === 'DISPLAY' ? orgLock.message : null} />
+        <LockNotice message={orgLock?.mode === 'DISPLAY' ? orgLock.message : null} remedy={orgLock?.remedy} />
         <button className="btn btn-primary" disabled={pending || companyCodes.length === 0 || orgLock?.mode === 'DISPLAY'}>
           {pending ? t('common.saving') : t('purchasingOrg.assignCompanyCode')}
         </button>

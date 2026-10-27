@@ -12,6 +12,7 @@ import {
   listRecentSourceEntries,
 } from '@/modules/purchasing/source-list';
 import SourceListWorkbench from './SourceList';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,7 +74,7 @@ export default async function PurchasingSourceListPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && opened && (
         <ChangeLock lockObject="SOURCE_LIST" argument={opened.sourceNumber} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <SourceListWorkbench
         key={`${requestedSource}|${requestedMaterial}|${requestedPlant}|${requestedOrg}`}
         list={list}

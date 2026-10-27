@@ -70,7 +70,7 @@ export default function PaymentRun({ run, runs, banks, canExecute, today }: {
           <p className="mt-2 text-sm text-ink-soft">No payment run stands selected.</p>
         )}
         <Message state={cancelState} />
-        <LockNotice message={runLock?.mode === 'DISPLAY' ? runLock.message : null} />
+        <LockNotice message={runLock?.mode === 'DISPLAY' ? runLock.message : null} remedy={runLock?.remedy} />
         {editable && (
           <form action={cancelActionState} className="mt-2">
             <input type="hidden" name="runDate" value={run.runDate} />

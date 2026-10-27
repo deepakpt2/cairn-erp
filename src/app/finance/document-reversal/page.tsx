@@ -12,6 +12,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { EnqueueError, assertChangeForSession, displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { t } from '@/platform/i18n';
 import { ChangeLock, LockNotice } from '@/ui/lock/ChangeLock';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -148,7 +149,7 @@ export default async function DocumentReversalPage({
       {view && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="ACCOUNTING_DOCUMENT" argument={reversalKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
 
       {!grant && (
         <p className="rounded-card border border-line bg-surface p-4 text-sm text-ink-soft" role="note">

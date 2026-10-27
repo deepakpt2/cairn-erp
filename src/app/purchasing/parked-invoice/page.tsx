@@ -13,6 +13,7 @@ import {
   openOrderForPark,
 } from '@/modules/purchasing/parked-invoice';
 import ParkedInvoice from './ParkedInvoice';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,7 +69,7 @@ export default async function ParkedInvoicePage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && standing && (
         <ChangeLock lockObject="PARKED_INVOICE" argument={standing.parkedNumber} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <ParkedInvoice
         key={`${orderNumber}:${requestedPark}`}
         opened={opened}

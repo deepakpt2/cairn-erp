@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
-import { t } from '@/platform/i18n';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 import {
   EnqueueError,
   deleteEnqueueEntry,
@@ -60,10 +60,8 @@ export async function openChangeLockAction(
     return {
       mode: opened.mode,
       message: displayOnlyMessage(opened),
-      // The recovery path is the same on every screen, because it is the same mechanism: the holder leaves
-      // or stops answering, or an operator clears the row. Nothing here retries on its own, and the wording
-      // says so rather than promising a refresh that will not come.
-      remedy: opened.mode === 'DISPLAY' && opened.holder ? t('lock.displayOnlyRecovery') : null,
+      // One sentence, one condition, shared with the screens whose lock is opened during their server render.
+      remedy: displayOnlyRemedy(opened),
     };
   } catch (error) {
     if (error instanceof EnqueueError) return { mode: 'DISPLAY', message: error.message, remedy: error.remedy ?? null };

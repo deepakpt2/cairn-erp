@@ -308,7 +308,7 @@ function UnassignPair({
     >
       <input type="hidden" name="controllingArea" value={controllingArea} />
       <input type="hidden" name="companyCode" value={companyCode} />
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       <button
         type="submit"
         className={buttonClass}

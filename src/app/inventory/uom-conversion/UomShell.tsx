@@ -79,7 +79,7 @@ export default function UomShell({
             </label>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <LockNotice message={changing && defineLock?.mode === 'DISPLAY' ? defineLock.message : null} />
+            <LockNotice message={changing && defineLock?.mode === 'DISPLAY' ? defineLock.message : null} remedy={defineLock?.remedy} />
             <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={!canMaintain || saving || (changing && defineLock?.mode === 'DISPLAY')}>
               {saving ? t('uom.saving') : t('uom.save')}
             </button>
@@ -162,7 +162,7 @@ function RemoveConversion({
     >
       <input type="hidden" name="materialNumber" value={row.materialNumber} />
       <input type="hidden" name="alternativeUnit" value={row.alternativeUnit} />
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       <button
         type="submit"
         className="btn min-h-11 sm:min-h-8"

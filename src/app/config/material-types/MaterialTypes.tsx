@@ -432,7 +432,7 @@ export default function MaterialTypes({
               number ranges screen, internal against internal and external against external.
             </p>
             <div className="flex gap-2">
-              <LockNotice message={typeLock?.mode === 'DISPLAY' ? typeLock.message : null} />
+              <LockNotice message={typeLock?.mode === 'DISPLAY' ? typeLock.message : null} remedy={typeLock?.remedy} />
               <button type="submit" className="btn btn-primary" disabled={typePending || (Boolean(selected) && typeLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Define material type'}
               </button>
@@ -547,7 +547,7 @@ export default function MaterialTypes({
               <ReasonInput id="ref-reason" />
             </div>
             <div className="flex gap-2">
-              <LockNotice message={referenceLock?.mode === 'DISPLAY' ? referenceLock.message : null} />
+              <LockNotice message={referenceLock?.mode === 'DISPLAY' ? referenceLock.message : null} remedy={referenceLock?.remedy} />
               <button type="submit" className="btn btn-primary" disabled={referencePending || (Boolean(selectedReference) && referenceLock?.mode !== 'CHANGE')}>
                 {selectedReference ? 'Save changes' : 'Define reference'}
               </button>
@@ -602,7 +602,7 @@ export default function MaterialTypes({
                 : 'The type becomes available to new materials again.'}
             </p>
             <ReasonInput id="dlg-active-reason" />
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               {dialog.row.isActive ? 'Deactivate' : 'Reactivate'}
             </button>
@@ -623,7 +623,7 @@ export default function MaterialTypes({
               references and materials stand.
             </p>
             <ReasonInput id="dlg-delete-reason" />
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
@@ -643,7 +643,7 @@ export default function MaterialTypes({
               {dialog.row.typeCount} name it now.
             </p>
             <ReasonInput id="dlg-delete-ref-reason" />
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>
@@ -712,7 +712,7 @@ function ValuationRow({
           <div className="min-w-48 flex-1">
             <ReasonInput id={`val-reason-${row.materialType}-${row.plant}`} />
           </div>
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <button type="submit" className="btn btn-default" disabled={!held}>
             Save updating
           </button>

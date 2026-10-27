@@ -69,7 +69,7 @@ function ActivationRow({ row }: { readonly row: PartnerBankProfileActivationView
               <input type="hidden" name="country" value={row.country} />
               <input type="hidden" name="expectedPolicyRevision" value={row.currentPolicyRevision} />
               <input type="hidden" name="expectedVersion" value={row.version ?? ''} />
-              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
               <button className="btn btn-primary" type="submit" disabled={pending || !held}>
                 {pending ? t('bp.profile.pending') : t('bp.profile.activate')}
               </button>

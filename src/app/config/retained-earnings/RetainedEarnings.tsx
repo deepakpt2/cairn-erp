@@ -117,7 +117,7 @@ function MaintainDetermination({ rows, charts }: {
           <input name="reason" className="field-input" required />
         </label>
         <div className="sm:col-span-2 lg:col-span-3">
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={maintaining || blocked}>Save determination</button>
         </div>
         <Message state={maintainState} />
@@ -151,7 +151,7 @@ function DeleteDetermination() {
           <input name="reason" className="field-input" required />
         </label>
         <div className="sm:col-span-2 lg:col-span-3">
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" disabled={deleting || !held}>Delete determination</button>
         </div>
         <Message state={deleteState} />

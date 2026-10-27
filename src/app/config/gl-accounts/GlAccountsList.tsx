@@ -91,7 +91,7 @@ function BlockDialog({
     >
       <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
       <input type="hidden" name="accountNumber" value={account} />
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
 
       <label
         htmlFor={`${idPrefix}-posting`}
@@ -177,7 +177,7 @@ function DeleteDialog({
     >
       <input type="hidden" name="chartOfAccounts" value={chartOfAccounts} />
       <input type="hidden" name="accountNumber" value={account} />
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       <ReasonField
         id={`${idPrefix}-reason`}
         hint={t('glAccount.reasonRequired')}

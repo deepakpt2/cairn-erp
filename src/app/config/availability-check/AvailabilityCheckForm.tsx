@@ -99,7 +99,7 @@ export default function AvailabilityCheckForm({
       {canMaintain && (
         <form key={group?.checkingGroup ?? 'new-group'} action={groupAction} className="space-y-3 border border-line bg-white p-4">
           <h2 className="text-sm font-semibold">{group ? 'Change checking group' : 'Create checking group'}</h2>
-          {group && <LockNotice message={groupLock?.message} />}
+          {group && <LockNotice message={groupLock?.message} remedy={groupLock?.remedy} />}
           <Notice state={groupState} />
           <input type="hidden" name="mode" value={group ? 'CHANGE' : 'CREATE'} />
           <input type="hidden" name="version" value={group?.version ?? 0} />
@@ -155,7 +155,7 @@ export default function AvailabilityCheckForm({
       {canMaintain && (
         <form key={rule?.checkingRule ?? 'new-rule'} action={ruleAction} className="space-y-3 border border-line bg-white p-4">
           <h2 className="text-sm font-semibold">{rule ? 'Change checking rule' : 'Create checking rule'}</h2>
-          {rule && <LockNotice message={ruleLock?.message} />}
+          {rule && <LockNotice message={ruleLock?.message} remedy={ruleLock?.remedy} />}
           <Notice state={ruleState} />
           <input type="hidden" name="mode" value={rule ? 'CHANGE' : 'CREATE'} />
           <input type="hidden" name="version" value={rule?.version ?? 0} />
@@ -256,7 +256,7 @@ export default function AvailabilityCheckForm({
       {canMaintain && (
         <form key={scope ? `${scope.checkingGroup}/${scope.checkingRule}` : 'new-scope'} action={scopeAction} className="space-y-3 border border-line bg-white p-4">
           <h2 className="text-sm font-semibold">{scope ? 'Change scope of check' : 'Create scope of check'}</h2>
-          {scope && <LockNotice message={scopeLock?.message} />}
+          {scope && <LockNotice message={scopeLock?.message} remedy={scopeLock?.remedy} />}
           <Notice state={scopeState} />
           <input type="hidden" name="mode" value={scope ? 'CHANGE' : 'CREATE'} />
           <input type="hidden" name="version" value={scope?.version ?? 0} />

@@ -213,7 +213,7 @@ export default function Industries({
               </div>
             </div>
             <div className="flex gap-2">
-              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+              <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
               <button type="submit" className="btn btn-primary" disabled={savePending || (Boolean(selected) && changeLock?.mode !== 'CHANGE')}>
                 {selected ? 'Save changes' : 'Create industry'}
               </button>
@@ -246,7 +246,7 @@ export default function Industries({
                 : 'The industry becomes available to partners again.'}
             </p>
             <ReasonInput id="dlg-industry-active-reason" />
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               {dialog.row.isActive ? 'Deactivate' : 'Reactivate'}
             </button>
@@ -266,7 +266,7 @@ export default function Industries({
               {dialog.row.partnerCount} stand against it now.
             </p>
             <ReasonInput id="dlg-industry-delete-reason" />
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <button type="submit" className="btn btn-primary" disabled={dialogLock?.mode !== 'CHANGE'}>
               Delete
             </button>

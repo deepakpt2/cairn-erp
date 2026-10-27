@@ -10,6 +10,7 @@ import { country } from '@/platform/tables/reference';
 import { changeHistory } from '@/platform/change';
 import { PaymentMethodForm } from './PaymentMethodForm';
 import { RetirePaymentMethodForm } from './RetirePaymentMethodForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,7 +129,7 @@ export default async function PaymentMethodsPage({ searchParams }: {
 
       {detail && <>
         {editing && changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="PAYMENT_METHOD" argument={methodArgument} />}
-        <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+        <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
         {editing && held ? <PaymentMethodForm
           country={detail.country}
           initial={{

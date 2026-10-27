@@ -326,7 +326,7 @@ function CompanyCodeRow({
 
                     <div className="space-y-2">
                       <AssignmentMessage state={state} />
-                      <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
+                      <LockNotice message={companyLock?.mode === 'DISPLAY' ? companyLock.message : null} remedy={companyLock?.remedy} />
                       {notices.map((notice) => (
                         <p key={notice} role="status" className="border border-line bg-white p-3 text-sm text-ink-soft">
                           {notice}

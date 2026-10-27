@@ -80,7 +80,7 @@ function SalesAreaItem({ area, canMaintain }: { area: SalesAreaListEntry; canMai
 
         {canMaintain && (
           <div className="space-y-3 border-t border-line pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0" onFocus={() => setEngaged(true)}>
-            <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} />
+            <LockNotice message={areaLock?.mode === 'DISPLAY' ? areaLock.message : null} remedy={areaLock?.remedy} />
             <form action={changeAction} className="flex flex-col gap-2 sm:flex-row sm:items-end" onSubmit={(event) => { if (areaLock?.mode !== 'CHANGE') { event.preventDefault(); setEngaged(true); } }}>
               <input type="hidden" name="mode" value="CHANGE" />
               <input type="hidden" name="expectedVersion" value={area.version} />

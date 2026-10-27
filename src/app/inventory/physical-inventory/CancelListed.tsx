@@ -19,7 +19,7 @@ export function CancelListed({ number, year }: { number: string; year: string | 
       <form action={cancelListedAction} className="mt-2 space-y-2">
         <input type="hidden" name="inventoryDocumentNumber" value={number} />
         <input type="hidden" name="fiscalYear" value={year} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn btn-default min-h-11 sm:min-h-8" data-cancel={number} disabled={!held}>
           {t('mi01.cancel')}
         </button>

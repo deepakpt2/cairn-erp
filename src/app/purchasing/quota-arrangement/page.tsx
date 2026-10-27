@@ -12,6 +12,7 @@ import {
   listRecentQuotaArrangements,
 } from '@/modules/purchasing/quota-arrangement';
 import QuotaWorkbench from './QuotaArrangement';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,7 @@ export default async function PurchasingQuotaPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && opened && (
         <ChangeLock lockObject="QUOTA_ARRANGEMENT" argument={opened.quotaNumber} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <QuotaWorkbench
         key={`${requestedQuota}|${requestedMaterial}|${requestedPlant}`}
         opened={opened}

@@ -288,7 +288,7 @@ function VariantDeleteControl({ row, canMaintain }: { row: PostingPeriodVariantR
               <input type="hidden" name="variant" value={row.variant} />
 
               <ActionMessage state={state} />
-              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
 
               <p className="text-sm text-ink">
                 {t('ppv.deleteConfirm', {
@@ -451,7 +451,7 @@ function PostingPeriodChangeDialog({
       <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
         <div className="mx-auto max-w-3xl">
           <DialogHeader code={row.variant} label={`${t('ppv.change')} ${row.variant}`} />
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <section className="panel overflow-hidden p-4">
             <PostingPeriodVariantForm
               mode="CHANGE"

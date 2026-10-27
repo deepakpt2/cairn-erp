@@ -249,7 +249,7 @@ export default function GlClearing({ view, loadError, canClear, today }: {
                     </label>
                   </>
                 )}
-                <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
+                <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} remedy={accountLock?.remedy} />
                 <label className="flex items-end gap-2">
                   <input type="checkbox" name="confirmed" value="yes" required className="size-4" />
                   <span className="text-sm">I confirm this clearing</span>

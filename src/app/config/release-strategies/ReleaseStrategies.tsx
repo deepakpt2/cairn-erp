@@ -271,7 +271,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason</span>
                 <input name="reason" className="input w-full" required />
               </label>
-              <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+              <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} remedy={groupLock?.remedy} />
               <div className="mt-4 flex justify-end gap-2">
                 {groupEditor.mode === 'CHANGE' && (
                   <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
@@ -411,7 +411,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
                 <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason</span>
                 <input name="reason" className="input w-full" required />
               </label>
-              <LockNotice message={strategyLock?.mode === 'DISPLAY' ? strategyLock.message : null} />
+              <LockNotice message={strategyLock?.mode === 'DISPLAY' ? strategyLock.message : null} remedy={strategyLock?.remedy} />
               <div className="mt-4 flex justify-end gap-2">
                 {strategyEditor.mode === 'CHANGE' && (
                   <button type="button" className="btn btn-default min-h-11 sm:min-h-8"
@@ -437,7 +437,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason</span>
               <input name="reason" className="input w-full" required />
             </label>
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <div className="mt-3 flex justify-end">
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>
                 {dialog.status === 'ACTIVE' ? 'Activate' : 'Block'}
@@ -456,7 +456,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason</span>
               <input name="reason" className="input w-full" required />
             </label>
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <div className="mt-3 flex justify-end">
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>Delete</button>
             </div>
@@ -472,7 +472,7 @@ export default function ReleaseStrategies({ data, canMaintain }: {
               <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-faint">Reason</span>
               <input name="reason" className="input w-full" required />
             </label>
-            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} />
+            <LockNotice message={dialogLock?.mode === 'DISPLAY' ? dialogLock.message : null} remedy={dialogLock?.remedy} />
             <div className="mt-3 flex justify-end">
               <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={dialogLock?.mode !== 'CHANGE'}>Delete</button>
             </div>

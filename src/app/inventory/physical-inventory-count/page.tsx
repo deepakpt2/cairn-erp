@@ -14,6 +14,7 @@ import {
 } from '@/modules/inventory/physical-inventory-count';
 import { searchCountDocuments } from '@/modules/inventory/physical-inventory-count';
 import CountWorkbench from './CountWorkbench';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -163,7 +164,7 @@ export default async function PhysicalInventoryCountPage({ searchParams }: {
       {document && changeLock?.mode === 'CHANGE' && (
         <ChangeLock lockObject="PHYSICAL_INVENTORY" argument={countKey} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {document && (
         <CountWorkbench
           document={document}

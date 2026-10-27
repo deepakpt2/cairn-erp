@@ -103,7 +103,7 @@ export function ClearResidualForm({
         <button type="submit" formAction={checkAction} formNoValidate className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || checking || posting} data-grir-check>{checking ? checkingLabel : checkLabel}</button>
         <button type="submit" formAction={postAction} className="btn btn-primary min-h-11 sm:min-h-8" disabled={!key || checking || posting || residualLock?.mode === 'DISPLAY'} data-grir-post>{posting ? postingLabel : postLabel}</button>
       </div>
-      <LockNotice message={residualLock?.mode === 'DISPLAY' ? residualLock.message : null} />
+      <LockNotice message={residualLock?.mode === 'DISPLAY' ? residualLock.message : null} remedy={residualLock?.remedy} />
       <Notice state={notice} />
     </form>
   );
@@ -153,7 +153,7 @@ export function ReverseClearingForm({
         <input name="comment" className="input w-full" value={comment} onChange={(event) => setComment(event.target.value)} required maxLength={100} />
       </label>
       <button type="submit" formAction={action} className="btn btn-default min-h-11 sm:min-h-8" disabled={!key || reversing || documentLock?.mode === 'DISPLAY'} data-grir-reverse-save>{reversing ? reversingLabel : reverseLabel}</button>
-      <LockNotice message={documentLock?.mode === 'DISPLAY' ? documentLock.message : null} />
+      <LockNotice message={documentLock?.mode === 'DISPLAY' ? documentLock.message : null} remedy={documentLock?.remedy} />
       <Notice state={state} />
     </form>
   );

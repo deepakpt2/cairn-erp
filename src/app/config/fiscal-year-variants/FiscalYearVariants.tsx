@@ -393,7 +393,7 @@ function VariantLifecycleControl({ row }: { row: FiscalYearVariantRow }) {
             </div>
             <div className="space-y-3 p-4">
               <ActionMessage state={state} />
-              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+              <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
               <form action={formAction} className="space-y-3">
                 <input type="hidden" name="variant" value={row.variant} />
                 <input type="hidden" name="isActive" value={row.isActive ? 'false' : 'true'} />
@@ -713,7 +713,7 @@ function FiscalYearChangeDialog({
       <div className="fixed inset-0 z-40 overflow-y-auto bg-[#f4f6f7] p-3 sm:p-6">
         <div className="mx-auto max-w-3xl">
           <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.change')} ${row.variant}`} />
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <section className="panel overflow-hidden p-4">
             <FiscalYearVariantForm
               mode="CHANGE"
@@ -749,7 +749,7 @@ function FiscalYearPeriodDialog({ row, canMaintain }: { row: FiscalYearVariantRo
       >
         <div className="mx-auto max-w-3xl">
           <DialogHeader code={row.variant} label={`${t('fiscalYearVariant.periods')} · ${row.variant}`} />
-          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+          <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
           <section className="panel overflow-hidden p-4">
             <div className="overflow-x-auto">
               <PeriodPanel row={row} canMaintain={canMaintain} submitDisabled={writes && lock?.mode !== 'CHANGE'} />

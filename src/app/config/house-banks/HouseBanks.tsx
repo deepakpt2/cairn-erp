@@ -230,7 +230,7 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
                 </div>
                 <ReasonField id={`house-bank-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <HouseMessage state={changeState} />
-                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('houseBank.save')}
                 </button>
@@ -260,7 +260,7 @@ function RowDialogs({ row, banks }: { row: HouseBankRow; banks: BankChoice[] }) 
                 )}
                 <ReasonField id={`house-bank-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <HouseMessage state={deleteState} />
-                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || blocked || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('houseBank.delete')}
                 </button>
@@ -370,7 +370,7 @@ function AccountDialogs({
                 {accountFields(idKey, account)}
                 <ReasonField id={`bank-account-change-reason-${idKey}`} value={changeReason} onChange={setChangeReason} />
                 <HouseMessage state={changeState} />
-                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('houseBank.saveAccount')}
                 </button>
@@ -395,7 +395,7 @@ function AccountDialogs({
                 <p className="text-sm text-ink-soft">{t('houseBank.deleteAccountNote')}</p>
                 <ReasonField id={`bank-account-delete-reason-${idKey}`} value={deleteReason} onChange={setDeleteReason} />
                 <HouseMessage state={deleteState} />
-                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('houseBank.delete')}
                 </button>

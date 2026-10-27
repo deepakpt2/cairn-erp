@@ -142,7 +142,7 @@ export default function PhysicalInventoryShell({
             {t('mi01.countEntry')}
           </a>
 
-          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} />
+          <LockNotice message={cancelLock?.mode === 'DISPLAY' ? cancelLock.message : null} remedy={cancelLock?.remedy} />
           <form action={cancelAction} className="mt-3 flex flex-wrap items-end gap-3">
             <input type="hidden" name="inventoryDocumentNumber" value={createState.document.inventoryDocumentNumber} />
             <input type="hidden" name="fiscalYear" value={createState.document.fiscalYear} />

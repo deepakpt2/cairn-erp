@@ -166,7 +166,7 @@ function RowDialogs({ row }: { row: BankRow }) {
                   <input id={`bank-swift-${idKey}`} name="swift" className="field-input code" maxLength={11} defaultValue={row.swift ?? ''} />
                 </div>
                 <BankMessage state={changeState} />
-                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || changeLock?.mode !== 'CHANGE'}>
                   {t('bank.save')}
                 </button>
@@ -189,7 +189,7 @@ function RowDialogs({ row }: { row: BankRow }) {
                 <input type="hidden" name="bankKey" value={row.bankKey} />
                 <p className="text-sm text-ink-soft">{t('bank.deleteNote')}</p>
                 <BankMessage state={deleteState} />
-                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || deleteLock?.mode !== 'CHANGE'}>
                   {t('bank.delete')}
                 </button>

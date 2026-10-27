@@ -67,7 +67,7 @@ function SaveForm({ action, children, label, record }: {
         <F label="Change reason"><input name="reason" className="field-input w-72" required /></F>
         <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={pending || blocked}>{label}</button>
       </div>
-      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+      <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
       {state.message && (
         <p role="status" className={`text-sm ${state.ok ? 'text-ink' : 'text-red-700'}`}>
           {state.message}{state.remedy ? ` ${state.remedy}` : ''}

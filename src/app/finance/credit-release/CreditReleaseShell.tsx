@@ -25,7 +25,7 @@ function DocumentLock({
     onMode(code, mode);
     return () => onMode(code, 'WAITING');
   }, [code, mode, onMode]);
-  return <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />;
+  return <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />;
 }
 
 function DocumentRow({
@@ -56,7 +56,7 @@ function DocumentRow({
     <details onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="cursor-pointer text-2xs text-accent">{t('release.actions')}</summary>
       <div className="mt-1 flex flex-col gap-1">
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <span className="flex gap-1">
           <form action={recheckAction}>
             <input type="hidden" name="salesDocument" value={salesDocument} />

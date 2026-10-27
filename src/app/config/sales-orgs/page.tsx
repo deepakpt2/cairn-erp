@@ -12,6 +12,7 @@ import { centralAddress, factoryCalendar as factoryCalendarTable, purchasingOrg 
 import { t } from '@/platform/i18n';
 import { SalesOrgDefinitionForm, type SalesOrgDefinitionDraft } from './SalesOrgDefinitionForm';
 import { DeactivateSalesOrgForm } from './DeactivateSalesOrgForm';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 const SALES_ORG_DEFINE = 'CFG.ORG.SALESORG.DEFINE';
@@ -265,7 +266,7 @@ export default async function SalesOrgsPage({ searchParams }: { searchParams: Pr
       {changeLock?.mode === 'CHANGE' && selected && (
         <ChangeLock lockObject="SALES_ORG" argument={selected.salesOrg} />
       )}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       {creating && <SalesOrgDefinitionForm key="CREATE:new" mode="CREATE" initial={initial} version={0} languageKey={languageKey} currencies={currencies} countries={countries} purchasingOrganizations={purchasingOrganizationChoices} referenceSalesOrganizations={referenceSalesOrganizationChoices} factoryCalendars={factoryCalendarChoices} customers={customerChoices} vendors={vendorChoices} />}
       {editing && selected && <SalesOrgDefinitionForm key={`CHANGE:${selected.salesOrg}`} mode="CHANGE" initial={initial} version={version} languageKey={languageKey} currencies={currencies} countries={countries} purchasingOrganizations={purchasingOrganizationChoices} referenceSalesOrganizations={referenceSalesOrganizationChoices} factoryCalendars={factoryCalendarChoices} customers={customerChoices} vendors={vendorChoices} />}
 

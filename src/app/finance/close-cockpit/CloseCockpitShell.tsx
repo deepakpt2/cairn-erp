@@ -153,7 +153,7 @@ export default function CloseCockpitShell({ canUse, companies, templates, lists,
                 {selected.list.criticalPathOpen ? ` · ${t('close.criticalOpen')}` : ''}
               </span>
             </div>
-            <LockNotice message={cycleLock?.mode === 'DISPLAY' ? cycleLock.message : null} />
+            <LockNotice message={cycleLock?.mode === 'DISPLAY' ? cycleLock.message : null} remedy={cycleLock?.remedy} />
             <div className="flex flex-wrap gap-2">
               {selected.list.status === 'INITIAL' && (
                 <form action={releaseListAction}>{cycleFields}<button className="btn btn-primary min-h-8" type="submit" disabled={!cycleHeld}>{t('close.release')}</button></form>

@@ -251,6 +251,7 @@ function ChangeNodeDialog({
   onOpen,
   held,
   notice,
+  remedy,
 }: {
   row: HierarchyNodeRow;
   nodes: HierarchyNodeRow[];
@@ -258,6 +259,7 @@ function ChangeNodeDialog({
   onOpen: (open: boolean) => void;
   held: boolean;
   notice: string | null;
+  remedy: string | null;
 }) {
   const [state, formAction, pending] = useAction(saveHierarchyNodeAction as never);
   const label = `Node ${row.node}`;
@@ -270,7 +272,7 @@ function ChangeNodeDialog({
         <NodeFields idPrefix={`hier-node-${row.node}`} row={row} nodes={nodes} />
         <ReasonField id={`hier-node-change-reason-${row.node}`} />
         <Message state={state} />
-        <LockNotice message={notice} />
+        <LockNotice message={notice} remedy={remedy} />
         <button type="submit" className="btn-primary" disabled={pending || !held}>
           Save changes
         </button>
@@ -286,6 +288,7 @@ function DeleteNodeDialog({
   onOpen,
   held,
   notice,
+  remedy,
 }: {
   row: HierarchyNodeRow;
   childCount: number;
@@ -293,6 +296,7 @@ function DeleteNodeDialog({
   onOpen: (open: boolean) => void;
   held: boolean;
   notice: string | null;
+  remedy: string | null;
 }) {
   const [state, formAction, pending] = useAction(deleteHierarchyNodeAction as never);
   const label = `Node ${row.node}`;
@@ -313,7 +317,7 @@ function DeleteNodeDialog({
         ) : null}
         <ReasonField id={`hier-node-delete-reason-${row.node}`} />
         <Message state={state} />
-        <LockNotice message={notice} />
+        <LockNotice message={notice} remedy={remedy} />
         <button type="submit" className="btn-primary" disabled={pending || blocked || !held}>
           Delete node
         </button>
@@ -396,7 +400,7 @@ function PlacementPanel({
         </div>
         <ReasonField id="place-reason" />
         <Message state={state} />
-        <LockNotice message={placementLock?.mode === 'DISPLAY' ? placementLock.message : null} />
+        <LockNotice message={placementLock?.mode === 'DISPLAY' ? placementLock.message : null} remedy={placementLock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || !placementHeld}>
           Place period
         </button>
@@ -459,7 +463,7 @@ function UnassignDialog({
         </p>
         <ReasonField id={`unplace-reason-${placement.profitCenter}-${placement.validFrom}`} />
         <Message state={state} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Unassign period
         </button>
@@ -592,7 +596,7 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
         </div>
         <ReasonField id={`leaf-${group.groupName}-reason`} />
         <Message state={leafState} />
-        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} remedy={groupLock?.remedy} />
         <button type="submit" className="btn-primary" disabled={leafPending || !groupHeld}>
           Add leaf
         </button>
@@ -605,7 +609,7 @@ function GroupCard({ group, selectedArea }: { group: GroupRow; selectedArea: str
         </p>
         <ReasonField id={`group-delete-reason-${group.groupName}`} />
         <Message state={deleteState} />
-        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} />
+        <LockNotice message={groupLock?.mode === 'DISPLAY' ? groupLock.message : null} remedy={groupLock?.remedy} />
         <button type="submit" className="btn-primary" disabled={deletePending || !groupHeld}>
           Delete group
         </button>
@@ -647,7 +651,7 @@ function RemoveLeafDialog({
         </p>
         <ReasonField id={`leaf-remove-reason-${group.groupName}-${leaf.valFrom}`} />
         <Message state={state} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Remove leaf
         </button>
@@ -677,10 +681,11 @@ function NodeActions({
   );
   const held = lock?.mode === 'CHANGE';
   const notice = lock?.mode === 'DISPLAY' ? lock.message : null;
+  const remedy = lock?.remedy ?? null;
   return (
     <div className="flex flex-wrap gap-1">
-      <ChangeNodeDialog row={row} nodes={nodes} selectedArea={selectedArea} onOpen={setChangeOpen} held={held} notice={notice} />
-      <DeleteNodeDialog row={row} childCount={childCount} selectedArea={selectedArea} onOpen={setDeleteOpen} held={held} notice={notice} />
+      <ChangeNodeDialog row={row} nodes={nodes} selectedArea={selectedArea} onOpen={setChangeOpen} held={held} notice={notice} remedy={remedy} />
+      <DeleteNodeDialog row={row} childCount={childCount} selectedArea={selectedArea} onOpen={setDeleteOpen} held={held} notice={notice} remedy={remedy} />
     </div>
   );
 }

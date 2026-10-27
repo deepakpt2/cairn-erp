@@ -116,7 +116,7 @@ function GroupLock({
     onMode(code, mode);
     return () => onMode(code, 'WAITING');
   }, [code, mode, onMode]);
-  return <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />;
+  return <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />;
 }
 
 export function PurchasingGroupsGrid({

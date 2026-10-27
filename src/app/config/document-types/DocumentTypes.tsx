@@ -289,7 +289,7 @@ function RowDialogs({
                 <TypeFields idPrefix={`doc-type-${row.documentType}`} intervals={intervals} types={rows} row={row} />
                 <ReasonField id={`doc-type-change-reason-${row.documentType}`} value={changeReason} onChange={setChangeReason} />
                 <DocMessage state={changeState} />
-                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} />
+                <LockNotice message={changeLock?.mode === 'DISPLAY' ? changeLock.message : null} remedy={changeLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={changePending || !changeReason.trim() || changeLock?.mode !== 'CHANGE'}>
                   {t('docType.save')}
                 </button>
@@ -315,7 +315,7 @@ function RowDialogs({
                 </p>
                 <ReasonField id={`doc-type-toggle-reason-${row.documentType}`} value={toggleReason} onChange={setToggleReason} />
                 <DocMessage state={toggleState} />
-                <LockNotice message={toggleLock?.mode === 'DISPLAY' ? toggleLock.message : null} />
+                <LockNotice message={toggleLock?.mode === 'DISPLAY' ? toggleLock.message : null} remedy={toggleLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={togglePending || !toggleReason.trim() || toggleLock?.mode !== 'CHANGE'}>
                   {toggleLabel}
                 </button>
@@ -344,7 +344,7 @@ function RowDialogs({
                 )}
                 <ReasonField id={`doc-type-delete-reason-${row.documentType}`} value={deleteReason} onChange={setDeleteReason} />
                 <DocMessage state={deleteState} />
-                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} />
+                <LockNotice message={deleteLock?.mode === 'DISPLAY' ? deleteLock.message : null} remedy={deleteLock?.remedy} />
                 <button type="submit" className="btn-primary" disabled={deletePending || used || !deleteReason.trim() || deleteLock?.mode !== 'CHANGE'}>
                   {t('docType.delete')}
                 </button>

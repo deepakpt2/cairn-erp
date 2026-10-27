@@ -12,6 +12,7 @@ import {
   infoRecordChoices,
 } from '@/modules/purchasing/info-record';
 import InfoRecordWorkbench from './InfoRecord';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,7 +71,7 @@ export default async function PurchasingInfoRecordPage({ searchParams }: {
       {changeLock?.mode === 'CHANGE' && record && (
         <ChangeLock lockObject="INFO_RECORD" argument={record.infoRecordNumber} />
       )}
-      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
       <InfoRecordWorkbench
         key={`${requestedNumber}|${supplier}|${materialNumber}|${requestedOrg}|${requestedPlant}`}
         record={record}

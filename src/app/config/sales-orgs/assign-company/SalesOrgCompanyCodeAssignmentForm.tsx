@@ -197,7 +197,7 @@ export function SalesOrgCompanyCodeAssignmentForm({
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#d6dce1] pt-4">
             <p className="max-w-2xl text-xs text-ink-soft">{t('salesOrg.assignmentOneCompanyRule')}</p>
-            <LockNotice message={changing && companyLock?.mode === 'DISPLAY' ? companyLock.message : null} />
+            <LockNotice message={changing && companyLock?.mode === 'DISPLAY' ? companyLock.message : null} remedy={companyLock?.remedy} />
             <button
               type="submit"
               className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"

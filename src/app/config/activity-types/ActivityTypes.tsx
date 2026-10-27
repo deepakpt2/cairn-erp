@@ -334,7 +334,7 @@ function ChangeDialog({
         />
         <ReasonField id={`act-type-change-reason-${suffix}`} />
         <Message state={state} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Save changes
         </button>
@@ -367,7 +367,7 @@ function LockDialog({ row }: { row: ActivityTypeRow }) {
         </p>
         <ReasonField id={`act-type-lock-reason-${suffix}`} />
         <Message state={state} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           {verb} activity type
         </button>
@@ -398,7 +398,7 @@ function DeleteDialog({ row }: { row: ActivityTypeRow }) {
         </p>
         <ReasonField id={`act-type-delete-reason-${suffix}`} />
         <Message state={state} />
-        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+        <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
         <button type="submit" className="btn-primary" disabled={pending || lock?.mode !== 'CHANGE'}>
           Delete activity type period
         </button>

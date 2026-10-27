@@ -177,7 +177,7 @@ export default function AssignPlant({
               </label>
               <input id="assign-plant-remove-reason" name="reason" required className="input mt-1" />
             </div>
-            <LockNotice message={assignmentLock?.mode === 'DISPLAY' ? assignmentLock.message : null} />
+            <LockNotice message={assignmentLock?.mode === 'DISPLAY' ? assignmentLock.message : null} remedy={assignmentLock?.remedy} />
             <button type="submit" className="btn btn-default min-h-11" disabled={removePending || assignmentLock?.mode !== 'CHANGE'}>Remove</button>
           </form>
         </div>

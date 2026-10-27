@@ -261,7 +261,7 @@ export default function CustomerDownPaymentClearing({ view, loadError, canEnter,
                 An allocation stands above an item's remaining amount, or not above zero.
               </p>
             )}
-            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} />
+            <LockNotice message={accountLock?.mode === 'DISPLAY' ? accountLock.message : null} remedy={accountLock?.remedy} />
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="submit" className="btn btn-primary min-h-11 sm:min-h-8"

@@ -107,7 +107,7 @@ export function SalesOrgDivisionAssignmentsList({
                                 division: item.division,
                               })}
                             </p>
-                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} />
+                            <LockNotice message={removeLock?.mode === 'DISPLAY' ? removeLock.message : null} remedy={removeLock?.remedy} />
                             <div className="flex flex-wrap gap-2 sm:justify-end">
                               <button type="submit" className="btn btn-danger min-h-11 sm:min-h-9" disabled={pending || removeLock?.mode !== 'CHANGE'}>
                                 {pending ? t('common.saving') : t('salesOrgDivision.confirmRemove')}

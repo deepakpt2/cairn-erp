@@ -15,6 +15,7 @@ import {
   groupAccountChoices,
 } from '@/modules/finance/gl-account-group-maintenance';
 import { GlAccountFields, type GlAccountMode, type GlAccountValues } from './GlAccountFields';
+import { displayOnlyRemedy } from '@/ui/lock/remedy';
 import {
   RECONCILIATION_TYPES,
   type AccountType,
@@ -241,7 +242,7 @@ export async function GlAccountModeScreen({
   return shell(
     <>
       {changeLock?.mode === 'CHANGE' && <ChangeLock lockObject="GL_ACCOUNT" argument={accountArgument} />}
-      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} />
+      <LockNotice message={changeLock?.mode === 'DISPLAY' ? displayOnlyMessage(changeLock) : null} remedy={displayOnlyRemedy(changeLock)} />
     <GlAccountFields
       mode={mode}
       chartOfAccounts={chart.chartOfAccounts}

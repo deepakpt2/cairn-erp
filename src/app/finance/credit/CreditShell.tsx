@@ -125,7 +125,7 @@ export default function CreditShell({ canUse, config, credit, audit, selected }:
               <input name="changeReason" required maxLength={240} className="field-input w-72" placeholder={t('credit.changeReasonHint')} />
             </Field>
           </div>
-          <LockNotice message={credit && creditLock?.mode === 'DISPLAY' ? creditLock.message : null} />
+          <LockNotice message={credit && creditLock?.mode === 'DISPLAY' ? creditLock.message : null} remedy={creditLock?.remedy} />
           <button type="submit" className="btn btn-primary min-h-11 sm:min-h-8" disabled={saving || (Boolean(credit) && creditLock?.mode !== 'CHANGE')}>
             {saving ? t('credit.saving') : t('credit.save')}
           </button>
