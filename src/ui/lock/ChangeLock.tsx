@@ -2,6 +2,7 @@
 
 import { useEffect, useReducer } from 'react';
 
+
 import {
   heartbeatEnqueueAction,
   openChangeLockAction,
@@ -12,6 +13,7 @@ import {
   changeLockClaim,
   claimKey,
   claimNotice,
+  failureNoticeView,
   failureText,
   IDLE_CLAIM,
   projectClaim,
@@ -139,6 +141,37 @@ export function LockNotice({ message, remedy }: { message: string | null | undef
       <span className="block">{message}</span>
       {remedy && <span className="mt-1 block text-xs">{remedy}</span>}
     </p>
+  );
+}
+
+/**
+ * The notice for a claim that never answered, and the one control that can do anything about it.
+ *
+ * It renders for `failed` and for nothing else: a refusal is a different fact and keeps its own notice with
+ * the recovery sentence about the other session, and a claim still in flight has nothing to report yet. The
+ * retry button is therefore also the guard against a double request — once it is pressed the phase leaves
+ * `failed`, the notice goes with it, and the reducer refuses a retry that is not on a failed claim, so
+ * pressing twice cannot start two claims. What it restarts is a new claim: the grant the failed attempt did
+ * not get is not carried over, and neither is any press the failure dropped.
+ *
+ * The lines are the catalogue's, and only the operator-safe line of what the platform threw is among them —
+ * `failureNoticeView` and `failureDetail` in `./claim` decide them, keeping stack frames, paths, queries and
+ * credentials off the screen.
+ */
+export function ClaimFailureNotice({ claim, onRetry }: { claim: ChangeLockClaim; onRetry: () => void }) {
+  const view = failureNoticeView(claim);
+  if (!view) return null;
+  return (
+    <div role="alert" className="border border-signal-error/30 bg-signal-error-soft p-3 text-sm text-signal-error">
+      {view.lines.map((line, index) => (
+        <p key={line} className={index === 0 ? undefined : 'mt-1 text-xs'}>
+          {line}
+        </p>
+      ))}
+      <button type="button" className="btn btn-default mt-2 min-h-11" onClick={onRetry}>
+        {view.action.label}
+      </button>
+    </div>
   );
 }
 

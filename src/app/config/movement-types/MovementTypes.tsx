@@ -19,7 +19,8 @@ import {
   saveMovementTypeAction,
   type MovementTypeActionState,
 } from './actions';
-import { useChangeLock } from '@/ui/lock/ChangeLock';
+import { ClaimFailureNotice, useChangeLockClaim } from '@/ui/lock/ChangeLock';
+import { awaitingClaim } from '@/ui/lock/claim';
 
 function RequiredMark() {
   return <span className="ms-1 text-signal-error" aria-hidden="true">*</span>;
@@ -61,14 +62,18 @@ export default function MovementTypes({
   const [checkState, checkAction, checkPending] = useActionState(checkMovementTypeAction, empty);
   const [deleteState, deleteAction, deletePending] = useActionState(deleteMovementTypeAction, empty);
   const row = movements.find((movement) => movement.movementType === selected) ?? null;
-  const changeLock = useChangeLock(
+  const { claim, notice, retry } = useChangeLockClaim(
     'MOVEMENT_TYPE',
     mode === 'CHANGE' ? selected : null,
     'OMJJ',
     canMaintain && mode === 'CHANGE',
   );
-  const waitingForLock = canMaintain && mode === 'CHANGE' && Boolean(selected) && !changeLock;
-  const lockedOut = changeLock?.mode === 'DISPLAY';
+  // Waiting for an answer and having none are different facts: the edit form still waits while the claim
+  // is in flight, but a claim that never answered no longer hides the section it refuses to let be saved.
+  // The reason is on the screen instead, with the one control that asks for the opening again.
+  const waitingForLock = canMaintain && mode === 'CHANGE' && Boolean(selected) && awaitingClaim(claim);
+  const lockedOut = claim.phase === 'refused';
+  const granted = claim.phase === 'open';
   const frozen = mode === 'CHANGE' && row != null && citedByHistory(row);
 
   useEffect(() => {
@@ -173,9 +178,10 @@ export default function MovementTypes({
         )}
       </section>
 
-      {lockedOut && changeLock?.message && (
-        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{changeLock.message}</p>
+      {lockedOut && notice.message && (
+        <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{notice.message}</p>
       )}
+      <ClaimFailureNotice claim={claim} onRetry={retry} />
       {canMaintain && (mode === 'CREATE' || (row && !lockedOut && !waitingForLock)) && (
         <form key={`${mode}-${selected ?? 'new'}`} action={saveAction} className="space-y-3 border border-line p-3">
           <h2 className="text-base font-semibold">
@@ -294,7 +300,13 @@ export default function MovementTypes({
             <input id="movement-type-reason" name="reason" required className="input mt-1 w-full" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn btn-primary min-h-11" disabled={savePending}>
+            {/* Creation holds no lock and the action does not ask for one; changing a row does, and the
+                grant is what says this session may write. */}
+            <button
+              type="submit"
+              className="btn btn-primary min-h-11"
+              disabled={savePending || (mode === 'CHANGE' && !granted)}
+            >
               Save
             </button>
           </div>
@@ -318,7 +330,7 @@ export default function MovementTypes({
               </label>
               <input id="movement-type-delete-reason" name="reason" required className="input mt-1" />
             </div>
-            <button type="submit" className="btn btn-default min-h-11" disabled={deletePending}>
+            <button type="submit" className="btn btn-default min-h-11" disabled={deletePending || !granted}>
               Delete
             </button>
           </form>

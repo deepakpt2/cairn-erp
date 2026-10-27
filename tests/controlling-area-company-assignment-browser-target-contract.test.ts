@@ -70,4 +70,39 @@ describe('SCR-025 / OX19 browser acceptance target guard', () => {
     // screenshot: nothing moved, nothing was filed, and the holder kept what it held.
     expect(ox19).toContain('A refused unassign filed no audit record.');
   });
+
+  it('cuts the action route to prove a failed claim, its retry control, and that neither files anything', () => {
+    // The failure phase exists because the shared contract says a claim can fail for a reason the
+    // platform never described. It is driven as an operator would meet it — press once, read the row,
+    // ask again — and asserted against copy, the table, the audit history and the lock row.
+    for (const phrase of [
+      "const cut = async (route: Route) => (route.request().method() === 'POST' ? route.abort('failed') : route.continue());",
+      'await page.route(samePage, cut);',
+      'The change lock for this record could not be opened\\.',
+      'Nothing was written\\. Try again, and if it fails again ask an administrator to check the server log\\.',
+      'assert.match(failureAlerts, /Failed to fetch/);',
+      "a failure notice must not publish internals.'",
+      'cannot change it|not open for change|is being changed by|display only|lock monitor/i',
+      'a failed claim may not report a change.',
+      "'A failed claim files nothing, then or afterwards.'",
+      "'A claim that never reached the server took no lock.'",
+      "'A failed claim leaves the row pressable, so the operator can ask again.'",
+      "const retryControl = failure.getByRole('button', { name: 'Try again', exact: true });",
+      "'a retried claim files nothing either.'",
+      "'a retried claim takes no lock it was not granted.'",
+      'await page.unroute(samePage, cut);',
+      'after a failed claim the row completes in one press, and nothing the failure dropped comes back',
+    ]) {
+      expect(ox19).toContain(phrase);
+    }
+    // The route is cut for one interaction and no more: it is detached before the press that is meant to
+    // succeed, so the retry is a normal workflow rather than a permanently broken page.
+    expect((ox19.match(/await page\.route\(samePage, cut\);/g) ?? []).length).toBe(1);
+    expect((ox19.match(/await page\.unroute\(samePage, cut\);/g) ?? []).length).toBe(1);
+    expect(ox19.indexOf('await page.unroute(samePage, cut);')).toBeLessThan(ox19.lastIndexOf('await failButton.click();'));
+    // A click on the row's own button, not a keyboard shortcut or a programmatic submit: the press is the
+    // workflow, in both the failing and the succeeding half of this phase.
+    expect((ox19.match(/await failButton\.click\(\);/g) ?? []).length).toBe(2);
+    expect(ox19).not.toMatch(/requestSubmit|dispatchEvent/);
+  });
 });

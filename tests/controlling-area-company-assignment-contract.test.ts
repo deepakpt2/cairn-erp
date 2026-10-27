@@ -110,7 +110,7 @@ describe('SCR-025 / OX19 assignment contract', () => {
     // refuses. The browser round found it exactly there — the press acquired
     // `CONTROLLING_AREA_COMPANY M210/M201`, filed no submit, and left the control enabled and
     // silent, so an operator had to press again for no stated reason.
-    expect(ui).toContain('const { claim, notice, reportPress, dispatched } = useChangeLockClaim(');
+    expect(ui).toContain('const { claim, notice, retry, reportPress, dispatched } = useChangeLockClaim(');
     expect((ui.match(/useChangeLock\w*\(/g) ?? []).length).toBe(1);
     expect(ui).not.toContain('const lock = ');
     expect(ui).toContain("const refused = claim.phase === 'refused';");
@@ -140,20 +140,25 @@ describe('SCR-025 / OX19 assignment contract', () => {
     expect(actions).toContain('argument: `${controllingArea}/${companyCode}`,');
   });
 
-  it('tells an unreachable claim apart from a refused one, and retries only on the next press', () => {
+  it('tells an unreachable claim apart from a refused one, and retries only on an explicit request', () => {
     // The failure path the shared contract adds, pinned where the queue is pinned: a claim that never
     // answered is announced as a failure in the platform's own words, never as somebody else holding
     // the row; the screen claims no lock and no saved change; and the way back is the operator's next
     // press, not a timer and not the queue replaying itself.
-    expect(ui).toContain("{claim.phase === 'failed' && (");
-    expect(ui).toMatch(/<p role="alert"[^>]*>\s*\{t\('common\.error'\)\}: \{notice\.message\}/);
+    // The failure notice is the shared one, so a screen cannot reword or forget the retry affordance.
+    expect(ui).toContain('<ClaimFailureNotice claim={claim} onRetry={retry} />');
     expect(ui).toContain("if (claim.phase === 'open') return;");
-    expect(ui).not.toMatch(/setTimeout|setInterval|retry\(/);
+    expect(ui).not.toMatch(/setTimeout|setInterval|retry\(\)/);
+    expect(ui).not.toMatch(/role="alert"/);
+    expect(ui).not.toContain("t('common.error')");
     // The refusal keeps its copy and its recovery sentence; the failure never borrows them.
     expect(ui).toContain('message={refused ? notice.message : null}');
     expect(ui).toContain('remedy={refused ? notice.remedy : null}');
     expect(ui).toContain("{pending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}");
-    expect((ui.match(/role="alert"/g) ?? []).length).toBe(1);
+    // The retry is not a replay: a press kept by the failed attempt is gone, and the notice's button is the
+    // only other way a claim restarts. Both are the claim's rules, not this screen's.
+    expect(ui).not.toMatch(/setQueued\(true\)[\s\S]*retry/);
+    expect(ui.match(/<ClaimFailureNotice/g)).toHaveLength(1);
   });
 
   it('enforces exact currency/Fiscal Year Variant matches and current-assignment CoA baseline', () => {

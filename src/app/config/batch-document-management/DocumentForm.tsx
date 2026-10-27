@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { DocumentManagementRow } from '@/modules/inventory/batch-document-management';
-import { useChangeLock } from '@/ui/lock/ChangeLock';
+import { ClaimFailureNotice, LockNotice, useChangeLockClaim } from '@/ui/lock/ChangeLock';
 
 import { saveDocumentManagementAction, type DocumentActionState } from './actions';
 
@@ -20,8 +20,13 @@ export default function DocumentForm({
   canMaintain: boolean;
 }) {
   const router = useRouter();
-  const lock = useChangeLock('BATCH_DOCUMENT_MANAGEMENT', client, 'ODOC', canMaintain);
-  const writable = canMaintain && lock?.mode !== 'DISPLAY';
+  const { claim, notice, retry } = useChangeLockClaim('BATCH_DOCUMENT_MANAGEMENT', client, 'ODOC', canMaintain);
+  const refused = claim.phase === 'refused';
+  // Writable on an answer, not on the absence of a refusal. While the claim is in flight this reads as it
+  // always did — and the save is then answered by the action, which re-checks this session's lock — but a
+  // claim that never answered used to leave the form open and silent. It is closed now, with the reason on
+  // the screen and the one control that can ask for the opening again.
+  const writable = canMaintain && !refused && claim.phase !== 'failed';
   const opened = current.code === 'X' ? 'X' : current.version > 0 ? '' : undefined;
   const [selected, setSelected] = useState<string | undefined>(opened);
   const [requestKey, setRequestKey] = useState('');
@@ -44,9 +49,8 @@ export default function DocumentForm({
         KZDCD. Active is X. Not active is blank. A missing row is not active.
         Saving does not create a document, upload a file, or post.
       </p>
-      {lock?.mode === 'DISPLAY' && lock.message && (
-        <p role="status" className="text-sm">{lock.message}</p>
-      )}
+      <LockNotice message={refused ? notice.message : null} remedy={refused ? notice.remedy : null} />
+      <ClaimFailureNotice claim={claim} onRetry={retry} />
       <fieldset className="space-y-2 text-sm" disabled={!writable}>
         <legend className="font-medium">Indicator</legend>
         <label className="flex items-start gap-2">

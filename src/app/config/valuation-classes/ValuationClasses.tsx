@@ -8,7 +8,7 @@ import type {
   ValuationClassRow,
   ValuationReferenceRow,
 } from '@/modules/inventory/valuation-class-definition';
-import { useChangeLock } from '@/ui/lock/ChangeLock';
+import { ClaimFailureNotice, useChangeLockClaim } from '@/ui/lock/ChangeLock';
 import {
   assignTypeAction,
   checkValuationAction,
@@ -65,27 +65,34 @@ export default function ValuationClasses({
   const referenceRow = references.find((row) => row.reference === selectedReference) ?? null;
   const classRow = classes.find((row) => row.valuationClass === selectedClass) ?? null;
   const typeRow = types.find((row) => row.materialType === selectedType) ?? null;
-  const referenceLock = useChangeLock(
+  const { claim: referenceClaim, notice: referenceNotice, retry: referenceRetry } = useChangeLockClaim(
     'ACCOUNT_CATEGORY_REFERENCE',
     referenceMode === 'CHANGE' ? selectedReference : null,
     'CFG.INV.VALCLASS.DEFINE',
     canMaintain && referenceMode === 'CHANGE',
   );
-  const classLock = useChangeLock(
+  const { claim: classClaim, notice: classNotice, retry: classRetry } = useChangeLockClaim(
     'VALUATION_CLASS',
     classMode === 'CHANGE' ? selectedClass : null,
     'CFG.INV.VALCLASS.DEFINE',
     canMaintain && classMode === 'CHANGE',
   );
-  const typeLock = useChangeLock(
+  const { claim: typeClaim, notice: typeNotice, retry: typeRetry } = useChangeLockClaim(
     'MATERIAL_TYPE',
     selectedType,
     'CFG.INV.VALCLASS.DEFINE',
     canMaintain && !!selectedType,
   );
-  const referenceLocked = referenceLock?.mode === 'DISPLAY';
-  const classLocked = classLock?.mode === 'DISPLAY';
-  const typeLocked = typeLock?.mode === 'DISPLAY';
+  // The three sections are refused, granted and failed on their own, so each reads its own claim: a
+  // display-only answer is another session's opening, with its recovery sentence, and a claim that never
+  // answered is a failure of this one. Only a grant lets a section be worked on, which is what the
+  // conditions below already enforced through the projected answer, now said in the words the claim owns.
+  const referenceLocked = referenceClaim.phase === 'refused';
+  const classLocked = classClaim.phase === 'refused';
+  const typeLocked = typeClaim.phase === 'refused';
+  const referenceGranted = referenceClaim.phase === 'open';
+  const classGranted = classClaim.phase === 'open';
+  const typeGranted = typeClaim.phase === 'open';
 
   useEffect(() => {
     setRequestKey((current) => current || crypto.randomUUID());
@@ -187,10 +194,11 @@ export default function ValuationClasses({
             </tbody>
           </table>
         </div>
-        {referenceLocked && referenceLock?.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{referenceLock.message}</p>
+        {referenceLocked && referenceNotice.message && (
+          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{referenceNotice.message}</p>
         )}
-        {canMaintain && (referenceMode === 'CREATE' || (referenceRow && !referenceLocked && referenceLock)) && (
+        <ClaimFailureNotice claim={referenceClaim} onRetry={referenceRetry} />
+        {canMaintain && (referenceMode === 'CREATE' || (referenceRow && !referenceLocked && referenceGranted)) && (
           <form key={`reference-${referenceMode}-${selectedReference ?? 'new'}-${referenceRow?.version ?? 0}`} action={saveReference} className="space-y-3 border border-line p-3">
             <h3 className="text-sm font-semibold">{referenceMode === 'CREATE' ? 'Create reference' : `Change reference ${referenceRow?.reference}`}</h3>
             <input type="hidden" name="mode" value={referenceMode} />
@@ -217,7 +225,7 @@ export default function ValuationClasses({
             <button type="submit" className="btn btn-primary min-h-11" disabled={referencePending}>Save reference</button>
           </form>
         )}
-        {canMaintain && referenceRow && !referenceLocked && referenceLock && (
+        {canMaintain && referenceRow && !referenceLocked && referenceGranted && (
           <form action={deleteReference} className="space-y-3 border border-line p-3">
             <p className="text-sm text-ink-soft">Delete is refused while a material type or a valuation class names this reference. Nothing is rewritten.</p>
             <input type="hidden" name="reference" value={referenceRow.reference} />
@@ -273,10 +281,11 @@ export default function ValuationClasses({
             </tbody>
           </table>
         </div>
-        {classLocked && classLock?.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{classLock.message}</p>
+        {classLocked && classNotice.message && (
+          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{classNotice.message}</p>
         )}
-        {canMaintain && (classMode === 'CREATE' || (classRow && !classLocked && classLock)) && (
+        <ClaimFailureNotice claim={classClaim} onRetry={classRetry} />
+        {canMaintain && (classMode === 'CREATE' || (classRow && !classLocked && classGranted)) && (
           <form key={`class-${classMode}-${selectedClass ?? 'new'}-${classRow?.version ?? 0}`} action={saveClass} className="space-y-3 border border-line p-3">
             <h3 className="text-sm font-semibold">{classMode === 'CREATE' ? 'Create valuation class' : `Change ${classRow?.valuationClass}`}</h3>
             {classRow && (classRow.materialCount > 0 || classRow.determinationCount > 0) && (
@@ -340,7 +349,7 @@ export default function ValuationClasses({
             <button type="submit" className="btn btn-primary min-h-11" disabled={classPending}>Save valuation class</button>
           </form>
         )}
-        {canMaintain && classRow && !classLocked && classLock && (
+        {canMaintain && classRow && !classLocked && classGranted && (
           <form action={deleteClass} className="space-y-3 border border-line p-3">
             <p className="text-sm text-ink-soft">Delete is refused while a material or an account determination names this class.</p>
             <input type="hidden" name="valuationClass" value={classRow.valuationClass} />
@@ -384,10 +393,11 @@ export default function ValuationClasses({
             </tbody>
           </table>
         </div>
-        {typeLocked && typeLock?.message && (
-          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{typeLock.message}</p>
+        {typeLocked && typeNotice.message && (
+          <p role="status" className="border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800">{typeNotice.message}</p>
         )}
-        {canMaintain && typeRow && !typeLocked && typeLock && (
+        <ClaimFailureNotice claim={typeClaim} onRetry={typeRetry} />
+        {canMaintain && typeRow && !typeLocked && typeGranted && (
           <form key={`type-${typeRow.materialType}`} action={assignType} className="space-y-3 border border-line p-3">
             <h3 className="text-sm font-semibold">Assign {typeRow.materialType}</h3>
             <input type="hidden" name="materialType" value={typeRow.materialType} />

@@ -20,10 +20,13 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import type { ChangeLockState } from '../src/app/platform/locks/actions';
+import { t } from '../src/platform/i18n';
 import {
+  awaitingClaim,
   changeLockClaim,
   claimKey,
   claimNotice,
+  failureDetail,
   failureText,
   IDLE_CLAIM,
   phaseOf,
@@ -97,7 +100,7 @@ describe('the shared change-lock claim', () => {
     expect(refusedClaim.phase).toBe('refused');
     expect(refusedClaim.state).toBe(REFUSED);
     // The recovery guidance travels with the refusal, unchanged.
-    expect(claimNotice(refusedClaim)).toEqual({ message: REFUSED.message, remedy: REFUSED.remedy });
+    expect(claimNotice(refusedClaim)).toEqual({ message: REFUSED.message, remedy: REFUSED.remedy, detail: null });
     // and the projection keeps every existing consumer working: the notice condition, the disabled
     // condition, and the submit gate all read the same value they read before the phases existed.
     expect(projectClaim(refusedClaim)).toBe(REFUSED);
@@ -119,8 +122,19 @@ describe('the shared change-lock claim', () => {
     const failedClaim = run(IDLE_CLAIM, begin(), rejected('Network request failed'));
     expect(failedClaim.phase).toBe('failed');
     expect(failedClaim.error).toBe('Network request failed');
-    // The screen is told the claim failed, and is given no recovery promise it cannot keep.
-    expect(claimNotice(failedClaim)).toEqual({ message: 'Network request failed', remedy: null });
+    // The screen is told the claim failed, in the catalogue's own words, with the recovery line every
+    // operation that wrote nothing already gives. It promises no lock and no saved change.
+    expect(claimNotice(failedClaim)).toEqual({
+      message: t('lock.claimFailed'),
+      remedy: t('lock.claimFailedRecovery'),
+      detail: 'Network request failed',
+    });
+    expect(t('lock.claimFailed')).not.toBe('lock.claimFailed');
+    expect(t('lock.claimFailedRecovery')).not.toBe('lock.claimFailedRecovery');
+    expect(claimNotice(failedClaim).message).not.toMatch(/lock is yours|has been opened|saved|unassigned/i);
+    // A refusal and a failure are told apart by the words on the screen, not only by the phase.
+    expect(claimNotice(failedClaim).message).not.toBe(claimNotice(run(IDLE_CLAIM, begin(), refused())).message);
+    expect(claimNotice(failedClaim).message).not.toMatch(/is being changed by|display only/i);
     // Nothing may read this as authorised: the projection is "no answer", the same value a pending
     // claim projects, so a gate on `mode !== 'CHANGE'` stays shut and a `held` derivation goes false.
     expect(projectClaim(failedClaim)).toBeNull();
@@ -141,13 +155,77 @@ describe('the shared change-lock claim', () => {
     expect(run(IDLE_CLAIM, rejected()).phase, 'a failure for a claim never begun stays idle').toBe('idle');
   });
 
-  it('quotes the platform failure text, and falls back to a sentence that claims nothing', () => {
+  it('keeps what the platform threw for the claim, and shows only what an operator may be told', () => {
     expect(failureText(new Error('HTTP 500'))).toBe('HTTP 500');
     expect(failureText('  boom  ')).toBe('boom');
-    const fallback = failureText(undefined);
-    expect(fallback).toContain('could not be opened');
-    expect(fallback).toContain('No change was saved');
-    expect(run(IDLE_CLAIM, begin(), { type: 'reject', key: KEY, error: null }).error).toBe(fallback);
+    // Nothing is invented when there is no message: the notice still explains the failure from the catalogue.
+    expect(failureText(undefined)).toBeNull();
+    expect(failureText(new Error('   '))).toBeNull();
+    const bare = run(IDLE_CLAIM, begin(), { type: 'reject', key: KEY, error: null });
+    expect(bare.error).toBeNull();
+    expect(claimNotice(bare)).toEqual({
+      message: t('lock.claimFailed'),
+      remedy: t('lock.claimFailedRecovery'),
+      detail: null,
+    });
+  });
+
+  it('does not put a stack trace, a query, a path or a credential on a screen', () => {
+    // A rejected action can carry whatever the server logged. The line is shown only when it reads like an
+    // explanation; everything else stays in the console, where the log already has it.
+    expect(failureDetail('Failed to fetch')).toBe('Failed to fetch');
+    expect(failureDetail('HTTP 500')).toBe('HTTP 500');
+    expect(failureDetail('  signed out  ')).toBe('signed out');
+    for (const unsafe of [
+      'TypeError: x is not a function\n    at Object.<anonymous> (/home/cairn/cairn-erp/src/ui/lock/claim.ts:42:11)',
+      'select count(*) from change_document where client = $1',
+      'update controlling_area_company set is_active = false',
+      'connect ECONNREFUSED postgresql://cairn_app:pw@127.0.0.1:5432/cairn',
+      'password for cairn was rejected',
+      'the token expired at /var/run/secrets/token',
+      'read ECONNRESET https://internal.example/api/locks',
+      'x'.repeat(240),
+      '',
+      '   ',
+    ]) {
+      expect(failureDetail(unsafe), unsafe.slice(0, 48)).toBeNull();
+    }
+    // and a screen told about a failure never inherits the refusal's claim about who holds the record
+    const leaked = run(IDLE_CLAIM, begin(), { type: 'reject', key: KEY, error: 'M210/M201 is being changed by someone' });
+    expect(claimNotice(leaked).detail).toBeNull();
+  });
+
+  it('names the window in which an answer is owed, so a form can wait without hiding the reason', () => {
+    expect(awaitingClaim(IDLE_CLAIM)).toBe(true);
+    expect(awaitingClaim(run(IDLE_CLAIM, begin()))).toBe(true);
+    expect(awaitingClaim(run(IDLE_CLAIM, begin(), granted()))).toBe(false);
+    expect(awaitingClaim(run(IDLE_CLAIM, begin(), refused()))).toBe(false);
+    expect(awaitingClaim(run(IDLE_CLAIM, begin(), rejected()))).toBe(false);
+    // `awaitingClaim` is what a screen waits on, so a failure is never mistaken for "still loading" and
+    // hides the section it should be explaining.
+    expect(awaitingClaim(run(IDLE_CLAIM, begin(), rejected()))).toBe(false);
+  });
+
+  it('allows one retry in flight, and no second claim from a repeated request', () => {
+    const failedClaim = run(IDLE_CLAIM, begin(), rejected());
+    const retried = run(failedClaim, { type: 'retry', key: KEY });
+    // The retry is a new claim: the answer that never came is not carried into it, and neither is a press.
+    expect(retried.state).toBeNull();
+    expect(retried.queued).toBe(false);
+    expect(retried.error).toBeNull();
+    expect(retried.attempt).toBe(failedClaim.attempt + 1);
+    // Pressing again while that claim is in flight changes nothing at all — no second claim, no queue.
+    expect(run(retried, { type: 'retry', key: KEY })).toBe(retried);
+    expect(run(retried, begin())).toBe(retried);
+    const pressed = run(retried, { type: 'press' });
+    expect(pressed.attempt).toBe(retried.attempt);
+    expect(shouldDispatch(pressed)).toBe(false);
+    expect(shouldDispatch(run(pressed, granted()))).toBe(true);
+    // A grant that arrived late for the failed claim is not a grant for the retry either: the answer is
+    // scoped to the claim that asked, so `retry` cannot be answered by a stale result.
+    const stale = { type: 'resolve', key: claimKey('CONTROLLING_AREA_COMPANY', 'OTHER/ROW', 'CFG.COST.CONTROLLINGAREA.DEFINE'), state: GRANTED } as const;
+    expect(run(retried, stale)).toBe(retried);
+    expect(projectClaim(run(retried, stale))).toBeNull();
   });
 
   it('will not let a pending claim be pressed into two submissions, and does not restart on a re-render', () => {

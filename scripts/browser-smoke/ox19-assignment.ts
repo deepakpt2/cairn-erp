@@ -508,8 +508,16 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   assert.equal(await failButton.isDisabled(), false, 'An unopened row offers its control to a session that has not claimed it.');
 
   await failButton.click();
-  await page.getByRole('alert').filter({ hasText: /Error/i }).first().waitFor({ timeout: 20_000 });
+  const failure = page.getByRole('alert').filter({ hasText: /could not be opened/i }).first();
+  await failure.waitFor({ timeout: 20_000 });
   const failureAlerts = (await page.getByRole('alert').allInnerTexts()).join('\n');
+  // The words are the catalogue's, and they are the failure's: the sentence that says nothing was opened,
+  // the recovery line every operation that wrote nothing already gives, and the one line of platform text
+  // an operator may be shown.
+  assert.match(failureAlerts, /The change lock for this record could not be opened\./);
+  assert.match(failureAlerts, /Nothing was written\. Try again, and if it fails again ask an administrator to check the server log\./);
+  assert.match(failureAlerts, /Failed to fetch/);
+  assert.doesNotMatch(failureAlerts, /page\.tsx|node_modules|at \S+ \(|https?:\/\//, 'a failure notice must not publish internals.');
   assert.doesNotMatch(
     failureAlerts,
     /cannot change it|not open for change|is being changed by|display only|lock monitor/i,
@@ -525,11 +533,21 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   );
   assert.equal((await waitForLock(FAIL_AREA, FAIL_COMPANY, false)).length, 0, 'A claim that never reached the server took no lock.');
   assert.equal(await failButton.isDisabled(), false, 'A failed claim leaves the row pressable, so the operator can ask again.');
+  // The notice's own control. The route is still cut, so this claim fails too — which is the proof that a
+  // retry starts a new claim rather than reusing the answer that never came, and that it files nothing
+  // however many times it is offered while the platform cannot be reached.
+  const retryControl = failure.getByRole('button', { name: 'Try again', exact: true });
+  assert.equal(await retryControl.isVisible(), true, 'the failure notice carries the way back.');
+  await retryControl.click();
+  await failure.waitFor({ timeout: 20_000 });
+  assert.equal(await readLink(FAIL_AREA, FAIL_COMPANY), true, 'a retried claim files nothing either.');
+  assert.equal((await linkHistory(FAIL_AREA, FAIL_COMPANY)).length, historyBeforeFailure);
+  assert.equal((await waitForLock(FAIL_AREA, FAIL_COMPANY, false)).length, 0, 'a retried claim takes no lock it was not granted.');
   await page.unroute(samePage, cut);
-  console.log(`  ✓ a claim that cannot be reached is told as a failure and files nothing (${failureAlerts.replace(/\s+/g, ' ').trim()})`);
+  console.log(`  ✓ a claim that cannot be reached is told as a failure, offers Try again, and files nothing (${failureAlerts.replace(/\s+/g, ' ').trim()})`);
 
-  // The next press re-claims, and this time the answer is a grant: the unassignment goes through on
-  // that single press, with its audit record and no opening left behind.
+  // One press more, with the route back: the claim is granted, and the unassignment goes through on that
+  // single press, with its audit record and no opening left behind.
   await failButton.click();
   await page.getByRole('status').getByText(
     `Company Code ${FAIL_COMPANY} unassigned from Controlling Area ${FAIL_AREA}; prior change history retained.`,
@@ -539,5 +557,5 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   assert.equal(await readLink(FAIL_AREA, FAIL_COMPANY), false);
   assert.ok((await linkHistory(FAIL_AREA, FAIL_COMPANY)).some((event) => event.changeType === 'DELETE'));
   assert.equal((await waitForLock(FAIL_AREA, FAIL_COMPANY, false)).length, 0);
-  console.log('  ✓ the press after a failed claim retries the opening and completes in one press');
+  console.log('  ✓ after a failed claim the row completes in one press, and nothing the failure dropped comes back');
 }

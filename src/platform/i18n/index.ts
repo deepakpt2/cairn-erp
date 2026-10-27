@@ -53,6 +53,12 @@ const en: Catalogue = {
   'enqueue.answerFresh': 'Answered {seconds} s ago',
   'enqueue.answerHint': 'The answer time is read as this page is built. A lock nobody answers is not listed here: three minutes after its last answer it is released when the object is opened next, or now by an operator who deletes it. Deleting a lock changes no document.',
   'lock.displayOnlyRecovery': 'This opening does not take the lock back by itself. Re-open the document once that session has left, signed out, or stopped answering: a lock nobody answers is released about three minutes after its last answer, at the next opening. An operator can clear it in the lock monitor, which changes no document.',
+  // The half of a lock notice the platform never answers: a claim that did not reach the server, so the
+  // screen cannot say who holds the record and must not imply that anything was changed. The recovery line
+  // is the one every other screen already gives for an operation that wrote nothing.
+  'lock.claimFailed': 'The change lock for this record could not be opened.',
+  'lock.claimFailedRecovery': 'Nothing was written. Try again, and if it fails again ask an administrator to check the server log.',
+  'lock.claimRetry': 'Try again',
   'nav.registry': 'Term registry',
   'nav.journal': 'Accounting documents',
   'nav.related': 'Related screens',

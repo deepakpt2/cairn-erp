@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { t } from '@/platform/i18n';
-import { LockNotice, useChangeLockClaim } from '@/ui/lock/ChangeLock';
+import { ClaimFailureNotice, LockNotice, useChangeLockClaim } from '@/ui/lock/ChangeLock';
 import { shouldDispatch } from '@/ui/lock/claim';
 import {
   assignControllingAreaCompanyAction,
@@ -293,9 +293,10 @@ export function ControllingAreaCompanyAssignmentUI({
  * - `refused` is a display-only opening belonging to another session: the press is dropped, the notice
  *   carries the platform's own sentence with its recovery guidance, and the control is refused;
  * - `failed` is neither a grant nor a refusal — the claim itself did not reach an answer. The kept press
- *   is dropped, the platform's failure text is shown as an alert, and nothing is ever replayed. The
- *   operator's next press is the retry: it asks for the opening again and is honoured only if that
- *   claim is genuinely granted;
+ *   is dropped and the shared failure notice says so, with the catalogue's own recovery line; nothing is
+ *   replayed, and a retry of any kind starts a new claim rather than reusing the answer that never came.
+ *   The way back is the operator's: the notice's `Try again`, or their next press of the row — both
+ *   re-claim, and only a grant that follows lets the unassignment through;
  * - a superseded row (the pair changed, the row left the screen) cannot land an answer or a dispatch at
  *   all, because both are scoped to the claim key the effect owns.
  *
@@ -320,7 +321,7 @@ function UnassignPair({
   // Read for its FormData when a press kept for the opening is finally dispatched.
   const formRef = useRef<HTMLFormElement>(null);
   const [engaged, setEngaged] = useState(false);
-  const { claim, notice, reportPress, dispatched } = useChangeLockClaim(
+  const { claim, notice, retry, reportPress, dispatched } = useChangeLockClaim(
     'CONTROLLING_AREA_COMPANY',
     `${controllingArea}/${companyCode}`,
     'CFG.COST.CONTROLLINGAREA.DEFINE',
@@ -356,11 +357,7 @@ function UnassignPair({
       <input type="hidden" name="controllingArea" value={controllingArea} />
       <input type="hidden" name="companyCode" value={companyCode} />
       <LockNotice message={refused ? notice.message : null} remedy={refused ? notice.remedy : null} />
-      {claim.phase === 'failed' && (
-        <p role="alert" className="border border-signal-error/30 bg-signal-error-soft p-2 text-xs text-signal-error">
-          {t('common.error')}: {notice.message}
-        </p>
-      )}
+      <ClaimFailureNotice claim={claim} onRetry={retry} />
       <button
         type="submit"
         className={buttonClass}
