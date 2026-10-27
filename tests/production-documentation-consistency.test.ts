@@ -176,9 +176,16 @@ describe('the ledger carries what this round could not close', () => {
   it('holds the unregistered-gate finding until the registry says otherwise', () => {
     const registered = /code: 'PROD\.(CONFIRM\.CANCEL|WORKCENTER\.(CREATE|CHANGE|DISPLAY))'/.test(seed);
     if (registered) {
-      // Someone registered the gates. The finding is closed and DI-014 must say so, not stay open.
-      expect(deferred, 'DI-014 is stale: the codes are registered now').toContain('CLOSED');
+      // Someone registered the gates. The finding is closed and DI-014 must say so, not stay open. The marker has
+      // to sit on DI-014's own entry: the file holds other closed entries, and `toContain('CLOSED')` would pass on
+      // one of them.
+      expect(deferred, 'DI-014 is stale: the codes are registered now').toMatch(
+        /^\| DI-014 \|.*CLOSED/m,
+      );
     } else {
+      // The row says the gate is still open, which is the fact this case exists to protect, and the
+      // status file must not claim the registry is complete while it is not.
+      expect(deferred).toMatch(/^\| DI-014 \|.*OPEN/m);
       expect(status).not.toContain('every production gate is registered');
     }
   });
