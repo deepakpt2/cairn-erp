@@ -182,6 +182,9 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'co09-availability') return '/production/order-availability';
   if (target.id === 'controlling-area') return '/config/controlling-area';
   if (target.id === 'controlling-area-company-assignment') return '/config/controlling-area/assign-company-code';
+  if (target.id === 'batch-document-management') return '/config/batch-document-management';
+  if (target.id === 'movement-types') return '/config/movement-types';
+  if (target.id === 'valuation-classes') return '/config/valuation-classes';
   if (target.id === 'chart-of-accounts') return '/config/chart-of-accounts';
   if (target.id === 'gl-accounts') return '/config/gl-accounts';
   if (target.id === 'chart-of-accounts-copy') return '/config/chart-of-accounts/copy';

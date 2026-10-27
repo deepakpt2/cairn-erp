@@ -14,16 +14,26 @@
  *   family they belong to is proved closed against the rest of `src`, and each gate is checked against the
  *   server rule it mirrors — including the read-only actions that must NOT be gated by a lock.
  *
- * What is deliberately not here: a rewrite of the fifteen other `lock?.mode !== 'DISPLAY'` screens. They
- * keep their gates because their actions answer a pressed save with the platform's own refusal and remedy,
- * which is asserted above from those action files and tested at the server boundary by `tests/action-security.test.ts`
- * and the lock suites. The remaining gap is stated in the readiness report, §19.8.
+ * What changed in Pass 36, and is asserted by the last block: the fifteen other legacy screens were not
+ * rewritten. The projection they read now answers a dead claim in the shape they already understand — a
+ * display answer carrying the failure's own two lines — which closes their gates and shows their notice
+ * without touching a single form expression. That is only safe because of the two properties the block
+ * measures across all of `src`, and holds: a comparison against a projected `mode` never reads a failure
+ * as a grant, and no consumer composes wording around a display answer. The remaining gaps, including the
+ * retry control only the claim-reading screens have, are stated in the readiness report, §20.5.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { awaitingClaim, changeLockClaim, failureNoticeView, IDLE_CLAIM, type ChangeLockClaim } from '../src/ui/lock/claim';
+import {
+  awaitingClaim,
+  changeLockClaim,
+  failureNoticeView,
+  IDLE_CLAIM,
+  projectClaim,
+  type ChangeLockClaim,
+} from '../src/ui/lock/claim';
 import { LOCALES, t } from '../src/platform/i18n';
 
 const KEY = 'CONTROLLING_AREA_COMPANY\u0000M210/M201\u0000CFG.COST.CONTROLLINGAREA.DEFINE';
@@ -40,6 +50,15 @@ const refused = {
   state: { mode: 'DISPLAY', message: 'CONTROLLING_AREA_COMPANY M210/M201 is being changed by x. This opening is display only.', remedy: 're-open it' },
 } as const;
 const failed = (error: string | null) => claim(begin, { type: 'reject', key: KEY, error });
+
+/** Every file under a directory, the way the repo-wide cases below need it. */
+function* walk(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (statSync(path).isDirectory()) yield* walk(path);
+    else yield path;
+  }
+}
 
 /** The screens whose lock state a press can change, one per form architecture. */
 const MIGRATED = [
@@ -142,6 +161,17 @@ describe('the consumers that read a failed claim as an answer', () => {
     // The refusal keeps this screen's own words and styling: only the source of the text moved.
     expect(movement).toContain('border border-signal-warn/40 bg-amber-50 p-3 text-sm text-amber-800');
     expect(movement).toContain('{lockedOut && notice.message && (');
+    // A refusal carries its recovery sentence, not only its headline: these two screens used to show the
+    // message and drop the remedy, while `LockNotice` — which the document form and OX19 use — shows both.
+    for (const [file, name] of [
+      ['src/app/config/movement-types/MovementTypes.tsx', 'notice'],
+      ['src/app/config/valuation-classes/ValuationClasses.tsx', 'referenceNotice'],
+      ['src/app/config/valuation-classes/ValuationClasses.tsx', 'classNotice'],
+      ['src/app/config/valuation-classes/ValuationClasses.tsx', 'typeNotice'],
+    ]) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, `${file}: ${name} keeps its recovery sentence`).toContain(`{${name}.remedy && <span className="mt-1 block text-xs">{${name}.remedy}</span>}`);
+    }
   });
 
   it('keeps a Movement Types change behind the grant, and its read-only check outside it', () => {
@@ -339,6 +369,17 @@ describe('the consumers that read a failed claim as an answer', () => {
     }
     // The Check sections read the record and are not lock-gated anywhere, in the screen or in the action.
     expect(valuation).toContain('disabled={checkPending}');
+    // …and on Movement Types the same holds while the row is refused: the refusal closes the delete, and
+    // leaves the read alone. Found in Pass 36 while the browser target drove this screen — the whole block
+    // used to sit behind `!lockedOut`, so a refused session lost an action its action never gated.
+    const movementSource = sources.get('src/app/config/movement-types/MovementTypes.tsx')!;
+    const checkForm = movementSource.indexOf('<form action={checkAction}>');
+    const deleteGuard = movementSource.indexOf('{!lockedOut && (');
+    const deleteForm = movementSource.indexOf('<form action={deleteAction}');
+    expect(checkForm, 'the check form stands in its own block').toBeGreaterThanOrEqual(0);
+    expect(deleteGuard, 'the delete form is the part a refusal closes').toBeGreaterThan(checkForm);
+    expect(deleteForm, 'the delete form sits inside that guard').toBeGreaterThan(deleteGuard);
+    expect(movementSource.indexOf('{canMaintain && row && ('), 'the read is not behind the refusal').toBeLessThan(checkForm);
   });
 });
 
@@ -380,5 +421,138 @@ describe('the copy a failed claim speaks', () => {
     }
     expect(keys.size).toBeGreaterThan(12);
     for (const key of keys) expect(t(key), `${key} used in the lock surface`).not.toBe(key);
+  });
+});
+
+describe('what a legacy screen reads when the claim dies', () => {
+  /**
+   * The whole legacy surface in one question: a consumer holds `const lock = useChangeLock(...)`, and reads
+   * `lock?.mode` against one of the two answers. These cases take every such comparison out of `src` and
+   * apply it to the projections the shipped `projectClaim` produces, so the claim is: whatever a screen
+   * does with a display-only refusal, it now does with a dead claim, and nothing anywhere reads a dead
+   * claim as permission to write.
+   */
+  const COMPARISON = /\b([A-Za-z0-9_$]*[Ll]ock[A-Za-z0-9_$]*)\??\.mode\s*(===|!==)\s*'(DISPLAY|CHANGE)'/g;
+  const projections = {
+    idle: projectClaim(IDLE_CLAIM),
+    pending: projectClaim(claim(begin)),
+    open: projectClaim(claim(begin, granted)),
+    refused: projectClaim(claim(begin, refused)),
+    failed: projectClaim(failed('Failed to fetch')),
+  } as const;
+  const readMode = (value: { mode: 'CHANGE' | 'DISPLAY' } | null, operator: string, mode: string) => {
+    const actual = value?.mode as string | undefined;
+    return operator === '===' ? actual === mode : actual !== mode;
+  };
+  const sites: { file: string; name: string; operator: string; mode: string }[] = [];
+  for (const file of walk('src')) {
+    if (!/\.(tsx?)$/.test(file) || file.includes('/ui/lock/')) continue;
+    const source = readFileSync(file, 'utf8');
+    for (const match of source.matchAll(COMPARISON)) {
+      sites.push({ file, name: match[1] as string, operator: match[2] as string, mode: match[3] as string });
+    }
+  }
+
+  it('finds the comparisons, rather than an empty walk', () => {
+    expect(sites.length).toBeGreaterThan(150);
+    expect(new Set(sites.map((site) => site.file)).size).toBeGreaterThan(80);
+  });
+
+  it('closes every legacy gate on a dead claim, exactly as a refusal closes it', () => {
+    for (const site of sites) {
+      const onFailure = readMode(projections.failed, site.operator, site.mode);
+      const onRefusal = readMode(projections.refused, site.operator, site.mode);
+      expect(onFailure, `${site.file}: ${site.name}.mode ${site.operator} '${site.mode}'`).toBe(onRefusal);
+      // A grant is the only answer that opens a protected write, so only the comparisons that read a
+      // grant are pinned shut: `< x !== 'DISPLAY'` and `x === 'CHANGE'`. Their negations (`!== 'CHANGE'`,
+      // a "blocked" flag) are expected to be true on a dead claim, which is the gate working.
+      const readsAGrant = (site.operator === '!==' && site.mode === 'DISPLAY') || (site.operator === '===' && site.mode === 'CHANGE');
+      if (readsAGrant) {
+        expect(onFailure, `${site.file}: ${site.name}.mode ${site.operator} '${site.mode}' is a grant test, and a dead claim is not one`).toBe(false);
+      }
+    }
+  });
+
+  it('leaves a screen that has not asked yet able to ask', () => {
+    for (const site of sites) {
+      const idle = readMode(projections.idle, site.operator, site.mode);
+      const pending = readMode(projections.pending, site.operator, site.mode);
+      expect(idle, `${site.file}: idle`).toBe(pending);
+      // whatever idle reads, the first paint and a claim in flight must agree, or a screen would disable
+      // its own controls while it was still asking — which is what makes `awaitingClaim` the honest gate
+      // for a screen that reads the claim itself.
+      expect(idle).toBe(readMode(projections.pending, site.operator, site.mode));
+    }
+    expect(awaitingClaim(IDLE_CLAIM)).toBe(true);
+    expect(awaitingClaim(claim(begin))).toBe(true);
+  });
+
+  it('is honest only because no legacy consumer repeats the platform words', () => {
+    // The projection borrows a refusal's shape to say something the platform never said. That is only
+    // honest while a screen cannot dress it up: the sentences that describe contention live in the
+    // platform and in one catalogue key, and no file that reads the projection writes them. Measured on
+    // the shipped tree, pinned here, so a later screen cannot quietly start.
+    const REFUSAL_WORDS = /being changed by|This opening is display only|does not take the lock back/i;
+    const readers: string[] = [];
+    for (const file of walk('src')) {
+      if (!/\.(tsx?)$/.test(file) || file.includes('/ui/lock/')) continue;
+      const source = readFileSync(file, 'utf8');
+      if (!/const\s+\w*[Ll]ock\w*\s*=\s*useChangeLock\(/.test(source)) continue;
+      readers.push(file);
+      expect(REFUSAL_WORDS.test(source), `${file}: composes refusal wording while a failure is projected as a display answer`).toBe(false);
+    }
+    expect(readers.length).toBeGreaterThan(85);
+    // And the one catalogue key carrying that wording belongs to a screen that reads the claim itself, so
+    // it is only ever shown beside a refusal — never as the advice for a failure the platform did not give.
+    for (const file of readers) {
+      expect(readFileSync(file, 'utf8'), `${file}: renders the display-only recovery sentence`).not.toContain('lock.displayOnlyRecovery');
+    }
+    const claimReaders: string[] = [];
+    for (const file of walk('src')) {
+      if (!/\.(tsx?)$/.test(file)) continue;
+      if (readFileSync(file, 'utf8').includes('useChangeLockClaim(')) claimReaders.push(file);
+    }
+    expect(claimReaders.sort()).toEqual([
+      'src/app/config/batch-document-management/DocumentForm.tsx',
+      'src/app/config/controlling-area/ControllingAreaCompanyAssignmentUI.tsx',
+      'src/app/config/movement-types/MovementTypes.tsx',
+      'src/app/config/valuation-classes/ValuationClasses.tsx',
+      'src/ui/lock/ChangeLock.tsx',
+    ]);
+  });
+
+  it('reaches the fifteen batch and configuration forms through the strings they already render', () => {
+    // Every one of them shows a display answer as `<p role="status">` with `lock.message`, which is where
+    // the failure sentence now lands. Pinned rather than assumed, because the projection is worth nothing
+    // to a screen that discards the strings.
+    const forms = [
+      'src/app/inventory/batch-classes/ClassForm.tsx',
+      'src/app/inventory/batches/new/CreateBatchForm.tsx',
+      'src/app/inventory/batch-sort-sequences/SortForm.tsx',
+      'src/app/inventory/batch-search-strategies/StrategyForm.tsx',
+      'src/app/config/batch-search-procedures/SearchProcedureForm.tsx',
+      'src/app/config/batch-number-assignment/BatchNumberAssignmentForm.tsx',
+      'src/app/config/batch-access-sequences/AccessSequenceForm.tsx',
+      'src/app/config/batch-status-plants/PlantBatchStatusForm.tsx',
+      'src/app/config/batch-number-ranges/BatchNumberRangeForms.tsx',
+      'src/app/config/batch-search-allocations/AllocationForm.tsx',
+      'src/app/config/batch-condition-tables/ConditionTableForm.tsx',
+      'src/app/config/batch-initial-status/InitialStatusForm.tsx',
+      'src/app/config/batch-strategy-types/StrategyTypeForm.tsx',
+      'src/app/config/batch-classification/ClassificationForm.tsx',
+      'src/app/config/wip-batch/WipForm.tsx',
+    ];
+    expect(forms.length).toBe(15);
+    let withRemedy = 0;
+    for (const file of forms) {
+      const source = readFileSync(file, 'utf8');
+      expect(source.match(COMPARISON), `${file}: reads a projected mode`).toBeTruthy();
+      // The failure sentence is the `message`; the recovery line rides in `remedy`, and one of the fifteen
+      // renders only the first. Measured rather than assumed, because the projection is worth nothing to a
+      // screen that discards the strings.
+      expect(/\.(message)\b/.test(source), `${file}: renders the projected message`).toBe(true);
+      withRemedy += /\.remedy\b/.test(source) ? 1 : 0;
+    }
+    expect(withRemedy).toBeGreaterThanOrEqual(14);
   });
 });

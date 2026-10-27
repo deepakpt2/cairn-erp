@@ -102,7 +102,28 @@ export function awaitingClaim(claim: ChangeLockClaim): boolean {
 
 /** The value `useChangeLock` has always returned, derived from the claim. */
 export function projectClaim(claim: ChangeLockClaim): ChangeLockState | null {
-  return claim.phase === 'open' || claim.phase === 'refused' ? claim.state : null;
+  if (claim.phase === 'open' || claim.phase === 'refused') return claim.state;
+  /**
+   * A claim that never reached the server is projected as a display answer, not as the absence of one.
+   *
+   * `null` reads to a legacy screen as "nothing has been asked yet", so the form stays open, the save is
+   * pressed, and the answer it gets is `ENQUEUE_NOT_HELD` — "Open the object in change. A save does not
+   * take a lock the screen did not hold." — advice for an operator who never tried, when the truth is that
+   * this screen tried and the request died. The refusal-shaped projection says what happened, in the two
+   * lines the screen already renders, and closes whatever a grant opened.
+   *
+   * This is only safe because the consumer surface was measured first, and is pinned by
+   * `tests/change-lock-ux-contract.test.ts`: every place that compares a projected `mode` with `DISPLAY`
+   * either gates on it or echoes `message`/`remedy` — none composes wording of its own — and no screen
+   * treats the projection as a boolean, the family Pass 35 closed. A failure therefore cannot be read as
+   * permission anywhere, and cannot be dressed up as a refusal the platform never made. `idle` and `pending` stay `null`: the first render has no claim to report on, and a
+   * screen has to be able to ask for one.
+   */
+  if (claim.phase === 'failed') {
+    const { message, remedy, detail } = claimNotice(claim);
+    return { mode: 'DISPLAY', message, remedy: [detail, remedy].filter(Boolean).join(' ') || null };
+  }
+  return null;
 }
 
 /**

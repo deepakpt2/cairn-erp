@@ -1,7 +1,8 @@
 /**
  * The shared change-lock claim: its phases, and what every consumer of the projection may rely on.
  *
- * `useChangeLock` returns `ChangeLockState | null` to 143 call sites, and Pass 33 left the gap this
+ * `useChangeLock` returns `ChangeLockState | null` to the legacy consumers counted in
+ * `tests/change-lock-ux-contract.test.ts`, and Pass 33 left the gap this
  * file closes: the hook had no rejection handling, and `null` stood for "not asked", "answer owed" and
  * "claim failed" all at once. The lifecycle now lives in `src/ui/lock/claim.ts`, which the hook drives
  * with `useReducer`, so these are assertions about the state machine the shipped hook actually runs —
@@ -135,9 +136,20 @@ describe('the shared change-lock claim', () => {
     // A refusal and a failure are told apart by the words on the screen, not only by the phase.
     expect(claimNotice(failedClaim).message).not.toBe(claimNotice(run(IDLE_CLAIM, begin(), refused())).message);
     expect(claimNotice(failedClaim).message).not.toMatch(/is being changed by|display only/i);
-    // Nothing may read this as authorised: the projection is "no answer", the same value a pending
-    // claim projects, so a gate on `mode !== 'CHANGE'` stays shut and a `held` derivation goes false.
-    expect(projectClaim(failedClaim)).toBeNull();
+    // Nothing may read this as authorised. Pass 36 changed what a legacy screen is *told*: the projection
+    // borrows the shape of a display answer, because `null` read as "nothing has been asked yet" — the
+    // form stayed open, the save went, and the server answered with advice for an operator who never tried
+    // to open the object. A gate on `mode === 'CHANGE'` stays shut, `mode !== 'DISPLAY'` closes, and the
+    // two lines a legacy screen renders are this failure's own.
+    const projectedFailure = projectClaim(failedClaim);
+    expect(projectedFailure?.mode).toBe('DISPLAY');
+    expect(projectedFailure?.message).toBe(t('lock.claimFailed'));
+    expect(projectedFailure?.remedy, 'the safe line and the recovery sentence travel together').toBe(
+      ['Network request failed', t('lock.claimFailedRecovery')].join(' '),
+    );
+    expect(projectedFailure?.remedy).not.toMatch(/is being changed by|display only/i);
+    // A claim still in flight is still no answer at all, so a screen can ask for its first one.
+    expect(projectClaim(run(IDLE_CLAIM, begin()))).toBeNull();
     expect(shouldDispatch(failedClaim)).toBe(false);
     expect(failedClaim.queued).toBe(false);
     // A press that was already kept is cleared by the failure rather than replayed later.
@@ -315,21 +327,36 @@ describe('the shared change-lock claim', () => {
       failed: run(IDLE_CLAIM, begin(), rejected()),
     };
     const states = Object.fromEntries(Object.entries(phases).map(([name, claim]) => [name, projectClaim(claim)]));
-    expect(states).toEqual({ idle: null, pending: null, open: GRANTED, refused: REFUSED, failed: null });
+    expect(states).toEqual({
+      idle: null,
+      pending: null,
+      open: GRANTED,
+      refused: REFUSED,
+      // Pass 36: a dead claim is projected, not swallowed. `null` was the value that meant "nothing has
+      // been asked yet", so a legacy screen carried on as if the claim were still ahead of it.
+      failed: { mode: 'DISPLAY', message: t('lock.claimFailed'), remedy: ['Failed to fetch', t('lock.claimFailedRecovery')].join(' ') },
+    });
 
     for (const claim of Object.values(phases)) {
       const projected = projectClaim(claim);
       // The submit gate: only a grant lets a protected operation through.
       expect(projected?.mode !== 'CHANGE').toBe(claim.phase !== 'open');
-      // The display-only notice and its refusal styling: never lit by a failure.
-      expect(projected?.mode === 'DISPLAY').toBe(claim.phase === 'refused');
+      // A display answer is what a refusal and a dead claim have in common now, and it is the value every
+      // legacy `writable`, `displayOnly` and `disabled` derivation reads.
+      expect(projected?.mode === 'DISPLAY').toBe(claim.phase === 'refused' || claim.phase === 'failed');
       // A `held` derivation: false while pending and after a failure, exactly as it is when nothing
       // was asked for. This is the one behaviour a legacy screen gains: no stale grant survives a
       // re-claim, because the projection follows the claim rather than the last answer it happened to see.
       expect(projected?.mode === 'CHANGE').toBe(claim.phase === 'open');
+      // What the two display answers say is never interchangeable: the wording is the platform's for a
+      // refusal, and this screen's own failure for a dead claim.
+      if (claim.phase === 'refused') expect(projected?.message).toBe(REFUSED.message);
+      if (claim.phase === 'failed') expect(projected?.message).toBe(t('lock.claimFailed'));
     }
-    // The phase a consumer cannot survive confusing is the one the projection keeps distinct.
-    expect(states.failed).toBe(states.pending);
+    // The phase a consumer cannot survive confusing is still told apart — by the strings, since the mode
+    // is deliberately shared. A pending claim owes an answer and projects nothing; a failed one is over.
+    expect(states.failed).not.toBe(states.pending);
+    expect(states.pending).toBeNull();
     expect(phases.failed.phase).not.toBe(phases.pending.phase);
     expect(phases.failed.error).not.toBeNull();
     expect(phases.pending.error).toBeNull();

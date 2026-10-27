@@ -166,6 +166,9 @@ export const TARGETS = [
   { id: 'divisions', client: 'T974', label: 'SCR-022 OVXB Division create/change/copy/deactivate and exact-capability access' },
   { id: 'payment-methods', client: 'T989', label: 'Payment Methods create/change/retire, history and display-only access' },
   { id: 'tenant-creation', client: 'T971', label: 'SCR-032 tenant creation: empty and standard paths, copy refused, names shared and a key refused' },
+  { id: 'batch-document-management', client: 'T867', label: 'Document management for batches: the claim the screen opens on mount, the refusal of a second session, and the failure it must say out loud' },
+  { id: 'movement-types', client: 'T868', label: 'Movement type configuration: creation without a lock, a change from the grant, a refused second session that keeps its read-only action, and a claim that dies out loud' },
+  { id: 'valuation-classes', client: 'T869', label: 'Valuation class configuration: three sections, three claims — a refusal on one does not reach into the next, and a dead claim names itself' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

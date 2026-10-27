@@ -190,4 +190,11 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   // SCR-032 · B3 acceptance runs on the reviewed loopback database, like every other
   // local target; the probes it creates are destroyed by the check itself.
   'tenant-creation': { database: 'cairn_b210', port: '5432', batch: 'SCR-032 local loopback' },
+  // The three configuration screens whose change lock Pass 36 proved in a browser. They came to no earlier
+  // batch, so each is labelled with the reserved fixture key that isolates it — the same thing that isolates
+  // every other local target now that the per-target clusters are gone — and runs on the reviewed loopback
+  // database. Their checks write only inside that tenant and delete it again in the runner's cleanup.
+  'batch-document-management': { database: 'cairn_b210', port: '5432', batch: 'T867 change-lock local loopback' },
+  'movement-types': { database: 'cairn_b210', port: '5432', batch: 'T868 change-lock local loopback' },
+  'valuation-classes': { database: 'cairn_b210', port: '5432', batch: 'T869 change-lock local loopback' },
 };
