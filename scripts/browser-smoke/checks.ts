@@ -135,6 +135,7 @@ import { carryforward } from './carryforward';
 import { customerCredit } from './credit';
 import { creditMonitor } from './credit-monitor';
 import { creditRelease } from './credit-release';
+import { salesOrderToInvoice } from './sales-order-to-invoice';
 import { trialBalance } from './trial-balance';
 import { balanceSheet } from './balance-sheet';
 import { glReporting } from './gl-reporting';
@@ -5158,6 +5159,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'credit': customerCredit,
   'credit-monitor': creditMonitor,
   'credit-release': creditRelease,
+  'sales-order-to-invoice': salesOrderToInvoice,
   'trial-balance': trialBalance,
   'balance-sheet': balanceSheet,
   'gl-reporting': glReporting,

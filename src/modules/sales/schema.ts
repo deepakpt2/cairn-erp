@@ -4,12 +4,14 @@
  * The order is the customer's commitment: an ordered quantity, a price a standing condition record
  * answered for, and the credit determination the save itself raised. It reserves no stock and posts
  * no accounting document, which is why nothing here refers to a period, a valuation or a movement.
- * The outbound delivery, the goods issue and the billing document are the next links of the chain and
- * arrive with their own tables; the quantities a follow-on advances are added there rather than
- * sitting here unread, and so do the pricing procedures, their steps and the access sequences — a
- * master with no reader is a table only a test would write (DI-018).
+ * The outbound delivery, its picking, the goods issue and the billing document are the rest of the chain:
+ * the delivery carries what left the plant and the material document that moved it, the billing document
+ * carries what the customer owes and the invoice that says so. Quantities a follow-on document advances are
+ * held there and never copied back onto the order line, so an order and its fulfillment cannot disagree by
+ * arithmetic. The pricing procedures, their steps and the access sequences are still absent — a master with
+ * no reader is a table only a test would write (DI-018).
  */
-import { pgTable, varchar, char, integer, numeric, boolean, date, primaryKey, foreignKey, uniqueIndex, check } from 'drizzle-orm/pg-core';
+import { pgTable, timestamp, varchar, char, integer, numeric, boolean, date, primaryKey, foreignKey, uniqueIndex, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { currency, unitOfMeasure } from '../../platform/tables/reference';
@@ -147,3 +149,160 @@ export const salesConditionRecord = pgTable('sales_condition_record', {
 
 /** The tables this module owns, named for the audit that checks each one is registered and policed. */
 export const salesTableNames = ['sales_order', 'sales_order_line', 'sales_condition_record'] as const;
+
+/**
+ * The outbound delivery — LIKP. It carries the plant the goods leave, the order it was created from and,
+ * once the movement has run, the material document that did it. No quantity counter of the order is kept
+ * here or there: what stands delivered is read from the delivery lines that reference the order line.
+ */
+export const DELIVERY_STATUSES = ['OPEN', 'PICKED', 'GOODS_ISSUED', 'CANCELLED'] as const;
+
+export const delivery = pgTable('delivery', {
+  client: tenant(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 2 }).notNull().default('LF'),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+  division: varchar('division', { length: 2 }).notNull(),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  deliveryDate: date('delivery_date', { mode: 'string' }).notNull(),
+  goodsMovementDate: date('goods_movement_date', { mode: 'string' }),
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }),
+  materialDocumentYear: integer('material_document_year'),
+  headerText: varchar('header_text', { length: 100 }),
+  version: integer('version').notNull().default(1),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.deliveryNumber] }),
+  check('delivery_status_ck', sql`${t.status} in ('OPEN', 'PICKED', 'GOODS_ISSUED', 'CANCELLED')`),
+  check('delivery_version_ck', sql`${t.version} > 0`),
+  check('delivery_issued_needs_document_ck', sql`${t.status} <> 'GOODS_ISSUED' or (${t.materialDocumentNumber} is not null and ${t.materialDocumentYear} is not null)`),
+  foreignKey({
+    name: 'delivery_order_fk',
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [salesOrder.client, salesOrder.orderNumber],
+  }).onDelete('cascade'),
+]);
+
+/**
+ * One item of a delivery — LIPS. The four order-facing quantities stay on the row so the over-delivery
+ * refusal is readable from the delivery alone, and `remaining_quantity` is arithmetic the database checks
+ * rather than a figure the form was trusted with.
+ */
+export const deliveryLine = pgTable('delivery_line', {
+  client: tenant(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  quantityUnit: char('quantity_unit', { length: 6 }).notNull().references(() => unitOfMeasure.code),
+  orderedQuantity: numeric('ordered_quantity', { precision: 13, scale: 3 }).notNull(),
+  deliveredBefore: numeric('delivered_before', { precision: 13, scale: 3 }).notNull().default('0'),
+  deliveryQuantity: numeric('delivery_quantity', { precision: 13, scale: 3 }).notNull(),
+  remainingQuantity: numeric('remaining_quantity', { precision: 13, scale: 3 }).notNull(),
+  pickedQuantity: numeric('picked_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+  goodsIssueQuantity: numeric('goods_issue_quantity', { precision: 13, scale: 3 }).notNull().default('0'),
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.deliveryNumber, t.lineNumber] }),
+  check('delivery_line_status_ck', sql`${t.status} in ('OPEN', 'PICKED', 'GOODS_ISSUED')`),
+  check('delivery_line_quantity_ck', sql`${t.orderedQuantity} > 0 and ${t.deliveryQuantity} > 0 and ${t.deliveredBefore} >= 0`),
+  check('delivery_line_remaining_ck', sql`${t.remainingQuantity} = ${t.orderedQuantity} - ${t.deliveredBefore} - ${t.deliveryQuantity} and ${t.remainingQuantity} >= 0`),
+  check('delivery_line_picked_ck', sql`${t.pickedQuantity} >= 0 and ${t.pickedQuantity} <= ${t.deliveryQuantity}`),
+  check('delivery_line_issue_completeness_ck', sql`${t.status} <> 'GOODS_ISSUED' or (${t.pickedQuantity} = ${t.deliveryQuantity} and ${t.goodsIssueQuantity} = ${t.deliveryQuantity})`),
+]);
+
+/** A picking confirmation — append-only, so a wrong one is answered by a row of the opposite sign. */
+export const deliveryPicking = pgTable('delivery_picking', {
+  client: tenant(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  pickNumber: integer('pick_number').notNull(),
+  quantityDelta: numeric('quantity_delta', { precision: 13, scale: 3 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }).notNull(),
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
+  reason: varchar('reason', { length: 60 }),
+  requestKey: varchar('request_key', { length: 64 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull().default('SYSTEM'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.deliveryNumber, t.lineNumber, t.pickNumber] }),
+  check('delivery_picking_delta_ck', sql`${t.quantityDelta} <> 0`),
+]);
+
+/**
+ * The billing document — VBRK. It posts nothing of its own: the receivable is the accounting-invoice
+ * service's work, and this row keeps the document number it returned so the link reads both ways.
+ */
+export const BILLING_STATUSES = ['OPEN', 'POSTED', 'CANCELLED'] as const;
+
+export const billingDocument = pgTable('billing_document', {
+  client: tenant(),
+  billingNumber: varchar('billing_number', { length: 20 }).notNull(),
+  documentType: varchar('document_type', { length: 2 }).notNull().default('F2'),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  salesOrg: varchar('sales_org', { length: 4 }).notNull(),
+  distributionChannel: varchar('distribution_channel', { length: 2 }).notNull(),
+  division: varchar('division', { length: 2 }).notNull(),
+  customerNumber: varchar('customer_number', { length: 40 }).notNull(),
+  companyCode: varchar('company_code', { length: 10 }).notNull(),
+  currency: char('currency', { length: 3 }).notNull().references(() => currency.code),
+  billingDate: date('billing_date', { mode: 'string' }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }),
+  status: varchar('status', { length: 16 }).notNull().default('OPEN'),
+  netValue: numeric('net_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  taxValue: numeric('tax_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  grossValue: numeric('gross_value', { precision: 23, scale: 4 }).notNull().default('0'),
+  customerInvoiceNumber: varchar('customer_invoice_number', { length: 20 }),
+  journalDocumentNumber: varchar('journal_document_number', { length: 20 }),
+  referenceDocumentText: varchar('reference_document_text', { length: 100 }),
+  version: integer('version').notNull().default(1),
+  requestKey: varchar('request_key', { length: 64 }),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.billingNumber] }),
+  check('billing_document_status_ck', sql`${t.status} in ('OPEN', 'POSTED', 'CANCELLED')`),
+  check('billing_document_posted_needs_invoice_ck', sql`${t.status} <> 'POSTED' or (${t.customerInvoiceNumber} is not null and ${t.journalDocumentNumber} is not null)`),
+  uniqueIndex('billing_document_delivery_uq').on(t.client, t.deliveryNumber),
+]);
+
+/** One item of a billing document — VBRP. Written once, and one delivery line earns one of them, ever. */
+export const billingDocumentLine = pgTable('billing_document_line', {
+  client: tenant(),
+  billingNumber: varchar('billing_number', { length: 20 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  deliveryNumber: varchar('delivery_number', { length: 20 }).notNull(),
+  deliveryLineNumber: integer('delivery_line_number').notNull(),
+  orderNumber: varchar('order_number', { length: 20 }).notNull(),
+  orderLineNumber: integer('order_line_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  billingQuantity: numeric('billing_quantity', { precision: 13, scale: 3 }).notNull(),
+  netPrice: numeric('net_price', { precision: 23, scale: 4 }).notNull(),
+  priceUnit: integer('price_unit').notNull().default(1),
+  netAmount: numeric('net_amount', { precision: 23, scale: 4 }).notNull(),
+  taxCode: varchar('tax_code', { length: 4 }),
+  taxRate: numeric('tax_rate', { precision: 7, scale: 4 }).notNull().default('0'),
+  taxAmount: numeric('tax_amount', { precision: 23, scale: 4 }).notNull().default('0'),
+  conditionNumber: varchar('condition_number', { length: 18 }).notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull().default('SYSTEM'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.billingNumber, t.lineNumber] }),
+  check('billing_document_line_quantity_ck', sql`${t.billingQuantity} > 0 and ${t.priceUnit} > 0`),
+  check('billing_document_line_amount_math_ck', sql`abs(${t.netAmount} - (${t.billingQuantity} * ${t.netPrice} / ${t.priceUnit})) < 0.005`),
+  uniqueIndex('billing_document_line_delivery_line_uq').on(t.client, t.deliveryNumber, t.deliveryLineNumber),
+  foreignKey({
+    name: 'billing_document_line_condition_fk',
+    columns: [t.client, t.conditionNumber],
+    foreignColumns: [salesConditionRecord.client, salesConditionRecord.conditionNumber],
+  }).onDelete('restrict'),
+]);

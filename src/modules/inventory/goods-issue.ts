@@ -72,9 +72,10 @@ export interface GoodsIssueScenario {
   description: string;
   accountAssignment: 'COST_CENTER' | 'NONE' | 'ORDER';
   /** The account-determination event the offsetting debit reads. */
-  expenseEvent: 'CONSUMPTION' | 'SCRAP' | 'PRODUCTION_CONSUMPTION';
-  /** Which screen offers this movement: MIGO carries the order issue (SCR-139). */
-  screen: 'MB1A' | 'MIGO';
+  expenseEvent: 'CONSUMPTION' | 'SCRAP' | 'PRODUCTION_CONSUMPTION' | 'SALES_ISSUE';
+  /** Which screen offers this movement: MIGO carries the order issue (SCR-139), Sales carries the
+   * customer shipment, which no other screen may post. */
+  screen: 'MB1A' | 'MIGO' | 'SALES';
 }
 
 export const GOODS_ISSUE_SCENARIOS: readonly GoodsIssueScenario[] = [
@@ -89,6 +90,15 @@ export const GOODS_ISSUE_SCENARIOS: readonly GoodsIssueScenario[] = [
     expenseEvent: 'SCRAP', screen: 'MB1A',
   },
   {
+    // The customer shipment of a sales delivery. Offered by the delivery alone: a 601 posted from a stock
+    // screen would move goods against no order and no picked quantity, and the invariant that makes it a
+    // customer goods issue is the delivery it came from. It charges no controlling object — the offset is the
+    // cost of the goods sold, read from the sales event on the material's own valuation class.
+    code: '601', movementType: 'GI_CUSTOMER', reversalMovementType: 'GI_CUSTOMER_REVERSAL',
+    description: 'Customer goods issue from a delivery', accountAssignment: 'NONE',
+    expenseEvent: 'SALES_ISSUE', screen: 'SALES',
+  },
+  {
     // SCR-139: the component issue a production order consumes. Offered by MIGO alone —
     // SAP's MB1A reaches it too, and canon keeps one screen per movement so the matrix
     // in MIGO stays the single place an action and a reference select a movement.
@@ -100,6 +110,8 @@ export const GOODS_ISSUE_SCENARIOS: readonly GoodsIssueScenario[] = [
 
 /** The movements the MB1A screen offers: the order issue lives on MIGO (SCR-139). */
 export const MB1A_SCENARIOS = GOODS_ISSUE_SCENARIOS.filter((s) => s.screen === 'MB1A');
+/** The movement the sales delivery posts: the customer shipment, offered by no other screen. */
+export const SALES_ISSUE_SCENARIOS = GOODS_ISSUE_SCENARIOS.filter((s) => s.screen === 'SALES');
 /** The movements MIGO posts from its own grid. */
 export const MIGO_ISSUE_SCENARIOS = GOODS_ISSUE_SCENARIOS.filter((s) => s.screen === 'MIGO');
 
@@ -193,19 +205,23 @@ function requireDate(value: string, what: string) {
   }
 }
 
-function resolveScenario(code: string, screen: 'MB1A' | 'MIGO'): GoodsIssueScenario {
+function resolveScenario(code: string, screen: GoodsIssueScenario['screen']): GoodsIssueScenario {
   const found = GOODS_ISSUE_SCENARIOS.find((s) => s.code === code.trim());
   if (found && found.screen === screen) return found;
   if (found) {
     throw new GoodsIssueError(
-      `Movement ${found.code} is posted from ${found.screen === 'MIGO' ? 'MIGO' : 'MB1A'}, not from this screen.`,
+      `Movement ${found.code} is posted from ${
+        found.screen === 'MIGO' ? 'MIGO' : found.screen === 'SALES' ? 'the sales delivery screen' : 'MB1A'
+      }, not from this screen.`,
       found.screen === 'MIGO'
         ? 'Open MIGO, choose Goods issue with an order reference, then post it there.'
-        : 'Post this movement from the goods issue screen.',
+        : found.screen === 'SALES'
+          ? 'Post the goods issue on the delivery, where the picked quantity and the order reference stand.'
+          : 'Post this movement from the goods issue screen.',
     );
   }
   const trimmed = code.trim();
-  if (['202', '552', '262'].includes(trimmed)) {
+  if (['202', '552', '262', '602'].includes(trimmed)) {
     throw new GoodsIssueError(
       `${trimmed} is a reversal, not an issue.`,
       'Reverse a posted goods issue through MBST (INV.REVERSE); this screen posts issues only.',
@@ -213,7 +229,9 @@ function resolveScenario(code: string, screen: 'MB1A' | 'MIGO'): GoodsIssueScena
   }
   throw new GoodsIssueError(
     `Movement type ${trimmed || '(empty)'} is not a goods issue canon delivers.`,
-    'Goods issues stand on 201 (goods issue for a cost centre) or 551 (scrapping).',
+    screen === 'SALES'
+      ? 'A sales delivery stands on 601 (goods issue for a customer shipment).'
+      : 'Goods issues stand on 201 (goods issue for a cost centre) or 551 (scrapping).',
   );
 }
 
@@ -329,7 +347,7 @@ async function toView(
  */
 export async function postGoodsIssue(
   input: PostGoodsIssueInput,
-  screen: 'MB1A' | 'MIGO' = 'MB1A',
+  screen: 'MB1A' | 'MIGO' | 'SALES' = 'MB1A',
   options?: { tx?: Tx },
 ): Promise<GoodsIssueView> {
   requireDate(input.postingDate, 'The posting date');

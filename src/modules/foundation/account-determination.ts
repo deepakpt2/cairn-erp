@@ -53,6 +53,13 @@ export const POSTING_EVENTS: PostingEvent[] = [
   // The credit side of a production order receipt (WRX-style): what the order produced is worth
   // to the plant, offset against inventory. Added with SCR-140.
   { event: 'PRODUCTION_OUTPUT', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  // The sales delivery link. A customer goods issue debits the cost of the goods that left the plant, on the
+  // material's own valuation class, exactly as a cost-centre issue does; the revenue side is judged per chart
+  // and not per material, because what the customer is charged is not a property of the stock. Registered with
+  // no seeded row: a tenant that has not maintained the event is refused at posting, which is the honest answer
+  // (§14.7, DI-020).
+  { event: 'SALES_ISSUE', referenceAlias: 'GBB', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
+  { event: 'SALES_REVENUE', referenceAlias: 'ERL', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'PRICE_DIFFERENCE', referenceAlias: 'PRD', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: true, usesGeneralModifier: false },
   { event: 'TAX', referenceAlias: 'MWS', expectedAccountKind: 'BALANCE_SHEET', usesValuationClass: false, usesGeneralModifier: false },
   { event: 'FXGAIN', referenceAlias: 'FXGAIN', expectedAccountKind: 'PL_STATEMENT', usesValuationClass: false, usesGeneralModifier: false },

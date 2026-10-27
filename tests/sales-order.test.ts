@@ -377,16 +377,19 @@ describe('sales order and its pricing', () => {
         update customer_sales_area set is_blocked = false
         where client = ${tenant.client} and partner_number = ${BLOCKED_CUSTOMER}
       `);
+      // 400.00, not 200.00: an order this customer already stands with is now in the basis, because a
+      // commitment a release let through is still a commitment. The figure below leaves room for the first
+      // order (125.00 against the other order's 125.00) and takes it away on the change.
       await saveCustomerCredit({
         client: tenant.client, changedBy: ACTOR, customer: BLOCKED_CUSTOMER, creditControlArea: AREA,
-        creditLimit: '200.00', riskCategory: 'A', isBlocked: false, changeReason: 'Test fixture limit for the change case.',
+        creditLimit: '400.00', riskCategory: 'A', isBlocked: false, changeReason: 'Test fixture limit for the change case.',
       });
     });
     const created = await createSalesOrder({
       ...base, customerNumber: BLOCKED_CUSTOMER, requestKey: 'SD9190-CREDIT-0002',
       lines: [{ lineNumber: undefined, materialNumber: MATERIAL, plant: '1000', orderQuantity: 5, quantityUnit: 'UNT' }],
     });
-    expect(created.credit.status).toBe('PASSED'); // 125.00 against a 200.00 limit
+    expect(created.credit.status).toBe('PASSED'); // 125.00 on top of the other order against a 400.00 limit
     const view = await getSalesOrder(tenant.client, created.orderNumber);
     const changed = await changeSalesOrder({
       ...base, customerNumber: BLOCKED_CUSTOMER,

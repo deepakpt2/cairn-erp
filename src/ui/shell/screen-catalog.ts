@@ -2469,6 +2469,26 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "sales-pricing",
     accepts: ["customer", "material"],
   },
+  {
+    id: "/sales/delivery",
+    path: "/sales/delivery",
+    query: {},
+    code: "SALES.DELIVERY.CREATE",
+    title: "Outbound deliveries",
+    area: "sales",
+    family: "sales-delivery",
+    accepts: ["delivery", "order"],
+  },
+  {
+    id: "/sales/billing",
+    path: "/sales/billing",
+    query: {},
+    code: "SALES.BILLING.CREATE",
+    title: "Billing documents",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["billing", "customer", "delivery"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [

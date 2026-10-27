@@ -130,15 +130,57 @@ The first link of the order-to-invoice chain is live at the service level and on
 * `/sales/conditions` (`CFG.SALES.CONDITION.MAINTAIN`) maintains the price one customer and material carries for
   a period. A sales order takes its prices from these records and nowhere else: an item no record prices is
   refused rather than priced at zero, and the record the order read is named on the line.
-* Evidence run on the box for this commit: `tests/sales-order.test.ts` 17/17 (create, pricing from the record,
+* Evidence run on the box for the order commit, and run again here for the fulfillment one:
+  `tests/sales-order.test.ts` 17/17 (create, pricing from the record,
   tax by company country, every refusal — no record, over-precise quantity, unknown unit, material not at the
   plant, blocked customer sales area, unknown sales area, replay of a repeated submission, change with a stale
   version and with a silently dropped item, rejection keeping its reason, credit block then authorized release
   then a refused second release, a fresh determination when a change takes the order over the limit, cancel once
-  and the transitions that no longer exist, and a condition change closing the span it replaced);
+  and the transitions that no longer exist, and a condition change closing the span it replaced). The change case
+  holds a 400.00 limit rather than the 200.00 it was written with: since DI-019 a standing sales commitment of the
+  same customer is in the credit basis, and the previous case's order is one;
   `npm run db:verify` 13/13 after applying `drizzle/9190`; `tsc --noEmit` 152, none of them in a sales file;
   `screen-links`, `production-documentation-consistency`, `credit-release`, `credit-monitor`, `customer-invoice`,
   `purchase-order` and `browser-target-constrained-driving` green in the same run (8 files, 54 tests).
 * Not done, and recorded rather than glossed: there is no browser target for either new screen yet, because the
   journey a target would drive does not end at an order — see DI-020. The delivery, goods-issue and billing links,
   the rest of the pricing vocabulary (DI-018) and the exposure basis (DI-019) are the next three entries.
+
+## Sales fulfillment and billing, as it stands after DI-020
+
+The rest of the chain is written and now **run**: `drizzle/9191`, `src/modules/sales/{delivery,billing,
+fulfillment-quantities,exposure}.ts`, the 601/602 scenario in `src/modules/inventory/goods-issue.ts`, the two
+screens `/sales/delivery` and `/sales/billing`, their server actions and catalog entries, `tests/
+sales-delivery.test.ts` (9/9), and one browser target `sales-order-to-invoice` on fixture key T871. The migration
+applies, `npm run db:verify` passes, and the focused and neighbouring suites are green on a PostgreSQL 17.11
+cluster run in the workspace, because the verification box stayed unreachable. `npm run build` and the browser
+target are the two gates still owed there: this workspace holds 2 GB, which the Next build worker will not fit in,
+and DI-020 records how far the dev-server attempt got and what it proved about the routes. Owner instruction
+2026-10-28 defers every browser target until the test server is available, so those two gates wait there rather
+than being retried here. Everything else,
+including the whole evidence set, is in DI-020.
+
+What the design commits to, and what a reviewer should read the code against:
+
+* **One author of the delivered quantity.** Nothing is copied onto the order line or the delivery line to make
+  progress readable: `fulfillment-quantities.ts` sums it from the delivery and billing rows that stand, which is
+  why a cancelled delivery returns the quantity to the order and why the same arithmetic freezes an order line.
+* **The movement is the inventory engine's, not a parallel one.** `postDeliveryGoodsIssue` calls
+  `postGoodsIssue(..., 'SALES', { tx })` inside its own transaction, so stock, valuation, the material document
+  and the journal commit or roll back with the delivery status. The link back is `delivery.material_document_number`
+  plus the deterministic request key `sd-gi-<client>-<deliveryNumber>`, because `material_document_line` holds no
+  sales columns; `material_doc_display` therefore shows the delivery's movement as its own document, and the
+  reversal is MBST's `reverseMaterialDocument`, which is the only act that takes the stock back and refuses a
+  second reversal of a line.
+* **The invoice is the accounting service's, not a parallel one.** A billing document prices from the order line
+  and its condition record, computes tax from the tax master the order used, and posts through
+  `postCustomerInvoice` with the billing number as the customer `reference`; `cancelBillingDocument` cancels
+  through `cancelCustomerInvoice`. A `uniqueIndex (client, delivery_number)` on `billing_document` is what makes
+  "billed once" a database fact.
+* **Credit is a refusal at three points and a hold at the fourth.** Delivery creation, picking and the goods issue
+  refuse a standing block; a breach the goods issue itself causes blocks the *receivable* (the movement is never
+  undone by a credit act). The billing document stays OPEN and holds the invoice until a release stands, and
+  re-submitting it then posts the same document rather than a second one.
+* **Every gate for this is owed.** The box was unreachable for the whole pass, so no migrate, `db:verify`,
+  `tsc`, focused test, build or browser run has touched it. Until those run and pass on persisted rows, the
+  journey is not accepted at any level — DI-020 says so, and so does this page.

@@ -407,8 +407,15 @@ blocked milestone), and given acceptance criteria so the next person can close i
   /finance/credit-monitor, and prove with tests that an order which pushes exposure past the limit blocks the
   *next* document and that releasing it re-reads the same basis. `tests/credit-release.test.ts` and
   `tests/credit-monitor.test.ts` stay green unchanged.
+* **Status (the pass that built DI-020).** Unchanged as a defect, narrowed in one respect: the basis is now
+  `openSalesCommitments`, which adds the standing `credit_determination` value of sales documents that are not
+  yet billed, so a delivery or a blocked order does move the ladder — and the exclusion of the document being
+  judged (`excludeSalesDocument`) is passed at all three call sites, so a document never blocks itself. What is
+  still true of DI-019 is the part it names: the exposure figure is `amount_local` of unclosed journal lines with
+  no currency conversion, and open orders are counted only through their determinations rather than as receivable
+  equivalents. Left open on purpose; nothing in the fulfillment work depended on closing it.
 
-## DI-020 — The outbound delivery, goods issue and billing links of the sales chain do not exist yet
+## DI-020 — The outbound delivery, goods issue and billing links of the sales chain (built, service gates green; build and browser target owed)
 
 * **Severity:** High. **Area:** `src/modules/sales`, `src/modules/inventory`, SD order-to-invoice.
 * **Evidence:** the database holds `sales_order`, `sales_order_line` and `sales_condition_record` and no
@@ -434,3 +441,86 @@ blocked milestone), and given acceptance criteria so the next person can close i
   one browser target covering create → deliver → pick → goods issue → bill → payment and clearing, with blocked
   credit, insufficient stock, partial fulfillment and a repeated submission as its failure paths. The enqueue
   guard's object classes gain `sales_order` and the new documents at the same time, so a change lock covers them.
+
+* **Status (the pass that built it).** `drizzle/9191_sales_delivery_billing.sql` creates the five document tables
+  (`delivery`, `delivery_line`, `delivery_picking`, `billing_document`, `billing_document_line`) with forced RLS,
+  literal grants and the five `SALES.*` capability codes; movement 601 and its 602 reversal arrive as a
+  `GOODS_ISSUE_SCENARIOS` entry in `src/modules/inventory/goods-issue.ts` (`screen: 'SALES'`,
+  `expenseEvent: 'SALES_ISSUE'`), which `ensureMovements` seeds per tenant, so no movement master migration is
+  needed. `src/modules/sales/delivery.ts` creates a delivery from the open quantity of one order, records picks,
+  and posts the goods issue by calling `postGoodsIssue` **inside** the delivery transaction;
+  `src/modules/sales/billing.ts` bills the goods-issued quantity through `postCustomerInvoice` and cancels
+  through `cancelCustomerInvoice`. Credit is enforced at the three points CAIRN.md §14.8 names: delivery
+  creation, picking and the goods issue refuse a standing block, and a block raises at the billing release,
+  which holds the invoice instead of undoing the movement. `changeSalesOrder` refuses to drop, reject, or
+  re-quantity a line a delivery has drawn on, and `cancelSalesOrder` refuses an order the chain has touched.
+  Screens `/sales/delivery` and `/sales/billing` with their server actions, both `screen-catalog.ts` entries,
+  `tests/sales-delivery.test.ts` and browser target `sales-order-to-invoice` (fixture key T871, the next free
+  key after settlement's T870, because T982 is the runner's own cross-tenant probe, which
+  `tests/storage-location-ui-contract.test.ts:83` refuses for any target) are written.
+* **What the gates said.** The verification box stayed unreachable (`ssh -p 2222 cairn@107.173.201.115` times
+  out while a raw connect to the port answers), so the gates were run here instead, on a PostgreSQL 17.11
+  cluster the sandbox owns: `cairn_app` without `BYPASSRLS` as the runtime role and `cairn` as the migration
+  role, the repository's own development defaults, 313 migrations applied including `+ 9191_sales_delivery_billing.sql`.
+  `npm run db:verify` passes 13 of 13. `tests/sales-delivery.test.ts` passes 9 of 9 and `tests/sales-order.test.ts`
+  17 of 17. The suites this change reaches are green: goods issue 14, MIGO component issue 10, MIGO matrix
+  contract 12, customer invoice 3, credit 3, credit release 4, credit monitor 3, account determination 13,
+  material document reversal 9, document reversal 4, atomic inventory posting 11, inventory block invariant 6,
+  screen links 6, browser targets 208, constrained driving 2, storage location contract 5. The whole suite ran
+  458 files and 3,178 tests with six failures in four files: two of them (`migration-grant-policy`,
+  `default-privilege-audit`) read `DATABASE_URL` and `MIGRATION_DATABASE_URL` from the environment and pass 13 of
+  13 under `npm run db:verify`, which is the way the repository runs them; the other two were contract tests
+  pinning text this change legitimately altered, and both are green since. A `tsc --noEmit` narrowed to this
+  change's files and everything they import reports 27 errors, and comparing against the same narrowed program
+  in a worktree at `c10f707` shows not one of them arriving with this change (its own `billing.ts` and
+  `sales-delivery.test.ts` errors, seven in all, were fixed: the built-row union became a discriminant, and the
+  change calls gained the `rejectLines` the input type requires). The full `tsc --noEmit` cannot run in the
+  sandbox: 2 GB of RAM, killed past about a gigabyte of heap, which is also why the numbers above come from a
+  scoped program rather than the 152-error repository figure. `npm run lint:ip` names 141 trademark occurrences
+  across the repository and none of them in a file of this change.
+* **What running the code found.** Two faults a static read cannot see. `postBillingDocument`'s deliberate retry
+  after a credit release re-entered `createBillingFromDelivery`, which refuses any delivery that already carries a
+  billing row, so the retry could never post whatever it released: the retry now posts the standing document
+  through `postStandingBilling`, and both paths share `linkPostedInvoice` so the invoice, its link and the status
+  move as one act. And five refusal sentences interpolated the `char(6)` unit column, so they printed
+  `UNT   ` to the user; the messages trim, `assertUnitScale` looks the unit up trimmed and names a unit that is
+  missing. One fixture moved with the semantics rather than being worked around: the order-change test's customer
+  now holds a 400.00 limit, because since DI-019 a standing sales commitment of the same customer is in the credit
+  basis, and at 200.00 the order the test meant to pass was blocked by the previous test's order.
+* **What is NOT yet true, and why the entry stays open.** `npm run build` and the browser target are still owed,
+  and by owner instruction (2026-10-28) **every browser target is deferred until the test server is available**, so
+  nothing in this workspace should attempt them before that. The build and the target were both tried anyway, and
+  both are owed to this sandbox's memory rather than to the code. The build was attempted four times with heap
+  caps from 900 MB to 1500 MB and the Next build worker was killed every time, once with 1,476 MB free and the
+  database stopped; `next start` therefore has nothing to serve. The target was driven against a `next dev` server
+  on the guarded `cairn_b210` database instead, and it reached: the identity guard passing ("Verified DI-020 sales
+  order to invoice local loopback database: cairn_b210 on 127.0.0.1:5432; runtime role restricted, migration role
+  elevated"), Chromium launching, and the onboarding form creating a tenant (`POST /clients/new` answering 303,
+  the sign-in redirect carrying `client=T871&created=1`). Next's own dev rule then ended it: `server/lib/start-server.js`
+  restarts the server after a request in which the heap has passed 80 per cent of its limit, and the restart drops
+  the navigation in flight. What that run did prove is worth recording: every route the target reads compiled, in
+  0.7 to 6.3 seconds each, and served 200 or the 307 to the sign-in page an unauthenticated session must see —
+  `/signin`, `/clients/new`, `/config`, `/sales/orders`, `/sales/delivery`, `/sales/billing`. So the screens build
+  and answer; the eight browser proofs on persisted rows are the piece that needs a host able to hold a production
+  build. Two design points are also documented rather than claimed as met: the brief's journey ends at
+  *payment and clearing*, which this pass does not build (the AR tail after the invoice is unchanged and already
+  works, and the browser target stops at the posted receivable); and re-billing a delivery whose billing document
+  was cancelled is refused by `billing_document_delivery_uq`, because a delivery earns one billing row ever — the
+  credit-memo path that would allow a re-bill does not exist (DI-018's sibling gap, recorded here).
+* **On the criterion about the enqueue guard's object classes.** `src/platform/lock/enqueue.ts` holds no
+  object-class allowlist — `openChangeForSession` and `openForChange` take any class, and the enqueue rows are
+  audited under the single `'enqueue_entry'` class. The documents therefore enter that vocabulary through their
+  change records and their own concurrency guards: `recordChange` is called with `objectClass` `sales_order`
+  (`src/modules/sales/sales-order.ts:45`), `delivery` (`delivery.ts:43`) and `billing_document`
+  (`billing.ts:43`), and every act re-reads `version` inside the transaction and re-checks it on the final update,
+  which is the same shape the production and inventory document services use rather than the maintenance
+  screens' claim-a-lock shape. Nothing here is registered as a lock class because the mechanism has no class
+  registry to register in.
+* **To close it, once the test server is up:** `npm run build`, then `--target sales-order-to-invoice` until its
+  eight browser proofs pass on persisted rows, on a host with more than the 2 GB this workspace holds. Until the
+  test server exists this entry stays open at that line: no further browser attempt is wanted. The environment the rest was run in, and how to raise it again: a PostgreSQL 17 cluster on
+  loopback, a `cairn` superuser owning `cairn_dev`/`cairn_b210` and a `cairn_app` role that is neither superuser
+  nor `BYPASSRLS` (which is what `assertApplicationRole` demands), those two URLs in `.env.local`, then `npm run
+  db:migrate`, `npm run db:verify`, `npm run seed` and `npm run seed:reference`, then the suites named above.
+  Nothing the service
+  gates would report is still owed: they were run, and what they reported was fixed.

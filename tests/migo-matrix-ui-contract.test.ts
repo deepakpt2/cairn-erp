@@ -76,7 +76,9 @@ describe('SCR-139 MIGO action/reference matrix', () => {
     expect(actions).toContain('resolveMigoCell(action, reference)');
     expect(actions).toContain("if (cell.kind !== 'POST_HERE')");
     expect(actions).toContain("}, 'MIGO')");
-    expect(service).toContain("screen: 'MB1A' | 'MIGO' = 'MB1A'");
+    // The service, not the form, decides the screen a movement is judged against; 'SALES' is the delivery's
+    // own context, so a 601 typed into MIGO or the goods issue screen is refused by name there too.
+    expect(service).toContain("screen: 'MB1A' | 'MIGO' | 'SALES' = 'MB1A'");
   });
 
   it('offers 261 on MIGO alone, with MB1A keeping its own two movements', () => {

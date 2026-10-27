@@ -73,6 +73,10 @@ export class CreditError extends Error {
 import { sql } from 'drizzle-orm';
 import { withTenant } from '@/platform/db/client';
 import { fromScaled, toScaled } from '@/platform/posting/decimal';
+// The exposure basis is stated by the product document as open orders plus open deliveries plus open
+// receivables. The receivable half is this module's own ledger read; the sales halves can only be counted by
+// the module that owns those documents, so the ladder asks the owner instead of reading its tables (§5.1).
+import { openSalesCommitments } from '@/modules/sales/exposure';
 
 type Tx = Parameters<Parameters<typeof withTenant>[1]>[0];
 
@@ -339,6 +343,8 @@ export async function listCreditAudit(client: string, customer: string, area: st
 
 export async function evaluateCreditCheck(input: {
   client: string; customer: string; creditControlArea: string; amount?: string;
+  /** The sales document being judged, kept out of the basis it is being judged against. */
+  excludeSalesDocument?: string;
 }): Promise<CreditCheckResult> {
   const amount = input.amount ? toScaled(input.amount) : 0n;
   return withTenant(input.client, async (tx) => {
@@ -348,7 +354,13 @@ export async function evaluateCreditCheck(input: {
       where client = ${input.client} and customer = ${input.customer} and credit_control_area = ${input.creditControlArea}
     `);
     const record = (rows as unknown as CreditRow[])[0];
-    const exposure = await exposureIn(tx, input.client, input.customer, input.creditControlArea);
+    let exposure = await exposureIn(tx, input.client, input.customer, input.creditControlArea);
+    // The un-billed half of the chain, in the area's own currency: an order that has not gone out and a
+    // delivery that has not been invoiced are both money the customer has committed to (§14.8).
+    const commitments = await openSalesCommitments(
+      tx, input.client, input.customer, areaRow.currency, input.excludeSalesDocument,
+    ).catch(() => '0');
+    exposure += toScaled(commitments);
     if (!record) {
       return {
         decision: 'BLOCK' as const, reason: 'NO_CREDIT_RECORD',
@@ -693,7 +705,7 @@ export async function checkSalesDocumentCredit(input: {
 
   const check = await evaluateCreditCheck({
     client: input.client, customer: input.customer, creditControlArea: input.creditControlArea,
-    amount: input.orderValue,
+    amount: input.orderValue, excludeSalesDocument: document,
   });
   const status: DeterminationStatus = check.decision === 'BLOCK' ? 'BLOCKED' : 'PASSED';
   const determinationId = newDeterminationId();
@@ -828,7 +840,7 @@ export async function releaseDocument(input: {
   }
   const check = await evaluateCreditCheck({
     client, customer: current.customer, creditControlArea: current.credit_control_area,
-    amount: fromScaled(toScaled(current.order_value)),
+    amount: fromScaled(toScaled(current.order_value)), excludeSalesDocument: salesDocument,
   });
   const stillBlocked = check.decision === 'BLOCK';
   if (stillBlocked && !input.override) {
@@ -922,7 +934,7 @@ export async function reblockDocument(input: {
   // A fresh determination always precedes a reblock.
   const check = await evaluateCreditCheck({
     client: input.client, customer: current.customer, creditControlArea: current.credit_control_area,
-    amount: fromScaled(toScaled(current.order_value)),
+    amount: fromScaled(toScaled(current.order_value)), excludeSalesDocument: input.salesDocument,
   });
   const reason = check.decision === 'BLOCK' ? check.reason : 'MANUAL_REBLOCK';
   if (check.decision !== 'BLOCK' && !input.reason.trim()) {

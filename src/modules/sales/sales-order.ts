@@ -36,6 +36,7 @@ import {
   type CreditDeterminationView, type ReleaseOutcome,
 } from '../finance/credit';
 import { customerCredit } from '../finance/schema';
+import { deliveredOf, fulfillmentDocumentsOf, orderLineProgress } from './fulfillment-quantities';
 import { PricingError, assertMaterialAtPlant, itemNetAmount, priceItem, resolveCustomerSalesData } from './pricing';
 import { salesOrder, salesOrderLine } from './schema';
 
@@ -128,7 +129,7 @@ async function requireOne<T>(row: T | undefined, missing: string, remedy: string
  * the receivable; only when the company carries no area does the customer's own single area answer, and
  * a document may name an area only when the customer is monitored in it.
  */
-async function creditAreaFor(
+export async function creditAreaFor(
   tx: Tx, client: string, customerNumber: string, company: string, named?: string,
 ): Promise<string> {
   const [companyRow] = await tx.select({ area: companyCode.creditControlArea }).from(companyCode)
@@ -614,6 +615,34 @@ export async function changeSalesOrder(input: OrderChangeInput): Promise<SalesOr
       );
     }
 
+    // What the chain downstream has already done is what freezes an item. A quantity that has gone out cannot
+    // be re-ordered underneath the delivery that carried it, an item that has been delivered cannot be rejected
+    // as though it had never been asked for, and a price an invoice has already quoted cannot be re-read from a
+    // condition record that has since moved. Nothing is copied onto the order line to make this readable: the
+    // answer is summed from the delivery and billing documents that stand, which is the only author of it.
+    const progress = await orderLineProgress(tx, parsed.client, parsed.orderNumber);
+    const rejectedOnFulfillment = new Set(parsed.rejectLines.map((entry) => entry.lineNumber));
+    const standing = await tx.select().from(salesOrderLine).where(and(
+      eq(salesOrderLine.client, parsed.client), eq(salesOrderLine.orderNumber, parsed.orderNumber),
+    ));
+    for (const row of standing) {
+      const delivered = deliveredOf(progress, row.lineNumber);
+      if (delivered <= 0) continue;
+      const submitted = parsed.lines.find((line) => line.lineNumber === row.lineNumber);
+      if (!submitted || rejectedOnFulfillment.has(row.lineNumber)) {
+        throw new SalesOrderError(
+          `Item ${row.lineNumber} has ${delivered} ${row.quantityUnit.trim()} delivered on it, so it cannot be dropped from the order or rejected.`,
+          'A delivered item stands as it is. Bill what went out, and enter a new order for anything more.',
+        );
+      }
+      if (submitted.materialNumber !== row.materialNumber || Number(submitted.orderQuantity) !== Number(row.orderQuantity)) {
+        throw new SalesOrderError(
+          `Item ${row.lineNumber} has ${delivered} ${row.quantityUnit.trim()} delivered, so its material and its ordered quantity are frozen: the delivery and any invoice already quote them.`,
+          'Cancel or extend the order with a new item, and change the delivery for what has gone out.',
+        );
+      }
+    }
+
     let customer: Awaited<ReturnType<typeof resolveCustomerSalesData>>;
     try {
       customer = await resolveCustomerSalesData(tx, parsed.client, before.customerNumber,
@@ -752,6 +781,19 @@ export async function cancelSalesOrder(input: {
     }
     if (before.version !== expectedVersion) {
       throw new SalesOrderError(`Sales order ${orderNumber} changed since it was read.`, 'Reload the order first.');
+    }
+    // An order that has shipped is not un-bought. The deliveries are what make the commitment real, and a
+    // cancellation that left them standing would strand stock that has gone out against an order that no longer
+    // exists. Cancelled documents are not counted, so a delivery backed out in full frees the order again.
+    const fulfilled = await fulfillmentDocumentsOf(tx, client, orderNumber);
+    if (fulfilled.deliveries.length || fulfilled.billings.length) {
+      throw new SalesOrderError(
+        `Sales order ${orderNumber} cannot be cancelled while it is being fulfilled: ${[
+          fulfilled.deliveries.length ? `delivery ${fulfilled.deliveries.join(', ')}` : '',
+          fulfilled.billings.length ? `billing document ${fulfilled.billings.join(', ')}` : '',
+        ].filter(Boolean).join(' and ')}.`,
+        'Cancel the delivery while it has not been goods-issued, and the billing document before it, then cancel the order.',
+      );
     }
     const applied = await tx.update(salesOrder).set({
       status: 'CANCELLED', version: before.version + 1, changedBy, changedAt: new Date(),

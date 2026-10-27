@@ -198,4 +198,6 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'movement-types': { database: 'cairn_b210', port: '5432', batch: 'T868 change-lock local loopback' },
   'valuation-classes': { database: 'cairn_b210', port: '5432', batch: 'T869 change-lock local loopback' },
   'settlement-configuration': { database: 'cairn_b210', port: '5432', batch: 'T870 change-lock local loopback' },
+  // The sales fulfillment journey, on the same reviewed loopback database, isolated by its reserved key.
+  'sales-order-to-invoice': { database: 'cairn_b210', port: '5432', batch: 'DI-020 sales order to invoice local loopback' },
 };
