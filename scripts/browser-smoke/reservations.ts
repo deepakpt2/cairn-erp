@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../src/platform/db/client';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -76,9 +77,9 @@ export async function reservations(ctx: Context) {
   await page.fill('input[name="baseDate"]', '2026-11-20');
   await page.fill('input[name="costCenter"]', 'CC9001');
   await page.fill('input[name="material-1"]', 'MB21-MAT');
-  await page.fill('input[name="plant-1"]', 'QK01');
+  await chooseClosed(page, 'plant-1', 'QK01');
   await page.fill('input[name="quantity-1"]', '25');
-  await page.fill('input[name="sloc-1"]', 'SK01');
+  await chooseClosed(page, 'sloc-1', 'SK01');
   await page.getByRole('button', { name: 'Create reservation', exact: true }).click();
 
   const status = page.locator('p[role="status"]').first();
@@ -128,7 +129,7 @@ export async function reservations(ctx: Context) {
   await page.selectOption('select[name="movementTypeCode"]', '261');
   await page.fill('input[name="baseDate"]', '2026-11-20');
   await page.fill('input[name="material-1"]', 'MB21-MAT');
-  await page.fill('input[name="plant-1"]', 'QK01');
+  await chooseClosed(page, 'plant-1', 'QK01');
   await page.fill('input[name="quantity-1"]', '5');
   await page.getByRole('button', { name: 'Create reservation', exact: true }).click();
   await page.locator('p[role="status"]').filter({ hasText: 'carries no order master' }).waitFor();

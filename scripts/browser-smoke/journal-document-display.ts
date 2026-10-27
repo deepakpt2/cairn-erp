@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postJournalEntry } from '../../src/platform/posting';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -236,10 +237,10 @@ export async function journalDocumentDisplay(ctx: Context) {
       values (${client}, 'QR01', 'SR01', 'Anchor store', true, false, 'browser.admin')
       on conflict (client, plant, storage_location) do update set is_active = true
     `);
+    // The issue material is typed RAW because its valuation class is only permitted for that type.
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
-      select ${client}, 'FB03-ISSUE', 'Anchor issue material', t.material_type, 'PC', 'browser.admin'
-      from (select material_type from material_type where client = ${client} order by material_type limit 1) t
+      select ${client}, 'FB03-ISSUE', 'Anchor issue material', 'RAW', 'PC', 'browser.admin'
       on conflict do nothing
     `);
     await tx.execute(sql`
@@ -303,8 +304,8 @@ export async function journalDocumentDisplay(ctx: Context) {
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="headerText"]', 'Anchored issue');
   await page.fill('input[name="material-1"]', 'FB03-ISSUE');
-  await page.fill('input[name="plant-1"]', 'QR01');
-  await page.fill('input[name="sloc-1"]', 'SR01');
+  await chooseClosed(page, 'plant-1', 'QR01');
+  await chooseClosed(page, 'sloc-1', 'SR01');
   await page.fill('input[name="quantity-1"]', '5');
   await page.fill('input[name="costCenter-1"]', 'CC3701');
   await page.getByRole('button', { name: 'Post the goods issue', exact: true }).click();

@@ -51,3 +51,16 @@ built, at `/production/work-centers` and `/production/work-center-display` over
 `src/modules/production/work-center.ts`, with `CFG.PROD.WORKCENTER.DEFINE` as the activity that opens the way.
 
 The first user and the system roles are created with the tenant. There is no later screen for a second user.
+
+## The screens, as far as they were run
+
+`docs/operational-readiness.md` carries the state of PP, SD/AR, QM and HR as measured on 2026-10-27, the
+42 browser targets that were run against a build of that tree, and the command that reproduces the numbers.
+It is deliberately not a count of screens: it is the record of which workflows a user was seen to complete.
+
+One screen path was found broken and is fixed here: the quantity-scale check in
+`src/modules/production/production-version.ts` refused a whole planned quantity for a material whose base
+unit carries no decimal places, because the order snapshot hands that check a value padded to three places.
+`tests/production-order-bom.test.ts` now creates a `PC` order through the same path and still refuses an
+over-precise quantity. The remaining stale targets, and the drift class that hid them from the suite, are
+DI-015 and `tests/browser-target-constrained-driving.test.ts`.

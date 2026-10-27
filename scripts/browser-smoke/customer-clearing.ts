@@ -7,6 +7,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { postJournalEntry } from '../../src/platform/posting';
 import { postCustomerInvoice } from '../../src/modules/finance/customer-invoice';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -87,7 +88,7 @@ export async function customerClearingF32(ctx: Context) {
   await page.getByRole('heading', { level: 1, name: 'Clear Customer Open Items', exact: true }).waitFor();
   const selection = page.locator('section[aria-labelledby="cc-selection"]');
   await selection.locator('input[name="customer"]').fill('C10000');
-  await selection.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(selection, 'companyCode', '1000');
   await selection.getByRole('button', { name: 'Load open items', exact: true }).click();
   await page.waitForLoadState('networkidle');
   await selection.getByText(/2 open items standing at 0\.00/).waitFor();

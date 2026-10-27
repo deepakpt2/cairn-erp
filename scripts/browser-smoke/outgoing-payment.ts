@@ -7,6 +7,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { postVendorInvoice } from '../../src/modules/finance/vendor-invoice';
 import { postVendorCreditMemo } from '../../src/modules/finance/vendor-credit-memo';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -98,7 +99,7 @@ export async function outgoingPaymentF53(ctx: Context) {
   await items.locator('input[name="clearingDate"]').fill('2026-11-21');
   await items.locator('input[name="bankAccount"]').fill('101000');
   await items.locator('input[name="amount"]').fill('440');
-  await items.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(items, 'currency', 'USD');
   await items.locator('input[name="reference"]').fill('CHQ-998877');
   const boxes = items.locator('input[name="item"]');
   await boxes.nth(0).check();

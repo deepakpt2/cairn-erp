@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postAssetAcquisition } from '../../src/modules/finance/asset-acquisition';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -36,7 +37,7 @@ export async function assetRetirementAbavn(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
   const createForm = page.locator('section[aria-labelledby="ac-form"]');
-  await createForm.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(createForm, 'companyCode', '1000');
   await createForm.locator('input[name="assetClass"]').fill('1000');
   await createForm.locator('input[name="description1"]').fill('Browser press machine');
   await createForm.getByRole('tab', { name: 'Time-dependent assignments' }).click();
@@ -118,7 +119,7 @@ export async function assetRetirementAbavn(ctx: Context) {
   console.log('  ✓ journal, partial values and ACTIVE status verified in the database');
 
   const reverse = page.locator('section[aria-labelledby="rt-reverse"]');
-  await reverse.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(reverse, 'companyCode', '1000');
   await reverse.locator('input[name="assetNumber"]').fill(assetNumber);
   await reverse.locator('input[name="documentNumber"]').fill(documentNumber);
   await reverse.locator('input[name="fiscalYear"]').fill('2026');

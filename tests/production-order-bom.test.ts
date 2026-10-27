@@ -36,11 +36,11 @@ let tenant: TestTenant;
 let other: TestTenant | undefined;
 let client = '';
 
-async function finished(materialNumber: string) {
+async function finished(materialNumber: string, baseUnit = 'KG') {
   await saveMaterialView({
     client, materialNumber, changedBy: ACTOR, expectedVersion: 0,
     reason: 'CO01 BOM test', view: 'BASIC', description: materialNumber, materialType: 'RAW',
-    materialGroup: 'RAW', baseUnit: 'KG', industrySector: 'M', barcode: '',
+    materialGroup: 'RAW', baseUnit, industrySector: 'M', barcode: '',
     grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false,
   });
   await saveMaterialView({
@@ -52,34 +52,38 @@ async function finished(materialNumber: string) {
   });
 }
 
-async function component(materialNumber: string) {
+async function component(materialNumber: string, baseUnit = 'KG') {
   await saveMaterialView({
     client, materialNumber, changedBy: ACTOR, expectedVersion: 0,
     reason: 'CO01 BOM test', view: 'BASIC', description: materialNumber, materialType: 'RAW',
-    materialGroup: 'RAW', baseUnit: 'KG', industrySector: 'M', barcode: '',
+    materialGroup: 'RAW', baseUnit, industrySector: 'M', barcode: '',
     grossWeight: '0', netWeight: '0', weightUnit: '', isBlocked: false,
   });
   await saveMaterialView({
     client, materialNumber, changedBy: ACTOR, expectedVersion: 0,
     reason: 'CO01 BOM test', view: 'PURCHASING', plant: PLANT,
-    purchasingGroup: '', orderUnit: 'KG', overdeliveryTolerance: '0',
+    purchasingGroup: '', orderUnit: baseUnit, overdeliveryTolerance: '0',
     underdeliveryTolerance: '0', manufacturerPartNumber: '',
   });
 }
 
-async function bom(materialNumber: string, alternative: string, items: Array<Record<string, string>>) {
+async function bom(
+  materialNumber: string, alternative: string, items: Array<Record<string, string>>, baseUnit = 'KG',
+) {
   return createMaterialBom({
     client, changedBy: ACTOR, materialNumber, plant: PLANT, usage: 'P', alternative,
-    baseQuantity: '1', baseUnit: 'KG', validFrom: '2026-01-01',
-    items: items.map((item) => ({ itemCategory: 'S', unit: 'KG', ...item })),
+    baseQuantity: '1', baseUnit, validFrom: '2026-01-01',
+    items: items.map((item) => ({ itemCategory: 'S', unit: baseUnit, ...item })),
   });
 }
 
-async function version(materialNumber: string, productionVersion: string, bomAlternative: string) {
+async function version(
+  materialNumber: string, productionVersion: string, bomAlternative: string, lotUnit = 'KG', routingGroup = '50000051',
+) {
   return createProductionVersion({
     client, changedBy: ACTOR, materialNumber, plant: PLANT, productionVersion,
-    validFrom: '2026-01-01', lotFrom: '0', lotTo: '999999', lotUnit: 'KG',
-    bomUsage: 'P', bomAlternative, taskListType: 'N', routingGroup: '50000051', groupCounter: '01',
+    validFrom: '2026-01-01', lotFrom: '0', lotTo: '999999', lotUnit,
+    bomUsage: 'P', bomAlternative, taskListType: 'N', routingGroup, groupCounter: '01',
   });
 }
 
@@ -139,6 +143,10 @@ describe('CO01 production version and BOM snapshot', () => {
     for (const materialNumber of ['CO01-RM1', 'CO01-RM2', 'CO01-RM3', 'CHG-RM', 'PH-RM', 'BK-RM', 'OUT-RM', 'REC-RM', 'AMB-RM', 'EXT-RM']) {
       await component(materialNumber);
     }
+    // The two count-unit materials are made here rather than in the test, because the routing
+    // below assigns the material and the routing has to stand before a version can point at it.
+    await finished('PC-FG', 'PC');
+    await component('PC-RM', 'PC');
     await saveRoutingTaskListType({ client, changedBy: ACTOR, taskListType: 'N', description: 'Routing' });
     await saveRoutingUsage({ client, changedBy: ACTOR, usage: '1', description: 'Production' });
     await saveRoutingControlKey({ client, changedBy: ACTOR, controlKey: 'PP01', description: 'Internal' });
@@ -151,6 +159,14 @@ describe('CO01 production version and BOM snapshot', () => {
       routingGroup: '50000051', groupCounter: '01', baseQuantity: '1', baseUnit: 'KG', validFrom: '2026-01-01',
       assignments: ['CO01-FG', 'CO01-CHG', 'CO01-PH', 'CO01-BK', 'CO01-OUT', 'CO01-REC', 'CO01-AMB', 'CO01-EXT'].map((materialNumber) => ({ materialNumber })),
       operations: [{ operationNumber: '0010', shortText: 'Make', workCenter: 'WC01', controlKey: 'PP01' }],
+    });
+    // The routing's base unit has to be the material's own, so the count-unit material gets a
+    // routing of its own rather than borrowing the kilogram one.
+    await createRouting({
+      client, changedBy: ACTOR, taskListType: 'N', plant: PLANT, usage: '1',
+      routingGroup: '50000052', groupCounter: '01', baseQuantity: '1', baseUnit: 'PC', validFrom: '2026-01-01',
+      assignments: [{ materialNumber: 'PC-FG' }],
+      operations: [{ operationNumber: '0010', shortText: 'Count out', workCenter: 'WC01', controlKey: 'PP01' }],
     });
     await bom('CO01-FG', '01', [
       { itemNumber: '0010', componentMaterial: 'CO01-RM1', quantity: '2' },
@@ -181,6 +197,28 @@ describe('CO01 production version and BOM snapshot', () => {
     if (client) await destroyTenant(client);
     if (other) await destroyTenant(other.client);
   }, 180_000);
+
+  it('measures the planned quantity against the unit scale, not the padding', async () => {
+    // 'PC' carries no decimal places, and the order snapshot reads the planned quantity through the
+    // version check as a three-place text. A whole number must stand; digits that a rounding would
+    // drop must still be refused rather than silently cut.
+    await bom('PC-FG', '03', [{ itemNumber: '0010', componentMaterial: 'PC-RM', quantity: '2' }], 'PC');
+    await version('PC-FG', '0003', '03', 'PC', '50000052');
+
+    const before = await counts();
+    const view = await createProductionOrder(orderInput('PC-FG', 'pc-whole', '0003'));
+    expect(view.status).toBe('CREATED');
+    expect(view.productionVersion).toBe('0003');
+    expect(view.components.map((row) => [row.materialNumber, row.requiredQuantity, row.unit])).toEqual([
+      ['PC-RM', '20.000', 'PC'],
+    ]);
+    expect(await counts()).toEqual({ ...before, orders: before.orders + 1, components: before.components + 1 });
+
+    await expect(createProductionOrder({
+      ...orderInput('PC-FG', 'pc-fine', '0003'), orderQuantity: 10.001,
+    })).rejects.toThrow(/more decimal places than the unit allows/);
+    expect(await counts()).toEqual({ ...before, orders: before.orders + 1, components: before.components + 1 });
+  });
 
   it('stores the selected version and scales the BOM snapshot', async () => {
     const before = await counts();

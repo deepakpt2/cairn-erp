@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
@@ -70,7 +70,13 @@ export async function creditRelease(ctx: Context) {
   await row.getByText('BLOCKED', { exact: true }).waitFor();
   console.log('  ✓ the blocked determination stands in the queue');
 
-  await row.getByRole('button', { name: 'Release', exact: true }).click();
+  // The row's actions sit behind an "Actions" disclosure, and each of them is offered only while this
+  // session holds the change lock on the sales document. Opening the disclosure files the claim; waiting
+  // for the button to become enabled is what proves the grant rather than assuming it.
+  await row.locator('summary').click();
+  const release = row.getByRole('button', { name: 'Release', exact: true });
+  await expect(release).toBeEnabled();
+  await release.click();
   await page.getByText(/SO-B1 — The fresh credit check still blocks/).waitFor();
   console.log('  ✓ release refused while the fresh check still fails — no silent bypass');
 
@@ -82,7 +88,10 @@ export async function creditRelease(ctx: Context) {
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   const rowAgain = page.locator('tr', { hasText: 'SO-B1' }).first();
-  await rowAgain.getByRole('button', { name: 'Release', exact: true }).click();
+  await rowAgain.locator('summary').click();
+  const releaseAgain = rowAgain.getByRole('button', { name: 'Release', exact: true });
+  await expect(releaseAgain).toBeEnabled();
+  await releaseAgain.click();
   await page.getByText(/SO-B1 — Released: the fresh credit check passes/).waitFor();
   console.log('  ✓ release succeeded on the re-evaluated standing');
 

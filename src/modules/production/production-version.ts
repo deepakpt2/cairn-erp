@@ -195,7 +195,12 @@ async function decimalsOf(tx: Tx, code: string): Promise<number> {
 function quantityText(value: string, label: string, decimals: number): string {
   const text = value.trim();
   if (!/^\d+(\.\d+)?$/.test(text)) fail('LOT', `${label} ${value || '(blank)'} is not a quantity. It was not rounded.`);
-  if ((text.split('.')[1] ?? '').length > Math.min(3, decimals)) fail('LOT', `${label} has more decimal places than the unit allows. It was not rounded.`);
+  // The scale belongs to the unit, but this text is not always what someone typed: the order
+  // snapshot hands the check a quantity padded to three places, and '25.000' of a unit that holds
+  // no decimals loses nothing. Only digits that a rounding would drop count as over-precise.
+  if ((text.split('.')[1] ?? '').replace(/0+$/, '').length > Math.min(3, decimals)) {
+    fail('LOT', `${label} has more decimal places than the unit allows. It was not rounded.`);
+  }
   if (Number(text) < 0) fail('LOT', `${label} must be zero or positive.`);
   return text;
 }
@@ -508,9 +513,11 @@ async function writeVersion(input: ProductionVersionInput, mode: 'CREATE' | 'CHA
     const validFrom = input.validFrom !== undefined && input.validFrom !== null
       ? dateOf(input.validFrom, 'Valid from')
       : mode === 'CHANGE' ? beforeRow!.validFrom : fail('DATE', 'Valid from is required.');
+    // A supplied value — empty or null — clears the end of validity, the same way the routing
+    // and BOM writes read it; only an omitted key keeps the standing date.
     const validTo = input.validTo === undefined
       ? (mode === 'CHANGE' ? beforeRow!.validTo : OPEN_ENDED)
-      : input.validTo.trim() ? dateOf(input.validTo, 'Valid to') : OPEN_ENDED;
+      : input.validTo?.trim() ? dateOf(input.validTo, 'Valid to') : OPEN_ENDED;
     if (validTo < validFrom) fail('DATE_RANGE', 'Valid-to is before valid-from.');
     const description = input.description === undefined ? (mode === 'CHANGE' ? beforeRow!.description : null) : textOf(input.description, 'Description', 40);
     const lotUnitInput = (input.lotUnit ?? '').trim().toUpperCase();

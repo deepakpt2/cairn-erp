@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -66,10 +67,10 @@ export async function customerDownPaymentF29(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Post Customer Down Payment', exact: true }).waitFor();
   const form = page.locator('section[aria-labelledby="cdp-header"]');
-  await form.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(form, 'companyCode', '1000');
   await form.locator('input[name="customer"]').fill('C10000');
   await form.locator('input[name="amount"]').fill('8000');
-  await form.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(form, 'currency', 'USD');
   await form.locator('input[name="bankAccount"]').fill('101000');
   await form.locator('input[name="specialGlIndicator"]').fill('A');
   await form.locator('input[name="reference"]').fill('CDP-2026-001');

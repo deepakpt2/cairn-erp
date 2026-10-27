@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -134,10 +135,10 @@ export async function scr144CloseTheGaps(ctx: Context) {
     await page.fill('input[name="materialNumber"]', 'SCR144-BOX');
     await page.fill('input[name="quantity"]', '2');
     await page.fill('input[name="unit"]', unit);
-    await page.fill('input[name="issuingPlant"]', PLANT);
-    await page.fill('input[name="issuingStorageLocation"]', SLOC);
-    await page.fill('input[name="receivingPlant"]', PLANT);
-    await page.fill('input[name="receivingStorageLocation"]', SLOC_TO);
+    await chooseClosed(page, 'issuingPlant', PLANT);
+    await chooseClosed(page, 'issuingStorageLocation', SLOC);
+    await chooseClosed(page, 'receivingPlant', PLANT);
+    await chooseClosed(page, 'receivingStorageLocation', SLOC_TO);
     await page.fill('input[name="postingDate"]', '2026-10-20');
     await page.fill('input[name="documentDate"]', '2026-10-20');
     await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();

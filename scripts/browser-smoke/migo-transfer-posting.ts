@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -32,10 +33,10 @@ export async function migoTransferPosting(ctx: Context) {
     const code = companies[0].company_code;
     const currency = companies[0].currency;
 
+    // The type is named because the ledger refuses a valuation class the material type does not permit.
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
-      select ${client}, 'MGT-MAT', 'Transferred material', t.material_type, 'PC', 'browser.admin'
-      from (select material_type from material_type where client = ${client} order by material_type limit 1) t
+      select ${client}, 'MGT-MAT', 'Transferred material', 'RAW', 'PC', 'browser.admin'
       on conflict do nothing
     `);
     await tx.execute(sql`
@@ -124,10 +125,10 @@ export async function migoTransferPosting(ctx: Context) {
     await page.selectOption('select[name="movementTypeCode"]', fields.movement);
     await page.fill('input[name="materialNumber"]', 'MGT-MAT');
     await page.fill('input[name="quantity"]', fields.quantity);
-    await page.fill('input[name="issuingPlant"]', fields.issuingPlant);
-    await page.fill('input[name="issuingStorageLocation"]', fields.issuingLocation);
-    await page.fill('input[name="receivingPlant"]', fields.receivingPlant);
-    await page.fill('input[name="receivingStorageLocation"]', fields.receivingLocation);
+    await chooseClosed(page, 'issuingPlant', fields.issuingPlant);
+    await chooseClosed(page, 'issuingStorageLocation', fields.issuingLocation);
+    await chooseClosed(page, 'receivingPlant', fields.receivingPlant);
+    await chooseClosed(page, 'receivingStorageLocation', fields.receivingLocation);
     await page.fill('input[name="postingDate"]', '2026-10-16');
     await page.fill('input[name="documentDate"]', '2026-10-16');
     await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();

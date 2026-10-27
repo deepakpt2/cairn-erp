@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm';
 
 import { withTenant } from '../../src/platform/db/client';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -28,7 +29,7 @@ export async function assetMasterAs01As02(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
   const form = page.locator('section[aria-labelledby="ac-form"]');
-  await form.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(form, 'companyCode', '1000');
   await form.locator('input[name="assetClass"]').fill('1000');
   await form.locator('input[name="description1"]').fill('Browser lathe');
   await form.locator('input[name="inventoryNumber"]').fill('INV-BROWSER-1');

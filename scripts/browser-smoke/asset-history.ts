@@ -7,6 +7,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { postAssetAcquisition } from '../../src/modules/finance/asset-acquisition';
 import { executeDepreciationRun } from '../../src/modules/finance/asset-depreciation';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -37,7 +38,7 @@ export async function assetHistorySheet(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
   const createForm = page.locator('section[aria-labelledby="ac-form"]');
-  await createForm.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(createForm, 'companyCode', '1000');
   await createForm.locator('input[name="assetClass"]').fill('1000');
   await createForm.locator('input[name="description1"]').fill('Browser history press');
   await createForm.getByRole('tab', { name: 'Time-dependent assignments' }).click();

@@ -7,6 +7,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { postVendorInvoice } from '../../src/modules/finance/vendor-invoice';
 import { postVendorDownPayment } from '../../src/modules/finance/vendor-down-payment';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -91,7 +92,7 @@ export async function vendorDownPaymentClearingF54(ctx: Context) {
   await header.getByText(/1 down payments stand under indicator/).waitFor();
 
   const items = page.locator('section[aria-labelledby="vdpc-items"]');
-  await items.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(items, 'currency', 'USD');
   await items.locator('input[name="downPayment"]').check();
   await items.locator('input[name^="apply-dp-"]').fill('550');
   await items.locator('input[name="invoice"]').check();

@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -39,10 +40,10 @@ export async function parkedJournalFv50(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Park a Journal Entry', exact: true }).waitFor();
   const form = page.locator('section[aria-labelledby="pj-header"]');
-  await form.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(form, 'companyCode', '1000');
   await form.locator('input[name="documentDate"]').fill('2026-10-01');
   await form.locator('input[name="postingDate"]').fill('2026-10-01');
-  await form.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(form, 'currency', 'USD');
   await form.locator('input[name="reference"]').fill('PARK-2026-001');
   await form.getByLabel('G/L account').nth(0).fill('400000');
   await form.getByLabel('Amount').nth(0).fill('250');

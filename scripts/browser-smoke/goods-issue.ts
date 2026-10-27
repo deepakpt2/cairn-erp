@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { chooseClosed } from './closed-fields';
 import { strict as assert } from 'node:assert';
 import { sql } from 'drizzle-orm';
 
@@ -47,10 +48,10 @@ export async function goodsIssue(ctx: Context) {
       values (${client}, 'QP01', 'SP01', 'Issue store', true, false, 'browser.admin')
       on conflict (client, plant, storage_location) do update set is_active = true, allow_negative_stock = false
     `);
+    // The type is named because the ledger refuses a valuation class the material type does not permit.
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
-      select ${client}, 'MB1A-MAT', 'Issue material', t.material_type, 'PC', 'browser.admin'
-      from (select material_type from material_type where client = ${client} order by material_type limit 1) t
+      select ${client}, 'MB1A-MAT', 'Issue material', 'RAW', 'PC', 'browser.admin'
       on conflict do nothing
     `);
     await tx.execute(sql`
@@ -129,8 +130,8 @@ export async function goodsIssue(ctx: Context) {
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="headerText"]', 'Issue to the line');
   await page.fill('input[name="material-1"]', 'MB1A-MAT');
-  await page.fill('input[name="plant-1"]', 'QP01');
-  await page.fill('input[name="sloc-1"]', 'SP01');
+  await chooseClosed(page, 'plant-1', 'QP01');
+  await chooseClosed(page, 'sloc-1', 'SP01');
   await page.fill('input[name="quantity-1"]', '10');
   await page.fill('input[name="costCenter-1"]', 'CC7701');
   await page.getByRole('button', { name: 'Post the goods issue', exact: true }).click();
@@ -158,9 +159,9 @@ export async function goodsIssue(ctx: Context) {
   await page.fill('input[name="baseDate"]', '2026-10-20');
   await page.fill('input[name="costCenter"]', 'CC7701');
   await page.fill('input[name="material-1"]', 'MB1A-MAT');
-  await page.fill('input[name="plant-1"]', 'QP01');
+  await chooseClosed(page, 'plant-1', 'QP01');
   await page.fill('input[name="quantity-1"]', '8');
-  await page.fill('input[name="sloc-1"]', 'SP01');
+  await chooseClosed(page, 'sloc-1', 'SP01');
   await page.getByRole('button', { name: 'Create reservation', exact: true }).click();
   const created = await page.locator('p[role="status"]').first().innerText();
   const reservation = /RSV-\d+/.exec(created)![0];
@@ -176,8 +177,8 @@ export async function goodsIssue(ctx: Context) {
   await page.fill('input[name="postingDate"]', '2026-10-15');
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="material-1"]', 'MB1A-MAT');
-  await page.fill('input[name="plant-1"]', 'QP01');
-  await page.fill('input[name="sloc-1"]', 'SP01');
+  await chooseClosed(page, 'plant-1', 'QP01');
+  await chooseClosed(page, 'sloc-1', 'SP01');
   await page.fill('input[name="quantity-1"]', '3');
   await page.fill('input[name="costCenter-1"]', 'CC7701');
   await page.fill('input[name="reservation-1"]', reservation);
@@ -210,7 +211,7 @@ export async function goodsIssue(ctx: Context) {
   await page.fill('input[name="postingDate"]', '2026-10-15');
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="material-1"]', 'MB1A-MAT');
-  await page.fill('input[name="plant-1"]', 'QP01');
+  await chooseClosed(page, 'plant-1', 'QP01');
   await page.fill('input[name="quantity-1"]', '1');
   await page.getByRole('button', { name: 'Post the goods issue', exact: true }).click();
   await page.locator('p[role="status"]').filter({ hasText: 'no order master' }).waitFor();

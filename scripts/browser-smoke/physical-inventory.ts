@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -33,11 +34,11 @@ export async function physicalInventoryCount(ctx: Context) {
     const code = companies[0].company_code;
     const currency = companies[0].currency;
 
+    // The type is named because the ledger refuses a valuation class the material type does not permit.
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
-      select ${client}, v.n, v.d, t.material_type, 'PC', 'browser.admin'
-      from (values ('MPI-COUNT', 'Counted material'), ('MPI-FREE', 'Uncounted material')) as v(n, d)
-      cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
+      select ${client}, v.n, v.d, v.t, 'PC', 'browser.admin'
+      from (values ('MPI-COUNT', 'Counted material', 'RAW'), ('MPI-FREE', 'Uncounted material', 'RAW')) as v(n, d, t)
       on conflict do nothing
     `);
     await tx.execute(sql`
@@ -128,10 +129,10 @@ export async function physicalInventoryCount(ctx: Context) {
   await page.selectOption('select[name="movementTypeCode"]', '311');
   await page.fill('input[name="materialNumber"]', 'MPI-COUNT');
   await page.fill('input[name="quantity"]', '5');
-  await page.fill('input[name="issuingPlant"]', 'QP02');
-  await page.fill('input[name="issuingStorageLocation"]', 'SQ01');
-  await page.fill('input[name="receivingPlant"]', 'QP02');
-  await page.fill('input[name="receivingStorageLocation"]', 'SQ02');
+  await chooseClosed(page, 'issuingPlant', 'QP02');
+  await chooseClosed(page, 'issuingStorageLocation', 'SQ01');
+  await chooseClosed(page, 'receivingPlant', 'QP02');
+  await chooseClosed(page, 'receivingStorageLocation', 'SQ02');
   await page.fill('input[name="postingDate"]', '2026-10-20');
   await page.fill('input[name="documentDate"]', '2026-10-20');
   await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();
@@ -156,10 +157,10 @@ export async function physicalInventoryCount(ctx: Context) {
   await page.selectOption('select[name="movementTypeCode"]', '311');
   await page.fill('input[name="materialNumber"]', 'MPI-COUNT');
   await page.fill('input[name="quantity"]', '5');
-  await page.fill('input[name="issuingPlant"]', 'QP02');
-  await page.fill('input[name="issuingStorageLocation"]', 'SQ01');
-  await page.fill('input[name="receivingPlant"]', 'QP02');
-  await page.fill('input[name="receivingStorageLocation"]', 'SQ02');
+  await chooseClosed(page, 'issuingPlant', 'QP02');
+  await chooseClosed(page, 'issuingStorageLocation', 'SQ01');
+  await chooseClosed(page, 'receivingPlant', 'QP02');
+  await chooseClosed(page, 'receivingStorageLocation', 'SQ02');
   await page.fill('input[name="postingDate"]', '2026-10-20');
   await page.fill('input[name="documentDate"]', '2026-10-20');
   await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();
@@ -185,10 +186,10 @@ export async function physicalInventoryCount(ctx: Context) {
   await page.selectOption('select[name="movementTypeCode"]', '311');
   await page.fill('input[name="materialNumber"]', 'MPI-FREE');
   await page.fill('input[name="quantity"]', '3');
-  await page.fill('input[name="issuingPlant"]', 'QP02');
-  await page.fill('input[name="issuingStorageLocation"]', 'SQ01');
-  await page.fill('input[name="receivingPlant"]', 'QP02');
-  await page.fill('input[name="receivingStorageLocation"]', 'SQ02');
+  await chooseClosed(page, 'issuingPlant', 'QP02');
+  await chooseClosed(page, 'issuingStorageLocation', 'SQ01');
+  await chooseClosed(page, 'receivingPlant', 'QP02');
+  await chooseClosed(page, 'receivingStorageLocation', 'SQ02');
   await page.fill('input[name="postingDate"]', '2026-10-20');
   await page.fill('input[name="documentDate"]', '2026-10-20');
   await page.getByRole('button', { name: 'Post the transfer', exact: true }).click();

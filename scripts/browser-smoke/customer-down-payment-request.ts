@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -69,11 +70,11 @@ export async function customerDownPaymentRequestF37(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Post Customer Down Payment Request', exact: true }).waitFor();
   const form = page.locator('section[aria-labelledby="cdpr-header"]');
-  await form.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(form, 'companyCode', '1000');
   await form.locator('input[name="customer"]').fill('C10000');
   await form.locator('input[name="dueDate"]').fill('2026-11-15');
   await form.locator('input[name="amount"]').fill('5000');
-  await form.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(form, 'currency', 'USD');
   await form.locator('input[name="indicator"]').fill('F');
   await form.locator('input[name="reference"]').fill('REQ-2026-001');
   await form.getByRole('button', { name: 'Post request', exact: true }).click();
@@ -87,11 +88,11 @@ export async function customerDownPaymentRequestF37(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Post Customer Down Payment', exact: true }).waitFor();
   const receipt = page.locator('section[aria-labelledby="cdp-header"]');
-  await receipt.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(receipt, 'companyCode', '1000');
   await receipt.locator('input[name="customer"]').fill('C10000');
   await receipt.locator('input[name="bankAccount"]').fill('101000');
   await receipt.locator('input[name="amount"]').fill('2000');
-  await receipt.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(receipt, 'currency', 'USD');
   await receipt.locator('input[name="specialGlIndicator"]').fill('A');
   await receipt.locator('input[name="fulfillRequest"]').fill(requestNumber);
   await receipt.getByRole('button', { name: 'Post down payment', exact: true }).click();

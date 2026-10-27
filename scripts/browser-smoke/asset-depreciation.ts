@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postAssetAcquisition } from '../../src/modules/finance/asset-acquisition';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -36,7 +37,7 @@ export async function assetDepreciationAfab(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
   const createForm = page.locator('section[aria-labelledby="ac-form"]');
-  await createForm.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(createForm, 'companyCode', '1000');
   await createForm.locator('input[name="assetClass"]').fill('1000');
   await createForm.locator('input[name="description1"]').fill('Browser lathe');
   await createForm.getByRole('tab', { name: 'Time-dependent assignments' }).click();
@@ -63,7 +64,7 @@ export async function assetDepreciationAfab(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Depreciation Run', exact: true }).waitFor();
   const entry = page.locator('section[aria-labelledby="dp-entry"]');
-  await entry.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(entry, 'companyCode', '1000');
   await entry.locator('input[name="fiscalYear"]').fill('2026');
   await entry.locator('input[name="postingPeriod"]').fill('3');
   await entry.locator('input[name="postingDate"]').fill('2026-03-31');

@@ -7,6 +7,7 @@ import { defineRange } from '../../src/platform/numbering';
 import { postCustomerInvoice } from '../../src/modules/finance/customer-invoice';
 import { postCustomerDownPayment } from '../../src/modules/finance/customer-down-payment';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -91,7 +92,7 @@ export async function customerDownPaymentClearingF39(ctx: Context) {
   await header.getByText(/1 down payments stand under indicator/).waitFor();
 
   const items = page.locator('section[aria-labelledby="cdpc-items"]');
-  await items.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(items, 'currency', 'USD');
   await items.getByRole('button', { name: 'Add allocation', exact: true }).click();
   await items.getByLabel('Down payment', { exact: true }).selectOption({ index: 1 });
   await items.getByLabel('Invoice', { exact: true }).selectOption({ index: 1 });

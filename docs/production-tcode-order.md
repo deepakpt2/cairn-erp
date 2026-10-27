@@ -11,8 +11,9 @@ Process orders, repetitive manufacturing, printing, archiving, and batch determi
 
 Do not rebuild these.
 
-- `CO01` creates a production order and releases it, at `/production/orders`. Components may be typed or read
-  from a production version, and the snapshot is not re-read afterwards.
+- `CO01` creates a production order and releases it, at `/production/orders`. The components come from the
+  production version's bill of material — the create screen offers no component rows of its own — and the
+  snapshot is not re-read afterwards.
 - `CO02` and `CO03` change and display a saved order — `/production/production-order-change` and
   `/production/production-order-display`. The change carries the quantity, the dates and the component snapshot
   while no goods movement has been posted against the line; it does not re-read the bill of material. Technical

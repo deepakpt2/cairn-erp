@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -71,8 +72,8 @@ export async function customerInvoiceFb70(ctx: Context) {
   await page.getByRole('heading', { level: 1, name: 'Enter Customer Invoice', exact: true }).waitFor();
   const lines = page.locator('section[aria-labelledby="ci-lines"]');
   await lines.locator('input[name="customer"]').fill('C10000');
-  await lines.locator('input[name="companyCode"]').fill('1000');
-  await lines.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(lines, 'companyCode', '1000');
+  await chooseClosed(lines, 'currency', 'USD');
   await lines.locator('input[name="reference"]').fill('INV-2026-981');
   await lines.locator('input[name="documentDate"]').fill('2026-10-16');
   await lines.locator('input[name="postingDate"]').fill('2026-10-18');

@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postVendorInvoice } from '../../src/modules/finance/vendor-invoice';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -73,8 +74,8 @@ export async function vendorCreditMemoFb65(ctx: Context) {
   await page.getByRole('heading', { level: 1, name: 'Enter Vendor Credit Memo', exact: true }).waitFor();
   const lines = page.locator('section[aria-labelledby="vm-lines"]');
   await lines.locator('input[name="vendor"]').fill('V10000');
-  await lines.locator('input[name="companyCode"]').fill('1000');
-  await lines.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(lines, 'companyCode', '1000');
+  await chooseClosed(lines, 'currency', 'USD');
   await lines.locator('input[name="reference"]').fill('BROW-CM-1');
   await lines.locator('input[name="documentDate"]').fill('2026-10-20');
   await lines.locator('input[name="postingDate"]').fill('2026-10-20');

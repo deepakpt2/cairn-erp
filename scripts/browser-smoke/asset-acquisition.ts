@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -35,7 +36,7 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Create Asset', exact: true }).waitFor();
   const createForm = page.locator('section[aria-labelledby="ac-form"]');
-  await createForm.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(createForm, 'companyCode', '1000');
   await createForm.locator('input[name="assetClass"]').fill('1000');
   await createForm.locator('input[name="description1"]').fill('Browser milling machine');
   await createForm.getByRole('tab', { name: 'Time-dependent assignments' }).click();
@@ -55,7 +56,7 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Asset Acquisition', exact: true }).waitFor();
   const entry = page.locator('section[aria-labelledby="aq-entry"]');
-  await entry.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(entry, 'companyCode', '1000');
   await entry.locator('input[name="assetNumber"]').fill(assetNumber);
   await entry.locator('input[name="documentDate"]').fill('2026-03-10');
   await entry.locator('input[name="postingDate"]').fill('2026-03-15');
@@ -111,7 +112,7 @@ export async function assetAcquisitionAbzon(ctx: Context) {
   console.log('  ✓ journal, capitalization and value record verified in the database');
 
   const reverse = page.locator('section[aria-labelledby="aq-reverse"]');
-  await reverse.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(reverse, 'companyCode', '1000');
   await reverse.locator('input[name="assetNumber"]').fill(assetNumber);
   await reverse.locator('input[name="documentNumber"]').fill(documentNumber);
   await reverse.locator('input[name="fiscalYear"]').fill('2026');

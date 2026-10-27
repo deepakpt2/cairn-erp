@@ -6,6 +6,7 @@ import type { Page } from '@playwright/test';
 import { withTenant } from '../../src/platform/db/client';
 import { createPurchasingInfoRecord } from '../../src/modules/purchasing/info-record';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -364,7 +365,7 @@ export async function scr151InfoRecord(ctx: Context) {
   const segment = page.locator('[data-info-record-segment="1"]');
   const change = segment.locator('form').filter({ has: page.getByRole('button', { name: 'Save change', exact: true }) });
   await change.locator('input[name="amount"]').fill('25');
-  await change.locator('input[name="currency"]').fill('KWD');
+  await chooseClosed(change, 'currency', 'KWD');
   await change.locator('input[name="priceUnitOfMeasure"]').fill('PC');
   await change.locator('input[name="validFrom"]').fill(takenRow[0].document_date);
   await change.locator('input[name="validTo"]').fill(TO);

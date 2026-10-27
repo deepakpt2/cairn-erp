@@ -27,6 +27,9 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-012 | The order has no money basis, so variance, WIP and settlement cannot be built | High | PP / CO | OPEN — needs schema authorization |
 | DI-013 | Production documentation denied behaviour that had shipped | Medium | Documentation | CLOSED by this commit |
 | DI-014 | Five production screens gate on capability codes the registry does not hold | Medium | Authorization / PP | OPEN — needs a registry decision |
+| DI-015 | Sixteen browser acceptance targets cannot reach the assertion they were written to make | Medium | Test harness / browser targets | OPEN — 21 files repaired by this commit |
+| DI-016 | Six sibling validators repeat the quantity check that mis-fired at CO01 | Low | PP validation | OPEN |
+| DI-017 | Thirty-five fixtures still choose a material type by which one sorts first | Low | Test fixtures | OPEN |
 
 ---
 
@@ -286,3 +289,76 @@ blocked milestone), and given acceptance criteria so the next person can close i
   (`CFG.PROD.WORKCENTER.DEFINE` and `PROD.CONFIRM.ORDER` respectively), in which case `implemented-functions.md`'s
   production table loses its "built screens not in the registry" sentence. No third option: leaving the codes
   unregistered while the catalogue prints them is what makes a grant list and a screen disagree.
+
+
+## DI-015 — Sixteen browser acceptance targets cannot reach the assertion they were written to make
+
+* **Severity:** Medium. **Area:** `scripts/browser-smoke`, the acceptance evidence for PP, SD/AR and FI.
+* **Evidence:** of the 42 targets run on 2026-10-27 against a build of `main`, 16 exit non-zero while the
+  vitest suite stayed green, because nothing in the suite opens a browser. Twenty-one files, 46 lines of
+  them typed into a `<select>`: `page.fill('input[name="companyCode"]', …)` and its row variants, against
+  fields `ConstrainedField` renders as a closed select because their kind is in `CLOSED_KINDS`. Those are
+  repaired by this commit, together with five fixtures that paired a RAW valuation class with a FIN
+  material type and three that asserted copy the screens had reworded. The 16 that still fail wait for a
+  `section[aria-labelledby=…]` the screen no longer uses — `aq-entry`, `dp-entry`, `rt-reverse`,
+  `op-header`, `cdpc-header`, `vdpc-header`, `info-record-create` — for a `p[role="status"]` that
+  `goods-issue.ts:217` and `scr144-close-the-gaps.ts` expect in other words, or for
+  `[data-cancel="PI-2026-0000001"]` in `physical-inventory.ts:145`, an anchor carrying a document number
+  the run does not produce. The per-target text is in `/tmp/p39-<target>.out` on the verification box.
+* **Impact:** the workflows behind those 16 targets — fixed-asset acquisition, depreciation and retirement,
+  the down-payment and outgoing-payment legs, the info record and the MB1A goods-issue status — have unit
+  coverage and no current screen-level evidence. A reviewer following the acceptance standard cannot mark
+  them accepted from a green run, and a broken screen in one of them would read exactly like a stale target.
+* **Why deferred:** each is target-side drift, not product behaviour: the screens renamed their sections and
+  reworded their status lines while the targets were last touched. Repairing 16 files needs the same
+  read-the-component-then-rewrite cycle this commit applied to 21, and it is mechanical work with no
+  business decision in it, so it does not compete with the PP money basis or the SD document chain.
+* **Acceptance criteria:** `bash /home/cairn/p39-wide.sh 1` and `… 2` report `fail=none` for all 42 targets
+  against a build of `main` with `server_errors=0`; each repaired target keeps its assertion on the
+  persisted result (a row read back through `withTenant`, not a screenshot); and no repair removes a check
+  — a target that cannot be made to pass is deleted only with the flow it covers re-covered elsewhere.
+  `tests/browser-target-constrained-driving.test.ts` must stay green and must still fail on the mutant
+  described in its header, so a repaired target cannot drift back into typing into a select unnoticed.
+
+## DI-016 — Six sibling validators repeat the quantity check that mis-fired at CO01
+
+* **Severity:** Low. **Area:** `src/modules/production` quantity-scale validation.
+* **Evidence:** this commit fixed `production-version.ts:195` because `order-bom-snapshot.ts:85` hands the
+  check `input.orderQuantity.toFixed(3)`, and three padding digits exceed the zero places `PC` allows. The
+  same expression — `(text.split('.')[1] ?? '').length > Math.min(3, decimals)` — stands at
+  `material-bom.ts:273`, `routing.ts:365`, `time-ticket.ts:249`, `production-order-change.ts:153`,
+  `planned-order-create.ts:124` and `planned-order-change.ts:125`. Only the version check is known to be
+  fed normalized text; the others read what the screen sent, so no refusal is demonstrated at them today.
+  `production-order-change.ts` is the one to watch: a change form that prefills from a numeric column reads
+  back `25.000`.
+* **Impact:** if any of those paths receives padded text, a count-unit material is refused for a number the
+  user never typed, the way CO01 was. Nothing else: the rule itself — refuse rather than round — is
+  deliberate and stays.
+* **Why deferred:** changing six validators on the strength of one demonstrated case would widen a
+  validation relaxation beyond the evidence, and CAIRN.md's DV-003 owns the rule. The fix belongs with a
+  case that reproduces a refusal, not with a resemblance.
+* **Acceptance criteria:** either a test shows a padded value reaching one of the six and the significant-
+  fraction comparison is applied there too, or each site gains a test proving that a whole number for a
+  zero-decimal unit passes and `x.001` is still refused, which makes the difference intentional rather than
+  latent.
+
+## DI-017 — Thirty-five fixtures still choose a material type by which one sorts first
+
+* **Severity:** Low. **Area:** `scripts/browser-smoke` fixtures.
+* **Evidence:** `grep -rln "order by material_type limit 1" scripts/browser-smoke | wc -l` reports 35
+  targets. The pattern inserts a material with `t.material_type` from
+  `(select material_type from material_type … order by material_type limit 1)` while the same fixture sets a
+  valuation class by hand. `valuation-class-definition.ts:427` refuses a class the material type's account
+  category reference does not permit, which is exactly how `migo-component-issue`, `goods-issue`,
+  `migo-transfer-posting`, `physical-inventory` and `journal-document-display` failed until this commit named
+  `RAW` or `FIN` per material.
+* **Impact:** a fixture can fail with "Valuation class … is not allowed for material type …" and read like a
+  ledger defect when it is a fixture guess; and the pair can also agree by accident, which hides the rule the
+  ledger is enforcing.
+* **Why deferred:** five files were repaired because their targets were being run anyway. The remaining 30
+  are untouched by this pass, and rewriting a fixture that passes has no acceptance value — it would be
+  standardizing working code, which the brief rules out.
+* **Acceptance criteria:** when one of those targets is next repaired or extended, its material insert names
+  the type its valuation class belongs to, and the refusal message it would otherwise hit is quoted in the
+  commit note. A fixture that has to pick a type from what exists is replaced by one that creates the type
+  it needs. No new shared helper: the pairing is per material and a helper would hide it again.

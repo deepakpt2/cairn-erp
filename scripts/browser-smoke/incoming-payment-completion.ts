@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { postCustomerInvoice } from '../../src/modules/finance/customer-invoice';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -91,7 +92,7 @@ export async function incomingPaymentCompletionF28(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Post Incoming Payment', exact: true }).waitFor();
   const header = page.locator('section[aria-labelledby="ip-header"]');
-  await header.locator('input[name="companyCode"]').fill('1000');
+  await chooseClosed(header, 'companyCode', '1000');
   await header.locator('input[name="customer"]').fill('C10000');
   await header.getByRole('button', { name: 'Load open items', exact: true }).click();
   await page.waitForLoadState('networkidle');
@@ -103,7 +104,7 @@ export async function incomingPaymentCompletionF28(ctx: Context) {
   await items.locator('input[name="clearingDate"]').fill('2026-10-21');
   await items.locator('input[name="bankAccount"]').fill('101000');
   await items.locator('input[name="amount"]').fill('539');
-  await items.locator('input[name="currency"]').fill('USD');
+  await chooseClosed(items, 'currency', 'USD');
   await items.locator('input[name="reference"]').fill('BANK-REF-001');
   const boxes = items.locator('input[name="item"]');
   await boxes.nth(0).check();

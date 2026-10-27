@@ -7,6 +7,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { createProductionOrder, releaseProductionOrder } from '../../src/modules/inventory/production-orders';
 import type { BrowserTarget } from './targets';
+import { chooseClosed } from './closed-fields';
 
 type Context = { page: Page; base: string; target: BrowserTarget };
 
@@ -34,11 +35,13 @@ export async function migoComponentIssue(ctx: Context) {
 
     await tx.execute(sql`
       insert into material (client, material_number, description, material_type, base_unit, created_by)
-      select ${client}, v.n, v.d, t.material_type, 'PC', 'browser.admin'
-      from (values ('MIGO-FG', 'Order output'), ('MIGO-RM', 'Order component')) as v(n, d)
-      cross join (select material_type from material_type where client = ${client} order by material_type limit 1) t
+      select ${client}, v.n, v.d, v.t, 'PC', 'browser.admin'
+      from (values ('MIGO-FG', 'Order output', 'FIN'), ('MIGO-RM', 'Order component', 'RAW')) as v(n, d, t)
       on conflict do nothing
     `);
+    // The type is named per material because the ledger refuses a valuation class the material
+    // type does not permit: RAW_INVENTORY belongs to a RAW material, not to whatever type the
+    // tenant happens to have first.
     await tx.execute(sql`
       insert into plant (client, plant, name, company_code, country, created_by)
       values (${client}, 'QG01', 'MIGO plant', ${code}, 'KW', 'browser.admin')
@@ -135,8 +138,8 @@ export async function migoComponentIssue(ctx: Context) {
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="headerText"]', 'Issue to the order');
   await page.fill('input[name="material-1"]', 'MIGO-RM');
-  await page.fill('input[name="plant-1"]', 'QG01');
-  await page.fill('input[name="sloc-1"]', 'SG01');
+  await chooseClosed(page, 'plant-1', 'QG01');
+  await chooseClosed(page, 'sloc-1', 'SG01');
   await page.fill('input[name="quantity-1"]', '10');
   await page.fill('input[name="orderItem-1"]', '10');
   await page.getByRole('button', { name: 'Post the movement', exact: true }).click();
@@ -208,8 +211,8 @@ export async function migoComponentIssue(ctx: Context) {
   await page.fill('input[name="postingDate"]', '2026-10-15');
   await page.fill('input[name="documentDate"]', '2026-10-15');
   await page.fill('input[name="material-1"]', 'MIGO-RM');
-  await page.fill('input[name="plant-1"]', 'QG01');
-  await page.fill('input[name="sloc-1"]', 'SG01');
+  await chooseClosed(page, 'plant-1', 'QG01');
+  await chooseClosed(page, 'sloc-1', 'SG01');
   await page.fill('input[name="quantity-1"]', '16');
   await page.fill('input[name="orderItem-1"]', '10');
   await page.getByRole('button', { name: 'Post the movement', exact: true }).click();
