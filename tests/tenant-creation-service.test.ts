@@ -157,7 +157,8 @@ describe('tenant creation without a company', () => {
     expect(await count('ZT03', 'sales_area')).toBe(0);
 
     const completed = await completedActivities('ZT03');
-    // The eleven the reduced package marks, plus the three platform ones, asserted as an
+    // The twelve the reduced package marks — `inventory/standard-config.ts:97` marks the
+    // valuation classes it seeds just above that loop — plus the three platform ones, asserted as an
     // exact list rather than a count. Measured by execution, which corrected two readings
     // of the source: the payment terms applier records a change document under
     // CFG.FIN.PAYTERMS.DEFINE but never marks that activity, so it is not one of the
@@ -170,6 +171,7 @@ describe('tenant creation without a company', () => {
       'CFG.FIN.PPV.DEFINE',
       'CFG.INV.MATERIALGROUP.DEFINE',
       'CFG.INV.MATERIALTYPE.DEFINE',
+      'CFG.INV.VALCLASS.DEFINE',
       'CFG.ORG.DISTCHANNEL.DEFINE',
       'CFG.ORG.DIVISION.DEFINE',
       'CFG.PLT.CLIENT.DEFINE',

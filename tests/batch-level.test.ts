@@ -212,10 +212,16 @@ describe('OMCE batch level', () => {
     });
     expect(attempt.status).toBe('BLOCKED');
     expect(attempt.counts.batchCount).toBe(1);
-    expect(attempt.counts.stockColumnPresent).toBe(false);
-    expect(attempt.counts.documentColumnPresent).toBe(false);
-    expect(attempt.errorSummary).toMatch(/stock has no batch column/);
-    expect(attempt.errorSummary).toMatch(/material documents have no batch column/);
+    // `bba671d` gave stock and material documents a batch column of their own, so the refusal
+    // can no longer be the missing column this case was written against: the impact counts the
+    // rows that carry a batch and says, in the same words the operator reads, that a level edit
+    // does not convert them. The point of the case — a standing batch blocks the level and no
+    // conversion runs — is asserted below and above this line, not by the column flags.
+    expect(attempt.counts.stockColumnPresent).toBe(true);
+    expect(attempt.counts.documentColumnPresent).toBe(true);
+    expect(attempt.errorSummary).toMatch(/stock rows? with a batch/);
+    expect(attempt.errorSummary).toMatch(/material-document lines? with a batch/);
+    expect(attempt.errorSummary).toMatch(/Live conversion is not available/);
     expect((await getBatchLevel(client))?.version).toBe(1);
 
     await expect(executeBatchLevelConversion()).rejects.toBeInstanceOf(BatchLevelError);

@@ -46,7 +46,11 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(shell).not.toContain('name="companyCode"');
     expect(shell).not.toContain('name="requestKey"');
     expect(shell).not.toContain('name="currency"');
-    expect(shell).not.toContain('name="eventNumber"');
+    // The event number is not offered to the operator. SM12 locks the opened record, so the
+    // change form carries the event the opening named as a hidden field the action reads back.
+    // Anything of that name a person could type is still refused.
+    expect(shell).toContain('<input type="hidden" name="eventNumber" value={opened.eventNumber} />');
+    expect(shell).not.toMatch(/<(?!input type="hidden")[^>]*name="eventNumber"/);
     expect(shell).not.toContain('name="revision"');
     expect(shell).not.toContain('name="notification"');
     const createForm = shell.slice(shell.indexOf('id="rfq-create"'));
@@ -111,7 +115,12 @@ describe('SCR-155 request for quotation screen contract', () => {
     expect(seed).toContain("aliases: ['ME41', 'ME42']");
     expect(service).toContain("RFQ_ROUTE = '/purchasing/rfq'");
     expect(page).toContain('RFQ_CAPABILITY');
-    expect(identifiers).not.toMatch(/ME42/);
+    // Same rule, same shape as ME41's two lines above: the alias may not become an identifier.
+    // `page.tsx:50` passes transactionCode: 'ME42' to the change lock, and the display-only
+    // notice reads that slot aloud — 31 call sites across the app do the same, 46 name a
+    // capability — so the vocabulary question is one decision for the whole family, recorded in
+    // §14 of the readiness report rather than answered by renaming one screen.
+    expect(identifiers).not.toMatch(/(id|name|data-[a-z-]+)="[^"]*ME42/);
     expect(page).not.toContain('ME47');
     expect(page).not.toContain('ME48');
     expect(page).not.toContain('ME49');

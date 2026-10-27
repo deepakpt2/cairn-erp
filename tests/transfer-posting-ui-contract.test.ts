@@ -75,7 +75,11 @@ describe('SCR-131 transfer posting UI contract', () => {
     expect(service).toContain('moves inside one plant, and the configuration says so');
     expect(service).toContain('moves between storage locations, and the configuration says so');
     expect(service).toContain('moves inside one storage location, and the configuration says so');
-    expect(service).toContain('blocked for postings');
+    // SCR-143 moved the posting-block sentence into the shared guard, so the service no longer
+    // owns the wording: it asks the guard for both lines of the transfer and re-throws what the
+    // guard said, remedy and all. That is the contract this line was protecting.
+    expect(service.match(/await assertInventoryCountOpen\(tx, input\.client, \{/g)?.length).toBe(2);
+    expect(service).toContain('throw new TransferPostingError(caught.message, caught.remedy)');
     expect(service).toContain('cross-company stock transfer needs intercompany clearing');
     expect(service).toContain('The material posting period');
     expect(service).toContain('short of the');

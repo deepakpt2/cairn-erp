@@ -13,6 +13,19 @@ import { glAccountGroup } from '@/modules/finance/gl-account-group-schema';
 import { chartOfAccounts, distributionChannel, division, salesOrgDistributionChannel, salesOrgDivision } from '@/modules/foundation/schema';
 import { deriveGlAccountType, deriveIsBalanceSheet } from '@/modules/finance/gl-account-vocabulary';
 
+/**
+ * A date `days` from today, as `YYYY-MM-DD`.
+ *
+ * A fixture that judges a payment-term window, a due date or a period allowance has to be dated
+ * against the clock the service reads, or it ages out and the assertion measures the calendar
+ * instead of the rule. That is how SCR-079/080's completion tests came to fail on 2026-10-27:
+ * an invoice dated 2026-10-16 sits eleven days back, one day outside a ten-day discount window,
+ * so the terms still stood and the suggested percentage was 0.
+ */
+export function dateFromToday(days: number): string {
+  return new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+}
+
 /** Four-character tenant key, T + three digits. The reference model uses three characters; ours is longer and its own. */
 export function testClientId(seed: string): string {
   let hash = 0;

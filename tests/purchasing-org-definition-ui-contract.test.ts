@@ -27,7 +27,12 @@ describe('SCR-017 Purchasing Organisation definition UI contract', () => {
     expect(page).toContain('can(session, PURCHASING_ORG_DEFINE)');
     expect(page).toContain('where(eq(purchasingOrgTable.client, client))');
     expect(page).toContain('const creating = params.new === \'1\' && !selectionRequested && canMaintain');
-    expect(page).toContain('const editing = Boolean(params.edit && selected && canMaintain)');
+    // SM12 gates editing on the change lock as well: a session that holds only DISPLAY may not
+    // submit, so the literal names the lock. `displayOnlyMessage` and `ChangeLock` above are the
+    // other half of that same line.
+    expect(page).toContain(
+      "const editing = Boolean(params.edit && selected && canMaintain && changeLock?.mode === 'CHANGE')",
+    );
     expect(page).toContain('getPurchasingOrgDefinitionVersion(client, selected.purchasingOrg)');
     expect(page).not.toContain('params.client');
     expect(page).not.toContain('searchParams.client');

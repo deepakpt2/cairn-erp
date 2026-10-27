@@ -195,7 +195,11 @@ describe('SCR-157 quotation schema', () => {
     expect(of('purchasing_rfq_item')).not.toContain('net_price');
     expect(of('purchasing_rfq_event')).not.toContain('quotation_number');
     expect(of('purchase_order')).not.toContain('quotation_number');
-    expect(of('purchase_order_item')).not.toContain('quotation_number');
+    // As with the quota: 9109_purchasing_follow_on.sql lets an order name the quotation it was
+    // saved from, and nothing more. The pair is the whole quotation family on the item, which is
+    // what keeps the quotation's state from being copied into the order.
+    expect(of('purchase_order_item').filter((c) => c.startsWith('quotation')).sort())
+      .toEqual(['quotation_item', 'quotation_number']);
     expect(of('purchase_requisition_item')).not.toContain('quotation_number');
     expect(of('purchasing_info_record')).not.toContain('quotation_number');
     expect(of('purchasing_info_record_price')).not.toContain('quotation_number');

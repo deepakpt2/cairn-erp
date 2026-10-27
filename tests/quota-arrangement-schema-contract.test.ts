@@ -143,7 +143,16 @@ describe('SCR-154 quota-arrangement schema', () => {
       select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'purchase_order_item'
     `)) as unknown as Array<{ column_name: string }>;
-    expect(orderColumns.map((row) => row.column_name)).not.toContain('quota_number');
+    // SCR-154 forbade a quota column on the order; 9109_purchasing_follow_on.sql changed that on
+    // purpose — "An order may name the quotation and the quota item it settled" — so the guard now
+    // bounds the quota family on the item to the reference pair and holds the line the rule was
+    // really drawn at: the arrangement's own arithmetic stays out of the order.
+    const quotaOnItem = orderColumns.map((row) => row.column_name)
+      .filter((c) => c.startsWith('quota') && !c.startsWith('quotation')).sort();
+    expect(quotaOnItem).toEqual(['quota_item', 'quota_number']);
+    for (const absent of ['allocated_quantity', 'quota_base_quantity', 'valid_from', 'valid_to', 'status']) {
+      expect(orderColumns.map((row) => row.column_name)).not.toContain(absent);
+    }
     const columns = await withTenant(client, (tx) => tx.execute(sql`
       select table_name, column_name
         from information_schema.columns

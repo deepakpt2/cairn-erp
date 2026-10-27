@@ -73,13 +73,25 @@ describe('SCR-025 / OX19 assignment contract', () => {
   it('wires Add and Unassign to server actions and renders pending, success, duplicate and error feedback', () => {
     expect(ui).toContain('useActionState<ControllingAreaCompanyAssignmentActionState, FormData>');
     expect(ui).toContain('<form action={assignAction}');
-    expect(ui.match(/<form action=\{unassignAction\}>/g)).toHaveLength(2); // mobile and desktop layouts
+    // Each layout hands `unassignAction` to one shared `UnassignPair`, and the component renders
+    // the form around it (SM12 gave it the lock's props). Counted through the component the
+    // contract is the same one this line was written for: one unassign form per layout, wired to
+    // the server action, and no unassign control outside it.
+    expect((ui.match(/<UnassignPair\b/g) ?? []).length).toBe(2);
+    expect((ui.match(/action=\{unassignAction\}/g) ?? []).length).toBe(2);
+    expect(ui).toMatch(/<form\s+action=\{action\}/);
     expect(ui).toContain('disabled={!canMaintain || assignmentPending}');
-    expect(ui).toContain('disabled={!canMaintain || unassignmentPending}');
     expect(ui).toContain("role={assignmentState.ok ? 'status' : 'alert'}");
     expect(ui).toContain("role={unassignmentState.ok ? 'status' : 'alert'}");
-    expect(ui).toContain('name="controllingArea" value={item.controllingArea}');
-    expect(ui).toContain('name="companyCode" value={item.companyCode}');
+    // The unassign controls moved into the shared component both layouts hand their flags to, so
+    // each refusal is expressed once, in the component, against its own props: the pending flag,
+    // the capability, and the change lock SM12 added — whose display-only mode also refuses the
+    // form's own submit. The same refusals the six literals above used to read off the file.
+    expect((ui.match(/pending=\{unassignmentPending\}/g) ?? []).length).toBe(2);
+    expect(ui).toContain("disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}");
+    expect(ui).toContain("if (lock?.mode !== 'CHANGE') event.preventDefault();");
+    expect(ui).toContain('<input type="hidden" name="controllingArea" value={controllingArea} />');
+    expect(ui).toContain('<input type="hidden" name="companyCode" value={companyCode} />');
     expect(ui).not.toContain('keepPreviewLocal');
     expect(actions).toContain("t('controllingArea.assignmentDuplicate'");
     expect(locale).toContain('controllingArea.assignmentAdded');

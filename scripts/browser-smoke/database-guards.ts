@@ -136,6 +136,15 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'scr157-quotation': { database: 'cairn_b210', port: '5432', batch: 'SCR-157 local loopback' },
   'scr158-quotation-display': { database: 'cairn_b210', port: '5432', batch: 'SCR-158 local loopback' },
   'scr159-quotation-comparison': { database: 'cairn_b210', port: '5432', batch: 'SCR-159 local loopback' },
+  // SCR-160 to SCR-165 were added to TARGETS without a guard, which is the one shape the runner
+  // cannot catch: it verifies a guard that exists and runs a target that has none, so those six
+  // acceptance runs reached whatever DATABASE_URL said with no review behind it.
+  'scr160-parked-invoice': { database: 'cairn_b210', port: '5432', batch: 'SCR-160 local loopback' },
+  'scr161-invoice-overview': { database: 'cairn_b210', port: '5432', batch: 'SCR-161 local loopback' },
+  'scr162-blocked-invoice': { database: 'cairn_b210', port: '5432', batch: 'SCR-162 local loopback' },
+  'scr163-grir-clearing': { database: 'cairn_b210', port: '5432', batch: 'SCR-163 local loopback' },
+  'scr164-purchase-order-display': { database: 'cairn_b210', port: '5432', batch: 'SCR-164 local loopback' },
+  'scr165-vendor-evaluation': { database: 'cairn_b210', port: '5432', batch: 'SCR-165 local loopback' },
   'production-order-create': { database: 'cairn_b210', port: '5432', batch: 'SCR-138 local loopback' },
   'journal-document-display': { database: 'cairn_b210', port: '5432', batch: 'SCR-137 local loopback' },
   'material-document-output': { database: 'cairn_b210', port: '5432', batch: 'SCR-135 local loopback' },

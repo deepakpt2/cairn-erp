@@ -5,7 +5,16 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { postVendorInvoice } from '../src/modules/finance/vendor-invoice';
 import { getPayables, postOutgoingPayment } from '../src/modules/finance/outgoing-payment';
-import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { createTenant, dateFromToday, defineTestRanges, destroyTenant } from './helpers';
+
+// The terms give 2 percent within ten days of the document date, and `getReceivables` judges that
+// window against today (`incoming-payment.ts:100`, `outgoing-payment.ts:154`), so the fixture dates
+// are counted from the run rather than fixed. Four days back keeps every case inside the window
+// and inside the fiscal year the ranges in the fixture define.
+const INVOICE_DATE = dateFromToday(-4);
+const POSTING_DATE = dateFromToday(-2);
+const PAYMENT_DATE = dateFromToday(0);
+const CLEARING_DATE = dateFromToday(1);
 
 const ACTOR = 'SCR080_F53_TEST';
 
@@ -79,13 +88,13 @@ describe('SCR-080 outgoing payment completion (F-53)', () => {
 
       await postVendorInvoice({
         client, changedBy: ACTOR, vendorNumber: 'V10000', companyCode: '1000',
-        documentDate: '2026-10-16', postingDate: '2026-10-18',
+        documentDate: INVOICE_DATE, postingDate: POSTING_DATE,
         reference: 'INV-COMP-1', currency: 'USD', grossAmount: 550, requestKey: 'comp-vinv-1',
         lines: [{ glAccount: '400000', netAmount: 500, taxCode: 'T10' }],
       });
       await postVendorInvoice({
         client, changedBy: ACTOR, vendorNumber: 'V10000', companyCode: '1000',
-        documentDate: '2026-10-16', postingDate: '2026-10-18',
+        documentDate: INVOICE_DATE, postingDate: POSTING_DATE,
         reference: 'INV-COMP-2', currency: 'USD', grossAmount: 300, requestKey: 'comp-vinv-2',
         lines: [{ glAccount: '400000', netAmount: 300 }],
       });
@@ -102,7 +111,7 @@ describe('SCR-080 outgoing payment completion (F-53)', () => {
   const payment = (patch: Partial<Parameters<typeof postOutgoingPayment>[0]> = {}) => ({
     client, changedBy: ACTOR,
     vendorNumber: 'V10000', companyCode: '1000',
-    documentDate: '2026-10-20', postingDate: '2026-10-20', clearingDate: '2026-10-21',
+    documentDate: PAYMENT_DATE, postingDate: PAYMENT_DATE, clearingDate: CLEARING_DATE,
     bankGlAccount: '101000', amount: 0, currency: 'USD',
     requestKey: `comp-${Math.random()}`,
     items: [] as Parameters<typeof postOutgoingPayment>[0]['items'],

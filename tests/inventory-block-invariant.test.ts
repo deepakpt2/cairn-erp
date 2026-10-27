@@ -21,6 +21,16 @@ const stockWriters = (): string[] => readdirSync(MODULE_DIR)
     return /insert\s+into\s+stock_quantity|tx\.update\(stockQuantity\)|do update set quantity\s*=/.test(source);
   });
 
+/**
+ * One module writes `stock_quantity` and is deliberately not asked about the block: the count's own
+ * difference posting (MI07). `assertInventoryCountOpen` carries no exemption for the document that
+ * set the block, so requiring it there would refuse the posting of the very differences the count
+ * exists to produce, and a blocked document could never be finished. The half of the invariant that
+ * does belong to it is the exclusive scope lock over the materials it moves, and the case below
+ * insists on it, so the exemption cannot quietly become the bypass SCR-143 closed.
+ */
+const COUNT_OWN_POSTING = 'physical-inventory-posting.ts';
+
 describe('SCR-143 the posting block reaches every stock-writing module', () => {
   it('finds the stock writers at all, so an empty pass cannot be mistaken for a green one', () => {
     const writers = stockWriters();
@@ -30,10 +40,12 @@ describe('SCR-143 the posting block reaches every stock-writing module', () => {
   });
 
   it('has every one of them consulting the guard', () => {
-    const unguarded = stockWriters().filter(
-      (file) => !readFileSync(`${MODULE_DIR}/${file}`, 'utf8').includes('assertInventoryCountOpen'),
-    );
+    const unguarded = stockWriters()
+      .filter((file) => file !== COUNT_OWN_POSTING)
+      .filter((file) => !readFileSync(`${MODULE_DIR}/${file}`, 'utf8').includes('assertInventoryCountOpen'));
     expect(unguarded).toEqual([]);
+    expect(readFileSync(`${MODULE_DIR}/${COUNT_OWN_POSTING}`, 'utf8'))
+      .toMatch(/lockStockScope\(tx, input\.client, items\.map\(\(item\) => item\.material_number\), 'EXCLUSIVE'\)/);
   });
 
   it('covers both reversal paths, which were the real bypass', () => {
@@ -54,8 +66,9 @@ describe('SCR-143 the posting block reaches every stock-writing module', () => {
     expect(service).toContain('.sort()');
     // The guard takes the shared lock itself: no caller can forget it.
     expect(service).toMatch(/assertInventoryCountOpen[\s\S]{0,400}lockStockScope\(tx, client, \[movement\.materialNumber\], 'SHARED'\)/);
-    // Creation takes the exclusive lock on its own materials.
-    expect(service).toMatch(/lockStockScope\(tx, input\.client, materials, 'EXCLUSIVE'\)/);
+    // Creation takes the exclusive lock on its own materials. SCR-147 moved creation into the
+    // writer that creation and the recount share, so the call names that writer's `spec`.
+    expect(service).toMatch(/lockStockScope\(tx, spec\.client, materials, 'EXCLUSIVE'\)/);
   });
 
   it('bumps the version and records the block release as its own fact', () => {
