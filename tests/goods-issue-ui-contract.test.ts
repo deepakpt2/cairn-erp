@@ -64,7 +64,11 @@ describe('SCR-136 goods issue UI contract', () => {
   });
 
   it('says what it refuses rather than hiding it: 261, counters and batch', () => {
-    expect(service).toContain('PROD.ORDER.CREATE');
+    // SCR-139 moved 261 from a refusal to a MIGO movement, so the header no longer points at a
+    // capability that would unlock it. What it must keep saying, in the service and not only in
+    // the screen copy, is which screen posts a 261 and why this one will not.
+    expect(service).toContain('Movement ${found.code} is posted from');
+    expect(service).toContain('Open MIGO, choose Goods issue with an order reference');
     expect(service).toContain('MBST');
     expect(service).toContain('A batch-managed material posts only against a batch that already stands.');
     expect(messages).toContain("'mb1a.hint'");

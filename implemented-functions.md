@@ -1,6 +1,9 @@
 # Implemented functions and transaction codes
 
-Source: the command registry in `scripts/seed.ts` (169 entries), plus four built screens that are not yet in that registry. The product code is the function. The alias is the search code only.
+Source: the capability registry `CAPABILITIES` and the screen registry `REGISTRY` in `scripts/seed.ts`, plus the
+built screens whose code is in one of those and not the other. The product code is the function. The alias is the
+search code only. A section heading's count is the number of rows under it — every section here agrees with its own
+table, and a row is kept while the route it names resolves to a page under `src/app`.
 
 ## Platform (7)
 
@@ -198,14 +201,63 @@ Source: the command registry in `scripts/seed.ts` (169 entries), plus four built
 | `CFG.INV.MATERIALRANGE.DEFINE` Define material number ranges | MMNR | Config | `/config/material-number-ranges` |
 | `CFG.INV.MATERIALGROUP.DEFINE` Define material groups | OMSF | Config | `/config/material-groups` |
 
-## Production (4)
+## Production (37)
+
+Thirty-two `PROD.*` codes are registered in `CAPABILITIES` in `scripts/seed.ts` (thirty-three rows, because
+`PROD.MRP.RUN` is entered twice), and five more are demanded by built screens without being registered —
+`PROD.MRP.SETTINGS`, `PROD.WORKCENTER.{CREATE,CHANGE,DISPLAY}` and `PROD.CONFIRM.CANCEL` — the
+"built screens whose code is in one of those and not the other" case the header names (DI-014 in
+`docs/DEFERRED_ISSUES.md`). Route is the screen that demands the code, read from that page's own
+`requireCapability` calls; a screen that demands several codes appears under each. The alias is the search code
+the screen prints beside its capability, or the one its registry description names.
 
 | Function | Alias | Type | Route |
 |---|---|---|---|
-| `PROD.ORDER.CREATE` Create production order | CO01 | Transaction | `/production/orders` |
-| `PROD.MRP.RUN` Total planning | MD01 | Transaction | `/production/mrp-run` |
-| `PROD.MRP.STOCKREQ` Stock/requirements list | MD04 | Transaction | `/production/stock-requirements` |
+| `PROD.ORDER.CREATE` Create a production order | CO01 | Transaction | `/production/orders` |
+| `PROD.ORDER.RELEASE` Release a production order | CO01 | Action | `/production/orders` |
+| `PROD.ORDER.CHANGE` Change a production order | CO02 | Transaction | `/production/production-order-change` · `/production/order-information` |
+| `PROD.ORDER.DISPLAY` Display a production order | CO03 | Transaction | `/production/production-order-display` · `/production/order-availability` |
+| `PROD.ORDER.GI` Issue components to a production order | MIGO | Transaction | `/inventory/migo` — 261 is offered there alone, and `MB1A` refuses it by name |
+| `PROD.ORDER.GR` Receive finished goods from a production order | MIGO | Transaction | `/inventory/migo` — movement 101 with R08, `production-receipt.ts` |
+| `PROD.ORDER.SETTLE` Settle a production order | — | Registered, no screen | — — see the note below: it settles nothing |
+| `PROD.ORDER.INFO` List production and planned orders | COOIS | Transaction | `/production/order-information` |
+| `PROD.CONFIRM.ENTER` Enter a time ticket | CO11N | Transaction | `/production/time-ticket` · `/production/order-information` |
+| `PROD.CONFIRM.ORDER` Confirm at header level | CO15 | Transaction | `/production/order-confirmation` · `/production/order-information` |
+| `PROD.CONFIRM.CANCEL` Cancel a confirmation | CO13 | Transaction | `/production/confirmation-cancel` |
+| `PROD.MRP.RUN` Plan a plant | MD01, MD02 | Transaction | `/production/mrp-run` · `/production/single-item-planning` |
+| `PROD.MRP.REGENERATE` Confirm a regenerative run | — | Action | `/production/mrp-run` · `/production/single-item-planning` · `/production/single-level-planning` |
+| `PROD.MRP.SINGLELEVEL` Plan one material at one level | MD03 | Transaction | `/production/single-level-planning` |
+| `PROD.MRP.STOCKREQ` Stock/requirements list, and the availability of an order | MD04, CO09 | Transaction | `/production/stock-requirements` · `/production/order-availability` |
 | `PROD.MRP.SETTINGS` Material planning settings | — | Transaction | `/inventory/materials?view=MRP` |
+| `PROD.MATERIAL.MRP.MAINTAIN` Maintain material planning views | — | Action | the MRP view of `/inventory/materials`; the posting records this code |
+| `PROD.PLANNEDORDER.CREATE` Create a planned order by hand | MD11 | Transaction | `/production/planned-order-create` |
+| `PROD.PLANNEDORDER.CHANGE` Change a planned order | MD12 | Transaction | `/production/planned-order-change` |
+| `PROD.PLANNEDORDER.DISPLAY` Display a planned order | MD13 | Transaction | `/production/planned-order-display` · `/production/order-information` |
+| `PROD.PLANNEDORDER.CONVERT` Convert one planned order | CO40 | Transaction | `/production/planned-order-conversion` |
+| `PROD.PLANNEDORDER.CONVERT.COLLECTIVE` Convert a selected set | CO41 | Transaction | `/production/planned-order-conversion-collective` |
+| `PROD.WORKCENTER.CREATE` Define a work centre | CR01 | Transaction | `/production/work-centers` |
+| `PROD.WORKCENTER.CHANGE` Change a work centre | CR02 | Transaction | `/production/work-centers` |
+| `PROD.WORKCENTER.DISPLAY` Display a work centre | CR03 | Transaction | `/production/work-center-display` |
+| `PROD.BOM.CREATE` Create a material BOM | CS01 | Transaction | `/production/boms` |
+| `PROD.BOM.CHANGE` Change a material BOM | CS02 | Transaction | `/production/boms` |
+| `PROD.BOM.DISPLAY` Display a material BOM | CS03 | Transaction | `/production/bom-display` |
+| `PROD.ROUTING.CREATE` Create a standard routing | CA01 | Transaction | `/production/routings` — not the chart-of-accounts key of the same name |
+| `PROD.ROUTING.CHANGE` Change a standard routing | CA02 | Transaction | `/production/routings` |
+| `PROD.ROUTING.DISPLAY` Display a standard routing | CA03 | Transaction | `/production/routing-display` |
+| `PROD.VERSION.CREATE` Create a production version | C223 | Transaction | `/production/production-versions` |
+| `PROD.VERSION.CHANGE` Change a production version | C223 | Transaction | `/production/production-versions` |
+| `PROD.VERSION.DISPLAY` Display a production version | C223 | Transaction | `/production/production-version-display` |
+| `PROD.VERSION.CHECK` Run the version consistency check | — | Action | `/production/production-versions` |
+| `PROD.VERSION.LOCK` Lock or unlock a version | — | Action | `/production/production-versions` |
+| `PROD.VERSION.DELETE` Delete or flag an unused version | — | Action | `/production/production-versions` |
+
+Two lines carry a decision rather than a screen. `PROD.ORDER.SETTLE` is granted by the registry and implements
+nothing for a production order: no cost basis stands on the order to settle, so there is no variance, no WIP and
+no settlement to read, `CO88` is not wired, and the acceptance criteria live in DI-012 of
+`docs/DEFERRED_ISSUES.md`. `docs/production-tcode-order.md` and the header of
+`src/modules/inventory/production-orders.ts` say the same thing. And the two goods movements of an order are not
+new transactions: they are the 261 issue and the 101 + R08 receipt on MIGO, which is why `MB1A` refuses a 261 by
+name and names the screen that posts it.
 
 ## Sales (8)
 

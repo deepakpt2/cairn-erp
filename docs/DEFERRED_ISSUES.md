@@ -25,6 +25,8 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-010 | One settlement rule per order, and the rule screen takes no session of its own | Low | Settlement rules | DEFERRED BY DECISION (D-11, D-12) |
 | DI-011 | Read-only actions behind a claim gate: swept on one screen only | Low | Change lock / UI | OPEN |
 | DI-012 | The order has no money basis, so variance, WIP and settlement cannot be built | High | PP / CO | OPEN — needs schema authorization |
+| DI-013 | Production documentation denied behaviour that had shipped | Medium | Documentation | CLOSED by this commit |
+| DI-014 | Five production screens gate on capability codes the registry does not hold | Medium | Authorization / PP | OPEN — needs a registry decision |
 
 ---
 
@@ -220,3 +222,67 @@ blocked milestone), and given acceptance criteria so the next person can close i
   `work_center_costing` × activity rates × confirmed quantities plus the receipt valuation basis, a report that
   reads it, `PROD.ORDER.SETTLE` still refusing per order until variance and settlement land (step 4), and no
   accumulated counter anywhere — matching `confirmation-movements.ts:10-13`'s "derived, never accumulated here".
+* **Update (Pass 38, documentation):** the claim is now stated where a reader will meet it first, so nobody builds
+  a settlement screen on the assumption that one exists: `PROD.ORDER.SETTLE` is described as registered-and-inert in
+  `src/modules/inventory/production-orders.ts`, in `implemented-functions.md`'s production table, and in step 12 of
+  `docs/production-tcode-order.md`. No money basis was invented here, and none of this closes the entry: the
+  migration decision above is still outstanding.
+
+## DI-013 — Production documentation denied behaviour that had shipped — CLOSED
+
+* **Severity:** Medium. **Area:** `docs/production-tcode-order.md`, `implementation-status.md`,
+  `implemented-functions.md`, the headers of `src/modules/inventory/goods-issue.ts` and
+  `src/modules/inventory/production-orders.ts`.
+* **What was wrong:** five documents stated, in the present tense, that the production module could not do things
+  it had already been extended to do — the 261 component issue ("refused by name — canon has no order master"),
+  technical completion and the finished-goods receipt (both listed as deferred in the order module), the BOM
+  explosion and planned-order conversion (`MD01` "does not explode a bill of material … does not turn a planned
+  order into a production order"), the production order on `MD04` ("does not list a production order", and the same
+  claim as an open gap), change of quantity, dates and components ("cannot be changed"), and work centres (listed
+  in `implementation-status.md` among "Workbench entries that are not built" while
+  `/production/work-centers` and `work-center.ts` exist). The Production table in `implemented-functions.md`
+  carried four rows while the application holds 25 production screens over 32 registered `PROD.*` codes.
+* **Evidence, measured in this pass rather than recalled:** `GOODS_ISSUE_SCENARIOS` carries
+  `code: '261' … screen: 'MIGO'` (`goods-issue.ts:95-98`) and `MB1A_SCENARIOS`/`MIGO_ISSUE_SCENARIOS` are filters
+  on that `screen` field (:101-104), so the refusal is a *screen* refusal — `:201` reads "Movement 261 is posted
+  from MIGO, not from this screen", which is what `tests/goods-issue.test.ts:211` and
+  `tests/migo-component-issue.test.ts:26,152,251` already pinned. `technicallyCompleteProductionOrder`
+  (`production-order-change.ts:599`) and `revokeTechnicalCompletion` (`:656`) ship, with `changeType 'TECO'`.
+  `PROD.ORDER.GR` ships in `src/modules/inventory/production-receipt.ts` and is granted to the production role in
+  `src/platform/tenancy/index.ts:75`. `mrp-run.ts:27` imports `explodePlannedSupply`, and `stock-requirements.ts`
+  reads `production_order` as a receipt element (:412) and `production_order_component` as the demand beneath it
+  (:484). 25 directories under `src/app/production` hold a `page.tsx`; `find src/app -name page.tsx` returns 236.
+* **Resolution:** the five files were corrected to the sentences above — comments and documentation only, with no
+  behaviour, no interface and no business rule touched. `tests/production-documentation-consistency.test.ts` pins
+  each corrected sentence to the code that makes it true, and holds the function table against the screen tree, so
+  a correction cannot rot back and a new screen cannot be left out.
+* **What was deliberately not decided here:** the money basis (`CO88`, variance, WIP and settlement) stays exactly
+  as DI-012 has it; the `CO09` paragraph was rewritten only to the read-only overview the module already refuses by
+  name, and `docs/co09-availability-audit.md` remains the matrix — that screen is under its owner's active work and
+  was not edited. `implementation-status.md`'s counts (`169` codes, `166` pages, `71` activities, "fourteen … no
+  page") could not be re-derived from any rule, and the file now states the measured catalogue figures and the guard
+  that holds the claim instead. A stale count is the same harm as a stale sentence.
+
+## DI-014 — Five production screens gate on capability codes the registry does not hold
+
+* **Severity:** Medium. **Area:** `CAPABILITIES` in `scripts/seed.ts`, `/production/work-centers`,
+  `/production/work-center-display`, `/production/confirmation-cancel`, `/inventory/materials?view=MRP`.
+* **Evidence:** `src/modules/production/work-center.ts:32-34` defines `PROD.WORKCENTER.{CREATE,CHANGE,DISPLAY}` and
+  the two work-centre pages demand them with `requireCapability`; `confirmation-cancel` demands
+  `PROD.CONFIRM.CANCEL`; the MRP view records `PROD.MRP.SETTINGS` in the screen catalogue and the term registry.
+  None of the four codes appears in `CAPABILITIES` (measured: 33 `PROD.*` rows, 32 unique codes, and no
+  `WORKCENTER` or `CONFIRM.CANCEL` among them — only the activity `CFG.PROD.WORKCENTER.DEFINE` is registered). A
+  role that can only be granted registered codes therefore cannot be given these screens; a role holding a wildcard
+  such as `PROD.*` can, which is what `tests/work-center.test.ts:218-221` exercises. Fail-closed, so not a bypass.
+* **Impact:** a tenant configured through the grant screens, rather than by a wildcard, cannot open the work-centre
+  or confirmation-cancel screens that the production flow starts at — the same family as the ~28 pages reported to
+  fall back to `auth.readOnly`.
+* **Why deferred:** the fix is a registry change. `CAPABILITIES` seeds rows that become persisted capability
+  identifiers, which the checkpoint brief's §4 puts behind explicit authorization, and DI-008's type/build gate is
+  owner-occupied in the same area. Recording it here keeps the next person from concluding the screens are dead.
+* **Acceptance criteria:** either the four codes are registered in `CAPABILITIES` with `module: 'PROD'` and the
+  action that matches their use, in which case `tests/production-documentation-consistency.test.ts`'s last case
+  asks that DI-014 be marked CLOSED in the same commit; or the four pages are re-gated on registered codes
+  (`CFG.PROD.WORKCENTER.DEFINE` and `PROD.CONFIRM.ORDER` respectively), in which case `implemented-functions.md`'s
+  production table loses its "built screens not in the registry" sentence. No third option: leaving the codes
+  unregistered while the catalogue prints them is what makes a grant list and a screen disagree.

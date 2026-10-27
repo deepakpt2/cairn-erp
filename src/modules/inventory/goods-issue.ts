@@ -9,13 +9,16 @@
  * transaction**, so the demand in MD04 falls with the stock.
  *
  * Delivered movements: **201** (goods issue to a cost centre) and **551**
- * (scrapping). **261 is refused by name** — it consumes against a production order
- * and canon has no order master. The counter movements (202 / 552) stand in the
- * catalogue with their `reversal_movement_type` links so **MBST** reverses an issue
- * through the tested path; this service posts no counter movement of its own.
+ * (scrapping) on this screen, and **261** (goods issue for a production order).
+ * SCR-139 delivered 261 and MIGO offers it alone — `MB1A_SCENARIOS` filters by the
+ * `screen` each movement belongs to — so a 261 typed here is refused by name with the
+ * transaction that posts it, and `tests/goods-issue.test.ts` and
+ * `tests/migo-component-issue.test.ts` hold both halves of that sentence. The counter
+ * movements (202 / 552 / 262) stand in the catalogue with their
+ * `reversal_movement_type` links so **MBST** reverses an issue through the tested
+ * path; this service posts no counter movement of its own.
  *
  * A batch-managed material posts only against a batch that already stands.
- * The production-order issue stays on MIGO until PROD.ORDER.CREATE names it.
  * The posting does not create the batch, and a restricted batch is refused
  * because movements 341 and 342 are not available.
  */

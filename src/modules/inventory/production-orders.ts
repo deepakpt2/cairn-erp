@@ -1,7 +1,8 @@
 /**
  * Create and release a production order — SCR-138 / CO01 (SAP alias only).
  *
- * The order master the next round's 261 will post against. Two acts, deliberately
+ * The order master a 261 component issue posts against (SCR-139, from MIGO), and the row a
+ * confirmation, a finished-goods receipt and a technical completion act on. Two acts, deliberately
  * separate: **create** records what is to be produced, where, how much and when, with
  * its components; **release** is the single step that allows work to be charged to it,
  * and it records who released it and when. Nothing posts to the ledger here, and nothing
@@ -22,11 +23,23 @@
  * does not rewrite either snapshot.
  * Capacity is not read.
  *
- * Deferred by name: TECO / technically complete, order closure, deletion flags, the
- * finished-goods receipt (PROD.ORDER.GR), settlement (PROD.ORDER.SETTLE), availability
- * checking (ATP), collective orders, and external order numbering. A finished-good
- * batch may be named when that batch already stands. A new batch is created only when
- * the scheduling profile snapshotted at create says so. OPKP is not this screen.
+ * What this screen is *not*, because each of these is a different one and was wired
+ * after this module was written: change and display of a saved order
+ * (`production-order-change.ts`, `production-order-display.ts` — the change carries the
+ * quantity, the dates and the component snapshot), technical completion and its
+ * revocation (`technicallyCompleteProductionOrder`, `revokeTechnicalCompletion`, both in
+ * `production-order-change.ts`), the finished-goods receipt (`production-receipt.ts`
+ * under `PROD.ORDER.GR`, MIGO 101 + R08), confirmations and time tickets, and the
+ * availability overview (`order-availability.ts`, read only — it writes no commitment
+ * and no reservation, which is its stated contract, not an omission).
+ *
+ * Still refused by name here, and nowhere else: order closure, a deletion flag on the
+ * order, settlement of a production order (`PROD.ORDER.SETTLE` is granted by the
+ * registry and settles nothing, because no cost basis stands on the order to settle —
+ * `docs/DEFERRED_ISSUES.md` DI-012), collective manufacturing orders, and external
+ * order numbering. A finished-good batch may be named when that batch already stands.
+ * A new batch is created only when the scheduling profile snapshotted at create says
+ * so. OPKP is not this screen.
  */
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 

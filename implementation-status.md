@@ -2,7 +2,12 @@
 
 Checked against `scripts/seed.ts` and the pages under `src/app`. No new screen was added.
 
-169 command-bar codes. Every route in that registry has a page. 166 pages exist. The workbench has 71 activities. Fourteen of those open a route that has no page.
+The screen catalogue in `src/ui/shell/screen-catalog.ts` holds 242 entries over 235 distinct routes, and every one of
+those routes has a page under `src/app`, where 236 pages exist. This file no longer repeats the counts it once did
+(`169` codes, `166` pages, `71` activities, fourteen routes with no page): none of them could be re-derived from any
+rule, and a count nobody can reproduce is how a status file starts to lie. What is checked instead is the link the
+counts were standing in for — that nothing in the catalogue or in a screen's own related links points at a page that
+is not there, which is what `tests/screen-links.test.ts` holds.
 
 ## Broken links between parts that exist
 
@@ -40,6 +45,9 @@ Goods receipt writes its own movement `GOODS_RECEIPT_PO` if the movement table i
 
 These steps remain on the plan and no longer store a route, so the workbench says the screen is pending instead of opening a missing page.
 
-Roles, users, pricing procedures, condition records, work centres, MRP controllers, lot sizing, scheduling, employee record types, pay components, deduction rules, and mail.
+Roles, users, pricing procedures, condition records, MRP controllers, lot sizing, scheduling, employee record
+types, pay components, deduction rules, and mail. Work centres were on this list and are taken off it: they are
+built, at `/production/work-centers` and `/production/work-center-display` over
+`src/modules/production/work-center.ts`, with `CFG.PROD.WORKCENTER.DEFINE` as the activity that opens the way.
 
 The first user and the system roles are created with the tenant. There is no later screen for a second user.
