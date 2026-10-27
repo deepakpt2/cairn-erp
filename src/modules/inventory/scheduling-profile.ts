@@ -2,8 +2,8 @@
  * OPKP — production scheduling profile. The table is TCO43, not T399X.
  *
  * The key is the plant and CO_PRODPRF, stored as typed, at most six characters.
- * The description is PRODPRF_TX in the tenant language. A language row per
- * SPRAS is not stored.
+ * The description is PRODPRF_TX in the tenant language. One language row per
+ * language key is not stored.
  *
  * Only settings this system can execute are saved:
  * - FLG_REL_CR, domain KREUZ: X releases at creation, blank does not.

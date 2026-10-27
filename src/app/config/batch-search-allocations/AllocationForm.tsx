@@ -44,20 +44,20 @@ export default function AllocationForm({
         {lock?.mode === 'DISPLAY' && lock.message && <p role="status" className="text-sm">{lock.message}</p>}
         <label className="block text-sm">
           Movement type
-          <input name="movementType" list="omcg-movements" defaultValue={editing?.movementType ?? ''} readOnly={Boolean(editing)} required maxLength={20} className="code mt-1 w-full border border-line px-2 py-1" />
+          <input name="movementType" list="batch-search-allocation-movements" defaultValue={editing?.movementType ?? ''} readOnly={Boolean(editing)} required maxLength={20} className="code mt-1 w-full border border-line px-2 py-1" />
         </label>
-        <datalist id="omcg-movements">
+        <datalist id="batch-search-allocation-movements">
           {movements.map((row) => <option key={row.movementType} value={row.movementType}>{row.description}</option>)}
         </datalist>
         <label className="block text-sm">
           Search procedure
-          <input name="searchProcedure" list="omcg-procedures" defaultValue={editing?.searchProcedure ?? ''} required maxLength={6} disabled={!writable} className="code mt-1 w-full border border-line px-2 py-1" />
+          <input name="searchProcedure" list="batch-search-allocation-procedures" defaultValue={editing?.searchProcedure ?? ''} required maxLength={6} disabled={!writable} className="code mt-1 w-full border border-line px-2 py-1" />
         </label>
         <label className="block text-sm">
           Transfer procedure
-          <input name="transferProcedure" list="omcg-procedures" defaultValue={editing?.transferProcedure ?? ''} maxLength={6} disabled={!writable} className="code mt-1 w-full border border-line px-2 py-1" />
+          <input name="transferProcedure" list="batch-search-allocation-procedures" defaultValue={editing?.transferProcedure ?? ''} maxLength={6} disabled={!writable} className="code mt-1 w-full border border-line px-2 py-1" />
         </label>
-        <datalist id="omcg-procedures">
+        <datalist id="batch-search-allocation-procedures">
           {procedures.map((row) => <option key={row.searchProcedure} value={row.searchProcedure}>{row.description}</option>)}
         </datalist>
         <label className="flex items-start gap-2 text-sm">

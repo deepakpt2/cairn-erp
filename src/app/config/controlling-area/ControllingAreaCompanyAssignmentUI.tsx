@@ -65,9 +65,9 @@ export function ControllingAreaCompanyAssignmentUI({
 
   return (
     <div className="space-y-4">
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="ox19-assignment-form-title">
+      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="assign-company-code-form-title">
         <header className="border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4">
-          <h2 id="ox19-assignment-form-title" className="text-base font-semibold text-[#334f65]">
+          <h2 id="assign-company-code-form-title" className="text-base font-semibold text-[#334f65]">
             {t('controllingArea.assignmentFormTitle')}
           </h2>
           <p className="mt-1 text-sm text-ink-soft">{t('controllingArea.assignmentFormHint')}</p>
@@ -94,7 +94,7 @@ export function ControllingAreaCompanyAssignmentUI({
         <form action={assignAction} className="space-y-4 p-3 sm:p-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <ControllingAreaValueHelp
-              id="ox19-controlling-area"
+              id="assign-company-code-controlling-area"
               name="controllingArea"
               label={t('controllingArea.code')}
               value={controllingAreaValue}
@@ -109,7 +109,7 @@ export function ControllingAreaCompanyAssignmentUI({
               disabled={!canMaintain || assignmentPending}
             />
             <ControllingAreaValueHelp
-              id="ox19-company-code"
+              id="assign-company-code-company-code"
               name="companyCode"
               label={t('cc.code')}
               value={companyCodeValue}
@@ -136,20 +136,20 @@ export function ControllingAreaCompanyAssignmentUI({
               type="submit"
               className="btn btn-primary min-h-11 w-full sm:min-h-9 sm:w-auto"
               disabled={!canMaintain || assignmentPending}
-              aria-describedby="ox19-assignment-actions-pending"
+              aria-describedby="assign-company-code-actions-pending"
             >
               {assignmentPending ? t('common.saving') : t('controllingArea.assignmentAddButton')}
             </button>
           </div>
-          <span id="ox19-assignment-actions-pending" className="sr-only">
+          <span id="assign-company-code-actions-pending" className="sr-only">
             {t('controllingArea.assignmentActionsPending')}
           </span>
         </form>
       </section>
 
-      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="ox19-current-assignments-title">
+      <section className="overflow-hidden border border-[#9eb6c8] bg-white shadow-sm" aria-labelledby="assign-company-code-current-assignments-title">
         <div className="flex items-center gap-2 border-b border-[#cbd5de] bg-[#eef3f7] px-3 py-3 sm:px-4">
-          <h2 id="ox19-current-assignments-title" className="min-w-0 flex-1 text-sm font-semibold text-[#334f65]">
+          <h2 id="assign-company-code-current-assignments-title" className="min-w-0 flex-1 text-sm font-semibold text-[#334f65]">
             {t('controllingArea.assignmentListTitle')}
           </h2>
           <span className="code text-xs tabular text-ink-faint">{assignments.length}</span>

@@ -131,7 +131,7 @@ async function createAccessUsers(client: string) {
 export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   const { page, base: BASE, target } = ctx;
   const CLIENT = target.client;
-  const assignmentForm = page.locator('section[aria-labelledby="ox19-assignment-form-title"] form');
+  const assignmentForm = page.locator('section[aria-labelledby="assign-company-code-form-title"] form');
   const areaInput = assignmentForm.locator('[name="controllingArea"]');
   const companyInput = assignmentForm.locator('[name="companyCode"]');
 
