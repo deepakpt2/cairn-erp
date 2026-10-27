@@ -329,7 +329,12 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
                 disabled={!current || !canEdit || assignmentPending}
                 className="field-input code mt-1 min-h-11 w-full uppercase sm:min-h-9"
                 value={assignment.sourceAccount}
-                onChange={(event) => setAssignment((value) => ({ ...value, sourceAccount: event.currentTarget.value.toUpperCase() }))}
+                onChange={(event) => {
+                  // Read the event now: React releases it before the updater below runs, and currentTarget is
+                  // null by then.
+                  const typed = event.currentTarget.value.toUpperCase();
+                  setAssignment((state) => ({ ...state, sourceAccount: typed }));
+                }}
               />
             </label>
             <label className="block">
@@ -340,7 +345,10 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
                 disabled={!current || !canEdit || assignmentPending}
                 className="field-input mt-1 min-h-11 w-full sm:min-h-9"
                 value={assignment.receiverCategory}
-                onChange={(event) => setAssignment((value) => ({ ...value, receiverCategory: event.currentTarget.value }))}
+                onChange={(event) => {
+                  const picked = event.currentTarget.value;
+                  setAssignment((state) => ({ ...state, receiverCategory: picked }));
+                }}
               >
                 {CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
@@ -362,7 +370,10 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
                 disabled={!current || !canEdit || assignment.byOriginalAccount || assignmentPending}
                 className="field-input code mt-1 min-h-11 w-full uppercase sm:min-h-9"
                 value={assignment.settlementAccount}
-                onChange={(event) => setAssignment((value) => ({ ...value, settlementAccount: event.currentTarget.value.toUpperCase() }))}
+                onChange={(event) => {
+                  const typed = event.currentTarget.value.toUpperCase();
+                  setAssignment((state) => ({ ...state, settlementAccount: typed }));
+                }}
               />
             </label>
             <Check
