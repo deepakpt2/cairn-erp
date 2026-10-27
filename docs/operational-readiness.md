@@ -119,3 +119,26 @@ lines this pass repaired, and a one-line mutant (`reservations.ts:80`) failed it
 
 Reproduce the numbers with `bash /home/cairn/p39-wide.sh 1` and `2` on the verification box, and
 `bash ~/run-box-tests.sh <tag> tests/browser-target-constrained-driving.test.ts` for the guard.
+
+## Sales order entry, as it stands after this commit
+
+The first link of the order-to-invoice chain is live at the service level and on two screens:
+
+* `/sales/orders` (`SALES.ORDER.CREATE`) creates, changes, rejects an item and cancels a sales order. The header
+  carries the value the credit check judged, and the standing `credit_determination` for the order number is what
+  reads as blocked. An unauthorized session sees the list without the forms.
+* `/sales/conditions` (`CFG.SALES.CONDITION.MAINTAIN`) maintains the price one customer and material carries for
+  a period. A sales order takes its prices from these records and nowhere else: an item no record prices is
+  refused rather than priced at zero, and the record the order read is named on the line.
+* Evidence run on the box for this commit: `tests/sales-order.test.ts` 17/17 (create, pricing from the record,
+  tax by company country, every refusal — no record, over-precise quantity, unknown unit, material not at the
+  plant, blocked customer sales area, unknown sales area, replay of a repeated submission, change with a stale
+  version and with a silently dropped item, rejection keeping its reason, credit block then authorized release
+  then a refused second release, a fresh determination when a change takes the order over the limit, cancel once
+  and the transitions that no longer exist, and a condition change closing the span it replaced);
+  `npm run db:verify` 13/13 after applying `drizzle/9190`; `tsc --noEmit` 152, none of them in a sales file;
+  `screen-links`, `production-documentation-consistency`, `credit-release`, `credit-monitor`, `customer-invoice`,
+  `purchase-order` and `browser-target-constrained-driving` green in the same run (8 files, 54 tests).
+* Not done, and recorded rather than glossed: there is no browser target for either new screen yet, because the
+  journey a target would drive does not end at an order — see DI-020. The delivery, goods-issue and billing links,
+  the rest of the pricing vocabulary (DI-018) and the exposure basis (DI-019) are the next three entries.

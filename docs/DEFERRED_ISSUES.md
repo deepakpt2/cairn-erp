@@ -30,6 +30,9 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-015 | Sixteen browser acceptance targets cannot reach the assertion they were written to make | Medium | Test harness / browser targets | OPEN — 21 files repaired by this commit |
 | DI-016 | Six sibling validators repeat the quantity check that mis-fired at CO01 | Low | PP validation | OPEN |
 | DI-017 | Thirty-five fixtures still choose a material type by which one sorts first | Low | Test fixtures | OPEN |
+| DI-018 | Sales pricing resolves an item price and no other condition type | Medium | SD pricing | OPEN |
+| DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
+| DI-020 | The outbound delivery, goods issue and billing links of the sales chain do not exist yet | High | SD order-to-invoice | OPEN |
 
 ---
 
@@ -362,3 +365,72 @@ blocked milestone), and given acceptance criteria so the next person can close i
   the type its valuation class belongs to, and the refusal message it would otherwise hit is quoted in the
   commit note. A fixture that has to pick a type from what exists is replaced by one that creates the type
   it needs. No new shared helper: the pairing is per material and a helper would hide it again.
+
+## DI-018 — Sales pricing resolves an item price and no other condition type
+
+* **Severity:** Medium. **Area:** `src/modules/sales`, SD pricing.
+* **Evidence:** migration `drizzle/9190` constrains both `sales_pricing_step` and `sales_condition_record`
+  to `condition_type = 'PR00'`, and `src/modules/sales/pricing.ts` reads exactly three accesses
+  (customer-and-material, material alone, customer alone) for the order date. There is no pricing-procedure
+  table, no step table and no access sequence: `grep -rn "material_sales" src/modules` returns nothing, and
+  `customer_sales_area.pricing_procedure` is a validated varchar no code resolves. CAIRN.md:2032-2044 puts
+  full pricing procedures in Phase 3.
+* **Impact:** no discounts, no freight, no header conditions, no scales, no condition supplements, no
+  accruals, and no per-document-type procedure. An item whose customer has no record and no general record
+  is refused, so the gap shows as a refusal rather than as a wrong price. Because the order stores the
+  `condition_number` it read, a later billing document can re-read the same record and stay consistent.
+* **Why deferred:** the masters a step vocabulary needs (procedure, step, access sequence, condition table)
+  have no reader yet, and a table nothing reads is what this ledger exists to record. Their maintenance screen
+  is a configuration screen of its own, not a form bolted onto order entry.
+* **Acceptance criteria:** with the billing link, add `sales_pricing_procedure` and `sales_pricing_step`
+  (condition type, step category, calculation level, required flag) plus the material sales view, resolve the
+  customer's procedure instead of ignoring it, and give each a maintenance screen under the two `CFG.SALES.*`
+  codes that are registered today. A procedure that names a step no record answers must refuse the document,
+  as the price step does now, and one test must show an order and its invoice deriving the same figure.
+
+## DI-019 — Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing
+
+* **Severity:** Medium. **Area:** `src/modules/finance/credit.ts`, SD credit control.
+* **Evidence:** `exposureIn` (src/modules/finance/credit.ts:111) sums posted, uncleared
+  `journal_entry_line` rows reached through the company codes assigned to the credit control area, in local
+  currency. Nothing before billing creates a receivable, so an order, a delivery and a posted goods issue add
+  nothing to the figure the ladder compares against the limit.
+* **Impact:** a customer with a large book of open orders and no invoice is judged on what has been billed. The
+  block that the order does raise is real — `checkSalesDocumentCredit` is called on create and on every change,
+  and a determination in status BLOCKED is what the release screen claims — but "open order value" and
+  "delivered not yet invoiced" are not components of exposure.
+* **Why deferred:** widening the sum changes a live control that already has a screen, an audit trail and tests,
+  and the documents that would be summed (delivery, goods issue, billing) do not exist yet (DI-020). Choosing a
+  basis is a business decision, not a coding step, and this pass was not authorized to invent one.
+* **Acceptance criteria:** when the chain exists, state the components in the engine (open order value,
+  delivered-not-billed, open receivables, and the uncleared-item rule that already stands), show the split on
+  /finance/credit-monitor, and prove with tests that an order which pushes exposure past the limit blocks the
+  *next* document and that releasing it re-reads the same basis. `tests/credit-release.test.ts` and
+  `tests/credit-monitor.test.ts` stay green unchanged.
+
+## DI-020 — The outbound delivery, goods issue and billing links of the sales chain do not exist yet
+
+* **Severity:** High. **Area:** `src/modules/sales`, `src/modules/inventory`, SD order-to-invoice.
+* **Evidence:** the database holds `sales_order`, `sales_order_line` and `sales_condition_record` and no
+  `delivery`, `delivery_line`, `delivery_picking`, `billing_document` or `billing_document_line` (the authorized
+  `drizzle/9190` was narrowed to the order link on purpose, so nothing ships with no writer). `src/modules/inventory/goods-issue.ts:80`
+  offers movements 201, 551 and 261 — no 601 and no 602, so there is no goods-issue movement against a delivery.
+  There is no `/sales/delivery` or `/sales/billing` route, and `grep -n "sales-order" scripts/browser-smoke/targets.ts`
+  finds no target for the new screens either.
+* **Impact:** acceptance items 2 to 6 and 9 of the order-to-invoice brief are unmet: an order cannot be fulfilled,
+  nothing is billed, and the credit block therefore binds no follow-on document — the refusal site does not exist.
+  The AR tail on the other side (customer invoice, incoming payment, clearing, ageing, dunning) is untouched and
+  still works, so no half-built accounting path stands either.
+* **Why deferred:** the delivery needs its own migration, picking rows, the 601/602 scenario and its journal,
+  billing that creates the receivable through `postCustomerInvoice`, and screens for each. That is the next
+  milestone of the chain, not a tail to this one, and adding tables or a scenario number without their postings
+  would be the "registered code with no production caller" this brief rules out.
+* **Acceptance criteria:** the seven-table migration (already authorized); a delivery built from the open quantity
+  of one order, refusing over-delivery and a second delivery for the same quantity; pick confirmations that move
+  no stock; one 601 goods issue per delivery posting stock and cost of goods sold in the same transaction as the
+  delivery status, with 602 the only reversal and refused once reversed; a billing document from delivered
+  quantities that posts through the existing customer-invoice service and refuses a second billing of the same
+  quantity; the credit determination refusing a blocked document at delivery creation and at billing release; and
+  one browser target covering create → deliver → pick → goods issue → bill → payment and clearing, with blocked
+  credit, insufficient stock, partial fulfillment and a repeated submission as its failure paths. The enqueue
+  guard's object classes gain `sales_order` and the new documents at the same time, so a change lock covers them.

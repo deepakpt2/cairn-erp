@@ -11,6 +11,7 @@ export type ScreenArea =
   | 'foundation'
   | 'finance'
   | 'purchasing'
+  | 'sales'
   | 'inventory'
   | 'production'
   | 'controlling'
@@ -2448,12 +2449,33 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "platform",
     accepts: [],
   },
+  {
+    id: "/sales/orders",
+    path: "/sales/orders",
+    query: {},
+    code: "SALES.ORDER.CREATE",
+    title: "Sales order",
+    area: "sales",
+    family: "sales-orders",
+    accepts: ["order"],
+  },
+  {
+    id: "/sales/conditions",
+    path: "/sales/conditions",
+    query: {},
+    code: "CFG.SALES.CONDITION.MAINTAIN",
+    title: "Sales condition records",
+    area: "sales",
+    family: "sales-pricing",
+    accepts: ["customer", "material"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [
   'platform',
   'foundation',
   'finance',
+  'sales',
   'purchasing',
   'inventory',
   'production',
