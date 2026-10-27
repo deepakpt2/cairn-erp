@@ -6,6 +6,7 @@ import { withTenant } from '../../src/platform/db/client';
 import { changeHistory } from '../../src/platform/change';
 import { defineCompanyCode } from '../../src/modules/foundation/company-code-definition';
 import { saveControllingArea } from '../../src/modules/foundation/controlling-area-maintenance';
+import type { Route } from '@playwright/test';
 import { upsertCompanyCode } from '../../src/modules/foundation/services';
 import type { BrowserContext } from '../browser-smoke/checks';
 
@@ -485,4 +486,58 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   await second.close();
   assert.equal((await lockRow(AREA, COMPANY)).length, 0, 'No lock stands after the holder finished.');
   console.log('  ✓ the holder completes the unassign in one press and no lock or assignment is left behind');
+
+  // ── The claim the browser cannot reach ─────────────────────────────────────────────
+  // A fresh opening of the page, a pair nobody has locked, and the action route cut for one
+  // interaction. The press starts the claim, the claim never answers, and the row has to say so as a
+  // failure: not as another session's refusal, not as a saved change, and with nothing filed. The
+  // control stays pressable, because the operator's next press is the retry and the only way back.
+  await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { level: 1, name: 'Company Code Assignments', exact: true }).waitFor();
+  const FAIL_AREA = 'M210';
+  const FAIL_COMPANY = 'M203';
+  const failRow = page.locator('tbody tr').filter({ hasText: FAIL_AREA }).filter({ hasText: FAIL_COMPANY });
+  await failRow.waitFor();
+  const failButton = failRow.getByRole('button', { name: 'Unassign', exact: true });
+  const actionUrl = new URL(page.url()).pathname;
+  const samePage = (url: URL) => url.pathname === actionUrl;
+  const cut = async (route: Route) => (route.request().method() === 'POST' ? route.abort('failed') : route.continue());
+  await page.route(samePage, cut);
+  const historyBeforeFailure = (await linkHistory(FAIL_AREA, FAIL_COMPANY)).length;
+  assert.equal(await readLink(FAIL_AREA, FAIL_COMPANY), true);
+  assert.equal(await failButton.isDisabled(), false, 'An unopened row offers its control to a session that has not claimed it.');
+
+  await failButton.click();
+  await page.getByRole('alert').filter({ hasText: /Error/i }).first().waitFor({ timeout: 20_000 });
+  const failureAlerts = (await page.getByRole('alert').allInnerTexts()).join('\n');
+  assert.doesNotMatch(
+    failureAlerts,
+    /cannot change it|not open for change|is being changed by|display only|lock monitor/i,
+    `an unreachable claim was told as somebody else holding the row: ${failureAlerts}`,
+  );
+  assert.doesNotMatch(failureAlerts, /unassigned|saved|recorded/i, 'a failed claim may not report a change.');
+  await page.waitForTimeout(1_500);
+  assert.equal(await readLink(FAIL_AREA, FAIL_COMPANY), true, 'A failed claim files nothing, then or afterwards.');
+  assert.equal(
+    (await linkHistory(FAIL_AREA, FAIL_COMPANY)).length,
+    historyBeforeFailure,
+    'A failed claim leaves the audit history untouched.',
+  );
+  assert.equal((await waitForLock(FAIL_AREA, FAIL_COMPANY, false)).length, 0, 'A claim that never reached the server took no lock.');
+  assert.equal(await failButton.isDisabled(), false, 'A failed claim leaves the row pressable, so the operator can ask again.');
+  await page.unroute(samePage, cut);
+  console.log(`  ✓ a claim that cannot be reached is told as a failure and files nothing (${failureAlerts.replace(/\s+/g, ' ').trim()})`);
+
+  // The next press re-claims, and this time the answer is a grant: the unassignment goes through on
+  // that single press, with its audit record and no opening left behind.
+  await failButton.click();
+  await page.getByRole('status').getByText(
+    `Company Code ${FAIL_COMPANY} unassigned from Controlling Area ${FAIL_AREA}; prior change history retained.`,
+    { exact: true },
+  ).waitFor();
+  await failRow.waitFor({ state: 'detached' });
+  assert.equal(await readLink(FAIL_AREA, FAIL_COMPANY), false);
+  assert.ok((await linkHistory(FAIL_AREA, FAIL_COMPANY)).some((event) => event.changeType === 'DELETE'));
+  assert.equal((await waitForLock(FAIL_AREA, FAIL_COMPANY, false)).length, 0);
+  console.log('  ✓ the press after a failed claim retries the opening and completes in one press');
 }

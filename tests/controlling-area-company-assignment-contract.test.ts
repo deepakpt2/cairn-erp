@@ -92,7 +92,7 @@ describe('SCR-025 / OX19 assignment contract', () => {
     // The refusals the row has always had — no capability, and a display-only opening. A claim in
     // flight must NOT disable the control: that would eat the press between mousedown and mouseup,
     // which is the failure this round is about, rediscovered in the first attempt at fixing it.
-    expect(ui).toContain("disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}");
+    expect(ui).toContain('disabled={!canMaintain || pending || refused}');
     expect(ui).not.toContain('const opening =');
     expect(ui).not.toMatch(/disabled=\{[^}]*opening/);
     expect(ui).toContain('<input type="hidden" name="controllingArea" value={controllingArea} />');
@@ -110,32 +110,50 @@ describe('SCR-025 / OX19 assignment contract', () => {
     // refuses. The browser round found it exactly there — the press acquired
     // `CONTROLLING_AREA_COMPANY M210/M201`, filed no submit, and left the control enabled and
     // silent, so an operator had to press again for no stated reason.
-    expect(ui).toContain('const [queued, setQueued] = useState(false);');
-    expect(ui).toContain('if (!lock) setQueued(true);');
-    expect(ui).toContain('const held = lock?.mode === \'CHANGE\';');
-    // The press is replayed only once the opening has answered, and only when it granted change;
-    // an answer of display drops the press and lets the notice speak instead.
-    expect(ui).toMatch(/if \(!queued \|\| !lock\) return;/);
-    // A press that arrives before the answer is kept, not submitted unauthenticated: the only
-    // thing the early press does is start the claim and set the queue.
-    expect(ui).toMatch(/if \(!lock\) setQueued\(true\);/);
+    expect(ui).toContain('const { claim, notice, reportPress, dispatched } = useChangeLockClaim(');
+    expect((ui.match(/useChangeLock\w*\(/g) ?? []).length).toBe(1);
+    expect(ui).not.toContain('const lock = ');
+    expect(ui).toContain("const refused = claim.phase === 'refused';");
+    // The press is replayed only once the claim has been granted, and it is spent by the shared rule
+    // rather than by a condition the screen has to remember to get right.
+    expect(ui).toMatch(/if \(!shouldDispatch\(claim\)\) return;/);
+    expect(ui).toContain('dispatched();');
+    expect(ui).toMatch(/if \(form\) action\(new FormData\(form\)\);/);
+    // A press that arrives before the answer is kept, not submitted unauthenticated: the only thing
+    // the early press does is start the claim and hand the intent to it.
+    expect(ui).toMatch(/if \(claim\.phase === 'open'\) return;\s*event\.preventDefault\(\);\s*setEngaged\(true\);\s*reportPress\(\);/);
     expect(ui).toContain('onFocus={() => setEngaged(true)}');
-    expect(ui).toMatch(/if \(held && form\) action\(new FormData\(form\)\);/);
     // Exactly one dispatch path, and the form itself still owns the ordinary press.
     expect((ui.match(/new FormData\(form\)/g) ?? []).length).toBe(1);
     expect(ui).not.toContain('requestSubmit');
-    // No timer stands in for the answer: the queue is what says a reply is owed.
+    // No timer stands in for the answer: the claim says whether a reply is owed.
     expect(ui).not.toMatch(/setTimeout|setInterval/);
-    // Queuing only widens what is already opened, so the claim is never restarted under the row.
-    expect(ui).toContain('(engaged || queued) && canMaintain,');
-    expect((ui.match(/useChangeLock\(/g) ?? []).length).toBe(1);
+    // Opening the row is what the interaction does, and the queue cannot widen it: the queue lives in
+    // the claim this condition would decide, so the condition reads only the interaction.
+    expect(ui).toContain('engaged && canMaintain,');
     // Both refusals stay: display-only still speaks through the shared notice with its remedy, and
     // the action re-checks the lock, so a submit forced past the client gate is refused server-side.
-    expect(ui).toContain("message={lock?.mode === 'DISPLAY' ? lock.message : null}");
-    expect(ui).toContain('remedy={lock?.remedy}');
+    expect(ui).toContain('message={refused ? notice.message : null}');
+    expect(ui).toContain('remedy={refused ? notice.remedy : null}');
     expect(actions).toContain('await assertChangeForSession(session, {');
     expect(actions).toContain("lockObject: 'CONTROLLING_AREA_COMPANY',");
     expect(actions).toContain('argument: `${controllingArea}/${companyCode}`,');
+  });
+
+  it('tells an unreachable claim apart from a refused one, and retries only on the next press', () => {
+    // The failure path the shared contract adds, pinned where the queue is pinned: a claim that never
+    // answered is announced as a failure in the platform's own words, never as somebody else holding
+    // the row; the screen claims no lock and no saved change; and the way back is the operator's next
+    // press, not a timer and not the queue replaying itself.
+    expect(ui).toContain("{claim.phase === 'failed' && (");
+    expect(ui).toMatch(/<p role="alert"[^>]*>\s*\{t\('common\.error'\)\}: \{notice\.message\}/);
+    expect(ui).toContain("if (claim.phase === 'open') return;");
+    expect(ui).not.toMatch(/setTimeout|setInterval|retry\(/);
+    // The refusal keeps its copy and its recovery sentence; the failure never borrows them.
+    expect(ui).toContain('message={refused ? notice.message : null}');
+    expect(ui).toContain('remedy={refused ? notice.remedy : null}');
+    expect(ui).toContain("{pending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}");
+    expect((ui.match(/role="alert"/g) ?? []).length).toBe(1);
   });
 
   it('enforces exact currency/Fiscal Year Variant matches and current-assignment CoA baseline', () => {

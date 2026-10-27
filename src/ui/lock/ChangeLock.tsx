@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer } from 'react';
 
 import {
   heartbeatEnqueueAction,
@@ -8,25 +8,114 @@ import {
   releaseEnqueueAction,
   type ChangeLockState,
 } from '@/app/platform/locks/actions';
+import {
+  changeLockClaim,
+  claimKey,
+  claimNotice,
+  failureText,
+  IDLE_CLAIM,
+  projectClaim,
+  type ChangeLockClaim,
+} from './claim';
+
+/**
+ * The answer of a claim, and the one action that can restart it.
+ *
+ * Screens that only need the platform's answer keep reading `useChangeLock`. A screen that has to tell
+ * an owed answer from a failure — anything that keeps a press, or that must say why nothing happened —
+ * reads `claim` instead.
+ */
+export interface ChangeLockClaimHandle {
+  claim: ChangeLockClaim;
+  /** What a notice should show for this claim: refusal text with its recovery sentence, or the failure. */
+  notice: { message: string | null; remedy: string | null };
+  /** The only way a claim restarts, for a press the operator makes after a failure. */
+  retry: () => void;
+  /** A press the gate refused to honour, so the row can say so instead of going quiet. */
+  reportPress: () => void;
+  /** Called by the screen once it has dispatched a kept press, so the intent is spent. */
+  dispatched: () => void;
+}
+
+/** A background call whose failure is not the operator's to carry: it must not reject unhandled. */
+function quietly(promise: Promise<unknown>): void {
+  void promise.catch(() => undefined);
+}
 
 /** Keeps a lock this session already holds, and drops it when the screen leaves. */
 export function ChangeLock({ lockObject, argument }: { lockObject: string; argument: string }) {
   useEffect(() => {
     if (!argument) return undefined;
     const beat = window.setInterval(() => {
-      void heartbeatEnqueueAction(lockObject, argument);
+      quietly(heartbeatEnqueueAction(lockObject, argument));
     }, 20_000);
     return () => {
       window.clearInterval(beat);
-      void releaseEnqueueAction(lockObject, argument);
+      quietly(releaseEnqueueAction(lockObject, argument));
     };
   }, [lockObject, argument]);
   return null;
 }
 
 /**
- * For a screen that chooses the row in the browser. The first session gets
- * change. A second session is told to display, and the save is refused.
+ * For a screen that chooses the row in the browser. The first session gets change. A second session is
+ * told to display, and the save is refused.
+ *
+ * The claim itself, with its lifecycle: see `./claim` for what each phase means and for the rules about
+ * keeping, dispatching and dropping a press.
+ */
+export function useChangeLockClaim(
+  lockObject: string,
+  argument: string | null,
+  transactionCode: string,
+  enabled: boolean,
+): ChangeLockClaimHandle {
+  const [claim, dispatch] = useReducer(changeLockClaim, IDLE_CLAIM);
+  const key = claimKey(lockObject, argument, transactionCode);
+  const open = enabled && Boolean(argument);
+
+  useEffect(() => {
+    if (!open || !argument) {
+      dispatch({ type: 'reset' });
+      return undefined;
+    }
+    dispatch({ type: 'begin', key });
+    // The effect's own teardown is what makes a superseded claim unable to answer: the row that
+    // changed hands, or left the screen, cannot land its grant on the row that replaced it. A rejected
+    // action is answered here rather than left unhandled, and it lands as `failed`, not as a refusal.
+    let settled = false;
+    void openChangeLockAction(lockObject, argument, transactionCode).then(
+      (state) => {
+        if (!settled) dispatch({ type: 'resolve', key, state });
+      },
+      (error: unknown) => {
+        if (!settled) dispatch({ type: 'reject', key, error: failureText(error) });
+      },
+    );
+    const beat = window.setInterval(() => {
+      quietly(heartbeatEnqueueAction(lockObject, argument));
+    }, 20_000);
+    return () => {
+      settled = true;
+      window.clearInterval(beat);
+      quietly(releaseEnqueueAction(lockObject, argument));
+    };
+  }, [key, open, argument, lockObject, transactionCode, claim.attempt]);
+
+  return {
+    claim,
+    notice: claimNotice(claim),
+    retry: () => dispatch({ type: 'retry', key }),
+    reportPress: () => dispatch({ type: 'press' }),
+    dispatched: () => dispatch({ type: 'dispatched' }),
+  };
+}
+
+/**
+ * The projection every lock screen already reads: the platform's answer, or `null` while an answer is
+ * owed or the claim failed. It never reports a grant the platform did not give, and it is derived from
+ * the same claim as everything else, so a screen reading `mode` and a screen reading `phase` cannot
+ * disagree about whether this session holds the opening.
  */
 export function useChangeLock(
   lockObject: string,
@@ -34,26 +123,8 @@ export function useChangeLock(
   transactionCode: string,
   enabled: boolean,
 ): ChangeLockState | null {
-  const [open, setOpen] = useState<ChangeLockState | null>(null);
-  useEffect(() => {
-    if (!enabled || !argument) {
-      setOpen(null);
-      return undefined;
-    }
-    let cancelled = false;
-    void openChangeLockAction(lockObject, argument, transactionCode).then((result) => {
-      if (!cancelled) setOpen(result);
-    });
-    const beat = window.setInterval(() => {
-      void heartbeatEnqueueAction(lockObject, argument);
-    }, 20_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(beat);
-      void releaseEnqueueAction(lockObject, argument);
-    };
-  }, [lockObject, argument, transactionCode, enabled]);
-  return open;
+  const { claim } = useChangeLockClaim(lockObject, argument, transactionCode, enabled);
+  return projectClaim(claim);
 }
 
 /**
@@ -70,3 +141,5 @@ export function LockNotice({ message, remedy }: { message: string | null | undef
     </p>
   );
 }
+
+export type { ChangeLockClaim, ChangeLockPhase } from './claim';
