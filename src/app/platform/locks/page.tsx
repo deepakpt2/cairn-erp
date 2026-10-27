@@ -9,6 +9,17 @@ import { DeleteLock } from './DeleteLock';
 export const dynamic = 'force-dynamic';
 
 const ROUTE = '/platform/locks';
+
+/**
+ * How long the holder has been silent, as this page is rendered. The staleness itself is the platform's
+ * judgement (`listEnqueue`), and a row that has fallen silent past the threshold is gone from the list
+ * before it is drawn — this number is what an operator reads in the meantime, so that "answered 12 s ago"
+ * and "answered 170 s ago" are visibly different rows rather than two timestamps to subtract by eye.
+ */
+function quietSeconds(heartbeatAt: string): number {
+  const at = Date.parse(heartbeatAt);
+  return Number.isFinite(at) ? Math.max(0, Math.round((Date.now() - at) / 1000)) : 0;
+}
 const DISPLAY = 'PLT.LOCK.DISPLAY';
 const DELETE = 'PLT.LOCK.DELETE';
 
@@ -45,6 +56,7 @@ export default async function LockMonitorPage() {
                 <th>{t('enqueue.transaction')}</th>
                 <th>{t('enqueue.since')}</th>
                 <th>{t('enqueue.heartbeat')}</th>
+                <th title={t('enqueue.answerHint')}>{t('enqueue.answer')}</th>
               </tr>
             </thead>
             <tbody>
@@ -57,11 +69,17 @@ export default async function LockMonitorPage() {
                   <td className="code">{row.transactionCode ?? '—'}</td>
                   <td className="text-xs">{row.acquiredAt}</td>
                   <td className="text-xs">{row.heartbeatAt}</td>
+                  <td>
+                    {row.stale
+                      ? <span className="chip chip-warn">{t('enqueue.answerStale')}</span>
+                      : <span className="text-xs text-ink-soft">{t('enqueue.answerFresh', { seconds: quietSeconds(row.heartbeatAt) })}</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           {rows.length === 0 && <p className="p-4 text-sm text-ink-soft">{t('enqueue.empty')}</p>}
+          {rows.length > 0 && <p className="px-4 pb-4 text-xs text-ink-faint">{t('enqueue.answerHint')}</p>}
         </section>
       )}
 

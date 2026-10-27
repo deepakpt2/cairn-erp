@@ -56,11 +56,17 @@ export function useChangeLock(
   return open;
 }
 
-export function LockNotice({ message }: { message: string | null | undefined }) {
+/**
+ * The display-only notice of a change session, with the recovery path under it when the caller has one to
+ * show. `remedy` stays opt-in on purpose: several screens reuse this component for their own warnings, and
+ * a lock-recovery sentence would be wrong advice on a notice that is not about a lock.
+ */
+export function LockNotice({ message, remedy }: { message: string | null | undefined; remedy?: string | null }) {
   if (!message) return null;
   return (
     <p role="status" className="border border-signal-warn/40 bg-signal-warn-soft p-3 text-sm text-signal-warn">
-      {message}
+      <span className="block">{message}</span>
+      {remedy && <span className="mt-1 block text-xs">{remedy}</span>}
     </p>
   );
 }

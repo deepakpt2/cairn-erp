@@ -70,7 +70,9 @@ async function authorized(form: FormData, kind: 'structure' | 'profile' | 'order
 
 function refused(error: unknown): SettlementConfigActionState {
   if (error instanceof SettlementMastersError) return { ok: false, message: error.message, remedy: error.remedy };
-  if (error instanceof EnqueueError) return { ok: false, message: error.message };
+  // The platform's own remedy, untouched: `assertChangeLock` already tells the operator which of the two
+  // cases this is — the lock stands under another session, or this session never took it.
+  if (error instanceof EnqueueError) return { ok: false, message: error.message, remedy: error.remedy };
   if (error instanceof AuthzError) {
     return {
       ok: false,

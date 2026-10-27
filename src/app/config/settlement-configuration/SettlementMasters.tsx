@@ -318,7 +318,7 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
           <form action={editAction} className="space-y-3 border border-line p-3">
             <h3 className="font-medium">Description of {current ? <Code value={current.structureCode} /> : 'the selected structure'}</h3>
             <Message state={edit} />
-            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
             <input type="hidden" name="mode" value="CHANGE" />
             <input type="hidden" name="structureCode" value={current?.structureCode ?? ''} />
             <input type="hidden" name="expectedVersion" value={current?.version ?? 0} />
@@ -509,7 +509,7 @@ function SettlementProfiles({
     <form action={action} className="space-y-3 border border-line p-3">
       <h3 className="font-medium">{mode === 'CREATE' ? 'New profile' : `Profile ${values.profileCode || '—'}`}</h3>
       <Message state={state} />
-      {mode === 'CHANGE' && <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />}
+      {mode === 'CHANGE' && <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />}
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="expectedVersion" value={current?.version ?? 0} />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -716,7 +716,7 @@ function OrderTypeAssignments({
           <form action={assignAction} className="space-y-3 border border-line p-3">
             <h3 className="font-medium">Profile for order type <Code value={current.orderType} /></h3>
             <Message state={assign} />
-            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} />
+            <LockNotice message={lock?.mode === 'DISPLAY' ? lock.message : null} remedy={lock?.remedy} />
             <input type="hidden" name="mode" value={current.profileCode ? 'CHANGE' : 'CREATE'} />
             <input type="hidden" name="orderType" value={current.orderType} />
             <input type="hidden" name="expectedVersion" value={current.version} />

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { t } from '@/platform/i18n';
 import {
   EnqueueError,
   deleteEnqueueEntry,
@@ -16,9 +17,16 @@ import {
 const ROUTE = '/platform/locks';
 const DELETE = 'PLT.LOCK.DELETE';
 
+/**
+ * What a screen needs to render a change session: the mode, the platform's own reason when this session
+ * was told to display, and what the operator can do about it. `remedy` is null wherever there is nothing to
+ * add — a CHANGE grant, or an error the platform itself carries no guidance for — so a screen shows a second
+ * line only when there is one.
+ */
 export interface ChangeLockState {
   mode: 'CHANGE' | 'DISPLAY';
   message: string | null;
+  remedy: string | null;
 }
 
 export interface LockDeleteState {
@@ -49,9 +57,16 @@ export async function openChangeLockAction(
       argument,
       transactionCode,
     });
-    return { mode: opened.mode, message: displayOnlyMessage(opened) };
+    return {
+      mode: opened.mode,
+      message: displayOnlyMessage(opened),
+      // The recovery path is the same on every screen, because it is the same mechanism: the holder leaves
+      // or stops answering, or an operator clears the row. Nothing here retries on its own, and the wording
+      // says so rather than promising a refresh that will not come.
+      remedy: opened.mode === 'DISPLAY' && opened.holder ? t('lock.displayOnlyRecovery') : null,
+    };
   } catch (error) {
-    if (error instanceof EnqueueError) return { mode: 'DISPLAY', message: error.message };
+    if (error instanceof EnqueueError) return { mode: 'DISPLAY', message: error.message, remedy: error.remedy ?? null };
     throw error;
   }
 }
