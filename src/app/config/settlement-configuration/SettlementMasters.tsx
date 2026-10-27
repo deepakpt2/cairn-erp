@@ -11,7 +11,7 @@
 import { type ReactNode, useEffect, useActionState, useState } from 'react';
 
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
-import { SETTLEMENT_CONFIG_LOCKS } from '@/modules/foundation/settlement-configuration-keys';
+import { SETTLEMENT_CONFIG_LOCKS, settlementConfigArgument } from '@/modules/foundation/settlement-configuration-keys';
 import {
   removeAssignmentAction,
   removeOrderTypeAction,
@@ -34,6 +34,17 @@ export interface AssignmentEntry {
   version: number;
 }
 
+/**
+ * A key this structure was once assigned on and no longer is. Nothing here is editable — the pair is the
+ * key and `version` is what a save must submit to take the key back, because the audit rows of a removal
+ * stay counted against it. See `getAllocationStructure` on the module side.
+ */
+export interface RemovedAssignmentEntry {
+  sourceAccount: string;
+  receiverCategory: string;
+  version: number;
+}
+
 export interface StructureEntry {
   structureCode: string;
   description: string;
@@ -41,6 +52,7 @@ export interface StructureEntry {
   orderTypes: number;
   version: number;
   assignments: AssignmentEntry[];
+  removedAssignments: RemovedAssignmentEntry[];
   profilesUsedBy: Array<{ profileCode: string; isActive: boolean }>;
 }
 
@@ -156,6 +168,27 @@ function Check({
 
 function Code({ value }: { value: string }) {
   return <span className="code text-sm">{value}</span>;
+}
+
+/**
+ * The version the assignment form has to submit for the key it is about to write — the key the operator
+ * has typed, not the one selected in the list, since the two differ as soon as an account is retyped.
+ *
+ * The guard on the write side counts this structure's audit rows for `structure/source/receiver`, and a
+ * removal adds a row instead of clearing the count. So the number comes from the live row when there is
+ * one, from the removed key's history when the row is gone, and only for a key that has never been
+ * assigned is it 0. Reading live rows alone would strand a re-add on a version no screen can offer.
+ */
+function assignmentVersionFor(
+  structure: Pick<StructureEntry, 'assignments' | 'removedAssignments'> | null,
+  target: { sourceAccount: string; receiverCategory: string },
+): number {
+  const key = `${settlementConfigArgument(target.sourceAccount)}/${target.receiverCategory}`;
+  const same = (row: { sourceAccount: string; receiverCategory: string }) =>
+    `${row.sourceAccount}/${row.receiverCategory}` === key;
+  return structure?.assignments.find(same)?.version
+    ?? structure?.removedAssignments.find(same)?.version
+    ?? 0;
 }
 
 function AllocationStructures({ structures, canMaintain }: { structures: StructureEntry[]; canMaintain: boolean }) {
@@ -318,7 +351,7 @@ function AllocationStructures({ structures, canMaintain }: { structures: Structu
             </h3>
             <Message state={addAssignment} />
             <input type="hidden" name="structureCode" value={current?.structureCode ?? ''} />
-            <input type="hidden" name="expectedVersion" value={assignmentRow?.version ?? 0} />
+            <input type="hidden" name="expectedVersion" value={assignmentVersionFor(current, assignment)} />
             <label className="block">
               <Label text="Source account" required />
               <input

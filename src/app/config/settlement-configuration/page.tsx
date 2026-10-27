@@ -49,6 +49,9 @@ export default async function SettlementConfigurationPage() {
       version: detail?.version ?? 0,
       assignments: (detail?.assignments ?? []).map((assignment) => ({ ...assignment })),
       profilesUsedBy: detail?.profilesUsedBy ?? [],
+      // A removed key is read by the assignment form for one reason: it holds the version that a re-add
+      // has to submit. See `getAllocationStructure`.
+      removedAssignments: (detail?.removedAssignments ?? []).map((row) => ({ ...row })),
     };
   }));
 

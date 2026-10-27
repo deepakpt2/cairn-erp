@@ -215,6 +215,12 @@ export async function listAllocationStructures(client: string) {
   });
 }
 
+/**
+ * One structure as a maintainer sees it: its description, the profiles that read it, its assignment rows,
+ * and the version each of those rows stands at. A key that was assigned and removed has no row to show, so
+ * it is reported in `removedAssignments` with the version its own history left behind: that is the number a
+ * save must submit to take the key back.
+ */
 export async function getAllocationStructure(client: string, structureCode: string) {
   const parsed = z.object({ client: clientSchema, structureCode: codeSchema }).strict().safeParse({ client, structureCode });
   if (!parsed.success) throw invalidInput(parsed.error);
@@ -233,6 +239,31 @@ export async function getAllocationStructure(client: string, structureCode: stri
         eq(settlementProfile.client, parsed.data.client),
         eq(settlementProfile.allocationStructure, parsed.data.structureCode),
       )).orderBy(asc(settlementProfile.profileCode));
+    // A removed assignment leaves its audit rows behind, so its key keeps a version even though there is
+    // no row to read. The write-side guard counts those rows (`auditVersion`), and a removal adds one
+    // rather than clearing them, so a reader that reported only live rows could never satisfy the guard for
+    // a key it wants back: it would be told to re-read a row that does not exist. The order-type read
+    // (`listOrderTypeSettlementProfiles`) has always handed out the version whether or not a row stands
+    // there; this is the same rule, over the keys this structure's history names.
+    const history = await tx.select({
+      objectKey: changeDocument.objectKey,
+      version: sql<number>`count(*)::int`,
+    }).from(changeDocument).where(and(
+      eq(changeDocument.client, parsed.data.client),
+      eq(changeDocument.objectClass, ASSIGNMENT_CLASS),
+      sql`split_part(${changeDocument.objectKey}, '/', 1) = ${parsed.data.structureCode}`,
+    )).groupBy(changeDocument.objectKey).orderBy(asc(changeDocument.objectKey));
+    const liveKeys = new Set(assignments.map((assignment) => assignmentKeyOf(parsed.data.structureCode, {
+      sourceAccount: assignment.sourceAccount.trim(),
+      receiverCategory: assignment.receiverCategory,
+    })));
+    const removedAssignments = history.flatMap((entry) => {
+      if (liveKeys.has(entry.objectKey)) return [];
+      const [, sourceAccount, receiverCategory] = entry.objectKey.split('/');
+      if (!sourceAccount || !receiverCategory) return [];
+      return [{ sourceAccount, receiverCategory, version: entry.version }];
+    });
+
     return {
       structureCode: row.structureCode.trim(),
       description: row.description.trim(),
@@ -248,6 +279,7 @@ export async function getAllocationStructure(client: string, structureCode: stri
         settlementAccount: assignment.settlementAccount?.trim() ?? null,
         version: await auditVersion(tx, parsed.data.client, ASSIGNMENT_CLASS, assignmentKeyOf(parsed.data.structureCode, assignment)),
       }))),
+      removedAssignments,
     };
   });
 }

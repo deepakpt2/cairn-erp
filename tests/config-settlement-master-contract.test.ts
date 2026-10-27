@@ -10,6 +10,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { closeDb, createTenant, defineTestRanges, destroyTenant, sql, withTenant } from './helpers';
+import { ensureSettlementMasters } from './settlement-masters';
 import { defineRange } from '../src/platform/numbering';
 import { postJournalEntry } from '../src/platform/posting';
 import { createInternalOrder } from '../src/modules/foundation/internal-order';
@@ -308,6 +309,130 @@ describe('the settlement masters', () => {
     });
     expect(saved).toMatchObject({ changed: true, version: 2 });
     expect((await changeRows(tenant, 'settlement_profile')).map((row) => row.change_type)).toEqual(['CREATE', 'CHANGE']);
+  });
+
+  it('gives a removed assignment key the version a re-add has to submit', async () => {
+    const tenant = await standing('ko88-master-readd');
+    await configured(tenant);
+
+    const live = await getAllocationStructure(tenant.client, 'AS01');
+    expect(live?.assignments).toMatchObject([{ sourceAccount: '410000', receiverCategory: 'COST_CENTER', version: 1 }]);
+    expect(live?.removedAssignments).toEqual([]);
+
+    await removeAllocationStructureAssignment({
+      client: tenant.client, changedBy: ACTOR, structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER',
+    });
+    const removed = await getAllocationStructure(tenant.client, 'AS01');
+    expect(removed?.assignments).toEqual([]);
+    // Two audit rows stand against the key — the create and the removal — and the guard counts both.
+    expect(removed?.removedAssignments).toMatchObject([{ sourceAccount: '410000', receiverCategory: 'COST_CENTER', version: 2 }]);
+
+    // The number a reader that only saw live rows would have sent is 0. The guard is untouched, so it is
+    // still refused, and the remedy it offers — re-read and repeat — now leads somewhere.
+    await expect(assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: true, expectedVersion: 0,
+    })).rejects.toThrow(/stands at another version/);
+
+    const back = await assignment(tenant, {
+      structureCode: 'AS01',
+      sourceAccount: '410000',
+      receiverCategory: 'COST_CENTER',
+      byOriginalAccount: false,
+      settlementAccount: '200000',
+      expectedVersion: 2,
+    });
+    expect(back).toMatchObject({ created: true, changed: true, version: 3 });
+
+    const again = await getAllocationStructure(tenant.client, 'AS01');
+    expect(again?.assignments).toMatchObject([{
+      sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: false, settlementAccount: '200000', version: 3,
+    }]);
+    expect(again?.removedAssignments).toEqual([]);
+    expect(await assignmentRows(tenant)).toHaveLength(1);
+    expect((await changeRows(tenant, 'allocation_structure_assignment')).map((row) => row.change_type))
+      .toEqual(['CREATE', 'DELETE', 'CREATE']);
+  });
+
+  it('counts the version on the structure whose key it removes, and nowhere else', async () => {
+    const tenant = await standing('ko88-master-removed-scope');
+    await configured(tenant);
+    await structure(tenant, 'CREATE', 'AS02', 'Second structure');
+    await assignment(tenant, { structureCode: 'AS02', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: true });
+
+    await removeAllocationStructureAssignment({
+      client: tenant.client, changedBy: ACTOR, structureCode: 'AS02', sourceAccount: '410000', receiverCategory: 'COST_CENTER',
+    });
+    const first = await getAllocationStructure(tenant.client, 'AS01');
+    const second = await getAllocationStructure(tenant.client, 'AS02');
+    // The audit key is structure/source/receiver: one account standing on two structures is two keys, and a
+    // removal on one must not hand the other a version it never earned.
+    expect(second?.removedAssignments).toMatchObject([{ sourceAccount: '410000', receiverCategory: 'COST_CENTER', version: 2 }]);
+    expect(first?.removedAssignments).toEqual([]);
+    expect(first?.assignments).toMatchObject([{ sourceAccount: '410000', version: 1 }]);
+    // Removing a key that is already gone writes nothing and reports the number it stands at.
+    await expect(removeAllocationStructureAssignment({
+      client: tenant.client, changedBy: ACTOR, structureCode: 'AS02', sourceAccount: '410000', receiverCategory: 'COST_CENTER',
+    })).resolves.toMatchObject({ removed: false, version: 2 });
+    expect((await changeRows(tenant, 'allocation_structure_assignment')).map((row) => row.change_type)).toEqual(['CREATE', 'CREATE', 'DELETE']);
+  });
+
+  it('starts a key that was never assigned at version zero', async () => {
+    const tenant = await standing('ko88-master-never-used');
+    await configured(tenant);
+    const view = await getAllocationStructure(tenant.client, 'AS01');
+    expect(view?.removedAssignments.map((row) => row.sourceAccount)).not.toContain('410100');
+
+    const fresh = await assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410100', receiverCategory: 'GL_ACCOUNT', byOriginalAccount: true, expectedVersion: 0,
+    });
+    expect(fresh).toMatchObject({ created: true, changed: true, version: 1 });
+    expect((await getAllocationStructure(tenant.client, 'AS01'))?.removedAssignments).toEqual([]);
+  });
+
+  it('refuses a stale assignment save, on a live row and on a key taken back', async () => {
+    const tenant = await standing('ko88-master-assignment-stale');
+    await configured(tenant);
+
+    const first = await assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: false, settlementAccount: '200000', expectedVersion: 1,
+    });
+    expect(first).toMatchObject({ changed: true, version: 2 });
+    await expect(assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: true, expectedVersion: 1,
+    })).rejects.toThrow(/stands at another version/);
+    expect(await assignmentRows(tenant)).toHaveLength(1);
+    expect((await getAllocationStructure(tenant.client, 'AS01'))?.assignments[0])
+      .toMatchObject({ byOriginalAccount: false, settlementAccount: '200000' });
+
+    await removeAllocationStructureAssignment({
+      client: tenant.client, changedBy: ACTOR, structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER',
+    });
+    const view = await getAllocationStructure(tenant.client, 'AS01');
+    const at = view?.removedAssignments.find((row) => row.sourceAccount === '410000')?.version ?? -1;
+    expect(at).toBe(3);
+    // Reading the removed key's version is what makes the re-add pass; one number off still refuses, so the
+    // fix has not put a window next to the guard.
+    await expect(assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: true, expectedVersion: at - 1,
+    })).rejects.toThrow(/stands at another version/);
+    await expect(assignment(tenant, {
+      structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER', byOriginalAccount: true, expectedVersion: at,
+    })).resolves.toMatchObject({ created: true, version: 4 });
+  });
+
+  it('lets the supported fixture writer rebuild a key it removed', async () => {
+    const tenant = await standing('ko88-master-fixture');
+    await ensureSettlementMasters(tenant.client, { orderType: 'IO01' });
+    await removeAllocationStructureAssignment({
+      client: tenant.client, changedBy: ACTOR, structureCode: 'AS01', sourceAccount: '410000', receiverCategory: 'COST_CENTER',
+    });
+    await removeOrderTypeSettlementProfile({ client: tenant.client, changedBy: ACTOR, orderType: 'IO01' });
+    // The writer documents itself as idempotent. After a removal, 0 is a stale number for a key that has
+    // been used before, so it has to submit what the reads report — on both sides of the chain.
+    await expect(ensureSettlementMasters(tenant.client, { orderType: 'IO01' })).resolves.toBeUndefined();
+    expect((await getAllocationStructure(tenant.client, 'AS01'))?.assignments)
+      .toMatchObject([{ sourceAccount: '410000', receiverCategory: 'COST_CENTER' }]);
+    expect((await listOrderTypeSettlementProfiles(tenant.client)).find((row) => row.orderType === 'IO01')?.profileCode).toBe('SP01');
   });
 
   it('keeps an assignment an unsettled balance still reads', async () => {

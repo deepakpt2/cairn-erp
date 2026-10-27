@@ -10,6 +10,7 @@
 import {
   assignOrderTypeSettlementProfile,
   getAllocationStructure,
+  listOrderTypeSettlementProfiles,
   saveAllocationStructure,
   saveAllocationStructureAssignment,
   saveSettlementProfile,
@@ -27,7 +28,11 @@ export interface SettlementMasterFixture {
   methods?: { percentage?: boolean; equivalence?: boolean; amount?: boolean };
 }
 
-/** Idempotent: a create over a standing row changes nothing, so two fixtures for one tenant agree. */
+/**
+ * Idempotent: a create over a standing row changes nothing, and a create over a key that was removed
+ * submits the version its history left behind, so two fixtures for one tenant agree whichever order the
+ * removals came in.
+ */
 export async function ensureSettlementMasters(client: string, input: SettlementMasterFixture = {}): Promise<void> {
   const structureCode = input.structureCode ?? 'AS01';
   const profileCode = input.profileCode ?? 'SP01';
@@ -47,10 +52,15 @@ export async function ensureSettlementMasters(client: string, input: SettlementM
     if (structure?.assignments.some((row) => row.sourceAccount === sourceAccount && row.receiverCategory === receiverCategory)) {
       continue;
     }
+    // A key that was assigned here and removed has no row to read, yet its audit rows still count: the
+    // version it stands at comes from `removedAssignments`, and 0 is only right for a key never used.
+    const version = structure?.removedAssignments.find(
+      (row) => row.sourceAccount === sourceAccount && row.receiverCategory === receiverCategory,
+    )?.version ?? 0;
     await saveAllocationStructureAssignment({
       client,
       changedBy: ACTOR,
-      expectedVersion: 0,
+      expectedVersion: version,
       structureCode,
       sourceAccount,
       receiverCategory,
@@ -72,11 +82,14 @@ export async function ensureSettlementMasters(client: string, input: SettlementM
     amountAllowed: input.methods?.amount ?? true,
     isActive: true,
   });
+  // Same rule on the other side of the chain: an order type that was assigned a profile and then unlinked
+  // stands at its audit count, not at 0.
+  const standingType = (await listOrderTypeSettlementProfiles(client)).find((row) => row.orderType === orderType);
   await assignOrderTypeSettlementProfile({
     client,
     changedBy: ACTOR,
     mode: 'CREATE',
-    expectedVersion: 0,
+    expectedVersion: standingType?.version ?? 0,
     orderType,
     profileCode,
   });
