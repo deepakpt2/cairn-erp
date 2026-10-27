@@ -41,4 +41,33 @@ describe('SCR-025 / OX19 browser acceptance target guard', () => {
       expect(ox19).toContain(phrase);
     }
   });
+
+  it('drives one press per unassign and refuses a second session that is told to display', () => {
+    for (const phrase of [
+      'const unassignRow = async (',
+      "await unassignRow(firstRow, 'M210', 'M201');",
+      "await unassignRow(secondRow, 'M210', 'M202');",
+      'A display-only opening must not offer the press.',
+      'is being changed by ${HOLDER}',
+      'A refused unassign moved nothing.',
+      'the refused press reached the action; the viewer was told:',
+      'a lock nobody answers is released about three minutes after its last answer',
+      "username: 'ox19.both.other'",
+      'No lock stands after the holder finished.',
+    ]) {
+      expect(ox19).toContain(phrase);
+    }
+    // The single press is the workflow under test. A retry here would hide the defect this round
+    // exists to close, so the helper is read for how many times it presses.
+    const body = /const unassignRow = async \(([\s\S]*?)\n  \};/.exec(ox19)?.[1] ?? '';
+    expect(body).not.toBe('');
+    expect((body.match(/\.click\(\)/g) ?? []).length).toBe(1);
+    // The second session signs in on its own terms: copying the first session's cookies would be
+    // the same holder, which is not the contention this phase is about.
+    expect(ox19).toContain('await other.locator(\'[name="username"]\').fill(VIEWER);');
+    expect(ox19).not.toContain('addCookies');
+    // The refusal is asserted against the database and the audit history, not against a
+    // screenshot: nothing moved, nothing was filed, and the holder kept what it held.
+    expect(ox19).toContain('A refused unassign filed no audit record.');
+  });
 });

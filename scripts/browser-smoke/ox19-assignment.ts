@@ -98,6 +98,13 @@ async function createAccessUsers(client: string) {
       roleCode: 'OX19_BOTH',
       capabilities: [CONTROLLING_AREA_DEFINE, COMPANY_CODE_DEFINE],
     },
+    {
+      // A second capable session, so one of them can be told to display by the other's lock.
+      username: 'ox19.both.other',
+      fullName: 'OX19 Dual Capability Second Session',
+      roleCode: 'OX19_BOTH_OTHER',
+      capabilities: [CONTROLLING_AREA_DEFINE, COMPANY_CODE_DEFINE],
+    },
   ];
 
   await withTenant(client, async (tx) => {
@@ -245,6 +252,43 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   });
   const linkHistory = async (area: string, company: string) =>
     withTenant(CLIENT, (tx) => changeHistory(tx, CLIENT, 'controlling_area_company', `${area}/${company}`));
+  const lockRow = async (area: string, company: string) => (await withTenant(CLIENT, (tx) => tx.execute(sql`
+    select owner_user from public.enqueue_entry
+     where client = ${CLIENT} and lock_object = 'CONTROLLING_AREA_COMPANY' and argument = ${`${area}/${company}`}
+  `))) as unknown as Array<{ owner_user: string }>;
+  const waitForLock = async (area: string, company: string, expect = true) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const rows = await lockRow(area, company);
+      if (rows.length > 0 === expect) return rows;
+      await page.waitForTimeout(250);
+    }
+    return lockRow(area, company);
+  };
+
+  /**
+   * The unassign a real operator performs: one press of the row's own button. The press opens the
+   * change lock for that pair and the unassignment goes through when the opening is granted — the
+   * row used to swallow that first press, because the gate asked for a lock the press had only just
+   * started to claim, so the sequence is asserted end to end rather than retried.
+   */
+  const unassignRow = async (row: ReturnType<typeof page.locator>, area: string, company: string) => {
+    const button = row.getByRole('button', { name: 'Unassign', exact: true });
+    assert.equal(await button.isDisabled(), false, 'A row nobody has opened yet offers its control.');
+    await button.click();
+    await page.getByRole('status').getByText(
+      `Company Code ${company} unassigned from Controlling Area ${area}; prior change history retained.`,
+      { exact: true },
+    ).waitFor();
+    await row.waitFor({ state: 'detached' });
+    assert.equal(await readLink(area, company), false, 'The link is gone from the table.');
+    assert.ok((await linkHistory(area, company)).some((event) => event.changeType === 'DELETE'), 'The delete is in the audit history.');
+    assert.equal(
+      (await waitForLock(area, company, false)).length,
+      0,
+      'Leaving the row released the opening, so no stale lock stands behind the work.',
+    );
+  };
+
 
   // Both inactive masters remain visible and selectable; non-Char-4 legacy keys
   // stay visible for discovery but are disabled in value help.
@@ -319,12 +363,7 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   // No implicit reassignment: reject a second owner, then perform Unassign and Add.
   await submitAndExpectError('M211', 'M201', /already assigned to Controlling Area M210/);
   const firstRow = page.locator('tbody tr').filter({ hasText: 'M210' }).filter({ hasText: 'M201' });
-  await firstRow.getByRole('button', { name: 'Unassign', exact: true }).click();
-  await page.getByRole('status').getByText(
-    'Company Code M201 unassigned from Controlling Area M210; prior change history retained.',
-    { exact: true },
-  ).waitFor();
-  await firstRow.waitFor({ state: 'detached' });
+  await unassignRow(firstRow, 'M210', 'M201');
   assert.equal(await readLink('M210', 'M201'), false);
   history = await linkHistory('M210', 'M201');
   assert.equal(history.length, 3);
@@ -338,11 +377,7 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   // Removing the last current link clears the derived CoA baseline; the next
   // first assignment may establish a different baseline.
   const secondRow = page.locator('tbody tr').filter({ hasText: 'M210' }).filter({ hasText: 'M202' });
-  await secondRow.getByRole('button', { name: 'Unassign', exact: true }).click();
-  await page.getByRole('status').getByText(
-    'Company Code M202 unassigned from Controlling Area M210; prior change history retained.',
-    { exact: true },
-  ).waitFor();
+  await unassignRow(secondRow, 'M210', 'M202');
   await submitAndExpect('M210', 'M203');
   await submitAndExpectError('M210', 'M202', /Operational Chart of Accounts CA01 does not match the current assignment baseline ALT1/);
   console.log('  ✓ an empty assignment set accepts a new first CoA baseline');
@@ -383,4 +418,71 @@ export async function controllingAreaCompanyAssignment(ctx: BrowserContext) {
   const authorizedRow = page.locator('tbody tr').filter({ hasText: 'A000' }).filter({ hasText: '1000' });
   assert.equal(await authorizedRow.getByRole('button', { name: 'Unassign', exact: true }).isDisabled(), false);
   console.log('  ✓ a user holding both exact owner-approved capabilities receives OX19 mutation controls');
+
+  // ── The change lock, on a pair this session has opened ──────────────────────────────
+  // Focusing a row is what opens its lock here, exactly as tabbing to the control does for an
+  // operator, so the opening is claimed without submitting and held while the row stands.
+  const AREA = 'M211';
+  const COMPANY = 'M201';
+  const HOLDER = 'ox19.both';
+  const VIEWER = 'ox19.both.other';
+  const heldRow = page.locator('tbody tr').filter({ hasText: AREA }).filter({ hasText: COMPANY });
+  await heldRow.getByRole('button', { name: 'Unassign', exact: true }).focus();
+  assert.equal((await waitForLock(AREA, COMPANY))[0]?.owner_user, HOLDER);
+
+  const browser = page.context().browser();
+  assert.ok(browser, 'the browser is available for a second session');
+  const second = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const other = await second.newPage();
+  await other.goto(`${BASE}/signin`, { waitUntil: 'domcontentloaded' });
+  await other.locator('[name="client"]').fill(CLIENT);
+  await other.locator('[name="username"]').fill(VIEWER);
+  await other.locator('[name="password"]').fill(PASSWORD);
+  const signedIn = other.waitForURL((url) => url.pathname === '/', { waitUntil: 'commit', timeout: 30_000 });
+  await other.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await signedIn;
+  await other.goto(`${BASE}${ROUTE}`, { waitUntil: 'domcontentloaded' });
+  await other.getByRole('heading', { level: 1, name: 'Company Code Assignments', exact: true }).waitFor();
+
+  const otherRow = other.locator('tbody tr').filter({ hasText: AREA }).filter({ hasText: COMPANY });
+  const otherButton = otherRow.getByRole('button', { name: 'Unassign', exact: true });
+  const beforeRefusal = await readLink(AREA, COMPANY);
+  const historyBeforeRefusal = (await linkHistory(AREA, COMPANY)).length;
+
+  // The stale moment an operator actually meets: this page loaded before the pair was opened, so it
+  // still offers the control. The press claims the opening, the opening answers display-only, and the
+  // press is kept back rather than filed — the notice and the recovery sentence are what the operator
+  // gets, and the control is taken away for as long as the refusal stands.
+  assert.equal(await otherButton.isDisabled(), false, 'A session that never opened the row still sees the control it loaded.');
+  await otherButton.click();
+  await other.getByRole('status').getByText(
+    new RegExp(`CONTROLLING_AREA_COMPANY ${AREA}/${COMPANY} is being changed by ${HOLDER} in ${CONTROLLING_AREA_DEFINE}\\. This opening is display only\\.`),
+  ).waitFor();
+  // The recovery sentence is part of the refusal, not an optional extra.
+  await other.getByText(/a lock nobody answers is released about three minutes after its last answer/).waitFor();
+  assert.equal(await otherButton.isDisabled(), true, 'A display-only opening must not offer the press.');
+  await other.waitForTimeout(1500);
+  // The refused press must never reach the action, so no refusal wording may appear on this page:
+  // the block the action would answer through is the assignments alert, and it stays silent. A press
+  // that had been filed and rejected server-side would have written "This session cannot change it."
+  const viewerAlerts = (await other.getByRole('alert').allInnerTexts()).join('\n');
+  assert.doesNotMatch(
+    viewerAlerts,
+    /cannot change it|not open for change|is being changed by/,
+    `the refused press reached the action; the viewer was told: ${viewerAlerts}`,
+  );
+  assert.equal(await readLink(AREA, COMPANY), beforeRefusal, 'A refused unassign moved nothing.');
+  assert.equal((await linkHistory(AREA, COMPANY)).length, historyBeforeRefusal, 'A refused unassign filed no audit record.');
+  assert.equal((await lockRow(AREA, COMPANY))[0]?.owner_user, HOLDER,
+    'The viewer neither took nor broke the lock it was refused.');
+  console.log('  ✓ a press from a stale session is refused with the recovery sentence and files nothing');
+  // The client gate is not the boundary: the action re-checks the same session lock, and
+  // tests/session-change-lock.test.ts holds the platform rule that a second session reads and never
+  // takes over. Forging a request past this button would meet that check, not a missing one.
+
+  // The holder still owns the pair, so its own press completes the work and releases on leaving.
+  await unassignRow(heldRow, AREA, COMPANY);
+  await second.close();
+  assert.equal((await lockRow(AREA, COMPANY)).length, 0, 'No lock stands after the holder finished.');
+  console.log('  ✓ the holder completes the unassign in one press and no lock or assignment is left behind');
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { t } from '@/platform/i18n';
 import { LockNotice, useChangeLock } from '@/ui/lock/ChangeLock';
 import {
@@ -275,7 +275,28 @@ export function ControllingAreaCompanyAssignmentUI({
   );
 }
 
-/** The listed pair is the opened assignment. A new pair stays unlocked. */
+/**
+ * The listed pair is the opened assignment. A new pair stays unlocked.
+ *
+ * The press that opens the claim must not also be the press that is refused. `useChangeLock` has
+ * nothing to report until its action answers, and a row form has no field to focus before the
+ * button — so focus and submit arrive in the same interaction, the claim is still in flight when
+ * the gate asks for `CHANGE`, and the operator's first press used to be discarded in silence: the
+ * button stayed enabled, no notice appeared, and only a second press submitted.
+ *
+ * The gate itself is unchanged and stays strict: nothing submits unless this session holds the
+ * change lock, and `unassignControllingAreaCompanyAction` re-checks that same lock on the server.
+ * What changes is that the press is kept rather than thrown away — it claims the opening, and the
+ * unassignment is dispatched the moment that opening answers with change. An opening that answers
+ * display-only drops the press and lets the notice speak, the same sentence every other lock screen
+ * gives, and its button stays refused exactly as it was.
+ *
+ * The control is deliberately NOT disabled while the claim is in flight, which is the one
+ * temptation this round already fell for once: a press that lands between the mousedown that focuses
+ * the button and the mouseup would then never reach `click` at all, and the row would swallow the
+ * operator's press in a new and quieter way. It is the queue that makes the press safe to accept
+ * early, not a disabled button.
+ */
 function UnassignPair({
   controllingArea,
   companyCode,
@@ -291,19 +312,48 @@ function UnassignPair({
   canMaintain: boolean;
   buttonClass: string;
 }) {
+  // Read for its FormData when a press held for the opening is finally dispatched.
+  const formRef = useRef<HTMLFormElement>(null);
   const [engaged, setEngaged] = useState(false);
+  const [queued, setQueued] = useState(false);
   const lock = useChangeLock(
     'CONTROLLING_AREA_COMPANY',
     `${controllingArea}/${companyCode}`,
     'CFG.COST.CONTROLLINGAREA.DEFINE',
-    engaged && canMaintain,
+    // A queued press may only ever widen what is already opened: the claim itself is not restarted,
+    // so no press releases and re-acquires the lock the row already holds.
+    (engaged || queued) && canMaintain,
   );
+  const held = lock?.mode === 'CHANGE';
+
+  useEffect(() => {
+    // Hold the press until the opening answers. `lock` is null both while the claim is in flight and
+    // while the row is not opened at all, so the queue — not a timer — is what says an answer is owed.
+    if (!queued || !lock) return;
+    setQueued(false);
+    // Grant it and the press runs; refuse it and the notice below is what the operator reads
+    // instead of a silent form. Either way the press is answered, never discarded.
+    //
+    // The press is handed to the action `useActionState` returned, with this form's own FormData,
+    // rather than replayed through the form element: replaying it by submitting the form measured
+    // one request on the wire — the claim — no mutation, and no message, because a submit that
+    // arrives from an effect never carries the user gesture the form's own action path expects.
+    // Dispatching the action is the same call React makes for the press, so the pending flag and
+    // the result message behave exactly as they do when the operator presses an already-open row.
+    const form = formRef.current;
+    if (held && form) action(new FormData(form));
+  }, [queued, held, lock, action]);
+
   return (
     <form
+      ref={formRef}
       action={action}
       onFocus={() => setEngaged(true)}
       onSubmit={(event) => {
-        if (lock?.mode !== 'CHANGE') event.preventDefault();
+        if (held) return;
+        event.preventDefault();
+        setEngaged(true);
+        if (!lock) setQueued(true);
       }}
     >
       <input type="hidden" name="controllingArea" value={controllingArea} />
@@ -312,6 +362,9 @@ function UnassignPair({
       <button
         type="submit"
         className={buttonClass}
+        // Refused pressings are exactly the two that were refused before: no maintenance
+        // capability, and an opening that came back display-only. A claim in flight keeps the
+        // control pressable so the press can be queued instead of lost.
         disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}
       >
         {pending ? t('common.saving') : t('controllingArea.assignmentUnassignButton')}

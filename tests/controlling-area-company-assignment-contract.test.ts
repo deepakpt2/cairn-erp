@@ -79,7 +79,8 @@ describe('SCR-025 / OX19 assignment contract', () => {
     // the server action, and no unassign control outside it.
     expect((ui.match(/<UnassignPair\b/g) ?? []).length).toBe(2);
     expect((ui.match(/action=\{unassignAction\}/g) ?? []).length).toBe(2);
-    expect(ui).toMatch(/<form\s+action=\{action\}/);
+    // The row's own form, addressed so a press held for the opening can be replayed into it.
+    expect(ui).toMatch(/<form\s+ref=\{formRef\}\s+action=\{action\}/);
     expect(ui).toContain('disabled={!canMaintain || assignmentPending}');
     expect(ui).toContain("role={assignmentState.ok ? 'status' : 'alert'}");
     expect(ui).toContain("role={unassignmentState.ok ? 'status' : 'alert'}");
@@ -88,8 +89,12 @@ describe('SCR-025 / OX19 assignment contract', () => {
     // the capability, and the change lock SM12 added — whose display-only mode also refuses the
     // form's own submit. The same refusals the six literals above used to read off the file.
     expect((ui.match(/pending=\{unassignmentPending\}/g) ?? []).length).toBe(2);
+    // The refusals the row has always had — no capability, and a display-only opening. A claim in
+    // flight must NOT disable the control: that would eat the press between mousedown and mouseup,
+    // which is the failure this round is about, rediscovered in the first attempt at fixing it.
     expect(ui).toContain("disabled={!canMaintain || pending || lock?.mode === 'DISPLAY'}");
-    expect(ui).toContain("if (lock?.mode !== 'CHANGE') event.preventDefault();");
+    expect(ui).not.toContain('const opening =');
+    expect(ui).not.toMatch(/disabled=\{[^}]*opening/);
     expect(ui).toContain('<input type="hidden" name="controllingArea" value={controllingArea} />');
     expect(ui).toContain('<input type="hidden" name="companyCode" value={companyCode} />');
     expect(ui).not.toContain('keepPreviewLocal');
@@ -97,6 +102,40 @@ describe('SCR-025 / OX19 assignment contract', () => {
     expect(locale).toContain('controllingArea.assignmentAdded');
     expect(locale).toContain('controllingArea.assignmentDuplicate');
     expect(locale).toContain('controllingArea.assignmentRemoved');
+  });
+
+  it('keeps the press that opens a row lock without loosening the gate it has to pass', () => {
+    // Why a row form needs a queue at all: unlike every other lock screen, it has no field to
+    // focus before its button, so the click that claims the opening is the same click the gate
+    // refuses. The browser round found it exactly there — the press acquired
+    // `CONTROLLING_AREA_COMPANY M210/M201`, filed no submit, and left the control enabled and
+    // silent, so an operator had to press again for no stated reason.
+    expect(ui).toContain('const [queued, setQueued] = useState(false);');
+    expect(ui).toContain('if (!lock) setQueued(true);');
+    expect(ui).toContain('const held = lock?.mode === \'CHANGE\';');
+    // The press is replayed only once the opening has answered, and only when it granted change;
+    // an answer of display drops the press and lets the notice speak instead.
+    expect(ui).toMatch(/if \(!queued \|\| !lock\) return;/);
+    // A press that arrives before the answer is kept, not submitted unauthenticated: the only
+    // thing the early press does is start the claim and set the queue.
+    expect(ui).toMatch(/if \(!lock\) setQueued\(true\);/);
+    expect(ui).toContain('onFocus={() => setEngaged(true)}');
+    expect(ui).toMatch(/if \(held && form\) action\(new FormData\(form\)\);/);
+    // Exactly one dispatch path, and the form itself still owns the ordinary press.
+    expect((ui.match(/new FormData\(form\)/g) ?? []).length).toBe(1);
+    expect(ui).not.toContain('requestSubmit');
+    // No timer stands in for the answer: the queue is what says a reply is owed.
+    expect(ui).not.toMatch(/setTimeout|setInterval/);
+    // Queuing only widens what is already opened, so the claim is never restarted under the row.
+    expect(ui).toContain('(engaged || queued) && canMaintain,');
+    expect((ui.match(/useChangeLock\(/g) ?? []).length).toBe(1);
+    // Both refusals stay: display-only still speaks through the shared notice with its remedy, and
+    // the action re-checks the lock, so a submit forced past the client gate is refused server-side.
+    expect(ui).toContain("message={lock?.mode === 'DISPLAY' ? lock.message : null}");
+    expect(ui).toContain('remedy={lock?.remedy}');
+    expect(actions).toContain('await assertChangeForSession(session, {');
+    expect(actions).toContain("lockObject: 'CONTROLLING_AREA_COMPANY',");
+    expect(actions).toContain('argument: `${controllingArea}/${companyCode}`,');
   });
 
   it('enforces exact currency/Fiscal Year Variant matches and current-assignment CoA baseline', () => {
