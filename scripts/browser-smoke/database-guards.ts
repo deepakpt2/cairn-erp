@@ -197,4 +197,5 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'batch-document-management': { database: 'cairn_b210', port: '5432', batch: 'T867 change-lock local loopback' },
   'movement-types': { database: 'cairn_b210', port: '5432', batch: 'T868 change-lock local loopback' },
   'valuation-classes': { database: 'cairn_b210', port: '5432', batch: 'T869 change-lock local loopback' },
+  'settlement-configuration': { database: 'cairn_b210', port: '5432', batch: 'T870 change-lock local loopback' },
 };

@@ -35,6 +35,7 @@ import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assig
 import { batchDocumentManagementIndicator } from './batch-document-management';
 import { movementTypesConfiguration } from './movement-types';
 import { valuationClassesConfiguration } from './valuation-classes';
+import { settlementConfigurationMasters } from './settlement-configuration';
 import { chartOfAccountsDefinition as ob13ChartOfAccounts } from './chart-of-accounts';
 import { chartOfAccountsCopyOby7 } from './chart-of-accounts-copy';
 import { fiscalYearVariantAssignmentOb37 } from './fiscal-year-variant-assignment';
@@ -5057,6 +5058,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'batch-document-management': batchDocumentManagementIndicator,
   'movement-types': movementTypesConfiguration,
   'valuation-classes': valuationClassesConfiguration,
+  'settlement-configuration': settlementConfigurationMasters,
   'chart-of-accounts': ob13ChartOfAccounts,
   'chart-of-accounts-copy': chartOfAccountsCopyOby7,
   'fiscal-year-variant-assignment': fiscalYearVariantAssignmentOb37,

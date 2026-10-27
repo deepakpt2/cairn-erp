@@ -24,6 +24,11 @@ const SUITE = [
     route: '/config/batch-document-management',
     module: 'scripts/browser-smoke/batch-document-management.ts',
   },
+  {
+    id: 'settlement-configuration',
+    route: '/config/settlement-configuration',
+    module: 'scripts/browser-smoke/settlement-configuration.ts',
+  },
 ] as const;
 
 const FAILURE_COPY = 'The change lock for this record could not be opened.';
@@ -31,6 +36,13 @@ const RECOVERY_COPY = 'Nothing was written. Try again, and if it fails again ask
 
 const source = (path: string) => readFileSync(path, 'utf8');
 const moduleOf = (id: string) => source(SUITE.find((entry) => entry.id === id)!.module);
+
+/**
+ * The screens that render `ClaimFailureNotice`, and with it the catalogue's retry control. The fourth target
+ * drives a screen that was never migrated to that notice: it gets the failure from `projectClaim` alone and
+ * recovers by asking again, which is a different shape and gets its own case below (DI-002).
+ */
+const MIGRATED = ['movement-types', 'valuation-classes', 'batch-document-management'];
 
 describe('the change-lock configuration browser targets', () => {
   it('are registered, each on a key no other target shares', () => {
@@ -65,7 +77,9 @@ describe('the change-lock configuration browser targets', () => {
       expect(text, `${id}: the failure message`).toContain(FAILURE_COPY);
       expect(text, `${id}: the recovery line`).toMatch(/Nothing was written\. Try again|RECOVERY_COPY/);
       expect(text, `${id}: the recovery copy is the catalogue's own`).toContain(RECOVERY_COPY);
-      expect(text, `${id}: the retry control is pressed, not described`).toContain("'Try again'");
+      // The retry control is a *migrated* screen's affordance; a legacy screen has none, and its run must not
+      // claim one. The migrated list is checked for the press itself in the case below.
+      if (MIGRATED.includes(id)) expect(text, `${id}: the retry control is pressed, not described`).toContain("'Try again'");
       // Next keeps an empty `role="alert"` announcer on every page: waiting on the document-wide role is how
       // a run ends up waiting for a node that is never removed.
       expect(text, `${id}: never waits on the route announcer`).not.toContain("page.getByRole('alert')");
@@ -76,7 +90,7 @@ describe('the change-lock configuration browser targets', () => {
   it('measure the record and the audit trail at every claim phase, not only the notice', () => {
     for (const { id } of SUITE) {
       const text = moduleOf(id);
-      const reads = (text.match(/await read(Indicator|Movement|Reference)\(/g) ?? []).length;
+      const reads = (text.match(/await read(Indicator|Movement|Reference|Structure)\(/g) ?? []).length;
       expect(reads, `${id}: its table is read on both sides of each claim`).toBeGreaterThanOrEqual(5);
       const audits = (text.match(/await auditRows\(/g) ?? []).length;
       expect(audits, `${id}: audit records are counted around each phase`).toBeGreaterThanOrEqual(6);
@@ -121,12 +135,12 @@ describe('the change-lock configuration browser targets', () => {
   });
 
   it('exercise a retry into the same failure before the retry that gets through', () => {
-    for (const { id } of SUITE) {
+    for (const id of MIGRATED) {
       const text = moduleOf(id);
       const presses = (text.match(/'Try again', exact: true \}\)\.click\(\)|retry\.click\(\)/g) ?? []).length;
       expect(presses, `${id}: retried once into the failure and once out of it`).toBeGreaterThanOrEqual(2);
-      expect(text, `${id}: nothing arrives between the failure and the grant`).toMatch(
-        /Nothing was applied between the failure and the grant|the dropped press never comes back/,
+      expect(text, `${id}: nothing arrives between the failure and the recovery`).toMatch(
+        /Nothing was applied between the failure and the (?:grant|re-open)|the dropped press never comes back/,
       );
       expect(text, `${id}: exactly one change is audited after the retry`).toMatch(
         /grantedAfterOwed \+ 1|auditAtGrant \+ 1|auditBeforeFailure \+ 1/,
@@ -134,11 +148,30 @@ describe('the change-lock configuration browser targets', () => {
     }
   });
 
+  it('recover from a dead claim on an unmigrated screen the only way that screen has, a fresh claim', () => {
+    // DI-002 in `docs/DEFERRED_ISSUES.md`: `ClaimFailureNotice`, and with it the retry button, is mounted on
+    // the migrated screens only. A legacy screen gets the failure from `projectClaim` and has to ask again,
+    // so its target must prove that *that* path recovers the row — and must not invent a control the screen
+    // does not have.
+    const text = moduleOf('settlement-configuration');
+    expect(text, 'the failure is read from the notice the screen renders').not.toMatch(/getByRole\('alert'\)/);
+    expect(text, 'no retry control is pressed on a screen that has none').not.toMatch(/Try again', exact: true \}\)\.click\(\)/);
+    const closeAt = text.indexOf("name: 'Close', exact: true })");
+    const reopenAt = text.indexOf("name: 'Edit', exact: true })", closeAt);
+    expect(closeAt, 'the run leaves the row the claim died on').toBeGreaterThanOrEqual(0);
+    expect(reopenAt, 'and chooses it again, which files a fresh claim').toBeGreaterThan(closeAt);
+    // Whatever the run does in between, it must not press a control the screen does not render.
+    const between = text.slice(closeAt, reopenAt);
+    expect(between, 'no retry control is pressed between the two').not.toContain("name: 'Try again'");
+    expect(between, 'the re-open is preceded by waiting the retired notice out, not by a button').toContain("failure.waitFor({ state: 'detached' })");
+    expect(text, 'the projection is what closes the write, and the run says so').toContain('the projection answers DISPLAY');
+  });
+
   it('leave no lock standing for a dead claim, and none behind when the run moves on', () => {
     for (const { id } of SUITE) {
       const text = moduleOf(id);
       expect(text, `${id}: a dead claim leaves no lock`).toContain('left no lock standing');
-      expect(text, `${id}: leaving the screen releases the lock`).toMatch(/released (the change )?lock|released its lock|releases its lock/);
+      expect(text, `${id}: leaving the screen releases the lock`).toMatch(/releas(?:ed|es)(?: the(?: change)?| its) lock/);
       // The release has to be an in-app navigation, or Chromium drops it the way it drops any request in
       // flight during a document load — which would make the assertion above measure the harness.
       expect(text, `${id}: releases through an in-app navigation`).toMatch(/getByRole\('link'|a\[href=|locator\('a\[href/);

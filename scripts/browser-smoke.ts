@@ -185,6 +185,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'batch-document-management') return '/config/batch-document-management';
   if (target.id === 'movement-types') return '/config/movement-types';
   if (target.id === 'valuation-classes') return '/config/valuation-classes';
+  if (target.id === 'settlement-configuration') return '/config/settlement-configuration';
   if (target.id === 'chart-of-accounts') return '/config/chart-of-accounts';
   if (target.id === 'gl-accounts') return '/config/gl-accounts';
   if (target.id === 'chart-of-accounts-copy') return '/config/chart-of-accounts/copy';
