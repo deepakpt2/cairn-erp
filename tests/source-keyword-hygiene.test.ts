@@ -24,30 +24,32 @@
  * The vocabulary is the registry's own alias data rather than a second list: a rule that
  * repeated the codes would go stale the moment a screen registered a new one, which is how
  * the identifiers in the allowlist below went unnoticed for five screens.
+ *
+ * The keyword scan makes exactly one exception, and it is not a keyword exception: fourteen lines
+ * in three `src/modules/inventory/batch-*.ts` files name a field key that is *already stored* —
+ * behind a `CHECK` constraint, inside two primary keys, and folded into the fingerprint duplicate
+ * detection compares. `tests/hygiene-vocabulary.ts` holds them as exact file-and-line occurrences
+ * with a cap on repetitions and a rationale each, and `assertVocabularyExceptionShape` stops the
+ * scan if the table is widened. Renaming the names is a migration decision; it is not a way to
+ * make this test green.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Data-dictionary field and table keywords. Transaction codes (FS00, OB13, OBY7, OB29) are
- * deliberately absent: those are the aliases the registry is for.
+ * The keyword list, the scan, and the one exception the guard makes all live in
+ * `./hygiene-vocabulary`, so this file and `tests/vocabulary-exception-boundary.test.ts` aim at
+ * the same logic rather than at a copy of it. Transaction codes (FS00, OB13, OBY7, OB29) stay out
+ * of the keyword list on purpose: those are the aliases the registry is for, and the identifier
+ * scan below is the rule that watches them.
  */
-const KEYWORDS = [
-  // G/L account master and its chart
-  'SAKNR', 'HKONT', 'KTOPL', 'KTKTB', 'KTOKS', 'XBILK', 'XOPVW', 'MITKZ', 'ZUAWE', 'SPRAS',
-  'XSPEB', 'XSPEA',
-  // Fiscal year variants and periods
-  'PERIV', 'LTEXT', 'XJAHR', 'ANZPER', 'ANZSP', 'XMONAT', 'BDATJ', 'POPER', 'MONAT', 'TAG',
-  'JAHRSHIFT', 'T009', 'T009B',
-  // Posting period variants and their intervals
-  'VARNT', 'BKRSV', 'T010O', 'XT010O', 'T001B',
-  // Organisational and partner keys
-  'VKORG', 'BUKRS', 'VTWEG', 'VTEXT', 'SPART', 'MATNR', 'WERKS', 'LGORT', 'EKORG', 'EKGRP',
-  'LIFNR', 'KUNNR',
-] as const;
-
-const PATTERN = new RegExp(`\\b(?:${KEYWORDS.join('|')})\\b`);
+import {
+  assertVocabularyExceptionShape,
+  keywordOffendersInFile,
+  PATTERN,
+  vocabularyExceptionDrift,
+} from './hygiene-vocabulary';
 
 /** Where a DOM identifier can appear. Values only, so prose is never scanned. */
 const DOM_IDENTIFIER =
@@ -176,13 +178,16 @@ function applicationSources(dir: string, found: string[] = []): string[] {
 
 describe('source-system keyword hygiene', () => {
   it('keeps data-dictionary keywords out of every application source', () => {
+    // Refuse to scan at all if the exception has been widened past the persisted-key contract.
+    assertVocabularyExceptionShape();
     const offenders: string[] = [];
     for (const path of applicationSources('src')) {
-      const lines = readFileSync(path, 'utf8').split('\n');
-      lines.forEach((line, index) => {
-        if (PATTERN.test(line)) offenders.push(`${path}:${index + 1}: ${line.trim().slice(0, 120)}`);
-      });
+      offenders.push(...keywordOffendersInFile(path, readFileSync(path, 'utf8')));
     }
+    // The exception is the debt and nothing else: every excepted occurrence must still be there,
+    // in exactly the number of lines declared. Retiring one by migration shrinks the table, and
+    // duplicating one past its cap fails even though the scan above would let it through.
+    expect(vocabularyExceptionDrift((file) => readFileSync(file, 'utf8'))).toEqual([]);
     expect(offenders).toEqual([]);
   });
 
