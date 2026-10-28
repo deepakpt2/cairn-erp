@@ -151,14 +151,21 @@ The first link of the order-to-invoice chain is live at the service level and on
 The rest of the chain is written and now **run**: `drizzle/9191`, `src/modules/sales/{delivery,billing,
 fulfillment-quantities,exposure}.ts`, the 601/602 scenario in `src/modules/inventory/goods-issue.ts`, the two
 screens `/sales/delivery` and `/sales/billing`, their server actions and catalog entries, `tests/
-sales-delivery.test.ts` (9/9), and one browser target `sales-order-to-invoice` on fixture key T871. The migration
-applies, `npm run db:verify` passes, and the focused and neighbouring suites are green on a PostgreSQL 17.11
-cluster run in the workspace, because the verification box stayed unreachable. `npm run build` and the browser
-target are the two gates still owed there: this workspace holds 2 GB, which the Next build worker will not fit in,
-and DI-020 records how far the dev-server attempt got and what it proved about the routes. Owner instruction
-2026-10-28 defers every browser target until the test server is available, so those two gates wait there rather
-than being retried here. Everything else,
-including the whole evidence set, is in DI-020.
+sales-delivery.test.ts` (9/9), and one browser target `sales-order-to-invoice` on fixture key T871.
+
+**Every gate that can run without a browser has now run on the test box**, on its `cairn_b210` database, against the
+committed tree: `db:migrate` applies `+ 9191` over 313, `npm run db:verify` passes 13/13, the sixteen focused and
+neighbouring suites pass 125 tests (sales fulfillment 9, sales order 17, goods issue 14, MIGO component issue 10,
+customer invoice 3, the three credit suites 10, account determination 13, the two material-document reversal suites
+14, document reversal 4, reversal batch 2, atomic posting 11, block invariant 6), the whole suite is 3,145 of
+3,152 tests with the seven misses traced to the owner's uncommitted work rather than to this change (a `c10f707`
+worktree reproduces the same six, assertion for assertion), `tsc --noEmit` reports its baseline 152 with none in a
+file of this change, `lint:ip` its baseline 141 with nothing new, and `npm run build` exits 0 with
+`ƒ /sales/orders`, `ƒ /sales/delivery` and `ƒ /sales/billing` in the manifest.
+
+Browser acceptance is **deferred by owner decision (2026-10-28) until the test server is in use**, tracked as
+DI-021 with the target, its eight proofs and the exact way to run it. Nothing in this pass launched a browser
+against a development server, and no browser evidence is claimed anywhere in these notes.
 
 What the design commits to, and what a reviewer should read the code against:
 

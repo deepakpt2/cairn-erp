@@ -32,7 +32,8 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-017 | Thirty-five fixtures still choose a material type by which one sorts first | Low | Test fixtures | OPEN |
 | DI-018 | Sales pricing resolves an item price and no other condition type | Medium | SD pricing | OPEN |
 | DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
-| DI-020 | The outbound delivery, goods issue and billing links of the sales chain do not exist yet | High | SD order-to-invoice | OPEN |
+| DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | OPEN — built and verified on the test box; open for the AR tail past the invoice and the re-bill path (see below) |
+| DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | DEFERRED BY DECISION (owner instruction 2026-10-28: no browser target runs until the test server is in use) |
 
 ---
 
@@ -415,7 +416,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
   no currency conversion, and open orders are counted only through their determinations rather than as receivable
   equivalents. Left open on purpose; nothing in the fulfillment work depended on closing it.
 
-## DI-020 — The outbound delivery, goods issue and billing links of the sales chain (built, service gates green; build and browser target owed)
+## DI-020 — The outbound delivery, goods issue and billing links of the sales chain (built; verified on the test box)
 
 * **Severity:** High. **Area:** `src/modules/sales`, `src/modules/inventory`, SD order-to-invoice.
 * **Evidence:** the database holds `sales_order`, `sales_order_line` and `sales_condition_record` and no
@@ -458,7 +459,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
   `tests/sales-delivery.test.ts` and browser target `sales-order-to-invoice` (fixture key T871, the next free
   key after settlement's T870, because T982 is the runner's own cross-tenant probe, which
   `tests/storage-location-ui-contract.test.ts:83` refuses for any target) are written.
-* **What the gates said.** The verification box stayed unreachable (`ssh -p 2222 cairn@107.173.201.115` times
+* **What the gates said (the workspace pass; read the box status at the end of this entry first).** The verification box stayed unreachable (`ssh -p 2222 cairn@107.173.201.115` times
   out while a raw connect to the port answers), so the gates were run here instead, on a PostgreSQL 17.11
   cluster the sandbox owns: `cairn_app` without `BYPASSRLS` as the runtime role and `cairn` as the migration
   role, the repository's own development defaults, 313 migrations applied including `+ 9191_sales_delivery_billing.sql`.
@@ -487,7 +488,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
   missing. One fixture moved with the semantics rather than being worked around: the order-change test's customer
   now holds a 400.00 limit, because since DI-019 a standing sales commitment of the same customer is in the credit
   basis, and at 200.00 the order the test meant to pass was blocked by the previous test's order.
-* **What is NOT yet true, and why the entry stays open.** `npm run build` and the browser target are still owed,
+* **What was NOT yet true in the workspace pass (the box run below settles the build and the type check, and DI-021 carries the browser leg).** `npm run build` and the browser target were owed,
   and by owner instruction (2026-10-28) **every browser target is deferred until the test server is available**, so
   nothing in this workspace should attempt them before that. The build and the target were both tried anyway, and
   both are owed to this sandbox's memory rather than to the code. The build was attempted four times with heap
@@ -516,11 +517,120 @@ blocked milestone), and given acceptance criteria so the next person can close i
   which is the same shape the production and inventory document services use rather than the maintenance
   screens' claim-a-lock shape. Nothing here is registered as a lock class because the mechanism has no class
   registry to register in.
-* **To close it, once the test server is up:** `npm run build`, then `--target sales-order-to-invoice` until its
-  eight browser proofs pass on persisted rows, on a host with more than the 2 GB this workspace holds. Until the
-  test server exists this entry stays open at that line: no further browser attempt is wanted. The environment the rest was run in, and how to raise it again: a PostgreSQL 17 cluster on
+* **Status (the pass that ran the gates on the test box).** The box came back and the whole battery was run there,
+  on the repository's own `.env.local` database `cairn_b210` at `127.0.0.1:5432`, after syncing the 27 files of
+  `c74c535`/`9896197` into the box tree (verified byte-for-byte by `sha256sum` against the commit, and the box
+  tree was confirmed to equal `c10f707` apart from the owner's own untracked test and the two docs). The box holds
+  **no** owner-owned modified file, so this is the committed state and nothing else, which is what makes the
+  numbers below attributable.
+  * **Implemented and verified.** `npm run db:migrate`: `Applied 1 migration(s): + 9191_sales_delivery_billing.sql`
+    over 313. `npm run db:verify`: 13 of 13. Focused suites: `sales-delivery` 9, `sales-order` 17, `goods-issue` 14,
+    `migo-component-issue` 10, `migo-matrix-ui-contract` 12, `customer-invoice` 3, `credit` 3, `credit-release` 4,
+    `credit-monitor` 3, `account-determination` 13, `material-document-reversal` 9 and its accounting twin 5,
+    `document-reversal` 4, `reversal-batch` 2, `atomic-inventory-posting` 11, `inventory-block-invariant` 6 —
+    **16 files, 125 tests, no failures**. Whole suite: **455 of 458 files, 3,145 of 3,152 tests**. `npx tsc --noEmit`:
+    **152 errors, the repository's own figure to the unit, and not one of them in a file of this change** (the
+    seven it reports in `goods-issue.ts` are the pre-existing ones, present at `c10f707` with the same messages at
+    shifted lines). `npm run lint:ip`: **141 occurrences, the baseline count, with the same text multiset as
+    `c10f707`** — the one hit naming a file of this change, `goods-issue.ts:103 [SAP]`, is the pre-existing
+    sentence at `:93` moved down by an insertion. `npm run build`: **exit 0**, "Compiled successfully in 59s", the
+    route manifest carrying `ƒ /sales/orders`, `ƒ /sales/delivery` and `ƒ /sales/billing`.
+  * **The six full-suite failures are not this change, and the proof is a worktree.** At `c10f707` alone — no
+    delivery or billing file, no 9191, owner's uncommitted work absent, same database — `tests/action-security.test.ts`
+    fails the same **4** tests with the same reasons (`expected { ok: false, …(4) } to match { ok: true, changed:
+    true, version: 2 }` at `:234`, two `expected false to be true`, `expected 12 to be 11` at `:269`) and
+    `tests/grir-clearing.test.ts` the same **2** (`{ base: 7, entered: 7 }` against `{ base: 84, entered: 7 }` at
+    `:338`). Both belong to the change-lock and alternative-unit work the owner is carrying uncommitted in this
+    workspace, where those two files pass. The seventh box failure, `tests/production-order-writer-guard.test.ts`,
+    is the owner's own untracked test, present on the box and failing for the same reason (CO09 availability
+    status `UNSUPPORTED` where their in-flight work would answer `AVAILABLE`).
+  * **No longer blocked by the environment.** The previous bullets in this entry describe the 2 GB workspace
+    sandbox, where `next build` and the full `tsc` could not be run at all (the build worker SIGKILL'd four times,
+    `tsc --noEmit` exit 137 at 18 minutes, and the two database files `migration-grant-policy` and
+    `default-privilege-audit` failing a bare `npx vitest run` for want of the exported URLs while passing 13/13
+    under `npm run db:verify`). The scoped-typecheck substitute recorded there was a subset program and is not
+    being offered as equivalent to the full check: the full check has now run on the box, and 152 is its answer.
+  * **Deferred, not outstanding.** Browser acceptance has its own entry, **DI-021**, so that this one can be read
+    as what the code does rather than as what the harness has not yet run. Running no browser target here is the
+    owner's instruction of 2026-10-28, not a finding: nothing in this pass launched Chromium against the
+    development server, and no browser evidence is claimed.
+  * **Still open substantively, and unchanged in kind.** Two things the acceptance list asked for are not built:
+    the journey stops at the **posted receivable** — payment and clearing of a sales invoice are the AR services
+    that already exist for FB70 (`tests/incoming-payment`, `tests/customer-clearing`, `tests/dunning`, all green
+    here), and nothing drives them from the sales chain; and re-billing a delivery whose billing document was
+    cancelled is refused by `billing_document_delivery_uq`, because a delivery earns one billing row ever, with no
+    credit-memo path to authorize a second (weakening that unique index is not this pass's call). Both need an
+    owner decision, not a coding decision.
+  * **Guarantees as coded, read off the code rather than asserted.** Concurrency: every act takes
+    `pg_advisory_xact_lock(hashtextextended('<client>/sales-order/<n>' or '<client>/delivery/<n>', 0))`
+    (`delivery.ts:158`, `:162`; the billing path takes the delivery's key) and re-checks `version` inside the same
+    transaction before its final update (`delivery.ts:844` for the goods issue, `:630` for a pick), so two
+    submissions on one delivery serialize and a stale read is refused by name — and that is all they do: there is
+    no claim, no lock row and no object-class registry, exactly as the bullet above this one records, and
+    `recordChange` is the audit trail (`sales_order`, `delivery`, `billing_document`), not a mutex. Quantity
+    integrity is enforced below the service, so no caller can talk its way past it: `delivery_line_remaining_quantity_ck`
+    keeps `remaining = ordered − delivered_before − delivery` and `>= 0` (over-delivery is refused by the
+    database), `delivery_line_picked_ck` keeps `picked <= delivery`, `delivery_line_issued_ck` keeps
+    `issued <= picked`, `delivery_goods_issued_ck` forbids `GOODS_ISSUED` without a material document and its
+    year, and `billing_document_posted_ck` forbids `POSTED` without both the customer invoice number and the
+    journal document number. Idempotency and duplicate protection: `delivery_request_key_uq`,
+    `delivery_picking_request_key_uq`, `billing_document_delivery_uq` and
+    `billing_document_line_delivery_line_uq`, plus the derived keys handed to the services that own those ledgers
+    (`sd-gi-<client>-<delivery>` into `postGoodsIssue`, `sd-bl-<client>-<billing>` into `postCustomerInvoice`), so
+    a replay returns the standing document instead of writing a second one, and `delivery_picking_delta_ck`
+    refuses a zero delta so no "correction" can pass as a silent no-op. Reversal runs only through 602 or MBST,
+    against the tested `reversal_movement_type` link. Tenancy: `enable` plus `force row level security` on all five
+    tables with a `tenant_isolation` policy on `cairn.client` for both `using` and `with check`, `revoke all ...
+    from public`, DML granted per table to `cairn_app`, and `revoke update, delete, truncate` on `delivery_picking`
+    and `billing_document_line` — append-only by rights, which is what the two database files in `db:verify`
+    audit. Credit is enforced at three points (creation, pick, goods issue, each naming the document and refusing
+    before any stock or journal write) and a breach caused by the movement holds the receivable rather than undoing
+    the movement; the release path posts the standing billing under its existing number through
+    `postStandingBilling`, which is the fix that retry needed.
+* **To close it:** the two substantive items above — an authorized AR tail driven from the sales chain, and a
+  decision on re-billing after cancellation. The browser leg has moved to DI-021, where its target, preconditions
+  and eight proofs are recorded for the run the test server will allow. The environment the rest was run in, and how to raise it again: a PostgreSQL 17 cluster on
   loopback, a `cairn` superuser owning `cairn_dev`/`cairn_b210` and a `cairn_app` role that is neither superuser
   nor `BYPASSRLS` (which is what `assertApplicationRole` demands), those two URLs in `.env.local`, then `npm run
   db:migrate`, `npm run db:verify`, `npm run seed` and `npm run seed:reference`, then the suites named above.
   Nothing the service
   gates would report is still owed: they were run, and what they reported was fixed.
+
+---
+
+## DI-021 — The sales order-to-invoice journey has no browser acceptance run
+
+* **Severity:** Medium. **Area:** `scripts/browser-smoke/`, SD order-to-invoice. Split out of DI-020 by owner
+  instruction (2026-10-28) so that implementation completion and browser acceptance are tracked apart; DI-020
+  keeps the substantive gaps.
+* **Status:** **deferred by decision, not by inability.** The target is written and registered; the box can build
+  and serve it (`npm run build` exits 0 there and the manifest lists `/sales/orders`, `/sales/delivery` and
+  `/sales/billing`); and no browser target is to be run until the test server is in use for it. Absence of browser
+  evidence is not a functional defect and no browser acceptance is claimed.
+* **What already exists, so this can be finished in one pass.** `scripts/browser-smoke/sales-order-to-invoice.ts`
+  (the journey in the order a user does it), registered in four places: `targets.ts:173` (id
+  `sales-order-to-invoice`, fixture key **T871** — deliberately not T982, which is the runner's own cross-tenant
+  probe and which `tests/storage-location-ui-contract.test.ts:83` refuses for any target),
+  `database-guards.ts:202` (bound to `cairn_b210` on `127.0.0.1:5432`, batch "DI-020 sales order to invoice local
+  loopback"), `checks.ts` (`CHECKS['sales-order-to-invoice']`), and `scripts/browser-smoke.ts:183` (protected
+  route `/sales/orders` for the sign-out redirect assertion). The static half of its contract is already green on
+  the box: `tests/browser-targets.test.ts` 208 tests and `tests/browser-target-constrained-driving.test.ts` 2.
+* **How to run it.** On the test server, from the repository root: `npm run build`, serve it
+  (`SMOKE_BASE_URL` defaults to `http://127.0.0.1:3000`, so `npx next start -p 3000` is enough), with the
+  guarded `cairn_b210` provisioned (`npm run db:migrate`, `npm run seed`, `npm run seed:reference`) and
+  `CAIRN_ENV=development`; then `npm run smoke:browser -- --target sales-order-to-invoice`. Cold-server runs want
+  the deadline raised, never lowered: `CAIRN_BROWSER_RUN_TIMEOUT_MS`, `CAIRN_BROWSER_PAGE_TIMEOUT_MS`,
+  `CAIRN_BROWSER_NAV_TIMEOUT_MS`. Chromium is in the box image at `/ms-playwright`; the runner enforces the loopback
+  and role guards, creates the fixture tenant through `/clients/new`, and refuses the run if T871 belongs to any
+  other tenant.
+* **Acceptance criteria — the eight proofs, on persisted rows, with no page errors.** (1) an order priced from
+  standing condition records; (2) a delivery drawn from the quantity the order still has open, with
+  `deliveredQuantity`/`remainingQuantity` reading back; (3) over-delivery refused by name, quoting the unit;
+  (4) a pick recorded against the delivery item, with a correction as a signed delta and an under-zero pick
+  refused; (5) one 601 goods issue posting stock, valuation and the journal in the delivery's own act, and a
+  602/MBST reversal as the only way back; (6) one billing document for the delivered quantity, and no second one
+  for the same delivery; (7) the credit determination refusing a delivery on a blocked order, and holding the
+  invoice raised by a movement that breached the limit, then posting the same billing number once released;
+  (8) the links readable back from the tables the services wrote — order, delivery, material document, billing
+  document, customer invoice, accounting document. Its failure paths are blocked credit, insufficient stock,
+  partial fulfillment and a repeated submission, and the sign-out at the end must land on `/signin?`.
