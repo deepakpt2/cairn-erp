@@ -33,7 +33,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-018 | Sales pricing resolves an item price and no other condition type | Medium | SD pricing | OPEN |
 | DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
 | DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | OPEN — built and verified on the test box; open for the AR tail past the invoice and the re-bill path (see below) |
-| DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | DEFERRED BY DECISION (owner instruction 2026-10-28: no browser target runs until the test server is in use) |
+| DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | CLOSED — run on the test box 2026-10-28, `--target sales-order-to-invoice` exits 0 twice with 24 assertions across 11 steps |
 
 ---
 
@@ -488,7 +488,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
   missing. One fixture moved with the semantics rather than being worked around: the order-change test's customer
   now holds a 400.00 limit, because since DI-019 a standing sales commitment of the same customer is in the credit
   basis, and at 200.00 the order the test meant to pass was blocked by the previous test's order.
-* **What was NOT yet true in the workspace pass (the box run below settles the build and the type check, and DI-021 carries the browser leg).** `npm run build` and the browser target were owed,
+* **What was NOT yet true in the workspace pass (the box run below settles the build and the type check; the browser leg DI-021 carried has since been run and passed).** `npm run build` and the browser target were owed,
   and by owner instruction (2026-10-28) **every browser target is deferred until the test server is available**, so
   nothing in this workspace should attempt them before that. The build and the target were both tried anyway, and
   both are owed to this sandbox's memory rather than to the code. The build was attempted four times with heap
@@ -550,10 +550,10 @@ blocked milestone), and given acceptance criteria so the next person can close i
     `default-privilege-audit` failing a bare `npx vitest run` for want of the exported URLs while passing 13/13
     under `npm run db:verify`). The scoped-typecheck substitute recorded there was a subset program and is not
     being offered as equivalent to the full check: the full check has now run on the box, and 152 is its answer.
-  * **Deferred, not outstanding.** Browser acceptance has its own entry, **DI-021**, so that this one can be read
-    as what the code does rather than as what the harness has not yet run. Running no browser target here is the
-    owner's instruction of 2026-10-28, not a finding: nothing in this pass launched Chromium against the
-    development server, and no browser evidence is claimed.
+  * **Browser acceptance: run, and it passed.** **DI-021** carried this leg while the test server was not in use,
+    and records what the run found once it was: `--target sales-order-to-invoice` on the box, Chromium from the
+    image, a served `next start` build, exit 0 on two consecutive runs. Six corrections came out of it, all in
+    the harness or in the two sales screens — the services were not touched to make the journey pass.
   * **Still open substantively, and unchanged in kind.** Two things the acceptance list asked for are not built:
     the journey stops at the **posted receivable** — payment and clearing of a sales invoice are the AR services
     that already exist for FB70 (`tests/incoming-payment`, `tests/customer-clearing`, `tests/dunning`, all green
@@ -603,34 +603,58 @@ blocked milestone), and given acceptance criteria so the next person can close i
 * **Severity:** Medium. **Area:** `scripts/browser-smoke/`, SD order-to-invoice. Split out of DI-020 by owner
   instruction (2026-10-28) so that implementation completion and browser acceptance are tracked apart; DI-020
   keeps the substantive gaps.
-* **Status:** **deferred by decision, not by inability.** The target is written and registered; the box can build
-  and serve it (`npm run build` exits 0 there and the manifest lists `/sales/orders`, `/sales/delivery` and
-  `/sales/billing`); and no browser target is to be run until the test server is in use for it. Absence of browser
-  evidence is not a functional defect and no browser acceptance is claimed.
-* **What already exists, so this can be finished in one pass.** `scripts/browser-smoke/sales-order-to-invoice.ts`
-  (the journey in the order a user does it), registered in four places: `targets.ts:173` (id
-  `sales-order-to-invoice`, fixture key **T871** — deliberately not T982, which is the runner's own cross-tenant
-  probe and which `tests/storage-location-ui-contract.test.ts:83` refuses for any target),
-  `database-guards.ts:202` (bound to `cairn_b210` on `127.0.0.1:5432`, batch "DI-020 sales order to invoice local
-  loopback"), `checks.ts` (`CHECKS['sales-order-to-invoice']`), and `scripts/browser-smoke.ts:183` (protected
-  route `/sales/orders` for the sign-out redirect assertion). The static half of its contract is already green on
-  the box: `tests/browser-targets.test.ts` 208 tests and `tests/browser-target-constrained-driving.test.ts` 2.
-* **How to run it.** On the test server, from the repository root: `npm run build`, serve it
-  (`SMOKE_BASE_URL` defaults to `http://127.0.0.1:3000`, so `npx next start -p 3000` is enough), with the
-  guarded `cairn_b210` provisioned (`npm run db:migrate`, `npm run seed`, `npm run seed:reference`) and
-  `CAIRN_ENV=development`; then `npm run smoke:browser -- --target sales-order-to-invoice`. Cold-server runs want
-  the deadline raised, never lowered: `CAIRN_BROWSER_RUN_TIMEOUT_MS`, `CAIRN_BROWSER_PAGE_TIMEOUT_MS`,
-  `CAIRN_BROWSER_NAV_TIMEOUT_MS`. Chromium is in the box image at `/ms-playwright`; the runner enforces the loopback
-  and role guards, creates the fixture tenant through `/clients/new`, and refuses the run if T871 belongs to any
-  other tenant.
-* **Acceptance criteria — the eight proofs, on persisted rows, with no page errors.** (1) an order priced from
-  standing condition records; (2) a delivery drawn from the quantity the order still has open, with
-  `deliveredQuantity`/`remainingQuantity` reading back; (3) over-delivery refused by name, quoting the unit;
-  (4) a pick recorded against the delivery item, with a correction as a signed delta and an under-zero pick
-  refused; (5) one 601 goods issue posting stock, valuation and the journal in the delivery's own act, and a
-  602/MBST reversal as the only way back; (6) one billing document for the delivered quantity, and no second one
-  for the same delivery; (7) the credit determination refusing a delivery on a blocked order, and holding the
-  invoice raised by a movement that breached the limit, then posting the same billing number once released;
-  (8) the links readable back from the tables the services wrote — order, delivery, material document, billing
-  document, customer invoice, accounting document. Its failure paths are blocked credit, insufficient stock,
-  partial fulfillment and a repeated submission, and the sign-out at the end must land on `/signin?`.
+* **Status:** **closed — the run happened on the test box on 2026-10-28 and passed.**
+  `npm run smoke:browser -- --target sales-order-to-invoice` exited 0 twice in a row against a served build
+  (`/tmp/g-browser17.log`, `/tmp/g-browser18.log` on the box), each ending on the runner's own verdict — "Browser
+  target sales-order-to-invoice passed; no other target was run." — after the identity guard ("Verified DI-020
+  sales order to invoice local loopback database: cairn_b210 on 127.0.0.1:5432; runtime role restricted, migration
+  role elevated") and with `Browser errors: []`. Eleven steps were echoed as they passed, with 24 assertions
+  between them. Every correction the run required is in the commit beside this entry, and every one of them is in
+  the harness or in the two sales screens: no service was changed to make the journey go through.
+* **How it was run, so that it can be run again.** On the test server, from the repository root: `npm run build`,
+  then serve the build (`npx next start -p 3000 -H 127.0.0.1`; `SMOKE_BASE_URL` defaults to
+  `http://127.0.0.1:3000`), with the guarded `cairn_b210` provisioned (`npm run db:migrate`, `npm run seed`,
+  `npm run seed:reference`) and `CAIRN_ENV=development` exported from `.env.local`; then
+  `npm run smoke:browser -- --target sales-order-to-invoice` with `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` and
+  the deadline raised, never lowered — `CAIRN_BROWSER_RUN_TIMEOUT_MS=900000`, `CAIRN_BROWSER_PAGE_TIMEOUT_MS=60000`,
+  `CAIRN_BROWSER_NAV_TIMEOUT_MS=90000` for a cold server. The runner enforces the loopback and role guards,
+  creates the fixture tenant through `/clients/new`, and refuses the run if T871 belongs to any other tenant.
+  `npx next start` warns that it "does not work with `output: standalone`"; it serves the routes anyway, which is
+  what the run used, and the warning is recorded here rather than quietly ignored.
+* **What the run proved, on persisted rows, with no page errors.** (1) an order created through `/sales/orders`
+  and priced from the standing condition record; (2) `DL-0000001` created from the quantity the order line still
+  had open, and over-delivery refused with that quantity quoted back ("Item 10 carries 6.000 UNT open of 6.000
+  ordered, and 99 was entered"); (3) the pick confirmed and the delivery standing PICKED with its pick history;
+  (4) the goods issue posting as `MD-00000001` with the shelf moving 100 → 96, read from `stock_quantity`; (5)
+  `INV-0000001` billing the issued quantity and posting the receivable as `CI-0000001`; (6) a second attempt
+  leaving the delivery billed by **exactly one** document — one row on screen and `count(*) = 1` in
+  `billing_document` — with the delivery no longer offered as billable; (7) `SO-0000002` refused a delivery while
+  its credit block stood ("Sales order SO-0000002 is credit-blocked (LIMIT_EXCEEDED): nothing was delivered."),
+  and the same act going through once the release stood; (8) a delivery created under the customer's own limit
+  blocked on its own value, its pick refused, and the tables showing it OPEN with no picked quantity; (9) the
+  whole chain read back from the tables the services wrote — delivery GOODS_ISSUED with the material document the
+  screen named, billing POSTED with its invoice and its accounting document, gross 110 for the four units at the
+  order price, one pick row of `4.000`, one receivable row of 110.
+* **What the run had to be told, which is the part worth reading.** Four of its failures were the target's
+  expectations being wrong rather than the product's: the goods-issue result had to be read from the delivery
+  header, because a posted issue retires the form that posted it; the fixture had to open the material period the
+  way `goods-receipt.ts` and `migo-transfer-posting.ts` do, since `initializeMaterialPeriodControl` is what makes
+  a movement dated today acceptable; the partial quantity after a release had to be the line's remaining two
+  units, because the open quantity is the ceiling; and the picked total had to be compared as a number, because a
+  `numeric(13,3)` sum and a coalesced zero do not share a scale. One was a screen: `/sales/billing` printed "0
+  deliverys issued and not yet billed.", and now states each of its three cases in words worth reading. The last
+  was a fact about the router rather than about billing: a form that stays mounted keeps its request key and its
+  last answer, so a "retry" inside it is the replay the screen guards and not a second act — which is why proof
+  (6) is the standing count of documents rather than a sentence inside that form, and why the retry opens the
+  screen from another route.
+* **What this target does not drive, so no one looks for it in the log.** The browser leg stops at the posted
+  receivable, exactly as DI-020's open half says: no payment or clearing, and no credit-memo path for re-billing
+  a delivery whose billing document was cancelled. The reversal by 602/MBST, the held invoice surviving to a
+  release that re-posts the same number, the cancellation of a billing document and the refusal to rewrite an
+  order line the chain has drawn on are asserted by name in `tests/sales-delivery.test.ts` ("reverses a customer
+  goods issue with the one movement that undoes it, once"; "refuses a delivery, a pick and a goods issue on a
+  blocked document, and holds the invoice"; "cancels a billing document by mirroring the receivable it raised"),
+  and by `tests/goods-issue.test.ts` for the movement's own screen; they are not repeated in the browser here. The
+  under-zero pick and the insufficient-stock refusal are likewise service-level refusals the unit suites own. The
+  sign-out leg is not driven by this target either: it ends on the delivery panel that refused the pick, with the
+  runner's own session checks standing behind it.

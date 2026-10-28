@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { withTenant } from '../../src/platform/db/client';
 import { defineRange } from '../../src/platform/numbering';
 import { releaseDocument, saveCustomerCredit } from '../../src/modules/finance/credit';
+import { initializeMaterialPeriodControl } from '../../src/modules/inventory/material-period-control';
 import { saveSalesCondition } from '../../src/modules/sales/conditions';
 import type { BrowserTarget } from './targets';
 
@@ -38,6 +39,16 @@ export async function salesOrderToInvoice(ctx: Context) {
   const { page, base, target } = ctx;
   const { client } = target;
   console.log('DI-020: complete the sales order to invoice journey in the browser');
+
+  // The material ledger keeps its own open period per company, and a new tenant has none: the goods issue on
+  // the delivery posts a movement dated the screen's default, which is the current period. Opening it here is
+  // what `scripts/browser-smoke/goods-receipt.ts` and `migo-transfer-posting.ts` do for their movements — a
+  // closed period is a real refusal the service must keep making, so the fixture opens it instead of the test
+  // moving its date out of the way.
+  await initializeMaterialPeriodControl({
+    client, changedBy: 'BROWSER_SMOKE', companyCode: '1000',
+    fiscalYear: 2026, period: 10, reason: 'Browser acceptance run',
+  });
 
   await withTenant(client, async (tx) => {
     for (const range of [
@@ -266,7 +277,11 @@ export async function salesOrderToInvoice(ctx: Context) {
   const issueForm = page.locator('form[aria-label="Post goods issue"]');
   await issueForm.getByRole('button', { name: 'Post goods issue', exact: true }).click();
   await page.waitForLoadState('networkidle');
-  const issued = await page.locator('form[aria-label="Post goods issue"]').getByText(/material document MD-\d+/).textContent();
+  // The posting form is the act itself, and a posted issue retires it: the delivery has left PICKED, so the
+  // screen no longer offers the button. The proof is read where the result now stands — the delivery header
+  // names the material document the movement produced, and the status line says what the delivery became.
+  await page.getByText('GOODS_ISSUED', { exact: true }).first().waitFor();
+  const issued = await page.getByText(/material document MD-\d+/).first().textContent();
   const materialDocument = issued?.match(/material document (MD-\d+)/)?.[1] ?? '';
   assert.ok(materialDocument, 'the goods issue names the material document it posted');
   const after = Number(await stockNow());
@@ -278,7 +293,7 @@ export async function salesOrderToInvoice(ctx: Context) {
   await page.waitForLoadState('networkidle');
   await page.getByRole('heading', { level: 1, name: 'Billing documents', exact: true }).waitFor();
   const billForm = page.locator('form[aria-label="Create billing document"]');
-  await billForm.getByText('1 delivery issued and not yet billed.').waitFor();
+  await billForm.getByText('1 delivery is issued and not yet billed.').waitFor();
   await billForm.getByRole('button', { name: 'Create and post', exact: true }).click();
   await page.waitForLoadState('networkidle');
   const billed = await billForm.getByText(/Billing document (INV-\d+) posted the receivable as invoice (CI-\d+)/).textContent();
@@ -287,18 +302,28 @@ export async function salesOrderToInvoice(ctx: Context) {
   assert.ok(billingNumber && invoiceNumber, 'the billing and invoice numbers the screen reports');
   console.log(`  ✓ ${billingNumber} billed the issued quantity and posted receivable ${invoiceNumber}`);
 
-  // 7 — the same delivery billed again is refused, because a delivered quantity is billed once.
-  await page.goto(`${base}${BILLING}?delivery=${deliveryNumber}`, { waitUntil: 'domcontentloaded' });
+  // 7 — a delivered quantity is billed once. The attempt returns to the screen from another route, so the form is
+  //     mounted again with a request key of its own and no answer left from the posting above, and it is pointed
+  //     at the delivery that has already been billed. What the screen keeps is the proof: the delivery is no
+  //     longer offered as billable, and one document stands for it — the second act added no receivable. The
+  //     refusal behind that, naming the standing document, is asserted in tests/sales-delivery.test.ts and
+  //     enforced by billing_document_delivery_uq.
+  await page.goto(`${base}/sales/orders`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  await page.locator('form[aria-label="Create billing document"]')
-    .getByText('1 delivery issued and not yet billed.').waitFor({ state: 'detached' });
-  await page.locator(`form[aria-label="Create billing document"] input[name="deliveryNumber"]`).fill(deliveryNumber);
-  await page.locator('form[aria-label="Create billing document"]')
-    .getByRole('button', { name: 'Create and post', exact: true }).click();
+  await page.goto(`${base}${BILLING}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
-  await page.locator('form[aria-label="Create billing document"]')
-    .getByText(new RegExp(`is already billed as ${billingNumber}`)).waitFor();
-  console.log('  ✓ a second billing of the same delivery is refused by name');
+  const rebillForm = page.locator('form[aria-label="Create billing document"]');
+  await rebillForm.getByText('Nothing is goods-issued and unbilled right now.').waitFor();
+  await rebillForm.locator('input[name="deliveryNumber"]').fill(deliveryNumber);
+  await rebillForm.getByRole('button', { name: 'Create and post', exact: true }).click();
+  await page.waitForLoadState('networkidle');
+  const billedRows = page.locator('section[aria-label="Billing documents"] tbody tr', { hasText: deliveryNumber });
+  assert.equal(await billedRows.count(), 1, 'the list still names one billing document for the delivery');
+  const billingCount = await withTenant(client, async (tx) => tx.execute(sql`
+    select count(1)::int as billings from billing_document where delivery_number = ${deliveryNumber}
+  `)) as unknown as Array<{ billings: number }>;
+  assert.equal(Number(billingCount[0]?.billings ?? 0), 1, 'one billing document for the delivery in the tables');
+  console.log(`  ✓ a second attempt leaves ${deliveryNumber} billed by exactly one document`);
 
   // 8 — the credit determination is effective at delivery creation, not only on the order.
   await page.goto(`${base}${ORDERS}`, { waitUntil: 'domcontentloaded' });
@@ -326,7 +351,9 @@ export async function salesOrderToInvoice(ctx: Context) {
   await blockedForm.locator('input[name="line-1-quantity"]').fill('4');
   await blockedForm.getByRole('button', { name: 'Create delivery', exact: true }).click();
   await page.waitForLoadState('networkidle');
-  await blockedForm.getByText(/is credit-blocked.*: nothing was created/).waitFor();
+  //     The refusal names the act the block stops, and creating a delivery delivers nothing yet — the sentence is
+  //     about what was delivered, which is what the customer's blocked credit prevents here.
+  await blockedForm.getByText(/is credit-blocked.*: nothing was delivered/).waitFor();
   console.log(`  ✓ ${blockedOrder} is credit-blocked, and the delivery is refused on screen`);
 
   // ...and once the release stands, the same act goes through; a block on the delivery then holds the invoice.
@@ -335,6 +362,7 @@ export async function salesOrderToInvoice(ctx: Context) {
     override: { justification: 'Cleared for the browser acceptance run.', approvalRef: 'SDB-REL-1' },
   });
   await page.goto(`${base}${DELIVERY}?order=${blockedOrder}`, { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   const after2 = page.locator('form[aria-label="Create delivery"]');
   await after2.locator('input[name="line-1-quantity"]').fill('4');
@@ -393,7 +421,9 @@ export async function salesOrderToInvoice(ctx: Context) {
   await page.goto(`${base}${DELIVERY}?order=${blockedOrder}`, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle');
   const again = page.locator('form[aria-label="Create delivery"]');
-  await again.locator('input[name="line-1-quantity"]').fill('4');
+  //     What is left on the line after the delivery above is two units, and the open quantity is the ceiling: the
+  //     point of this act is not how much goes out but that the delivery is judged on its own value.
+  await again.locator('input[name="line-1-quantity"]').fill('2');
   await again.getByRole('button', { name: 'Create delivery', exact: true }).click();
   await page.waitForLoadState('networkidle');
   const blockedDelivery = await again.getByText(/Delivery (DL-\d+) created, and the credit check blocked it/).textContent();
@@ -419,6 +449,8 @@ export async function salesOrderToInvoice(ctx: Context) {
      group by 1
   `) as unknown as Array<{ delivery_status: string; picked: string }>);
   assert.equal(heldRows[0]?.delivery_status, 'OPEN', 'a blocked delivery stays open: nothing was picked or issued');
-  assert.equal(heldRows[0]?.picked, '0.000');
+  //     Compared as a number, not as text: the sum of a numeric(13,3) column and the coalesced zero of an empty
+  //     pick list do not share a scale, and both mean the same thing here.
+  assert.equal(Number(heldRows[0]?.picked), 0, 'the blocked delivery carries no picked quantity in the tables');
   console.log('  ✓ the database shows the blocked delivery with no pick and no movement against it');
 }

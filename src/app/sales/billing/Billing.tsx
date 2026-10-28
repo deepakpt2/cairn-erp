@@ -77,7 +77,11 @@ function CreateBilling({
           {pending ? 'Billing…' : 'Create and post'}
         </button>
         <span className="text-xs text-ink-faint">
-          {billable.length} delivery{billable.length === 1 ? '' : 's'} issued and not yet billed.
+          {billable.length === 0
+            ? 'Nothing is goods-issued and unbilled right now.'
+            : billable.length === 1
+              ? '1 delivery is issued and not yet billed.'
+              : `${billable.length} deliveries are issued and not yet billed.`}
         </span>
       </div>
       <Notice state={state} />

@@ -151,7 +151,8 @@ The first link of the order-to-invoice chain is live at the service level and on
 The rest of the chain is written and now **run**: `drizzle/9191`, `src/modules/sales/{delivery,billing,
 fulfillment-quantities,exposure}.ts`, the 601/602 scenario in `src/modules/inventory/goods-issue.ts`, the two
 screens `/sales/delivery` and `/sales/billing`, their server actions and catalog entries, `tests/
-sales-delivery.test.ts` (9/9), and one browser target `sales-order-to-invoice` on fixture key T871.
+sales-delivery.test.ts` (9/9), and one browser target `sales-order-to-invoice` on fixture key T871 — the target
+below was written while the test server was out of reach, and has since been run there and passed (DI-021).
 
 **Every gate that can run without a browser has now run on the test box**, on its `cairn_b210` database, against the
 committed tree: `db:migrate` applies `+ 9191` over 313, `npm run db:verify` passes 13/13, the sixteen focused and
@@ -163,9 +164,13 @@ worktree reproduces the same six, assertion for assertion), `tsc --noEmit` repor
 file of this change, `lint:ip` its baseline 141 with nothing new, and `npm run build` exits 0 with
 `ƒ /sales/orders`, `ƒ /sales/delivery` and `ƒ /sales/billing` in the manifest.
 
-Browser acceptance is **deferred by owner decision (2026-10-28) until the test server is in use**, tracked as
-DI-021 with the target, its eight proofs and the exact way to run it. Nothing in this pass launched a browser
-against a development server, and no browser evidence is claimed anywhere in these notes.
+Browser acceptance has **run on the box and passed**: `npm run smoke:browser --
+--target sales-order-to-invoice` exits 0 twice in a row against a served `next start` build — eleven steps echoed
+as they passed, 24 assertions between them, `Browser errors: []`, and the identity guard verifying `cairn_b210`
+before the first click. DI-021 records the run, the six corrections it required (every one of them in the harness
+or in the two sales screens, none in a service), and the legs the target deliberately does not drive. The earlier
+note in these pages that no browser target had been launched is the history of the workspace pass, not the state
+of the chain.
 
 What the design commits to, and what a reviewer should read the code against:
 
@@ -188,6 +193,8 @@ What the design commits to, and what a reviewer should read the code against:
   refuse a standing block; a breach the goods issue itself causes blocks the *receivable* (the movement is never
   undone by a credit act). The billing document stays OPEN and holds the invoice until a release stands, and
   re-submitting it then posts the same document rather than a second one.
-* **Every gate for this is owed.** The box was unreachable for the whole pass, so no migrate, `db:verify`,
-  `tsc`, focused test, build or browser run has touched it. Until those run and pass on persisted rows, the
-  journey is not accepted at any level — DI-020 says so, and so does this page.
+* **Every gate has now run, on the box and on persisted rows** — migrate, `db:verify`, the focused suites and the
+  whole suite, `tsc`, `lint:ip`, the build, and the browser journey DI-021 carries. What stays open on this chain
+  is substantive rather than unverified, and DI-020 keeps it: the journey stops at the posted receivable, so no
+  payment or clearing is driven from the sales side, and a delivery whose billing document was cancelled cannot be
+  billed again until the credit-memo path exists — `billing_document_delivery_uq` is left exactly as it is.
