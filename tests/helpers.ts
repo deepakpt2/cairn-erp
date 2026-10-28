@@ -12,6 +12,7 @@ import { applyStandardStructureInTransaction } from '@/platform/tenancy/standard
 import { glAccountGroup } from '@/modules/finance/gl-account-group-schema';
 import { chartOfAccounts, distributionChannel, division, salesOrgDistributionChannel, salesOrgDivision } from '@/modules/foundation/schema';
 import { deriveGlAccountType, deriveIsBalanceSheet } from '@/modules/finance/gl-account-vocabulary';
+import { TARGETS } from '../scripts/browser-smoke/targets';
 
 /**
  * A date `days` from today, as `YYYY-MM-DD`.
@@ -42,6 +43,35 @@ export interface TestTenant {
 }
 
 /**
+ * The keys the browser acceptance cohort reserves for itself, read from its own registry rather than copied:
+ * `scripts/browser-smoke.ts` refuses to run a target whose fixture key belongs to another tenant
+ * (`isOwnedFixture`), so a unit-test tenant parked on a reserved key does not merely look untidy — it stops a
+ * browser acceptance run. Measured before this change, 54 of the 288 hashed test keys landed inside the
+ * reserved range, and 56 keys were shared by two or more test FILES.
+ */
+const RESERVED_BROWSER_KEYS = new Set<string>(TARGETS.map((target) => target.client));
+
+/**
+ * The name a fixture tenant carries: the prefix `tests/global-setup.ts` purges on, then the seed that owns it.
+ * Carrying the seed is what makes a shared key detectable — the hash alone could not tell "my tenant, left by
+ * an aborted run of this file" from "another file's live tenant", and the second case is the one that made a
+ * whole test file fail with `Company code 1000 is not configured` or `destroyTenant: tenant T474 was not
+ * deleted` while its partner deleted the tenant underneath it.
+ */
+function fixtureName(client: string, seed: string): string {
+  return `Test tenant ${client} (${seed})`.slice(0, 120);
+}
+
+/** Candidate keys: the seed's own hash first, then a bounded forward probe over the same hash family. */
+function keyCandidates(seed: string): string[] {
+  const keys = [testClientId(seed)];
+  for (let attempt = 1; attempt < 400 && keys.length < 400; attempt++) {
+    keys.push(testClientId(`${seed}#${attempt}`));
+  }
+  return [...new Set(keys)].filter((key) => !RESERVED_BROWSER_KEYS.has(key));
+}
+
+/**
  * Create a tenant the same way the application does — through a tenant-scoped
  * transaction. This matters: it proves the row-level security policy permits
  * INSERT into `client` when the session key matches the row being written.
@@ -55,54 +85,80 @@ export async function createTenant(
   seed: string,
   options: { currency?: string; companyCode?: string; withConfiguration?: boolean } = {},
 ): Promise<TestTenant> {
-  const client = testClientId(seed);
   const companyCode = options.companyCode ?? '1000';
   const currency = options.currency ?? 'USD';
 
-  await withTenant(client, async (tx) => {
-    const existing = await tx.select().from(clientTable).where(eq(clientTable.client, client));
-    if (existing.length && (existing[0].name !== `Test tenant ${client}` || !existing[0].isDevelopment)) {
-      throw new Error(`Test key ${client} belongs to a non-fixture tenant; refusing to modify it.`);
-    }
-    await tx
-      .insert(clientTable)
-      .values({
-        client,
-        name: `Test tenant ${client}`,
-        country: 'KW',
-        currency,
-        status: 'ACTIVE',
-        isDevelopment: true,
-        createdBy: 'TEST',
-      })
-      .onConflictDoNothing();
+  let client = '';
+  for (const candidate of keyCandidates(seed)) {
+    const outcome = await withTenant(candidate, async (tx) => {
+      const existing = await tx.select().from(clientTable).where(eq(clientTable.client, candidate));
+      if (existing.length) {
+        if (existing[0].name === fixtureName(candidate, seed) && existing[0].isDevelopment) {
+          // Ours, standing from earlier in this file or left by an interrupted run of it: reclaim it.
+        } else if (existing[0].isDevelopment) {
+          // Another file's fixture, live or leaked. Share nothing with it — take the next key instead.
+          return 'occupied';
+        } else {
+          // A tenant this run has no claim on at all. Never write to it, and say so.
+          return 'refused';
+        }
+      }
+      await tx
+        .insert(clientTable)
+        .values({
+          client: candidate,
+          name: fixtureName(candidate, seed),
+          country: 'KW',
+          currency,
+          status: 'ACTIVE',
+          isDevelopment: true,
+          createdBy: 'TEST',
+        })
+        .onConflictDoNothing();
 
-    await tx
-      .insert(clientSettings)
-      .values({ client, createdBy: 'TEST' })
-      .onConflictDoNothing();
+      await tx
+        .insert(clientSettings)
+        .values({ client: candidate, createdBy: 'TEST' })
+        .onConflictDoNothing();
 
-    if (options.withConfiguration !== false) {
-      await applyStandardPackage(tx, {
-        client,
-        currency,
-        fiscalYearVariant: 'K4',
-        activatedBy: 'TEST',
-      });
-      // The enterprise structure a configured test tenant is expected to have. While
-      // the standard package still writes it this call finds the rows already there
-      // and does nothing; when the package is reduced to general data this is what
-      // keeps the eighteen structure-dependent test files unchanged.
-      await applyStandardStructureInTransaction(tx, {
-        client,
-        companyCode,
-        companyName: `Test company ${client}`,
-        currency,
-        country: 'KW',
-        changedBy: 'TEST',
-      });
+      if (options.withConfiguration !== false) {
+        await applyStandardPackage(tx, {
+          client: candidate,
+          currency,
+          fiscalYearVariant: 'K4',
+          activatedBy: 'TEST',
+        });
+        // The enterprise structure a configured test tenant is expected to have. While
+        // the standard package still writes it this call finds the rows already there
+        // and does nothing; when the package is reduced to general data this is what
+        // keeps the eighteen structure-dependent test files unchanged.
+        await applyStandardStructureInTransaction(tx, {
+          client: candidate,
+          companyCode,
+          companyName: `Test company ${candidate}`,
+          currency,
+          country: 'KW',
+          changedBy: 'TEST',
+        });
+      }
+
+      return 'claimed';
+    });
+    if (outcome === 'refused') {
+      throw new Error(`Test key ${candidate} belongs to a non-development tenant; refusing to modify it.`);
     }
-  });
+    if (outcome === 'claimed') {
+      client = candidate;
+      break;
+    }
+  }
+  if (client === '') {
+    throw new Error(
+      `No free test tenant key for seed ${seed}: every candidate was occupied. A full run leaks no tenant any `
+      + 'more (tests/global-setup.ts purges them first), so this means a run was interrupted mid-file — reset with '
+      + '`npm run test:db` or delete the stale Test tenant T### rows.',
+    );
+  }
 
   return { client, companyCode, currency };
 }

@@ -1981,6 +1981,14 @@ Status:        DRAFT → AGREED → IN BUILD → SIGNED OFF
 from `INTL-STD-2` (§7.3) activated into a throwaway schema. Deterministic, reproducible, and it
 proves the configuration package itself.
 
+**The suite owns its database:** the database-backed layers run against a scratch database of their
+own — `npm run test:db` provisions one (migrations, reference seed, standard seed) — and a
+whole-suite run refuses any database the browser acceptance guards name, because a suite both
+reserves those tenant keys and purges fixture tenants. Fixture tenants are claimed, not assumed: a
+test takes the `T###` key its seed hashes to only while that key is free, so two suites whose seeds
+collide each get a tenant of their own instead of deleting one another's mid-run. Focused runs and
+the browser harness still work on any development database, including the acceptance one.
+
 ### 24.4 Debugging facilities (built in, not bolted on)
 
 | Facility | Purpose |
@@ -2715,6 +2723,7 @@ to the valuation case. Never run two invocations of the same target concurrently
 | `npm run smoke:browser:material-valuation` | Valuation/currency/history and financial price-read denial, with fresh Basic prerequisite |
 | `npm run smoke:browser -- --list` | Lists targets without opening the browser/database |
 | `npm run test:browser-harness` | Pure argument/fixture-guard tests; dedicated config has no database setup or purge |
+| `npm run test:db` | Provisions the scratch database the whole suite runs on (`cairn` by default, `--database`/`CAIRN_TEST_DB_NAME`); refuses the guarded acceptance databases |
 
 Each browser run has a 120-second work deadline (raced against the complete target, including database
 assertions), short per-action/navigation timeouts, bounded failure diagnostics and guarded cleanup.

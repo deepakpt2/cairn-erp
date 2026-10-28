@@ -39,6 +39,7 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-024 | A quality block cannot hold a supplier invoice, so inspection does not reach payables | Low | Purchasing / QM boundary | OPEN — widening a check constraint needs a migration authorization |
 | DI-025 | The inspection lot has one capability and no place in the navigation | Low | UI shell / authorization surface | OPEN by decision — the command-bar handle was verified in a browser on the box this pass, so only the *place* and the *display code* remain; a display code and a `quality` screen area both need the owner's files or a role model that does not exist |
 | DI-026 | A lot records the request and decides nothing; the batch cockpit still refuses to read a lot | Medium | Quality / Inventory boundary | OPEN — the decision act is slice 2 with it; the cockpit sentence was corrected this passs own grant, version guard and batch write; the stale refusal text is recorded |
+| DI-027 | The whole suite shared the browser acceptance database and a 1,000-key tenant hash, so fixtures deleted each other | Medium | Test infrastructure | MECHANISM FIXED 2026-10-28 (`npm run test:db`, claimed fixture keys, guarded-database refusal); OPEN for the key space, the shared global masters and the baseline seven |
 
 ---
 
@@ -890,3 +891,72 @@ blocked milestone), and given acceptance criteria so the next person can close i
   posting, a valuation or an availability rule: if it appears to, that is the finding, and it comes back here
   rather than being built.
 
+## DI-027 — The whole suite had no database of its own: 56 shared tenant keys, 54 reserved ones, and 24 tests a run lost to a neighbour's cleanup
+
+* **Severity:** Medium. **Area:** `tests/`, `vitest.config.ts`, `scripts/` — test infrastructure only.
+* **Status:** MECHANISM FIXED (2026-10-28); three residuals stay open below.
+* **What stood before.** `tests/helpers.ts` derived every fixture tenant from `T` + a 31-multiplier hash of the
+  seed `mod 1000`, and `tests/global-setup.ts` purged **every** `T[0-9]{3}` development tenant before and after
+  the whole run. A census of the 288 keys the 459 suite files asked for found **56 claimed by two or more
+  files** (`T857` by quality-lot, gl-reporting-suite and supplier-companies; `T518` by info-record and
+  purchasing-group-maintenance; `T474` by time-ticket and vendor-evaluation; `T794`, `T339` likewise) and **54
+  landing on keys the browser harness reserves** (`T036`, `T058`, `T124` … `TARGETS` is the list). With
+  `fileParallelism: false` the files run one after another in one database, so whoever finished first deleted
+  the row the next file was still seeding. The suite also ran in `cairn_b210`, the *browser acceptance*
+  database, which it must not: it reserves those tenants and purges them. Failure signatures were always
+  someone else's state — `destroyTenant: tenant T857 was not deleted`, `PostingError: Company code 1000 is not
+  configured.`, `PurchaseOrderError: Supplier V-IR does not exist.`, `Material MV-FG does not exist.`, FK
+  violations on `vendor_invoice_client_fkey` and `material_plant_client_client_client_fk`, `deadlock detected`.
+  Measured on the box, same commit, same database: **31 failed** (452 of 459 files) on a dirty start, **7
+  failed** (3,154 of 3,161) once the residue of that run was gone — the twenty-four between them were state,
+  not code, and guessing at a database cause was forbidden until the census and these two numbers said so.
+* **What is in place now.** Three pieces, all test-side. (1) `createTenant` **claims** a key: the seed's own
+  hash first, then `testClientId(seed + '#n')` probes for n under 400, never a key in `TARGETS`; an occupied key is reused only
+  when the row is exactly this seed's fixture (named `Test tenant T### (seed)`) and `is_development`, another
+  development fixture is skipped, and anything else is refused by name. The fixture name carries the seed, so a
+  collision is visible in the table instead of invisible in a hash. (2) `npm run test:db`
+  (`scripts/test-db.ts`) provisions a scratch database the suite owns — `cairn` unless `--database` or
+  `CAIRN_TEST_DB_NAME` says otherwise — refusing unless `CAIRN_ENV=development`, refusing any name in
+  `ACCEPTANCE_DATABASE_GUARDS` **before connecting**, refusing to drop anything without `--fresh --yes`, then
+  migrating and running `scripts/seed.ts` and `scripts/seed-reference.ts` (a migrated-only database is not a
+  test database: 484 failures and 1,421 skips is what that looks like), verifying counts and `current_database()`
+  and printing the two `export` lines it just verified. (3) `tests/global-setup.ts` prints
+  `Test setup: database <name> on <host>:<port>.` on every run and a **whole-suite** run on a guarded database
+  refuses with the remediation, while focused runs stay exempt so `npm run db:verify` and the single-suite gates
+  keep working there; `vitest.browser-harness.config.ts` sets `globalSetup: []` and never sees it. The purge
+  also removes a stale un-suffixed `Browser verification tenant`, which is the row that made a smoke target
+  answer `Reserved test key belongs to another tenant; refusing to run.`
+* **Verified on the box.** Suite on `cairn_b210` → prints the identity line, then refuses. `npm run test:db --
+  --database cairn_b210` → refuses. `npm run test:db` → `cairn stands with 315 migrations, 280 capabilities,
+  21 units, 30 countries, 0 test tenant(s).`; `--fresh --yes` reproduces it and prints the app role's own
+  credential rather than guessing the owner's. Whole suite on `cairn` → **457 of 460 files, 3,159 of 3,166
+  tests**, the seven misses exactly the documented baseline. Five stale `Test tenant T###` rows planted on the
+  colliding keys plus a reserved `T036` browser tenant → the five affected suites still pass **26/26**, the
+  case that used to fail. The seven were then confirmed **independently** on a virgin scratch database, alone in
+  three files: same seven, and every one an `AssertionError` about behaviour (unit basis `{ base: 7 }` vs
+  `{ base: 84 }`, availability `UNSUPPORTED` vs `AVAILABLE 34 20`, a write answering `ok: false`, 12 vs 11)
+  with no tenant, FK or "not configured" signature. Gates unchanged: `db:verify` 13/13 and
+  `tests/browser-targets.test.ts` 209/209 on `cairn_b210`, the box's harness list 503/503, `tsc --noEmit` 152
+  = baseline, `lint:ip` 141 occurrences = baseline. `tests/test-tenant-isolation.test.ts` (5 tests) pins the
+  claim rule, the purge pattern and both refusals' text so none of it regresses silently.
+* **What remains open.** (a) The key space is still 1,000 and the suite wants 288, so about a quarter of seeds
+  land where a neighbour already stands; claiming makes a collision harmless, not rare, and 400 probes before
+  refusal is a budget, not a solution — a per-run allocation ledger or a wider key is the structural answer.
+  (b) The scratch database is the same cluster and the same global masters: `country`, `unit_of_measure`,
+  `uom_conversion`, `material_type` and `term_registry` are written by whoever gets there first, so two
+  concurrent suite runs still share those tables — separate instances (or namespaced masters) are out of a
+  test-infrastructure task's reach. (c) The baseline seven are behaviour assertions in the owner's in-flight
+  unit-basis, availability and payment-method work and were left alone by instruction.
+  (d) `CAIRN_ALLOW_GUARDED_TEST_DATABASE=1` exists and is pinned by name in a test, but it has never been
+  exercised: proving it means running the whole suite against the acceptance database, which is the damage the
+  guard exists to prevent. (e) `scripts/reset-db.ts` still drops `public` in any database named by the
+  environment when `CAIRN_ENV=development` — pre-existing, dev-only, and now the one path that can reach an
+  acceptance database; it was not widened here because the brief confined this pass to the demonstrated defect.
+* **Acceptance criteria for closing.** (1) `npm run test:db` is the documented way to get a suite database and
+  no supported test path can name an acceptance one — a test that proves the refusal, not a comment. (2) Two
+  fixture suites whose seeds hash to the same key pass together and in a full run, with the collision case
+  pinned by a test that finds the pair rather than hard-coding it. (3) A full suite on the scratch database
+  equals the documented baseline, reported with the database identity, file and test counts, and every
+  remaining failure reproduced alone in the same database. (4) The key-collision census is re-run and reports
+  zero *harmful* shares, or the key scheme is widened. (5) Either global masters are namespaced per run or the
+  suite runs on its own instance, and the readiness doc stops describing `cairn_b210` as the suite's database.

@@ -173,6 +173,16 @@ worktree reproduces the same six, assertion for assertion), `tsc --noEmit` repor
 file of this change, `lint:ip` its baseline 141 with nothing new, and `npm run build` exits 0 with
 `ƒ /sales/orders`, `ƒ /sales/delivery` and `ƒ /sales/billing` in the manifest.
 
+> **Later the same day (DI-027): the suite no longer runs in this database.** `npm run test:db` provisions a
+> scratch database of the suite's own (`cairn` by default) and a whole-suite `vitest run` refuses a database the
+> browser guards name, so the figures above were re-measured on the scratch database at **457 of 460 files and
+> 3,159 of 3,166 tests** — a new isolation test accounts for the file and the five tests, and the seven misses
+> are the same seven, reproduced alone on a freshly provisioned database. The twenty-four extra failures the
+> first full-suite run on `cairn_b210` had shown were fixture tenants deleting one another, and are gone; the
+> baseline seven are behaviour assertions and were not touched. Re-running the whole suite on `cairn_b210` is
+> now refused by design — focused gates and `npm run db:verify` still run there, and every run prints
+> `Test setup: database <name> on <host>:<port>.` so a number can never be read without knowing its database.
+
 Browser acceptance has **run on the box and passed**: `npm run smoke:browser --
 --target sales-order-to-invoice` exits 0 twice in a row against a served `next start` build — eleven steps echoed
 as they passed, 24 assertions between them, `Browser errors: []`, and the identity guard verifying `cairn_b210`
