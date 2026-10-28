@@ -17,6 +17,12 @@ Counts come from `ls src/app/<area>`, `grep -c pgTable` over `src/modules/*/sche
 tables the barrel `src/platform/schema.ts` pulls in, and from `scripts/browser-smoke/targets.ts` (170
 targets). The same measurement is `/home/user/p39-coverage.txt` in the working area.
 
+The table above was taken on 2026-10-27 at `c92061d` and it has not been re-taken since, so two of its rows now
+read as history rather than as state: the SD line ("document chain absent") describes the tree before
+`9896197` delivered delivery, picking, goods issue and billing for an order line, and the QM line's page, target
+and test counts are re-measured below, where the commands are stated. The PP and HR rows were not re-measured
+in the pass that produced the QM numbers, so they are left as they were taken rather than quietly refreshed.
+
 **PP, the chain a factory runs.** BOM and routing masters, production version, CO01 order create with a
 version-derived component snapshot, release, 261 component issue through MIGO/MB1A, operation
 confirmations, 101 + R08 finished-goods receipt, technical completion and its reversal. Each step posts
@@ -115,7 +121,10 @@ lines this pass repaired, and a one-line mutant (`reservations.ts:80`) failed it
 4. **Payroll** — the statutory scope decision is already made (none); what is missing is the runs, the
    earnings and deduction configuration per jurisdiction, payslips and the posting. It cannot be built
    without a decision on which jurisdiction's rules the deduction configuration models.
-5. **QM inspection model** — needs a requirement first: nothing in `CAIRN.md` asks for inspection lots.
+5. **QM inspection model** — needs a requirement first: nothing in `CAIRN.md` asks for inspection lots. The
+   coverage was re-measured and the smallest coherent workflow was written out on 2026-10-28, in "Quality
+   management: verified coverage and the minimum viable workflow" below; DI-022, DI-023 and DI-024 hold the three
+   decisions it waits on. No code was built in that pass.
 
 Reproduce the numbers with `bash /home/cairn/p39-wide.sh 1` and `2` on the verification box, and
 `bash ~/run-box-tests.sh <tag> tests/browser-target-constrained-driving.test.ts` for the guard.
@@ -198,3 +207,175 @@ What the design commits to, and what a reviewer should read the code against:
   is substantive rather than unverified, and DI-020 keeps it: the journey stops at the posted receivable, so no
   payment or clearing is driven from the sales side, and a delivery whose billing document was cancelled cannot be
   billed again until the credit-memo path exists — `billing_document_delivery_uq` is left exactly as it is.
+
+## Quality management: verified coverage and the minimum viable workflow (2026-10-28)
+
+Written as a discovery pass. **Nothing was built in it**: no schema, no service, no screen and no migration was
+touched, and the Sales chain at `7b65271` was not reopened. Every number below is reproducible from the command
+printed beside it, on this tree.
+
+### 1. What the QM scope is, measured
+
+| What | Command | Result |
+|---|---|---|
+| QM tables | `grep -n "pgTable('" src/modules/foundation/characteristic-schema.ts` (the five classification tables `characteristic`, `characteristic_value`, `class_type`, `classification_class`, `class_assignment`) plus `batch_status_management`, `batch_status_plant`, `batch_status_plant_conversion` in `src/modules/inventory/schema.ts` | **8** — the same eight the 2026-10-27 table counted. No `inspection_*`, `quality_*`, `lot`, `result` or `nonconformance` table exists: `grep -rl "inspection_lot\|usage_decision\|quality_notification\|nonconformance" src/` is empty |
+| QM capability codes | `grep -oE "code: '[A-Z0-9._]+'" scripts/seed.ts \| sort -u` | **no `QM.*` code at all** (0). Eight operational codes — `INV.BATCH.CREATE`, `.CHANGE`, `.DISPLAY`, `.COCKPIT`, `.PICKUP`, `INV.BATCHCLASS.MAINTAIN`, `INV.BATCHSORT.MAINTAIN` and `INV.BATCHSTRATEGY.MAINTAIN` — and fourteen `CFG.INV.BATCH*.DEFINE` plus `CFG.PROD.WIPBATCH.DEFINE`. Every one of the twenty-three is referenced from at least three files under `src/`, so none is a grantable code reaching nothing, which is how the pre-milestone `SALES.*` codes failed |
+| QM screens | `find src/app -type d \( -name "*batch*" -o -name "*charact*" -o -name "*class*" -o -name "*shelf*" \)` keeping those with a `page.tsx` | **26 directories, 72 files**; 24 of them are QM or batch disposition once `/config/valuation-classes` and `/finance/grir-reclass` are set aside. The 2026-10-27 table said 25 under a looser scope |
+| QM browser targets | `grep -oE "\{ id: '[a-z0-9-]+'" scripts/browser-smoke/targets.ts` over 171 ids, then the batch/characteristic/class labels | **3**: `characteristics` (SCR-057 CT04), `classes` (SCR-058 CL02), `batch-document-management`. None of them appears in DI-015's list of stale targets, so all three are current, and two of them are named as passing in §2 above |
+| QM tests | `ls tests/ \| grep -icE "batch\|charact\|class\|shelf"` | **45 files, 153 tests, 45/45 and 153/153 passed on the test box at `7b65271`** (`npx vitest run` over that file list, 89.9 s), with `npm run db:verify` at 13/13 on `cairn_b210` in the same session. The 2026-10-27 table's 44 counted one file fewer under a slightly narrower pattern |
+| Refusals that mark the boundary | `grep -rn "inspection\|quality" src/modules/production/order-confirmation.ts src/modules/inventory/batch-cockpit.ts src/modules/purchasing/blocked-invoice.ts` | Three honest refusals where a QM act would sit: "An inspection lot is not stored. Nothing was read." (`batch-cockpit.ts:159`, filter refused at `:30`), "A quality inspection is not stored. None was created." (`order-confirmation.ts:90`), "A quality block is not on this screen." (`blocked-invoice.ts:155`) |
+
+**Correction to the previous evidence, in the direction of less, not more:** the QM row's "25 pages, 5 browser
+targets, 44 test files" is 24, 3 and 45 by the commands above. No page or test count was interpreted as a
+workflow; the classification below is read out of the services and their callers.
+
+### 2. Coverage, capability by capability
+
+| Capability | Verdict | Evidence |
+|---|---|---|
+| Inspection-lot creation, source-document linkage | **absent** | No table, no code, no route; `batch-cockpit.ts:159` refuses the lot it does not store |
+| Inspection characteristics, inspection plans | **implemented as classification only** | CT04/CL04-class masters are built, maintained and browser-accepted (`characteristic-definition.ts`, `class-definition.ts`, `characteristic-schema.ts`). They describe *objects*, not *inspections*: no plan binds characteristics to a material for a purpose, and `class_assignment` hangs characteristics at positions inside a class (`characteristic-schema.ts:94-118`) — there is no object-to-class assignment table |
+| Results recording and validation | **absent** | Nothing stores a result. The characteristic model already carries the validation that a result would need — `dataFormat ∈ CHAR,NUM,DATE,TIME,CURR`, `decimalPlaces`, `negativeValuesAllowed`, `intervalsAllowed`, `requiredEntry`, `valueAssignment` (`characteristic-schema.ts:19-38`) — but no caller reads it for a measurement |
+| Usage decision | **absent as a document; the disposition levers exist and are verified** | See the next two rows |
+| Stock disposition | **implemented and enforced, but unreachable in one direction** | Quality stock is a real segment; a goods issue reads `stockType = 'UNRESTRICTED'` and nothing else (`goods-issue.ts:660`), so quality and blocked stock cannot be consumed; the sales chain inherits that through `sales/delivery.ts:31`; 321 releases quality to unrestricted as a posted transfer with its counter (`transfer-scenarios.ts:52-57`, `drizzle/9086:74`), and the counter is refused by hand on purpose (`transfer-posting.ts:87-91`). Nothing can post *into* quality — DI-022 |
+| Batch status and inventory integration | **implemented, verified, and the strongest existing control** | `restricted_use` (`schema.ts:980-981`, ZUSTD: blank unrestricted, `X` restricted) is set at creation from the initial-status decision (`batch-master.ts:277-297`, OMAB) and changed by `batch-change.ts` only where status management is effective (OMCS scope `batch-status.ts`, plant activation `batch-status-plant.ts`, level from OMCE). It is *enforced* at the posting gate `resolvePostingBatch` (`batch-posting.ts`), which eleven modules call — goods issue, goods receipt, production receipt, production orders, transfer posting, return delivery, physical inventory, stock overview, stock posting date, purchasing orders — and it refuses with "Batch X is restricted. No stock was posted." plus the honest remedy that 341/342 do not exist. `tests/batch-posting.test.ts:158` holds it, and it passed on the box |
+| Nonconformance, quality notifications | **absent** | No table, no term, no code. The only quality scoring in the tree is a manual supplier-scorecard criterion (`vendor_evaluation_criterion`, seeded `('QUALITY','Quality','MANUAL','NONE',…)` at `scripts/seed.ts:1052`) |
+| Audit history | **implemented for everything that writes** | `recordChange` on each batch and classification module, read back through `changeHistory` (as `/inventory/batch-classes` does), material document lines stamped with their segment, `version` optimistic tokens on the batch master, `requestKey` on batch creation. No second history table is needed for a lot |
+| Authorization and concurrency | **implemented in the batch scope** | One capability per act (the twenty-three codes above), `pg_advisory_xact_lock`-style document locks in the newer chains, forced RLS with tenant isolation on every table in scope, append-only grants where a row is a record |
+| Reversal | **implemented where a document is posted** | A transfer or a movement reverses through its own counter; a batch status change posts nothing and is therefore corrected by a new change, not by a reversal — which is a fact a QM decision has to respect rather than route around |
+| Production integration | **refused at the confirmation; respected in availability** | `order-confirmation.ts:90` refuses an inspection at confirmation. `includeQualityStock` in the checking profile already decides whether quality-inspection stock counts as available (`order-availability.ts:633`, `availability-check.ts:509`), so an in-process or final inspection would change what CO09 and MRP say about a material *without touching either screen* |
+| Procurement integration | **no routing in, no hold on payables** | The receipt hard-codes its segment (`goods-receipt.ts:604,615`; `production-receipt.ts:519`); no material says inspection is required (DI-023); `supplier_invoice_payment_block_reason_ck check (reason = 'MANUAL')` makes a quality hold impossible (DI-024) |
+
+Read together: **"configuration and batch disposition only" is confirmed**, with the qualification that the
+disposition half is stronger than the 2026-10-27 note implied — a restricted batch is refused at every posting
+entry point in the system, and quality stock cannot be consumed at all. What is missing is not enforcement. It is
+a document that decides, and a way in.
+
+### 3. The minimum viable workflow this architecture supports
+
+The approved requirements do not contain an inspection rule. `CAIRN.md:770` gives the material master's Quality
+view as "Inspection setup (structural; no QM module)", and §10.11 lists quality management among the Tier 3
+functions that are "registry-only until requested". So the workflow below is *derived* from what the built model
+can already say, and it is a proposal for approval rather than an implementation plan already agreed.
+
+Four acts, each of which maps onto a mechanism that exists and is verified:
+
+1. **A lot is opened against the receipt that needs deciding.** One row: the material document number and line it
+   comes from, material, plant, batch, quantity, the segment the stock stands in, and a status
+   (`OPEN → DECIDED`). It creates nothing in stock and posts nothing. `MATDOC` linkage is enough to make the
+   source unambiguous, because the movement line already carries the segment and the batch.
+2. **A result may be recorded against the lot, as values on characteristics.** Reusing `characteristic` and its
+   validation (format, decimals, negative sign, required entry) means no new value arithmetic, and it stays an
+   *observation*: nothing in this act may change stock, a batch or a balance. Whether slice 1 needs this at all is
+   decision D3 below.
+3. **A usage decision is recorded, and its only effect is the batch indicator.** Accept leaves `restricted_use`
+   blank; reject sets it to `X`; conditional accept records the decision and leaves the batch restricted until a
+   second decision lifts it. This reuses the write path `batch-change.ts` already owns, with its OMCS/OMCU scope
+   test, its version guard, its refusal to change a batch that status management does not govern, and its
+   `recordChange` audit — so the decision is enforced by eleven posting entry points the moment it is stored, with
+   no new enforcement anywhere.
+4. **A segment change, where quarantine is wanted, is a visible transfer, never a side effect.** 321 (or its
+   configured twin) posts as a material document with a counter. A decision that quietly moved stock would be the
+   one thing this design must not do.
+
+Mandatory now, and deferrable later. Mandatory: the lot as the document that makes "waiting for quality"
+answerable; the decision with an effect only on the batch indicator; the enforcement already provided by
+`resolvePostingBatch` and by the unrestricted-only read at issue; audit, idempotency, capability and version on
+every act. Deferrable: sampling procedures, tolerance limits and any automatic accept, inspection plans binding
+characteristics to a material, results recording itself (D3), quality notifications and follow-up, a certificate
+of analysis, dashboards, a quality hold on payables (DI-024), and history reporting beyond the change documents
+that already exist.
+
+The constraints on existing workflows that follow if the minimal shape is approved: a receipt stays whole but may
+land in quality (DI-022's narrow route), so goods issue, transfer out, production issue, reservation consumption
+and the sales delivery chain all simply *see less available stock* — which is already their behaviour, not a new
+rule; MRP and CO09 change only through the `includeQualityStock` flag already in the checking profile; the
+invoice side is untouched unless the owner takes D4.
+
+### 4. What the owner has to decide, separated from what is already settled
+
+Already settled by the repository, and not open for re-litigation by this plan: the stock segment model and its
+unrestricted-only issue; the ZUSTD batch indicator, its scope from OMCE/OMCS/OMCU, and its enforcement at posting;
+321 as the release movement with its counter reversal-only; characteristics and classes as maintained masters;
+`recordChange`, `version`, `requestKey`, forced RLS and per-act capabilities as the shape of every new document;
+that number ranges need no migration for a new object code (`src/platform/numbering/index.ts:299-306`).
+
+Open, in the order they have to be answered:
+
+* **D1 — Is "under inspection" the stock segment, the batch indicator, or both?** *Minimal proposal:* both, with
+  different jobs: the segment for goods that must not be consumed by anyone, the batch indicator for goods that
+  may move but are not released. Neither needs a table; the pair is what makes the decision enforceable.
+* **D2 — What decides that a receipt needs inspection?** *Minimal proposal:* the person and the movement type —
+  configure a receipt movement whose `destination_stock_type` is `QUALITY`, already maintainable at
+  `/config/movement-types`, and honour that column on the receipt line (DI-022). No migration, no new field, and
+  a tenant that does not configure it is unaffected. *The alternative:* an inspection-relevance flag on
+  `material_plant`, which is automatic and needs a migration plus the tenth material view, which is not built
+  (DI-023). Recommend the first for slice 1 and the second only if routing must be automatic.
+* **D3 — Does a lot hold results, or only a decision?** *Minimal proposal:* decision only, with the free text of
+  the lot explaining what was found. Results are the first thing to add after the lot is real, reusing the
+  characteristic validation that exists, and they should not be built as a schema guess now.
+* **D4 — Does inspection hold the payable?** *Minimal proposal:* no, not yet. It needs the check-constraint
+  change in DI-024 and a lot to be open against; the row is recorded so the lever is not lost.
+* **D5 — Does an open lot constrain MRP, availability or a delivery today?** *Minimal proposal:* no new rule. If
+  D1 uses the segment, the existing reads already exclude quality stock from issue, and the checking profile
+  already states whether quality stock counts as available; if D1 uses only the batch indicator, `CO09` and the
+  sales chain honour it through the posting gate. Either way nothing in `production/` or `sales/` is edited, which
+  is also what keeps this off the owner's in-flight work.
+
+### 5. The staged plan, in dependency order
+
+Each slice is independently verifiable, none is a big patch, and none reopens the Sales chain.
+
+**Slice 0 — decide, and record the decision.** No code. D1 to D5 answered in `CAIRN.md`; the `QM.*` capability
+namespace, the tier rows and a registry row per new screen added to `scripts/seed.ts` at the same moment the first
+screen lands, so the registry stops promising an entry it does not have. *Check:* the documentation suites below,
+which read the files rather than the intent.
+
+**Slice 1 — the lot, with no power over stock.** New table `quality_lot` (client, lot number, `material_document_
+number` + `material_document_year` + line, material, plant, batch, quantity, unit, segment at opening, status,
+decision columns nullable, `request_key` unique for opening, `version`, audit columns) in one migration under
+`drizzle/`, with `enable row level security`, `force`, the `tenant_isolation` policy on both `using` and
+`with check`, and `revoke all from public` — the recipe `drizzle/9191_sales_delivery_billing.sql` carries and
+`tests/migration-grant-policy.test.ts` and `tests/default-privilege-audit.test.ts` police. Service
+`src/modules/quality/lot.ts` with `openLot`, `listLots`, `getLot`; capability `QM.LOT.CREATE`; the lot number from
+`defineRange` under object code `INSPLOT`, which needs no migration. Screen `/quality/lots` with the open form and
+the list, its `screen-catalog.ts` entry, its related-screen links, and one registry row. Reuse: `withTenant`,
+`recordChange`, `requireSession`/`can`, `defineRange`, and the `Delivery.tsx`/`Billing.tsx` shapes for the list
+with a `?document=` filter. *Tests:* open from a real goods receipt, refuse a document line that does not exist,
+refuse the same submission twice by `requestKey`, refuse a change on a stale version, read the row back from the
+tables with the tenant set. *Browser (separate environment):* receive, open the lot at `/quality/lots`, see the
+movement, the batch and the segment named on the lot; `db:verify` untouched. *Depends on:* nothing but the
+decision D1/D2. *Needs authorization:* a migration.
+
+**Slice 2 — the decision, whose only effect is the batch indicator.** `decideLot(client, lot, { decision,
+reason, expectedVersion, requestKey })` writes the decision in the same transaction as the batch write performed
+through the logic `batch-change.ts` already owns (the OMCS/OMCU effectiveness test, the refusal to change what
+status management does not govern, the `recordChange` audit). `OPEN → DECIDED` is one-way; re-deciding is a new
+lot act, never an overwrite. *Tests:* reject ⇒ `goods-issue` refuses that batch with "is restricted. No stock was
+posted."; accept ⇒ the same issue goes through; a decided lot cannot be decided again; a conditional decision
+leaves the batch restricted; the refusal texts name the lot. *Browser:* reject a lot, watch the goods issue fail,
+accept it from the lot or at `/inventory/batches/change`, watch the issue post. *Depends on:* slice 1, and on
+`batch-posting.ts` staying as it is. *Needs authorization:* none beyond slice 1's.
+
+**Slice 3 — quarantine at receipt, honouring the configuration.** Replace the two `'UNRESTRICTED'` literals at
+`goods-receipt.ts:604,615` with the movement row's `destinationStockType` when it stands, and make the reversal
+read the segment off the document line. No alias is added to `MOVEMENT_ALIASES` and the 322 counter stays
+reversal-only (`transfer-posting.ts:87-91`), so a person still cannot hand-enter a counter. **This slice edits
+`src/modules/inventory/goods-receipt.ts`, which the owner has uncommitted changes in right now**, together with
+`return-delivery.ts` and `unit-conversion.ts`; it is sequenced after that work lands, and if the owner's changes
+already route the segment, slice 3 shrinks to tests. *Tests:* a configured receipt movement lands the line in
+quality; NULL changes nothing, so the whole inventory suite passes unedited; an issue from quality fails by name;
+the reversal returns to the segment it came from; the value and the journal are the same as before, because the
+segment is not a valuation dimension. *Depends on:* purchasing, inventory, batches. *Needs authorization:* none —
+this is where the model already says yes.
+
+**Slice 4 — results, tolerance and reports, only after D3.** Either values on characteristics against a lot
+(no new tables if the classification model is enough) or a `quality_result` table with `numeric(13,3)` values and
+an explicit, owner-written rule for what passes. Sampling is not in this slice and must not be invented here: if a
+sampling rule is wanted, it arrives as its own decision with its own tests. *Depends on:* slices 1 and 2, and on a
+requirement that does not exist yet.
+
+Out of scope for the whole sequence, and left where the refusals already state it: 341/342 batch status
+movements, class-type 023 classification at goods movement (`batch-classification.ts` refuses it, and posting a
+movement that names it is refused before stock or a journal), a quality hold on supplier invoices (DI-024), and
+any change to `sales/` (the brief is explicit, and nothing in the above gives a reason to reopen it).

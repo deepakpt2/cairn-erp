@@ -34,6 +34,9 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
 | DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | OPEN — built and verified on the test box; open for the AR tail past the invoice and the re-bill path (see below) |
 | DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | CLOSED — run on the test box 2026-10-28, `--target sales-order-to-invoice` exits 0 twice with 24 assertions across 11 steps |
+| DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — needs the owner's ruling on how quarantine is expressed; the smaller option edits a file the owner has uncommitted work in |
+| DI-023 | Nothing says a material needs inspection: the Quality view is not built and QM is Tier 3 | Medium | Material master / QM | OPEN — a requirement, not a defect; `CAIRN.md` §10.11 defers quality management by name |
+| DI-024 | A quality block cannot hold a supplier invoice, so inspection does not reach payables | Low | Purchasing / QM boundary | OPEN — widening a check constraint needs a migration authorization |
 
 ---
 
@@ -658,3 +661,122 @@ blocked milestone), and given acceptance criteria so the next person can close i
   under-zero pick and the insufficient-stock refusal are likewise service-level refusals the unit suites own. The
   sign-out leg is not driven by this target either: it ends on the delivery panel that refused the pick, with the
   runner's own session checks standing behind it.
+
+---
+
+## DI-022 — Quality-inspection stock is a dimension the model carries and no posting can reach
+
+* **Severity:** Medium. **Area:** `src/modules/inventory/`, the QM boundary.
+* **Status:** OPEN, and it is a decision before it is a build: the two ways to express quarantine are both
+  admissible in the approved model, and the choice belongs to the owner. The minimal rule each one implies is
+  written out in `docs/operational-readiness.md`, "Quality management: verified coverage and the minimum viable
+  workflow", with the recommendation the discovery pass arrived at.
+* **What stands today, by file and line.** The stock table already keys its balance on a segment:
+  `stock_quantity.stock_type`, and the vocabulary for it is
+  `MOVEMENT_STOCK_TYPES = ['UNRESTRICTED', 'QUALITY', 'BLOCKED']` (`src/modules/inventory/movement-type-vocabulary.ts:25`).
+  Quality stock is honoured everywhere it is read — the stock overview (`stock-overview.ts:30,317`), warehouse
+  stocks (`warehouse-stocks.ts:250,332`), the batch cockpit (`batch-cockpit.ts:318,395`), returns
+  ("Return unrestricted or quality stock", `return-delivery.ts:448`) and MRP availability, whose checking profile
+  decides whether quality stock counts at all (`order-availability.ts:633`, configured by
+  `includeQualityStock` at `availability-check.ts:509`). It is honoured in what may not touch it either: a goods
+  issue reads `stockType = 'UNRESTRICTED'` and nothing else (`goods-issue.ts:660`), which is also why the sales
+  chain cannot ship it — `sales/delivery.ts:31` runs that same engine. The release movement exists as a posted
+  document: 321 `TRANSFER_STYPE` with `source_stock_type = 'QUALITY'` (`transfer-scenarios.ts:52-57`, seeded at
+  `drizzle/9086_mb1b_movement_configuration.sql:74`), and its counter `TRANSFER_STYPE_REV` is deliberately not
+  enterable by hand (`transfer-posting.ts:87-91` and `:142-146`, "posted only by reversing a transfer").
+  What does not exist is a way **in**. The receipt decides the segment for itself and always answers
+  unrestricted — `stockType: 'UNRESTRICTED'` at `goods-receipt.ts:604` and `:615`, and the same literal at
+  `production-receipt.ts:519`. The configuration that would say otherwise is already maintainable and already
+  validated: `/config/movement-types` offers Source and Destination stock type
+  (`src/app/config/movement-types/MovementTypes.tsx:244-245`) and `movement-type-configuration.ts:276-282`
+  judges them against the same three names and requires both or neither. The receipt path simply never reads the
+  row's destination, although it has the row in hand (`movement.movementType` is used at `goods-receipt.ts:602`).
+* **Impact.** A quarantine the data model can express, that the issue path already protects and that the release
+  movement already knows how to undo, cannot be entered by any person through any screen. Today only a test
+  fixture puts stock in quality — `tests/stock-overview.test.ts:70` inserts the row — so the segment is verified
+  as a *read* and as a *protection*, never as a *consequence of a receipt*. Everything a QM usage decision would
+  dispose of therefore has nothing to dispose: an incoming inspection would have to be recorded against stock
+  that is already unrestricted and already issuable.
+* **Why it is deferred rather than fixed here.** Both routes need a ruling first. The wide one is the reference
+  system's: an inspection-relevance indicator on the material (which does not exist — see DI-023) routes the
+  receipt. The narrow one needs no new column at all: honour `destination_stock_type` on the movement the person
+  chose to receive with, so a tenant that configures its receipt movement to land in quality gets quarantine, and
+  one that does not changes nothing. The narrow route is one substitution at each of two lines in
+  `src/modules/inventory/goods-receipt.ts` — a file the owner has uncommitted changes in as of this pass — so
+  building it now would either collide with that work or quietly overwrite it, and the standing instruction is
+  that owner-owned work is neither.
+* **Acceptance criteria.** (1) A receipt whose `movement_type` row names `destination_stock_type = 'QUALITY'`
+  posts the material document line and the stock balance in `QUALITY`, with the same value, journal, batch
+  resolution and idempotency semantics as today. (2) A row with the column NULL posts exactly what it posts now —
+  every existing inventory test stays green without an edit, because a default is not a migration. (3) Reversing
+  such a receipt returns the quantity to the segment the line came from, reading the segment from the line rather
+  than assuming it. (4) A goods issue, a transfer out, a sales delivery and a production issue all still fail to
+  draw quality stock, and the refusal names the segment. (5) A release posts 321 through the transfer screen and
+  leaves both a material document and its reversible counter, which is what makes the decision visible. (6) No
+  new stock category, movement number, table or migration: if the acceptance above cannot be met without one, the
+  gap returns here as a finding rather than being paved over.
+
+## DI-023 — Nothing says a material needs inspection: the Quality view is not built, and QM is Tier 3 by name
+
+* **Severity:** Medium. **Area:** `src/modules/inventory/` material master, the QM boundary.
+* **Status:** OPEN as an open product decision. This is not a dropped milestone: `CAIRN.md` line 770 gives the
+  material master's tenth view as "Quality | 10 | Inspection setup (structural; no QM module)", and §10.11
+  (lines 1094-1103) lists quality management among the Tier 3 functions that are "registry-only until
+  requested", where each "has a registry entry explaining what it does, why it is deferred, and what would be
+  required to build it".
+* **What stands today.** `MATERIAL_VIEWS = ['BASIC', 'PURCHASING', 'MRP', 'ACCOUNTING']`
+  (`src/modules/inventory/constants.ts:2`) — four views are built, and `material_plant` carries no inspection
+  column of any kind (`grep -rn "quality\|inspection" src/modules/inventory/schema.ts` over the table returns
+  nothing but the batch status rows). The tiers actually seeded in the function registry are 145 `TIER_1_BUILT`,
+  79 `TIER_2_CONFIGURED`, 3 `TIER_3_MAPPED` and 2 `REFERENCE`
+  (`grep -oE "tier: '[A-Z0-9_]+'" scripts/seed.ts | sort | uniq -c`), and none of them is a quality function — so
+  the registry entry §10.11 promises for quality management does not exist either. The only "quality" that any
+  procurement document carries is a supplier scorecard line: `vendor_evaluation_criterion` seeded with
+  `('QUALITY', 'Quality', 'MANUAL', 'NONE', …)` (`scripts/seed.ts:1052`), which is a manual score, not a control.
+  Where a QM act would be expected, the tree refuses it by name: `batch-cockpit.ts:159` ("An inspection lot is not
+  stored. Nothing was read.") and `:30` ("No inspection lot stands. That filter is refused."),
+  `production/order-confirmation.ts:90` ("A quality inspection is not stored. None was created.").
+* **Impact.** Without an indicator, an inspection rule cannot be automatic: a person would have to decide at each
+  receipt whether a lot is needed (DI-022's narrow route), and no report can answer "what is waiting for quality"
+  because nothing records the waiting. And because there is no lot, no result and no decision document anywhere in
+  the schema — `grep -rl "inspection_lot\|usage_decision\|quality_notification\|nonconformance" src/` returns
+  nothing — the readiness table's verdict "configuration and batch disposition only" is confirmed, not stale.
+* **Why it is deferred rather than fixed here.** The requirement is what is missing, not the code. Building
+  inspection routing would mean inventing the rule that says when inspection applies, which the pass brief
+  forbids and which `CAIRN.md` does not support. Adding the column is a migration; the migration is not the hard
+  part, the rule is.
+* **Acceptance criteria.** (1) The owner rules, in `CAIRN.md`, whether quality management stays Tier 3 or takes
+  the minimal shape recorded in `docs/operational-readiness.md`. (2) If it is built, the registry carries the
+  QM rows it promises: a `QM.*` capability namespace in `scripts/seed.ts` (today `grep -c "^QM\." ` over the
+  seeded codes is 0), a `screen-catalog.ts` entry per screen so `tests/screen-links.test.ts` still finds every
+  built page, and tier rows for the codes. (3) If the indicator is chosen over the human decision at receipt, it
+  is one nullable column on `material_plant` with an authorized migration, maintained in the plant view, with a
+  material that has it set and a tenant that does not both covered by one test each. (4) A lot number, if a lot is
+  built, needs no migration for its interval: `number_range.object_code` is free-form
+  (`src/platform/numbering/index.ts:299-306`), which is how `SALESORD`, `DELIVERY`, `BILLING`, `MATDOC` and
+  `CUSTINV` were added.
+
+## DI-024 — A quality block cannot hold a supplier invoice, so inspection does not reach payables
+
+* **Severity:** Low. **Area:** `src/modules/purchasing/`, the QM boundary.
+* **Status:** OPEN, with a recommendation to defer it until after any QM slice that lands.
+* **What stands today.** A supplier invoice payment block admits exactly one reason, in the database itself:
+  `constraint supplier_invoice_payment_block_reason_ck check (reason = 'MANUAL')`
+  (`drizzle/9099_supplier_invoice_payment_block.sql:31`, mirrored in `src/modules/purchasing/schema.ts:905`), and
+  the screen says so when asked for another: "A quality block is not on this screen. It is not stored as a manual
+  hold." (`blocked-invoice.ts:154-156`). The reference system's invoice verification carries a separate quality
+  block for a receipt whose inspection is open, and holds the payable without holding the goods.
+* **Impact.** Incoming inspection, if it is built, would constrain only the stock side. A supplier could be paid
+  for goods that are sitting in quality stock undecided, which in the reference system is the mechanism that makes
+  a quality organization's calendar matter to purchasing. It is not a correctness defect — the invoice stands for
+  what was received, and the GR/IR clearing is unaffected — so nothing here mis-states a balance today.
+* **Why it is deferred rather than fixed here.** The fix is a check-constraint change, which is a migration, and
+  a migration needs the owner's authorization; and it would be an empty capability while there is no lot to be
+  open or closed (DI-023). Widening it before the decision is made means the constraint change is reviewed twice.
+* **Acceptance criteria.** (1) An authorized migration widens the check to `('MANUAL', 'QUALITY')` and leaves
+  every existing row valid. (2) Blocking for quality and releasing it are two audited acts behind their own
+  capability, each idempotent by request key, each refused while the invoice is settled. (3) A quality-blocked
+  invoice stays out of the payment run and out of the due-date arithmetic that `payment terms` drives, with the
+  reason printed on the block list. (4) Releasing the invoice's quality block reads the *lot's* standing
+  (DI-022/DI-023), so a quality block cannot be removed by hand while a lot is open — or the rule says plainly
+  that it can, and the refusal is not invented.
