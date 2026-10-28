@@ -17,13 +17,17 @@ These are the gaps that stop a browser company from posting, or that send a buil
 
 **A goods receipt does not have to use a storage location the plant defined.** A purchase order checks the location when one is typed. The receipt accepts a blank location and writes the stock there. The locations from OX09 are then invisible to that stock.
 
-**Quality inspection has nothing to decide about.** The stock model carries a quality segment and honours it — a
-goods issue reads unrestricted stock and nothing else, and a restricted batch is refused at every posting entry
-point — but no receipt can land in quality (DI-022), no material says inspection is required and no lot, result or
-usage decision is stored anywhere (DI-023), so the three screens that would be asked about it answer by refusing:
-`batch-cockpit.ts:159`, `order-confirmation.ts:90`, `blocked-invoice.ts:155`. `docs/operational-readiness.md`
-carries the measured coverage, the minimum workflow that needs no new stock category or movement type, and the five
-decisions QM waits on.
+**An inspection lot is now a record, and it is only a record.** `/quality/lots` opens a lot against one line of a
+posted material document: the table `quality_lot` (migration 9192), the service `src/modules/quality/lot.ts`, one
+capability `QM.LOT.CREATE`, and a number drawn from a new `INSPLOT` interval. The lot stores its own facts alone —
+material, plant, batch, quantity, unit, movement and stock segment are read back from the receipt line, so a lot
+cannot drift away from the goods it names. Opening one posts nothing and restricts nothing: quality stock still
+moves only through transfers, a restricted batch is still refused at every posting entry point, and no receipt can
+land in quality at all (DI-022, whose trace is now complete and whose fix sits in a file the owner has open). No
+result, sampling rule or usage decision is stored anywhere, so the screens that would be asked about those still
+refuse by name (`batch-cockpit.ts:159`, `order-confirmation.ts:90`, `blocked-invoice.ts:155`).
+`docs/operational-readiness.md` §6 carries what was built, the status of each of the five QM decisions, the tests
+that were run, and the browser acceptance criteria that have not been run.
 
 **A requisition does not become a purchase order.** A quotation does not either. The quotation service refuses with “A requisition is not converted.” The screens link to one another. The documents do not.
 

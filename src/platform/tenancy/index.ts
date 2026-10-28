@@ -79,7 +79,10 @@ const SYSTEM_ROLES: Array<{
     name: 'Warehouse clerk',
     description: 'Goods receipts, issues, transfers and physical inventory',
     readOnly: false,
-    capabilities: ['INV.*', 'AUDIT.TRAIL.VIEW'],
+    // QM.LOT.CREATE travels with the receiving role because a lot is opened against the receipt the clerk
+    // posted; the code grants no power over stock, and no QM role model exists yet (migration 9192 grants
+    // the same code to the receiving and batch roles of tenants that were created before it).
+    capabilities: ['INV.*', 'QM.LOT.CREATE', 'AUDIT.TRAIL.VIEW'],
   },
   {
     code: 'SALES_CLERK',
@@ -108,6 +111,7 @@ const STANDARD_RANGES: Array<{
 }> = [
   { objectCode: 'MATDOC', subObject: '*', prefix: 'MD', length: 8 },
   { objectCode: 'RESERV', subObject: '*', prefix: 'RSV', length: 8 },
+  { objectCode: 'INSPLOT', subObject: '*', prefix: 'QL', length: 7 },
   { objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', length: 7 },
   { objectCode: 'PURCHCONT', subObject: '*', prefix: '46', length: 10 },
   { objectCode: 'SCHEDAGREE', subObject: '*', prefix: '55', length: 10 },

@@ -89,9 +89,17 @@ export const ALSO: Record<string, readonly string[]> = {
     '/inventory/stock-overview',
     '/purchasing/purchase-order-display',
     '/inventory/materials',
+    '/quality/lots',
   ],
   materials: ['/inventory/stock-overview', '/production/boms', '/production/single-item-planning', '/production/production-versions'],
   stock: ['/inventory/materials', '/inventory/material-documents', '/inventory/migo', '/production/stock-requirements'],
+  // A received quantity that is to be examined gets a lot, so the movement screens reach the lot list
+  // and a lot reaches back to the goods it names.
+  'quality-inspection': [
+    '/inventory/goods-receipt',
+    '/inventory/material-documents',
+    '/inventory/batches/display',
+  ],
   'material-documents': ['/inventory/migo', '/inventory/stock-overview', '/finance/journal/document', '/purchasing/purchase-order-display'],
   journal: ['/finance/customer-invoice', '/finance/vendor-invoice', '/finance/gl-clearing'],
   'customer-accounting': ['/finance/journal/document', '/foundation/partners'],

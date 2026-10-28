@@ -34,9 +34,11 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-019 | Credit exposure counts invoiced receivables only, so no sales document is in the basis before billing | Medium | SD credit control | OPEN |
 | DI-020 | Delivery, goods issue and billing for a sales order line, credit-bound | High | SD order-to-invoice | OPEN — built and verified on the test box; open for the AR tail past the invoice and the re-bill path (see below) |
 | DI-021 | The sales order-to-invoice journey has no browser acceptance run | Medium | Test harness / SD | CLOSED — run on the test box 2026-10-28, `--target sales-order-to-invoice` exits 0 twice with 24 assertions across 11 steps |
-| DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — needs the owner's ruling on how quarantine is expressed; the smaller option edits a file the owner has uncommitted work in |
-| DI-023 | Nothing says a material needs inspection: the Quality view is not built and QM is Tier 3 | Medium | Material master / QM | OPEN — a requirement, not a defect; `CAIRN.md` §10.11 defers quality management by name |
+| DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — blocked at `goods-receipt.ts`, an owner-owned file; the consumer trace is complete (three readers) and the reversal half turned out to need no change. Needs the owner's ruling on how quarantine is expressed |
+| DI-023 | Nothing says a material needs inspection: the Quality view is not built and QM is Tier 3 | Medium | Material master / QM | OPEN — a requirement, not a defect. A lot is now stored (9192) and the registry carries its first `QM` rows; the indicator and the owner's Tier-3 ruling are still outstanding |
 | DI-024 | A quality block cannot hold a supplier invoice, so inspection does not reach payables | Low | Purchasing / QM boundary | OPEN — widening a check constraint needs a migration authorization |
+| DI-025 | The inspection lot has one capability and no place in the navigation | Low | UI shell / authorization surface | OPEN by decision — a display code and a `quality` screen area both need the owner's files or a role model that does not exist |
+| DI-026 | A lot records the request and decides nothing; the batch cockpit still refuses to read a lot | Medium | Quality / Inventory boundary | OPEN — the decision act is slice 2 with its own grant, version guard and batch write; the stale refusal text is recorded |
 
 ---
 
@@ -667,10 +669,21 @@ blocked milestone), and given acceptance criteria so the next person can close i
 ## DI-022 — Quality-inspection stock is a dimension the model carries and no posting can reach
 
 * **Severity:** Medium. **Area:** `src/modules/inventory/`, the QM boundary.
-* **Status:** OPEN, and it is a decision before it is a build: the two ways to express quarantine are both
-  admissible in the approved model, and the choice belongs to the owner. The minimal rule each one implies is
-  written out in `docs/operational-readiness.md`, "Quality management: verified coverage and the minimum viable
-  workflow", with the recommendation the discovery pass arrived at.
+* **Status:** OPEN, **blocked at an owner-owned file**, and it is a decision before it is a build: the two ways to
+  express quarantine are both admissible in the approved model, and the choice belongs to the owner. The minimal
+  rule each one implies is written out in `docs/operational-readiness.md`, "Quality management: verified coverage
+  and the minimum viable workflow", with the recommendation the discovery pass arrived at. The later pass the same
+  day completed the trace of every consumer of the column (readiness §6, "D2") and it is three readers, not the
+  one this entry assumed — `transfer-posting.ts:114-115`, `physical-inventory-posting.ts:393-400` and
+  `movement-type-configuration.ts:276-282` — while no receipt reads it at all. Two facts came out of that trace.
+  The work is smaller than recorded: `goods-receipt.ts:813-886` already reads the segment off the line being
+  reversed, so criterion (3) below needs no change, and the substitution is the two receipt sites
+  (`goods-receipt.ts:604,615`, plus `production-receipt.ts:519` for a production receipt) together with reading the
+  movement row inside the posting transaction, because `DELIVERED_MOVEMENTS` (`goods-receipt.ts:59-74`) carries no
+  stock-type fields. And it is still not available to build: all of those lines are in
+  `src/modules/inventory/goods-receipt.ts`, which the owner held uncommitted at this pass (+75/−14, unit
+  conversion at receipt). Nothing here was implemented, and the inspection lot that landed in the same pass
+  (9192) deliberately has no power over stock, so this entry remains the only route to quarantine.
 * **What stands today, by file and line.** The stock table already keys its balance on a segment:
   `stock_quantity.stock_type`, and the vocabulary for it is
   `MOVEMENT_STOCK_TYPES = ['UNRESTRICTED', 'QUALITY', 'BLOCKED']` (`src/modules/inventory/movement-type-vocabulary.ts:25`).
@@ -736,11 +749,20 @@ blocked milestone), and given acceptance criteria so the next person can close i
   Where a QM act would be expected, the tree refuses it by name: `batch-cockpit.ts:159` ("An inspection lot is not
   stored. Nothing was read.") and `:30` ("No inspection lot stands. That filter is refused."),
   `production/order-confirmation.ts:90` ("A quality inspection is not stored. None was created.").
-* **Impact.** Without an indicator, an inspection rule cannot be automatic: a person would have to decide at each
-  receipt whether a lot is needed (DI-022's narrow route), and no report can answer "what is waiting for quality"
-  because nothing records the waiting. And because there is no lot, no result and no decision document anywhere in
-  the schema — `grep -rl "inspection_lot\|usage_decision\|quality_notification\|nonconformance" src/` returns
-  nothing — the readiness table's verdict "configuration and batch disposition only" is confirmed, not stale.
+* **Impact.** Without an indicator, an inspection rule cannot be automatic: a person has to decide at each receipt
+  whether a lot is needed (DI-022's narrow route). The second half of that sentence changed on 2026-10-28:
+  migration 9192 added `quality_lot`, one row per material-document line, so "what is waiting for quality" is now
+  answerable — it is the lots that stand, read at `/quality/lots` or by `listLots`. What is still not recorded is
+  the outcome: no result, no tolerance, no usage decision and no quality notification exists anywhere, and the two
+  refusals that mark the boundary are still in the tree verbatim — `batch-cockpit.ts:159` ("An inspection lot is
+  not stored. Nothing was read.", now stale as a statement about the schema and still true of that screen, which
+  was not given a lot read: DI-026) and `production/order-confirmation.ts:90`. Criterion (2) below is met in part:
+  `QM.LOT.CREATE` is in `scripts/seed.ts`, `/quality/lots` is in `screen-catalog.ts`, and `term_registry` carries
+  its first module-`QM` row. Criterion (1) — the owner's ruling on whether quality management stays Tier 3 — is
+  what is outstanding. The schema claim still reproduces: `grep -rl` over `src/` for each of `inspection_lot`,
+  `usage_decision`, `quality_notification` and `nonconformance` returns nothing, while
+  `grep -rn "pgTable(" src/modules/quality/schema.ts` returns one table — `quality_lot`, named for the record that
+  was built and not for a decision that was not.
 * **Why it is deferred rather than fixed here.** The requirement is what is missing, not the code. Building
   inspection routing would mean inventing the rule that says when inspection applies, which the pass brief
   forbids and which `CAIRN.md` does not support. Adding the column is a migration; the migration is not the hard
@@ -755,6 +777,10 @@ blocked milestone), and given acceptance criteria so the next person can close i
   built, needs no migration for its interval: `number_range.object_code` is free-form
   (`src/platform/numbering/index.ts:299-306`), which is how `SALESORD`, `DELIVERY`, `BILLING`, `MATDOC` and
   `CUSTINV` were added.
+  The lot followed that route exactly: `INSPLOT` is one `STANDARD_RANGES` entry in `src/platform/tenancy/index.ts`,
+  so a tenant created from now on is given the interval and a tenant created before it is refused by name at the
+  save and pointed at `/config/number-ranges` — which is the deliberate shape of the standard package, not an
+  oversight, and it is why no data migration was written for it.
 
 ## DI-024 — A quality block cannot hold a supplier invoice, so inspection does not reach payables
 
@@ -780,3 +806,73 @@ blocked milestone), and given acceptance criteria so the next person can close i
   reason printed on the block list. (4) Releasing the invoice's quality block reads the *lot's* standing
   (DI-022/DI-023), so a quality block cannot be removed by hand while a lot is open — or the rule says plainly
   that it can, and the refusal is not invented.
+
+## DI-025 — The inspection lot has one capability and no place in the navigation: a read-only QM role cannot exist, and quality has no screen area
+
+* **Severity:** Low. **Area:** `src/ui/shell/`, `scripts/seed.ts`, the authorization surface of the new lot screen.
+* **Status:** OPEN by decision, recorded so the next QM pass inherits it rather than rediscovering it. Slice 1
+  registered the screen and its code in the shapes the platform already had; the two things it did not have are
+  left here rather than built beside them.
+* **What stands today.** `QM.LOT.CREATE` (`drizzle/9192_quality_inspection_lot.sql`) is the only quality code in
+  the tree: `grep -oE "code: '[A-Z0-9._]+'" scripts/seed.ts | sort -u | grep -c "^code: 'QM\."` is 1, and the
+  screen gates its opening act on it while its reads run for any signed-in session — the same arrangement
+  `/sales/delivery` has, where `SALES.DELIVERY.CREATE` is both the write code and the code the catalog prints. So
+  a role that is to *see* what is under inspection cannot be defined: `hasCapability`
+  (`src/platform/auth/session.ts:611`) matches a held pattern against that one code, and holding nothing leaves a
+  session with the list as the only thing visible — while the worklist a quality organization reads *is* that list.
+  The second gap is navigation. `ScreenArea` (`src/ui/shell/screen-catalog.ts:9-18`) and `SCREEN_AREAS` (`:2494`)
+  carry nine areas and none of them is quality, because an area's heading is looked up under the key
+  `nav.area.<area>` in `src/app/page.tsx:114`, and the catalogue `src/platform/i18n/index.ts` has eight
+  `nav.area.*` keys — `grep -c "'nav.area" src/platform/i18n/index.ts` — with `nav.area.sales` among the absent, so
+  the launchpad's Sales heading currently renders the key rather than a label. That file is one of the owner's
+  uncommitted documents at this pass (`+2/−2`, three `co09.*` labels), which is why no key was added to it and why
+  `/quality/lots` was registered in the Inventory area, under its own `quality-inspection` family, instead.
+* **Impact.** Nothing is broken and nothing is overstated: a session that must not open a lot cannot, and a
+  read-only quality role simply cannot be expressed yet. The visible cost today is that the lot screen is filed
+  beside goods movements rather than under a quality heading, and that a pre-existing Sales heading shows a message
+  key to a user.
+* **Why it is deferred rather than fixed here.** Both halves are one-line changes to files the owner is editing or
+  to a role model that does not exist. Inventing a `QM.LOT.DISPLAY` code, or a quality role, to make a screenshot
+  look complete is the kind of schema-and-registry guess this brief rules out; and the `nav.area.sales` label is a
+  defect in work that is already accepted and closed, so it is recorded here rather than quietly repaired inside a
+  QM pass.
+* **Acceptance criteria.** (1) If a read-only quality view is wanted, a display code arrives with the screen that
+  uses it, is registered in `scripts/seed.ts` and `drizzle/`, and is refused-by-name in the tests the lot already
+  has. (2) If quality becomes an area, `ScreenArea`, `SCREEN_AREAS` and `nav.area.quality` land together, and
+  `nav.area.sales` is added in the same edit so the launchpad stops printing a key; `tests/screen-links.test.ts`
+  stays green without an edit, because it reads the catalog rather than the count. (3) Neither half may be
+  satisfied by moving a screen between areas without the labels.
+
+## DI-026 — A lot records the request and nothing else: the decision act is unbuilt, and the batch cockpit still answers "An inspection lot is not stored"
+
+* **Severity:** Medium. **Area:** `src/modules/quality/`, `src/modules/inventory/batch-cockpit.ts`, the QM boundary.
+* **Status:** OPEN, and this is the boundary the inspection-lot pass stopped at on purpose.
+* **What stands today.** `quality_lot` (9192) is append-only by design: `revoke update, delete, truncate … from
+  cairn_app`, no `status` column, no `version`, no decision columns, because no act in slice 1 could write them.
+  The decision is slice 2 of `docs/operational-readiness.md` §5 and it needs three things at once — the `grant
+  update` and a `version` guard, the one-way `OPEN → DECIDED` transition, and the batch write performed through the
+  rules `src/modules/inventory/batch-change.ts` already owns (the OMCS/OMCU effectiveness test, the refusal to
+  change what status management does not govern) — which is why it was not folded into a foundation pass. Second:
+  `src/modules/inventory/batch-cockpit.ts:159` still refuses with "An inspection lot is not stored. Nothing was
+  read." and `:30` with "No inspection lot stands. That filter is refused.", while lots *are* now stored. Both
+  sentences remain true of that screen — it was not given a lot read, and its refusal writes nothing and misleads
+  no one about a posting — but the first is now false as a statement about the schema, and the next pass that
+  touches either file should replace it with a read of `quality_lot` rather than leave a stale claim in the tree.
+* **Impact.** "Under inspection" is a query a person can now answer at `/quality/lots`, and it is not yet an
+  instruction the system enforces: goods do not move because a lot says so, they move or do not move because of the
+  segment and `restricted_use` the receipt left. A user of the batch cockpit is told a lot does not exist and is
+  not pointed at the screen where it does.
+* **Why it is deferred rather than fixed here.** The decision act changes what a lot is allowed to do to stock,
+  which is D1 and D2 territory and needs the owner's ruling on the workflow, not a foundation pass guessing at it;
+  and the cockpit's refusal text lives in an inventory module whose behaviour the brief put out of scope (D5:
+  nothing in `production/` or `sales/` is edited, and the disposition gates stay as they are).
+* **Acceptance criteria.** (1) A decided lot writes its decision once, in the same transaction as the batch act,
+  and a second decision on the same lot is refused by name — never an overwrite. (2) A rejection restricts the
+  batch and `goods-issue` refuses it with the existing "is restricted. No stock was posted."; an acceptance
+  releases it and the same issue goes through; both refusals name the lot. (3) The grant, the version guard, the
+  `recordChange` entry and the RLS policy are covered by the focused suite, and `npm run db:verify` still passes
+  with the widened rights. (4) The cockpit either reads `quality_lot` and says what stands, or its sentence is
+  corrected to speak of that screen; no half-measure that keeps the old claim. (5) Nothing in the slice changes a
+  posting, a valuation or an availability rule: if it appears to, that is the finding, and it comes back here
+  rather than being built.
+

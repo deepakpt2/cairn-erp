@@ -16,4 +16,5 @@ export * from '../modules/foundation/schema';
 
 export * from '../modules/inventory/schema';
 export * from '../modules/production/schema';
+export * from '../modules/quality/schema';
 export * from '../modules/sales/schema';

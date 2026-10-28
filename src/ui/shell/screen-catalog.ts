@@ -2489,6 +2489,20 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "sales-billing",
     accepts: ["billing", "customer", "delivery"],
   },
+  {
+    // Quality management has no screen area of its own yet: a `quality` entry in `ScreenArea` and
+    // `SCREEN_AREAS` would also need its `nav.area.quality` label in src/platform/i18n/index.ts, a file with
+    // uncommitted owner work in it. Until that label can land, the lot lives in the Inventory area, beside
+    // the receipt it points at, under its own family.
+    id: "/quality/lots",
+    path: "/quality/lots",
+    query: {},
+    code: "QM.LOT.CREATE",
+    title: "Inspection lots",
+    area: "inventory",
+    family: "quality-inspection",
+    accepts: ["document", "lot", "material", "plant", "batch"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [
