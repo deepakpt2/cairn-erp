@@ -136,6 +136,7 @@ import { customerCredit } from './credit';
 import { creditMonitor } from './credit-monitor';
 import { creditRelease } from './credit-release';
 import { salesOrderToInvoice } from './sales-order-to-invoice';
+import { qualityLotReceipt } from './quality-lots';
 import { trialBalance } from './trial-balance';
 import { balanceSheet } from './balance-sheet';
 import { glReporting } from './gl-reporting';
@@ -5160,6 +5161,7 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'credit-monitor': creditMonitor,
   'credit-release': creditRelease,
   'sales-order-to-invoice': salesOrderToInvoice,
+  'quality-lot-receipt': qualityLotReceipt,
   'trial-balance': trialBalance,
   'balance-sheet': balanceSheet,
   'gl-reporting': glReporting,

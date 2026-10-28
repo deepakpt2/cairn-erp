@@ -37,8 +37,8 @@ blocked milestone), and given acceptance criteria so the next person can close i
 | DI-022 | Quality-inspection stock is a dimension the model carries and no posting can reach | Medium | Inventory / QM boundary | OPEN — blocked at `goods-receipt.ts`, an owner-owned file; the consumer trace is complete (three readers) and the reversal half turned out to need no change. Needs the owner's ruling on how quarantine is expressed |
 | DI-023 | Nothing says a material needs inspection: the Quality view is not built and QM is Tier 3 | Medium | Material master / QM | OPEN — a requirement, not a defect. A lot is now stored (9192) and the registry carries its first `QM` rows; the indicator and the owner's Tier-3 ruling are still outstanding |
 | DI-024 | A quality block cannot hold a supplier invoice, so inspection does not reach payables | Low | Purchasing / QM boundary | OPEN — widening a check constraint needs a migration authorization |
-| DI-025 | The inspection lot has one capability and no place in the navigation | Low | UI shell / authorization surface | OPEN by decision — a display code and a `quality` screen area both need the owner's files or a role model that does not exist |
-| DI-026 | A lot records the request and decides nothing; the batch cockpit still refuses to read a lot | Medium | Quality / Inventory boundary | OPEN — the decision act is slice 2 with its own grant, version guard and batch write; the stale refusal text is recorded |
+| DI-025 | The inspection lot has one capability and no place in the navigation | Low | UI shell / authorization surface | OPEN by decision — the command-bar handle was verified in a browser on the box this pass, so only the *place* and the *display code* remain; a display code and a `quality` screen area both need the owner's files or a role model that does not exist |
+| DI-026 | A lot records the request and decides nothing; the batch cockpit still refuses to read a lot | Medium | Quality / Inventory boundary | OPEN — the decision act is slice 2 with it; the cockpit sentence was corrected this passs own grant, version guard and batch write; the stale refusal text is recorded |
 
 ---
 
@@ -827,6 +827,17 @@ blocked milestone), and given acceptance criteria so the next person can close i
   the launchpad's Sales heading currently renders the key rather than a label. That file is one of the owner's
   uncommitted documents at this pass (`+2/−2`, three `co09.*` labels), which is why no key was added to it and why
   `/quality/lots` was registered in the Inventory area, under its own `quality-inspection` family, instead.
+* **Re-measured, and one half of it closed, in the dedicated-box acceptance pass.** The cohort is **172** targets
+  now, the added one being this slice's `quality-lot-receipt`; `grep -c "'nav.area" src/platform/i18n/index.ts`
+  is still **8**; the tree still holds exactly **one** `QM.*` code; and that catalogue file still carries
+  uncommitted owner work, so `nav.area.quality` was again left alone and the screen stays in the Inventory area
+  under its `quality-inspection` family. What closed is the navigation half that did not need that file: the
+  handle `9192` registers resolves in a real browser. The run types `/quality/lots` into the command bar, and
+  the screen answers — heading, capability line and all — rather than falling through to the registry search
+  `executeCommand` redirects a miss to, and the related-screens panel stands the lot beside `INV.GR.POST` and
+  `INV.DISPLAY`. So the screen is reachable by the route the platform already had; what is missing is a *place*,
+  which is the owner's dictionary decision, and a *read-only quality role*, which is a display code nobody has
+  asked for yet.
 * **Impact.** Nothing is broken and nothing is overstated: a session that must not open a lot cannot, and a
   read-only quality role simply cannot be expressed yet. The visible cost today is that the lot screen is filed
   beside goods movements rather than under a quality heading, and that a pre-existing Sales heading shows a message
@@ -843,21 +854,24 @@ blocked milestone), and given acceptance criteria so the next person can close i
   stays green without an edit, because it reads the catalog rather than the count. (3) Neither half may be
   satisfied by moving a screen between areas without the labels.
 
-## DI-026 — A lot records the request and nothing else: the decision act is unbuilt, and the batch cockpit still answers "An inspection lot is not stored"
+## DI-026 — A lot records the request and nothing else: the decision act is unbuilt (the cockpit's stale sentence is corrected; the read of `quality_lot` is not)
 
 * **Severity:** Medium. **Area:** `src/modules/quality/`, `src/modules/inventory/batch-cockpit.ts`, the QM boundary.
-* **Status:** OPEN, and this is the boundary the inspection-lot pass stopped at on purpose.
+* **Status:** OPEN for the decision act; the stale sentence is corrected.
+  The acceptance pass changed one string in the cockpit and built no act, so the boundary this issue records is now only the missing decision.
 * **What stands today.** `quality_lot` (9192) is append-only by design: `revoke update, delete, truncate … from
   cairn_app`, no `status` column, no `version`, no decision columns, because no act in slice 1 could write them.
   The decision is slice 2 of `docs/operational-readiness.md` §5 and it needs three things at once — the `grant
   update` and a `version` guard, the one-way `OPEN → DECIDED` transition, and the batch write performed through the
   rules `src/modules/inventory/batch-change.ts` already owns (the OMCS/OMCU effectiveness test, the refusal to
   change what status management does not govern) — which is why it was not folded into a foundation pass. Second:
-  `src/modules/inventory/batch-cockpit.ts:159` still refuses with "An inspection lot is not stored. Nothing was
-  read." and `:30` with "No inspection lot stands. That filter is refused.", while lots *are* now stored. Both
-  sentences remain true of that screen — it was not given a lot read, and its refusal writes nothing and misleads
-  no one about a posting — but the first is now false as a statement about the schema, and the next pass that
-  touches either file should replace it with a read of `quality_lot` rather than leave a stale claim in the tree.
+  `src/modules/inventory/batch-cockpit.ts:159` refused with "An inspection lot is not stored. Nothing was read."
+  — a sentence that stopped being true the day `quality_lot` stood, and which this pass corrected in place: it
+  now answers "This cockpit reads no inspection lot, and lots are stored — at /quality/lots. Nothing was read.",
+  keeping the code `INSPECTION_REFUSED`, the remedy and the refusal itself (acceptance criterion 4's second
+  branch, the correction rather than a read, because a read is a feature and this pass was told not to build
+  one). `:30`'s "No inspection lot stands. That filter is refused." was left as it is: it speaks of the
+  selection in front of the user, and it is still true.
 * **Impact.** "Under inspection" is a query a person can now answer at `/quality/lots`, and it is not yet an
   instruction the system enforces: goods do not move because a lot says so, they move or do not move because of the
   segment and `restricted_use` the receipt left. A user of the batch cockpit is told a lot does not exist and is

@@ -444,21 +444,57 @@ them. On the test box, where only these fifteen paths were added to `f538fa7`: `
 `next build` exit **0** with `ƒ /quality/lots` in the route table (3.24 kB, dynamic), and repo-wide
 `tsc --noEmit` at **152** errors — the recorded baseline, none of them in a file of this pass.
 
-**Not verified here, by instruction: the browser.** No development server was started and no browser test was run
-in this pass. For the dedicated environment, `/quality/lots` is accepted when: (1) signed in as a role holding
-`QM.LOT.CREATE`, after a goods receipt at `/inventory/goods-receipt`, the picker offers exactly the standing
-receipt lines that carry no lot, and choosing one opens a lot whose number reads `QL-nnnnnnn`; (2) the lot detail
-names that document, its line, movement, material, plant, storage location, batch, both quantity pairs and the
-segment the posting left, and its link opens `/inventory/material-documents` on that document; (3) a second
-attempt on the covered line is refused with the standing lot's number, and `select count(*) from quality_lot`
-for that line stays 1; (4) repeating the submission answers "already opened by this submission" without creating
-a row; (5) the stock overview, the CO09 figures and the receipt's journal are unchanged by the act, read
-before and after; (6) reversing the receipt shows the lot as "Source reversed" while leaving the row untouched;
-(7) a session without the code sees the list and the read-only sentence, and the save answers with the refusal;
-(8) a tenant with no `INSPLOT` interval is refused by name and pointed at `/config/number-ranges`, with nothing
-written. No `scripts/browser-smoke/targets.ts` entry was added: a target needs its four registrations and a
-reserved fixture tenant, and this slice has no browser acceptance yet. That the route exists, the code is
-registered and eight tests pass is **not** the feature being operational.
+**Browser acceptance: run, on the dedicated test box, and passed.** The criteria below were written as
+acceptance a *reviewer* should hold the slice to, and they have now been executed there — not against a
+development server, and not by a route test: `npm run smoke:browser -- --target quality-lot-receipt`, the
+slice's own browser target, on the box's served `next start` build of this tree. Its fixture key is **T872**,
+the only unreserved key between sales' T871 and settlement's T873, and the runner's own guard line opens every
+run: `Verified QM9192 local loopback database: cairn_b210 on 127.0.0.1:5432; runtime role restricted,
+migration role elevated.` It exits **0 twice in a row**, each run creating its tenant through `/clients/new`
+and eleven journey steps answering ✓ with no browser error, so no claim below rests on a code path a human
+never clicked.
+
+Per criterion, and what a browser cannot reach: (1) the picker offered exactly the standing receipt line and
+nothing else, and choosing it drew **`QL-0000001`** from the interval ✓ — including the refusal of a session
+whose tenant had no line to offer, and the handle `/quality/lots` opening the screen from the command bar.
+(2) the detail named document, line, movement, material, plant, storage location, batch, both quantity pairs
+and the segment the posting left, and **its link was clicked** to `/inventory/material-documents` on that
+document ✓. (3) the covered line left the candidate list the moment the lot stood, and the second attempt on it
+was refused by name (`Lot QL-0000001 already stands against MD-00000001 line 1.`) with the line still carrying
+exactly one row ✓. (4) *repeating the submission was not reachable in a browser, and the reason is a fact about
+the screen*: the request key is generated per render and the covered line is gone from the form that would
+resend it, so replay was taken through `openLot` against the same rows the browser was showing — same key, same
+number, `replayed: true`, no second row — and the sentence the screen turns that into
+(`Lot … was already opened by this submission; nothing was created twice.`) is quoted here rather than claimed.
+(5) stock rows, valuation, the batch row with its version and `restricted_use`, the document and line counts and
+the receipt's journal lines were read whole before and after every quality act and compared with a deep
+equality ✓; no movement was posted, so the stock overview and the CO09 figures have nothing new to read.
+(6) reversing the receipt from `/inventory/goods-receipt` displayed the lot as **Source reversed** and named the
+reversal document on it, while the lot row itself did not change by one column ✓ — the standing is read, never
+written back. (7) a second signed-in session, in the platform's own `AUDITOR` role, read both lots, was shown
+the read-only sentence and was offered no opening form; and because a refusal-on-save cannot be pressed from a
+render that contains no save, the proof of that gate is the reverse direction: granting `QM.LOT.CREATE` to that
+role made the form appear on the next read, and revoking it took it away — the affordance follows the
+authorization surface, which is what the action's `can()` answer enforces. (8) with no `INSPLOT` interval the
+save was refused by name and pointed at `/config/number-ranges`, and nothing was written ✓; the reversal's own
+line, being a line that records goods going back, is not offered ✓ and is refused on the way in.
+
+Six corrections the run required, every one of them in the target's own file and none in a service: the empty
+tenant's sentence is `No inspection lot has been opened in this tenant yet.`; quantities render at
+`5.000 PC`, the three decimals `quantity()` gives a `numeric`; the target must define
+`RF_BELEG / 1000 / GENERAL` as the other movement targets do, or the receipt screen answers
+`No number range is defined for RF_BELEG / 1000 / GENERAL` before its form can be reached; candidate rows are
+counted by their radios, because the opening form also carries a `label` for the note; and the audit column
+holds the platform's uppercased actor, as every other screen's does. The sixth is an observation the run earned
+and did not fix: `scripts/browser-smoke/goods-receipt.ts` still drives the purchase-order grid with
+`form > div select`, and the grid has since wrapped its header fields in a `fieldset` — so that target's order
+step no longer matches the screen, which is why this journey creates its order through `createOrder` and keeps
+the *receipt*, which is what slice 1 posts against, in the browser. It belongs to the owner's harness work and is
+recorded here rather than repaired beside it.
+
+What that does and does not make true: `/quality/lots` is accepted as what slice 1 claims to be — a record with
+no power over goods. It is **not** the quality-inspection workflow becoming operational: no result, no sampling
+rule and no usage decision exists, so nothing in this chain can yet tell a person whether goods may move.
 
 **What is still open, stated as blockers rather than as backlog.** The usage decision (slice 2) needs the
 `grant update`, a `version` column and the batch write performed through the rules `batch-change.ts` already

@@ -200,4 +200,7 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'settlement-configuration': { database: 'cairn_b210', port: '5432', batch: 'T870 change-lock local loopback' },
   // The sales fulfillment journey, on the same reviewed loopback database, isolated by its reserved key.
   'sales-order-to-invoice': { database: 'cairn_b210', port: '5432', batch: 'DI-020 sales order to invoice local loopback' },
+  // QM slice 1 keeps the reviewed loopback database the whole cohort runs on; isolation is the reserved
+  // fixture key, exactly as the owner's R-77 ruling put it for every target rebound here.
+  'quality-lot-receipt': { database: 'cairn_b210', port: '5432', batch: 'QM9192 local loopback' },
 };

@@ -156,7 +156,10 @@ function dateOf(value: string | undefined, label: string): string | null {
 
 function refuseUnsupported(selection: CockpitSelection): void {
   if (clean(selection.inspectionLot)) {
-    throw new BatchCockpitError('An inspection lot is not stored. Nothing was read.', 'INSPECTION_REFUSED', 'Leave the inspection lot empty.');
+    throw new BatchCockpitError(
+      'This cockpit reads no inspection lot, and lots are stored — at /quality/lots. Nothing was read.',
+      'INSPECTION_REFUSED', 'Leave the inspection lot empty.',
+    );
   }
   if (clean(selection.className) || clean(selection.characteristic)) {
     throw new BatchCockpitError(

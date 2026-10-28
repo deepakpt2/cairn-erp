@@ -181,6 +181,7 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'tenant-creation') return '/config';
   if (target.id === 'co09-availability') return '/production/order-availability';
   if (target.id === 'sales-order-to-invoice') return '/sales/orders';
+  if (target.id === 'quality-lot-receipt') return '/quality/lots';
   if (target.id === 'controlling-area') return '/config/controlling-area';
   if (target.id === 'controlling-area-company-assignment') return '/config/controlling-area/assign-company-code';
   if (target.id === 'batch-document-management') return '/config/batch-document-management';

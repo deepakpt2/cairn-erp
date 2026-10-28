@@ -173,6 +173,9 @@ export const TARGETS = [
   // (T871, the next free key after settlement's T870 — T982 is the runner's own cross-tenant probe).
   { id: 'sales-order-to-invoice', client: 'T871', label: 'DI-020 sales order to invoice: delivery from open quantities, picking, goods issue, one billing document, and credit controls in between' },
   { id: 'settlement-configuration', client: 'T870', label: 'Settlement masters on a screen the claim handle never migrated: creation without a lock, a change from the grant, a refusal that leaves creation free, and a dead claim told by the shared projection' },
+  // QM slice 1: the inspection lot journey, on a fixture key of its own (T872, the only key between
+  // sales' T871 and settlement's T873 that no target holds; T982 stays the runner's own probe).
+  { id: 'quality-lot-receipt', client: 'T872', label: 'QM9192 inspection lots: the picker offers the standing receipt lines and nothing else, a lot reads its line back, the covered line leaves the list, a session without QM.LOT.CREATE reads only, no INSPLOT interval refuses with nothing written, and a reversal flips the displayed standing' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

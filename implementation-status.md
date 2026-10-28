@@ -25,9 +25,11 @@ cannot drift away from the goods it names. Opening one posts nothing and restric
 moves only through transfers, a restricted batch is still refused at every posting entry point, and no receipt can
 land in quality at all (DI-022, whose trace is now complete and whose fix sits in a file the owner has open). No
 result, sampling rule or usage decision is stored anywhere, so the screens that would be asked about those still
-refuse by name (`batch-cockpit.ts:159`, `order-confirmation.ts:90`, `blocked-invoice.ts:155`).
-`docs/operational-readiness.md` §6 carries what was built, the status of each of the five QM decisions, the tests
-that were run, and the browser acceptance criteria that have not been run.
+refuse by name (`batch-cockpit.ts:159`, `order-confirmation.ts:90`, `blocked-invoice.ts:155`) — and the cockpit's
+sentence was corrected the day the table landed, because an inspection lot *is* stored now: what that screen
+declines is to read it. `docs/operational-readiness.md` §6 carries what was built, the status of each of the five
+QM decisions, the tests that were run, and the browser acceptance the dedicated box has since executed
+(`npm run smoke:browser -- --target quality-lot-receipt`, eleven steps, exit 0 twice).
 
 **A requisition does not become a purchase order.** A quotation does not either. The quotation service refuses with “A requisition is not converted.” The screens link to one another. The documents do not.
 
