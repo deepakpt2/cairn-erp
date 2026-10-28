@@ -132,6 +132,38 @@ probe tables, it is never pointed at production, and no production target is
 configured for it; the deployment design offers no read-only production variant
 of this check, so there is none to run.
 
+**A pending migration is applied to that target by the gate itself.**
+`tests/migration-grant-policy.test.ts` calls `runMigrations()` to prove the
+runner still works under the restricted default, and `runMigrations()` applies
+whatever the target is missing — it does not dry-run. So running `db:verify`
+while `.env.local` points `MIGRATION_DATABASE_URL` at a database you do not
+intend to change (an acceptance or demo database, for instance) will migrate
+it. Measured on 2026-10-28: one `db:verify` run applied a new People migration
+to the browser-acceptance database, five empty tables and six registry rows,
+and left no existing row altered. To run the two suites against the test
+database instead, skip the `.env.local` load and give them the test env:
+
+```sh
+set -a; . ./.env.development.example; set +a
+npx vitest run tests/migration-grant-policy.test.ts tests/default-privilege-audit.test.ts
+```
+
+**A `revoke … from cairn_app` line declares the table immutable, so it cannot
+sit beside a `grant update`.** The gate collects every table any migration
+revokes from the runtime role and asserts live that the role can do none of
+UPDATE, DELETE or TRUNCATE on it — that is how 9185-9187 keep the ledger
+append-only and how 9016 and 9017 keep privacy tables read-only. A table whose
+rows must be written once more than inserted (a dated record that gets its last
+day, a document that gets a status) therefore must not carry a revoke: it
+grants the one privilege its writers exercise, and DELETE and TRUNCATE stay
+denied because 9186's default for a table the migration role creates is SELECT
+and INSERT. Proving "nothing may be deleted" belongs in a test that attempts
+the delete and expects `permission denied`, which is what the slice tests do;
+proving it with a revoke would simultaneously forbid the update the table
+needs. `drizzle/9193_people_record_types_and_employee.sql` is the worked
+example of that shape, and its comment block states the reasoning beside the
+grants.
+
 **Passing this gate is not passing the suite.** `db:verify` says the privilege
 contract holds: the default is `SELECT` and `INSERT`, declared-immutable tables
 deny mutation, and every table a service edits still has its grant. It says

@@ -11,7 +11,7 @@ under `docs/`; it reads them and the code, and it records only numbers that a st
 | PP | 62 | 38 (`PROD.*`, `CFG.PROD.*`) | 52 | 30 | 91 | deep and usable end to end |
 | SD | 38 (AR, credit, dunning, payments) | 27 | 21 | 32 | 62 | AR tail usable, document chain absent |
 | QM | 8 (characteristics, classes, batch status) | 8 (`INV.BATCH*`) | 25 | 5 | 44 | configuration and batch disposition only |
-| HR | 1 (`employee_tolerance_group`) | 0 | 0 | 1 | 1 | absent apart from an AP/AR tolerance control |
+| HR | 6 (5 People master tables + `employee_tolerance_group`) | 4 | 3 | 1 | 2 | People master and dated records built and service-verified 2026-10-28; no payroll, no org block, no time/leave, nothing browser-accepted |
 
 Counts come from `ls src/app/<area>`, `grep -c pgTable` over `src/modules/*/schema.ts` and the satellite
 tables the barrel `src/platform/schema.ts` pulls in, and from `scripts/browser-smoke/targets.ts` (170
@@ -45,11 +45,16 @@ batch-level controls. There is no inspection lot, no results recording, no usage
 nonconformance record — and `CAIRN.md` carries no requirement for one (the QM grep returns nothing in the
 specification), so this is an open product decision, not a dropped milestone.
 
-**HR** is one table: the employee tolerance group an AP/AR credit check reads. Payroll has approved
-tables (`payroll_run`, `payroll_result`, `payroll_result_line`, `payroll_posting_run`,
+**HR was** one table: the employee tolerance group an AP/AR credit check reads. On 2026-10-28 the
+module's first workflow landed on the approved design — `record_type`, `record_field`, `employee`,
+`employee_record`, `record_field_value` with `/people/employees` and `/config/people-record-types`
+(`notes/people-increment-1.md` holds the evidence: 13 slice tests, 13 grant-gate tests, a clean production
+build of both routes). It is master data only and says so: `PEOPLE.EMPLOYEE.CREATE`, `PEOPLE.RECORD.MAINTAIN`
+and `CFG.PEOPLE.RECORDTYPE.DEFINE` are now registered beside `PEOPLE.PAYROLL.POST`, which still has nothing to
+execute, and 12 of the 15 operational codes `CAIRN.md` §10.8 names for People remain unregistered. Payroll has
+approved tables (`payroll_run`, `payroll_result`, `payroll_result_line`, `payroll_posting_run`,
 `payroll_posting_line`), an approved posting rule and an explicit scope line — statutory tax and social
-insurance are out of scope (`CAIRN.md` §1.3, R-11, D-013) — and none of it is built. 15 of the 16
-approved `PEOPLE.*` codes are not registered either.
+insurance are out of scope (`CAIRN.md` §1.3, R-11, D-013) — and none of it is built.
 
 ## 2. UI-level acceptance evidence, 2026-10-27
 
@@ -120,7 +125,13 @@ lines this pass repaired, and a one-line mutant (`reservations.ts:80`) failed it
    with 2, not before.
 4. **Payroll** — the statutory scope decision is already made (none); what is missing is the runs, the
    earnings and deduction configuration per jurisdiction, payslips and the posting. It cannot be built
-   without a decision on which jurisdiction's rules the deduction configuration models.
+   without a decision on which jurisdiction's rules the deduction configuration models. The People master it
+   records results against landed on 2026-10-28 (five tables, two screens, 13 focused tests,
+   `notes/people-increment-1.md`); the org block (`org_unit`, `position`, `job`, `position_assignment`) is the
+   next increment because assignment data is itself a record of a configured type, and nothing payroll-side was
+   started — `payroll_result` with no rule behind it would be a table of guesses. That decision, a People role
+   model for the two operational codes, the payslip format, and whether an external provider's result file is
+   the import source, are what the module waits on.
 5. **QM inspection model** — needs a requirement first: nothing in `CAIRN.md` asks for inspection lots. The
    coverage was re-measured and the smallest coherent workflow was written out on 2026-10-28, in "Quality
    management: verified coverage and the minimum viable workflow" below; DI-022, DI-023 and DI-024 hold the three

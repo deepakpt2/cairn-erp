@@ -1,0 +1,175 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+
+import { can, requireSession } from '@/platform/auth/current';
+import {
+  RECORD_TYPE_CAPABILITY,
+  RECORD_TYPE_ROUTE,
+  RecordTypeConfigError,
+  addRecordField,
+  changeRecordField,
+  changeRecordType,
+  defineRecordType,
+} from '@/modules/people/record-types';
+
+const ROUTE = RECORD_TYPE_ROUTE;
+
+export interface RecordTypeActionState {
+  ok: boolean;
+  message?: string;
+  remedy?: string;
+  code?: string;
+}
+
+const EMPTY: RecordTypeActionState = { ok: false };
+
+function text(form: FormData, name: string): string {
+  const value = form.get(name);
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function optional(form: FormData, name: string): string | undefined {
+  const value = text(form, name);
+  return value === '' ? undefined : value;
+}
+
+/**
+ * A ticked box or a button that means &quot;yes&quot; sends `1`; unchecking sends the name with an empty value, and a
+ * box nobody ticked sends nothing at all. Reading only presence would make an unticked box a tick.
+ */
+function flag(form: FormData, name: string): boolean {
+  const value = form.get(name);
+  return value === '1' || value === 'on';
+}
+
+/** The service's words and remedy are the refusal; anything else is a bug and stays a bug. */
+function refuse(error: unknown): RecordTypeActionState {
+  if (error instanceof RecordTypeConfigError) {
+    return { ok: false, message: error.message, remedy: error.remedy };
+  }
+  throw error;
+}
+
+function done(code: string, message: string): RecordTypeActionState {
+  revalidatePath(ROUTE);
+  revalidatePath(`${ROUTE}?type=${code}`);
+  return { ok: true, message, code };
+}
+
+function denied(): RecordTypeActionState {
+  return {
+    ok: false,
+    message: `Defining a record type needs ${RECORD_TYPE_CAPABILITY}, which this session does not hold.`,
+    remedy: `The activity is held by the roles that define the organisation a record points at; an administrator's star covers it, and a People role model is a decision still to be taken.`,
+  };
+}
+
+function fieldsOf(form: FormData): Array<{ code: string; label: string; valueKind: 'TEXT' | 'NUMBER' | 'DATE'; isRequired: boolean }> {
+  const fieldCode = text(form, 'fieldCode');
+  if (fieldCode === '') return [];
+  const kind = text(form, 'valueKind').toUpperCase();
+  return [{
+    code: fieldCode,
+    label: text(form, 'fieldLabel') || fieldCode,
+    valueKind: kind === 'NUMBER' || kind === 'DATE' ? kind : 'TEXT',
+    isRequired: flag(form, 'fieldRequired'),
+  }];
+}
+
+export async function defineRecordTypeAction(
+  _previous: RecordTypeActionState, formData: FormData,
+): Promise<RecordTypeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  try {
+    const fields = fieldsOf(formData);
+    if (fields.length === 0) {
+      return {
+        ok: false,
+        message: `A record type has to ask at least one question, or nothing can be recorded with it.`,
+        remedy: `Give the first field's code and label below; the rest can be added once the type stands.`,
+      };
+    }
+    const type = await defineRecordType({
+      client: session.user.client,
+      code: text(formData, 'code'),
+      name: text(formData, 'name'),
+      description: optional(formData, 'description'),
+      fields,
+      changedBy: session.user.username,
+    });
+    return done(type.code, `Record type ${type.code} — ${type.name} — defined with ${type.fields.length} field${type.fields.length === 1 ? '' : 's'}.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function changeRecordTypeAction(
+  _previous: RecordTypeActionState, formData: FormData,
+): Promise<RecordTypeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  const code = text(formData, 'code');
+  try {
+    const type = await changeRecordType({
+      client: session.user.client,
+      code,
+      name: optional(formData, 'name'),
+      description: formData.get('description') === null ? undefined : text(formData, 'description') || null,
+      // Retiring is the act this screen offers in place of deletion: history keeps standing, no record is lost.
+      isValid: formData.get('retire') !== null ? false : (formData.get('restore') !== null ? true : undefined),
+      changedBy: session.user.username,
+    });
+    return done(type.code, `Record type ${type.code}: ${type.name}, ${type.isValid ? 'open for new records' : 'retired — no new record, every standing one readable'}.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function addRecordFieldAction(
+  _previous: RecordTypeActionState, formData: FormData,
+): Promise<RecordTypeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  const recordType = text(formData, 'recordType');
+  try {
+    const fields = fieldsOf(formData);
+    if (fields.length === 0) {
+      return { ok: false, message: `A field needs a code of its own.`, remedy: `Use the name the payroll provider uses, uppercased: STKLD, FAMGT, ZABGR.` };
+    }
+    const type = await addRecordField({
+      client: session.user.client,
+      recordType,
+      ...fields[0],
+      changedBy: session.user.username,
+    });
+    return done(type.code, `${fields[0].code} added to ${type.code} — ${type.fields.length} fields now.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export async function changeRecordFieldAction(
+  _previous: RecordTypeActionState, formData: FormData,
+): Promise<RecordTypeActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  const recordType = text(formData, 'recordType');
+  const code = text(formData, 'code');
+  try {
+    const type = await changeRecordField({
+      client: session.user.client,
+      recordType,
+      code,
+      label: optional(formData, 'label'),
+      isRequired: flag(formData, 'required'),
+      changedBy: session.user.username,
+    });
+    return done(type.code, `${code} on ${recordType}: ${flag(formData, 'required') ? 'required' : 'optional'}.`);
+  } catch (error) {
+    return refuse(error);
+  }
+}
+
+export { EMPTY };

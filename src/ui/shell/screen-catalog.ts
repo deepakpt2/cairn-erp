@@ -2503,6 +2503,30 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "quality-inspection",
     accepts: ["document", "lot", "material", "plant", "batch"],
   },
+  {
+    // People has no screen area of its own yet, for the reason the quality entry above records: a `people`
+    // value in `ScreenArea` and `SCREEN_AREAS` needs its `nav.area.people` label in src/platform/i18n/index.ts,
+    // a file carrying uncommitted owner work. Until that label can land, the employee master sits in the
+    // Foundation area beside the other business masters, under its own family.
+    id: "/people/employees",
+    path: "/people/employees",
+    query: {},
+    code: "PEOPLE.EMPLOYEE.CREATE",
+    title: "Employees",
+    area: "foundation",
+    family: "people-employee-master",
+    accepts: ["employee", "q"],
+  },
+  {
+    id: "/config/people-record-types",
+    path: "/config/people-record-types",
+    query: {},
+    code: "CFG.PEOPLE.RECORDTYPE.DEFINE",
+    title: "Define employee record types",
+    area: "configuration",
+    family: "people-config",
+    accepts: ["type"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [
