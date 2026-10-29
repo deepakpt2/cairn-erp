@@ -50,9 +50,16 @@ export function db(): Db {
   return _db;
 }
 
-/** Direct, unpooled connection for migrations and anything needing session semantics. */
-export function directSql() {
-  return postgres(connectionString(), { max: 1, prepare: false, onnotice: () => {} });
+/**
+ * Direct, unpooled connection for migrations and anything needing session semantics.
+ *
+ * An explicit connection string is required — `directSql()` never falls back to
+ * `process.env.DATABASE_URL`, so a caller cannot silently connect to the wrong
+ * database. Each call creates a fresh connection; nothing is cached, so a client
+ * created for one target can never be reused against another.
+ */
+export function directSql(connectionString: string) {
+  return postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 }
 
 /** Fail closed if the runtime URL accidentally points at the migration role. */

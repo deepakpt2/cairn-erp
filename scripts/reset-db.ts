@@ -4,8 +4,13 @@
  * Drops and recreates the schema, then leaves the database empty for migrations.
  * This is a DEVELOPMENT tool only — it destroys all data. It refuses to run when
  * CAIRN_ENV is anything other than 'development' (CAIRN.md §22.8).
+ *
+ * The database target is validated through `validateTarget()` before any
+ * destructive operation: protected databases are refused, and the actual
+ * connected database identity is confirmed before the schema is dropped.
  */
 import postgres from 'postgres';
+import { validateTarget } from '../src/platform/db/target-guard';
 
 async function main() {
   if ((process.env.CAIRN_ENV ?? 'development') !== 'development') {
@@ -19,6 +24,8 @@ async function main() {
   const connectionString =
     process.env.MIGRATION_DATABASE_URL ??
     'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
+
+  await validateTarget(new URL(connectionString).pathname.replace(/^\//, ''));
 
   const client = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 

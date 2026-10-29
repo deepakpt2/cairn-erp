@@ -50,9 +50,14 @@ const UNITS: Array<[string, string, string, number, boolean]> = [
   ['M2', 'Square metre', 'AREA', 3, true], ['KWH', 'Kilowatt hour', 'ENERGY', 3, true],
 ];
 
+import { validateTarget } from '../src/platform/db/target-guard';
+
 async function main() {
   const connectionString =
     process.env.MIGRATION_DATABASE_URL ?? 'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
+
+  await validateTarget(new URL(connectionString).pathname.replace(/^\//, ''));
+
   const client = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 
   try {

@@ -167,6 +167,8 @@ export default async function WorkbenchPage({
     '/finance/journal',
     '/finance/journal/new',
     '/finance/credit',
+    '/people/time-leave',
+    '/platform/users',
   ]);
 
   const percent =

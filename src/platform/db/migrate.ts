@@ -12,6 +12,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { directSql } from './client';
+import { validateTarget } from './target-guard';
 
 const MIGRATION_DIR = join(process.cwd(), 'drizzle');
 
@@ -27,7 +28,14 @@ export async function runMigrations(): Promise<MigrationResult> {
     process.env.DATABASE_URL ??
     'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
 
-  const client = directSqlWith(connectionString);
+  // Extract the database name from the connection string and validate it
+  // through the target guard before connecting. The guard confirms the actual
+  // connected database identity matches the requested target and refuses
+  // protected databases without explicit authorization.
+  const targetDbName = new URL(connectionString).pathname.replace(/^\//, '');
+  await validateTarget(targetDbName);
+
+  const client = directSql(connectionString);
   const applied: string[] = [];
   const skipped: string[] = [];
 
@@ -103,12 +111,6 @@ function simpleChecksum(text: string): string {
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
   return hash.toString(16).padStart(8, '0');
-}
-
-// Imported lazily so this module does not pull the pool into every consumer.
-import postgres from 'postgres';
-function directSqlWith(connectionString: string) {
-  return postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 }
 
 /** CLI entry point: `npm run db:migrate` */

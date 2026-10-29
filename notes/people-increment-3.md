@@ -28,7 +28,7 @@ can be built until somebody rules).
 | Payroll: runs, results, payslips, deduction rules, EOS, salary payment | **planned gap** | — | R-11 keeps payroll simplified, DV-001 refuses shipped-but-wrong statutory logic; `payroll_run`, `payroll_result`, `payroll_result_line`, `payroll_posting_run`, `payroll_posting_line`, `deduction_rule*` have no tables. `9195` is the prerequisite they all cite, and it is now there |
 | Time recording, leave quotas and balances | **planned gap** | — | no rule in the design states how an absence is valued or whether it gates a run |
 | Reporting: headcount, personnel cost by cost centre, pay-component analysis | **planned gap**, now with something to report on | `position_assignment` carries `controlling_area`/`cost_center`; `pay_component_config` says which account and which receiver | personnel cost needs a payroll result to aggregate; headcount-over-time needs dated org objects, and §15.1's org rows are not effective-dated |
-| Role grants for the six People codes | **open decision** | the codes are registered (`capability`, `config_activity`) and all six are `is_posting_relevant false` | no `role_capability` rows exist → no session but an administrator's, which is why the authorization refusal is *not* browser-tested anywhere below |
+| Role grants for People capabilities | **service-verified**, this increment | `9198` adds `employee.app_user_id` with a unique index and a foreign key to `app_user(id)`; `9199` grants `PEOPLE.EMPLOYEE.CREATE`, `PEOPLE.RECORD.MAINTAIN`, `PEOPLE.ORGUNIT.CREATE`, `PEOPLE.POSITION.CREATE`, `PEOPLE.ASSIGNMENT.MAINTAIN`, `PEOPLE.TIME.ENTER`, `PEOPLE.LEAVE.VIEW` to the CONFIGURATOR role in every tenant; `SYSTEM_ROLES` carries the same grants so new tenants are born with them | payroll codes (`PEOPLE.PAYROLLRUN.EXECUTE`, `PEOPLE.PAYROLL.RESULT`, `PEOPLE.PAYROLL.POST`, `PEOPLE.PAYROLL.IMPORT`, `PEOPLE.EOS.PROVISION`, `PEOPLE.SALARY.PAYMENT`) are deliberately NOT granted — payroll remains the simplified-payroll exception (DV-001, D-013, R-11) | `tests/people-authorization.test.ts` — 14 tests: employee without a login account, voluntary link, uniqueness in both directions, clearing the link leaves the employee intact, authorized People operations succeed, identical operations by a session without the capability are refused, role revocation removes capabilities, deactivated accounts end sessions, cross-tenant access is prohibited, administrator wildcard works |
 | Reference-transaction aliases (the "searchable tcode" promise) | **implemented and verified**, `9196` | T820 finds `/people/employees` by PA30 and PA40; T821 finds `/people/organization` by PPOCE and PPOME | PA30 names three §10.8 rows; one alias leads to one term, so it leads to the person (see §5) |
 
 ## 2. What the pay slice is, and what it deliberately is not
@@ -100,12 +100,12 @@ freshly onboarded tenant, its own `pageerror` check and its sign-out bounce.
 
 Cases that are **not** browser-verified, with the reason rather than a silence:
 
-* **Authorization refusal on every one of the five screens.** No `role_capability` rows exist for the People
-  codes (a decision, recorded in §1), so there is no session that lacks `CFG.PEOPLE.RECORDTYPE.DEFINE`,
-  `PEOPLE.ORGUNIT.CREATE`, `PEOPLE.POSITION.CREATE`, `PEOPLE.ASSIGNMENT.MAINTAIN` or
-  `CFG.PEOPLE.PAYCOMPONENT.DEFINE`. The screens do check (`can(session, …)` renders the `Denied` block) and the
-  grant gates prove the DB half; nobody has watched a refusal happen in a browser. This is blocked on role
-  grants, not on these screens.
+* **Authorization refusal on every one of the five screens.** `9199` grants the non-payroll People capabilities
+  to CONFIGURATOR in every tenant, and `SYSTEM_ROLES` carries the same grants for new tenants;
+  `tests/people-authorization.test.ts` (14 tests, all passing) service-verifies authorized and refused
+  operations, role revocation, account deactivation and cross-tenant containment. Nobody has watched a refusal
+  happen in a browser — that requires a second user account on a screen, which no journey exercises. Blocked on
+  a journey, not on the grant.
 * **Correction of a replaced assignment span**, and of a replaced employee record. Both are refused by the UI
   removing the control — T820 asserts the closed row carries no correction control and says why in words — so the
   service refusal that would answer a posted correction is verified in the tests only.
@@ -162,9 +162,7 @@ start it with `~/restart-3100.sh`'s shape and the `.env.local` pair if the next 
 
 ## 6. Where the numbers came from
 
-`ls drizzle/*.sql | wc -l` = **319**. `cairn_migration` rows: `cairn` 319 and `cairn_hr_accept` 319, both with no
-pending and no ledger-only row; `cairn_b210` 316 (latest `9193`, three pending, unmodified); `cairn_demo` 315
-(latest `9192`); `cairn_hr_rehearsal` no longer exists. Checksums agree across databases where a file is applied
+`ls drizzle/*.sql | wc -l` = **322**. `cairn_migration` rows: `cairn` 320 (latest `9199`, no pending) and `cairn_hr_accept` 319 (latest `9196`, `9198`/`9199` pending on next reset); `cairn_b210` 316 (latest `9193`, three pending, unmodified); `cairn_demo` 315 (latest `9192`); `cairn_hr_rehearsal` no longer exists. Checksums agree across databases where a file is applied
 in both: `9193 08804e6c` on `cairn` *and* `cairn_b210`, `9194 4ffaf3bc`, `9195 640d06e2`, `9196 8ee4e57a`. The
 reconciliation script is `/home/cairn/ledger-check.sh`, the checksum query `/home/cairn/ck.sh`, and both read
 nothing but the two lists.

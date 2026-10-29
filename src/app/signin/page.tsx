@@ -128,6 +128,14 @@ export default async function SignInPage({
           </button>
         </form>
 
+        <p className="mt-3 text-center text-2xs text-ink-faint">
+          Forgot your password?{' '}
+          <a href="/forgot-password" className="link">
+            Request a reset
+          </a>
+          .
+        </p>
+
         <p className="mt-4 text-center text-2xs text-ink-faint">
           Sessions end after twelve hours of inactivity.
         </p>

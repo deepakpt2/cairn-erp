@@ -224,3 +224,33 @@ export const sodRule = pgTable(
   },
   (t) => [primaryKey({ columns: [t.client, t.code] })],
 );
+
+/**
+ * Single-use, short-lived password reset tokens — migration 9200.
+ *
+ * Stored as a SHA-256 hash only. Tenant-scoped via RLS (enabled in the
+ * migration). Referenced by app_user.id, so every token belongs to one
+ * application user in one tenant.
+ */
+export const passwordResetToken = pgTable(
+  'password_reset_token',
+  {
+    id: varchar('id', { length: 36 }).primaryKey(),
+    client: varchar('client', { length: 4 })
+      .notNull()
+      .references(() => client.client, { onDelete: 'cascade' }),
+    userId: varchar('user_id', { length: 36 })
+      .notNull()
+      .references(() => appUser.id, { onDelete: 'cascade' }),
+    tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdBy: varchar('created_by', { length: 60 }).notNull().default('SYSTEM'),
+    ipAddress: varchar('ip_address', { length: 45 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('password_reset_token_user_idx').on(t.userId),
+    index('password_reset_token_expires_idx').on(t.expiresAt),
+  ],
+);

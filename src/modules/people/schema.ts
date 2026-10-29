@@ -130,6 +130,7 @@ export const employee = pgTable(
     fullName: varchar('full_name', { length: 60 }).notNull(),
     isActive: boolean('is_active').notNull().default(true),
     requestKey: varchar('request_key', { length: 64 }),
+    appUserId: varchar('app_user_id', { length: 36 }),
     ...auditColumns,
   },
   (t) => [
@@ -138,6 +139,9 @@ export const employee = pgTable(
     uniqueIndex('employee_request_key_uq')
       .on(t.client, t.requestKey)
       .where(sql`${t.requestKey} is not null`),
+    uniqueIndex('employee_app_user_id_uq')
+      .on(t.client, t.appUserId)
+      .where(sql`${t.appUserId} is not null`),
   ],
 );
 
@@ -445,5 +449,126 @@ export const payComponentConfig = pgTable(
       'pay_component_config_assignment_needs_nothing_ck',
       sql`${t.costReceiverCategory} <> 'ASSIGNMENT' or (${t.controllingArea} is null and ${t.costCenter} is null})`,
     ),
+  ],
+);
+
+// ── 9197: time and leave ────────────────────────────────────────────────────
+// §8.10: time_recording, absence, attendance, leave_quota — Time data.
+// §10.8: PEOPLE.TIME.ENTER (absence and attendance entry), PEOPLE.LEAVE.VIEW
+// (leave quota and balance). §15.3: country-specific leave law is not built —
+// entitlement is what the tenant configures, and nothing here invents a statute.
+
+/** What a time type is: absence reduces a quota, attendance and overtime do not. */
+export const TIME_TYPE_KINDS = ['ABSENCE', 'ATTENDANCE', 'OVERTIME'] as const;
+export type TimeTypeKind = (typeof TIME_TYPE_KINDS)[number];
+
+/** The absence status lifecycle. REQUESTED is the only status a write can set. */
+export const ABSENCE_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
+export type AbsenceStatus = (typeof ABSENCE_STATUSES)[number];
+
+/** A kind of time the tenant counts: annual leave, sick leave, attendance, overtime. */
+export const timeType = pgTable(
+  'time_type',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    description: varchar('description', { length: 200 }),
+    typeKind: varchar('type_kind', { length: 12 }).notNull(),
+    reducesQuota: boolean('reduces_quota').notNull().default(false),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('time_type_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+    check('time_type_kind_ck', sql`${t.typeKind} in ('ABSENCE', 'ATTENDANCE', 'OVERTIME')`),
+    check('time_type_name_length_ck', sql`length(trim(${t.name})) > 0`),
+  ],
+);
+
+/** A dated absence/leave request: one employee, one type, an inclusive span, a status. */
+export const absence = pgTable(
+  'absence',
+  {
+    client: tenant(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    timeTypeCode: varchar('time_type_code', { length: 10 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    status: varchar('status', { length: 12 }).notNull().default('REQUESTED'),
+    reason: varchar('reason', { length: 200 }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.personnelNumber, t.timeTypeCode, t.validFrom] }),
+    foreignKey({
+      name: 'absence_emp_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'absence_type_fk',
+      columns: [t.client, t.timeTypeCode],
+      foreignColumns: [timeType.client, timeType.code],
+    }).onDelete('restrict'),
+    check('absence_span_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+    check('absence_status_ck', sql`${t.status} in ('REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED')`),
+    uniqueIndex('absence_request_key_uq')
+      .on(t.client, t.personnelNumber, t.requestKey)
+      .where(sql`${t.requestKey} is not null`),
+  ],
+);
+
+/** One leave quota per employee, per type that reduces quota, per calendar year. */
+export const leaveQuota = pgTable(
+  'leave_quota',
+  {
+    client: tenant(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    timeTypeCode: varchar('time_type_code', { length: 10 }).notNull(),
+    year: integer('year').notNull(),
+    entitlement: numeric('entitlement', { precision: 5, scale: 2 }).notNull().default('0'),
+    taken: numeric('taken', { precision: 5, scale: 2 }).notNull().default('0'),
+    remaining: numeric('remaining', { precision: 5, scale: 2 }).notNull().default('0'),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.personnelNumber, t.timeTypeCode, t.year] }),
+    foreignKey({
+      name: 'leave_quota_emp_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    check('leave_quota_year_ck', sql`${t.year} > 1900 and ${t.year} < 2100`),
+    check('leave_quota_nonnegative_ck', sql`${t.entitlement} >= 0 and ${t.taken} >= 0 and ${t.remaining} >= 0`),
+  ],
+);
+
+/** Hours an employee recorded on a day, of one type: a measurement, not history. */
+export const timeRecording = pgTable(
+  'time_recording',
+  {
+    client: tenant(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    timeTypeCode: varchar('time_type_code', { length: 10 }).notNull(),
+    recordingDate: date('recording_date', { mode: 'string' }).notNull(),
+    hours: numeric('hours', { precision: 5, scale: 2 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.personnelNumber, t.timeTypeCode, t.recordingDate] }),
+    foreignKey({
+      name: 'time_recording_emp_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'time_recording_type_fk',
+      columns: [t.client, t.timeTypeCode],
+      foreignColumns: [timeType.client, timeType.code],
+    }).onDelete('restrict'),
+    check('time_recording_hours_ck', sql`${t.hours} > 0 and ${t.hours} <= 24`),
   ],
 );

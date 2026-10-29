@@ -31,6 +31,8 @@ const ACTIVITIES: Activity[] = [
   { code: 'CFG.PLT.CLIENT.DEFINE', area: 'PLATFORM', title: 'Tenant administration', kind: 'DEFINE', prerequisites: [], enables: 'Everything else', wizardStage: 'ONBOARDING', route: '/clients' },
   { code: 'CFG.PLT.ROLE.DEFINE', area: 'PLATFORM', title: 'Define roles and capabilities', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'User authorisation', wizardStage: 'ONBOARDING' },
   { code: 'CFG.PLT.USER.CREATE', area: 'PLATFORM', title: 'Create users', kind: 'DEFINE', prerequisites: ['CFG.PLT.ROLE.DEFINE'], enables: 'Sign-in', wizardStage: 'ONBOARDING' },
+  { code: 'CFG.PLT.USER.MAINTAIN', area: 'PLATFORM', title: 'Maintain users', kind: 'DEFINE', prerequisites: ['CFG.PLT.USER.CREATE'], enables: 'Change user details, activate and deactivate accounts', wizardStage: 'STANDARD' },
+  { code: 'CFG.PLT.USER.PASSWORD_RESET', area: 'PLATFORM', title: 'Reset user passwords', kind: 'DEFINE', prerequisites: ['CFG.PLT.USER.CREATE'], enables: 'Administrator-initiated password reset without touching HR data', wizardStage: 'STANDARD' },
   { code: 'CFG.PLT.NUMBERRANGE.DEFINE', area: 'PLATFORM', title: 'Number range maintenance', kind: 'DEFINE', prerequisites: ['CFG.PLT.CLIENT.DEFINE'], enables: 'Document numbering', wizardStage: 'ONBOARDING', route: '/config/number-range-objects' },
 
   // ── Enterprise structure ──────────────────────────────────────────────────
@@ -407,6 +409,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'AUDIT.WORKSPACE', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'Open the auditor workspace' },
   { code: 'AUDIT.EVIDENCE.EXPORT', module: 'AUDIT', action: 'EXPORT', posting: false, description: 'Export an evidence pack' },
   { code: 'AUDIT.TRAIL.VIEW', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'View change history and document trail' },
+  { code: 'CFG.PLT.USER.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain application users: change details, activate and deactivate accounts. Does not touch HR-owned employee data.' },
+  { code: 'CFG.PLT.USER.PASSWORD_RESET', module: 'PLT', action: 'EXECUTE', posting: false, description: 'Administrator-initiated password reset for application users, including users without an employee link. Revokes all sessions and requires a new password at next sign-in.' },
 ];
 
 
@@ -689,9 +693,17 @@ const MESSAGES: Array<{ code: string; severity: string; cls: string; text: strin
   { code: 'CAIRN_CONFIG_INCOMPLETE', severity: 'ERROR', cls: 'CONFIGURATION', text: 'Configuration step {activity} has not been completed.', remedy: 'Complete it in the Configuration Workbench before continuing.' },
 ];
 
+import { validateTarget } from '../src/platform/db/target-guard';
+
 async function main() {
   const connectionString =
     process.env.MIGRATION_DATABASE_URL ?? 'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
+
+  // Validate the explicit database target before connecting. The guard refuses
+  // protected databases without authorization and confirms the actual connected
+  // database identity matches the requested target.
+  await validateTarget(new URL(connectionString).pathname.replace(/^\//, ''));
+
   const client = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 
   try {

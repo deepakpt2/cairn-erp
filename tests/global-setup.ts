@@ -16,6 +16,7 @@
  * database, and they cannot collide with a whole cohort.
  */
 import postgres from 'postgres';
+import { validateTarget } from '../src/platform/db/target-guard';
 
 import { ACCEPTANCE_DATABASE_GUARDS } from '../scripts/browser-smoke/database-guards';
 
@@ -28,6 +29,12 @@ export default async function setup() {
     process.env.MIGRATION_DATABASE_URL ?? 'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
   const identity = new URL(connectionString);
   const database = identity.pathname.replace(/^\//, '');
+
+  // Validate the database target through the guard before connecting: protected
+  // databases are refused without explicit authorization, and the actual
+  // connected identity is confirmed against the requested target.
+  await validateTarget(database);
+
   console.log(`Test setup: database ${database} on ${identity.hostname}:${identity.port || '5432'}.`);
 
   const guarded = new Set(

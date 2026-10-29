@@ -570,11 +570,13 @@ describe('people employee master and record types (9193)', () => {
 
     // No posting in this module, and no attempt at one. `9195` added the pay *structure* — what a component
     // is and where its money would go — so it is asserted as present beside its mapping, while every table that
-    // would carry an amount, a run, a payslip or an accrual is still absent.
+    // would carry a payroll amount, a run, a payslip or an accrual is still absent. Migration 9197 added the
+    // time/leave tables (`time_type`, `absence`, `leave_quota`, `time_recording`) — those are time and leave
+    // functionality, not payroll, so they are not part of this assertion.
     const payroll = await withTenant(tenant.client, async (tx) => tx.execute(sql`
       select count(*)::int as built from information_schema.tables
        where table_schema = 'public' and table_name in
-         ('payroll_run','payroll_result','payroll_result_line','payroll_posting_run','payroll_posting_line','payslip','eos_provision_run','deduction_rule','time_recording','absence','leave_quota')`));
+         ('payroll_run','payroll_result','payroll_result_line','payroll_posting_run','payroll_posting_line','payslip','eos_provision_run','deduction_rule')`));
     expect(Number((payroll[0] as { built: number }).built)).toBe(0);
     const structure = await withTenant(tenant.client, async (tx) => tx.execute(sql`
       select table_name from information_schema.tables

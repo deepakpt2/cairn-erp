@@ -2563,6 +2563,19 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "people-organization",
     accepts: ["employee", "position", "q"],
   },
+  {
+    // Time and leave sits in the foundation area beside the other People
+    // transaction screens: a `people` ScreenArea needs a nav label in
+    // src/platform/i18n/index.ts, which carries uncommitted owner work.
+    id: "/people/time-leave",
+    path: "/people/time-leave",
+    query: {},
+    code: "PEOPLE.TIME.ENTER",
+    title: "Time & leave",
+    area: "foundation",
+    family: "people-time-leave",
+    accepts: ["employee", "type", "status", "q"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [
