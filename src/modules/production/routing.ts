@@ -571,6 +571,30 @@ async function nextCounter(tx: Tx, client: string, taskListType: string, routing
   fail('No group counter from 01 to 99 is free.');
 }
 
+/**
+ * An operation as `writeRouting` holds it between validation and the row writes: every field is
+ * already normalised (codes upper-case, dates checked, quantities measured against the unit) and
+ * therefore ready to be written as it stands.
+ */
+type PreparedRoutingOperation = {
+  operationNumber: string;
+  shortText: string | null;
+  workCenter: string | null;
+  controlKey: string | null;
+  standardValueKey: string | null;
+  standardTextKey: string | null;
+  operationQuantity: string | null;
+  operationUnit: string | null;
+  baseQuantity: string;
+  baseUnit: string;
+  validFrom: string;
+  validTo: string;
+  deletionFlag: 'X' | ' ';
+  executionOrder?: string | number | null;
+  values: Array<{ parameter: string; quantity: string; unit: string }>;
+  allocations: RoutingAllocationInput[];
+};
+
 async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Promise<RoutingView> {
   if ((input.changeNumber ?? '').trim()) {
     fail('Engineering change management is not implemented. A change number is not stored.', 'Save without a change number. Validity is the from and to dates.');
@@ -697,7 +721,7 @@ async function writeRouting(input: RoutingInput, mode: 'CREATE' | 'CHANGE'): Pro
     const controlByKey = new Map(controls.map((row) => [row.controlKey, row]));
     const valueKeys = await tx.select().from(routingStandardValueParameter).where(eq(routingStandardValueParameter.client, input.client));
     const reserved = new Set((before?.operations ?? []).map((operation) => operation.operationNumber));
-    const preparedOperations = [];
+    const preparedOperations: PreparedRoutingOperation[] = [];
     const used = new Set<string>();
     let cursor = 10;
     for (const raw of sourceOperations ?? []) {

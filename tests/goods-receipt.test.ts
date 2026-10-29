@@ -8,6 +8,7 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import {
   getMaterialDocument, getReceiptOrder, postGoodsReceipt, reverseGoodsReceipt,
 } from '../src/modules/inventory/goods-receipt';
+import { defineUomConversion, removeUomConversion } from '../src/modules/inventory/unit-conversion';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'SCR061_MIGO_TEST';
@@ -145,6 +146,138 @@ describe('SCR-061 goods receipt (MIGO)', () => {
       };
     });
   }
+
+  // ── the unit a receipt is spoken in, and the unit stock is kept in ──────────────
+  // A purchase order may be placed in a packaging unit while the material is stocked in its
+  // base unit; `purchasing/orders.ts` admits such an item only when the material carries the
+  // conversion. So the receipt knows both numbers, and the two are not interchangeable: the
+  // document keeps what was entered in the unit it was entered in, while stock, valuation and
+  // the MRP ledger are the material's base unit — which `stock_quantity` has no column for and
+  // therefore can only ever hold in that unit.
+  it('posts the entered quantity as entered and the converted quantity as the base quantity, and moves stock, valuation and the order history by it', async () => {
+    const c = await standingClient();
+    await withTenant(c, async (tx) => {
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        values (${c}, 'MAT-BOX', 'Cased gaskets', 'RAW', 'PC', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, overdelivery_tolerance, created_by)
+        values (${c}, 'MAT-BOX', '1000', 0, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,
+                                        standard_price, moving_average_price, price_unit, currency, created_by)
+        values (${c}, 'MAT-BOX', '1000', 'RAW_INVENTORY', 'MOVING_AVERAGE', 0, 0, 1, 'USD', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+    await defineUomConversion({
+      client: c, changedBy: ACTOR, materialNumber: 'MAT-BOX', alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+    });
+    const onHand = async () => withTenant(c, async (tx) => {
+      const stock = await tx.execute(sql`
+        select coalesce(sum(quantity), 0)::float8 as quantity from stock_quantity
+         where client = ${c} and material_number = 'MAT-BOX' and plant = '1000'
+      `) as unknown as Array<{ quantity: number }>;
+      const valuation = await tx.execute(sql`
+        select total_stock_quantity::float8 as total_stock_quantity, stock_value::float8 as stock_value,
+               moving_average_price::float8 as moving_average_price
+          from material_valuation where client = ${c} and material_number = 'MAT-BOX' and valuation_area = '1000'
+      `) as unknown as Array<Record<string, number>>;
+      return { stock: stock[0]?.quantity ?? 0, ...valuation[0]! };
+    });
+    expect(await onHand()).toEqual({ stock: 0, total_stock_quantity: 0, stock_value: 0, moving_average_price: 0 });
+
+    const order = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(3, 40), materialNumber: 'MAT-BOX', shortText: 'Cased gaskets', unit: 'BOX' }],
+    });
+    const doc = await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: 'req-box-post', lines: [{ itemNumber: 10, quantity: 3 }],
+    });
+    const line = (await withTenant(c, async (tx) => tx.execute(sql`
+      select entry_quantity::float8 as entry_quantity, entry_unit, base_quantity::float8 as base_quantity, base_unit
+        from material_document_line where client = ${c} and material_document_number = ${doc.materialDocumentNumber}
+    `))) as unknown as Array<Record<string, string | number>>;
+    // Both pairs stand, and they are not the same number: three cases were ordered and received,
+    // thirty-six pieces entered the store.
+    expect(line[0]).toMatchObject({ entry_quantity: 3, entry_unit: 'BOX', base_quantity: 36, base_unit: 'PC' });
+
+    // Stock and the valuation quantity follow the base unit; the money is what the order speaks.
+    expect(await onHand()).toMatchObject({
+      stock: 36, total_stock_quantity: 36, stock_value: 120,
+      // 120 USD for 36 pieces is 3.33 each. Read as 3 pieces it would have said 40, the price
+      // of one box, and the next issue would have valued thirty-six pieces at that.
+      moving_average_price: 3.33,
+    });
+
+    // The order's own history stays in the unit the order was placed in, because that is the unit
+    // the buyer reads and the unit the receipt line is entered in.
+    const afterReceipt = await getReceiptOrder(c, order.orderNumber);
+    expect(afterReceipt?.items[0]).toMatchObject({ unit: 'BOX', ordered: 3, received: 3, remaining: 0 });
+    await expect(postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: 'req-box-over', lines: [{ itemNumber: 10, quantity: 1 }],
+    })).rejects.toThrow(/received 3 plus 1 exceeds the ordered 3/);
+
+    // A reversal removes what was put in, in the same unit it was put in with.
+    const view = await getMaterialDocument(c, doc.materialDocumentNumber);
+    await reverseGoodsReceipt({
+      client: c, changedBy: ACTOR, materialDocumentNumber: doc.materialDocumentNumber,
+      ...POSTING, requestKey: 'req-box-reverse',
+    });
+    expect(view?.status).toBe('POSTED');
+    expect(await onHand()).toMatchObject({ stock: 0, total_stock_quantity: 0, stock_value: 0 });
+    expect((await getReceiptOrder(c, order.orderNumber))?.items[0].received).toBe(0);
+  });
+
+  it('refuses a receipt whose material no longer carries the conversion, and posts nothing at all', async () => {
+    const c = await standingClient();
+    await withTenant(c, async (tx) => {
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        values (${c}, 'MAT-BOX2', 'Loose gaskets', 'RAW', 'PC', ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, overdelivery_tolerance, created_by)
+        values (${c}, 'MAT-BOX2', '1000', 0, ${ACTOR}) on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_valuation (client, material_number, valuation_area, valuation_class, price_control,
+                                        standard_price, moving_average_price, price_unit, currency, created_by)
+        values (${c}, 'MAT-BOX2', '1000', 'RAW_INVENTORY', 'MOVING_AVERAGE', 0, 0, 1, 'USD', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+    await defineUomConversion({
+      client: c, changedBy: ACTOR, materialNumber: 'MAT-BOX2', alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+    });
+    const order = await createOrder({
+      client: c, changedBy: ACTOR, ...header,
+      items: [{ ...item(2, 50), materialNumber: 'MAT-BOX2', shortText: 'Loose gaskets', unit: 'BOX' }],
+    });
+    // The conversion is maintained after the order and before the posting: what the receipt must
+    // then do is refuse, not assume that a box is a piece.
+    await removeUomConversion({
+      client: c, changedBy: ACTOR, materialNumber: 'MAT-BOX2', alternativeUnit: 'BOX',
+    });
+    await expect(postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: 'req-box-nofactor', lines: [{ itemNumber: 10, quantity: 2 }],
+    })).rejects.toThrow(/no conversion from BOX to its base unit PC/);
+
+    const posted = await withTenant(c, async (tx) => tx.execute(sql`
+      select
+        (select count(*)::int from material_document_line where client = ${c} and purchase_order_number = ${order.orderNumber}) as lines,
+        (select coalesce(sum(quantity), 0)::float8 from stock_quantity where client = ${c} and material_number = 'MAT-BOX2') as stock,
+        (select total_stock_quantity::float8 from material_valuation where client = ${c} and material_number = 'MAT-BOX2' and valuation_area = '1000') as valuation_quantity
+    `)) as unknown as Array<Record<string, number>>;
+    expect(posted[0]).toEqual({ lines: 0, stock: 0, valuation_quantity: 0 });
+    // The order still says nothing was received: a refused posting leaves no trace on it.
+    expect((await getReceiptOrder(c, order.orderNumber))?.items[0]).toMatchObject({ received: 0, remaining: 2 });
+  });
 
   it('posts the document, stock, valuation and balanced journal in one transaction, idempotently', async () => {
     const c = await standingClient();

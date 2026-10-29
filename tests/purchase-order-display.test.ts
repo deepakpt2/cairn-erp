@@ -296,6 +296,129 @@ describe('SCR-164 purchase order display', () => {
       });
     }
   });
+
+  // The order screen shows what was received, what remains to be delivered, and the state the line
+  // is in — all three read off the same figure, so a return that only cancels a receipt has to pull
+  // the received quantity down rather than push it up, and a document the reversal module really
+  // reversed has to cancel itself rather than count twice.
+  it('nets a return and a reversed receipt against what the order screen says was received', async () => {
+    const SIGNS = 'PO-DISP4';
+    await withTenant(client, async (tx) => {
+      const [master] = await tx.execute(sql`
+        select base_unit from material where client = ${client} and material_number = 'MAT-DISP'
+      `) as unknown as Array<{ base_unit: string }>;
+      const unit = master.base_unit;
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
+          (${client}, 'RETURN_TO_VENDOR', 'Return delivery to vendor', 'ISSUE', 'PURCHASE_ORDER', ${ACTOR}),
+          (${client}, 'RETURN_TO_VENDOR_REV', 'Reversal of return delivery to vendor', 'REVERSAL', 'MATERIAL_DOCUMENT', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order
+          (client, order_number, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+           document_date, created_by)
+        select ${client}, ${SIGNS}, supplier_number, purchasing_org, purchasing_group, company_code, currency,
+               '2026-10-28', ${ACTOR}
+          from purchase_order where client = ${client} and order_number = ${ORDER}
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item
+          (client, order_number, item_number, material_number, short_text, quantity, unit, net_price, price_unit,
+           net_value, plant, created_by)
+        values
+          (${client}, ${SIGNS}, 10, 'MAT-DISP', 'Returned in part', 4, ${unit}, 10, 1, 40, '1000', ${ACTOR}),
+          (${client}, ${SIGNS}, 20, 'MAT-DISP', 'Returned in full', 4, ${unit}, 10, 1, 40, '1000', ${ACTOR}),
+          (${client}, ${SIGNS}, 30, 'MAT-DISP', 'Receipt reversed', 4, ${unit}, 10, 1, 40, '1000', ${ACTOR}),
+          (${client}, ${SIGNS}, 40, 'MAT-DISP', 'Return reversed', 4, ${unit}, 10, 1, 40, '1000', ${ACTOR})
+      `);
+      // Four lines of one order, each ordering four pieces: a receipt with a part return, a receipt
+      // given back in full, a receipt the reversal module cancelled, and a return that was itself
+      // reversed. The reversed receipt's document carries REVERSED and its reversal stands next to it.
+      await tx.execute(sql`
+        insert into material_document
+          (client, material_document_number, document_year, document_date, posting_date, status, reversal_of, created_by)
+        values
+          (${client}, '5000000111', 2026, '2026-10-28', '2026-10-28', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000112', 2026, '2026-10-28', '2026-10-28', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000113', 2026, '2026-10-29', '2026-10-29', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000114', 2026, '2026-10-29', '2026-10-29', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000115', 2026, '2026-10-30', '2026-10-30', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000116', 2026, '2026-10-30', '2026-10-30', 'POSTED', null, ${ACTOR}),
+          (${client}, '5000000117', 2026, '2026-10-31', '2026-10-31', 'POSTED', '5000000116', ${ACTOR}),
+          (${client}, '5000000118', 2026, '2026-10-31', '2026-10-31', 'REVERSED', null, ${ACTOR}),
+          (${client}, '5000000119', 2026, '2026-11-01', '2026-11-01', 'POSTED', '5000000118', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, value,
+          purchase_order_number, purchase_order_item, line_direction, reversal_of_document, reversal_of_line, created_by
+        ) values
+          (${client}, '5000000111', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 10, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '5000000112', 1, 'RETURN_TO_VENDOR', 'MAT-DISP', '1000', 'UNRESTRICTED', 1, ${unit}, 1, ${unit}, 10, 1, 10, ${SIGNS}, 10, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '5000000113', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 20, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '5000000114', 1, 'RETURN_TO_VENDOR', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 20, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '5000000115', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 40, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '5000000116', 1, 'RETURN_TO_VENDOR', 'MAT-DISP', '1000', 'UNRESTRICTED', 2, ${unit}, 2, ${unit}, 10, 1, 20, ${SIGNS}, 40, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '5000000117', 1, 'RETURN_TO_VENDOR_REV', 'MAT-DISP', '1000', 'UNRESTRICTED', 2, ${unit}, 2, ${unit}, 10, 1, 20, ${SIGNS}, 40, 'RECEIPT', '5000000116', 1, ${ACTOR}),
+          (${client}, '5000000118', 1, 'GOODS_RECEIPT_PO', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 30, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '5000000119', 1, 'RECEIPT_REVERSAL', 'MAT-DISP', '1000', 'UNRESTRICTED', 4, ${unit}, 4, ${unit}, 10, 1, 40, ${SIGNS}, 30, 'ISSUE', '5000000118', 1, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    const before = await counts(client);
+    try {
+      const shown = await displayPurchaseOrder(client, SIGNS);
+      expect(shown.found).toBe(true);
+      if (!shown.found) return;
+      const item = (number: number) => shown.order.items.find((row) => row.itemNumber === number);
+
+      // Given one of four pieces back, the line received three and still waits for one.
+      expect(item(10)).toMatchObject({
+        receivedQuantity: '3.000', remainingToDeliver: '1.000', remainingToInvoice: '3.000',
+        state: 'PARTIALLY_DELIVERED',
+      });
+      // Returned in full, nothing was received: the screen must not say eight received of four
+      // ordered, four to be delivered minus four, and received in full.
+      expect(item(20)).toMatchObject({
+        receivedQuantity: '0.000', remainingToDeliver: '4.000', remainingToInvoice: '0.000', state: 'OPEN',
+      });
+      // A receipt reversed by a posted document cancels itself once, not twice: it leaves the line
+      // empty rather than at minus four received with eight still to come.
+      expect(item(30)).toMatchObject({
+        receivedQuantity: '0.000', remainingToDeliver: '4.000', remainingToInvoice: '0.000', state: 'OPEN',
+      });
+      // The return on the last line was itself reversed, which puts the goods back where they were.
+      expect(item(40)).toMatchObject({
+        receivedQuantity: '4.000', remainingToDeliver: '0.000', remainingToInvoice: '4.000', state: 'DELIVERED',
+      });
+
+      expect(await counts(client)).toEqual(before);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          delete from material_document_line where client = ${client} and purchase_order_number = ${SIGNS}
+        `);
+        await tx.execute(sql`
+          delete from material_document
+           where client = ${client} and material_document_number in
+                 ('5000000111', '5000000112', '5000000113', '5000000114', '5000000115',
+                  '5000000116', '5000000117', '5000000118', '5000000119')
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_item where client = ${client} and order_number = ${SIGNS}
+        `);
+        await tx.execute(sql`
+          delete from purchase_order where client = ${client} and order_number = ${SIGNS}
+        `);
+      });
+    }
+  });
+
 });
 
 async function counts(client: string) {

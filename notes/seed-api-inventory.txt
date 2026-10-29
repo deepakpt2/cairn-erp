@@ -1,0 +1,1130 @@
+### foundation
+partner-bank-reads.ts                      export async function lookupPartnerBankMetadata
+partner-bank-reads.ts                      export async function listPartnerBankMetadata
+exchange-rate-maintenance.ts               export async function listExchangeRates
+exchange-rate-maintenance.ts               export async function listCurrencyChoices
+exchange-rate-maintenance.ts               export async function saveExchangeRate
+exchange-rate-maintenance.ts               export async function deleteExchangeRate
+retained-earnings.ts                       export async function listRetainedEarnings
+retained-earnings.ts                       export async function maintainRetainedEarnings
+retained-earnings.ts                       export async function deleteRetainedEarnings
+internal-order-budget.ts                   export async function saveBudgetProfile
+internal-order-budget.ts                   export async function assignOrderTypeBudgetProfile
+internal-order-budget.ts                   export async function getOriginalBudget
+internal-order-budget.ts                   export async function changeOriginalBudget
+profit-center-report.ts                    export async function listProfitCenterLines
+profit-center-report.ts                    export function profitCenterLinesCsv
+fiscal-year-variant-assignment.ts          export async function assignFiscalYearVariant
+supplier-companies.ts                      export function normalizeSupplierPaymentMethods
+supplier-companies.ts                      export function assertSupplierPaymentMethodEligibility
+supplier-companies.ts                      export async function saveSupplierCompany
+supplier-companies.ts                      export async function getSupplierCompany
+supplier-companies.ts                      export async function listSupplierCompanies
+supplier-companies.ts                      export async function requireSupplierCompany
+supplier-companies.ts                      export async function supplierCompanyChoices
+number-ranges.ts                           export async function seedNumberRangeObjects
+number-ranges.ts                           export function rangeKey
+number-ranges.ts                           export async function listNumberRanges
+number-ranges.ts                           export async function journalRangeReadiness
+number-ranges.ts                           export async function maintainNumberRange
+number-ranges.ts                           export async function rangeAllocations
+number-ranges.ts                           export async function listNumberRangeObjects
+number-ranges.ts                           export async function saveNumberRangeObject
+number-ranges.ts                           export async function adjustNumberRangeCurrent
+tax-code-definition.ts                     export async function listTaxCodes
+tax-code-definition.ts                     export async function listCountryChoices
+tax-code-definition.ts                     export async function saveTaxCode
+tax-code-definition.ts                     export async function deleteTaxCode
+payment-terms.ts                           export async function savePaymentTerms
+payment-terms.ts                           export async function listPaymentTerms
+payment-terms.ts                           export async function getPaymentTerms
+payment-terms.ts                           export async function paymentSchedule
+payment-terms.ts                           export async function applyPaymentTermDefaults
+cost-center-hierarchy.ts                   export function flattenNodes
+cost-center-hierarchy.ts                   export function resolveGroupMembers
+cost-center-hierarchy.ts                   export async function listHierarchy
+cost-center-hierarchy.ts                   export async function saveHierarchyHeader
+cost-center-hierarchy.ts                   export async function saveHierarchyNode
+cost-center-hierarchy.ts                   export async function deleteHierarchyNode
+cost-center-hierarchy.ts                   export async function placeCostCenterPeriod
+cost-center-hierarchy.ts                   export async function unplaceCostCenterPeriod
+cost-center-hierarchy.ts                   export async function saveCostCenterGroup
+cost-center-hierarchy.ts                   export async function deleteCostCenterGroup
+cost-center-hierarchy.ts                   export async function addGroupLeaf
+cost-center-hierarchy.ts                   export async function removeGroupLeaf
+plant-maintenance.ts                       export async function getPlantDefinitionVersion
+plant-maintenance.ts                       export async function savePlantDefinition
+partner-bank-profile-activation-view.ts    export function resolvePartnerBankProfileActivationRows
+partner-bank-profile-activation-view.ts    export async function listPartnerBankProfileActivationRows
+posting-period-variant-definition.ts       export function describeInterval
+posting-period-variant-definition.ts       export function describeUsedBy
+posting-period-variant-definition.ts       export async function listPostingPeriodVariants
+posting-period-variant-definition.ts       export function describeIntervalSet
+posting-period-variant-definition.ts       export async function savePostingPeriodVariant
+posting-period-variant-definition.ts       export async function deletePostingPeriodVariant
+supplier-purchasing-partner-writes.ts      export async function saveSupplierPurchasingPartner
+supplier-purchasing-partner-writes.ts      export async function removeSupplierPurchasingPartner
+activity-type-definition.ts                export function activityCategoryLabel
+activity-type-definition.ts                export function priceIndicatorLabel
+activity-type-definition.ts                export function parseValidCategories
+activity-type-definition.ts                export function canonicalValidCategories
+activity-type-definition.ts                export async function listActivityTypes
+activity-type-definition.ts                export async function listActivityUnits
+activity-type-definition.ts                export async function saveActivityType
+activity-type-definition.ts                export async function setActivityTypePostingLock
+activity-type-definition.ts                export async function deleteActivityType
+company-code-definition.ts                 export async function defineCompanyCode
+company-code-coa-assignment.ts             export async function assignCompanyCodeCoa
+chart-of-accounts-maintenance.ts           export async function chartOfAccountsF4Choices
+chart-of-accounts-maintenance.ts           export async function listChartOfAccounts
+chart-of-accounts-maintenance.ts           export async function saveChartOfAccounts
+chart-of-accounts-maintenance.ts           export async function chartOfAccountsHasAccountsOrTransactions
+chart-of-accounts-maintenance.ts           export async function listGroupChartsOfAccounts
+chart-of-accounts-maintenance.ts           export async function saveGroupChartOfAccounts
+chart-of-accounts-maintenance.ts           export async function setChartOfAccountsActive
+chart-of-accounts-maintenance.ts           export async function setGroupChartOfAccountsActive
+fiscal-year-variant-maintenance.ts         export async function listFiscalYearVariants
+fiscal-year-variant-maintenance.ts         export async function fiscalYearVariantChoices
+fiscal-year-variant-maintenance.ts         export async function saveFiscalYearVariant
+fiscal-year-variant-maintenance.ts         export async function setFiscalYearVariantActive
+fiscal-year-variant-maintenance.ts         export async function saveFiscalYearPeriods
+controlling-area-company-compatibility.ts  export async function lockCompanyCodeOxxAssignments
+controlling-area-company-compatibility.ts  export async function assertCompanyCodeFinancialSettingsCompatible
+purchasing-org-plant.ts                    export async function purchasingOrgMayBuyForPlant
+purchasing-org-plant.ts                    export async function assertPurchasingOrgForPlant
+constrained-values.ts                      export async function suggestConstrainedValues
+cost-center-definition.ts                  export function isCostCenterCategory
+cost-center-definition.ts                  export async function listCostCenterAreas
+cost-center-definition.ts                  export async function listCostCenters
+cost-center-definition.ts                  export async function listAreaCompanyCodes
+cost-center-definition.ts                  export async function countCostCenterDocuments
+cost-center-definition.ts                  export async function saveCostCenter
+cost-center-definition.ts                  export async function setCostCenterPostingLock
+cost-center-definition.ts                  export async function deleteCostCenter
+sales-org-division-assignment.ts           export async function lockSalesOrgDivisionPair
+sales-org-division-assignment.ts           export async function salesOrgDivisionF4Choices
+sales-org-division-assignment.ts           export async function listSalesOrgDivisionAssignments
+sales-org-division-assignment.ts           export async function assignSalesOrgDivision
+sales-org-division-assignment.ts           export async function unassignSalesOrgDivision
+release-strategy-definition.ts             export async function listReleaseConfiguration
+release-strategy-definition.ts             export async function saveReleaseGroup
+release-strategy-definition.ts             export async function deleteReleaseGroup
+release-strategy-definition.ts             export async function saveReleaseStrategy
+release-strategy-definition.ts             export async function setReleaseStrategyStatus
+release-strategy-definition.ts             export async function deleteReleaseStrategy
+release-strategy-definition.ts             export function criterionMatches
+release-strategy-definition.ts             export async function determineRelease
+company-code-assignments.ts                export function missingCompanyCodeAssignments
+company-code-assignments.ts                export function hasCompanyCodeAssignments
+company-code-assignments.ts                export function describeMissingCompanyCodeAssignments
+settlement-configuration-keys.ts           export function settlementConfigArgument
+settlement-configuration-keys.ts           export function settlementConfigLock
+settlement-configuration-keys.ts           export function settlementConfigAdvisoryKey
+customer-sales-areas.ts                    export async function saveCustomerSalesArea
+customer-sales-areas.ts                    export async function getCustomerSalesArea
+customer-sales-areas.ts                    export async function listCustomerSalesAreas
+customer-sales-areas.ts                    export async function requireCustomerSalesArea
+customer-sales-areas.ts                    export async function customerSalesAreaChoices
+services.ts                                export async function listCompanyCodes
+services.ts                                export async function getCompanyCodeDetail
+services.ts                                export async function upsertCompanyCode
+services.ts                                export async function listGlAccounts
+services.ts                                export async function upsertGlAccount
+services.ts                                export async function setGlAccountBlocks
+services.ts                                export async function deleteGlAccount
+services.ts                                export async function glAccountUsage
+services.ts                                export async function glAccountAuditVersion
+services.ts                                export async function listPeriodRules
+services.ts                                export async function updatePeriodRule
+services.ts                                export async function listPlants
+services.ts                                export async function listConfigurationChoices
+characteristic-definition.ts               export async function listCharacteristics
+characteristic-definition.ts               export async function saveCharacteristic
+characteristic-definition.ts               export async function setCharacteristicStatus
+characteristic-definition.ts               export async function deleteCharacteristic
+payment-methods.ts                         export async function getPaymentMethod
+payment-methods.ts                         export async function listPaymentMethods
+payment-methods.ts                         export async function savePaymentMethod
+payment-methods.ts                         export async function retirePaymentMethod
+storage-location-maintenance.ts            export async function getStorageLocationVersion
+storage-location-maintenance.ts            export async function saveStorageLocation
+storage-location-maintenance.ts            export async function deactivateStorageLocation
+supplier-purchasing.ts                     export async function saveSupplierPurchasing
+supplier-purchasing.ts                     export async function getSupplierPurchasing
+supplier-purchasing.ts                     export async function listSupplierPurchasing
+supplier-purchasing.ts                     export async function requireSupplierPurchasing
+supplier-purchasing.ts                     export async function supplierPurchasingChoices
+settlement-configuration-masters.ts        export async function listSettlementProfileDocumentTypes
+settlement-configuration-masters.ts        export async function listAllocationStructures
+settlement-configuration-masters.ts        export async function getAllocationStructure
+settlement-configuration-masters.ts        export async function saveAllocationStructure
+settlement-configuration-masters.ts        export async function saveAllocationStructureAssignment
+settlement-configuration-masters.ts        export async function removeAllocationStructureAssignment
+settlement-configuration-masters.ts        export async function listSettlementProfiles
+settlement-configuration-masters.ts        export async function getSettlementProfile
+settlement-configuration-masters.ts        export async function saveSettlementProfile
+settlement-configuration-masters.ts        export async function listOrderTypeSettlementProfiles
+settlement-configuration-masters.ts        export async function assignOrderTypeSettlementProfile
+settlement-configuration-masters.ts        export async function removeOrderTypeSettlementProfile
+settlement-configuration-masters.ts        export async function structureDependents
+employee-tolerance-definition.ts           export async function listEmployeeToleranceGroups
+employee-tolerance-definition.ts           export async function listToleranceCompanies
+employee-tolerance-definition.ts           export async function saveEmployeeToleranceGroup
+partner-bank-profile-activation.ts         export function createPartnerBankProfileActivationService
+customer-companies.ts                      export function normalizeInterestIndicator
+customer-companies.ts                      export function normalizeToleranceGroup
+customer-companies.ts                      export async function saveCustomerCompany
+customer-companies.ts                      export async function getCustomerCompany
+customer-companies.ts                      export async function listCustomerCompanies
+customer-companies.ts                      export async function requireCustomerCompany
+customer-companies.ts                      export async function customerCompanyChoices
+account-determination.ts                   export function postingEvent
+account-determination.ts                   export async function listAccountDeterminations
+account-determination.ts                   export async function listDeterminationCharts
+account-determination.ts                   export async function listDeterminationValuationClasses
+account-determination.ts                   export async function listGlAccountChoices
+account-determination.ts                   export async function saveAccountDetermination
+account-determination.ts                   export async function deleteAccountDetermination
+standard-config.ts                         export async function applyStandardPackage
+payment-term-dates.ts                      export function calendarDate
+payment-term-dates.ts                      export function calculatePaymentSchedule
+profit-center-definition.ts                export async function listProfitCenters
+profit-center-definition.ts                export async function listResponsibleUsers
+profit-center-definition.ts                export async function countProfitCenterDocuments
+profit-center-definition.ts                export async function saveProfitCenter
+profit-center-definition.ts                export async function setProfitCenterPostingLock
+profit-center-definition.ts                export async function deleteProfitCenter
+sales-area-maintenance.ts                  export async function salesAreaF4Choices
+sales-area-maintenance.ts                  export async function listSalesAreas
+sales-area-maintenance.ts                  export async function saveSalesArea
+sales-area-maintenance.ts                  export async function deactivateSalesArea
+sales-area-maintenance.ts                  export async function reactivateSalesArea
+sales-area-maintenance.ts                  export async function getSalesAreaVersion
+supplier-purchasing-partners.ts            export async function listSupplierPartnerFunctions
+supplier-purchasing-partners.ts            export async function listSupplierPartnerChoices
+supplier-purchasing-partners.ts            export async function listSupplierPurchasingPartners
+internal-order-display.ts                  export async function displayInternalOrder
+house-bank-definition.ts                   export async function listHouseBanks
+house-bank-definition.ts                   export async function listHouseBankCompanies
+house-bank-definition.ts                   export async function listBankChoices
+house-bank-definition.ts                   export async function listHouseBankCurrencies
+house-bank-definition.ts                   export async function listGlAccountChoices
+house-bank-definition.ts                   export async function saveHouseBank
+house-bank-definition.ts                   export async function deleteHouseBank
+house-bank-definition.ts                   export async function saveBankAccount
+house-bank-definition.ts                   export async function deleteBankAccount
+purchasing-org-company-code-assignment.ts  export async function assignPurchasingOrgCompanyCode
+settlement-configuration.ts                export async function getSettlementConfiguration
+settlement-configuration.ts                export async function lockSettlementRuleForOrder
+settlement-configuration.ts                export async function saveOrderSettlementConfiguration
+controlling-area-maintenance.ts            export async function controllingAreaF4Choices
+controlling-area-maintenance.ts            export async function listControllingAreas
+controlling-area-maintenance.ts            export async function saveControllingArea
+controlling-area-maintenance.ts            export async function controllingAreaHasRecordedTransactions
+controlling-area-maintenance.ts            export async function lockControllingAreaForCompanyCode
+controlling-area-maintenance.ts            export async function getControllingAreaVersion
+class-definition.ts                        export async function listClasses
+class-definition.ts                        export async function saveClass
+class-definition.ts                        export async function setClassStatus
+class-definition.ts                        export async function deleteClass
+distribution-channel-division-maintenance.ts export async function saveDistributionChannelDefinition
+distribution-channel-division-maintenance.ts export async function saveDivisionDefinition
+distribution-channel-division-maintenance.ts export async function deactivateDistributionChannel
+distribution-channel-division-maintenance.ts export async function deactivateDivision
+distribution-channel-division-maintenance.ts export async function getDistributionChannelDefinitionVersion
+distribution-channel-division-maintenance.ts export async function getDivisionDefinitionVersion
+special-gl.ts                              export async function listSpecialGlConfigs
+special-gl.ts                              export async function maintainSpecialGlConfig
+special-gl.ts                              export async function deleteSpecialGlConfig
+internal-order.ts                          export async function createInternalOrder
+internal-order.ts                          export async function changeInternalOrder
+internal-order.ts                          export async function getInternalOrder
+internal-order.ts                          export async function listInternalOrders
+internal-order.ts                          export async function internalOrderChoices
+sales-org-company-code-assignment.ts       export async function assignSalesOrgCompanyCode
+sales-organization-maintenance.ts          export async function getSalesOrgDefinitionVersion
+sales-organization-maintenance.ts          export async function saveSalesOrgDefinition
+sales-organization-maintenance.ts          export async function deactivateSalesOrg
+partner-bank-profile-readiness.ts          export function createPartnerBankProfileReadinessReader
+plant-company-code-assignment.ts           export async function assignPlantCompanyCode
+cost-center-report.ts                      export async function calculateCostCenterReport
+profit-center-hierarchy.ts                 export function flattenNodes
+profit-center-hierarchy.ts                 export function resolveGroupMembers
+profit-center-hierarchy.ts                 export async function listHierarchy
+profit-center-hierarchy.ts                 export async function saveHierarchyHeader
+profit-center-hierarchy.ts                 export async function saveHierarchyNode
+profit-center-hierarchy.ts                 export async function deleteHierarchyNode
+profit-center-hierarchy.ts                 export async function placeProfitCenterPeriod
+profit-center-hierarchy.ts                 export async function unplaceProfitCenterPeriod
+profit-center-hierarchy.ts                 export async function saveProfitCenterGroup
+profit-center-hierarchy.ts                 export async function deleteProfitCenterGroup
+profit-center-hierarchy.ts                 export async function addGroupLeaf
+profit-center-hierarchy.ts                 export async function removeGroupLeaf
+bank-master.ts                             export async function listBanks
+bank-master.ts                             export async function listBankCountryChoices
+bank-master.ts                             export async function saveBank
+bank-master.ts                             export async function deleteBank
+business-partners.ts                       export async function saveBusinessPartner
+business-partners.ts                       export async function getBusinessPartner
+business-partners.ts                       export async function listBusinessPartners
+business-partners.ts                       export async function requireGeneralPartner
+sales-org-distribution-channel-assignment.ts export async function lockSalesOrgDistributionChannelPair
+sales-org-distribution-channel-assignment.ts export async function salesOrgDistributionChannelF4Choices
+sales-org-distribution-channel-assignment.ts export async function listSalesOrgDistributionChannelAssignments
+sales-org-distribution-channel-assignment.ts export async function assignSalesOrgDistributionChannel
+sales-org-distribution-channel-assignment.ts export async function unassignSalesOrgDistributionChannel
+central-address-maintenance.ts             export async function createCentralAddress
+document-type-definition.ts                export async function listDocumentTypes
+document-type-definition.ts                export async function listIntervalChoices
+document-type-definition.ts                export async function saveDocumentType
+document-type-definition.ts                export async function setDocumentTypeActive
+document-type-definition.ts                export async function deleteDocumentType
+plan-revaluation.ts                        export function planRevaluationEligibility
+plan-revaluation.ts                        export async function getPlanRevaluationOrder
+plan-revaluation.ts                        export async function createPlanRevaluationOrder
+internal-order-budget-display.ts           export async function displayOriginalBudget
+purchasing-group-maintenance.ts            export async function listPurchasingGroupDefinitions
+purchasing-group-maintenance.ts            export async function getPurchasingGroupDefinitionVersion
+purchasing-group-maintenance.ts            export async function savePurchasingGroupChanges
+order-settlement.ts                        export function orderSettlementPosting
+order-settlement.ts                        export async function settleOrder
+order-settlement.ts                        export async function settleOrdersCollective
+controlling-area-company-assignment.ts     export async function assignCompanyCodeToControllingArea
+controlling-area-company-assignment.ts     export async function assignCompanyCodeToControllingAreaInTransaction
+controlling-area-company-assignment.ts     export async function unassignCompanyCodeFromControllingArea
+posting-period-variant-assignment.ts       export async function listPostingPeriodVariantAssignments
+posting-period-variant-assignment.ts       export async function assignPostingPeriodVariant
+partner-bank-detail-view.ts                export async function getPartnerBankMaskedDetail
+industry-definition.ts                     export async function listIndustries
+industry-definition.ts                     export async function saveIndustry
+industry-definition.ts                     export async function setIndustryActive
+industry-definition.ts                     export async function deleteIndustry
+activity-rate-definition.ts                export async function planningContext
+activity-rate-definition.ts                export async function listActivityRates
+activity-rate-definition.ts                export function distinctCenters
+activity-rate-definition.ts                export function distinctTypes
+activity-rate-definition.ts                export async function saveActivityRates
+activity-rate-definition.ts                export async function deleteActivityRate
+activity-rate-definition.ts                export async function countActivityRates
+purchasing-org-maintenance.ts              export async function getPurchasingOrgDefinitionVersion
+purchasing-org-maintenance.ts              export async function savePurchasingOrgDefinition
+purchasing-org-maintenance.ts              export async function deactivatePurchasingOrg
+### inventory
+material-document-reversal.ts              export async function getReversalDocument
+material-document-reversal.ts              export async function reverseMaterialDocument
+material-number-range-groups.ts            export async function listMaterialNumberRangeGroups
+material-number-range-groups.ts            export async function listMaterialRangeGroupOptions
+material-number-range-groups.ts            export async function saveMaterialNumberRangeGroup
+material-number-range-groups.ts            export async function deleteMaterialNumberRangeGroup
+return-delivery.ts                         export async function resolveReturnMovement
+return-delivery.ts                         export async function getReturnableDocument
+return-delivery.ts                         export async function getReturnDocument
+return-delivery.ts                         export async function postReturnDelivery
+material-type-definition.ts                export async function listMaterialTypes
+material-type-definition.ts                export async function listAccountCategoryReferences
+material-type-definition.ts                export async function listTypeValuation
+material-type-definition.ts                export async function listValuationPlants
+material-type-definition.ts                export async function saveMaterialType
+material-type-definition.ts                export async function setMaterialTypeActive
+material-type-definition.ts                export async function deleteMaterialType
+material-type-definition.ts                export async function saveAccountCategoryReference
+material-type-definition.ts                export async function deleteAccountCategoryReference
+material-type-definition.ts                export async function saveTypeValuation
+transfer-posting.ts                        export async function getTransferDocument
+transfer-posting.ts                        export async function transferStockAt
+transfer-posting.ts                        export async function validateTransfer
+transfer-posting.ts                        export async function postTransfer
+transfer-posting.ts                        export async function reverseTransfer
+production-document-quantity.ts            export function lineNotReversed
+production-document-quantity.ts            export function lineReversalDisagreement
+batch-status.ts                            export function batchStatusScope
+batch-status.ts                            export async function getBatchStatusManagement
+batch-status.ts                            export async function saveBatchStatus
+batch-status.ts                            export async function executeBatchStatusConversion
+batch-master.ts                            export async function readLevel
+batch-master.ts                            export async function createBatch
+material-document-list.ts                  export async function listMaterialDocuments
+batch-document-management.ts               export async function documentManagementActive
+batch-document-management.ts               export async function getBatchDocumentManagement
+batch-document-management.ts               export async function saveBatchDocumentManagement
+batch-document-management.ts               export function linkBatchDocument
+batch-search-strategy.ts                   export async function listStrategyKeyCombinations
+batch-search-strategy.ts                   export async function listBatchSearchStrategies
+batch-search-strategy.ts                   export async function resolveBatchSearchStrategy
+batch-search-strategy.ts                   export async function determineBatch
+batch-search-strategy.ts                   export async function saveBatchSearchStrategy
+batch-search-strategy.ts                   export async function deleteBatchSearchStrategy
+batch-classification.ts                    export function classificationOf
+batch-classification.ts                    export async function listBatchClassification
+batch-classification.ts                    export async function saveBatchClassification
+batch-classification.ts                    export async function batchClassificationRefusal
+batch-search-procedure.ts                  export async function listBatchSearchProcedures
+batch-search-procedure.ts                  export async function saveBatchSearchProcedure
+batch-search-procedure.ts                  export async function deleteBatchSearchProcedure
+batch-search-procedure.ts                  export async function listBatchSearchProcedureSteps
+batch-search-procedure.ts                  export async function saveBatchSearchProcedureStep
+batch-search-procedure.ts                  export async function deleteBatchSearchProcedureStep
+physical-inventory-count.ts                export function countNamedRefusal
+physical-inventory-count.ts                export async function getCountDocument
+physical-inventory-count.ts                export async function searchCountDocuments
+physical-inventory-count.ts                export async function submitCounts
+physical-inventory-count.ts                export async function clearCount
+physical-inventory-count.ts                export async function getCountHistory
+physical-inventory-count.ts                export async function getCountStatus
+reservations.ts                            export async function getReservation
+reservations.ts                            export async function createReservation
+reservations.ts                            export async function withdrawReservation
+reservations.ts                            export async function withdrawReservationInTx
+reservations.ts                            export async function completeReservationItem
+physical-inventory-recount.ts              export async function validateRecount
+physical-inventory-recount.ts              export async function createRecount
+physical-inventory-recount.ts              export async function cancelRecount
+physical-inventory-recount.ts              export async function recountPostingBlock
+physical-inventory-recount.ts              export async function recountCountRemedy
+physical-inventory-recount.ts              export async function syncRecountLink
+physical-inventory-recount.ts              export async function getRecountSource
+physical-inventory-recount.ts              export async function getRecountComparison
+migo.ts                                    export function resolveMigoCell
+migo.ts                                    export function migoMatrix
+material-period-control.ts                 export async function listMaterialPeriodControl
+material-period-control.ts                 export async function getMaterialPeriodControl
+material-period-control.ts                 export function materialPeriodAllows
+material-period-control.ts                 export async function initializeMaterialPeriodControl
+material-period-control.ts                 export async function setMaterialPeriodIndicators
+material-period-control.ts                 export async function shiftMaterialPeriod
+physical-inventory-posting-status.ts       export async function releaseDifferenceAllocations
+physical-inventory-posting-status.ts       export async function recomputePostingStatus
+batch-access-sequence.ts                   export async function listBatchAccessSequences
+batch-access-sequence.ts                   export async function saveBatchAccessSequence
+batch-access-sequence.ts                   export async function deleteBatchAccessSequence
+batch-access-sequence.ts                   export async function listBatchAccessSteps
+batch-access-sequence.ts                   export async function saveBatchAccessStep
+batch-access-sequence.ts                   export async function deleteBatchAccessStep
+valuation-class-permission.ts              export function namedMaterialTypes
+valuation-class-permission.ts              export function classPermittedForType
+batch-display.ts                           export function batchStatusLabel
+batch-display.ts                           export async function displayBatch
+materials.ts                               export async function saveMaterialView
+materials.ts                               export async function setMaterialDeletionFlag
+materials.ts                               export async function materialChoices
+materials.ts                               export async function listMaterials
+materials.ts                               export async function getMaterialDetail
+materials.ts                               export async function requireUsableMaterial
+physical-inventory-differences.ts          export function labelOf
+physical-inventory-differences.ts          export function directionOf
+physical-inventory-differences.ts          export async function listDifferences
+physical-inventory-differences.ts          export async function getDifferenceDocument
+physical-inventory-differences.ts          export async function openDifferenceWorkflow
+batch-change.ts                            export async function readBatch
+batch-change.ts                            export async function changeBatch
+production-receipt.ts                      export async function postProductionReceipt
+production-receipt.ts                      export async function receivedQuantityFor
+price-change.ts                            export async function changeMaterialPrice
+price-change.ts                            export async function releaseFuturePrices
+price-change.ts                            export async function listFuturePrices
+batch-number-assignment.ts                 export async function internalAssignmentActive
+batch-number-assignment.ts                 export async function getInternalBatchAssignment
+batch-number-assignment.ts                 export async function saveInternalBatchAssignment
+batch-number-assignment.ts                 export async function listAssignedReceiptSettings
+batch-number-assignment.ts                 export async function saveAssignedReceipt
+batch-number-assignment.ts                 export function assignedGoodsReceiptDecision
+batch-number-assignment.ts                 export function assignedReceiptRefusal
+batch-number-assignment.ts                 export async function readAssignedGoodsReceiptDecision
+batch-number-assignment.ts                 export async function productionBatchAssignment
+batch-number-assignment.ts                 export async function allocateInternalBatchNumber
+batch-cockpit.ts                           export function traceBatchGenealogy
+batch-cockpit.ts                           export async function searchBatches
+batch-cockpit.ts                           export async function readBatchCockpit
+warehouse-stocks.ts                        export async function listWarehouseStocks
+batch-search-allocation.ts                 export async function listBatchSearchAllocations
+batch-search-allocation.ts                 export async function resolveBatchSearchAllocation
+batch-search-allocation.ts                 export async function checkEnteredBatch
+batch-search-allocation.ts                 export async function saveBatchSearchAllocation
+batch-search-allocation.ts                 export async function deleteBatchSearchAllocation
+batch-level.ts                             export async function dependentBatchData
+batch-level.ts                             export async function getBatchLevel
+batch-level.ts                             export async function latestConversion
+batch-level.ts                             export async function saveBatchLevel
+batch-level.ts                             export async function prepareBatchLevelConversion
+batch-level.ts                             export async function executeBatchLevelConversion
+batch-level.ts                             export async function createBatchIdentity
+material-document-output.ts                export async function recordOutputsForDocument
+material-document-output.ts                export async function recordOutputsForPostedDocument
+material-document-output.ts                export async function listOutputMessages
+material-document-output.ts                export async function determineOutputs
+material-document-output.ts                export async function renderSlip
+material-document-output.ts                export async function dispatchMessage
+material-document-output.ts                export async function dispatchPending
+material-document-output.ts                export async function setRecipient
+batch-posting.ts                           export async function resolvePostingBatch
+batch-control-use.ts                       export async function noteBatchControlUse
+material-shelf-life.ts                     export async function getMaterialShelfLife
+material-shelf-life.ts                     export async function saveMaterialShelfLife
+material-document-display.ts               export async function displayMaterialDocument
+goods-receipt.ts                           export async function getReceiptOrder
+goods-receipt.ts                           export async function getMaterialDocument
+goods-receipt.ts                           export async function postGoodsReceipt
+goods-receipt.ts                           export async function reverseGoodsReceipt
+batch-condition-table.ts                   export async function listBatchConditionTables
+batch-condition-table.ts                   export async function saveBatchConditionTable
+batch-condition-table.ts                   export async function deleteBatchConditionTable
+standard-config.ts                         export async function seedTypeValuationForPlant
+standard-config.ts                         export async function applyMaterialDefaults
+balance-update.ts                          export function postingFingerprint
+balance-update.ts                          export function quantityToken
+balance-update.ts                          export async function lockRequestKey
+balance-update.ts                          export async function mismatchedRequest
+balance-update.ts                          export async function applyValuationDelta
+stock-reconcile.ts                         export async function reconcileStock
+stock-reconcile.ts                         export async function rebuildStockDimension
+storage-location.ts                        export async function storageLocationRequired
+storage-location.ts                        export async function proposeStorageLocation
+storage-location.ts                        export async function resolveStorageLocation
+valuation-class-definition.ts              export async function listValuationReferences
+valuation-class-definition.ts              export async function listValuationClasses
+valuation-class-definition.ts              export async function listTypeReferences
+valuation-class-definition.ts              export async function listValuationGaps
+valuation-class-definition.ts              export async function valuationClassRefusal
+valuation-class-definition.ts              export async function postingValuationRefusal
+valuation-class-definition.ts              export async function referenceChangeBlock
+valuation-class-definition.ts              export async function saveValuationReference
+valuation-class-definition.ts              export async function deleteValuationReference
+valuation-class-definition.ts              export async function saveValuationClass
+valuation-class-definition.ts              export async function deleteValuationClass
+valuation-class-definition.ts              export async function assignMaterialTypeReference
+form-values.ts                             export function materialFormValue
+stock-overview.ts                          export async function stockOverview
+batch-status-plant.ts                      export async function readPlantBatchStatusActive
+batch-status-plant.ts                      export async function listPlantBatchStatus
+batch-status-plant.ts                      export async function listPlantStatusConversions
+batch-status-plant.ts                      export async function validatePlantBatchStatus
+batch-status-plant.ts                      export async function savePlantBatchStatus
+batch-status-plant.ts                      export async function executePlantStatusConversion
+physical-inventory.ts                      export async function writeInventoryDocument
+physical-inventory.ts                      export async function createPhysicalInventory
+physical-inventory.ts                      export async function cancelPhysicalInventory
+physical-inventory.ts                      export async function listPhysicalInventory
+physical-inventory.ts                      export async function lockStockScope
+physical-inventory.ts                      export async function tryLockStockScope
+physical-inventory.ts                      export async function assertInventoryCountOpen
+unit-conversion.ts                         export async function toBaseQuantity
+unit-conversion.ts                         export async function fromBaseQuantity
+unit-conversion.ts                         export function roundTo
+unit-conversion.ts                         export async function defineUomConversion
+unit-conversion.ts                         export async function listUomConversions
+unit-conversion.ts                         export async function listUnitsOfMeasure
+unit-conversion.ts                         export async function removeUomConversion
+physical-inventory-posting.ts              export async function getDifferencePosting
+physical-inventory-posting.ts              export async function validateDifferencePosting
+physical-inventory-posting.ts              export async function postDifferences
+physical-inventory-posting.ts              export async function getPostingHistory
+physical-inventory-posting.ts              export async function reverseDifferencePosting
+production-orders.ts                       export async function getProductionOrder
+production-orders.ts                       export async function previewProductionOrderBom
+production-orders.ts                       export async function createProductionOrder
+production-orders.ts                       export async function releaseProductionOrder
+initial-batch-status.ts                    export async function decideInitialRestrictedUse
+initial-batch-status.ts                    export async function listInitialBatchStatus
+initial-batch-status.ts                    export async function saveInitialBatchStatus
+batch-pickup.ts                            export async function listBatchPickup
+shelf-life-list.ts                         export function businessDate
+shelf-life-list.ts                         export async function listShelfLife
+material-group-definition.ts               export async function listMaterialGroups
+material-group-definition.ts               export async function saveMaterialGroup
+material-group-definition.ts               export async function setMaterialGroupActive
+material-group-definition.ts               export async function deleteMaterialGroup
+batch-number-range.ts                      export function displayBatchNumber
+batch-number-range.ts                      export async function getBatchNumberRanges
+batch-number-range.ts                      export async function saveBatchNumberInterval
+batch-number-range.ts                      export async function deleteBatchNumberInterval
+batch-number-range.ts                      export async function adjustBatchNumberStatus
+batch-number-range.ts                      export async function assertExternalBatchNumber
+stock-posting-date.ts                      export async function stockOnPostingDate
+industry-sector-definition.ts              export async function listIndustrySectors
+industry-sector-definition.ts              export async function saveIndustrySector
+industry-sector-definition.ts              export async function setIndustrySectorActive
+industry-sector-definition.ts              export async function deleteIndustrySector
+goods-issue.ts                             export async function getMaterialPeriodControlInTx
+goods-issue.ts                             export async function postGoodsIssue
+scheduling-profile.ts                      export async function listSchedulingProfiles
+scheduling-profile.ts                      export async function saveSchedulingProfile
+scheduling-profile.ts                      export async function assignSchedulingProfile
+scheduling-profile.ts                      export async function readMaterialSchedulingProfile
+scheduling-profile.ts                      export async function ensureOrderBatch
+movement-type-configuration.ts             export async function listMovementTypes
+movement-type-configuration.ts             export async function checkMovementType
+movement-type-configuration.ts             export async function saveMovementType
+movement-type-configuration.ts             export async function deleteMovementType
+batch-strategy-type.ts                     export async function listBatchStrategyTypes
+batch-strategy-type.ts                     export async function saveBatchStrategyType
+batch-strategy-type.ts                     export async function deleteBatchStrategyType
+material-document-accounting.ts            export async function readJournalStatus
+material-document-accounting.ts            export function describeJournalAccounting
+material-document-accounting.ts            export function accountingForOriginal
+batch-conversion.ts                        export async function listConversionChecks
+batch-conversion.ts                        export async function checkBatchConversion
+batch-conversion.ts                        export function executeBatchConversion
+development-fixture.ts                     export async function seedDevelopmentMaterials
+batch-class.ts                             export async function listBatchClasses
+batch-class.ts                             export async function saveBatchClass
+batch-class.ts                             export function evaluateBatchClass
+batch-sort-sequence.ts                     export async function listSortSequences
+batch-sort-sequence.ts                     export async function saveSortSequence
+batch-sort-sequence.ts                     export async function deleteSortSequence
+batch-sort-sequence.ts                     export async function rankSuppliedCandidates
+batch-sort-sequence.ts                     export function determineBatches
+### purchasing
+scheduling-agreement-schedule-display.ts   export async function openDeliveryScheduleDisplay
+scheduling-agreement-schedule-display.ts   export async function deliveryScheduleHistory
+purchase-order-list.ts                     export async function listPurchaseOrders
+release.ts                                 export async function getDocumentRelease
+release.ts                                 export async function listDocumentReleases
+release.ts                                 export async function requisitionAttributes
+release.ts                                 export async function orderAttributes
+release.ts                                 export async function syncDocumentRelease
+release.ts                                 export async function assertDocumentNotReleased
+release.ts                                 export async function releaseDocument
+release.ts                                 export async function cancelDocumentRelease
+follow-on.ts                               export async function convertMoney
+follow-on.ts                               export async function copyRequisition
+follow-on.ts                               export async function adoptQuotation
+follow-on.ts                               export async function settleQuota
+follow-on.ts                               export async function updateInfoRecordFromOrder
+follow-on.ts                               export async function orderDraftFromQuotation
+follow-on.ts                               export async function orderDraftFromRequisition
+po-account-assignment.ts                   export async function purchaseOrdersByAccountAssignment
+receipt-unit-basis.ts                      export function receiptMovementSign
+info-record.ts                             export async function previewPurchasingInfoRecord
+info-record.ts                             export async function createPurchasingInfoRecord
+info-record.ts                             export async function writePurchasingInfoRecord
+info-record.ts                             export async function changePurchasingInfoRecord
+info-record.ts                             export async function writePurchasingInfoRecordChange
+info-record.ts                             export async function previewPurchasingInfoRecordChange
+info-record.ts                             export async function resolvePurchasingInfoRecord
+info-record.ts                             export async function findPurchasingInfoRecord
+info-record.ts                             export async function getPurchasingInfoRecord
+info-record.ts                             export async function infoRecordChoices
+parked-invoice.ts                          export async function previewParkedInvoice
+parked-invoice.ts                          export async function parkSupplierInvoice
+parked-invoice.ts                          export async function previewParkedInvoiceChange
+parked-invoice.ts                          export async function changeParkedInvoice
+parked-invoice.ts                          export async function postParkedInvoice
+parked-invoice.ts                          export async function deleteParkedInvoice
+parked-invoice.ts                          export async function getParkedInvoice
+parked-invoice.ts                          export async function openOrderForPark
+parked-invoice.ts                          export async function listRecentParkedInvoices
+vendor-evaluation.ts                       export async function listVendorEvaluation
+vendor-evaluation.ts                       export async function checkVendorEvaluation
+vendor-evaluation.ts                       export async function saveManualScore
+quotation-display.ts                       export async function displayQuotation
+quotation-display.ts                       export async function displayQuotationForRequest
+quotation-display.ts                       export async function listRecentDisplayedQuotations
+purchase-order-display.ts                  export function assignedShare
+purchase-order-display.ts                  export async function displayPurchaseOrder
+purchase-order-display.ts                  export async function searchPurchaseOrders
+purchase-order-display.ts                  export async function openPurchaseOrderDisplay
+purchasing-org-plant-assignment.ts         export async function listPurchasingOrgPlantAssignments
+purchasing-org-plant-assignment.ts         export async function checkPurchasingOrgPlant
+purchasing-org-plant-assignment.ts         export async function assignPurchasingOrgPlant
+purchasing-org-plant-assignment.ts         export async function removePurchasingOrgPlant
+source-list.ts                             export async function previewSourceListEntry
+source-list.ts                             export async function createSourceListEntry
+source-list.ts                             export async function writeSourceListEntry
+source-list.ts                             export async function previewSourceListChange
+source-list.ts                             export async function changeSourceListEntry
+source-list.ts                             export async function writeSourceListChange
+source-list.ts                             export async function resolveSourceList
+source-list.ts                             export async function getSourceListEntry
+source-list.ts                             export async function getSourceList
+source-list.ts                             export async function listRecentSourceEntries
+quotation-comparison.ts                    export async function compareQuotations
+quotation.ts                               export function pricePerUnit
+quotation.ts                               export async function previewQuotation
+quotation.ts                               export async function previewQuotationChange
+quotation.ts                               export async function createQuotation
+quotation.ts                               export async function writeQuotation
+quotation.ts                               export async function changeQuotation
+quotation.ts                               export async function writeQuotationChange
+quotation.ts                               export async function openQuotation
+quotation.ts                               export async function listRecentQuotationRequests
+quotation.ts                               export async function getQuotation
+scheduling-agreement-release.ts            export async function saveReleaseProfile
+scheduling-agreement-release.ts            export async function assignReleaseProfile
+scheduling-agreement-release.ts            export async function createSchedulingAgreementReleases
+scheduling-agreement-release.ts            export async function listSchedulingAgreementReleases
+invoice-verification.ts                    export async function getInvoiceOrder
+invoice-verification.ts                    export async function listInvoiceTaxCodes
+invoice-verification.ts                    export async function getSupplierInvoice
+invoice-verification.ts                    export async function postSupplierInvoice
+invoice-verification.ts                    export async function cancelSupplierInvoice
+invoice-overview.ts                        export async function listInvoiceOverview
+invoice-overview.ts                        export async function readInvoiceOverviewDocument
+blocked-invoice.ts                         export async function activeBlockedInvoiceNumbers
+blocked-invoice.ts                         export async function listBlockedInvoices
+blocked-invoice.ts                         export async function listBlockEvents
+blocked-invoice.ts                         export async function previewPaymentBlock
+blocked-invoice.ts                         export async function placePaymentBlock
+blocked-invoice.ts                         export async function releasePaymentBlock
+scheduling-agreement.ts                    export async function createSchedulingAgreement
+scheduling-agreement.ts                    export async function changeSchedulingAgreement
+scheduling-agreement.ts                    export async function getSchedulingAgreement
+scheduling-agreement.ts                    export async function listSchedulingAgreements
+scheduling-agreement.ts                    export async function schedulingAgreementChoices
+contract.ts                                export async function createPurchaseContract
+contract.ts                                export async function changePurchaseContract
+contract.ts                                export async function getPurchaseContract
+contract.ts                                export async function contractChoices
+contract.ts                                export async function listPurchaseContracts
+contract.ts                                export async function assertPurchaseContractCallOff
+scheduling-agreement-schedule.ts           export async function maintainDeliverySchedule
+scheduling-agreement-schedule.ts           export async function readDeliverySchedule
+rfq.ts                                     export async function previewRequestForQuotation
+rfq.ts                                     export async function createRequestForQuotation
+rfq.ts                                     export async function writeRequestForQuotation
+rfq.ts                                     export async function listRecentRequestsForQuotation
+rfq.ts                                     export async function getRequestForQuotation
+rfq.ts                                     export async function previewRequestForQuotationChange
+rfq.ts                                     export async function changeRequestForQuotation
+rfq.ts                                     export async function writeRequestForQuotationChange
+rfq.ts                                     export async function resolveRequestForQuotation
+orders.ts                                  export async function listOrders
+orders.ts                                  export async function getOrder
+orders.ts                                  export async function createOrder
+orders.ts                                  export async function changeOrder
+orders.ts                                  export async function orderChoices
+requisition-list.ts                        export async function listPurchaseRequisitions
+scheduling-agreement-display.ts            export async function openSchedulingAgreementDisplay
+requisitions.ts                            export async function listRequisitions
+requisitions.ts                            export async function getRequisition
+requisitions.ts                            export async function createRequisition
+requisitions.ts                            export async function changeRequisition
+requisitions.ts                            export async function requisitionChoices
+contract-display.ts                        export async function openPurchaseContractDisplay
+grir-clearing.ts                           export function refuseNamed
+grir-clearing.ts                           export async function listGrIrResiduals
+grir-clearing.ts                           export async function listGrIrMaintenance
+grir-clearing.ts                           export async function previewGrIrClearing
+grir-clearing.ts                           export async function postGrIrClearing
+grir-clearing.ts                           export async function reverseGrIrClearing
+quota-arrangement.ts                       export function rateQuota
+quota-arrangement.ts                       export async function previewQuotaArrangement
+quota-arrangement.ts                       export async function createQuotaArrangement
+quota-arrangement.ts                       export async function writeQuotaArrangement
+quota-arrangement.ts                       export async function previewQuotaChange
+quota-arrangement.ts                       export async function changeQuotaArrangement
+quota-arrangement.ts                       export async function writeQuotaChange
+quota-arrangement.ts                       export async function listQuotaArrangements
+quota-arrangement.ts                       export async function listRecentQuotaArrangements
+quota-arrangement.ts                       export async function getQuotaArrangement
+quota-arrangement.ts                       export async function previewQuotaSelection
+### production
+production-order-status.ts                 export function parseProductionOrderStatus
+production-order-status.ts                 export function productionOrderMayBeCharged
+production-order-status.ts                 export function confirmationBlockReason
+production-order-status.ts                 export function priorStatusFromRelease
+material-bom.ts                            export function bomCapability
+material-bom.ts                            export function holdsMaterialBomAuthority
+material-bom.ts                            export function createMaterialBom
+material-bom.ts                            export function changeMaterialBom
+material-bom.ts                            export async function getMaterialBom
+material-bom.ts                            export async function listMaterialBoms
+material-bom.ts                            export async function resolveMaterialBom
+material-bom.ts                            export async function selectEffectiveMaterialBom
+material-bom.ts                            export async function listBomUsages
+material-bom.ts                            export async function listBomStatuses
+material-bom.ts                            export async function listBomItemCategories
+material-bom.ts                            export async function saveBomUsage
+material-bom.ts                            export async function saveBomStatus
+material-bom.ts                            export async function saveBomItemCategory
+mrp-explosion.ts                           export function componentRequirementQuantity
+mrp-explosion.ts                           export async function explodePlannedSupply
+production-order-change.ts                 export function productionOrderChangeRefusal
+production-order-change.ts                 export function holdsProductionOrderChangeAuthority
+production-order-change.ts                 export async function changeProductionOrder
+production-order-change.ts                 export async function technicallyCompleteProductionOrder
+production-order-change.ts                 export async function revokeTechnicalCompletion
+production-order-display.ts                export function productionOrderDisplayRefusal
+production-order-display.ts                export function holdsProductionOrderDisplayAuthority
+production-order-display.ts                export async function getProductionOrderDisplay
+production-order-display.ts                export async function listProductionOrders
+work-center.ts                             export function workCenterCapability
+work-center.ts                             export function holdsWorkCenterAuthority
+work-center.ts                             export async function saveWorkCenterCategory
+work-center.ts                             export async function listWorkCenterCategories
+work-center.ts                             export async function listWorkCenters
+work-center.ts                             export async function getWorkCenter
+work-center.ts                             export async function createWorkCenter
+work-center.ts                             export async function changeWorkCenter
+order-availability.ts                      export function orderAvailabilityRefusal
+order-availability.ts                      export function holdsOrderAvailabilityAuthority
+order-availability.ts                      export function businessFunctionForStatus
+order-availability.ts                      export async function checkOrderAvailability
+order-bom-snapshot.ts                      export async function resolveOrderBomSnapshot
+confirmation-cancel.ts                     export function holdsConfirmationCancelAuthority
+confirmation-cancel.ts                     export async function loadConfirmationCancellation
+confirmation-cancel.ts                     export async function cancelConfirmation
+planned-order-change.ts                    export function plannedOrderChangeRefusal
+planned-order-change.ts                    export function holdsPlannedOrderChangeAuthority
+planned-order-change.ts                    export async function changePlannedOrder
+mrp-structure.ts                           export async function structuralBomLevels
+order-confirmation.ts                      export function orderConfirmationRefusal
+order-confirmation.ts                      export function holdsOrderConfirmationAuthority
+order-confirmation.ts                      export function operationEffectQuantity
+order-confirmation.ts                      export function scaledEffectWithinLimit
+order-confirmation.ts                      export async function loadOrderConfirmation
+order-confirmation.ts                      export async function previewOrderConfirmation
+order-confirmation.ts                      export async function enterOrderConfirmation
+order-confirmation.ts                      export async function getOrderConfirmation
+conversion-outcome.ts                      export function pairedConversion
+conversion-outcome.ts                      export function conversionOutcomeText
+conversion-outcome.ts                      export function summarizeConversionResults
+availability-check.ts                      export function availabilityCheckRefusal
+availability-check.ts                      export async function listAvailabilityCheck
+availability-check.ts                      export async function saveCheckingGroup
+availability-check.ts                      export async function saveCheckingRule
+availability-check.ts                      export async function assignCheckingGroup
+availability-check.ts                      export async function saveScopeOfCheck
+stock-requirements.ts                      export async function stockRequirementsList
+order-information.ts                       export function orderInformationLists
+order-information.ts                       export function orderInformationFields
+order-information.ts                       export function orderInformationRefusal
+order-information.ts                       export function holdsOrderInformationAuthority
+order-information.ts                       export async function runOrderInformation
+order-information.ts                       export async function listOrderInformationLayouts
+order-information.ts                       export async function saveOrderInformationLayout
+checking-control.ts                        export function holdsCheckingControlAuthority
+checking-control.ts                        export function checkingControlRefusal
+checking-control.ts                        export async function listCheckingControls
+checking-control.ts                        export async function saveCheckingControl
+production-version.ts                      export function productionVersionCapability
+production-version.ts                      export function holdsProductionVersionAuthority
+production-version.ts                      export function createProductionVersion
+production-version.ts                      export function changeProductionVersion
+production-version.ts                      export async function copyProductionVersion
+production-version.ts                      export async function getProductionVersion
+production-version.ts                      export async function listProductionVersions
+production-version.ts                      export async function checkProductionVersion
+production-version.ts                      export async function lockProductionVersion
+production-version.ts                      export async function deleteProductionVersion
+production-version.ts                      export async function selectProductionVersion
+production-version.ts                      export async function saveProductionVersionRule
+production-version.ts                      export async function listProductionVersionChoices
+confirmation-movements.ts                  export function movementRequestKey
+confirmation-movements.ts                  export async function planConfirmationMovements
+confirmation-movements.ts                  export async function movementConfiguration
+confirmation-movements.ts                  export function plannedMovements
+confirmation-movements.ts                  export async function postedMovements
+confirmation-movements.ts                  export async function movementStands
+wip-batch.ts                               export async function wipBatchActive
+wip-batch.ts                               export async function readWipBatchFlag
+wip-batch.ts                               export async function getWipBatchActivation
+wip-batch.ts                               export async function saveWipBatchActivation
+wip-batch.ts                               export function createWipBatch
+mrp-run.ts                                 export function mrpNamedRefusal
+mrp-run.ts                                 export async function getMrpRun
+mrp-run.ts                                 export async function listMrpRuns
+mrp-run.ts                                 export async function cancelMrpRun
+mrp-run.ts                                 export async function planMaterials
+mrp-run.ts                                 export function singleItemRefusal
+mrp-run.ts                                 export async function planSingleItem
+mrp-run.ts                                 export function singleLevelRefusal
+mrp-run.ts                                 export async function planSingleLevel
+time-ticket.ts                             export function timeTicketRefusal
+time-ticket.ts                             export function holdsTimeTicketAuthority
+time-ticket.ts                             export async function rows
+time-ticket.ts                             export function dateOf
+time-ticket.ts                             export function quantityText
+time-ticket.ts                             export function clock
+time-ticket.ts                             export function plainQuantity
+time-ticket.ts                             export async function decimalsOf
+time-ticket.ts                             export async function orderQuantityOf
+time-ticket.ts                             export async function headerOf
+time-ticket.ts                             export async function operationsOf
+time-ticket.ts                             export function remainingText
+time-ticket.ts                             export async function loadTimeTicket
+time-ticket.ts                             export async function previewTimeTicket
+time-ticket.ts                             export async function enterTimeTicket
+time-ticket.ts                             export async function getTimeTicket
+order-type-parameters.ts                   export function holdsOrderTypeParameterAuthority
+order-type-parameters.ts                   export function orderTypeParameterRefusal
+order-type-parameters.ts                   export async function listOrderTypeParameters
+order-type-parameters.ts                   export async function saveOrderTypeParameter
+order-type-parameters.ts                   export function productionVersionSelectionOf
+order-type-parameters.ts                   export async function readProductionVersionSelection
+order-type-parameters.ts                   export function productionVersionForSelection
+order-operation-snapshot.ts                export async function resolveOrderOperationSnapshot
+order-operation-snapshot.ts                export async function insertOrderOperationSnapshot
+planned-order-conversion.ts                export function plannedOrderConversionRefusal
+planned-order-conversion.ts                export function holdsPlannedOrderConvertAuthority
+planned-order-conversion.ts                export function holdsPlannedOrderCollectiveAuthority
+planned-order-conversion.ts                export async function previewPlannedOrderConversion
+planned-order-conversion.ts                export async function listConvertiblePlannedOrders
+planned-order-conversion.ts                export async function convertPlannedOrder
+planned-order-conversion.ts                export function notAttemptedConversion
+planned-order-conversion.ts                export function rolledBackConversion
+planned-order-conversion.ts                export async function convertPlannedOrders
+planned-order-conversion.ts                export async function listConversionLog
+routing.ts                                 export function routingCapability
+routing.ts                                 export function holdsRoutingAuthority
+routing.ts                                 export function createRouting
+routing.ts                                 export function changeRouting
+routing.ts                                 export async function getRouting
+routing.ts                                 export async function listRoutings
+routing.ts                                 export async function resolveRouting
+routing.ts                                 export async function selectEffectiveRouting
+routing.ts                                 export async function saveRoutingTaskListType
+routing.ts                                 export async function saveRoutingUsage
+routing.ts                                 export async function saveRoutingStatus
+routing.ts                                 export async function saveRoutingControlKey
+routing.ts                                 export async function saveRoutingStandardValueKey
+routing.ts                                 export async function listRoutingConfiguration
+planned-order-create.ts                    export function plannedOrderCreateRefusal
+planned-order-create.ts                    export function holdsPlannedOrderCreateAuthority
+planned-order-create.ts                    export async function createPlannedOrder
+planned-order-display.ts                   export function plannedOrderDisplayRefusal
+planned-order-display.ts                   export function holdsPlannedOrderDisplayAuthority
+planned-order-display.ts                   export async function getPlannedOrder
+planned-order-display.ts                   export async function listPlannedOrders
+production-order-type.ts                   export function holdsOrderTypeAuthority
+production-order-type.ts                   export function productionOrderTypeRefusal
+production-order-type.ts                   export async function listProductionOrderTypes
+production-order-type.ts                   export async function saveProductionOrderType
+### finance
+payment-run.ts                             export async function getPaymentRun
+payment-run.ts                             export async function listPaymentRuns
+payment-run.ts                             export async function listBankChoices
+payment-run.ts                             export async function createPaymentRun
+payment-run.ts                             export async function generateProposal
+payment-run.ts                             export async function executePaymentRun
+payment-run.ts                             export async function cancelPaymentRun
+fx-valuation.ts                            export async function executeFxValuation
+fx-valuation.ts                            export async function getFxValuationRun
+fx-valuation.ts                            export function fxValuationCsv
+gl-clearing.ts                             export async function getGlClearing
+gl-clearing.ts                             export async function clearGlItems
+gl-account-transfer.ts                     export async function listAccountSegments
+gl-account-transfer.ts                     export async function transferGlAccounts
+customer-clearing.ts                       export async function getCustomerClearing
+customer-clearing.ts                       export async function clearCustomerItems
+intercompany.ts                            export async function listIntercompanyConfigs
+intercompany.ts                            export async function saveIntercompanyConfig
+intercompany.ts                            export async function deleteIntercompanyConfig
+intercompany.ts                            export async function postIntercompany
+intercompany.ts                            export async function listCompanyChoices
+chart-of-accounts-copy.ts                  export async function copyChartOfAccounts
+chart-of-accounts-copy.ts                  export async function listChartCopies
+customer-balances.ts                       export async function getCustomerBalances
+customer-down-payment-request.ts           export async function resolveRequestTarget
+customer-down-payment-request.ts           export async function createCustomerDownPaymentRequest
+customer-down-payment-request.ts           export async function fulfilledSoFar
+customer-down-payment-request.ts           export async function getCustomerDownPaymentRequests
+customer-down-payment-request.ts           export async function applyRequestFulfillment
+customer-down-payment-request.ts           export async function downPaymentCreditLine
+vendor-down-payment-request.ts             export async function resolveRequestTarget
+vendor-down-payment-request.ts             export async function createVendorDownPaymentRequest
+vendor-down-payment-request.ts             export async function fulfilledSoFar
+vendor-down-payment-request.ts             export async function getVendorDownPaymentRequests
+vendor-down-payment-request.ts             export async function applyVendorRequestFulfillment
+vendor-down-payment-request.ts             export async function downPaymentDebitLine
+asset-history.ts                           export async function getAssetHistorySheet
+asset-history.ts                           export function assetHistoryCsv
+profit-loss.ts                             export async function calculateProfitLoss
+subledger-tie-out.ts                       export async function calculateSubledgerTie
+close-cockpit.ts                           export function periodEndDate
+close-cockpit.ts                           export function findDependencyCycle
+close-cockpit.ts                           export async function upsertTemplateTask
+close-cockpit.ts                           export async function listTemplateTasks
+close-cockpit.ts                           export async function createTaskListFromTemplate
+close-cockpit.ts                           export async function getTaskList
+close-cockpit.ts                           export async function listTaskLists
+close-cockpit.ts                           export async function listTasks
+close-cockpit.ts                           export async function listExecutions
+close-cockpit.ts                           export async function listEvents
+close-cockpit.ts                           export async function releaseTaskList
+close-cockpit.ts                           export async function executeTask
+close-cockpit.ts                           export async function processScheduledExecutions
+close-cockpit.ts                           export async function attachEvidence
+close-cockpit.ts                           export async function signOffTask
+close-cockpit.ts                           export async function overrideTaskStatus
+close-cockpit.ts                           export async function reopenTask
+close-cockpit.ts                           export async function finalizeTaskList
+cash-flow.ts                               export async function calculateCashflow
+trial-balance.ts                           export async function calculateTrialBalance
+trial-balance.ts                           export async function listStatementVersions
+outgoing-payment.ts                        export async function getPayables
+outgoing-payment.ts                        export async function postOutgoingPayment
+customer-down-payment-clearing.ts          export async function getCustomerDownPaymentClearing
+customer-down-payment-clearing.ts          export async function clearCustomerDownPayments
+customer-down-payment.ts                   export async function postCustomerDownPayment
+customer-down-payment.ts                   export async function getCustomerDownPayments
+gl-balances.ts                             export async function getGlBalances
+gl-balances.ts                             export async function getGlBalanceReport
+asset-master.ts                            export async function createAsset
+asset-master.ts                            export async function changeAsset
+asset-master.ts                            export async function changeAssetAssignment
+asset-master.ts                            export async function changeAssetDepreciation
+asset-master.ts                            export async function deactivateAsset
+asset-master.ts                            export async function getAsset
+asset-master.ts                            export async function listAssets
+carryforward.ts                            export async function executeCarryforward
+carryforward.ts                            export async function getCarryforwardRun
+carryforward.ts                            export async function listCarryforwardRuns
+carryforward.ts                            export async function listCarryforwardResults
+vendor-down-payment.ts                     export async function resolveSpecialGlAccount
+vendor-down-payment.ts                     export async function postVendorDownPayment
+vendor-down-payment.ts                     export async function getVendorDownPayments
+journal-items.ts                           export async function getJournalItems
+consolidated-statements.ts                 export async function calculateConsolidatedStatements
+asset-acquisition.ts                       export async function simulateAssetAcquisition
+asset-acquisition.ts                       export async function postAssetAcquisition
+asset-acquisition.ts                       export async function reverseAssetAcquisition
+asset-acquisition.ts                       export async function getAssetTransactions
+parked-journal.ts                          export async function parkJournal
+parked-journal.ts                          export async function editParkedJournal
+parked-journal.ts                          export async function completeParkedJournal
+parked-journal.ts                          export async function postParkedJournal
+parked-journal.ts                          export async function deleteParkedJournal
+parked-journal.ts                          export async function listParkedJournals
+parked-journal.ts                          export async function getParkedJournal
+clearing-reset.ts                          export async function getClearingDocument
+clearing-reset.ts                          export async function resetClearing
+customer-invoice.ts                        export async function getCustomerInvoice
+customer-invoice.ts                        export async function listCustomerInvoiceTaxCodes
+customer-invoice.ts                        export async function postCustomerInvoice
+customer-invoice.ts                        export async function cancelCustomerInvoice
+ageing-derivation.ts                       export function validateAgeingSelection
+ageing-derivation.ts                       export async function deriveAgeingItems
+ageing-derivation.ts                       export function aggregateAgeingPartners
+credit.ts                                  export async function getCreditExposure
+credit.ts                                  export async function getCustomerCredit
+credit.ts                                  export async function listCreditConfig
+credit.ts                                  export async function saveCustomerCredit
+credit.ts                                  export async function listCreditAudit
+credit.ts                                  export async function evaluateCreditCheck
+credit.ts                                  export async function listCreditMonitor
+credit.ts                                  export async function checkSalesDocumentCredit
+credit.ts                                  export async function listCreditDeterminations
+credit.ts                                  export async function recheckDocument
+credit.ts                                  export async function releaseDocument
+credit.ts                                  export async function releaseDocumentsBulk
+credit.ts                                  export async function rejectReleaseRequest
+credit.ts                                  export async function reblockDocument
+credit.ts                                  export async function listReleaseEvents
+customer-ageing.ts                         export async function getCustomerAgeing
+accrual.ts                                 export async function postAccrualDocument
+accrual.ts                                 export async function getAccrualDocument
+accrual.ts                                 export async function listDueAccruals
+accrual.ts                                 export async function listAccrualDocuments
+accrual.ts                                 export async function executeAccrualReversal
+asset-retirement.ts                        export async function simulateAssetRetirement
+asset-retirement.ts                        export async function postAssetRetirement
+asset-retirement.ts                        export async function reverseAssetRetirement
+asset-retirement.ts                        export async function getAssetRetirements
+asset-retirement.ts                        export async function listRetireableAssets
+balance-sheet.ts                           export async function calculateBalanceSheet
+gl-account-group-maintenance.ts            export async function listAccountGroups
+gl-account-group-maintenance.ts            export async function accountGroupFieldStatusMatrices
+gl-account-group-maintenance.ts            export async function accountGroupChoices
+gl-account-group-maintenance.ts            export async function groupAccountChoices
+gl-account-group-maintenance.ts            export async function saveAccountGroup
+gl-account-group-maintenance.ts            export async function setAccountGroupActive
+gl-account-group-maintenance.ts            export async function saveAccountGroupFieldStatus
+vendor-down-payment-clearing.ts            export async function getDownPaymentClearing
+vendor-down-payment-clearing.ts            export async function clearDownPayments
+dunning.ts                                 export async function getDunningRun
+dunning.ts                                 export async function listDunningRuns
+dunning.ts                                 export async function proposeDunningRun
+dunning.ts                                 export async function excludeDunningAccount
+dunning.ts                                 export async function finalizeDunningRun
+dunning.ts                                 export async function cancelDunningRun
+vendor-balances.ts                         export async function getVendorBalances
+consolidation-monitor.ts                   export async function getConsolidationMonitor
+consolidation-monitor.ts                   export async function executeConsolidationTask
+consolidation-monitor.ts                   export async function executeConsolidationTaskGroup
+consolidation-monitor.ts                   export async function cancelConsolidationExecution
+gl-account-vocabulary.ts                   export function deriveGlAccountType
+gl-account-vocabulary.ts                   export function deriveIsBalanceSheet
+gl-account-vocabulary.ts                   export function isBalanceSheetAccountType
+gl-account-vocabulary.ts                   export function accountNumberInRange
+gl-account-vocabulary.ts                   export function resolveFieldStatus
+vendor-credit-memo.ts                      export async function getVendorCreditMemo
+vendor-credit-memo.ts                      export async function postVendorCreditMemo
+asset-depreciation.ts                      export async function executeDepreciationRun
+asset-depreciation.ts                      export async function listDepreciationRuns
+asset-depreciation.ts                      export async function getDepreciationRunItems
+asset-depreciation.ts                      export async function getPostedDepreciation
+document-display.ts                        export async function getJournalDocument
+document-display.ts                        export async function resolveDocumentNumber
+ledger-journal.ts                          export function ledgerJournalStatus
+gl-document.ts                             export async function postGlDocument
+tax-report.ts                              export async function executeTaxReport
+tax-report.ts                              export async function listTaxReturnRuns
+document-reversal.ts                       export async function getDocumentForReversal
+document-reversal.ts                       export async function reverseDocument
+consolidation-workbench.ts                 export async function listConsolidationAreas
+consolidation-workbench.ts                 export async function getConsolidationWorkbench
+consolidation-workbench.ts                 export async function saveDataBasis
+consolidation-workbench.ts                 export async function saveArea
+consolidation-workbench.ts                 export async function saveUnit
+consolidation-workbench.ts                 export async function saveGroup
+consolidation-workbench.ts                 export async function assignUnit
+consolidation-workbench.ts                 export async function saveGroupAccount
+consolidation-workbench.ts                 export async function saveMapping
+consolidation-workbench.ts                 export async function saveMethod
+consolidation-workbench.ts                 export async function saveVersion
+consolidation-workbench.ts                 export async function saveTask
+consolidation-workbench.ts                 export async function activateArea
+vendor-clearing.ts                         export async function getVendorClearing
+vendor-clearing.ts                         export async function clearVendorItems
+grir-reclass.ts                            export async function executeGrIrAnalysis
+grir-reclass.ts                            export async function getGrIrRun
+grir-reclass.ts                            export function grIrCsv
+vendor-ageing.ts                           export async function getVendorAgeing
+vendor-ageing.ts                           export function vendorAgeingCsv
+vendor-invoice.ts                          export async function getVendorInvoice
+vendor-invoice.ts                          export async function listVendorInvoiceTaxCodes
+vendor-invoice.ts                          export async function postVendorInvoice
+vendor-invoice.ts                          export async function cancelVendorInvoice
+incoming-payment.ts                        export async function getReceivables
+incoming-payment.ts                        export async function postIncomingPayment
+### sales
+billing.ts                                 export async function getBilling
+billing.ts                                 export async function listBillableDeliveries
+billing.ts                                 export async function listBillings
+billing.ts                                 export async function createBillingFromDelivery
+billing.ts                                 export async function postBillingDocument
+billing.ts                                 export async function cancelBillingDocument
+billing.ts                                 export async function salesDocumentFlow
+billing.ts                                 export async function goodsIssueStands
+pricing.ts                                 export function itemNetAmount
+pricing.ts                                 export async function resolveCustomerSalesData
+pricing.ts                                 export async function priceItem
+pricing.ts                                 export async function assertMaterialAtPlant
+exposure.ts                                export async function openSalesCommitments
+delivery.ts                                export async function standingDetermination
+delivery.ts                                export async function getDelivery
+delivery.ts                                export async function listDeliverableOrderLines
+delivery.ts                                export async function listDeliveries
+delivery.ts                                export async function createDelivery
+delivery.ts                                export async function confirmDeliveryPicks
+delivery.ts                                export async function postDeliveryGoodsIssue
+delivery.ts                                export async function cancelDelivery
+conditions.ts                              export async function saveSalesCondition
+conditions.ts                              export async function listSalesConditions
+fulfillment-quantities.ts                  export async function orderLineProgress
+fulfillment-quantities.ts                  export async function fulfillmentDocumentsOf
+fulfillment-quantities.ts                  export function deliveredOf
+fulfillment-quantities.ts                  export function billedOf
+sales-order.ts                             export async function creditAreaFor
+sales-order.ts                             export async function getSalesOrder
+sales-order.ts                             export async function createSalesOrder
+sales-order.ts                             export async function changeSalesOrder
+sales-order.ts                             export async function cancelSalesOrder
+sales-order.ts                             export async function listSalesOrderDocuments
+sales-order.ts                             export async function salesOrderChoices
+sales-order.ts                             export async function releaseSalesOrderCredit
+### quality
+lot.ts                                     export async function openLot
+lot.ts                                     export async function getLot
+lot.ts                                     export async function listLots
+lot.ts                                     export async function listInspectableLines

@@ -1,5 +1,5 @@
 /**
- * Standard configuration package — CAIRN.md §7.3, `INTL-STD-3`
+ * Standard configuration package — CAIRN.md §7.3, `INTL-STD-4`
  *
  * Activatable in one action, versioned, and used as the fixture for every
  * automated test. Its purpose is not to fill screens with sample data: it is to
@@ -19,7 +19,10 @@
  * the fiscal year variant and its periods, the posting period variant and its
  * interval rules, document types, exchange rates, distribution channels,
  * divisions, purchasing groups, the supplier partner-function catalogue, material
- * types, groups and valuation classes, and payment terms.
+ * types, groups and valuation classes, payment terms, and — since `INTL-STD-4` — the
+ * standard financial statement version with its nodes and account ranges, which the three
+ * closing reports refuse to run without. That version used to be written by the
+ * installation seed alone, which only reaches tenants that already stood when it ran.
  *
  * The enterprise structure a fixture needs now comes from
  * `src/platform/tenancy/standard-structure.ts`, which reproduces the rows this
@@ -49,7 +52,10 @@ import {
   purchasingGroup,
   supplierPartnerFunction,
 } from './schema';
-import { assetClass, assetTransactionType, depreciationArea, depreciationKey, glAccount, reversalReason } from '../finance/schema';
+import {
+  assetClass, assetTransactionType, depreciationArea, depreciationKey, glAccount, reversalReason,
+  financialStatementAssignment, financialStatementNode, financialStatementVersion,
+} from '../finance/schema';
 import { glAccountGroup } from '../finance/gl-account-group-schema';
 import {
   deriveGlAccountType,
@@ -61,7 +67,11 @@ import {
 // Bumped from INTL-STD-2 when the company-specific half left the package: the
 // version is the object key of the package's change document, so tenants
 // configured before and after the split are distinguishable in the audit trail.
-export const STANDARD_PACKAGE_VERSION = 'INTL-STD-3';
+// Bumped again for INTL-STD-4, when the standard financial statement version moved
+// out of the installation seed into the package. A tenant configured by INTL-STD-3
+// or earlier stands no version until `npm run seed` runs after its creation; that is
+// precisely the difference the audit trail has to be able to name.
+export const STANDARD_PACKAGE_VERSION = 'INTL-STD-4';
 
 /**
  * The Account Group the standard package defines for its chart (FS00).
@@ -98,6 +108,8 @@ export interface PackageResult {
   periods: number;
   accountsReceivableAccount: string;
   accountsPayableAccount: string;
+  /** The financial statement version the package stands, so the caller can report it. */
+  statementVersion: string;
 }
 
 /**
@@ -208,6 +220,45 @@ const CHART_OF_ACCOUNTS: AccountSpec[] = [
   { number: '610000', name: 'Assessment cost element', type: 'EXPENSE', isBalanceSheet: false, requiresCostObject: true },
   { number: '620000', name: 'Distribution cost element', type: 'EXPENSE', isBalanceSheet: false, requiresCostObject: true },
 ];
+
+/**
+ * The standard financial statement version: one header bound to the chart, the
+ * eight nodes of the reference statement, and the five account ranges that place
+ * the chart's accounts on them. The rows are the ones `scripts/seed.ts` has always
+ * delivered, verbatim — this moves who stands them, it adds no accounting.
+ *
+ * Two properties the writers of the package must keep. Node order is load-bearing:
+ * a parent must be inserted before its child, because the node table carries a
+ * self-foreign-key, and the readers lay the statement out by `sequence, node`. The
+ * ranges follow the chart's documented numbering — 1 assets, 2 liabilities and
+ * equity, 3 revenue, 4 cost of sales, 5 operating expenses — which leaves the
+ * 6xxxxx allocation accounts outside the hierarchy on purpose: an account with
+ * postings and no assignment is reported as unassigned with a warning rather than
+ * folded into a line that does not belong to it. Whether the standard should carry
+ * an allocation node is an open decision, not something this file may invent.
+ */
+export const STANDARD_STATEMENT_VERSION = {
+  version: 'INT',
+  name: 'International financial statement',
+  nodes: [
+    { node: 'BS', description: 'Balance sheet', parentNode: null, sequence: 10 },
+    { node: 'ASSETS', description: 'Assets', parentNode: 'BS', sequence: 10 },
+    { node: 'LIAEQ', description: 'Liabilities and equity', parentNode: 'BS', sequence: 20 },
+    { node: 'LIABILITIES', description: 'Liabilities', parentNode: 'LIAEQ', sequence: 10 },
+    { node: 'EQUITY', description: 'Equity', parentNode: 'LIAEQ', sequence: 20 },
+    { node: 'PL', description: 'Profit and loss', parentNode: null, sequence: 20 },
+    { node: 'REVENUE', description: 'Revenue', parentNode: 'PL', sequence: 10 },
+    { node: 'EXPENSES', description: 'Expenses', parentNode: 'PL', sequence: 20 },
+  ] satisfies Array<{ node: string; description: string; parentNode: string | null; sequence: number }>,
+  /** The debit side presents normally; the credit sides are inverted, as the reference statement does. */
+  assignments: [
+    { node: 'ASSETS', accountFrom: '100000', accountTo: '199999', presentationSign: 'NORMAL' },
+    { node: 'LIABILITIES', accountFrom: '200000', accountTo: '279999', presentationSign: 'INVERTED' },
+    { node: 'EQUITY', accountFrom: '280000', accountTo: '299999', presentationSign: 'INVERTED' },
+    { node: 'REVENUE', accountFrom: '300000', accountTo: '399999', presentationSign: 'INVERTED' },
+    { node: 'EXPENSES', accountFrom: '400000', accountTo: '599999', presentationSign: 'NORMAL' },
+  ] satisfies Array<{ node: string; accountFrom: string; accountTo: string; presentationSign: 'NORMAL' | 'INVERTED' }>,
+};
 
 /** Document types and the number ranges they consume (§8.2). */
 const DOCUMENT_TYPES: Array<{
@@ -363,6 +414,55 @@ export async function applyStandardPackage(
       createdBy: activatedBy,
     })
     .onConflictDoNothing();
+
+  /* ── Financial statement version (F.01, FIN.RPT.TRIALBALANCE / .BALANCESHEET / .PROFITLOSS) ─
+     The three closing reports resolve their layout from a version bound to the company's
+     chart, and they refuse without one — "Financial statement version X does not stand.",
+     with the remedy "Configure the FSV first.". A tenant must not need a second, later
+     command to be able to read its own ledger, so the version stands here with the chart it
+     binds to. Every write is existence-tolerant like the rest of the package: the seed's
+     backfill for older tenants and a repeated activation both find the rows already there. */
+  await tx
+    .insert(financialStatementVersion)
+    .values({
+      client,
+      version: STANDARD_STATEMENT_VERSION.version,
+      name: STANDARD_STATEMENT_VERSION.name,
+      chartOfAccounts: coaKey,
+      isActive: true,
+      createdBy: activatedBy,
+    })
+    .onConflictDoNothing();
+
+  for (const node of STANDARD_STATEMENT_VERSION.nodes) {
+    await tx
+      .insert(financialStatementNode)
+      .values({
+        client,
+        version: STANDARD_STATEMENT_VERSION.version,
+        node: node.node,
+        description: node.description,
+        parentNode: node.parentNode,
+        sequence: node.sequence,
+        createdBy: activatedBy,
+      })
+      .onConflictDoNothing();
+  }
+
+  for (const assignment of STANDARD_STATEMENT_VERSION.assignments) {
+    await tx
+      .insert(financialStatementAssignment)
+      .values({
+        client,
+        version: STANDARD_STATEMENT_VERSION.version,
+        node: assignment.node,
+        accountFrom: assignment.accountFrom,
+        accountTo: assignment.accountTo,
+        presentationSign: assignment.presentationSign,
+        createdBy: activatedBy,
+      })
+      .onConflictDoNothing();
+  }
 
   /* ── Fiscal year variant and its periods ─────────────────────────────────── */
   const fyv = {
@@ -592,6 +692,9 @@ export async function applyStandardPackage(
       fiscalYearVariant: fyvKey,
       periods: periodRows.length,
       supplierPartnerFunctions: SUPPLIER_PARTNER_FUNCTIONS.length,
+      statementVersion: STANDARD_STATEMENT_VERSION.version,
+      statementNodes: STANDARD_STATEMENT_VERSION.nodes.length,
+      statementAssignments: STANDARD_STATEMENT_VERSION.assignments.length,
     },
   });
 
@@ -652,5 +755,6 @@ export async function applyStandardPackage(
     periods: periodRows.length,
     accountsReceivableAccount: '110000',
     accountsPayableAccount: '200000',
+    statementVersion: STANDARD_STATEMENT_VERSION.version,
   };
 }

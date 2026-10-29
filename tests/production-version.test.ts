@@ -266,4 +266,22 @@ describe('production version', () => {
       materialNumber: 'FG-1', plant: '1000', keyDate: '2026-06-01', quantity: '10', unit: 'KG', context: 'COSTING',
     })).rejects.toBeInstanceOf(ProductionVersionError);
   });
+
+  it('reads a supplied null end of validity as open-ended and keeps an omitted one', async () => {
+    const created = await createProductionVersion(version({ productionVersion: '0006', lotFrom: '500', lotTo: '600', validTo: null }));
+    expect(created.validTo).toBe('9999-12-31');
+    const blank = await createProductionVersion(version({ productionVersion: '0007', lotFrom: '700', lotTo: '800', validTo: '' }));
+    expect(blank.validTo).toBe('9999-12-31');
+
+    const dated = await changeProductionVersion(version({
+      productionVersion: '0006', lotFrom: '500', lotTo: '600', version: created.version, validTo: '2026-12-31',
+    }));
+    expect(dated.validTo).toBe('2026-12-31');
+    const kept = await changeProductionVersion(version({ productionVersion: '0006', lotFrom: '500', lotTo: '600', version: dated.version }));
+    expect(kept.validTo).toBe('2026-12-31');
+    const cleared = await changeProductionVersion(version({
+      productionVersion: '0006', lotFrom: '500', lotTo: '600', version: kept.version, validTo: null,
+    }));
+    expect(cleared.validTo).toBe('9999-12-31');
+  });
 });

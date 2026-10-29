@@ -130,7 +130,7 @@ describe('tenant creation without a company', () => {
       creationType: 'standard',
     });
 
-    expect(result.packageVersion).toBe('INTL-STD-3');
+    expect(result.packageVersion).toBe('INTL-STD-4');
     expect(result.accountsCreated).toBe(75); // +590000 Loss on asset retirement (SCR-093)
 
     // What the package holds: data that is true for any company.

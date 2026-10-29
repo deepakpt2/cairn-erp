@@ -5,13 +5,16 @@ import { useActionState, useId, useState } from 'react';
 
 import type { RecordTypeDefinition } from '@/modules/people/record-types';
 import {
-  EMPTY,
   addRecordFieldAction,
   changeRecordFieldAction,
   changeRecordTypeAction,
   defineRecordTypeAction,
   type RecordTypeActionState,
 } from './actions';
+
+/** The state each form starts from. Kept here rather than imported from the actions module, because a
+ * `use server` file may export async functions only — see the note beside the same constant there. */
+const EMPTY: RecordTypeActionState = { ok: false };
 
 interface Props {
   types: RecordTypeDefinition[];

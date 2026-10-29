@@ -140,7 +140,7 @@ export default function OrderAvailabilityWorkbench({
           </p>
           {result.message ? (
             <p className="border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-              role="status" data-co09-state={result.status === 'NOT_CHECKED' ? 'not-checked' : 'incomplete-config'}>
+              role="status" data-co09-state={result.configurationGap ? 'incomplete-config' : 'not-checked'}>
               <span className="font-semibold">{result.message}</span>
               {result.remedy ? <span className="ms-2">{result.remedy}</span> : null}
             </p>
@@ -268,7 +268,7 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
                 {row.elements.map((element, index) => (
                   <tr key={`${element.date}|${element.elementType}|${element.documentNumber}|${index}`}
                     data-co09-element={element.elementType} data-co09-element-date={element.date}
-                    data-co09-own={element.ownDemand ? 'yes' : 'no'}>
+                    data-co09-element-unit={element.unit ?? ''} data-co09-own={element.ownDemand ? 'yes' : 'no'}>
                     <td className="code">{element.date}</td>
                     <td title={element.elementLabel}>{element.elementType}</td>
                     <td className="code">{element.documentNumber}</td>

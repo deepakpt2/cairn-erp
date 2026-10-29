@@ -84,6 +84,27 @@ describe('SCR-145 return delivery (MBRL)', () => {
                    (${client}, 'RET-OTHER', '1000', 'RAW_INVENTORY', 'MOVING_AVERAGE', 0, 0, 1, 'USD', ${ACTOR})
           on conflict do nothing
         `);
+        // A standard-priced material, so the stock credit and the reopened GR/IR are two different
+        // figures and a price-difference line is visible when the two are not derived alike. The
+        // order unit for it is a box of twelve pieces: the shape that a money figure can get wrong.
+        await tx.execute(sql`
+          insert into material (client, material_number, description, material_type, base_unit, created_by)
+          values (${client}, 'RET-STD', 'Standard-priced plate', 'RAW', 'PC', ${ACTOR}) on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into material_plant (client, material_number, plant, overdelivery_tolerance, created_by)
+          values (${client}, 'RET-STD', '1000', 0, ${ACTOR}) on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into material_valuation (
+            client, material_number, valuation_area, valuation_class, price_control,
+            standard_price, moving_average_price, price_unit, currency, created_by
+          ) values (${client}, 'RET-STD', '1000', 'RAW_INVENTORY', 'STANDARD', 40, 40, 1, 'USD', ${ACTOR})
+          on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into unit_of_measure (code, name) values ('BOX', 'Box') on conflict do nothing
+        `);
         await tx.execute(sql`
           insert into account_determination (client, chart_of_accounts, event, valuation_class, general_modifier, gl_account, created_by)
           values (${client}, 'CA01', 'INVENTORY', 'RAW_INVENTORY', '', '120000', ${ACTOR}),
@@ -133,10 +154,45 @@ describe('SCR-145 return delivery (MBRL)', () => {
 
   async function valuationOf(materialNumber = 'RET-MAT') {
     const rows = await withTenant(client, (tx) => tx.execute(sql`
-      select total_stock_quantity::text as qty, stock_value::text as value from material_valuation
+      select total_stock_quantity::text as qty, stock_value::text as value,
+             moving_average_price::text as price
+        from material_valuation
        where client = ${client} and material_number = ${materialNumber} and valuation_area = '1000'
-    `)) as unknown as Array<{ qty: string; value: string }>;
-    return { qty: Number(rows[0].qty), value: Number(rows[0].value) };
+    `)) as unknown as Array<{ qty: string; value: string; price: string }>;
+    return { qty: Number(rows[0].qty), value: Number(rows[0].value), map: Number(rows[0].price) };
+  }
+
+  /**
+   * The accounting entry a material document posted, read from the journal it carries. The three
+   * accounts the fixture determines are inventory, GR/IR and price difference, so a test can say
+   * which of them a posting touched and at what amount.
+   */
+  async function journalOf(documentNumber: string) {
+    const rows = await withTenant(client, (tx) => tx.execute(sql`
+      select l.gl_account, l.debit_credit, l.amount_local::float8 as amount
+        from material_document d
+        join journal_entry_line l
+          on l.client = d.client and l.document_number = d.journal_document_number
+       where d.client = ${client} and d.material_document_number = ${documentNumber}
+       order by l.gl_account
+    `)) as unknown as Array<{ gl_account: string; debit_credit: string; amount: number }>;
+    return {
+      rows,
+      inventory: rows.find((r) => r.gl_account === '120000'),
+      grIr: rows.find((r) => r.gl_account === '210000'),
+      priceDifference: rows.find((r) => r.gl_account === '300000'),
+      balanced: rows.reduce((sum, r) => sum + (r.debit_credit === 'S' ? r.amount : -r.amount), 0),
+    };
+  }
+
+  /** How many documents and journal entries stand, for a test that must write nothing at all. */
+  async function footprint() {
+    const rows = await withTenant(client, (tx) => tx.execute(sql`
+      select (select count(*) from material_document where client = ${client})::int as documents,
+             (select count(*) from material_document_line where client = ${client})::int as lines,
+             (select count(*) from journal_entry where client = ${client})::int as journals
+    `)) as unknown as Array<{ documents: number; lines: number; journals: number }>;
+    return rows[0];
   }
 
   let receiptNumber = '';
@@ -382,5 +438,245 @@ describe('SCR-145 return delivery (MBRL)', () => {
     // The receipt itself is blocked by the count, which is the guard doing its job.
     expect((doc as Error).message).toMatch(/blocks postings/);
     void count;
+  });
+
+  // ------------------------------------------------------------------------------------------
+  // The money of a return, priced in the unit the order priced in.
+  //
+  // A material document line carries its quantity twice — the figure entered in the receipt unit
+  // and the figure the material counts in — and it carries its price once: the vendor's rate per
+  // price unit in the *order* unit, which is what goods receipt copied onto the line. A return that
+  // multiplies its base-unit quantity by that rate prices twelve pieces at the price of a box.
+  // ------------------------------------------------------------------------------------------
+
+  const altItem = (materialNumber: string, quantity: number, unit: string, netPrice: number) => ({
+    materialNumber, shortText: materialNumber, quantity, unit,
+    netPrice, priceUnit: 1, taxCode: '', plant: '1000', storageLocation: '0001',
+    markedForDeletion: false,
+    scheduleLines: [{ deliveryDate: '2026-11-15', quantity }],
+    assignments: [] as never[],
+  });
+
+  /** A receipt of three boxes at 480 apiece: 36 pieces on stock, 1440 priced, no price difference. */
+  async function receivedInBoxes(quantityInBoxes = 3) {
+    const c = await standingClient();
+    await defineUomConversion({
+      client: c, changedBy: ACTOR, materialNumber: 'RET-STD', alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+    });
+    const order = await createOrder({
+      client: c, changedBy: ACTOR, ...header, items: [altItem('RET-STD', quantityInBoxes, 'BOX', 480)],
+    });
+    const doc = await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: quantityInBoxes, storageLocation: '0001' }],
+    });
+    return { order, doc };
+  }
+
+  it('prices a returned part of an alternative-unit receipt at the box rate, not at the piece count', async () => {
+    const c = await standingClient();
+    const { doc } = await receivedInBoxes();
+
+    // The receipt is the reference for the money as well as for the goods: three boxes priced, and
+    // no price-difference line because twelve times forty is the box rate.
+    const receipt = await journalOf(doc.materialDocumentNumber);
+    expect(receipt.inventory?.amount).toBe(1440);
+    expect(receipt.grIr?.amount).toBe(1440);
+    expect(receipt.priceDifference).toBeUndefined();
+
+    // Twelve pieces go back, which is one box of them: the reopened GR/IR is one box at 480.
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 12 }],
+    });
+    const entry = await journalOf(returned.materialDocumentNumber);
+    expect(entry.inventory?.debit_credit).toBe('H');
+    expect(entry.inventory?.amount).toBe(480);
+    expect(entry.grIr?.debit_credit).toBe('S');
+    expect(entry.grIr?.amount).toBe(480);
+    expect(entry.priceDifference).toBeUndefined();
+    expect(Math.abs(entry.balanced)).toBeLessThan(0.005);
+
+    // The document itself keeps both pairs honest: twelve pieces on the base side, the vendor's
+    // rate on the price side, and the stock value at the priced figure the credit is made of.
+    expect(Number(returned.lines[0].quantity)).toBe(12);
+    expect(returned.lines[0].unit).toBe('PC');
+    expect(Number(returned.lines[0].value)).toBe(480);
+  });
+
+  it('prices the same return identically when it is entered in the box it returns', async () => {
+    const c = await standingClient();
+    const { doc } = await receivedInBoxes();
+    const before = await stockOf('RET-STD');
+
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1, entryUnit: 'BOX' }],
+    });
+    const entry = await journalOf(returned.materialDocumentNumber);
+    expect(entry.grIr?.amount).toBe(480);
+    expect(entry.inventory?.amount).toBe(480);
+    expect(entry.priceDifference).toBeUndefined();
+    // One box entered, twelve pieces taken out of stock: the two units differ, the money does not.
+    expect(Number(returned.lines[0].quantity)).toBe(12);
+    expect(await stockOf('RET-STD')).toBe(before - 12);
+  });
+
+  it('reopens exactly what the receipt cleared, returned in two goes', async () => {
+    const c = await standingClient();
+    const { doc } = await receivedInBoxes();
+
+    const first = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 12 }],
+    });
+    const second = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 24 }],
+    });
+    const firstEntry = await journalOf(first.materialDocumentNumber);
+    const secondEntry = await journalOf(second.materialDocumentNumber);
+    expect((firstEntry.grIr?.amount ?? 0) + (secondEntry.grIr?.amount ?? 0)).toBe(1440);
+    expect(firstEntry.priceDifference).toBeUndefined();
+    expect(secondEntry.priceDifference).toBeUndefined();
+
+    const view = await getReturnableDocument(c, { documentNumber: doc.materialDocumentNumber });
+    expect(view?.items[0].previouslyReturned).toBe(36);
+    expect(view?.items[0].remaining).toBe(0);
+  });
+
+  it('leaves the money of a same-unit return exactly as it was', async () => {
+    const c = await standingClient();
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item('RET-STD', 40, 100)] });
+    const doc = await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 40, storageLocation: '0001' }],
+    });
+    // Ordered, entered and stocked in pieces: 4000 priced against 1600 of standard value, so the
+    // receipt books a 2400 credit to price difference and the return mirrors a quarter of it.
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 15 }],
+    });
+    const entry = await journalOf(returned.materialDocumentNumber);
+    expect(entry.inventory?.amount).toBe(600);
+    expect(entry.grIr?.amount).toBe(1500);
+    expect(entry.priceDifference?.debit_credit).toBe('H');
+    expect(entry.priceDifference?.amount).toBe(900);
+    expect(Math.abs(entry.balanced)).toBeLessThan(0.005);
+    expect(await received(order.orderNumber)).toBe(25);
+  });
+
+  it('takes a moving-average material down by what came back, and not by the piece count', async () => {
+    const c = await standingClient();
+    await defineUomConversion({
+      client: c, changedBy: ACTOR, materialNumber: 'RET-MAT', alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+    });
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [altItem('RET-MAT', 3, 'BOX', 480)] });
+    const doc = await postGoodsReceipt({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 3, storageLocation: '0001' }],
+    });
+    const before = await valuationOf('RET-MAT');
+
+    // A moving-average material values its stock at the priced figure, so this is the posting where
+    // the money error would reach the book value and the derived price, not only the clearing entry.
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 3 }],
+    });
+    const after = await valuationOf('RET-MAT');
+    const entry = await journalOf(returned.materialDocumentNumber);
+    expect(entry.grIr?.amount).toBe(120);
+    expect(entry.inventory?.amount).toBe(120);
+    expect(after.qty).toBe(before.qty - 3);
+    expect(after.value).toBeCloseTo(before.value - 120, 2);
+    expect(Number(returned.lines[0].value)).toBe(120);
+  });
+
+  it('refuses a return whose unit it can no longer convert, and writes nothing', async () => {
+    const c = await standingClient();
+    const { doc } = await receivedInBoxes();
+    const stockBefore = await stockOf('RET-STD');
+    const valueBefore = await valuationOf('RET-STD');
+    const before = await footprint();
+
+    // The rule was maintained when the goods arrived and has since been removed: the quantity in
+    // boxes cannot be stated any more, and no money figure may be invented to post anyway.
+    await withTenant(c, (tx) => tx.execute(sql`
+      delete from material_uom_conversion
+       where client = ${client} and material_number = 'RET-STD' and alternative_unit = 'BOX'
+    `));
+    try {
+      let refusal: unknown;
+      try {
+        await postReturnDelivery({
+          client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+          requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1, entryUnit: 'BOX' }],
+        });
+      } catch (caught) {
+        refusal = caught;
+      }
+      expect(refusal).toBeInstanceOf(ReturnDeliveryError);
+      expect((refusal as ReturnDeliveryError).message).toMatch(/carries no conversion from BOX/);
+      expect(await footprint()).toEqual(before);
+      expect(await stockOf('RET-STD')).toBe(stockBefore);
+      expect(await valuationOf('RET-STD')).toEqual(valueBefore);
+
+      // What the document already states needs no rule to price: twelve pieces is a third of a
+      // receipt of thirty-six, and the money follows that share rather than a re-derived ratio.
+      const posted = await postReturnDelivery({
+        client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+        requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 12 }],
+      });
+      expect((await journalOf(posted.materialDocumentNumber)).grIr?.amount).toBe(480);
+      expect((await journalOf(posted.materialDocumentNumber)).priceDifference).toBeUndefined();
+    } finally {
+      await defineUomConversion({
+        client: c, changedBy: ACTOR, materialNumber: 'RET-STD', alternativeUnit: 'BOX', numerator: 12, denominator: 1,
+      });
+    }
+  });
+
+  it('reopens the whole priced figure on a full return and puts it back when the return is reversed', async () => {
+    const c = await standingClient();
+    const { doc } = await receivedInBoxes();
+    const stockAfterReceipt = await stockOf('RET-STD');
+    const valueAfterReceipt = await valuationOf('RET-STD');
+
+    // Everything that came in goes back. The receipt cleared one thousand four hundred and forty,
+    // and a full return reopens that figure — not the piece count multiplied by the box rate.
+    const returned = await postReturnDelivery({
+      client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber, ...POSTING,
+      requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 36 }],
+    });
+    const returnEntry = await journalOf(returned.materialDocumentNumber);
+    expect(returnEntry.grIr?.amount).toBe(1440);
+    expect(returnEntry.inventory?.amount).toBe(1440);
+    expect(returnEntry.priceDifference).toBeUndefined();
+    expect(Math.abs(returnEntry.balanced)).toBeLessThan(0.005);
+    expect(Number(returned.lines[0].value)).toBe(1440);
+    expect(await stockOf('RET-STD')).toBe(stockAfterReceipt - 36);
+
+    const reversal = await reverseMaterialDocument({
+      client: c, changedBy: ACTOR, materialDocumentNumber: returned.materialDocumentNumber,
+      ...POSTING, requestKey: nextKey(),
+    });
+    expect(reversal.status).toBe('POSTED');
+    // The document undoing the return copies the return's own figures, so the value it puts back is
+    // the value that was taken out. That is why the money has to be right on the return itself.
+    const reversedLine = await withTenant(c, (tx) => tx.execute(sql`
+      select value::float8 as value, base_quantity::text as quantity, base_unit as unit
+        from material_document_line
+       where client = ${client} and material_document_number = ${reversal.materialDocumentNumber}
+    `)) as unknown as Array<{ value: number; quantity: string; unit: string }>;
+    expect(reversedLine[0].value).toBe(1440);
+    expect(Number(reversedLine[0].quantity)).toBe(36);
+    expect(reversedLine[0].unit).toBe('PC');
+    expect(await stockOf('RET-STD')).toBe(stockAfterReceipt);
+    expect(await valuationOf('RET-STD')).toEqual(valueAfterReceipt);
+    const view = await getReturnableDocument(c, { documentNumber: doc.materialDocumentNumber });
+    expect(view?.items[0].remaining).toBe(36);
+    expect(view?.items[0].previouslyReturned).toBe(0);
   });
 });

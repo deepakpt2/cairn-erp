@@ -97,6 +97,8 @@ export default async function WorkbenchPage({
     '/config/profit-centers',
     '/config/profit-center-hierarchy',
     '/config/settlement-configuration',
+    '/config/people-record-types',
+    '/config/pay-components',
     '/config/material-types',
     '/config/valuation-classes',
     '/config/movement-types',

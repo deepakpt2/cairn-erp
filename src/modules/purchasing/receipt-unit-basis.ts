@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 
 /**
  * The received-quantity basis for purchase-order readers.
@@ -68,3 +68,50 @@ export const receiptQuantityInOrderUnit = sql`
 
 /** True when the line cannot be placed in the order unit, so a reader must refuse instead of adding nothing. */
 export const receiptQuantityUnstateable = sql`(${receiptQuantityInOrderUnit}) is null`;
+
+/**
+ * The sign a movement line carries in the received figure of the order line it points at.
+ *
+ * `movement_type.direction` states what a movement does to stock, which is not the same as how
+ * a purchase-order reader adds it up. Three cases have to be told apart:
+ *
+ *  - `RECEIPT` adds — the goods reached the plant, which is what a receipt of a purchase order
+ *    line is for;
+ *  - `ISSUE` takes back. A return to the vendor is an issue movement that carries the order
+ *    number and item, and it belongs to the order line as a subtraction: goods that went back were
+ *    not kept. Counting it as a receipt reports a line received and returned in full as received
+ *    twice over, and the line then reads delivered, nothing outstanding;
+ *  - `REVERSAL` cancels the line it was posted against. The reversal module copies the original
+ *    line's figures verbatim and names it in `reversal_of_document` / `reversal_of_line`, so a
+ *    reversal negates the sign that line carried rather than always subtracting: reversing a
+ *    receipt takes the goods away, reversing a return puts them back. Where the reversed line
+ *    cannot be found — a document reversed by hand, or one recorded before the lineage columns
+ *    were set — the reversal subtracts, which is the reading every screen gave it before.
+ *
+ * `TRANSFER` is neither: no PO-carried movement uses it, and the readers leave it adding, as they
+ * did. The movement-side reading of the same three cases is
+ * `inventory/goods-receipt.ts` and `purchasing/grir-clearing.ts`.
+ *
+ * A reversal therefore cancels through the line it points at, not through its document header:
+ * `material_document.status` marks a reversed document `REVERSED` or `PARTIALLY_REVERSED` precisely
+ * so that its lines stay readable, and a reader that skips those lines while also counting the
+ * posted reversal takes the quantity back twice. Those are the only three statuses the header can
+ * carry, so dropping the status predicate lets in nothing that was not posted.
+ */
+export function receiptMovementSign(movementAlias = 'm'): SQL {
+  const movement = sql.raw(movementAlias);
+  return sql`case ${movement}.direction
+    when 'REVERSAL' then -(case when exists (
+      select 1
+        from material_document_line rev
+        join movement_type rev_mv
+          on rev_mv.client = rev.client and rev_mv.movement_type = rev.movement_type
+         and rev_mv.direction = 'ISSUE'
+       where rev.client = l.client
+         and rev.material_document_number = l.reversal_of_document
+         and rev.line_number = l.reversal_of_line
+    ) then -1 else 1 end)
+    when 'ISSUE' then -1
+    else 1
+  end`;
+}

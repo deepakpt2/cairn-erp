@@ -230,4 +230,95 @@ describe('SCR-129 purchase orders by account assignment (ME2K)', () => {
     expect(result.warnings.join(' ')).toMatch(/truncated at 2 hits/);
     expect(result.totalAssignedValue).toBe(100);
   });
+
+
+  // ME2K does not print a delivered column: the figure chooses which scope lists the line. A return
+  // counted as a receipt therefore hides work that is still open, and the line stays under
+  // "completed" with goods it no longer holds.
+  it('lists a line returned after a full receipt as still to be delivered, not as completed', async () => {
+    const ORDER = '4700000003';
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
+          (${client}, 'GOODS_RECEIPT_PO', 'Goods receipt against purchase order', 'RECEIPT', 'MATERIAL_DOCUMENT', ${ACTOR}),
+          (${client}, 'RETURN_TO_VENDOR', 'Return delivery to vendor', 'ISSUE', 'PURCHASE_ORDER', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order
+          (client, order_number, document_type, supplier_number, purchasing_org, purchasing_group,
+           company_code, currency, document_date, release_status, created_by)
+        select ${client}, ${ORDER}, document_type, supplier_number, purchasing_org, purchasing_group,
+               company_code, currency, document_date, release_status, ${ACTOR}
+          from purchase_order where client = ${client} and order_number = '4700000001'
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item
+          (client, order_number, item_number, item_category, material_number, short_text, quantity, unit,
+           net_price, price_unit, net_value, plant, account_assignment_category, created_by)
+        values
+          (${client}, ${ORDER}, 10, 'STANDARD', 'ME2K-MAT', 'Returned after a full receipt', 10, 'PC',
+           10, 1, 100, 'QD01', 'COST_CENTER', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_assignment
+          (client, order_number, item_number, line_number, cost_center, gl_account,
+           distribution_percentage, created_by)
+        values (${client}, ${ORDER}, 10, 1, 'CC1000', '500000', 100, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document
+          (client, material_document_number, document_year, document_date, posting_date, header_text, status, created_by)
+        values
+          (${client}, '5400000011', 2026, '2026-03-01', '2026-03-01', 'Full receipt', 'POSTED', ${ACTOR}),
+          (${client}, '5400000012', 2026, '2026-03-02', '2026-03-02', 'Part return', 'POSTED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant, storage_location,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, currency, value,
+          purchase_order_number, purchase_order_item, line_direction, created_by
+        ) values
+          (${client}, '5400000011', 1, 'GOODS_RECEIPT_PO', 'ME2K-MAT', 'QD01', 'SR01', 'UNRESTRICTED',
+           10, 'PC', 10, 'PC', 10, 1, 'KWD', 100, ${ORDER}, 10, 'RECEIPT', ${ACTOR}),
+          (${client}, '5400000012', 1, 'RETURN_TO_VENDOR', 'ME2K-MAT', 'QD01', 'SR01', 'UNRESTRICTED',
+           4, 'PC', 4, 'PC', 10, 1, 'KWD', 40, ${ORDER}, 10, 'ISSUE', ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    try {
+      const still = await report({ scope: 'STILL_TO_BE_DELIVERED' });
+      expect(still.rows.map((row) => row.orderNumber)).toContain(ORDER);
+      const completed = await report({ scope: 'COMPLETED' });
+      expect(completed.rows.map((row) => row.orderNumber)).not.toContain(ORDER);
+      // Six of ten received and none invoiced is open for both halves of the report.
+      const toInvoice = await report({ scope: 'STILL_TO_BE_INVOICED' });
+      expect(toInvoice.rows.map((row) => row.orderNumber)).toContain(ORDER);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          delete from material_document_line
+           where client = ${client} and purchase_order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from material_document
+           where client = ${client} and material_document_number in ('5400000011', '5400000012')
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_assignment where client = ${client} and order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_item where client = ${client} and order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from purchase_order where client = ${client} and order_number = ${ORDER}
+        `);
+      });
+    }
+  });
 });

@@ -182,6 +182,10 @@ function protectedRouteFor(target: BrowserTarget): string {
   if (target.id === 'co09-availability') return '/production/order-availability';
   if (target.id === 'sales-order-to-invoice') return '/sales/orders';
   if (target.id === 'quality-lot-receipt') return '/quality/lots';
+  if (target.id === 'people-employee-records') return '/people/employees';
+  if (target.id === 'people-organization') return '/people/organization';
+  if (target.id === 'people-assignments') return '/people/assignments';
+  if (target.id === 'people-pay-components') return '/config/pay-components';
   if (target.id === 'controlling-area') return '/config/controlling-area';
   if (target.id === 'controlling-area-company-assignment') return '/config/controlling-area/assign-company-code';
   if (target.id === 'batch-document-management') return '/config/batch-document-management';

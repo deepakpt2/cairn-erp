@@ -30,6 +30,10 @@ import { deactivateSalesOrg, saveSalesOrgDefinition } from '../../src/modules/fo
 import { assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel } from '../../src/modules/foundation/sales-org-distribution-channel-assignment';
 import { deactivateDivision, saveDivisionDefinition } from '../../src/modules/foundation/distribution-channel-division-maintenance';
 import { FIXTURE_NAME, type BrowserTargetId, type BrowserTarget } from './targets';
+import { peopleEmployeeRecords } from './people-employee-records';
+import { peopleOrganization } from './people-organization';
+import { peopleAssignments } from './people-assignments';
+import { peoplePayComponents } from './people-pay-components';
 import { ACCEPTANCE_DATABASE_GUARDS } from './database-guards';
 import { controllingAreaCompanyAssignment as ox19Assignment } from './ox19-assignment';
 import { batchDocumentManagementIndicator } from './batch-document-management';
@@ -5162,6 +5166,10 @@ export const CHECKS: Record<BrowserTargetId, (ctx: BrowserContext) => Promise<vo
   'credit-release': creditRelease,
   'sales-order-to-invoice': salesOrderToInvoice,
   'quality-lot-receipt': qualityLotReceipt,
+  'people-employee-records': peopleEmployeeRecords,
+  'people-organization': peopleOrganization,
+  'people-assignments': peopleAssignments,
+  'people-pay-components': peoplePayComponents,
   'trial-balance': trialBalance,
   'balance-sheet': balanceSheet,
   'gl-reporting': glReporting,

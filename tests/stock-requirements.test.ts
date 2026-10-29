@@ -238,4 +238,113 @@ describe('SCR-130 stock/requirements list (MD04)', () => {
       await tx.execute(sql`update material_plant set mrp_type = 'REQUIREMENTS' where client = ${client} and material_number = ${MATERIAL}`);
     });
   });
+
+
+  // The stock list needs the same signs on the movement it prints, in the unit it keeps them in.
+  // A receipt the vendor took back, or one the reversal module cancelled, has no stock effect left:
+  // it neither raises the coverage of the line it was booked against nor leaves a minus behind.
+  it("nets a return and a reversed receipt against an order's open quantity", async () => {
+    const MATERIAL = 'MRP-SIGN';
+    const ORDER = '5500000009';
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
+          (${client}, 'GOODS_RECEIPT_PO', 'Goods receipt against purchase order', 'RECEIPT', 'PURCHASE_ORDER', ${ACTOR}),
+          (${client}, 'RETURN_TO_VENDOR', 'Return delivery to vendor', 'ISSUE', 'PURCHASE_ORDER', ${ACTOR}),
+          (${client}, 'RECEIPT_REVERSAL', 'Reversal of a goods receipt', 'REVERSAL', 'PURCHASE_ORDER', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material (client, material_number, description, material_type, base_unit, created_by)
+        select ${client}, ${MATERIAL}, 'Signed movement material', t.material_type, 'PC', ${ACTOR}
+          from (select material_type from material_type where client = ${client}
+                 order by material_type limit 1) t
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org,
+                                    purchasing_group, company_code, currency, document_date, release_status, created_by)
+        values (${client}, ${ORDER}, 'STANDARD', 'V93000', 'O930', 'G93', '1000', 'KWD', '2026-05-04',
+                'RELEASED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item (client, order_number, item_number, item_category, short_text,
+                                         material_number, quantity, unit, net_price, price_unit, net_value, plant,
+                                         requisition_number, requisition_item, created_by)
+        values (${client}, ${ORDER}, 1, 'STANDARD', 'Signed movements', ${MATERIAL}, 30, 'PC', 1, 1, 30,
+                ${PLANT}, null, null, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_schedule_line (client, order_number, item_number, line_number, delivery_date,
+                                                 quantity, created_by)
+        values (${client}, ${ORDER}, 1, 1, '2026-07-20', 30, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document
+          (client, material_document_number, document_year, document_date, posting_date, header_text, status,
+           reversal_of, created_by)
+        values
+          (${client}, '6400000011', 2026, '2026-05-16', '2026-05-16', 'Receipt then part return', 'POSTED', null, ${ACTOR}),
+          (${client}, '6400000012', 2026, '2026-05-17', '2026-05-17', 'Return', 'POSTED', null, ${ACTOR}),
+          (${client}, '6400000013', 2026, '2026-05-18', '2026-05-18', 'Receipt reversed', 'REVERSED', null, ${ACTOR}),
+          (${client}, '6400000014', 2026, '2026-05-19', '2026-05-19', 'Its reversal', 'POSTED', '6400000013', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant, storage_location,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, currency, value,
+          purchase_order_number, purchase_order_item, line_direction, reversal_of_document, reversal_of_line, created_by
+        ) values
+          (${client}, '6400000011', 1, 'GOODS_RECEIPT_PO', ${MATERIAL}, ${PLANT}, 'SLF1', 'UNRESTRICTED',
+           30, 'PC', 30, 'PC', 1, 1, 'KWD', 30, ${ORDER}, 1, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '6400000012', 1, 'RETURN_TO_VENDOR', ${MATERIAL}, ${PLANT}, 'SLF1', 'UNRESTRICTED',
+           3, 'PC', 3, 'PC', 1, 1, 'KWD', 3, ${ORDER}, 1, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '6400000013', 1, 'GOODS_RECEIPT_PO', ${MATERIAL}, ${PLANT}, 'SLF1', 'UNRESTRICTED',
+           5, 'PC', 5, 'PC', 1, 1, 'KWD', 5, ${ORDER}, 1, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '6400000014', 1, 'RECEIPT_REVERSAL', ${MATERIAL}, ${PLANT}, 'SLF1', 'UNRESTRICTED',
+           5, 'PC', 5, 'PC', 1, 1, 'KWD', 5, ${ORDER}, 1, 'ISSUE', '6400000013', 1, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    try {
+      const result = await stockRequirementsList({
+        client,
+        today: TODAY,
+        selection: { material: MATERIAL, plant: PLANT, maxHits: 100 },
+      });
+      // Thirty were ordered, thirty arrived, three went back, and a receipt of five was reversed
+      // again: three are still to come. The return does not extend the order line and the reversed
+      // receipt does not turn into a requirement of five.
+      const elements = result.rows.filter((row) => row.documentNumber === ORDER);
+      expect(elements.map((row) => [row.date, row.elementType, row.quantity, row.direction])).toEqual([
+        ['2026-07-20', 'PURCHASE_ORDER', 3, 'RECEIPT'],
+      ]);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          delete from material_document_line
+           where client = ${client} and purchase_order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from material_document
+           where client = ${client} and material_document_number in
+                 ('6400000011', '6400000012', '6400000013', '6400000014')
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_schedule_line where client = ${client} and order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_item where client = ${client} and order_number = ${ORDER}
+        `);
+        await tx.execute(sql`
+          delete from purchase_order where client = ${client} and order_number = ${ORDER}
+        `);
+      });
+    }
+  });
 });

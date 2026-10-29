@@ -62,9 +62,19 @@ describe('SCR-124 purchase order list UI contract', () => {
   });
 
   it('derives delivered and invoiced from posted history rather than a status column', () => {
-    expect(service).toContain("d.status = 'POSTED'");
+    const basis = readFileSync('src/modules/purchasing/receipt-unit-basis.ts', 'utf8');
+    // Delivered is summed over the movement lines through the shared basis, so the sign comes from
+    // what the movement does: a receipt adds, an issue takes back, and a reversal cancels the line
+    // it points at. The document header is not filtered here — a reversed document is cancelled by
+    // the posted line that names it, and filtering both would take the quantity back twice.
+    expect(service).toContain('receiptMovementSign');
+    expect(service).toContain('receiptQuantityInOrderUnit');
+    expect(service).not.toContain("d.status = 'POSTED'");
+    expect(basis).toContain("when 'REVERSAL' then -(");
+    expect(basis).toContain("when 'ISSUE' then -1");
+    expect(basis).toContain('l.reversal_of_document');
+    // The invoice side counts posted documents, and a marked item is never outstanding work.
     expect(service).toContain("s2.status = 'POSTED'");
-    expect(service).toContain("m.direction = 'REVERSAL'");
     expect(service).toContain('and not marked_for_deletion');
   });
 

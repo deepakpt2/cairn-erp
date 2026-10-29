@@ -22,6 +22,12 @@ export interface RecordTypeActionState {
   code?: string;
 }
 
+/**
+ * Module-private on purpose. A `use server` file may export async functions and nothing else: exporting this
+ * object beside the actions made every submission on the screen throw in a production build, while a
+ * `next dev` render never reached the check. The client component keeps its own starting state for that
+ * reason — the shape every other People screen uses, and what the browser run for 9193 found.
+ */
 const EMPTY: RecordTypeActionState = { ok: false };
 
 function text(form: FormData, name: string): string {
@@ -171,5 +177,3 @@ export async function changeRecordFieldAction(
     return refuse(error);
   }
 }
-
-export { EMPTY };

@@ -574,7 +574,7 @@ export async function saveScopeOfCheck(input: {
       changedBy: input.changedBy,
       reason,
       transactionCode: ACTIVITY,
-      before: existing ? scopeOf(existing) : undefined,
+      before: existing ? { ...scopeOf(existing) } : undefined,
       after: input.mode === 'DELETE' ? undefined : { checkingGroup, checkingRule, ...flags },
     });
     await finish(tx, input.client, input.changedBy);

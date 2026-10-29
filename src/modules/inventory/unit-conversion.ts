@@ -85,6 +85,45 @@ export async function toBaseQuantity(
   return { baseQuantity: roundTo(exact, decimals), baseUnit, factor };
 }
 
+/**
+ * The reciprocal of `toBaseQuantity`: a quantity held in the material's base unit, spoken in one
+ * of its alternative units. The same row gives the way back, because a conversion is an exact
+ * ratio and not a rate that drifts — so nothing is re-derived here and nothing is rounded twice
+ * through a float. A material with no base unit, or with no rule for the unit asked for, is
+ * refused by name exactly as the forward direction refuses.
+ */
+export async function fromBaseQuantity(
+  tx: Tx,
+  client: string,
+  input: { materialNumber: string; baseQuantity: number; targetUnit: string },
+): Promise<number> {
+  const [master] = await tx.select({ baseUnit: material.baseUnit }).from(material).where(and(
+    eq(material.client, client), eq(material.materialNumber, input.materialNumber),
+  ));
+  if (!master?.baseUnit) {
+    throw new UnitConversionError(
+      `Material ${input.materialNumber} carries no base unit.`,
+      'Maintain the material base unit, then read the quantity in it.',
+    );
+  }
+  const targetUnit = (input.targetUnit ?? '').trim().toUpperCase();
+  if (targetUnit === '' || targetUnit === master.baseUnit) return input.baseQuantity;
+
+  const [conversion] = await tx.select().from(materialUomConversion).where(and(
+    eq(materialUomConversion.client, client),
+    eq(materialUomConversion.materialNumber, input.materialNumber),
+    eq(materialUomConversion.alternativeUnit, targetUnit),
+  ));
+  if (!conversion) {
+    throw new UnitConversionError(
+      `Material ${input.materialNumber} carries no conversion between ${targetUnit} and its base unit ${master.baseUnit}.`,
+      `Maintain the conversion (${UOM_CAPABILITY}) to state ${input.baseQuantity} ${master.baseUnit} in ${targetUnit}.`,
+    );
+  }
+  const decimals = await decimalsOf(tx, targetUnit);
+  return roundTo((input.baseQuantity * conversion.denominator) / conversion.numerator, decimals);
+}
+
 export function roundTo(value: number, decimals: number): number {
   const shift = 10 ** decimals;
   return Math.round((value + Number.EPSILON) * shift) / shift;

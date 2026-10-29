@@ -129,6 +129,25 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
           (${client}, '5000000005', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 5, 'PC', 5, 'PC', 30, 1, 150, '4500000003', 10, ${ACTOR})
         on conflict do nothing
       `);
+      // The reversal module does not delete the original's lines, it posts a document that cancels
+      // them and marks the original reversed. The fixture's reversed receipt only tells that story
+      // once its reversal stands next to it; the reader has to count both or neither.
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date, posting_date,
+                                       status, reversal_of, created_by)
+        values (${client}, '5000000007', 2026, '2026-01-18', '2026-01-18', 'POSTED', '5000000005', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, value,
+          purchase_order_number, purchase_order_item, line_direction, reversal_of_document, reversal_of_line, created_by
+        ) values
+          (${client}, '5000000007', 1, 'RECEIPT_REVERSAL', 'M100', 'P100', 'UNRESTRICTED', 5, 'PC', 5, 'PC',
+           30, 1, 150, '4500000003', 10, 'ISSUE', '5000000005', 1, ${ACTOR})
+        on conflict do nothing
+      `);
 
       // Invoice for line 1 only.
       await tx.execute(sql`
@@ -348,6 +367,125 @@ describe('SCR-124 purchase order list (ME2L suite)', () => {
         await tx.execute(sql`delete from purchase_order_item where client = ${client} and order_number = '4500000009'`);
         await tx.execute(sql`delete from purchase_order where client = ${client} and order_number = '4500000009'`);
         await tx.execute(sql`delete from material_uom_conversion where client = ${client} and material_number = 'M100'`);
+      });
+    }
+  });
+
+
+  // What the line shows as delivered is what reached the plant and stayed there: a return takes
+  // quantity back, and a reversal cancels the movement it points at. Counting every receipt-linked
+  // line as a receipt reports four pieces received and returned in full as eight delivered, fully
+  // delivered, with eight still to invoice.
+  it('nets a return and a reversed receipt against the delivered quantity', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category, created_by) values
+          (${client}, 'RETURN_TO_VENDOR', 'Return delivery to vendor', 'ISSUE', 'PURCHASE_ORDER', ${ACTOR}),
+          (${client}, 'RETURN_TO_VENDOR_REV', 'Reversal of return delivery to vendor', 'REVERSAL', 'MATERIAL_DOCUMENT', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order (client, order_number, document_type, supplier_number, purchasing_org,
+                                    purchasing_group, company_code, currency, document_date, release_status, created_by)
+        values (${client}, '4500000010', 'STANDARD', 'V10000', 'O100', 'G01', '1000', 'USD', '2026-02-20',
+                'RELEASED', ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into purchase_order_item (client, order_number, item_number, item_category, material_number,
+                                         short_text, quantity, unit, net_price, price_unit, net_value, plant,
+                                         material_group, requisition_number, requisition_item, marked_for_deletion, created_by)
+        values
+          (${client}, '4500000010', 10, 'STANDARD', 'M100', 'Received, nothing back', 4, 'PC', 10, 1, 40, 'P100', 'MG01', null, null, false, ${ACTOR}),
+          (${client}, '4500000010', 20, 'STANDARD', 'M100', 'Partly returned', 4, 'PC', 10, 1, 40, 'P100', 'MG01', null, null, false, ${ACTOR}),
+          (${client}, '4500000010', 30, 'STANDARD', 'M100', 'Returned in full', 4, 'PC', 10, 1, 40, 'P100', 'MG01', null, null, false, ${ACTOR}),
+          (${client}, '4500000010', 40, 'STANDARD', 'M100', 'Return reversed', 4, 'PC', 10, 1, 40, 'P100', 'MG01', null, null, false, ${ACTOR}),
+          (${client}, '4500000010', 50, 'STANDARD', 'M100', 'Receipt reversed', 4, 'PC', 10, 1, 40, 'P100', 'MG01', null, null, false, ${ACTOR})
+        on conflict do nothing
+      `);
+      await tx.execute(sql`
+        insert into material_document (client, material_document_number, document_year, document_date, posting_date,
+                                       status, reversal_of, created_by)
+        values
+          (${client}, '7000000011', 2026, '2026-02-21', '2026-02-21', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000012', 2026, '2026-02-21', '2026-02-21', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000013', 2026, '2026-02-22', '2026-02-22', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000014', 2026, '2026-02-22', '2026-02-22', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000015', 2026, '2026-02-23', '2026-02-23', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000016', 2026, '2026-02-23', '2026-02-23', 'POSTED', null, ${ACTOR}),
+          (${client}, '7000000017', 2026, '2026-02-24', '2026-02-24', 'POSTED', '7000000016', ${ACTOR}),
+          (${client}, '7000000018', 2026, '2026-02-24', '2026-02-24', 'REVERSED', null, ${ACTOR}),
+          (${client}, '7000000019', 2026, '2026-02-25', '2026-02-25', 'POSTED', '7000000018', ${ACTOR})
+        on conflict do nothing
+      `);
+      // Every line carries the purchase order reference both the goods receipt and the return write:
+      // the receipt adds, the issue subtracts, and the reversal cancels the movement it points at.
+      await tx.execute(sql`
+        insert into material_document_line (
+          client, material_document_number, line_number, movement_type, material_number, plant,
+          stock_type, entry_quantity, entry_unit, base_quantity, base_unit, unit_price, price_unit, value,
+          purchase_order_number, purchase_order_item, line_direction, reversal_of_document, reversal_of_line, created_by
+        ) values
+          (${client}, '7000000011', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 10, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '7000000012', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 20, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '7000000012', 2, 'RETURN_TO_VENDOR', 'M100', 'P100', 'UNRESTRICTED', 1, 'PC', 1, 'PC', 10, 1, 10, '4500000010', 20, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '7000000013', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 30, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '7000000014', 1, 'RETURN_TO_VENDOR', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 30, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '7000000015', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 40, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '7000000016', 1, 'RETURN_TO_VENDOR', 'M100', 'P100', 'UNRESTRICTED', 2, 'PC', 2, 'PC', 10, 1, 20, '4500000010', 40, 'ISSUE', null, null, ${ACTOR}),
+          (${client}, '7000000017', 1, 'RETURN_TO_VENDOR_REV', 'M100', 'P100', 'UNRESTRICTED', 2, 'PC', 2, 'PC', 10, 1, 20, '4500000010', 40, 'RECEIPT', '7000000016', 1, ${ACTOR}),
+          (${client}, '7000000018', 1, 'GOODS_RECEIPT_PO', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 50, 'RECEIPT', null, null, ${ACTOR}),
+          (${client}, '7000000019', 1, 'RECEIPT_REVERSAL', 'M100', 'P100', 'UNRESTRICTED', 4, 'PC', 4, 'PC', 10, 1, 40, '4500000010', 50, 'ISSUE', '7000000018', 1, ${ACTOR})
+        on conflict do nothing
+      `);
+    });
+
+    try {
+      const rows = await list({ orderFrom: '4500000010', orderTo: '4500000010' });
+      const item = (number: number) => rows.rows.find((entry) => entry.itemNumber === number);
+
+      // A receipt alone is the case the reader already got right.
+      expect(item(10)).toMatchObject({
+        quantity: 4, deliveredQuantity: 4, openDeliveryQuantity: 0, openInvoiceQuantity: 4, status: 'DELIVERED',
+      });
+      // One piece given back is three delivered, not five, and the line stays open.
+      expect(item(20)).toMatchObject({
+        deliveredQuantity: 3, openDeliveryQuantity: 1, openInvoiceQuantity: 3, status: 'PARTIALLY_DELIVERED',
+      });
+      // Returned in full, the line is back where it started: nothing delivered, nothing to invoice.
+      expect(item(30)).toMatchObject({
+        deliveredQuantity: 0, openDeliveryQuantity: 4, openInvoiceQuantity: 0, status: 'OPEN',
+      });
+      // A return reversed again restores the receipt; two cancellations do not remove the goods.
+      expect(item(40)).toMatchObject({
+        deliveredQuantity: 4, openDeliveryQuantity: 0, openInvoiceQuantity: 4, status: 'DELIVERED',
+      });
+      // A receipt whose document was really reversed cancels itself: it reads as nothing, never as
+      // minus four received with eight still to come.
+      expect(item(50)).toMatchObject({
+        deliveredQuantity: 0, openDeliveryQuantity: 4, openInvoiceQuantity: 0, status: 'OPEN',
+      });
+
+      const open = await list({ scope: 'STILL_TO_BE_DELIVERED', orderFrom: '4500000010', orderTo: '4500000010' });
+      expect(open.rows.map((entry) => entry.itemNumber)).toEqual([20, 30, 50]);
+    } finally {
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          delete from material_document_line
+           where client = ${client} and purchase_order_number = '4500000010'
+        `);
+        await tx.execute(sql`
+          delete from material_document
+           where client = ${client} and material_document_number in
+                 ('7000000011', '7000000012', '7000000013', '7000000014', '7000000015',
+                  '7000000016', '7000000017', '7000000018', '7000000019')
+        `);
+        await tx.execute(sql`
+          delete from purchase_order_item where client = ${client} and order_number = '4500000010'
+        `);
+        await tx.execute(sql`
+          delete from purchase_order where client = ${client} and order_number = '4500000010'
+        `);
       });
     }
   });

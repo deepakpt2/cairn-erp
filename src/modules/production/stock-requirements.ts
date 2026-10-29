@@ -33,7 +33,9 @@ import { sql } from 'drizzle-orm';
 
 import { lineNotReversed, lineReversalDisagreement, OPEN_PRODUCTION_DOCUMENT, REVERSAL_QUANTITY_DISAGREEMENT } from '../inventory/production-document-quantity';
 import { withTenant } from '../../platform/db/client';
+import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { fromScaled, toScaled } from '../../platform/posting/decimal';
+import { receiptMovementSign } from '../purchasing/receipt-unit-basis';
 
 export const STOCK_REQUIREMENTS_CAPABILITY = 'PROD.MRP.STOCKREQ';
 export const STOCK_REQUIREMENTS_ALIAS = 'MD04';
@@ -269,11 +271,12 @@ export async function stockRequirementsList(input: {
     // ── Open purchase orders: quantity less what has been delivered ─────────
     const poRows = await tx.execute(sql`
       with gr as (
+        -- The stock list keeps these figures in the material's base unit, which is what the
+        -- movement stored, so only the sign is shared with the purchase-order readers: a receipt
+        -- adds, a return takes back, and a reversal cancels the line it points at.
         select l.purchase_order_number, l.purchase_order_item,
-               sum(case when m.direction = 'REVERSAL' then -l.base_quantity else l.base_quantity end) as delivered
+               sum(${receiptMovementSign('m')} * l.base_quantity) as delivered
         from material_document_line l
-        join material_document d
-          on d.client = l.client and d.material_document_number = l.material_document_number and d.status = 'POSTED'
         join movement_type m on m.client = l.client and m.movement_type = l.movement_type
         where l.client = ${client} and l.purchase_order_number is not null
         group by l.purchase_order_number, l.purchase_order_item
@@ -282,7 +285,7 @@ export async function stockRequirementsList(input: {
         from purchase_order_schedule_line where client = ${client}
         group by order_number, item_number
       )
-      select i.order_number, i.item_number, i.quantity::text as quantity, po.document_date::text as document_date,
+      select i.order_number, i.item_number, i.quantity::text as quantity, i.unit, po.document_date::text as document_date,
              coalesce(gr.delivered, 0)::text as delivered, coalesce(sc.delivery_date, '') as delivery_date,
              i.marked_for_deletion
       from purchase_order_item i
@@ -356,8 +359,27 @@ export async function stockRequirementsList(input: {
         drillDown: `/purchasing/requisition-list?requisitionNumber=${encodeURIComponent(String(row.requisition_number))}`,
       });
     }
+    const baseUnit = String(master[0]!.base_unit ?? '');
+    let poUnitBlocked = 0;
     for (const row of poRows) {
-      const open = Number((num(row.quantity) - num(row.delivered)).toFixed(3));
+      // The goods received against a purchase order are counted in the material's base unit, which
+      // is what a posted material document keeps (SCR-144), so the ordered side has to arrive in
+      // that unit too before the two are subtracted. An item already in the base unit needs no
+      // rule; an item whose unit the material cannot convert is left as the order holds it and
+      // disclosed below, never re-scaled by a factor nobody maintains.
+      let ordered = num(row.quantity);
+      const unit = String(row.unit ?? '').trim();
+      if (unit !== '' && unit !== baseUnit) {
+        try {
+          ordered = (await toBaseQuantity(tx, client, {
+            materialNumber: s.material!, quantity: ordered, entryUnit: unit,
+          })).baseQuantity;
+        } catch (caught) {
+          if (caught instanceof UnitConversionError) poUnitBlocked += 1;
+          else throw caught;
+        }
+      }
+      const open = Number((ordered - num(row.delivered)).toFixed(3));
       if (open === 0) continue;
       elements.push({
         date: String(row.delivery_date) || String(row.document_date),
@@ -513,6 +535,9 @@ export async function stockRequirementsList(input: {
     }
     if (componentIssueReducedDemand) {
       warnings.push('A posted component issue is already subtracted from dated production-order component demand. It is not counted again. A reversal of that issue restores the open quantity.');
+    }
+    if (poUnitBlocked > 0) {
+      warnings.push(`${poUnitBlocked} purchase order item(s) stand in a unit this material carries no conversion for. Their ordered quantity is listed as the order holds it while the goods received are counted in ${baseUnit || 'the base unit'}, so their open quantity is the difference of two units and is not a coverage figure.`);
     }
     if (componentIssueUnitBlocked) {
       warnings.push('A posted component issue uses a different unit from the component requirement. It was not subtracted from planning demand.');

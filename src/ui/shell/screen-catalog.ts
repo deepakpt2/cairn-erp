@@ -2527,6 +2527,42 @@ export const SCREENS: readonly ScreenLink[] = [
     family: "people-config",
     accepts: ["type"],
   },
+  {
+    // The pay structure of 9195, in the configuration area beside the record types it depends on: the
+    // `people` area still waits on its nav label (see the note above), and a configuration screen belongs to
+    // configuration regardless.
+    id: "/config/pay-components",
+    path: "/config/pay-components",
+    query: {},
+    code: "CFG.PEOPLE.PAYCOMPONENT.DEFINE",
+    title: "Define pay components",
+    area: "configuration",
+    family: "people-config",
+    accepts: ["component", "chart", "q"],
+  },
+  {
+    // The org block of 9194 sits in the same area for the same reason the employee master above does: a
+    // `people` ScreenArea needs a nav label in src/platform/i18n/index.ts, which carries uncommitted owner
+    // work, so both People transaction screens are filed beside the other business masters.
+    id: "/people/organization",
+    path: "/people/organization",
+    query: {},
+    code: "PEOPLE.ORGUNIT.CREATE",
+    title: "Organisation",
+    area: "foundation",
+    family: "people-organization",
+    accepts: ["unit", "position", "job", "q"],
+  },
+  {
+    id: "/people/assignments",
+    path: "/people/assignments",
+    query: {},
+    code: "PEOPLE.ASSIGNMENT.MAINTAIN",
+    title: "Assignments",
+    area: "foundation",
+    family: "people-organization",
+    accepts: ["employee", "position", "q"],
+  },
 ];
 
 export const SCREEN_AREAS: readonly ScreenArea[] = [

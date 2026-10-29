@@ -35,6 +35,7 @@ import {
   REQUEST_MISMATCH_REMEDY,
 } from './balance-update';
 import { recordOutputsForPostedDocument } from './material-document-output';
+import { fromBaseQuantity, toBaseQuantity, UnitConversionError } from './unit-conversion';
 import {
   material, materialDocument, materialDocumentLine, materialPlant, materialValuation,
   movementType, stockQuantity,
@@ -143,6 +144,35 @@ async function receivedQuantities(tx: Tx, client: string, orderNumber: string): 
   return map;
 }
 
+/**
+ * What has been received on one order item, in the unit that item is ordered in.
+ *
+ * `receivedQuantities` adds the posted lines in the material's base unit, because that is the one
+ * unit every document on the order agrees on - a goods receipt and a return against it are both
+ * counted there. The order's own conversation is in another unit: `ordered`, `remaining`, the
+ * over-delivery tolerance and the quantity a receiver types all speak the item's unit, which is
+ * why the total comes back through the same material conversion that produced it. An item already
+ * in the base unit is answered untouched, and an item whose rule has gone since the posting is
+ * answered in the base unit with the gap named, because a number silently re-scaled by a factor
+ * nobody maintains would be the worse of the two lies.
+ */
+async function receivedInItemUnit(
+  tx: Tx, client: string, item: { materialNumber: string | null; unit: string }, receivedBase: number,
+): Promise<{ quantity: number; unconvertible: boolean }> {
+  if (receivedBase === 0 || !item.materialNumber) return { quantity: receivedBase, unconvertible: false };
+  try {
+    return {
+      quantity: await fromBaseQuantity(tx, client, {
+        materialNumber: item.materialNumber, baseQuantity: receivedBase, targetUnit: item.unit,
+      }),
+      unconvertible: false,
+    };
+  } catch (caught) {
+    if (caught instanceof UnitConversionError) return { quantity: receivedBase, unconvertible: true };
+    throw caught;
+  }
+}
+
 export interface ReceiptItemView {
   itemNumber: number;
   materialNumber: string | null;
@@ -196,10 +226,13 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
       releaseRequired: Boolean(release),
       released: !release || release.status === 'RELEASED',
       items: await Promise.all(items.map(async (item) => {
-        const got = received.get(item.itemNumber) ?? 0;
+        const gotBase = received.get(item.itemNumber) ?? 0;
+        const got = await receivedInItemUnit(tx, client, item, gotBase);
         const ordered = Number(item.quantity);
         let refusal: string | null = null;
-        if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
+        if (got.unconvertible) {
+          refusal = `The quantity received on this item cannot be stated in ${item.unit}: the material carries no conversion between ${item.unit} and its base unit, and the posted lines are kept in that base unit. Maintain the conversion to read the order history, or post the receipt in the base unit.`;
+        } else if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
         else if (!item.materialNumber) refusal = 'Text items carry no stock.';
         else if (item.accountAssignmentCategory) {
           refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
@@ -214,8 +247,8 @@ export async function getReceiptOrder(client: string, orderNumber: string): Prom
           proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
           unit: item.unit,
           ordered,
-          received: got,
-          remaining: Math.max(0, ordered - got),
+          received: got.quantity,
+          remaining: Math.max(0, ordered - got.quantity),
           netPrice: item.netPrice,
           priceUnit: item.priceUnit,
           eligible: !refusal,
@@ -374,7 +407,8 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
     const claimedReceipt = new Map<number, number>();
     const journalLines: Array<{ glAccount: string; debitCredit: 'S' | 'H'; amount: string; material?: string; plant?: string }> = [];
     const prepared: Array<{
-      item: ReceiptItemView; quantity: number; storageLocation: string; batch: string;
+      item: ReceiptItemView; quantity: number; baseQuantity: number; baseUnit: string;
+      storageLocation: string; batch: string;
       value: number; poValue: number; valuation: typeof materialValuation.$inferSelect;
     }> = [];
 
@@ -432,9 +466,33 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         );
       }
 
+      // SCR-144, the rule the production and issue postings already keep: the receipt is entered in
+      // the unit the order speaks, while stock, the material document's base pair and the
+      // valuation quantity are the material's base unit - `stock_quantity` has no unit column and
+      // can hold nothing else. `toBaseQuantity` converts by the material's own exact ratio, needs
+      // no row for an item already in the base unit, and refuses a unit it cannot convert by name
+      // instead of assuming that a case is a piece.
+      let baseQuantity = line.quantity;
+      let baseUnit = item.unit;
+      if (item.unit !== (mat.baseUnit ?? '')) {
+        try {
+          const conversion = await toBaseQuantity(tx, input.client, {
+            materialNumber: item.materialNumber!, quantity: line.quantity, entryUnit: item.unit,
+          });
+          baseQuantity = conversion.baseQuantity;
+          baseUnit = conversion.baseUnit;
+        } catch (caught) {
+          if (caught instanceof UnitConversionError) throw new GoodsReceiptError(caught.message, caught.remedy);
+          throw caught;
+        }
+      }
+      // The money is what the order priced: the entered quantity at the entered price unit. The
+      // standard-price stock value is the material's cost per base unit, so it follows the
+      // converted quantity - and a moving-average price divided by the base quantity is the price
+      // of one base unit, not the price of one package.
       const poValue = round2((line.quantity * Number(item.netPrice)) / Number(item.priceUnit));
       const stockValue = valuation.priceControl === 'STANDARD'
-        ? round2((line.quantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
+        ? round2((baseQuantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
         : poValue;
       // SCR-142: an open count with a posting block refuses the receipt for this material here.
       const required = await storageLocationRequired(tx, input.client, item.materialNumber, item.plant);
@@ -478,7 +536,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       }
 
       prepared.push({
-        item, quantity: line.quantity,
+        item, quantity: line.quantity, baseQuantity, baseUnit,
         storageLocation: receivedAt.storageLocation, batch,
         value: stockValue, poValue, valuation,
       });
@@ -546,7 +604,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         storageLocation: p.storageLocation || null, stockType: 'UNRESTRICTED',
         batchNumber: p.batch,
         entryQuantity: String(p.quantity), entryUnit: p.item.unit,
-        baseQuantity: String(p.quantity), baseUnit: p.item.unit,
+        baseQuantity: String(p.baseQuantity), baseUnit: p.baseUnit,
         unitPrice: p.item.netPrice, priceUnit: p.item.priceUnit, currency: view.currency,
         value: String(p.value),
         purchaseOrderNumber: input.orderNumber, purchaseOrderItem: p.item.itemNumber,
@@ -555,13 +613,13 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       await tx.insert(stockQuantity).values({
         client: input.client, materialNumber: p.item.materialNumber!, plant: p.item.plant,
         storageLocation: p.storageLocation, stockType: 'UNRESTRICTED', batchNumber: p.batch,
-        quantity: String(p.quantity), createdBy: input.changedBy,
+        quantity: String(p.baseQuantity), createdBy: input.changedBy,
       }).onConflictDoUpdate({
         target: [stockQuantity.client, stockQuantity.materialNumber, stockQuantity.plant, stockQuantity.storageLocation, stockQuantity.stockType, stockQuantity.batchNumber],
-        set: { quantity: sql`${stockQuantity.quantity} + ${p.quantity}`, changedBy: input.changedBy, changedAt: new Date() },
+        set: { quantity: sql`${stockQuantity.quantity} + ${p.baseQuantity}`, changedBy: input.changedBy, changedAt: new Date() },
       });
       await applyValuationDelta(
-        tx, input.client, input.changedBy, p.item.materialNumber!, p.item.plant, p.quantity, p.value,
+        tx, input.client, input.changedBy, p.item.materialNumber!, p.item.plant, p.baseQuantity, p.value,
       );
     }
 
@@ -616,10 +674,13 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
     releaseRequired: Boolean(release),
     released: !release || release.status === 'RELEASED',
     items: await Promise.all(items.map(async (item) => {
-      const got = received.get(item.itemNumber) ?? 0;
+      const gotBase = received.get(item.itemNumber) ?? 0;
+      const got = await receivedInItemUnit(tx, client, item, gotBase);
       const ordered = Number(item.quantity);
       let refusal: string | null = null;
-      if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
+      if (got.unconvertible) {
+        refusal = `The quantity received on this item cannot be stated in ${item.unit}: the material carries no conversion between ${item.unit} and its base unit, and the posted lines are kept in that base unit. Maintain the conversion to read the order history, or post the receipt in the base unit.`;
+      } else if (item.markedForDeletion) refusal = 'The item is marked for deletion.';
       else if (!item.materialNumber) refusal = 'Text items carry no stock.';
       else if (item.accountAssignmentCategory) {
         refusal = assignedReceiptRefusal(await readAssignedGoodsReceiptDecision(tx, client, item.plant, true));
@@ -633,7 +694,7 @@ async function getReceiptOrderInTx(tx: Tx, client: string, orderNumber: string):
         batch: item.batchNumber,
         proposedStorageLocation: await proposeStorageLocation(tx, client, item.plant, item.storageLocation),
         unit: item.unit,
-        ordered, received: got, remaining: Math.max(0, ordered - got),
+        ordered, received: got.quantity, remaining: Math.max(0, ordered - got.quantity),
         netPrice: item.netPrice, priceUnit: item.priceUnit,
         eligible: !refusal, refusal,
       };

@@ -203,4 +203,13 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   // QM slice 1 keeps the reviewed loopback database the whole cohort runs on; isolation is the reserved
   // fixture key, exactly as the owner's R-77 ruling put it for every target rebound here.
   'quality-lot-receipt': { database: 'cairn_b210', port: '5432', batch: 'QM9192 local loopback' },
+  // The People journeys create rows the reviewed acceptance database does not have yet: 9194 is
+  // applied on the development database and not on cairn_b210, and the org journeys need that
+  // schema. So these three run on a scratch database of their own, migrated and seeded for the
+  // purpose, on the same loopback port. The guard is what keeps the run off cairn_b210 and off
+  // the development database: a wrong DATABASE_URL fails the identity check before a click.
+  'people-employee-records': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9193 scratch acceptance' },
+  'people-organization': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9194 scratch acceptance' },
+  'people-assignments': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9194 scratch acceptance' },
+  'people-pay-components': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9195 scratch acceptance' },
 };

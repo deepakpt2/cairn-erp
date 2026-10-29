@@ -19,10 +19,15 @@
  * invented here because no reader in the system needs one yet: pay components, deductions and time data
  * arrive with their own decisions (docs/operational-readiness.md §4 items 4 and 5).
  *
- * The organisational block (`org_unit`, `position`, `job`, `org_hierarchy`, `position_assignment`), time and
- * leave, and every payroll table are deliberately absent. The org block comes next and for a specific
- * reason: assignment data is itself a record of a configured type, so building it with fixed columns first
- * would fix the shape the record types exist to avoid.
+ * The organisational block was left out of this first slice on a reading that turned out to be too narrow:
+ * its note reasoned that PA0001-style assignment data is "a record of a configured type", so fixed columns
+ * would fix the shape the record types exist to avoid. CAIRN.md §8.10 lists `position_assignment` as a table
+ * of its own, so `9194` builds it as one — with the *span* mechanics of this file's records (validity dates,
+ * an inclusive `valid_to`, a change that appends) rather than with the record-type indirection. What stayed
+ * out of People, on the grounds those files record: time and leave, and every payroll *result* table.
+ * The pay structure of §8.10 arrived in `9195` — what a pay component is, which account it moves, and whether
+ * a cost centre carries it — and it is a definition rather than a calculation: R-11 keeps payroll simplified
+ * and DV-001 refuses to ship guessed statutory rules, so nothing in People computes an amount.
  */
 import { boolean, check, date, foreignKey, integer, numeric, pgTable, primaryKey, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -43,6 +48,32 @@ export const RECORD_CAPABILITY = 'PEOPLE.RECORD.MAINTAIN';
 export const RECORD_TYPE_OBJECT_CLASS = 'record_type';
 export const EMPLOYEE_OBJECT_CLASS = 'employee';
 export const EMPLOYEE_RECORD_OBJECT_CLASS = 'employee_record';
+
+/** The organisational block `9194` adds: where a person sits, and who they report to. */
+export const ORG_ROUTE = '/people/organization';
+export const ASSIGNMENT_ROUTE = '/people/assignments';
+export const ORG_UNIT_CAPABILITY = 'PEOPLE.ORGUNIT.CREATE';
+export const POSITION_CAPABILITY = 'PEOPLE.POSITION.CREATE';
+export const ASSIGNMENT_CAPABILITY = 'PEOPLE.ASSIGNMENT.MAINTAIN';
+export const ORG_UNIT_OBJECT_CLASS = 'org_unit';
+export const JOB_OBJECT_CLASS = 'job';
+export const POSITION_OBJECT_CLASS = 'position';
+export const ORG_HIERARCHY_OBJECT_CLASS = 'org_hierarchy';
+export const ASSIGNMENT_OBJECT_CLASS = 'position_assignment';
+
+/** The two relations `org_hierarchy` carries: the tree, and the line §15.1 calls the reporting line. */
+export const ORG_RELATIONS = ['STRUCTURE', 'REPORTS_TO'] as const;
+export type OrgRelation = (typeof ORG_RELATIONS)[number];
+export const ORG_NODE_KINDS = ['ORGUNIT', 'POSITION'] as const;
+export type OrgNodeKind = (typeof ORG_NODE_KINDS)[number];
+
+/**
+ * How deep the structure may go. Ten is the number drizzle/0052 gave the cost centre tree, taken over rather
+ * than newly invented; it counts the whole chain, so a position under a unit under a unit is three levels.
+ * A structure deeper than this is a maintenance problem before it is a reporting one, and the cap is what
+ * turns "the tenant drew a ring" into a refusal with a sentence attached.
+ */
+export const MAX_ORG_DEPTH = 10;
 
 /** A record type: what the tenant keeps about a person. Retired by validity, never deleted. */
 export const recordType = pgTable(
@@ -177,6 +208,242 @@ export const recordFieldValue = pgTable(
     check(
       'record_field_value_one_slot_ck',
       sql`(${t.textValue} is not null)::int + (${t.numberValue} is not null)::int + (${t.dateValue} is not null)::int = 1`,
+    ),
+  ],
+);
+
+/**
+ * An organisational unit: a name, a place in a tree, and a validity flag. The parent is a row of
+ * `orgHierarchy` rather than a column, so there is exactly one answer to "what is above this". A unit is
+ * retired by validity and never deleted: `9194` grants no DELETE on it, because positions and other units
+ * cite it.
+ */
+export const orgUnit = pgTable(
+  'org_unit',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    description: varchar('description', { length: 200 }),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('org_unit_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+  ],
+);
+
+/** What a position does, named by the tenant and independent of where it is done. §10.8 gives jobs no code
+ * of their own, so the authority that maintains positions maintains these. */
+export const job = pgTable(
+  'job',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    description: varchar('description', { length: 200 }),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('job_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+  ],
+);
+
+/** One place in the structure an employee can be assigned to. Its unit is an edge; who holds it is a query
+ * against the assignment table, never a column here. */
+export const position = pgTable(
+  'position',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    title: varchar('title', { length: 60 }).notNull(),
+    jobCode: varchar('job_code', { length: 10 }),
+    description: varchar('description', { length: 200 }),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('position_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+    foreignKey({
+      name: 'position_job_fk',
+      columns: [t.client, t.jobCode],
+      foreignColumns: [job.client, job.code],
+    }).onDelete('restrict'),
+  ],
+);
+
+/**
+ * The structure itself: `STRUCTURE` rows say what hangs below what (a unit under a unit, a position in a
+ * unit), `REPORTS_TO` rows say which position is above which. The key is the child, which *is* the
+ * one-parent rule; the absence of a ring and the depth cap are the service's, both judged in the transaction
+ * that writes the edge. This is the one table of the slice the application may delete from, because a
+ * misfiled object has to be movable and a move in a child-keyed table is a delete and an insert.
+ */
+export const orgHierarchy = pgTable(
+  'org_hierarchy',
+  {
+    client: tenant(),
+    relationType: varchar('relation_type', { length: 12 }).notNull(),
+    parentKind: varchar('parent_kind', { length: 8 }).notNull(),
+    parentCode: varchar('parent_code', { length: 10 }).notNull(),
+    childKind: varchar('child_kind', { length: 8 }).notNull(),
+    childCode: varchar('child_code', { length: 10 }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.relationType, t.childKind, t.childCode] }),
+    check('org_hierarchy_relation_ck', sql`${t.relationType} in ('STRUCTURE', 'REPORTS_TO')`),
+    check(
+      'org_hierarchy_pairs_ck',
+      sql`(${t.relationType} = 'STRUCTURE' and ${t.parentKind} = 'ORGUNIT' and ${t.childKind} in ('ORGUNIT', 'POSITION'))
+        or (${t.relationType} = 'REPORTS_TO' and ${t.parentKind} = 'POSITION' and ${t.childKind} = 'POSITION')`,
+    ),
+    check(
+      'org_hierarchy_not_self_ck',
+      sql`${t.parentKind} <> ${t.childKind} or ${t.parentCode} <> ${t.childCode}`,
+    ),
+  ],
+);
+
+/**
+ * The assignment: an employee, a position, the cost centre that carried them, and the span it was true for.
+ * Keyed by (employee, first day) so a second assignment cannot begin the same day; overlapping spans are
+ * refused by the service, in the transaction, for the same reason `employee_record`'s overlap is. A change
+ * appends a row and delimits the one it replaces — `valid_to` is the only write history ever takes.
+ */
+export const positionAssignment = pgTable(
+  'position_assignment',
+  {
+    client: tenant(),
+    personnelNumber: varchar('personnel_number', { length: 20 }).notNull(),
+    positionCode: varchar('position_code', { length: 10 }).notNull(),
+    controllingArea: varchar('controlling_area', { length: 4 }).notNull(),
+    costCenter: varchar('cost_center', { length: 10 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }).notNull(),
+    validTo: date('valid_to', { mode: 'string' }),
+    requestKey: varchar('request_key', { length: 64 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.personnelNumber, t.validFrom] }),
+    foreignKey({
+      name: 'position_assignment_employee_fk',
+      columns: [t.client, t.personnelNumber],
+      foreignColumns: [employee.client, employee.personnelNumber],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'position_assignment_position_fk',
+      columns: [t.client, t.positionCode],
+      foreignColumns: [position.client, position.code],
+    }).onDelete('restrict'),
+    // The cost centre itself cannot be a foreign key: its own key carries a from-date (drizzle/0050), so a
+    // span cannot name one interval of it. The controlling area *is* a real key — declared in
+    // `9194`'s SQL, since no drizzle schema in this repository names that table and cross-module references
+    // are plain columns throughout (src/modules/finance/schema.ts stores `cost_center` the same way). What
+    // the code's validity across the span means is the service's question, asked of the dated master.
+    check('position_assignment_area_format_ck', sql`${t.controllingArea} ~ '^[A-Z0-9]{4}$'`),
+    check('position_assignment_cc_format_ck', sql`${t.costCenter} ~ '^[A-Z0-9]{1,10}$'`),
+    check('position_assignment_span_ck', sql`${t.validTo} is null or ${t.validTo} >= ${t.validFrom}`),
+    uniqueIndex('position_assignment_request_key_uq')
+      .on(t.client, t.personnelNumber, t.requestKey)
+      .where(sql`${t.requestKey} is not null`),
+  ],
+);
+
+// ── 9195: the pay structure ─────────────────────────────────────────────────
+// §8.10's "pay_component, pay_component_config | Pay structure and its GL/cost mapping". Two tables, one
+// screen, no amounts: the header of drizzle/9195_people_pay_structure.sql says what the kinds and the two
+// sides of a mapping are read from, and what waits on a jurisdiction decision instead.
+
+/** The four kinds §15.2's posting example reduces to, and no more than that. */
+export const PAY_COMPONENT_KINDS = ['EARNING', 'DEDUCTION', 'EMPLOYER_CONTRIBUTION', 'EOS_PROVISION'] as const;
+export type PayComponentKind = (typeof PAY_COMPONENT_KINDS)[number];
+
+/** Where a debit is charged: the employee's assignment, a centre this row names, or nothing. */
+export const COST_RECEIVER_CATEGORIES = ['ASSIGNMENT', 'FIXED', 'NONE'] as const;
+export type CostReceiverCategory = (typeof COST_RECEIVER_CATEGORIES)[number];
+
+export const PAY_COMPONENT_ROUTE = '/config/pay-components';
+export const PAY_COMPONENT_CAPABILITY = 'CFG.PEOPLE.PAYCOMPONENT.DEFINE';
+export const PAY_COMPONENT_OBJECT_CLASS = 'pay_component';
+export const PAY_COMPONENT_CONFIG_OBJECT_CLASS = 'pay_component_config';
+
+/** A component is a name for a kind of pay. It never carries a rule about how much. */
+export const payComponent = pgTable(
+  'pay_component',
+  {
+    client: tenant(),
+    code: varchar('code', { length: 10 }).notNull(),
+    name: varchar('name', { length: 60 }).notNull(),
+    componentKind: varchar('component_kind', { length: 24 }).notNull(),
+    affectsNetPay: boolean('affects_net_pay').notNull().default(false),
+    description: varchar('description', { length: 200 }),
+    isValid: boolean('is_valid').notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.code] }),
+    check('pay_component_code_format_ck', sql`${t.code} ~ '^([A-Z][A-Z0-9]{1,9})$'`),
+    check('pay_component_name_length_ck', sql`length(trim(${t.name})) > 0`),
+    check(
+      'pay_component_kind_vocabulary_ck',
+      sql`${t.componentKind} in ('EARNING', 'DEDUCTION', 'EMPLOYER_CONTRIBUTION', 'EOS_PROVISION')`,
+    ),
+    check('pay_component_net_effect_ck', sql`${t.affectsNetPay} = (${t.componentKind} in ('EARNING', 'DEDUCTION'))`),
+  ],
+);
+
+/**
+ * The mapping of one component within one chart of accounts. The relations to `gl_account` and to the
+ * cost-centre master are the database's rather than drizzle's: `public.gl_account` belongs to the finance
+ * schema and `public.cost_center` is dated by a key this file cannot point at, exactly as 9194 left its own
+ * cost-centre relation to SQL. The service checks both, in the transaction that writes the row.
+ */
+export const payComponentConfig = pgTable(
+  'pay_component_config',
+  {
+    client: tenant(),
+    componentCode: varchar('component_code', { length: 10 }).notNull(),
+    chartOfAccounts: varchar('chart_of_accounts', { length: 4 }).notNull(),
+    debitAccount: varchar('debit_account', { length: 10 }),
+    creditAccount: varchar('credit_account', { length: 10 }),
+    costReceiverCategory: varchar('cost_receiver_category', { length: 10 }).notNull().default('NONE'),
+    controllingArea: varchar('controlling_area', { length: 4 }),
+    costCenter: varchar('cost_center', { length: 10 }),
+    ...auditColumns,
+  },
+  (t) => [
+    primaryKey({ columns: [t.client, t.componentCode, t.chartOfAccounts] }),
+    foreignKey({
+      name: 'pay_component_config_component_fk',
+      columns: [t.client, t.componentCode],
+      foreignColumns: [payComponent.client, payComponent.code],
+    }).onDelete('restrict'),
+    check('pay_component_config_chart_format_ck', sql`${t.chartOfAccounts} ~ '^[A-Z0-9]{4}$'`),
+    check('pay_component_config_not_hollow_ck', sql`${t.debitAccount} is not null or ${t.creditAccount} is not null`),
+    check(
+      'pay_component_config_sides_differ_ck',
+      sql`${t.debitAccount} is null or ${t.creditAccount} is null or ${t.debitAccount} <> ${t.creditAccount}`,
+    ),
+    check(
+      'pay_component_config_receiver_vocabulary_ck',
+      sql`${t.costReceiverCategory} in ('ASSIGNMENT', 'FIXED', 'NONE')`,
+    ),
+    check(
+      'pay_component_config_cost_pair_ck',
+      sql`(${t.controllingArea} is null and ${t.costCenter} is null) or (${t.controllingArea} is not null and ${t.costCenter} is not null)`,
+    ),
+    check(
+      'pay_component_config_fixed_needs_centre_ck',
+      sql`${t.costReceiverCategory} <> 'FIXED' or (${t.controllingArea} is not null and ${t.costCenter} is not null)`,
+    ),
+    check(
+      'pay_component_config_assignment_needs_nothing_ck',
+      sql`${t.costReceiverCategory} <> 'ASSIGNMENT' or (${t.controllingArea} is null and ${t.costCenter} is null})`,
     ),
   ],
 );

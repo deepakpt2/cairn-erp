@@ -230,7 +230,15 @@ describe('server action security', () => {
     expect(await getPaymentMethod(alpha.client,'KW','Q')).toMatchObject({client:alpha.client,createdBy:'real.operator',allowedDirection:'BOTH',version:1});
     expect(await getPaymentMethod(beta.client,'KW','Q')).toBeNull();
 
+    // Retiring changes a row that already stands, so it is gated on the change lock the
+    // retire panel opens while it is engaged. A save that never opened the record is refused.
     const retire = form({client:beta.client,changedBy:'FORGED',country:'KW',methodCode:'Q',expectedVersion:'1',reason:'Retire action security test'});
+    const unheldRetirement = await retirePaymentMethodAction({ok:true},retire);
+    expect(unheldRetirement.ok).toBe(false);
+    expect(unheldRetirement.message).toContain('PAYMENT_METHOD KW/Q is not open for change in this session.');
+    expect(await getPaymentMethod(alpha.client,'KW','Q')).toMatchObject({isActive:true,version:1});
+
+    await hold('PAYMENT_METHOD','KW/Q');
     expect(await retirePaymentMethodAction({ok:true},retire)).toMatchObject({ok:true,changed:true,version:2});
     expect(await getPaymentMethod(alpha.client,'KW','Q')).toMatchObject({isActive:false,changedBy:'real.operator',version:2});
     expect(await getPaymentMethod(beta.client,'KW','Q')).toBeNull();
@@ -253,6 +261,14 @@ describe('server action security', () => {
 
   it('ignores a forged tenant/actor when changing posting controls', async () => {
     signedIn();
+    // The interval row has to be open in change for this session, exactly as the screen
+    // engages it on focus. Without that opening the write is refused and the row stands.
+    const unheld = await savePeriodRule(periodForm());
+    expect(unheld.ok).toBe(false);
+    expect(unheld.message).toContain('POSTING_PERIOD C001/S is not open for change in this session.');
+    const standing = await withTenant(alpha.client, (tx) => tx.execute(sql`select period_to from posting_period_rule where account_type = 'S'`));
+    expect((standing as unknown as Array<{ period_to: number }>)[0].period_to).toBe(12);
+    await hold('POSTING_PERIOD', 'C001/S');
     expect((await savePeriodRule(periodForm())).ok).toBe(true);
     const own = await withTenant(alpha.client, (tx) => tx.execute(sql`select period_to, changed_by from posting_period_rule where account_type = 'S'`));
     const other = await withTenant(beta.client, (tx) => tx.execute(sql`select period_to from posting_period_rule where account_type = 'S'`));
@@ -271,6 +287,12 @@ describe('server action security', () => {
 
   it('takes the number-range tenant and actor from the authenticated request', async () => {
     signedIn(); const data = rangeForm(); data.set('toNumber', '999998');
+    // Changing a standing interval goes through the lock the screen opens for it; the
+    // number-range number is never taken from the form, so the forged fields change nothing.
+    const unheld = await saveNumberRange({ ok: true }, rangeForm());
+    expect(unheld.ok).toBe(false);
+    expect(unheld.message).toContain('NUMBER_RANGE RF_BELEG/1000/GENERAL/0 is not open for change in this session.');
+    await hold('NUMBER_RANGE', 'RF_BELEG/1000/GENERAL/0');
     expect((await saveNumberRange({ ok: true }, data)).ok).toBe(true);
     expect((await listNumberRanges(alpha.client)).ranges[0].changedBy).toBe('real.operator');
     expect((await listNumberRanges(beta.client)).ranges).toHaveLength(0);

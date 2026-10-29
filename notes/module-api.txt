@@ -1,0 +1,1960 @@
+════ finance/accrual.ts
+  fns: postAccrualDocument, getAccrualDocument, listDueAccruals, listAccrualDocuments, executeAccrualReversal
+
+════ finance/ageing-derivation.ts
+  fns: deriveAgeingItems
+
+════ finance/asset-acquisition.ts
+  fns: simulateAssetAcquisition, postAssetAcquisition, reverseAssetAcquisition, getAssetTransactions
+
+════ finance/asset-depreciation.ts
+  fns: executeDepreciationRun, listDepreciationRuns, getDepreciationRunItems, getPostedDepreciation
+
+════ finance/asset-history.ts
+  fns: getAssetHistorySheet
+
+════ finance/asset-master.ts
+  fns: createAsset, changeAsset, changeAssetAssignment, changeAssetDepreciation, deactivateAsset, getAsset, listAssets
+
+════ finance/asset-retirement.ts
+  fns: simulateAssetRetirement, postAssetRetirement, reverseAssetRetirement, getAssetRetirements, listRetireableAssets
+
+════ finance/balance-sheet.ts
+  fns: calculateBalanceSheet
+
+════ finance/carryforward.ts
+  fns: executeCarryforward, getCarryforwardRun, listCarryforwardRuns, listCarryforwardResults
+
+════ finance/cash-flow.ts
+  fns: calculateCashflow
+
+════ finance/chart-of-accounts-copy.ts
+  fns: copyChartOfAccounts, listChartCopies
+  · inputSchema = z.object({
+  client: clientSchema,
+  sourceChartOfAccounts: chartCodeSchema,
+  targetChartOfAccounts: chartCodeSchema,
+  copyLongTexts: z.boolean().default(true),
+  overwriteExisting: z.boolean().default(false),
+  padLeadingZeros: z.boolean().default(false),
+  reason: z.string().trim().min(1).max(200),
+  changedBy: z.string().trim().min(1),
+})
+════ finance/clearing-reset.ts
+  fns: getClearingDocument, resetClearing
+
+════ finance/close-cockpit.ts
+  fns: upsertTemplateTask, listTemplateTasks, createTaskListFromTemplate, getTaskList, listTaskLists, listTasks, listExecutions, listEvents, releaseTaskList, executeTask, processScheduledExecutions, attachEvidence, signOffTask, overrideTaskStatus, reopenTask, finalizeTaskList
+
+════ finance/consolidated-statements.ts
+  fns: calculateConsolidatedStatements
+
+════ finance/consolidation-monitor.ts
+  fns: getConsolidationMonitor, executeConsolidationTask, executeConsolidationTaskGroup, cancelConsolidationExecution
+
+════ finance/consolidation-workbench.ts
+  fns: listConsolidationAreas, getConsolidationWorkbench, saveDataBasis, saveArea, saveUnit, saveGroup, assignUnit, saveGroupAccount, saveMapping, saveMethod, saveVersion, saveTask, activateArea
+
+════ finance/credit.ts
+  fns: getCreditExposure, getCustomerCredit, listCreditConfig, saveCustomerCredit, listCreditAudit, evaluateCreditCheck, listCreditMonitor, checkSalesDocumentCredit, listCreditDeterminations, recheckDocument, releaseDocument, releaseDocumentsBulk, rejectReleaseRequest, reblockDocument, listReleaseEvents
+
+════ finance/customer-ageing.ts
+  fns: getCustomerAgeing
+
+════ finance/customer-balances.ts
+  fns: getCustomerBalances
+
+════ finance/customer-clearing.ts
+  fns: getCustomerClearing, clearCustomerItems
+
+════ finance/customer-down-payment-clearing.ts
+  fns: getCustomerDownPaymentClearing, clearCustomerDownPayments
+
+════ finance/customer-down-payment-request.ts
+  fns: resolveRequestTarget, createCustomerDownPaymentRequest, fulfilledSoFar, getCustomerDownPaymentRequests, applyRequestFulfillment, downPaymentCreditLine
+
+════ finance/customer-down-payment.ts
+  fns: postCustomerDownPayment, getCustomerDownPayments
+
+════ finance/customer-invoice.ts
+  fns: getCustomerInvoice, listCustomerInvoiceTaxCodes, postCustomerInvoice, cancelCustomerInvoice
+
+════ finance/document-display.ts
+  fns: getJournalDocument, resolveDocumentNumber
+
+════ finance/document-reversal.ts
+  fns: getDocumentForReversal, reverseDocument
+
+════ finance/dunning.ts
+  fns: getDunningRun, listDunningRuns, proposeDunningRun, excludeDunningAccount, finalizeDunningRun, cancelDunningRun
+
+════ finance/fx-valuation.ts
+  fns: executeFxValuation, getFxValuationRun
+
+════ finance/gl-account-group-maintenance.ts
+  fns: listAccountGroups, accountGroupFieldStatusMatrices, accountGroupChoices, groupAccountChoices, saveAccountGroup, setAccountGroupActive, saveAccountGroupFieldStatus
+  · accountGroupValuesSchema = z.object({
+  chartOfAccounts: chartCodeSchema,
+  accountGroup: groupCodeSchema,
+  description: descriptionSchema,
+  fromAccountNumber: rangeBoundSchema,
+  toAccountNumber: rangeBoundSchema,
+})
+  · accountGroupLifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  chartOfAccounts: chartCodeSchema,
+  accountGroup: groupCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: versionSchema,
+  reason: reasonSchema,
+})
+  · accountGroupFieldStatusInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  chartOfAccounts: chartCodeSchema,
+  accountGroup: groupCodeSchema,
+  expectedVersion: versionSchema,
+  /** Field key → status. A field left out falls back to the baseline. */
+  statuses: z.record(z.string(), z.string()).default({}),
+  reason: reasonSchema,
+})
+════ finance/gl-account-transfer.ts
+  fns: listAccountSegments, transferGlAccounts
+
+════ finance/gl-balances.ts
+  fns: getGlBalances, getGlBalanceReport
+
+════ finance/gl-clearing.ts
+  fns: getGlClearing, clearGlItems
+
+════ finance/gl-document.ts
+  fns: postGlDocument
+
+════ finance/grir-reclass.ts
+  fns: executeGrIrAnalysis, getGrIrRun
+
+════ finance/incoming-payment.ts
+  fns: getReceivables, postIncomingPayment
+
+════ finance/intercompany.ts
+  fns: listIntercompanyConfigs, saveIntercompanyConfig, deleteIntercompanyConfig, postIntercompany, listCompanyChoices
+
+════ finance/journal-items.ts
+  fns: getJournalItems
+
+════ finance/outgoing-payment.ts
+  fns: getPayables, postOutgoingPayment
+
+════ finance/parked-journal.ts
+  fns: parkJournal, editParkedJournal, completeParkedJournal, postParkedJournal, deleteParkedJournal, listParkedJournals, getParkedJournal
+
+════ finance/payment-run.ts
+  fns: getPaymentRun, listPaymentRuns, listBankChoices, createPaymentRun, generateProposal, executePaymentRun, cancelPaymentRun
+
+════ finance/profit-loss.ts
+  fns: calculateProfitLoss
+
+════ finance/subledger-tie-out.ts
+  fns: calculateSubledgerTie
+
+════ finance/tax-report.ts
+  fns: executeTaxReport, listTaxReturnRuns
+
+════ finance/trial-balance.ts
+  fns: calculateTrialBalance, listStatementVersions
+
+════ finance/vendor-ageing.ts
+  fns: getVendorAgeing
+
+════ finance/vendor-balances.ts
+  fns: getVendorBalances
+
+════ finance/vendor-clearing.ts
+  fns: getVendorClearing, clearVendorItems
+
+════ finance/vendor-credit-memo.ts
+  fns: getVendorCreditMemo, postVendorCreditMemo
+
+════ finance/vendor-down-payment-clearing.ts
+  fns: getDownPaymentClearing, clearDownPayments
+
+════ finance/vendor-down-payment-request.ts
+  fns: resolveRequestTarget, createVendorDownPaymentRequest, fulfilledSoFar, getVendorDownPaymentRequests, applyVendorRequestFulfillment, downPaymentDebitLine
+
+════ finance/vendor-down-payment.ts
+  fns: resolveSpecialGlAccount, postVendorDownPayment, getVendorDownPayments
+
+════ finance/vendor-invoice.ts
+  fns: getVendorInvoice, listVendorInvoiceTaxCodes, postVendorInvoice, cancelVendorInvoice
+
+════ foundation/account-determination.ts
+  fns: listAccountDeterminations, listDeterminationCharts, listDeterminationValuationClasses, listGlAccountChoices, saveAccountDetermination, deleteAccountDetermination
+  · determinationValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  chartOfAccounts: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'The Chart of Accounts is exactly four letters or digits.')),
+  event: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z][A-Z0-9_]{2,23}$/, 'The Posting Event is an upper-case event key.')),
+  valuationClass: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^([A-Z0-9_]{1,20})?$/, 'The Valuation Class is up to twenty letters, digits or underscores, or blank for any class.')),
+  generalModifier: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^([A-Z0-9]{1,4})?$/, 'The General Modifier is up to four letters or digits, or blank.')),
+  glAccount: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, 'The G/L Account is up to ten letters or digits.')),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+  · determinationDeleteInputSchema = z.object({
+  ...actorFields,
+  chartOfAccounts: determinationValuesSchema.shape.chartOfAccounts,
+  event: determinationValuesSchema.shape.event,
+  valuationClass: determinationValuesSchema.shape.valuationClass,
+  generalModifier: determinationValuesSchema.shape.generalModifier,
+  reason: determinationValuesSchema.shape.reason,
+})
+════ foundation/activity-rate-definition.ts
+  fns: planningContext, listActivityRates, saveActivityRates, deleteActivityRate, countActivityRates
+  · entrySchema = z.object({
+  period: z.number().int().min(1, 'The fiscal period is between 1 and 16.').max(16, 'The fiscal period is between 1 and 16.'),
+  plannedQuantity: decimalText('The planned activity quantity', 3),
+  fixedPrice: decimalText('The fixed price', 2),
+  variablePrice: decimalText('The variable price', 2),
+  priceUnit: z.number().int().min(1, 'The price unit is at least 1.').max(99999, 'The price unit is at most 99,999.'),
+})
+  · activityRatesValuesSchema = z.object({
+  controllingArea: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'The Controlling Area is exactly four letters or digits.')),
+  planVersion: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,3}$/, 'The Planning Version is up to three letters or digits.')),
+  fiscalYear: z.number().int().min(1900, 'The Fiscal Year is a four-digit year.').max(9999, 'The Fiscal Year is a four-digit year.'),
+  costCenter: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, 'The Cost Centre is up to ten letters or digits.')),
+  activityType: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,6}$/, 'The Activity Type is up to six letters or digits.')),
+  entries: z.array(entrySchema).min(1, 'Plan at least one period.'),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+════ foundation/activity-type-definition.ts
+  fns: listActivityTypes, listActivityUnits, saveActivityType, setActivityTypePostingLock, deleteActivityType
+  · activityTypeValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  controllingArea: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'The Controlling Area is exactly four letters or digits.')),
+  activityType: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,6}$/, 'The Activity Type is up to six letters or digits.')),
+  validFrom: dateValue('Valid From'),
+  validTo: dateValue('Valid To'),
+  name: z.string().trim().min(1, 'The Name is required.').max(40, 'The Name is at most 40 characters.'),
+  activityUnit: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase()),
+  category: z
+    .string()
+    .trim()
+    .refine(
+      (value) => ACTIVITY_CATEGORIES.some((entry) => entry.code === value),
+      'The Activity Category is one of 1 (manual entry, manual allocation), 2 (indirect determination, indirect allocation), 3 (manual entry, indirect allocation), 4 (manual entry, no allocation).',
+    ),
+  priceIndicator: z
+    .string()
+    .trim()
+    .refine(
+  …
+════ foundation/bank-master.ts
+  fns: listBanks, listBankCountryChoices, saveBank, deleteBank
+  · bankValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  bankCountry: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{2}$/, 'The Bank Country is the two-letter key from the country master.')),
+  bankKey: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,15}$/, 'The Bank Key is up to fifteen letters or digits.')),
+  name: z.string().trim().min(1, 'A bank name is required.').max(60, 'The bank name is at most sixty characters.'),
+  /** An empty city or SWIFT clears it: both are optional on a bank. */
+  city: z
+    .string()
+    .trim()
+    .max(35, 'The city is at most thirty-five characters.')
+    .transform((value) => (value === '' ? null : value)),
+  swift: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value.toUpperCase()))
+    .pipe(
+      z
+        .string()
+        .regex(
+          /^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/,
+          'The SWIFT code is a BIC: eight or eleven characters — bank, country, location, and optionally branch.',
+        )
+  …
+  · bankDeleteInputSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  changedBy: z.string().trim().min(1).max(60),
+  bankCountry: bankValuesSchema.shape.bankCountry,
+  bankKey: bankValuesSchema.shape.bankKey,
+})
+════ foundation/business-partners.ts
+  fns: saveBusinessPartner, getBusinessPartner, listBusinessPartners, requireGeneralPartner
+
+════ foundation/central-address-maintenance.ts
+  fns: createCentralAddress
+
+════ foundation/characteristic-definition.ts
+  fns: listCharacteristics, saveCharacteristic, setCharacteristicStatus, deleteCharacteristic
+
+════ foundation/chart-of-accounts-maintenance.ts
+  fns: chartOfAccountsF4Choices, listChartOfAccounts, saveChartOfAccounts, chartOfAccountsHasAccountsOrTransactions, listGroupChartsOfAccounts, saveGroupChartOfAccounts, setChartOfAccountsActive, setGroupChartOfAccountsActive
+  · chartOfAccountsValuesSchema = z.object({
+  chartOfAccounts: chartCodeSchema,
+  name: descriptionSchema,
+  language: languageSchema,
+  accountNumberLength: accountLengthSchema,
+  groupChart: groupChartSchema,
+  costElementIntegration: costElementIntegrationSchema,
+  isBlocked: z.boolean(),
+})
+  · chartKeyInputSchema = z.object({ client: clientSchema, chartOfAccounts: chartCodeSchema })
+  · groupChartOfAccountsValuesSchema = z.object({
+  groupChartOfAccounts: chartCodeSchema,
+  name: descriptionSchema,
+  language: languageSchema,
+})
+  · chartLifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1).max(60),
+  chartOfAccounts: chartCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: lifecycleReasonSchema,
+})
+  · groupLifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1).max(60),
+  groupChartOfAccounts: chartCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: lifecycleReasonSchema,
+})
+════ foundation/class-definition.ts
+  fns: listClasses, saveClass, setClassStatus, deleteClass
+
+════ foundation/company-code-coa-assignment.ts
+  fns: assignCompanyCodeCoa
+  · companyCodeCoaAssignmentValuesSchema = z.object({
+  companyCode: z.string().trim().min(1).max(10),
+  chartOfAccounts: z.string().trim().transform((value) => value.toUpperCase()).pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'Chart of Accounts must be exactly four letters or numbers.')),
+})
+════ foundation/company-code-definition.ts
+  fns: defineCompanyCode
+  · companyCodeDefinitionValuesSchema = z.object({
+  companyCode: z.string().trim().min(1).max(10),
+  name: z.string().trim().min(1).max(160),
+  country: z.string().trim().regex(/^[A-Za-z]{2}$/).transform((value) => value.toUpperCase()),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()),
+  city: z.string().trim().max(80).optional().transform((value) => value || undefined),
+  taxRegistrationNumber: z.string().trim().max(40).optional().transform((value) => value || undefined),
+})
+════ foundation/constrained-values.ts
+  fns: suggestConstrainedValues
+
+════ foundation/controlling-area-company-assignment.ts
+  fns: assignCompanyCodeToControllingArea, assignCompanyCodeToControllingAreaInTransaction, unassignCompanyCodeFromControllingArea
+  · controllingAreaCompanyAssignmentValuesSchema = z.object({
+  controllingArea: controllingAreaKeySchema,
+  companyCode: companyCodeKeySchema,
+})
+════ foundation/controlling-area-company-compatibility.ts
+  fns: lockCompanyCodeOxxAssignments, assertCompanyCodeFinancialSettingsCompatible
+
+════ foundation/controlling-area-maintenance.ts
+  fns: controllingAreaF4Choices, listControllingAreas, saveControllingArea, controllingAreaHasRecordedTransactions, lockControllingAreaForCompanyCode, getControllingAreaVersion
+  · controllingAreaValuesSchema = z.object({
+  controllingArea: codeSchema,
+  name: nameSchema,
+  organizationName: organizationNameSchema,
+  companyCodeScope: scopeSchema,
+  currency: currencySchema,
+  fiscalYearVariant: fiscalYearVariantSchema,
+})
+  · controllingAreaKeyInputSchema = z.object({
+  client: clientSchema,
+  controllingArea: codeSchema,
+})
+════ foundation/cost-center-definition.ts
+  fns: listCostCenterAreas, listCostCenters, listAreaCompanyCodes, countCostCenterDocuments, saveCostCenter, setCostCenterPostingLock, deleteCostCenter
+  · costCenterValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  controllingArea: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'The Controlling Area is exactly four letters or digits.')),
+  costCenter: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, 'The Cost Centre is up to ten letters or digits.')),
+  validFrom: dateValue('Valid From'),
+  validTo: dateValue('Valid To'),
+  name: z.string().trim().min(1, 'The Name is required.').max(40, 'The Name is at most 40 characters.'),
+  personResponsible: z
+    .string()
+    .trim()
+    .max(20, 'Person Responsible is at most 20 characters.')
+    .transform((value) => (value === '' ? null : value)),
+  category: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .refine(isCostCenterCategory, 'The Category is one of the defined cost centre categories.'),
+  companyCode: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, 'The Company Code is up to ten letters or digits.')),
+  …
+════ foundation/cost-center-hierarchy.ts
+  fns: listHierarchy, saveHierarchyHeader, saveHierarchyNode, deleteHierarchyNode, placeCostCenterPeriod, unplaceCostCenterPeriod, saveCostCenterGroup, deleteCostCenterGroup, addGroupLeaf, removeGroupLeaf
+
+════ foundation/cost-center-report.ts
+  fns: calculateCostCenterReport
+
+════ foundation/customer-companies.ts
+  fns: saveCustomerCompany, getCustomerCompany, listCustomerCompanies, requireCustomerCompany, customerCompanyChoices
+
+════ foundation/customer-sales-areas.ts
+  fns: saveCustomerSalesArea, getCustomerSalesArea, listCustomerSalesAreas, requireCustomerSalesArea, customerSalesAreaChoices
+
+════ foundation/distribution-channel-division-maintenance.ts
+  fns: saveDistributionChannelDefinition, saveDivisionDefinition, deactivateDistributionChannel, deactivateDivision, getDistributionChannelDefinitionVersion, getDivisionDefinitionVersion
+  · distributionChannelDefinitionValuesSchema = z.object({ name: requiredNameSchema })
+  · divisionDefinitionValuesSchema = z.object({ name: requiredNameSchema })
+  · distributionChannelMaintenanceInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  mode: modeSchema,
+  distributionChannel: definitionKeySchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+  values: distributionChannelDefinitionValuesSchema,
+})
+  · divisionMaintenanceInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  mode: modeSchema,
+  division: definitionKeySchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+  values: divisionDefinitionValuesSchema,
+})
+  · distributionChannelDeactivationInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  distributionChannel: definitionKeySchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+})
+  · divisionDeactivationInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  division: definitionKeySchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+})
+  · distributionChannelVersionInputSchema = z.object({ client: tenantKeySchema, distributionChannel: definitionKeySchema })
+  · divisionVersionInputSchema = z.object({ client: tenantKeySchema, division: definitionKeySchema })
+════ foundation/document-type-definition.ts
+  fns: listDocumentTypes, listIntervalChoices, saveDocumentType, setDocumentTypeActive, deleteDocumentType
+  · documentTypeValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  documentType: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{2}$/, 'The Document Type is exactly two letters or digits.')),
+  name: z.string().trim().min(1, 'A description is required.').max(120, 'The description is at most 120 characters.'),
+  numberRangeObject: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9_.-]{1,40}$/, 'The number range object is up to forty letters, digits, underscores or dots.')),
+  numberRangeSubObject: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9_*.-]{1,24}$/, 'The number range interval is up to twenty-four letters, digits, underscores or dots.')),
+  allowedAccountTypes: z
+    .array(z.enum(ACCOUNT_TYPE_LETTERS))
+    .min(1, 'At least one account type must be allowed.')
+    .transform((letters) => ACCOUNT_TYPE_LETTERS.filter((letter) => letters.includes(letter)).join('')),
+  reversalMode: z.enum(REVERSAL_MODES),
+  /** An empty reverse type means the type reverses under itself. */
+  reversalDocumentType: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value.toUpperCase()))
+    .pipe(z.string().regex(/^[A-Z0-9]{2}$/, 'The Reverse Document Type is exactly two letters or digits.').nullable()),
+  requiresReference: z.boolean(),
+  …
+  · documentTypeDeleteInputSchema = z.object({
+  ...actorFields,
+  documentType: documentTypeValuesSchema.shape.documentType,
+  reason: documentTypeValuesSchema.shape.reason,
+})
+════ foundation/employee-tolerance-definition.ts
+  fns: listEmployeeToleranceGroups, listToleranceCompanies, saveEmployeeToleranceGroup
+  · toleranceGroupValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  companyCode: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^([A-Z0-9]{4})?$/, 'The Company Code is four letters or digits, or blank for the tenant-wide scope.')),
+  groupKey: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^([A-Z0-9]{1,4})?$/, 'The Tolerance Group is up to four letters or digits, or blank for the default group.')),
+  maxDocumentAmount: decimal(13, 2, 'The Maximum Amount per Document'),
+  maxLineAmount: decimal(11, 2, 'The Maximum Amount per Line Item'),
+  maxCashDiscountPercent: decimal(3, 3, 'The Maximum Cash Discount Percentage')
+    .refine((value) => scaledValue(value, 3) <= 100_000n, 'The Maximum Cash Discount Percentage is between 0.000 and 100.000.'),
+  paymentDiffRevenueAmount: optionalDecimal(5, 2, 'The Payment Difference Revenue amount'),
+  paymentDiffExpenseAmount: optionalDecimal(5, 2, 'The Payment Difference Expense amount'),
+  paymentDiffRevenuePercent: optionalDecimal(2, 1, 'The Payment Difference Revenue percentage'),
+  paymentDiffExpensePercent: optionalDecimal(2, 1, 'The Payment Difference Expense percentage'),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+════ foundation/exchange-rate-maintenance.ts
+  fns: listExchangeRates, listCurrencyChoices, saveExchangeRate, deleteExchangeRate
+  · exchangeRateValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  rateType: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.enum(RATE_TYPES, { message: 'The Exchange Rate Type is Average, Buying or Selling.' })),
+  fromCurrency: currencyCodeSchema,
+  toCurrency: currencyCodeSchema,
+  validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'The Valid From date is a calendar date (YYYY-MM-DD).'),
+  rate: rateValueSchema,
+  ratioFrom: ratioSchema.default(1),
+  ratioTo: ratioSchema.default(1),
+  /**
+   * The rate the screen opened against, for a change. Required rather than defaulted:
+   * a caller that does not say what it saw cannot be told that somebody else moved first.
+   */
+  expectedRate: z.string().trim().max(20).default(''),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+  · exchangeRateDeleteInputSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  changedBy: z.string().trim().min(1).max(60),
+  rateType: exchangeRateValuesSchema.shape.rateType,
+  fromCurrency: currencyCodeSchema,
+  toCurrency: currencyCodeSchema,
+  validFrom: exchangeRateValuesSchema.shape.validFrom,
+  reason: exchangeRateValuesSchema.shape.reason,
+})
+════ foundation/fiscal-year-variant-assignment.ts
+  fns: assignFiscalYearVariant
+  · fiscalYearVariantAssignmentValuesSchema = z.object({
+  companyCode: z.string().trim().min(1, 'A Company Code is required.').max(10, 'A Company Code is at most ten characters.'),
+  fiscalYearVariant: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{2}$/, 'The Fiscal Year Variant is exactly two letters or digits.')),
+  /**
+   * The variant the screen opened against, or an empty string when the Company Code had none.
+   * Required rather than defaulted: a caller that does not say what it saw cannot be told that
+   * somebody else moved first.
+   */
+  expectedVariant: z
+    .string()
+    .trim()
+    .max(2, 'The Fiscal Year Variant is exactly two letters or digits.')
+    .transform((value) => (value === '' ? null : value.toUpperCase())),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+════ foundation/fiscal-year-variant-maintenance.ts
+  fns: listFiscalYearVariants, fiscalYearVariantChoices, saveFiscalYearVariant, setFiscalYearVariantActive, saveFiscalYearPeriods
+  · variantInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1),
+  mode: z.enum(['CREATE', 'CHANGE']),
+  expectedVersion: z.number().int().nonnegative(),
+  variant: variantCodeSchema,
+  name: descriptionSchema,
+  isCalendarYear: z.boolean(),
+  regularPeriods: regularPeriodsSchema,
+  specialPeriods: specialPeriodsSchema,
+  isYearDependent: z.boolean(),
+  reason: reasonSchema,
+})
+  · lifecycleInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1),
+  variant: variantCodeSchema,
+  isActive: z.boolean(),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: reasonSchema,
+})
+  · periodRowSchema = z.object({
+  period: z.coerce.number().int().min(1).max(20),
+  month: z.coerce.number().int().min(1, 'A period ends in a month from 1 to 12.').max(12, 'A period ends in a month from 1 to 12.'),
+  day: z.coerce.number().int().min(1, 'A period ends on a day from 1 to 31, where 31 means the last day of the month.').max(31, 'A period ends on a day from 1 to 31, where 31 means the last day of the month.'),
+  yearShift: z.coerce.number().int().min(-1, 'The year shift is -1, 0 or 1.').max(1, 'The year shift is -1, 0 or 1.'),
+})
+  · periodsInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1),
+  variant: variantCodeSchema,
+  /** 0 for a variant whose periods hold for every year; the calendar year otherwise. */
+  calendarYear: z.coerce.number().int().min(0).max(9999).default(0),
+  periods: z.array(periodRowSchema).min(1, 'At least one period is required.').max(20, 'A fiscal year has at most twenty periods.'),
+  expectedVersion: z.number().int().nonnegative(),
+  reason: reasonSchema,
+})
+════ foundation/house-bank-definition.ts
+  fns: listHouseBanks, listHouseBankCompanies, listBankChoices, listHouseBankCurrencies, listGlAccountChoices, saveHouseBank, deleteHouseBank, saveBankAccount, deleteBankAccount
+  · houseBankValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  companyCode: z.string().trim().min(1, 'A Company Code is required.').max(10),
+  houseBankKey: upperKey(5, 'The House Bank key is up to five letters or digits.'),
+  bankCountry: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{2}$/, 'The Bank Country is the two-letter key from the country master.')),
+  bankKey: upperKey(15, 'The Bank Key is up to fifteen letters or digits.'),
+})
+  · houseBankDeleteInputSchema = z.object({
+  ...actorFields,
+  companyCode: houseBankValuesSchema.shape.companyCode,
+  houseBankKey: houseBankValuesSchema.shape.houseBankKey,
+})
+  · bankAccountValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  companyCode: houseBankValuesSchema.shape.companyCode,
+  houseBankKey: houseBankValuesSchema.shape.houseBankKey,
+  accountId: upperKey(5, 'The Account ID is up to five letters or digits.'),
+  accountNumber: z
+    .string()
+    .trim()
+    .min(1, 'An Account Number is required.')
+    .max(18, 'The Account Number is at most eighteen characters.'),
+  /** An empty IBAN clears it: the field is optional in the package and here. */
+  iban: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value.toUpperCase().replace(/\s+/g, '')))
+    .pipe(
+      z
+        .string()
+        .regex(
+          /^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/,
+          'The IBAN is two letters of country, two check digits, and the account body — fifteen to thirty-four characters in all.',
+        )
+        .nullable(),
+    ),
+  currency: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{3,5}$/, 'A currency is three to five letters.')),
+  glAccount: z
+  …
+  · bankAccountDeleteInputSchema = z.object({
+  ...actorFields,
+  companyCode: houseBankValuesSchema.shape.companyCode,
+  houseBankKey: houseBankValuesSchema.shape.houseBankKey,
+  accountId: bankAccountValuesSchema.shape.accountId,
+})
+════ foundation/industry-definition.ts
+  fns: listIndustries, saveIndustry, setIndustryActive, deleteIndustry
+
+════ foundation/internal-order-budget-display.ts
+  fns: displayOriginalBudget
+  · displayInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  orderNumber: z.string().trim().min(1).max(20),
+})
+════ foundation/internal-order-budget.ts
+  fns: saveBudgetProfile, assignOrderTypeBudgetProfile, getOriginalBudget, changeOriginalBudget
+  · annualInput = z.object({
+  fiscalYear: z.number().int(),
+  amount: z.string().trim().min(1).max(24),
+})
+  · changeInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  orderNumber: z.string().trim().min(1).max(20),
+  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  overallAmount: z.string().trim().max(24).optional(),
+  annual: z.array(annualInput).optional(),
+  documentText: z.string().trim().max(50).optional().default(''),
+  currency: z.string().trim().max(3).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+})
+  · profileInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  profileCode: z.string().trim().min(2).max(6),
+  description: z.string().trim().min(1).max(40),
+  overallBudget: z.boolean(),
+  annualBudget: z.boolean(),
+  annualNotExceedOverall: z.boolean().optional().default(false),
+  availabilityControl: z.boolean().optional().default(false),
+  changeAllowed: z.boolean().optional().default(true),
+})
+════ foundation/internal-order-display.ts
+  fns: displayInternalOrder
+  · displayInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  orderNumber: z.string().trim().min(1).max(20),
+})
+════ foundation/internal-order.ts
+  fns: createInternalOrder, changeInternalOrder, getInternalOrder, listInternalOrders, internalOrderChoices
+  · documentInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  orderType: z.string().trim().min(2).max(4),
+  description: z.string().trim().min(1).max(40),
+  controllingArea: z.string().trim().min(4).max(4),
+  companyCode: z.string().trim().min(1).max(10),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  personResponsible: z.string().trim().max(20).optional().default(''),
+  responsibleUser: z.string().trim().max(40).optional().default(''),
+  costCenter: z.string().trim().max(10).optional().default(''),
+  profitCenter: z.string().trim().max(10).optional().default(''),
+  statistical: z.boolean().optional(),
+  isPostingLocked: z.boolean().optional().default(false),
+  markedForDeletion: z.boolean().optional().default(false),
+  sourceOrderNumber: z.string().trim().max(20).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+  orderNumber: z.string().trim().max(20).optional().default(''),
+})
+════ foundation/number-ranges.ts
+  fns: seedNumberRangeObjects, listNumberRanges, journalRangeReadiness, maintainNumberRange, rangeAllocations, listNumberRangeObjects, saveNumberRangeObject, adjustNumberRangeCurrent
+  · maintenanceSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  objectCode: z.enum(NUMBER_OBJECTS),
+  companyCode: z.string().min(1).max(10),
+  subObject: z.string().regex(/^[A-Z0-9_*.-]{1,24}$/),
+  fiscalYear: z.number().int().refine((n) => n === 0 || (n >= 1900 && n <= 9999), 'Use 0 or a four-digit fiscal year.'),
+  prefix: z.string().regex(/^[A-Z0-9-]{0,12}$/),
+  fromNumber: z.number().int().safe().positive(),
+  toNumber: z.number().int().safe().positive(),
+  numberLength: z.number().int().min(1).max(16),
+  displayStyle: z.enum(['READABLE', 'CLASSIC']),
+  isExternal: z.boolean().default(false),
+  isBuffered: z.boolean().default(false),
+  bufferSize: z.number().int().min(0).max(100000).default(0),
+  status: z.enum(['ACTIVE', 'BLOCKED']),
+  mode: z.enum(['CREATE', 'CHANGE']),
+  reason: z.string().trim().min(3).max(500),
+  changedBy: z.string().min(1).max(60),
+  /** OMAD sends the values it opened. Absent means the general screen. */
+  expectedToNumber: z.number().int().safe().positive().optional(),
+  expectedCurrentNumber: z.number().int().safe().min(0).optional(),
+})
+════ foundation/order-settlement.ts
+  fns: settleOrder, settleOrdersCollective
+
+════ foundation/partner-bank-detail-view.ts
+  fns: getPartnerBankMaskedDetail
+
+════ foundation/partner-bank-profile-activation-view.ts
+  fns: listPartnerBankProfileActivationRows
+
+════ foundation/partner-bank-reads.ts
+  fns: lookupPartnerBankMetadata, listPartnerBankMetadata
+
+════ foundation/payment-methods.ts
+  fns: getPaymentMethod, listPaymentMethods, savePaymentMethod, retirePaymentMethod
+  · getInputSchema = z.object({ client: clientSchema, country: countrySchema, methodCode: methodCodeSchema })
+  · listInputSchema = z.object({
+  client: clientSchema,
+  country: countrySchema,
+  direction: z.enum(['OUTGOING', 'INCOMING']).optional(),
+  activeOnly: z.boolean().default(false),
+})
+  · valuesSchema = z.object({
+  description: z.string().trim().min(1).max(160),
+  allowedDirection: z.enum(PAYMENT_METHOD_DIRECTIONS),
+  isActive: z.boolean(),
+})
+  · maintenanceInputSchema = z.object({
+  client: clientSchema,
+  country: countrySchema,
+  methodCode: methodCodeSchema,
+  expectedVersion: z.number().int().nonnegative(),
+  changedBy: z.string().trim().min(1).max(60),
+  reason: z.string().trim().min(3).max(500),
+  values: valuesSchema,
+})
+  · retireInputSchema = z.object({
+  client: clientSchema,
+  country: countrySchema,
+  methodCode: methodCodeSchema,
+  expectedVersion: z.number().int().nonnegative(),
+  changedBy: z.string().trim().min(1).max(60),
+  reason: z.string().trim().min(3).max(500),
+})
+════ foundation/payment-terms.ts
+  fns: savePaymentTerms, listPaymentTerms, getPaymentTerms, paymentSchedule, applyPaymentTermDefaults
+
+════ foundation/plan-revaluation.ts
+  fns: getPlanRevaluationOrder, createPlanRevaluationOrder
+  · createInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  controllingArea: z.string().trim().min(4).max(4),
+  fiscalYear: z.number().int(),
+  periodFrom: z.number().int(),
+  periodTo: z.number().int(),
+  planVersion: z.string().trim().min(1).max(3),
+  description: z.string().trim().min(1).max(40),
+  orderFrom: z.string().trim().max(20).optional().default(''),
+  orderTo: z.string().trim().max(20).optional().default(''),
+  currency: z.string().trim().max(3).optional().default(''),
+  revaluationNumber: z.string().trim().max(20).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+})
+════ foundation/plant-company-code-assignment.ts
+  fns: assignPlantCompanyCode
+  · plantCompanyCodeAssignmentValuesSchema = z.object({
+  plant: z.string().trim().min(1).max(10),
+  companyCode: z.string().trim().min(1).max(10),
+})
+════ foundation/plant-maintenance.ts
+  fns: getPlantDefinitionVersion, savePlantDefinition
+
+════ foundation/posting-period-variant-assignment.ts
+  fns: listPostingPeriodVariantAssignments, assignPostingPeriodVariant
+  · postingPeriodVariantAssignmentValuesSchema = z.object({
+  companyCode: z.string().trim().min(1, 'A Company Code is required.').max(10, 'A Company Code is at most ten characters.'),
+  /** An empty value clears the assignment, subject to the clearing rule. */
+  postingPeriodVariant: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value.toUpperCase()))
+    .pipe(
+      z
+        .string()
+        .regex(/^[A-Z0-9]{4}$/, 'The Posting Period Variant is exactly four letters or digits.')
+        .nullable(),
+    ),
+  /**
+   * The variant the screen opened against, or an empty string when the Company Code had none.
+   * Required rather than defaulted: a caller that does not say what it saw cannot be told that
+   * somebody else moved first.
+   */
+  expectedVariant: z
+    .string()
+    .trim()
+    .max(4, 'The Posting Period Variant is exactly four letters or digits.')
+    .transform((value) => (value === '' ? null : value.toUpperCase())),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+════ foundation/posting-period-variant-definition.ts
+  fns: listPostingPeriodVariants, savePostingPeriodVariant, deletePostingPeriodVariant
+  · postingPeriodVariantValuesSchema = z.object({
+  /**
+   * The screen says which of the two it is doing. New Entries and editing a row ask the same
+   * two questions, and a service that inferred the answer from whether the key exists would
+   * turn a mistyped key on a new entry into somebody else's description change.
+   */
+  mode: z.enum(['CREATE', 'CHANGE']),
+  variant: variantKeySchema,
+  name: descriptionSchema,
+})
+  · postingPeriodVariantDeleteInputSchema = z.object({
+  client: clientSchema,
+  changedBy: z.string().trim().min(1, 'The user making the change is required.'),
+  variant: variantKeySchema,
+})
+════ foundation/profit-center-definition.ts
+  fns: listProfitCenters, listResponsibleUsers, countProfitCenterDocuments, saveProfitCenter, setProfitCenterPostingLock, deleteProfitCenter
+  · profitCenterValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  controllingArea: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{4}$/, 'The Controlling Area is exactly four letters or digits.')),
+  profitCenter: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, 'The Profit Centre is up to ten letters or digits.')),
+  validFrom: dateValue('Valid From'),
+  validTo: dateValue('Valid To'),
+  name: z.string().trim().min(1, 'The Name is required.').max(20, 'The Name is at most 20 characters.'),
+  longText: optionalText(40, 'The Long Text'),
+  personResponsible: z
+    .string()
+    .trim()
+    .max(20, 'The Person Responsible is at most 20 characters.'),
+  responsibleUser: optionalText(12, 'The Responsible User'),
+  segment: optionalText(10, 'The Segment')
+    .transform((value) => (value === null ? null : value.toUpperCase())),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+════ foundation/profit-center-hierarchy.ts
+  fns: listHierarchy, saveHierarchyHeader, saveHierarchyNode, deleteHierarchyNode, placeProfitCenterPeriod, unplaceProfitCenterPeriod, saveProfitCenterGroup, deleteProfitCenterGroup, addGroupLeaf, removeGroupLeaf
+
+════ foundation/profit-center-report.ts
+  fns: listProfitCenterLines
+
+════ foundation/purchasing-group-maintenance.ts
+  fns: listPurchasingGroupDefinitions, getPurchasingGroupDefinitionVersion, savePurchasingGroupChanges
+
+════ foundation/purchasing-org-company-code-assignment.ts
+  fns: assignPurchasingOrgCompanyCode
+  · purchasingOrgCompanyCodeAssignmentValuesSchema = z.object({
+  purchasingOrg: z.string().trim().regex(/^[A-Z0-9]{2,10}$/),
+  companyCode: z.string().trim().min(1).max(10),
+})
+════ foundation/purchasing-org-maintenance.ts
+  fns: getPurchasingOrgDefinitionVersion, savePurchasingOrgDefinition, deactivatePurchasingOrg
+
+════ foundation/purchasing-org-plant.ts
+  fns: purchasingOrgMayBuyForPlant, assertPurchasingOrgForPlant
+
+════ foundation/release-strategy-definition.ts
+  fns: listReleaseConfiguration, saveReleaseGroup, deleteReleaseGroup, saveReleaseStrategy, setReleaseStrategyStatus, deleteReleaseStrategy, determineRelease
+
+════ foundation/retained-earnings.ts
+  fns: listRetainedEarnings, maintainRetainedEarnings, deleteRetainedEarnings
+
+════ foundation/sales-area-maintenance.ts
+  fns: salesAreaF4Choices, listSalesAreas, saveSalesArea, deactivateSalesArea, reactivateSalesArea, getSalesAreaVersion
+  · salesAreaValuesSchema = z.object({
+  salesOrg: salesOrgCodeSchema,
+  distributionChannel: channelCodeSchema,
+  division: divisionCodeSchema,
+  name: z.string().trim().min(1, 'Sales Area Name is required.').max(160, 'Sales Area Name must be 160 characters or fewer.'),
+})
+  · salesAreaKeyInputSchema = z.object({
+  client: tenantKeySchema,
+  salesOrg: salesOrgCodeSchema,
+  distributionChannel: channelCodeSchema,
+  division: divisionCodeSchema,
+})
+  · salesAreaF4InputSchema = z.object({
+  client: tenantKeySchema,
+  salesOrg: salesOrgCodeSchema.optional(),
+  languageKey: languageKeySchema.default('E'),
+})
+════ foundation/sales-org-company-code-assignment.ts
+  fns: assignSalesOrgCompanyCode
+  · salesOrgCompanyCodeAssignmentValuesSchema = z.object({
+  salesOrg: z.string().trim().regex(/^[A-Z0-9]{4}$/, 'Sales Organization must be four uppercase alphanumeric characters.'),
+  companyCode: z.string().trim().regex(/^[A-Z0-9]{4}$/, 'Company Code must be four uppercase alphanumeric characters.'),
+})
+════ foundation/sales-org-distribution-channel-assignment.ts
+  fns: lockSalesOrgDistributionChannelPair, salesOrgDistributionChannelF4Choices, listSalesOrgDistributionChannelAssignments, assignSalesOrgDistributionChannel, unassignSalesOrgDistributionChannel
+  · salesOrgDistributionChannelValuesSchema = z.object({
+  salesOrg: z.string().trim().regex(/^[A-Z0-9]{4}$/,
+    'Sales Organization must be four uppercase alphanumeric characters.'),
+  distributionChannel: z.string().trim().regex(/^[A-Z0-9]{2}$/,
+    'Distribution Channel must be two uppercase alphanumeric characters.'),
+})
+════ foundation/sales-org-division-assignment.ts
+  fns: lockSalesOrgDivisionPair, salesOrgDivisionF4Choices, listSalesOrgDivisionAssignments, assignSalesOrgDivision, unassignSalesOrgDivision
+  · salesOrgDivisionValuesSchema = z.object({
+  salesOrg: z.string().trim().regex(
+    /^[A-Z0-9]{4}$/,
+    'Sales Organization must be four uppercase alphanumeric characters.',
+  ),
+  division: z.string().trim().regex(
+    /^[A-Z0-9]{2}$/,
+    'Division must be two uppercase alphanumeric characters.',
+  ),
+})
+════ foundation/sales-organization-maintenance.ts
+  fns: getSalesOrgDefinitionVersion, saveSalesOrgDefinition, deactivateSalesOrg
+  · salesOrgAddressValuesSchema = z.object({
+  country: z.string().trim().regex(/^([A-Z]{2})?$/).optional().transform((value) => value || null),
+  searchTerm1: nullableText(20),
+  searchTerm2: nullableText(20),
+  street: nullableText(60),
+  houseNumber: nullableText(10),
+  postalCode: nullableText(10),
+  city: nullableText(40),
+  region: nullableText(3),
+  poBox: nullableText(10),
+  poBoxPostalCode: nullableText(10),
+  companyPostalCode: nullableText(10),
+  telephone: nullableText(30),
+  telephoneExtension: nullableText(10),
+  mobilePhone: nullableText(30),
+  faxNumber: nullableText(30),
+  faxExtension: nullableText(10),
+  emailAddress: nullableText(241),
+})
+  · salesOrgDefinitionValuesSchema = z.object({
+  name: z.string().trim().min(1).max(35),
+  formText: nullableText(12),
+  currency: z.string().trim().max(5).optional()
+    .transform((value) => value || null)
+    .refine((value) => value === null || /^[A-Z0-9]{3,5}$/.test(value), 'Currency Key must contain 3 to 5 uppercase alphanumeric characters.'),
+  factoryCalendar: optionalFactoryCalendar,
+  purchasingOrganization: optionalPurchasingOrganization,
+  referenceSalesOrg: optionalPurchasingOrganization,
+  alePurchaseOrders: z.boolean().optional().default(false),
+  rebateProcessingActive: z.boolean().optional().default(false),
+  address: salesOrgAddressValuesSchema.optional().default({}),
+  intercompanyBillingCustomer: optionalCustomerNumber,
+  intercompanyBillingVendor: optionalVendorNumber,
+})
+  · salesOrgMaintenanceInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  /** One-character logon-language key supplied from the verified session. */
+  languageKey: z.string().trim().regex(/^[A-Z]$/).default('E'),
+  mode: salesOrgMaintenanceModeSchema,
+  salesOrg: salesOrgCodeSchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+  values: salesOrgDefinitionValuesSchema,
+})
+  · salesOrgDeactivationInputSchema = z.object({
+  client: tenantKeySchema,
+  changedBy: z.string().trim().min(1).max(60),
+  salesOrg: salesOrgCodeSchema,
+  expectedVersion: z.number().int().nonnegative(),
+  reason: optionalReasonSchema,
+})
+  · salesOrgVersionInputSchema = z.object({ client: tenantKeySchema, salesOrg: salesOrgCodeSchema })
+════ foundation/services.ts
+  fns: listCompanyCodes, getCompanyCodeDetail, upsertCompanyCode, listGlAccounts, upsertGlAccount, setGlAccountBlocks, deleteGlAccount, glAccountUsage, glAccountAuditVersion, listPeriodRules, updatePeriodRule, listPlants, listConfigurationChoices
+
+════ foundation/settlement-configuration-masters.ts
+  fns: listSettlementProfileDocumentTypes, listAllocationStructures, getAllocationStructure, saveAllocationStructure, saveAllocationStructureAssignment, removeAllocationStructureAssignment, listSettlementProfiles, getSettlementProfile, saveSettlementProfile, listOrderTypeSettlementProfiles, assignOrderTypeSettlementProfile, removeOrderTypeSettlementProfile, structureDependents
+  · allocationStructureInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  mode: modeSchema,
+  expectedVersion: versionSchema,
+  reason: reasonSchema,
+  structureCode: codeSchema,
+  description: descriptionSchema,
+})
+  · allocationAssignmentInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  expectedVersion: versionSchema,
+  reason: reasonSchema,
+  structureCode: codeSchema,
+  sourceAccount: accountSchema,
+  receiverCategory: receiverCategorySchema,
+  byOriginalAccount: z.boolean(),
+  settlementAccount: z.string().trim().transform((value) => value.toUpperCase())
+    .pipe(z.union([z.literal(''), z.string().regex(/^[A-Z0-9]{2,10}$/)])),
+  /** Required when the removal or the change leaves an order with a settlement history behind. */
+  confirmed: z.boolean().optional(),
+})
+  · allocationAssignmentKeyInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  reason: reasonSchema,
+  structureCode: codeSchema,
+  sourceAccount: accountSchema,
+  receiverCategory: receiverCategorySchema,
+  confirmed: z.boolean().optional(),
+})
+  · settlementProfileInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  mode: modeSchema,
+  expectedVersion: versionSchema,
+  reason: reasonSchema,
+  profileCode: codeSchema,
+  description: descriptionSchema,
+  allocationStructure: codeSchema,
+  documentType: z.string().trim().transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{2,12}$/, 'A document type is 2 to 12 letters or numbers.')),
+  percentageAllowed: z.boolean(),
+  equivalenceAllowed: z.boolean(),
+  amountAllowed: z.boolean(),
+  /** Stated explicitly. A new profile is never created inactive by accident, and never left active by accident. */
+  isActive: z.boolean(),
+})
+  · orderTypeSettlementProfileInputSchema = z.object({
+  client: clientSchema,
+  changedBy: actorSchema,
+  mode: modeSchema,
+  expectedVersion: versionSchema,
+  reason: reasonSchema,
+  orderType: z.string().trim().transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z0-9]{1,4}$/, 'An order type is up to 4 letters or numbers.')),
+  profileCode: codeSchema,
+  confirmed: z.boolean().optional(),
+})
+  · orderTypeSettlementProfileKeyInputSchema = z.object({
+  client: z.string().trim(),
+  changedBy: actorSchema,
+  reason: reasonSchema,
+  orderType: z.string().trim().transform((value) => value.toUpperCase())
+    .pipe(z.string().min(1).max(4)),
+  confirmed: z.boolean().optional(),
+})
+════ foundation/settlement-configuration.ts
+  fns: getSettlementConfiguration, lockSettlementRuleForOrder, saveOrderSettlementConfiguration
+
+════ foundation/special-gl.ts
+  fns: listSpecialGlConfigs, maintainSpecialGlConfig, deleteSpecialGlConfig
+
+════ foundation/standard-config.ts
+  fns: applyStandardPackage
+
+════ foundation/storage-location-maintenance.ts
+  fns: getStorageLocationVersion, saveStorageLocation, deactivateStorageLocation
+
+════ foundation/supplier-companies.ts
+  fns: saveSupplierCompany, getSupplierCompany, listSupplierCompanies, requireSupplierCompany, supplierCompanyChoices
+
+════ foundation/supplier-purchasing-partner-writes.ts
+  fns: saveSupplierPurchasingPartner, removeSupplierPurchasingPartner
+  · saveSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  partnerNumber,
+  purchasingOrg: code,
+  functionCode: z.enum(SUPPLIER_PARTNER_FUNCTION_CODES),
+  assignedPartnerNumber: partnerNumber,
+  /** Existing related supplier key when atomically replacing that assignment. */
+  replaceAssignedPartnerNumber: partnerNumber.optional(),
+  /** Zero for create; otherwise the current assignment version being edited/replaced. */
+  expectedVersion: z.number().int().nonnegative(),
+  isDefault: z.boolean(),
+  changedBy: z.string().trim().min(1).max(60),
+  reason: z.string().trim().min(3).max(500),
+})
+  · removeSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  partnerNumber,
+  purchasingOrg: code,
+  functionCode: z.enum(SUPPLIER_PARTNER_FUNCTION_CODES),
+  assignedPartnerNumber: partnerNumber,
+  expectedVersion: z.number().int().positive(),
+  changedBy: z.string().trim().min(1).max(60),
+  reason: z.string().trim().min(3).max(500),
+})
+════ foundation/supplier-purchasing-partners.ts
+  fns: listSupplierPartnerFunctions, listSupplierPartnerChoices, listSupplierPurchasingPartners
+
+════ foundation/supplier-purchasing.ts
+  fns: saveSupplierPurchasing, getSupplierPurchasing, listSupplierPurchasing, requireSupplierPurchasing, supplierPurchasingChoices
+
+════ foundation/tax-code-definition.ts
+  fns: listTaxCodes, listCountryChoices, saveTaxCode, deleteTaxCode
+  · taxCodeValuesSchema = z.object({
+  mode: z.enum(['CREATE', 'CHANGE']),
+  country: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{2}$/, 'The Country is the two-letter key from the country master.')),
+  taxCode: upperCode(4, 'The Tax Code is up to four letters or digits.'),
+  name: z.string().trim().min(1, 'A description is required.').max(50, 'The description is at most fifty characters.'),
+  taxType: upperCode(4, 'The Tax Type is up to four letters or digits.'),
+  ratePercent: z
+    .string()
+    .trim()
+    .regex(/^\d{1,3}(\.\d{1,2})?$/, 'The Tax Rate is a percentage of at most two fractional digits.')
+    .refine((value) => Number(value) <= 100, 'The Tax Rate is at most 100.'),
+  /** An empty account key clears it: the field is optional in the package and here. */
+  accountKey: z
+    .string()
+    .trim()
+    .transform((value) => (value === '' ? null : value.toUpperCase()))
+    .pipe(z.string().regex(/^[A-Z0-9]{1,3}$/, 'The Account Key is up to three letters or digits.').nullable()),
+  /**
+   * The rate the screen opened against, for a change. Required rather than defaulted:
+   * a caller that does not say what it saw cannot be told that somebody else moved first.
+   */
+  expectedRate: z.string().trim().max(10).default(''),
+  reason: z.string().trim().min(1, 'A reason is required.').max(500, 'The reason is at most 500 characters.'),
+})
+  · taxCodeDeleteInputSchema = z.object({
+  client: z.string().regex(/^[A-Za-z0-9]{2,4}$/),
+  changedBy: z.string().trim().min(1).max(60),
+  country: taxCodeValuesSchema.shape.country,
+  taxCode: taxCodeValuesSchema.shape.taxCode,
+  reason: taxCodeValuesSchema.shape.reason,
+})
+════ inventory/balance-update.ts
+  fns: lockRequestKey, mismatchedRequest, applyValuationDelta
+
+════ inventory/batch-access-sequence.ts
+  fns: listBatchAccessSequences, saveBatchAccessSequence, deleteBatchAccessSequence, listBatchAccessSteps, saveBatchAccessStep, deleteBatchAccessStep
+
+════ inventory/batch-change.ts
+  fns: readBatch, changeBatch
+
+════ inventory/batch-class.ts
+  fns: listBatchClasses, saveBatchClass
+
+════ inventory/batch-classification.ts
+  fns: listBatchClassification, saveBatchClassification, batchClassificationRefusal
+
+════ inventory/batch-cockpit.ts
+  fns: searchBatches, readBatchCockpit
+
+════ inventory/batch-condition-table.ts
+  fns: listBatchConditionTables, saveBatchConditionTable, deleteBatchConditionTable
+
+════ inventory/batch-control-use.ts
+  fns: noteBatchControlUse
+
+════ inventory/batch-conversion.ts
+  fns: listConversionChecks, checkBatchConversion
+
+════ inventory/batch-display.ts
+  fns: displayBatch
+
+════ inventory/batch-document-management.ts
+  fns: documentManagementActive, getBatchDocumentManagement, saveBatchDocumentManagement
+
+════ inventory/batch-level.ts
+  fns: dependentBatchData, getBatchLevel, latestConversion, saveBatchLevel, prepareBatchLevelConversion, executeBatchLevelConversion, createBatchIdentity
+
+════ inventory/batch-master.ts
+  fns: readLevel, createBatch
+
+════ inventory/batch-number-assignment.ts
+  fns: internalAssignmentActive, getInternalBatchAssignment, saveInternalBatchAssignment, listAssignedReceiptSettings, saveAssignedReceipt, readAssignedGoodsReceiptDecision, productionBatchAssignment, allocateInternalBatchNumber
+
+════ inventory/batch-number-range.ts
+  fns: getBatchNumberRanges, saveBatchNumberInterval, deleteBatchNumberInterval, adjustBatchNumberStatus, assertExternalBatchNumber
+
+════ inventory/batch-pickup.ts
+  fns: listBatchPickup
+
+════ inventory/batch-posting.ts
+  fns: resolvePostingBatch
+
+════ inventory/batch-search-allocation.ts
+  fns: listBatchSearchAllocations, resolveBatchSearchAllocation, checkEnteredBatch, saveBatchSearchAllocation, deleteBatchSearchAllocation
+
+════ inventory/batch-search-procedure.ts
+  fns: listBatchSearchProcedures, saveBatchSearchProcedure, deleteBatchSearchProcedure, listBatchSearchProcedureSteps, saveBatchSearchProcedureStep, deleteBatchSearchProcedureStep
+
+════ inventory/batch-search-strategy.ts
+  fns: listStrategyKeyCombinations, listBatchSearchStrategies, resolveBatchSearchStrategy, determineBatch, saveBatchSearchStrategy, deleteBatchSearchStrategy
+
+════ inventory/batch-sort-sequence.ts
+  fns: listSortSequences, saveSortSequence, deleteSortSequence, rankSuppliedCandidates
+
+════ inventory/batch-status-plant.ts
+  fns: readPlantBatchStatusActive, listPlantBatchStatus, listPlantStatusConversions, validatePlantBatchStatus, savePlantBatchStatus, executePlantStatusConversion
+
+════ inventory/batch-status.ts
+  fns: getBatchStatusManagement, saveBatchStatus, executeBatchStatusConversion
+
+════ inventory/batch-strategy-type.ts
+  fns: listBatchStrategyTypes, saveBatchStrategyType, deleteBatchStrategyType
+
+════ inventory/development-fixture.ts
+  fns: seedDevelopmentMaterials
+
+════ inventory/goods-issue.ts
+  fns: getMaterialPeriodControlInTx, postGoodsIssue
+
+════ inventory/goods-receipt.ts
+  fns: getReceiptOrder, getMaterialDocument, postGoodsReceipt, reverseGoodsReceipt
+
+════ inventory/industry-sector-definition.ts
+  fns: listIndustrySectors, saveIndustrySector, setIndustrySectorActive, deleteIndustrySector
+
+════ inventory/initial-batch-status.ts
+  fns: decideInitialRestrictedUse, listInitialBatchStatus, saveInitialBatchStatus
+
+════ inventory/material-document-accounting.ts
+  fns: readJournalStatus
+
+════ inventory/material-document-display.ts
+  fns: displayMaterialDocument
+
+════ inventory/material-document-list.ts
+  fns: listMaterialDocuments
+
+════ inventory/material-document-output.ts
+  fns: recordOutputsForDocument, recordOutputsForPostedDocument, listOutputMessages, determineOutputs, renderSlip, dispatchMessage, dispatchPending, setRecipient
+
+════ inventory/material-document-reversal.ts
+  fns: getReversalDocument, reverseMaterialDocument
+
+════ inventory/material-group-definition.ts
+  fns: listMaterialGroups, saveMaterialGroup, setMaterialGroupActive, deleteMaterialGroup
+
+════ inventory/material-number-range-groups.ts
+  fns: listMaterialNumberRangeGroups, listMaterialRangeGroupOptions, saveMaterialNumberRangeGroup, deleteMaterialNumberRangeGroup
+
+════ inventory/material-period-control.ts
+  fns: listMaterialPeriodControl, getMaterialPeriodControl, initializeMaterialPeriodControl, setMaterialPeriodIndicators, shiftMaterialPeriod
+
+════ inventory/material-shelf-life.ts
+  fns: getMaterialShelfLife, saveMaterialShelfLife
+
+════ inventory/material-type-definition.ts
+  fns: listMaterialTypes, listAccountCategoryReferences, listTypeValuation, listValuationPlants, saveMaterialType, setMaterialTypeActive, deleteMaterialType, saveAccountCategoryReference, deleteAccountCategoryReference, saveTypeValuation
+
+════ inventory/materials.ts
+  fns: saveMaterialView, setMaterialDeletionFlag, materialChoices, listMaterials, getMaterialDetail, requireUsableMaterial
+
+════ inventory/movement-type-configuration.ts
+  fns: listMovementTypes, checkMovementType, saveMovementType, deleteMovementType
+
+════ inventory/physical-inventory-count.ts
+  fns: getCountDocument, searchCountDocuments, submitCounts, clearCount, getCountHistory, getCountStatus
+  · lineSchema = z.object({
+  itemNumber: z.number().int().positive(),
+  /** Absent with `zeroCount` set means "counted, and it was zero". Absent with neither is refused. */
+  quantity: z.number().finite().nonnegative().optional(),
+  entryUnit: z.string().trim().max(16).optional(),
+  zeroCount: z.boolean().optional(),
+  countDate: z.string().regex(ISO_DATE, 'is not a date').optional(),
+  itemText: z.string().trim().max(60).optional(),
+  /** §13: the version the counter read. A stale submission is refused, never silently applied. */
+  expectedVersion: z.number().int().positive().optional(),
+})
+  · submissionSchema = z.object({
+  documentNumber: z.string().trim().min(1).max(24),
+  fiscalYear: z.number().int().min(2000).max(2999),
+  countDate: z.string().regex(ISO_DATE, 'is not a date'),
+  counterName: z.string().trim().max(35).optional(),
+  requestKey: z.string().trim().min(1).max(64),
+  reason: z.string().trim().max(200).optional(),
+  lines: z.array(lineSchema).min(1).max(500),
+})
+════ inventory/physical-inventory-differences.ts
+  fns: listDifferences, getDifferenceDocument, openDifferenceWorkflow
+  · selectionSchema = z.object({
+  plantFrom: z.string().trim().min(1).max(10),
+  plantTo: z.string().trim().max(10).optional(),
+  storageLocationFrom: z.string().trim().max(10).optional(),
+  storageLocationTo: z.string().trim().max(10).optional(),
+  documentFrom: z.string().trim().max(24).optional(),
+  documentTo: z.string().trim().max(24).optional(),
+  fiscalYear: z.number().int().min(2000).max(2999),
+  materialFrom: z.string().trim().max(40).optional(),
+  materialTo: z.string().trim().max(40).optional(),
+  differenceExists: z.boolean().optional(),
+  includeUncounted: z.boolean().optional(),
+  countStatus: z.enum(['UNCOUNTED', 'COUNTED', 'RECOUNT_REQUIRED']).optional(),
+  postingStatus: z.enum(POSTING_FILTERS).optional(),
+  minimumDifferenceValue: z.number().finite().nonnegative().optional(),
+  currency: z.string().trim().length(3).optional(),
+  includeUnvalued: z.boolean().optional(),
+  /** Accepted and not translated: the material master holds one description. */
+  language: z.string().trim().max(8).optional(),
+  /** Refused by name. Split valuation is not a dimension this list can price. */
+  valuationType: z.string().trim().max(16).optional(),
+  showPeriodNote: z.boolean().optional(),
+  sort: z.enum(SORTS).optional(),
+  sortDescending: z.boolean().optional(),
+  page: z.number().int().positive().optional(),
+  pageSize: z.number().int().positive().max(DIFFERENCE_PAGE_SIZE_MAX).optional(),
+})
+════ inventory/physical-inventory-posting-status.ts
+  fns: releaseDifferenceAllocations, recomputePostingStatus
+
+════ inventory/physical-inventory-posting.ts
+  fns: getDifferencePosting, validateDifferencePosting, postDifferences, getPostingHistory, reverseDifferencePosting
+
+════ inventory/physical-inventory-recount.ts
+  fns: validateRecount, createRecount, cancelRecount, recountPostingBlock, recountCountRemedy, syncRecountLink, getRecountSource, getRecountComparison
+
+════ inventory/physical-inventory.ts
+  fns: writeInventoryDocument, createPhysicalInventory, cancelPhysicalInventory, listPhysicalInventory, lockStockScope, tryLockStockScope, assertInventoryCountOpen
+
+════ inventory/price-change.ts
+  fns: changeMaterialPrice, releaseFuturePrices, listFuturePrices
+
+════ inventory/production-orders.ts
+  fns: getProductionOrder, previewProductionOrderBom, createProductionOrder, releaseProductionOrder
+
+════ inventory/production-receipt.ts
+  fns: postProductionReceipt, receivedQuantityFor
+
+════ inventory/reservations.ts
+  fns: getReservation, createReservation, withdrawReservation, withdrawReservationInTx, completeReservationItem
+
+════ inventory/return-delivery.ts
+  fns: resolveReturnMovement, getReturnableDocument, getReturnDocument, postReturnDelivery
+
+════ inventory/scheduling-profile.ts
+  fns: listSchedulingProfiles, saveSchedulingProfile, assignSchedulingProfile, readMaterialSchedulingProfile, ensureOrderBatch
+
+════ inventory/shelf-life-list.ts
+  fns: listShelfLife
+
+════ inventory/standard-config.ts
+  fns: seedTypeValuationForPlant, applyMaterialDefaults
+
+════ inventory/stock-overview.ts
+  fns: stockOverview
+
+════ inventory/stock-posting-date.ts
+  fns: stockOnPostingDate
+
+════ inventory/stock-reconcile.ts
+  fns: reconcileStock, rebuildStockDimension
+
+════ inventory/storage-location.ts
+  fns: storageLocationRequired, proposeStorageLocation, resolveStorageLocation
+
+════ inventory/transfer-posting.ts
+  fns: getTransferDocument, transferStockAt, validateTransfer, postTransfer, reverseTransfer
+
+════ inventory/unit-conversion.ts
+  fns: toBaseQuantity, fromBaseQuantity, defineUomConversion, listUomConversions, listUnitsOfMeasure, removeUomConversion
+
+════ inventory/valuation-class-definition.ts
+  fns: listValuationReferences, listValuationClasses, listTypeReferences, listValuationGaps, valuationClassRefusal, postingValuationRefusal, referenceChangeBlock, saveValuationReference, deleteValuationReference, saveValuationClass, deleteValuationClass, assignMaterialTypeReference
+
+════ inventory/warehouse-stocks.ts
+  fns: listWarehouseStocks
+
+════ production/availability-check.ts
+  fns: listAvailabilityCheck, saveCheckingGroup, saveCheckingRule, assignCheckingGroup, saveScopeOfCheck
+
+════ production/checking-control.ts
+  fns: listCheckingControls, saveCheckingControl
+
+════ production/confirmation-cancel.ts
+  fns: loadConfirmationCancellation, cancelConfirmation
+
+════ production/confirmation-movements.ts
+  fns: planConfirmationMovements, movementConfiguration, postedMovements, movementStands
+
+════ production/material-bom.ts
+  fns: getMaterialBom, listMaterialBoms, resolveMaterialBom, selectEffectiveMaterialBom, listBomUsages, listBomStatuses, listBomItemCategories, saveBomUsage, saveBomStatus, saveBomItemCategory
+
+════ production/mrp-explosion.ts
+  fns: explodePlannedSupply
+
+════ production/mrp-run.ts
+  fns: getMrpRun, listMrpRuns, cancelMrpRun, planMaterials, planSingleItem, planSingleLevel
+
+════ production/mrp-structure.ts
+  fns: structuralBomLevels
+
+════ production/order-availability.ts
+  fns: checkOrderAvailability
+
+════ production/order-bom-snapshot.ts
+  fns: resolveOrderBomSnapshot
+
+════ production/order-confirmation.ts
+  fns: loadOrderConfirmation, previewOrderConfirmation, enterOrderConfirmation, getOrderConfirmation
+
+════ production/order-information.ts
+  fns: runOrderInformation, listOrderInformationLayouts, saveOrderInformationLayout
+
+════ production/order-operation-snapshot.ts
+  fns: resolveOrderOperationSnapshot, insertOrderOperationSnapshot
+
+════ production/order-type-parameters.ts
+  fns: listOrderTypeParameters, saveOrderTypeParameter, readProductionVersionSelection
+
+════ production/planned-order-change.ts
+  fns: changePlannedOrder
+
+════ production/planned-order-conversion.ts
+  fns: previewPlannedOrderConversion, listConvertiblePlannedOrders, convertPlannedOrder, convertPlannedOrders, listConversionLog
+
+════ production/planned-order-create.ts
+  fns: createPlannedOrder
+
+════ production/planned-order-display.ts
+  fns: getPlannedOrder, listPlannedOrders
+
+════ production/production-order-change.ts
+  fns: changeProductionOrder, technicallyCompleteProductionOrder, revokeTechnicalCompletion
+
+════ production/production-order-display.ts
+  fns: getProductionOrderDisplay, listProductionOrders
+
+════ production/production-order-type.ts
+  fns: listProductionOrderTypes, saveProductionOrderType
+
+════ production/production-version.ts
+  fns: copyProductionVersion, getProductionVersion, listProductionVersions, checkProductionVersion, lockProductionVersion, deleteProductionVersion, selectProductionVersion, saveProductionVersionRule, listProductionVersionChoices
+
+════ production/routing.ts
+  fns: getRouting, listRoutings, resolveRouting, selectEffectiveRouting, saveRoutingTaskListType, saveRoutingUsage, saveRoutingStatus, saveRoutingControlKey, saveRoutingStandardValueKey, listRoutingConfiguration
+
+════ production/stock-requirements.ts
+  fns: stockRequirementsList
+
+════ production/time-ticket.ts
+  fns: rows, decimalsOf, orderQuantityOf, headerOf, operationsOf, loadTimeTicket, previewTimeTicket, enterTimeTicket, getTimeTicket
+
+════ production/wip-batch.ts
+  fns: wipBatchActive, readWipBatchFlag, getWipBatchActivation, saveWipBatchActivation
+
+════ production/work-center.ts
+  fns: saveWorkCenterCategory, listWorkCenterCategories, listWorkCenters, getWorkCenter, createWorkCenter, changeWorkCenter
+
+════ purchasing/blocked-invoice.ts
+  fns: activeBlockedInvoiceNumbers, listBlockedInvoices, listBlockEvents, previewPaymentBlock, placePaymentBlock, releasePaymentBlock
+
+════ purchasing/contract-display.ts
+  fns: openPurchaseContractDisplay
+
+════ purchasing/contract.ts
+  fns: createPurchaseContract, changePurchaseContract, getPurchaseContract, contractChoices, listPurchaseContracts, assertPurchaseContractCallOff
+  · itemInput = z.object({
+  itemNumber: z.number().int().positive().nullish(),
+  materialNumber: z.string().trim().max(40).optional().default(''),
+  shortText: z.string().trim().max(40).optional().default(''),
+  targetQuantity: z.number().positive().nullish(),
+  unit: z.string().trim().max(6).optional().default(''),
+  netPrice: z.number().min(0).nullish(),
+  priceUnit: z.number().int().positive().optional().default(1),
+  plant: z.string().trim().max(10).optional().default(''),
+  storageLocation: z.string().trim().max(10).optional().default(''),
+  accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
+  costCenter: z.string().trim().max(10).optional().default(''),
+  glAccount: z.string().trim().max(10).optional().default(''),
+  requisitionNumber: z.string().trim().max(10).optional().default(''),
+  requisitionItem: z.number().int().positive().nullish(),
+  rfqNumber: z.string().trim().max(20).optional().default(''),
+  rfqItem: z.number().int().positive().nullish(),
+  quotationNumber: z.string().trim().max(20).optional().default(''),
+  quotationItem: z.number().int().positive().nullish(),
+  markedForDeletion: z.boolean().optional().default(false),
+})
+  · documentInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  documentType: z.string().trim().min(2).max(4),
+  supplierNumber: z.string().trim().min(1).max(40),
+  purchasingOrg: z.string().trim().min(1).max(10),
+  purchasingGroup: z.string().trim().min(1).max(3),
+  companyCode: z.string().trim().min(1).max(10),
+  currency: z.string().trim().max(3).optional().default(''),
+  agreementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  validityStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  validityEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  targetValue: z.number().min(0).nullish(),
+  paymentTermsCode: z.string().trim().max(12).optional().default(''),
+  incotermsCode: z.string().trim().max(3).optional().default(''),
+  incotermsLocation: z.string().trim().max(160).optional().default(''),
+  yourReference: z.string().trim().max(12).optional().default(''),
+  ourReference: z.string().trim().max(12).optional().default(''),
+  languageCode: z.string().trim().max(2).optional().default(''),
+  sourceContractNumber: z.string().trim().max(20).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+  items: z.array(itemInput).optional().default([]),
+})
+════ purchasing/follow-on.ts
+  fns: convertMoney, copyRequisition, adoptQuotation, settleQuota, updateInfoRecordFromOrder, orderDraftFromQuotation, orderDraftFromRequisition
+
+════ purchasing/grir-clearing.ts
+  fns: listGrIrResiduals, listGrIrMaintenance, previewGrIrClearing, postGrIrClearing, reverseGrIrClearing
+
+════ purchasing/info-record.ts
+  fns: previewPurchasingInfoRecord, createPurchasingInfoRecord, writePurchasingInfoRecord, changePurchasingInfoRecord, writePurchasingInfoRecordChange, previewPurchasingInfoRecordChange, resolvePurchasingInfoRecord, findPurchasingInfoRecord, getPurchasingInfoRecord, infoRecordChoices
+
+════ purchasing/invoice-overview.ts
+  fns: listInvoiceOverview, readInvoiceOverviewDocument
+
+════ purchasing/invoice-verification.ts
+  fns: getInvoiceOrder, listInvoiceTaxCodes, getSupplierInvoice, postSupplierInvoice, cancelSupplierInvoice
+
+════ purchasing/orders.ts
+  fns: listOrders, getOrder, createOrder, changeOrder, orderChoices
+  · assignmentInput = z.object({
+  glAccount: z.string().trim().min(1).max(10),
+  costCenter: z.string().trim().min(1).max(10),
+  distributionPercentage: z.coerce.number().positive().max(100),
+})
+  · scheduleInput = z.object({
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a delivery date is required'),
+  quantity: z.coerce.number().positive(),
+})
+  · itemInput = z.object({
+  itemNumber: z.coerce.number().int().positive().optional(),
+  materialNumber: z.string().trim().max(40).optional().default(''),
+  shortText: z.string().trim().max(40).optional().default(''),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().trim().max(6).optional().default(''),
+  netPrice: z.coerce.number().min(0).optional(),
+  priceUnit: z.coerce.number().int().positive().optional().default(1),
+  /** Asks for the info-record lead time. A sent delivery date is kept unless this is set. */
+  applyLeadTime: z.boolean().optional().default(false),
+  taxCode: z.string().trim().max(4).optional().default(''),
+  plant: z.string().trim().min(1).max(10),
+  storageLocation: z.string().trim().max(10).optional().default(''),
+  /** A batch that already stands. The order does not create it. */
+  batch: z.string().trim().max(10).optional().default(''),
+  accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
+  markedForDeletion: z.boolean().optional().default(false),
+  requisitionNumber: z.string().trim().max(10).optional().default(''),
+  requisitionItem: z.coerce.number().int().positive().optional(),
+  quotationNumber: z.string().trim().max(20).optional().default(''),
+  quotationItem: z.coerce.number().int().positive().optional(),
+  contractNumber: z.string().trim().max(20).optional().default(''),
+  contractItem: z.number().int().positive().nullish(),
+  scheduleLines: z.array(scheduleInput).min(1, 'an item needs at least one schedule line'),
+  assignments: z.array(assignmentInput).optional().default([]),
+})
+  · documentInput = z.object({
+  client: z.string().min(1),
+  changedBy: z.string().min(1),
+  documentType: z.string().trim().min(1).max(20).optional().default('STANDARD'),
+  supplierNumber: z.string().trim().min(1).max(40),
+  purchasingOrg: z.string().trim().min(1).max(10),
+  purchasingGroup: z.string().trim().min(1).max(3),
+  companyCode: z.string().trim().min(1).max(10),
+  currency: z.string().trim().max(5).optional().default(''),
+  items: z.array(itemInput).min(1, 'a purchase order needs at least one item'),
+})
+════ purchasing/parked-invoice.ts
+  fns: previewParkedInvoice, parkSupplierInvoice, previewParkedInvoiceChange, changeParkedInvoice, postParkedInvoice, deleteParkedInvoice, getParkedInvoice, openOrderForPark, listRecentParkedInvoices
+
+════ purchasing/po-account-assignment.ts
+  fns: purchaseOrdersByAccountAssignment
+
+════ purchasing/purchase-order-display.ts
+  fns: displayPurchaseOrder, searchPurchaseOrders, openPurchaseOrderDisplay
+
+════ purchasing/purchase-order-list.ts
+  fns: listPurchaseOrders
+
+════ purchasing/purchasing-org-plant-assignment.ts
+  fns: listPurchasingOrgPlantAssignments, checkPurchasingOrgPlant, assignPurchasingOrgPlant, removePurchasingOrgPlant
+
+════ purchasing/quota-arrangement.ts
+  fns: previewQuotaArrangement, createQuotaArrangement, writeQuotaArrangement, previewQuotaChange, changeQuotaArrangement, writeQuotaChange, listQuotaArrangements, listRecentQuotaArrangements, getQuotaArrangement, previewQuotaSelection
+
+════ purchasing/quotation-comparison.ts
+  fns: compareQuotations
+
+════ purchasing/quotation-display.ts
+  fns: displayQuotation, displayQuotationForRequest, listRecentDisplayedQuotations
+
+════ purchasing/quotation.ts
+  fns: previewQuotation, previewQuotationChange, createQuotation, writeQuotation, changeQuotation, writeQuotationChange, openQuotation, listRecentQuotationRequests, getQuotation
+
+════ purchasing/release.ts
+  fns: getDocumentRelease, listDocumentReleases, requisitionAttributes, orderAttributes, syncDocumentRelease, assertDocumentNotReleased, releaseDocument, cancelDocumentRelease
+
+════ purchasing/requisition-list.ts
+  fns: listPurchaseRequisitions
+
+════ purchasing/requisitions.ts
+  fns: listRequisitions, getRequisition, createRequisition, changeRequisition, requisitionChoices
+  · assignmentInput = z.object({
+  glAccount: z.string().trim().min(1).max(10),
+  costCenter: z.string().trim().min(1).max(10),
+  distributionPercentage: z.coerce.number().positive().max(100),
+})
+  · itemInput = z.object({
+  itemNumber: z.coerce.number().int().positive().optional(),
+  materialNumber: z.string().trim().max(40).optional().default(''),
+  shortText: z.string().trim().max(40).optional().default(''),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().trim().max(6).optional().default(''),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a delivery date is required'),
+  plant: z.string().trim().min(1).max(10),
+  storageLocation: z.string().trim().max(10).optional().default(''),
+  purchasingGroup: z.string().trim().min(1).max(3),
+  /** Not stored. When a caller names an organisation, the pair is judged and then discarded. */
+  purchasingOrg: z.string().trim().max(10).optional().default(''),
+  estimatedPrice: z.coerce.number().min(0).optional(),
+  priceUnit: z.coerce.number().int().positive().optional().default(1),
+  currency: z.string().trim().max(5).optional().default(''),
+  accountAssignmentCategory: z.enum(['COST_CENTER']).nullable().optional().default(null),
+  markedForDeletion: z.boolean().optional().default(false),
+  assignments: z.array(assignmentInput).optional().default([]),
+})
+  · documentInput = z.object({
+  client: z.string().min(1),
+  changedBy: z.string().min(1),
+  documentType: z.string().trim().min(1).max(20).optional().default('STANDARD'),
+  /** Total planning's run number. A buyer's requisition does not send one. */
+  planningRunNumber: z.string().trim().max(12).optional(),
+  items: z.array(itemInput).min(1, 'a requisition needs at least one item'),
+})
+════ purchasing/rfq.ts
+  fns: previewRequestForQuotation, createRequestForQuotation, writeRequestForQuotation, listRecentRequestsForQuotation, getRequestForQuotation, previewRequestForQuotationChange, changeRequestForQuotation, writeRequestForQuotationChange, resolveRequestForQuotation
+
+════ purchasing/scheduling-agreement-display.ts
+  fns: openSchedulingAgreementDisplay
+
+════ purchasing/scheduling-agreement-release.ts
+  fns: saveReleaseProfile, assignReleaseProfile, createSchedulingAgreementReleases, listSchedulingAgreementReleases
+  · selectionInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  agreementFrom: z.string().trim().max(20).optional().default(''),
+  agreementTo: z.string().trim().max(20).optional().default(''),
+  supplierNumber: z.string().trim().max(40).optional().default(''),
+  purchasingOrg: z.string().trim().max(10).optional().default(''),
+  purchasingGroup: z.string().trim().max(3).optional().default(''),
+  plant: z.string().trim().max(10).optional().default(''),
+  itemFrom: z.number().int().positive().optional(),
+  itemTo: z.number().int().positive().optional(),
+  releaseTypes: z.array(z.enum(RELEASE_TYPES)).min(1),
+  generationDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  profileCode: z.string().trim().max(10).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+})
+  · profileInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  profileCode: z.string().trim().min(2).max(10),
+  description: z.string().trim().min(1).max(40),
+  releaseType: z.enum(RELEASE_TYPES),
+  horizonDays: z.number().int().min(0).max(999).nullable().optional(),
+  aggregation: z.enum(AGGREGATIONS),
+  comparisonMode: z.enum(COMPARISONS),
+  tolerancePercent: z.number().min(0).max(999.99).nullable().optional(),
+})
+  · assignmentInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  supplierNumber: z.string().trim().min(1).max(40),
+  purchasingOrg: z.string().trim().min(1).max(10),
+  plant: z.string().trim().max(10).optional().default(''),
+  releaseType: z.enum(RELEASE_TYPES),
+  profileCode: z.string().trim().min(2).max(10),
+})
+════ purchasing/scheduling-agreement-schedule-display.ts
+  fns: openDeliveryScheduleDisplay, deliveryScheduleHistory
+
+════ purchasing/scheduling-agreement-schedule.ts
+  fns: maintainDeliverySchedule, readDeliverySchedule
+  · lineInput = z.object({
+  lineNumber: z.number().int().positive().optional(),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  quantity: z.number().positive().finite(),
+  unit: z.string().trim().max(6).optional().default(''),
+  markedForDeletion: z.boolean().optional().default(false),
+})
+  · maintainInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  agreementNumber: z.string().trim().min(1).max(20),
+  itemNumber: z.number().int().positive(),
+  lines: z.array(lineInput).min(1),
+})
+════ purchasing/scheduling-agreement.ts
+  fns: createSchedulingAgreement, changeSchedulingAgreement, getSchedulingAgreement, listSchedulingAgreements, schedulingAgreementChoices
+  · itemInput = z.object({
+  itemNumber: z.number().int().positive().optional(),
+  materialNumber: z.string().trim().max(40).optional().default(''),
+  shortText: z.string().trim().max(40).optional().default(''),
+  targetQuantity: z.number().positive(),
+  unit: z.string().trim().max(6).optional().default(''),
+  netPrice: z.number().min(0).nullish(),
+  priceUnit: z.number().int().positive().optional().default(1),
+  plant: z.string().trim().max(10).optional().default(''),
+  storageLocation: z.string().trim().max(10).optional().default(''),
+  accountAssignmentCategory: z.enum(['COST_CENTER']).optional(),
+  costCenter: z.string().trim().max(10).optional().default(''),
+  glAccount: z.string().trim().max(10).optional().default(''),
+  requisitionNumber: z.string().trim().max(10).optional().default(''),
+  requisitionItem: z.number().int().positive().nullish(),
+  markedForDeletion: z.boolean().optional().default(false),
+})
+  · documentInput = z.object({
+  client: z.string().trim().min(1).max(4),
+  changedBy: z.string().trim().min(1).max(60),
+  documentType: z.string().trim().min(2).max(4),
+  supplierNumber: z.string().trim().min(1).max(40),
+  purchasingOrg: z.string().trim().min(1).max(10),
+  purchasingGroup: z.string().trim().min(1).max(3),
+  companyCode: z.string().trim().min(1).max(10),
+  currency: z.string().trim().max(3).optional().default(''),
+  agreementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  validityStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  validityEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  paymentTermsCode: z.string().trim().max(12).optional().default(''),
+  incotermsCode: z.string().trim().max(3).optional().default(''),
+  incotermsLocation: z.string().trim().max(160).optional().default(''),
+  yourReference: z.string().trim().max(12).optional().default(''),
+  ourReference: z.string().trim().max(12).optional().default(''),
+  requestKey: z.string().trim().max(64).optional(),
+  items: z.array(itemInput).min(1),
+})
+════ purchasing/source-list.ts
+  fns: previewSourceListEntry, createSourceListEntry, writeSourceListEntry, previewSourceListChange, changeSourceListEntry, writeSourceListChange, resolveSourceList, getSourceListEntry, getSourceList, listRecentSourceEntries
+
+════ purchasing/vendor-evaluation.ts
+  fns: listVendorEvaluation, checkVendorEvaluation, saveManualScore
+
+════ quality/lot.ts
+  fns: openLot, getLot, listLots, listInspectableLines
+  · lotOpenInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  materialDocumentNumber: key(20),
+  lineNumber: z.coerce.number().int().positive(),
+  inspectionNote: optionalText(200).optional(),
+  requestKey: optionalText(64).optional(),
+})
+════ sales/billing.ts
+  fns: getBilling, listBillableDeliveries, listBillings, createBillingFromDelivery, postBillingDocument, cancelBillingDocument, salesDocumentFlow, goodsIssueStands
+  · billingCreateInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  deliveryNumber: key(20),
+  billingDate: isoDate,
+  postingDate: z.union([z.undefined(), z.literal(''), isoDate]).optional(),
+  requestKey: optionalText(64).optional(),
+})
+  · billingCancelInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  billingNumber: key(20),
+  postingDate: isoDate,
+  reason: optionalText(60).optional(),
+  requestKey: optionalText(64).optional(),
+})
+════ sales/conditions.ts
+  fns: saveSalesCondition, listSalesConditions
+  · conditionInput = z.object({
+  client: key(4),
+  changedBy: z.string().trim().min(1).max(60),
+  salesOrg: key(4),
+  distributionChannel: key(2),
+  division: key(2),
+  /** Absent or blank means the record is customer-independent. */
+  customerNumber: z.union([z.undefined(), z.literal(''), key(40)]),
+  /** Absent or blank means the record is material-independent. */
+  materialNumber: z.union([z.undefined(), z.literal(''), key(40)]),
+  currency: key(3),
+  amount: z.coerce.number().min(0),
+  priceUnit: z.coerce.number().int().positive().default(1),
+  validityFrom: isoDate,
+  validityTo: isoDate,
+  /** Set only by a deliberate replacement of the price that stands for the overlapping period. */
+  supersedeStanding: z.boolean().default(false),
+})
+════ sales/delivery.ts
+  fns: standingDetermination, getDelivery, listDeliverableOrderLines, listDeliveries, createDelivery, confirmDeliveryPicks, postDeliveryGoodsIssue, cancelDelivery
+  · deliveryItemInput = z.object({
+  orderLineNumber: z.coerce.number().int().positive(),
+  /** What this delivery carries of the order line, in the order line's own unit. */
+  quantity: positiveQuantity,
+})
+  · deliveryCreateInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  orderNumber: key(20),
+  deliveryDate: isoDate,
+  goodsMovementDate: z.union([z.undefined(), z.literal(''), isoDate]).optional(),
+  headerText: optionalText(100).optional(),
+  items: z.array(deliveryItemInput).min(1, 'Name at least one order item to deliver.'),
+  requestKey: optionalText(64).optional(),
+})
+  · deliveryPickItemInput = z.object({
+  lineNumber: z.coerce.number().int().positive(),
+  /** Signed: a confirmation states what came to the dock, a correction the negative of what was wrong. */
+  quantity: signedQuantity,
+  storageLocation: optionalText(10).optional(),
+  batchNumber: optionalText(40).optional(),
+  reason: optionalText(60).optional(),
+})
+  · deliveryPickInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  deliveryNumber: key(20),
+  expectedVersion: z.coerce.number().int().positive().optional(),
+  items: z.array(deliveryPickItemInput).min(1, 'Name the delivery item the pick confirms.'),
+  requestKey: optionalText(64).optional(),
+})
+  · deliveryIssueInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  deliveryNumber: key(20),
+  expectedVersion: z.coerce.number().int().positive(),
+  postingDate: isoDate,
+  documentDate: isoDate.optional(),
+})
+  · deliveryCancelInput = z.object({
+  client: z.string().trim().length(4),
+  changedBy: key(60),
+  deliveryNumber: key(20),
+  expectedVersion: z.coerce.number().int().positive(),
+  reason: optionalText(60).optional(),
+})
+════ sales/exposure.ts
+  fns: openSalesCommitments
+
+════ sales/fulfillment-quantities.ts
+  fns: orderLineProgress, fulfillmentDocumentsOf
+
+════ sales/pricing.ts
+  fns: resolveCustomerSalesData, priceItem, assertMaterialAtPlant
+
+════ sales/sales-order.ts
+  fns: creditAreaFor, getSalesOrder, createSalesOrder, changeSalesOrder, cancelSalesOrder, listSalesOrderDocuments, salesOrderChoices, releaseSalesOrderCredit
+  · orderLineInput = z.object({
+  /** Present only to address an existing item on a change; a new item leaves it out. */
+  lineNumber: z.union([z.undefined(), z.coerce.number().int().positive()]),
+  materialNumber: key(40),
+  plant: key(10),
+  orderQuantity: z.coerce.number().gt(0),
+  /** Absent means the material's base unit. */
+  quantityUnit: optionalKey(6),
+  taxCode: optionalKey(4),
+  profitCenter: optionalKey(20),
+  requestedDeliveryDate: z.union([z.undefined(), isoDate]),
+})
+  · orderCreateInput = z.object(documentFields)
+  · orderChangeInput = z.object({
+  ...documentFields,
+  orderNumber: key(20),
+  expectedVersion: z.coerce.number().int().positive(),
+  rejectLines: z.array(z.object({ lineNumber: z.coerce.number().int().positive(), reason: key(4) })).default([]),
+})

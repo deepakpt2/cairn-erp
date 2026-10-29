@@ -95,6 +95,25 @@ describe('availability-check configuration', () => {
     expect(listed.gaps.join(' ')).not.toMatch(/created and released/);
   });
 
+  it('records the standing scope in the audit trail when a flag is changed', async () => {
+    const changed = await saveScopeOfCheck({
+      client: tenant.client, changedBy: ACTOR, mode: 'CHANGE', checkingGroup: '01', checkingRule: '01',
+      ...scopeFlags, purchaseOrders: ' ', version: 1, reason: 'Stop reading transport orders',
+    });
+    expect(changed).toMatchObject({ checkingGroup: '01', purchaseOrders: ' ', version: 2 });
+    const items = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select i.field_name, i.old_value, i.new_value
+      from change_document d
+      join change_document_item i on i.change_document_id = d.id
+      where d.client = ${tenant.client} and d.object_class = 'availability_check_scope'
+        and d.object_key = '01/01' and d.change_type = 'CHANGE'
+    `)) as unknown as Array<{ field_name: string; old_value: string | null; new_value: string | null }>;
+    // The old value is read off the row as it stood, so a change never loses the before image.
+    expect(items.find((item) => item.field_name === 'purchaseOrders')).toEqual({
+      field_name: 'purchaseOrders', old_value: 'X', new_value: ' ',
+    });
+  });
+
   it('keeps a missing assignment null and does not rewrite MRP data', async () => {
     const [before] = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select checking_group, planned_delivery_days, in_house_production_days, mrp_type, version

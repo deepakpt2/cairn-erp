@@ -15,6 +15,8 @@
  *
  * Accounting mirrors the receipt. A receipt debits inventory and credits GR/IR; a return credits
  * inventory and debits GR/IR, reopening the clearing position that the later credit memo closes.
+ * The figure it reopens is the receipt's own money in the share returned, measured in the unit the
+ * order priced in — which is not, for an alternative-unit order, the unit the material counts in.
  * No vendor liability is touched and no credit memo is created — that is invoice verification's
  * own work, and pretending otherwise here would put a document in the books nobody authorized.
  *
@@ -698,7 +700,19 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       }
       claimedStock.set(stockKey, alreadyStock + quantity);
 
-      const poValue = round2((quantity * Number(original.unitPrice)) / Number(original.priceUnit ?? '1'));
+      // The money follows the unit the vendor's rate is stated in. The receipt line carries that
+      // rate as the order carried it — goods receipt copies `unit_price` and `price_unit` from the
+      // order item, whose unit is the unit the price is per — while `quantity` above is the
+      // base-unit count the stock and the balance move in. So the priced part of a return is its
+      // share of the receipt, taken on the base pair and applied to the receipt's entered pair: of
+      // three boxes received as thirty-six pieces, twelve pieces back is one box back. Where the
+      // receipt was entered in the material's base unit the two pairs are one figure and this is
+      // the plain multiplication it always was, which is what keeps an alternative-unit-less
+      // posting, and a document posted before the receipt converted at posting, reading unchanged.
+      // The share can never exceed the receipt: the guard above measures the quantity and what
+      // remains in the same base unit, and the line's own check keeps both pairs above zero.
+      const pricedQuantity = (quantity * Number(original.entryQuantity)) / Number(original.baseQuantity);
+      const poValue = round2((pricedQuantity * Number(original.unitPrice)) / Number(original.priceUnit ?? '1'));
       const stockValue = valuation.priceControl === 'STANDARD'
         ? round2((quantity * Number(valuation.standardPrice)) / Number(valuation.priceUnit))
         : poValue;

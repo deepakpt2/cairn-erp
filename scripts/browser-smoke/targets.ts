@@ -176,6 +176,14 @@ export const TARGETS = [
   // QM slice 1: the inspection lot journey, on a fixture key of its own (T872, the only key between
   // sales' T871 and settlement's T873 that no target holds; T982 stays the runner's own probe).
   { id: 'quality-lot-receipt', client: 'T872', label: 'QM9192 inspection lots: the picker offers the standing receipt lines and nothing else, a lot reads its line back, the covered line leaves the list, a session without QM.LOT.CREATE reads only, no INSPLOT interval refuses with nothing written, and a reversal flips the displayed standing' },
+  // People slice (9193 + 9194): the employee master with its dated records, the structure, and
+  // assignment. Three targets because a fixture tenant is the unit of isolation here, and each
+  // journey writes only inside its own. Keys sit below the used range so the runner's reservation
+  // and the vitest allocator both leave them alone.
+  { id: 'people-employee-records', client: 'T820', label: 'HR9193 record types and the employee master: a type is defined with its required field and extended, a duplicate is refused with nothing filed, an employee is created, a record for a covered date is refused, delimiting leaves the closed values alone and correction reaches only the open row, search answers and no delete is offered' },
+  { id: 'people-organization', client: 'T821', label: 'HR9194 the organisational structure: units are defined with their level, a move is asserted on both parents, a cycle is refused and changes nothing, a position moves rather than duplicates, retirement keeps the standing reference and refuses the next one, and the reference codes resolve here through the registry' },
+  { id: 'people-assignments', client: 'T822', label: 'HR9194 position assignment: an assignment is written and read back with its mapping, an end date is inclusive, a covered day refuses the next start, a cost centre not in force on the start day is refused and accepted on the later one, correction reaches only the open row and never the dates, and the search and standing-today filter read the same table' },
+  { id: 'people-pay-components', client: 'T823', label: 'HR9195 the pay structure: the workbench opens both People configuration steps, a component is defined with its kind and its sides, the mapping offers only the accounts the chart has and the side allows, an account that demands a cost object refuses NONE, a fixed centre is stored with its area, retirement leaves the mapping standing, and nothing on the screen deletes either' },
 ] as const;
 export type BrowserTarget = typeof TARGETS[number];
 export type BrowserTargetId = BrowserTarget['id'];

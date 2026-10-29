@@ -66,11 +66,18 @@ const RULE = 'PP';
 const TYPE_ORDER = 'PP01';
 const TYPE_NO_CONTROL = 'PP02';
 
+/**
+ * The MRP-consistent configuration: `includeRestrictedUse` is the scope's
+ * "Include restricted-use batches" switch (`availability-check.ts` validates it, the form
+ * labels it that way), and the stock/requirements list counts no such stock type. Blank
+ * is therefore the only value this check can answer with, and the fixture keeps the
+ * other stock-type switches in the state the ledger can honour.
+ */
 const SCOPE_DEFAULTS = {
   includeSafetyStock: 'X',
   includeQualityStock: 'X',
   includeBlockedStock: ' ',
-  includeRestrictedUse: 'X',
+  includeRestrictedUse: ' ',
   purchaseOrders: 'X',
   purchaseRequisitions: 'X',
   plannedOrders: 'X',
@@ -517,6 +524,374 @@ describe('CO09 slice 1 order availability check', () => {
     expect(ownDemand.sort()).toEqual(['DEPENDENT_REQUIREMENT', 'PRODUCTION_COMPONENT']);
   });
 
+  it('excludes only the line being checked, and nets the order’s other lines against it', async () => {
+    await setScope();
+    // The control, taken before anything is added: item 10 is the order's only dated line
+    // of C-OK, so its own 10 is left out of its own coverage exactly once — the balance is
+    // 12, not the 2 that netting the same line a second time would give.
+    const alone = component(await run(orderOne, { item: '10' }), '10');
+    const aloneOwn = alone.elements.filter((element) => element.ownDemand);
+    expect(aloneOwn).toHaveLength(1);
+    expect(aloneOwn[0]!.documentItem).toBe('10');
+    expect(alone.cumulatedAtp).toBe(12);
+    expect(alone.coveredQuantity).toBe(10);
+    expect(alone.outcome).toBe('AVAILABLE');
+
+    // Now a second dated C-OK line on the same order: two requirements of 10 each against
+    // the same 12. The check may not answer by letting each line claim the whole opening.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into production_order_component
+          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, requirement_date, created_by)
+        values (${tenant.client}, ${orderOne}, 120, 'C-OK', ${PLANT}, 10, 'KG', ${REQ}, ${ACTOR})
+      `);
+    });
+    try {
+      // Each of the two competing lines sees the other's demand and stands short by the
+      // sibling's 10; neither is answered as though it were the order's only line.
+      const checked = component(await run(orderOne, { item: '10' }), '10');
+      const demand = checked.elements.filter((element) => element.elementType === 'PRODUCTION_COMPONENT');
+      // The element list carries this order's two dated lines plus the other two orders'
+      // C-OK lines: all four are shown, and only the checked one is not credited.
+      expect(demand).toHaveLength(4);
+      expect(demand.filter((element) => element.ownDemand)).toHaveLength(1);
+      expect(demand.find((element) => element.ownDemand)?.documentItem).toBe('10');
+      const fromThisOrder = demand.filter((element) => element.documentNumber === orderOne);
+      expect(fromThisOrder.map((element) => element.documentItem).sort()).toEqual(['10', '120']);
+      const sibling = fromThisOrder.find((element) => !element.ownDemand);
+      expect(sibling?.documentItem).toBe('120');
+      expect(sibling?.direction).toBe('REQUIREMENT');
+      expect(sibling?.quantity).toBe(10);
+      expect(checked.cumulatedAtp).toBe(2);
+      expect(checked.coveredQuantity).toBe(2);
+      expect(checked.shortageQuantity).toBe(8);
+      expect(checked.outcome).toBe('SHORT');
+
+      // The sibling is answered from its own exclusion, and so comes to the same figure.
+      const other = component(await run(orderOne, { item: '120' }), '120');
+      expect(other.cumulatedAtp).toBe(2);
+      expect(other.outcome).toBe('SHORT');
+
+      // All the order's lines at once: each line still excludes only itself, so the same
+      // 12 is answered against both and the pair cannot double-count the opening.
+      const both = await run(orderOne);
+      let claimed = 0;
+      for (const item of ['10', '120']) {
+        const row = component(both, item);
+        const own = row.elements.filter((element) => element.ownDemand);
+        expect(own).toHaveLength(1);
+        expect(own[0]!.documentItem).toBe(item);
+        expect(row.outcome).toBe('SHORT');
+        expect(row.cumulatedAtp).toBe(2);
+        expect(row.shortageQuantity).toBe(8);
+        claimed += row.coveredQuantity ?? 0;
+      }
+      expect(claimed).toBe(4);
+      expect(claimed).toBeLessThanOrEqual(12);
+
+      // The order's undated line is still refused before any quantity, as it was before the
+      // sibling existed: the exclusion never turns an undated line into an answer.
+      const undated = component(both, '110');
+      expect(undated.outcome).toBe('UNDATED');
+      expect(undated.cumulatedAtp).toBeNull();
+      expect(undated.elements).toHaveLength(0);
+    } finally {
+      await withTenant(tenant.client, (tx) => tx.execute(sql`
+        delete from production_order_component where client = ${tenant.client} and order_number = ${orderOne} and item_number = 120
+      `));
+    }
+  });
+
+  it('refuses a component line whose plant is not the order plant, before the list is asked', async () => {
+    await setScope();
+    const OTHER_PLANT = 'R80';
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into plant (client, plant, name, company_code, country, created_by)
+        values (${tenant.client}, ${OTHER_PLANT}, 'Plant R80', ${tenant.companyCode}, 'KW', ${ACTOR})
+        on conflict (client, plant) do update set company_code = excluded.company_code
+      `);
+      // The component's own plant carries the material's plant view, so the scope of check
+      // really is resolved there, and it holds 25 units of stock: the figure the wrong
+      // plant would have been read from. The list itself runs at the order's plant.
+      await tx.execute(sql`
+        insert into material_plant (client, material_number, plant, checking_group, created_by)
+        values (${tenant.client}, 'C-OK', ${OTHER_PLANT}, ${GROUP}, ${ACTOR})
+        on conflict (client, material_number, plant) do update set checking_group = excluded.checking_group
+      `);
+      await tx.execute(sql`
+        insert into stock_quantity (client, material_number, plant, stock_type, quantity, created_by)
+        values (${tenant.client}, 'C-OK', ${OTHER_PLANT}, 'UNRESTRICTED', 25, ${ACTOR})
+        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
+          do update set quantity = excluded.quantity
+      `);
+      // Line 130 is C-OK at the other plant. Line 140 is a material extended only at the
+      // order's plant, to show that neither plant is quietly substituted for the other.
+      await tx.execute(sql`
+        insert into production_order_component
+          (client, order_number, item_number, material_number, plant, required_quantity, unit_of_measure, requirement_date, created_by)
+        values
+          (${tenant.client}, ${orderOne}, 130, 'C-OK', ${OTHER_PLANT}, 10, 'KG', ${REQ}, ${ACTOR}),
+          (${tenant.client}, ${orderOne}, 140, 'C-NOP', ${OTHER_PLANT}, 4, 'KG', ${REQ}, ${ACTOR})
+      `);
+    });
+    try {
+      // The horizon ends before the check date, so any component that reached the list
+      // would be answered with the list's own horizon refusal. That wording is absent
+      // below, which is the proof that the line was refused before any list was called.
+      const result = await run(orderOne, { item: '130', horizonEnd: '2026-05-20' });
+      const cross = component(result, '130');
+      expect(cross.outcome).toBe('UNSUPPORTED');
+      expect(cross.message).toContain(OTHER_PLANT);
+      expect(cross.message).toContain(PLANT);
+      expect(cross.message ?? '').not.toContain('horizon');
+      expect(cross.remedy ?? '').toContain(OTHER_PLANT);
+      expect(cross.remedy ?? '').toContain(PLANT);
+      expect(cross.checkingGroup).toBe(GROUP); // resolved at the component's own plant
+      expect(cross.scopeKey).toBe(`${GROUP}/${RULE}`);
+      expect(cross.requirementDate).toBe(REQ);
+      expect(cross.cumulatedAtp).toBeNull();
+      expect(cross.coveredQuantity).toBeNull();
+      expect(cross.shortageQuantity).toBeNull();
+      expect(cross.elements).toHaveLength(0);
+      expect(result.refusedCount).toBe(1);
+      expect(result.checkedCount).toBe(0);
+
+      // A component whose material has no plant view at the component's plant is not
+      // answered from the order's plant either: the refusal is the answer, not a guess.
+      const unextended = component(await run(orderOne, { item: '140', horizonEnd: '2026-05-20' }), '140');
+      expect(unextended.outcome).toBe('NO_GROUP');
+      expect(unextended.message ?? '').not.toContain('horizon');
+
+      // A component in the order's own plant is untouched by the new refusal, on the same
+      // order that carries the cross-plant line.
+      const same = component(await run(orderOne, { item: '10' }), '10');
+      expect(same.outcome).toBe('AVAILABLE');
+      expect(same.cumulatedAtp).toBe(12);
+      expect(same.message ?? '').not.toContain(OTHER_PLANT);
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`
+          delete from production_order_component
+           where client = ${tenant.client} and order_number = ${orderOne} and item_number in (130, 140)
+        `);
+        await tx.execute(sql`delete from stock_quantity where client = ${tenant.client} and plant = ${OTHER_PLANT}`);
+        await tx.execute(sql`delete from material_plant where client = ${tenant.client} and plant = ${OTHER_PLANT}`);
+      });
+    }
+  });
+
+  it('refuses to answer a technically complete order instead of a shortage it cannot see', async () => {
+    // The availability list excludes the own demand and the dependent requirements of an order
+    // that is technically complete; the ledger behind this check excludes them too. Reading the
+    // remaining supply against the order that finished would publish a shortfall for demand the
+    // plant stopped covering, so the refusal is the answer. The reference product's overview
+    // marks such an order with a note rather than a figure, which is the reading this follows.
+    await setScope();
+    // Control: while the order is open the same call answers the line with a figure.
+    const before = await run(orderThree);
+    expect(before.checkedCount).toBe(1);
+    expect(component(before, '10').requirementDate).toBe('2026-06-14');
+
+    // A completed order resolves to the release-time checking control, which is what the delivered
+    // code then answered from. The fixture keeps no control at business function 2 for this order
+    // type, so one is created for the duration of this test and deleted again below rather than
+    // left standing for the rest of the file.
+    await setControl({ orderType: TYPE_ORDER, businessFunction: '2', noCheck: ' ', checkingRule: RULE });
+
+    // Technical completion normally arrives through the order-change screen, which records who
+    // completed the order and needs a release record to revoke it again. This check is read-only
+    // and the order under test was never released, so the fixture states the persisted completion
+    // directly - the pair of columns the table's own constraint binds to the status - and puts it
+    // back below.
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update production_order
+         set status = 'TECHNICALLY_COMPLETED', technically_completed_by = ${ACTOR}, technically_completed_at = now()
+       where client = ${tenant.client} and order_number = ${orderThree}
+    `));
+    try {
+      const result = await run(orderThree);
+      // The claim first: a finished order is answered with no figure at all.
+      expect(result.checkedCount).toBe(0);
+      expect(result.components).toHaveLength(1);
+      expect(result.components[0]!.outcome).toBe('UNSUPPORTED');
+      expect(result.components[0]!.cumulatedAtp).toBeNull();
+      expect(result.orderStatus).toBe('TECHNICALLY_COMPLETED');
+      expect(result.businessFunction).toBe('2'); // the status still picks the release control
+      expect(result.status).toBe('NOT_CHECKED');
+      expect(result.configurationGap).toBe(false); // nothing is missing from the configuration
+      expect(result.refusedCount).toBe(result.components.length);
+      expect(result.message ?? '').toContain('technically complete');
+      expect(result.message ?? '').toContain('no quantity is answered for a finished order');
+      expect(result.remedy ?? '').toContain('Revoke');
+      expect(result.warnings.join(' ')).toContain('and no element list is shown');
+      for (const row of result.components) {
+        expect(row.outcome).toBe('UNSUPPORTED');
+        expect(row.cumulatedAtp).toBeNull();
+        expect(row.coveredQuantity).toBeNull();
+        expect(row.shortageQuantity).toBeNull();
+        expect(row.elements).toHaveLength(0);      // the ledger is not displayed either
+        expect(row.checkingRule).toBeNull();       // nothing was resolved for it
+        expect(row.warnings.join(' ')).toContain('technically complete');
+      }
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`
+          update production_order
+             set status = 'CREATED', technically_completed_by = null, technically_completed_at = null
+           where client = ${tenant.client} and order_number = ${orderThree}
+        `);
+        await tx.execute(sql`
+          delete from production_checking_control
+           where client = ${tenant.client} and plant = ${PLANT} and order_type = ${TYPE_ORDER} and business_function = '2'
+        `);
+      });
+    }
+
+    // The order is answered again once the completion is revoked, with no residue of the refusal.
+    const again = await run(orderThree);
+    expect(again.status).not.toBe('NOT_CHECKED');
+    expect(again.checkedCount).toBe(again.components.length); // every line is answerable again
+    expect(again.components.every((row) => row.outcome !== 'UNSUPPORTED')).toBe(true);
+    expect(again.configurationGap).toBe(false);
+    expect(again.message).toBeNull();
+    expect(again.warnings.join(' ')).not.toContain('technically complete');
+    expect(again.components).toHaveLength(1);
+    expect(component(again, '10').outcome).toBe(component(before, '10').outcome);
+    expect(component(again, '10').cumulatedAtp).toBe(component(before, '10').cumulatedAtp);
+  });
+
+  it('refuses a horizon that stops before the requirement date it is asked to answer for', async () => {
+    // The horizon end is a search bound on the stock/requirements list. When it stops before the
+    // requirement date, the elements that answer that date are outside the bound, and a partial
+    // ledger printed at the requirement date is not a verdict: a horizon of 2026-06-05 on a line
+    // due 2026-06-10 counts the opening stock, two requisitions and two order receipts, and
+    // answers AVAILABLE with a cumulated figure, while the same line inside the list's own
+    // horizon is short.
+    await setScope();
+    const early = component(await run(orderOne, { item: '10', horizonEnd: '2026-06-05' }), '10');
+    expect(early.outcome).toBe('UNSUPPORTED');
+    expect(early.message ?? '').toContain('horizon');
+    expect(early.message ?? '').toContain('2026-06-05');
+    expect(early.message ?? '').toContain('2026-06-10');
+    expect(early.message ?? '').toContain('before');
+    expect(early.requirementDate).toBe('2026-06-10'); // the date the caller asked about is kept
+    expect(early.cumulatedAtp).toBeNull();
+    expect(early.coveredQuantity).toBeNull();
+    expect(early.shortageQuantity).toBeNull();
+    expect(early.earliestFullCoverageDate).toBeNull();
+    expect(early.elements).toHaveLength(0);
+    expect(early.warnings).toHaveLength(0);
+
+    // A horizon that reaches the requirement date answers, however tight it is: the refusal is
+    // about the date a figure is claimed for, not about the search being narrowed.
+    const reaching = component(await run(orderOne, { item: '10', horizonEnd: '2026-06-10' }), '10');
+    expect(reaching.outcome).toBe('AVAILABLE');
+    expect(reaching.cumulatedAtp).toBe(12);
+
+    // Every line of the order is refused on its own date, so the order reports nothing checked.
+    const all = await run(orderOne, { horizonEnd: '2026-06-05' });
+    expect(all.checkedCount).toBe(0);
+    expect(all.status).toBe('NOT_CHECKED');
+    expect(all.configurationGap).toBe(false);
+    expect(all.components.filter((row) => row.outcome === 'UNDATED').length).toBe(1); // kept distinct
+  });
+
+  it('adds same-unit elements as they stand, with no caveat and nothing converted', async () => {
+    await setScope();
+    const withDocuments = component(await run(orderOne, { item: '10' }), '10');
+    // Every counted row of this fixture stands in KG, the material's base unit, so the balance is
+    // the list's own arithmetic: figure for figure what it was before the units were traced.
+    expect(withDocuments.warnings.join(' ')).not.toContain('base unit');
+    for (const element of withDocuments.elements) {
+      expect(element.unit).toBe('KG');
+      expect(element.convertedFrom).toBeNull();
+    }
+
+    await setScope({ purchaseRequisitions: ' ', purchaseOrders: ' ', plannedOrders: ' ', dependentRequirements: ' ' });
+    const without = component(await run(orderOne, { item: '10' }), '10');
+    expect(without.warnings.join(' ')).not.toContain('base unit');
+    expect(without.elements.some((element) => element.elementType === 'PURCHASE_REQUISITION')).toBe(false);
+    expect(typeof without.cumulatedAtp).toBe('number');
+
+    // A refusal carries no unit warning: there is no figure for units to enter.
+    const refused = component(await run(orderOne, { item: '110' }), '110');
+    expect(refused.warnings).toHaveLength(0);
+  });
+
+  it('reports NOT_CHECKED when no line was answered, and keeps a configuration gap distinguishable', async () => {
+    // All components refused for one reason the check can see: the header must not call a check
+    // that answered nothing a partial one. The gap stays visible per component and as a warning.
+    await setScope({ includeRestrictedUse: 'X' });
+    const all = await run(orderOne, { item: '10' });
+    expect(all.checkedCount).toBe(0);
+    expect(all.refusedCount).toBe(1);
+    expect(all.status).toBe('NOT_CHECKED');
+    expect(all.configurationGap).toBe(false);
+    expect(all.message).toBeNull(); // a component-level refusal is not an order-level one
+    expect(all.warnings.join(' ')).toContain('No component of this order was answered with a figure');
+    expect(all.components[0]!.outcome).toBe('UNSUPPORTED');
+    expect(all.components[0]!.cumulatedAtp).toBeNull();
+    expect(all.components[0]!.elements).toHaveLength(0);
+
+    // A control that names no rule is the configuration's gap, not the operator's: same status,
+    // different bucket, so the workbench can say whose problem it is.
+    await setScope();
+    await setControl({ orderType: TYPE_ORDER, businessFunction: '1', noCheck: ' ', checkingRule: '' });
+    try {
+      const gap = await run(orderOne, { item: '10' });
+      expect(gap.checkedCount).toBe(0);
+      expect(gap.status).toBe('NOT_CHECKED');
+      expect(gap.configurationGap).toBe(true);
+      expect(gap.message ?? '').toContain('names no checking rule');
+      expect(gap.components[0]!.outcome).toBe('UNSUPPORTED');
+      expect(gap.components[0]!.cumulatedAtp).toBeNull();
+    } finally {
+      await setControl({ orderType: TYPE_ORDER, businessFunction: '1', noCheck: ' ', checkingRule: RULE });
+    }
+
+    // A partly answered order keeps the partial status, with the same reason list.
+    const part = await run(orderOne);
+    expect(part.checkedCount).toBeGreaterThan(0);
+    expect(part.refusedCount).toBeGreaterThan(0);
+    expect(part.status).toBe('PARTIALLY_CHECKED');
+    expect(part.configurationGap).toBe(false);
+  });
+
+  it('explains a shortfall that exceeds the line it was computed for', async () => {
+    // The shortfall is the supply this line needs on top of the deficit that the demand dated
+    // before it already left in the cumulated balance. That is the honest reading of a cumulated
+    // availability figure, and it can exceed the required quantity: the stock here is 2.000
+    // against 3.000 of reservation and 6.000 of open dependent requirement, so the balance in
+    // front of the line is -7.000 before its own 10.000 is added. The number stays; the sentence
+    // beside it must not let it be read as this line's unmet quantity alone.
+    await setScope({ purchaseRequisitions: ' ', productionOrders: ' ' });
+    const row = component(await run(orderOne, { item: '10' }), '10');
+    expect(row.requiredQuantity).toBe(10);
+    expect(row.cumulatedAtp).toBe(-7);
+    expect(row.outcome).toBe('SHORT');
+    expect(row.coveredQuantity).toBe(0);
+    expect(row.shortageQuantity).toBe(17);
+    expect((row.shortageQuantity ?? 0) > row.requiredQuantity).toBe(true);
+    expect(row.earliestFullCoverageDate).toBeNull();
+    expect(row.message ?? '').toContain('Short by 17.000');
+    // The composition is stated, so the two figures cannot be mistaken for complements.
+    expect(row.message ?? '').toContain('requirement of this line is 10.000');
+    expect(row.message ?? '').toContain('deficit the demand dated before it');
+    expect(row.coveredQuantity! + row.shortageQuantity!).not.toBe(row.requiredQuantity);
+
+    // Control: a shortage that does not exceed the requirement keeps the terse sentence, so the
+    // explanation is tied to the case and is not boilerplate on every shortfall.
+    await setScope({ receiptsInPast: 'B' });
+    const ordinary = component(await run(orderOne, { item: '10' }), '10');
+    expect(ordinary.cumulatedAtp).toBe(8);
+    expect(ordinary.shortageQuantity).toBe(2);
+    expect(ordinary.coveredQuantity).toBe(8);
+    expect(ordinary.message ?? '').toContain('Short by 2.000');
+    expect(ordinary.message ?? '').not.toContain('deficit the demand dated before it');
+    await setScope();
+  });
+
   it('switches dependent requirements and reservations off when the scope says so', async () => {
     await setScope({ dependentRequirements: ' ' });
     const noDemand = component(await run(orderOne, { item: '10' }), '10');
@@ -660,6 +1035,196 @@ describe('CO09 slice 1 order availability check', () => {
     expect(row.remedy).toContain('An unconverted comparison is not reported as an availability result');
   });
 
+  // ── F7: the unit of every quantity that enters the cumulated balance ────────────
+  // A counted element is one row of the stock/requirements list, and the list reads its
+  // quantities out of seven document tables that each store a unit of their own. These four
+  // cases are the whole of the question: a row already in the material's base unit is added
+  // as it was (the case above), a row in another unit is converted by the conversion the
+  // material carries, and a row that cannot be brought into that unit refuses the line.
+  it('converts a counted element with the conversion the material carries, before cumulating it', async () => {
+    await setScope();
+    // C-UOM is kept in its own base unit here so that the *element* is what arrives in another
+    // unit; the line-unit refusal is its own case further up.
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update production_order_component set unit_of_measure = 'PC'
+         where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+      `);
+      await tx.execute(sql`
+        insert into planned_order (client, order_number, material_number, plant, quantity, unit, start_date, finish_date,
+                                   firming_status, origin, request_key, created_by) values
+          (${tenant.client}, 'PL-UOM-1', 'C-UOM', ${PLANT}, 2, 'PAL', '2026-06-04', '2026-06-05',
+           'FIRMED', 'MANUAL', 'co09-uom-convert', 'cairn')
+      `);
+      await tx.execute(sql`
+        insert into material_uom_conversion (client, material_number, alternative_unit, base_unit,
+                                              numerator, denominator, created_by) values
+          (${tenant.client}, 'C-UOM', 'PAL', 'PC', 4, 1, 'cairn')
+      `);
+    });
+    try {
+      const row = component(await run(orderOne, { item: '50' }), '50');
+      // Two pallets at 4/1 are eight pieces, which covers a requirement of five. Read as
+      // "2" beside a requirement of "5" the same row would have said the line is short.
+      expect(row.outcome).toBe('AVAILABLE');
+      expect(row.cumulatedAtp).toBe(8);
+      expect(row.coveredQuantity).toBe(5);
+      expect(row.shortageQuantity).toBe(0);
+      expect(row.earliestFullCoverageDate).toBe(REQ); // covered at the date it was checked for
+      const planned = row.elements.find((element) => element.elementType === 'PLANNED_ORDER');
+      expect(planned?.quantity).toBe(8);
+      expect(planned?.unit).toBe('PC');
+      expect(planned?.cumulated).toBe(8);
+      expect(planned?.convertedFrom).toEqual({ quantity: 2, unit: 'PAL', factor: '4' });
+      // The conversion is stated where the figure is read, not kept in the service alone.
+      expect(row.warnings.join(' ')).toContain('2.000 PAL at 4 = 8.000 PC');
+      expect(row.warnings.join(' ')).toContain('PL-UOM-1');
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`delete from planned_order where client = ${tenant.client} and order_number = 'PL-UOM-1'`);
+        await tx.execute(sql`
+          delete from material_uom_conversion
+           where client = ${tenant.client} and material_number = 'C-UOM' and alternative_unit = 'PAL'
+        `);
+        await tx.execute(sql`
+          update production_order_component set unit_of_measure = 'KG'
+           where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+        `);
+      });
+    }
+  });
+
+  it('refuses a line whose counted element has no conversion, and publishes no figure and no element row', async () => {
+    await setScope();
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update production_order_component set unit_of_measure = 'PC'
+         where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+      `);
+      await tx.execute(sql`
+        insert into planned_order (client, order_number, material_number, plant, quantity, unit, start_date, finish_date,
+                                   firming_status, origin, request_key, created_by) values
+          (${tenant.client}, 'PL-UOM-1', 'C-UOM', ${PLANT}, 2, 'PAL', '2026-06-04', '2026-06-05',
+           'FIRMED', 'MANUAL', 'co09-uom-none', 'cairn')
+      `);
+    });
+    try {
+      const row = component(await run(orderOne, { item: '50' }), '50');
+      expect(row.outcome).toBe('UNSUPPORTED');
+      expect(row.cumulatedAtp).toBeNull();
+      expect(row.coveredQuantity).toBeNull();
+      expect(row.shortageQuantity).toBeNull();
+      expect(row.earliestFullCoverageDate).toBeNull();
+      expect(row.committedQuantity).toBeNull();
+      expect(row.elements).toHaveLength(0);
+      // The row that made the refusal is named with its own figure and unit, so the answer can
+      // be acted on: an unnamed refusal would leave the reader hunting the list for it.
+      expect(row.message).toContain('PLANNED_ORDER PL-UOM-1');
+      expect(row.message).toContain('2.000 PAL');
+      expect(row.message).toContain('no conversion from PAL to its base unit PC');
+      expect(row.remedy).toContain('INV.STOCK.UOM');
+      // A refusal states no quantity: neither a balance nor a shortage appears beside it.
+      expect(row.warnings).toHaveLength(1);
+      expect(row.message).not.toMatch(/cumulated (?:balance )?-?\d/);
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`delete from planned_order where client = ${tenant.client} and order_number = 'PL-UOM-1'`);
+        await tx.execute(sql`
+          update production_order_component set unit_of_measure = 'KG'
+           where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+        `);
+      });
+    }
+  });
+
+  it('will not convert a netted receipt, because its figure is already a difference of two unit streams', async () => {
+    await setScope();
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        update production_order_component set unit_of_measure = 'PC'
+         where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+      `);
+      await tx.execute(sql`
+        insert into material_uom_conversion (client, material_number, alternative_unit, base_unit,
+                                              numerator, denominator, created_by) values
+          (${tenant.client}, 'C-UOM', 'PAL', 'PC', 4, 1, 'cairn')
+      `);
+      // A requisition is a netted element: the list opens it with the quantity of the orders
+      // converted from it, and those stand in their own unit. Scaling the difference afterwards
+      // would convert a number that is not a quantity of anything.
+      await tx.execute(sql`
+        insert into purchase_requisition_item (client, requisition_number, item_number, short_text, quantity, unit,
+                                               requisition_date, delivery_date, plant, purchasing_group, material_number, created_by)
+        values (${tenant.client}, '900050', 1, 'palletised supply', 5, 'PAL', '2026-05-02', '2026-06-06',
+                ${PLANT}, 'G90', 'C-UOM', 'cairn')
+      `);
+    });
+    try {
+      const row = component(await run(orderOne, { item: '50' }), '50');
+      expect(row.outcome).toBe('UNSUPPORTED');
+      expect(row.cumulatedAtp).toBeNull();
+      expect(row.elements).toHaveLength(0);
+      expect(row.message).toContain('PURCHASE_REQUISITION 900050/1');
+      expect(row.message).toContain('netted');
+      // The conversion standing on the material is named as not the remedy for this one.
+      expect(row.message).toContain('PAL');
+      expect(row.message).toContain('PC');
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`
+          delete from purchase_requisition_item
+           where client = ${tenant.client} and requisition_number = '900050'
+        `);
+        await tx.execute(sql`
+          delete from material_uom_conversion
+           where client = ${tenant.client} and material_number = 'C-UOM' and alternative_unit = 'PAL'
+        `);
+        await tx.execute(sql`
+          update production_order_component set unit_of_measure = 'KG'
+           where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
+        `);
+      });
+    }
+  });
+
+  it('refuses the line a foreign-unit element sits on, rather than adding it in or dropping it out', async () => {
+    await setScope();
+    await withTenant(tenant.client, async (tx) => {
+      await tx.execute(sql`
+        insert into planned_order (client, order_number, material_number, plant, quantity, unit, start_date, finish_date,
+                                   firming_status, origin, request_key, created_by) values
+          (${tenant.client}, 'PL-Q90-U', 'C-OK', ${PLANT}, 14, 'PAL', '2026-06-15', '2026-06-18',
+           'FIRMED', 'MANUAL', 'co09-uom-poison', 'cairn')
+      `);
+    });
+    try {
+      const poisoned = component(await run(orderOne, { item: '10' }), '10');
+      // Either reading of a mixed total is wrong: adding the row says 26.000, dropping it says
+      // 12.000 as though the scope had no planned order to count. Both are refused.
+      expect(poisoned.outcome).toBe('UNSUPPORTED');
+      expect(poisoned.cumulatedAtp).toBeNull();
+      expect(poisoned.elements).toHaveLength(0);
+      expect(poisoned.message).toContain('PL-Q90-U');
+      expect(poisoned.message).toContain('14.000 PAL');
+      expect(poisoned.warnings.join(' ')).toContain('not published');
+
+      // With the kind out of the scope there is nothing to convert, and the established
+      // answer for this line returns figure for figure.
+      await setScope({ plannedOrders: ' ' });
+      const outside = component(await run(orderOne, { item: '10' }), '10');
+      expect(outside.outcome).toBe('AVAILABLE');
+      expect(outside.cumulatedAtp).toBe(12);
+      expect(outside.coveredQuantity).toBe(10);
+      expect(outside.shortageQuantity).toBe(0);
+      expect(outside.warnings.join(' ')).not.toContain('base unit');
+    } finally {
+      await withTenant(tenant.client, async (tx) => {
+        await tx.execute(sql`delete from planned_order where client = ${tenant.client} and order_number = 'PL-Q90-U'`);
+      });
+      await setScope();
+    }
+  });
+
   it('refuses a scope that splits stock by type, because the list does not', async () => {
     await setScope({ includeQualityStock: ' ' });
     const quality = component(await run(orderOne), '10');
@@ -671,12 +1236,26 @@ describe('CO09 slice 1 order availability check', () => {
     expect(blocked.outcome).toBe('UNSUPPORTED');
     expect(blocked.message).toContain('blocked stock');
 
-    await setScope({ includeRestrictedUse: ' ' });
+    // The third stock-type switch is "Include restricted-use batches" — the label the
+    // maintaining form carries and the label the validator names. Unrestricted-use stock
+    // has no inclusion switch in this scope at all, so a refusal may not name one.
+    await setScope({ includeRestrictedUse: 'X' });
     const restricted = component(await run(orderOne), '10');
     expect(restricted.outcome).toBe('UNSUPPORTED');
-    expect(restricted.message).toContain('unrestricted-use stock');
+    expect(restricted.message).toContain('restricted-use batches');
+    expect(restricted.message).not.toContain('unrestricted-use stock is not included');
+    expect(restricted.cumulatedAtp).toBeNull();
+    expect(restricted.coveredQuantity).toBeNull();
 
-    await setScope({ includeBlockedStock: ' ', includeQualityStock: 'X', includeRestrictedUse: 'X' });
+    // A blank restricted-use switch asks for exactly what the list already counts, so it
+    // is no reason to refuse; and the pair the check can answer with is answered.
+    await setScope({ includeRestrictedUse: ' ' });
+    const omitted = component(await run(orderOne), '10');
+    expect(omitted.outcome).toBe('AVAILABLE');
+    expect(omitted.message ?? '').not.toContain('restricted-use');
+    expect(omitted.cumulatedAtp).toBe(12);
+
+    await setScope();
     expect(component(await run(orderOne), '10').outcome).toBe('AVAILABLE');
   });
 

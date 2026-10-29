@@ -11,7 +11,7 @@ under `docs/`; it reads them and the code, and it records only numbers that a st
 | PP | 62 | 38 (`PROD.*`, `CFG.PROD.*`) | 52 | 30 | 91 | deep and usable end to end |
 | SD | 38 (AR, credit, dunning, payments) | 27 | 21 | 32 | 62 | AR tail usable, document chain absent |
 | QM | 8 (characteristics, classes, batch status) | 8 (`INV.BATCH*`) | 25 | 5 | 44 | configuration and batch disposition only |
-| HR | 6 (5 People master tables + `employee_tolerance_group`) | 4 | 3 | 1 | 2 | People master and dated records built and service-verified 2026-10-28; no payroll, no org block, no time/leave, nothing browser-accepted |
+| HR | 11 (10 People tables — 5 master/record, 5 org block — + `employee_tolerance_group`) | 7 | 5 | 1 | 3 | People master, dated records and the org block with assignments built and service-verified 2026-10-28; no payroll, no time/leave, nothing browser-accepted |
 
 Counts come from `ls src/app/<area>`, `grep -c pgTable` over `src/modules/*/schema.ts` and the satellite
 tables the barrel `src/platform/schema.ts` pulls in, and from `scripts/browser-smoke/targets.ts` (170
@@ -49,12 +49,40 @@ specification), so this is an open product decision, not a dropped milestone.
 module's first workflow landed on the approved design — `record_type`, `record_field`, `employee`,
 `employee_record`, `record_field_value` with `/people/employees` and `/config/people-record-types`
 (`notes/people-increment-1.md` holds the evidence: 13 slice tests, 13 grant-gate tests, a clean production
-build of both routes). It is master data only and says so: `PEOPLE.EMPLOYEE.CREATE`, `PEOPLE.RECORD.MAINTAIN`
-and `CFG.PEOPLE.RECORDTYPE.DEFINE` are now registered beside `PEOPLE.PAYROLL.POST`, which still has nothing to
-execute, and 12 of the 15 operational codes `CAIRN.md` §10.8 names for People remain unregistered. Payroll has
+build of both routes). The org block followed the same day: `org_unit`, `job`, `position`, `org_hierarchy` and
+`position_assignment` with `/people/organization` and `/people/assignments`, so §15.1's "Org units, positions,
+jobs, hierarchy, reporting line" and its assignment row are now enforced by `9194` rather than listed
+(`notes/people-increment-2.md`: 17 slice tests, 13 grant-gate tests, a clean build of all three People routes,
+188 typecheck diagnostics with none in the People files). Both increments are master data and say so:
+`PEOPLE.EMPLOYEE.CREATE`, `PEOPLE.RECORD.MAINTAIN`, `CFG.PEOPLE.RECORDTYPE.DEFINE`, `PEOPLE.ORGUNIT.CREATE`,
+`PEOPLE.POSITION.CREATE` and `PEOPLE.ASSIGNMENT.MAINTAIN` are registered beside `PEOPLE.PAYROLL.POST`, which
+still has nothing to execute, and 9 of the 15 operational codes §10.8 names for People remain unregistered. Payroll has
 approved tables (`payroll_run`, `payroll_result`, `payroll_result_line`, `payroll_posting_run`,
 `payroll_posting_line`), an approved posting rule and an explicit scope line — statutory tax and social
 insurance are out of scope (`CAIRN.md` §1.3, R-11, D-013) — and none of it is built.
+
+The pay structure followed on 2026-10-28: `9195` writes §8.10's `pay_component` and `pay_component_config` —
+the four component categories §15.2's posting example needs, `affects_net_pay` pinned to the kind by a CHECK
+rather than typed in, and one mapping per component and chart of accounts holding a debit account, a credit
+account and a cost receiver (`ASSIGNMENT`, a fixed `controlling_area`/`cost_center` pair, or nothing). Account
+sides, blocked posting and the cost-object demand are read off the finance masters, not copied into rules here.
+No posting key exists in the finance schema, so nothing consumes the mapping yet; that is the next row's work,
+not this one's. `9196` then registered the §10.8 codes PPOCE, PPOME and PA30/PA40 as searchable aliases, which
+is what the registry's alias promise had been missing.
+
+**All three People slices are now accepted in a browser, and the pay structure has not been accepted as
+payroll.** Four targets (`people-employee-records`, `people-organization`, `people-assignments`,
+`people-pay-components`) ran against a `next start` production build on a scratch database — 36 evidence lines,
+132 assertions, every case of create, view, change, search, effective-date overlap, hierarchy constraint,
+persistence, tenant containment and read-back passing with no client-side exception. The run found four defects
+no other check could see: the record-type screen's forms throwing on submit in published `9193` code, the two
+configuration activities having no workbench link at all, an assignment's end-confirmation deleting the panel
+that carried it, and two texts describing the wrong thing — an org-code remedy that pointed an operator at the
+assignment screen while they were defining a unit, and an incumbent count labelled "today" that in fact counts
+every span not yet ended, a planned one included. All are fixed, the first now guarded by
+`tests/server-action-exports.test.ts` (185 cases over every actions module in the app). What remains untested is
+stated in `notes/people-increment-3.md` §4: chiefly the authorization refusal, which cannot be reached until
+somebody grants the six People capabilities to a role, and `requestKey` idempotency on the assignment form.
 
 ## 2. UI-level acceptance evidence, 2026-10-27
 
@@ -90,6 +118,19 @@ constrained field must not be addressed as `input[name="…"]`, and an open one 
 name is per page (the page the target navigated to, or the route the runner opened), and fails with the
 file, line, route and remedy. Proven load-bearing twice: it found the five `goods-issue`/`reservations`
 lines this pass repaired, and a one-line mutant (`reservations.ts:80`) failed it with the exact message.
+
+### People, 2026-10-28 — four targets, one served build, a scratch database (4 pass, 0 fail)
+
+    people-employee-records 10  people-organization 9  people-assignments 9  people-pay-components 8
+
+The counts are evidence lines: assertions that a step reached its persisted result, read back on the tenant's
+own connection. These four targets write, so they did not run on `cairn_b210` — that database stays as the
+earlier read-only runs left it (316 migrations, `9193` latest, its checksum matching `cairn`'s `08804e6c`) —
+and every browser write went to `cairn_hr_accept`, rebuilt and seeded for the purpose. `npm run dev` was not
+used, and the app under test was the output of `npm run build`. The cases the screens do not offer, and so
+cannot be browser-verified — the authorization refusal for want of role grants, a correction of a replaced span,
+`requestKey` reuse — are listed with their reasons in `notes/people-increment-3.md` §4 rather than counted as
+passes.
 
 ## 3. What this pass changed
 

@@ -24,10 +24,11 @@
  *    check can only commit what is left. This repository stores no such column and
  *    slice 1 writes nothing, so `committedQuantity` is `null` for every component,
  *    always, and `cumulatedAtp` is labelled as what it is: the balance of the elements
- *    the scope includes, summed to the component's requirement date. The line's own
- *    demand is the demand being checked, so it is not netted against itself, while
- *    another document's demand dated that same day is — the list has no order within a
- *    day and this check does not guess who stands first in line. The gap is shown, not
+ *    the scope includes, summed to the component's requirement date. The demand being
+ *    checked is one *line* of the order, so only that line is left out of its own
+ *    balance — another line of the same order and any other document's demand dated the
+ *    same day are both counted against it, because the list has no order within a day and
+ *    this check does not guess who stands first in line. The gap is shown, not
  *    papered over.
  * 3. **The elements come from the stock/requirements engine, not from a second one.**
  *    `stockRequirementsList` is called per component; this file only *selects* from the
@@ -35,25 +36,40 @@
  *    check the way the configuration module defines it: planned orders `A` means firmed
  *    ones only, production orders `F` means released ones, receipts in the past `B`
  *    leaves a past receipt out of coverage. Where the scope asks for something the
- *    engine cannot express at all — stock split by stock type — the component is
+ *    engine cannot express at all — a stock split by stock type, which includes its
+ *    "include restricted-use batches" switch — the component is
  *    reported UNSUPPORTED rather than answered with a number that quietly means
- *    something else.
+ *    something else. A switch the engine already agrees with, such as a blank
+ *    restricted-use switch when the ledger counts no restricted-use stock at all, is
+ *    honoured by answering normally: it is not a reason to refuse.
+ *
+ * 4. **A quantity is added only in one unit.** Every counted element is read in the unit of
+ *    the document it came from and brought into the material's base unit by the conversion the
+ *    material carries (`inventory/unit-conversion.ts`). A row whose unit the material cannot
+ *    convert, or whose figure the ledger has already netted across two unit streams, refuses the
+ *    line rather than being added in or dropped out. So a cumulated figure here is a total of one
+ *    unit, and the conversion that produced each row that needed it is stated beside it.
  *
  * Nothing posts, reserves, commits, changes an order, or writes a row. A check that
  * runs twice returns the same answer, and the reason it can promise that is that it
  * keeps nothing between the two calls.
  */
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 
-import { withTenant } from '../../platform/db/client';
+import { withTenant, type Tx } from '../../platform/db/client';
 import {
   material as materialTable,
   materialPlant,
   productionOrder,
   productionOrderComponent,
 } from '../inventory/schema';
+import {
+  UOM_CAPABILITY,
+  UnitConversionError,
+  toBaseQuantity,
+} from '../inventory/unit-conversion';
 import { materialBomItem, plannedOrder, productionCheckingControl } from './schema';
 import { listAvailabilityCheck, type ScopeOfCheckRow } from './availability-check';
 import { parseProductionOrderStatus } from './production-order-status';
@@ -86,6 +102,8 @@ export const ORDER_AVAILABILITY_GAPS: readonly string[] = [
   'Replenishment lead time is not a date source. A component without a requirement date is reported undated, not given the order start date.',
   'No shortage status is set and no missing-parts log is stored; the order status is untouched and no release decision is made.',
   'No reset and no collective check over a worklist. Both need the commitment record that is not part of slice 1.',
+  'A counted supply is converted by the unit-of-measure conversion the material carries; the requirement being checked is not. A component line in another unit is refused, because converting the demand and measuring it against itself would answer a different question from the one the order holds.',
+  'A receipt the list has already netted — a requisition reduced by the orders converted from it, an order reduced by posted movements — is used only in the base unit. A difference taken across two units is not a quantity of either, so it is refused rather than converted afterwards.',
 ];
 
 /**
@@ -138,6 +156,14 @@ export type ComponentAvailabilityOutcome =
 
 export type OrderAvailabilityStatus = 'CHECKED' | 'PARTIALLY_CHECKED' | 'NOT_CHECKED';
 
+/** A counted element's figure as its own document holds it, kept beside the base-unit figure. */
+export interface ElementUnitConversion {
+  quantity: number;
+  unit: string;
+  /** The factor the material's conversion applied, as `toBaseQuantity` reports it. */
+  factor: string;
+}
+
 export interface AvailabilityElementRow {
   date: string;
   elementType: string;
@@ -146,6 +172,14 @@ export interface AvailabilityElementRow {
   documentNumber: string;
   documentItem: string;
   quantity: number;
+  /**
+   * The unit `quantity` is in. A counted element is brought into the material's base unit before
+   * it enters the balance, so this is that unit whenever the figure means anything; the row's own
+   * document quantity and unit stay visible in `convertedFrom`.
+   */
+  unit: string | null;
+  /** Set when this row's document stands in another unit and the material's conversion was applied. */
+  convertedFrom: ElementUnitConversion | null;
   /** The running total of the scoped elements through this one. */
   cumulated: number;
   /** True on the component's own demand row when it was left out of its own coverage. */
@@ -168,8 +202,18 @@ export interface ComponentAvailability {
   outcome: ComponentAvailabilityOutcome;
   /** Always null in slice 1: nothing here commits a quantity. */
   committedQuantity: number | null;
+  /** The counted balance at the requirement date, own demand of the checked line excluded.
+   *  It is the balance of the whole scope, not of this line, so it is negative when the demand
+   *  dated before the line already exceeds what the scope counts. */
   cumulatedAtp: number | null;
+  /** How much of this line's required quantity the balance at the date reaches, capped at the
+   *  requirement and never below zero. */
   coveredQuantity: number | null;
+  /** The supply that must still arrive at the requirement date for this line to be covered: the
+   *  line's own requirement plus any deficit the earlier demand left in the cumulated balance.
+   *  It therefore can exceed `requiredQuantity`, and `coveredQuantity + shortageQuantity` is not
+   *  the requirement whenever the balance in front of the line is negative. It is not the quantity
+   *  of this line that stands unmet, and it is not a reservation or a claim on stock. */
   shortageQuantity: number | null;
   earliestFullCoverageDate: string | null;
   message: string | null;
@@ -196,6 +240,11 @@ export interface OrderAvailabilityResult {
   checkedCount: number;
   refusedCount: number;
   excludedCount: number;
+  /** An order-level refusal that comes from the configuration not standing (no order type, no
+   *  checking control, a control naming no rule), as opposed to a refusal that comes from the
+   *  order or the state of its data. The workbench buckets these differently because one is
+   *  maintained by a configurator and the other is not. */
+  configurationGap: boolean;
   message: string | null;
   remedy: string | null;
   warnings: string[];
@@ -220,6 +269,181 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function round(value: number): number {
   return Number(value.toFixed(3));
+}
+
+/**
+ * The unit each counted element arrives in, and whether its figure is one quantity or a
+ * difference of two streams. The stock/requirements list selects a quantity and leaves the unit
+ * behind (`stock-requirements.ts`: `purchase_requisition_item.quantity`, `purchase_order_item
+ * .quantity`, `planned_order.quantity`, `mrp_dependent_requirement.quantity`,
+ * `reservation_item.required_quantity`, `production_order.order_quantity`,
+ * `production_order_component.required_quantity` — each of those tables stores a unit beside it,
+ * and no availability query reads it), so the unit is read from the row's own table here rather
+ * than assumed to be the base unit. `netted` marks the kinds whose open quantity the list
+ * computes by subtracting a second stream: a requisition by the purchase orders converted from
+ * it, a purchase order and a production order by `material_document_line.base_quantity`. A
+ * difference taken across two units is neither of them, so those three are usable only when they
+ * stand in the base unit and are otherwise a refusal, not a figure to be scaled afterwards.
+ *
+ * Stock on hand and the safety stock carry no unit of their own and need none:
+ * `stock_quantity.quantity` and `material_plant.safety_stock` are amounts in the material's base
+ * unit, which is the rule every posting is written to honour (`inventory/unit-conversion.ts`:
+ * "Everything in canon stored entry_quantity = base_quantity"), so those two enter the balance as
+ * base-unit figures by the schema's own design.
+ */
+const UNIT_OF_ELEMENT = new Map<string, { netted: boolean }>([
+  ['PURCHASE_REQUISITION', { netted: true }],
+  ['PURCHASE_ORDER', { netted: true }],
+  ['PRODUCTION_ORDER', { netted: true }],
+  ['PLANNED_ORDER', { netted: false }],
+  ['RESERVATION', { netted: false }],
+  ['DEPENDENT_REQUIREMENT', { netted: false }],
+  ['PRODUCTION_COMPONENT', { netted: false }],
+]);
+
+/** The table and the columns a counted element's own unit stands on. */
+const UNIT_SOURCE = new Map<string, {
+  table: string; document: string; item: string | null; unit: string;
+}>([
+  ['PURCHASE_REQUISITION', {
+    table: 'purchase_requisition_item', document: 'requisition_number', item: 'item_number', unit: 'unit',
+  }],
+  ['PURCHASE_ORDER', {
+    table: 'purchase_order_item', document: 'order_number', item: 'item_number', unit: 'unit',
+  }],
+  ['PLANNED_ORDER', {
+    table: 'planned_order', document: 'order_number', item: null, unit: 'unit',
+  }],
+  ['PRODUCTION_ORDER', {
+    table: 'production_order', document: 'order_number', item: null, unit: 'unit_of_measure',
+  }],
+  ['RESERVATION', {
+    table: 'reservation_item', document: 'reservation_number', item: 'item_number', unit: 'unit_of_measure',
+  }],
+  ['DEPENDENT_REQUIREMENT', {
+    table: 'mrp_dependent_requirement', document: 'parent_order_number', item: 'item_number', unit: 'unit',
+  }],
+  ['PRODUCTION_COMPONENT', {
+    table: 'production_order_component', document: 'order_number', item: 'item_number', unit: 'unit_of_measure',
+  }],
+]);
+
+function elementUnitKey(row: { elementType: string; documentNumber: string; documentItem: string }): string {
+  return `${row.elementType}|${row.documentNumber}|${row.documentItem}`;
+}
+
+/**
+ * The unit of every counted row, in one read per element kind. A kind the list named but this
+ * select does not return arrives as `null` — an element whose row cannot be found has no unit
+ * that can honestly be reported, and the caller refuses the line on that rather than adding the
+ * figure in silence.
+ */
+async function elementUnitsOf(
+  tx: Tx,
+  client: string,
+  plant: string,
+  materialNumber: string,
+  rows: StockRequirementRow[],
+): Promise<Map<string, string | null>> {
+  const wanted = new Map<string, Array<{ document: string; item: string }>>();
+  for (const row of rows) {
+    if (!UNIT_SOURCE.has(row.elementType)) continue;
+    const keys = wanted.get(row.elementType) ?? [];
+    keys.push({ document: row.documentNumber, item: row.documentItem });
+    wanted.set(row.elementType, keys);
+  }
+  const found = new Map<string, string | null>();
+  if (wanted.size === 0) return found;
+
+  for (const [kind, keys] of wanted) {
+    const source = UNIT_SOURCE.get(kind)!;
+    const read = await tx.execute(sql`
+      select ${sql.identifier(source.document)}::text as document_number,
+             ${source.item ? sql`${sql.identifier(source.item)}::text` : sql`''`} as document_item,
+             ${sql.identifier(source.unit)}::text as unit
+        from ${sql.identifier(source.table)}
+       where client = ${client} and material_number = ${materialNumber} and plant = ${plant}
+    `) as unknown as Array<{ document_number: string | null; document_item: string | null; unit: string | null }>;
+    const byRow = new Map<string, string | null>();
+    for (const row of read) {
+      byRow.set(`${row.document_number ?? ''}|${row.document_item ?? ''}`,
+        row.unit === null || row.unit === undefined ? null : String(row.unit).trim());
+    }
+    for (const key of keys) {
+      found.set(`${kind}|${key.document}|${key.item}`, byRow.get(`${key.document}|${key.item}`) ?? null);
+    }
+  }
+  return found;
+}
+
+/** What one counted row may be added as, and why not when it cannot. */
+interface ResolvedElementUnits {
+  /** Keyed by `elementUnitKey`. A row absent from the map is added exactly as it stands. */
+  quantities: Map<string, { quantity: number; convertedFrom: ElementUnitConversion | null }>;
+  /** One sentence per row the material cannot bring into the base unit. Each names the row. */
+  blockers: string[];
+}
+
+/**
+ * The unit of every counted row, and each row's figure in the material's base unit — in one
+ * read-only transaction, one select per element kind.
+ *
+ * A kind the list named but this select does not return has no unit that can honestly be
+ * reported, so it arrives as `null` and becomes a blocker rather than silence. A row already in
+ * the base unit is returned untouched, which is what keeps a same-unit check byte for byte the
+ * figure it was before any of this existed. Where a conversion is applied it is
+ * `inventory/unit-conversion.ts` that applies it, so the rounding is the posting path's rounding
+ * and the refusal of a missing factor is its refusal.
+ */
+async function resolveElementUnits(input: {
+  client: string;
+  plant: string;
+  materialNumber: string;
+  baseUnit: string | null;
+  rows: StockRequirementRow[];
+}): Promise<ResolvedElementUnits> {
+  const quantities = new Map<string, { quantity: number; convertedFrom: ElementUnitConversion | null }>();
+  const blockers: string[] = [];
+  if (!input.rows.some((row) => UNIT_OF_ELEMENT.has(row.elementType))) return { quantities, blockers };
+
+  return withTenant(input.client, async (tx) => {
+    const units = await elementUnitsOf(tx, input.client, input.plant, input.materialNumber, input.rows);
+    for (const row of input.rows) {
+      const key = elementUnitKey(row);
+      if (!UNIT_OF_ELEMENT.has(row.elementType)) continue;
+      const where = `${row.elementType} ${row.documentNumber}/${row.documentItem} (${row.date})`;
+      const unit = units.get(key);
+      if (unit === undefined || unit === null || unit === '') {
+        blockers.push(`${where} carries no unit that can be read on its row, so nothing can be compared with it`);
+        continue;
+      }
+      if (unit === input.baseUnit) continue; // one unit already: the figure stands as the list read it
+      if (input.baseUnit === null) {
+        blockers.push(`${where} stands in ${unit} while the material ${input.materialNumber} carries no base unit of its own to bring it into`);
+        continue;
+      }
+      if (UNIT_OF_ELEMENT.get(row.elementType)!.netted) {
+        blockers.push(`${where} is ${row.quantity.toFixed(3)} ${unit} netted against quantities the list reads in ${input.baseUnit}`
+          + '; the difference is neither unit, so a factor cannot be applied to it afterwards');
+        continue;
+      }
+      try {
+        const conversion = await toBaseQuantity(tx, input.client, {
+          materialNumber: input.materialNumber, quantity: row.quantity, entryUnit: unit,
+        });
+        quantities.set(key, {
+          quantity: conversion.baseQuantity,
+          convertedFrom: { quantity: row.quantity, unit, factor: conversion.factor },
+        });
+      } catch (error) {
+        const reason = error instanceof UnitConversionError
+          ? `${error.message.charAt(0).toLowerCase()}${error.message.slice(1)}`
+          : 'the conversion it would need could not be read';
+        blockers.push(`${where} is ${row.quantity.toFixed(3)} ${unit} and ${reason}`);
+      }
+    }
+    return { quantities, blockers };
+  });
 }
 
 /** A numeric column arrives as a string; the engine's quantities are plain numbers. */
@@ -249,7 +473,13 @@ export function businessFunctionForStatus(status: string): '1' | '2' {
  * says firmed is answered with firmed, and a `B` on past receipts really does drop a
  * receipt dated before the check date out of the coverage.
  *
- * `ownDemandOf` marks the row the check is about, which can never be its own coverage.
+ * The row that is being checked can never be its own coverage. It is one **line** of
+ * the order, not the order: a component requirement is identified by the production
+ * order *and* its item number, which is the key the stock/requirements list carries on
+ * every dependent row (`documentNumber` / `documentItem`, `stock-requirements.ts`), so a
+ * second line of the same material stays in the demand and competes for the supply like
+ * any other document's requirement does. Excluding the whole order instead would let two
+ * lines of one material each claim the same opening stock.
  */
 interface ElementContext {
   today: string;
@@ -259,21 +489,39 @@ interface ElementContext {
   releasedProduction: ReadonlySet<string>;
 }
 
+/**
+ * The elements that are *this* line's own demand, so that it cannot cover itself.
+ *
+ * `componentItem` is the item number of the component line being answered. On a dated
+ * production-component row the list's document key is the production order and `documentItem`
+ * is that component's own item number, so the pair — never the order alone — identifies the
+ * requirement being checked. An item number is unique within its document and is what the
+ * order's own key is built from (`production_order_component` primary key), so matching on
+ * the string the list put there is the same identity the row itself carries.
+ */
+function isOwnDemand(
+  row: StockRequirementRow,
+  ownDemandOf: { orderNumber: string; plannedOrderNumber: string | null; componentItem: string },
+): boolean {
+  if (row.elementType === 'PRODUCTION_COMPONENT') {
+    return row.documentNumber === ownDemandOf.orderNumber && row.documentItem === ownDemandOf.componentItem;
+  }
+  // The production order stands in for the planned order it was converted from; the
+  // engine already drops that planned order as a receipt, so its open dependent
+  // requirement is the same demand and is not counted against the order either. That
+  // row is keyed by the planned order's own item, so it is matched by document only.
+  return row.elementType === 'DEPENDENT_REQUIREMENT'
+    && ownDemandOf.plannedOrderNumber !== null
+    && row.documentNumber === ownDemandOf.plannedOrderNumber;
+}
+
 function elementCounts(
   scope: ScopeOfCheckRow,
   row: StockRequirementRow,
-  ownDemandOf: { orderNumber: string; plannedOrderNumber: string | null },
+  ownDemandOf: { orderNumber: string; plannedOrderNumber: string | null; componentItem: string },
   context: ElementContext,
 ): { counted: boolean; ownDemand: boolean; unsupported: string | null; pastReceipt: boolean } {
-  const ownProductionDemand = row.elementType === 'PRODUCTION_COMPONENT'
-    && row.documentNumber === ownDemandOf.orderNumber;
-  // The production order stands in for the planned order it was converted from; the
-  // engine already drops that planned order as a receipt, so its open dependent
-  // requirement is the same demand and is not counted against the order either.
-  const ownConvertedDemand = row.elementType === 'DEPENDENT_REQUIREMENT'
-    && ownDemandOf.plannedOrderNumber !== null
-    && row.documentNumber === ownDemandOf.plannedOrderNumber;
-  const ownDemand = ownProductionDemand || ownConvertedDemand;
+  const ownDemand = isOwnDemand(row, ownDemandOf);
 
   let byFlag: boolean;
   let unsupported: string | null = null;
@@ -367,12 +615,20 @@ async function scopeDocumentStates(
 /**
  * A scope that asks for stock by type cannot be honoured: the stock/requirements list
  * draws unrestricted-use and quality-inspection stock as one opening element and
- * never draws blocked stock at all. Refusing the component is the honest answer;
- * reporting the merged opening as though it were a chosen subset would not be.
+ * never draws blocked or restricted-use stock at all. Refusing the component is the
+ * honest answer; reporting the merged opening as though it were a chosen subset would
+ * not be.
+ *
+ * The flags are read as the maintaining screen defines them: `includeRestrictedUse` is
+ * "Include restricted-use batches" (`AvailabilityCheckForm.tsx`, and the label
+ * `availability-check.ts` validates it under), not an inclusion switch for
+ * unrestricted-use stock — that type has no switch in this scope. So a blank
+ * restricted-use switch asks for exactly what the list already counts and is no reason
+ * to refuse, while `X` asks for a stock type the list has no element for.
  */
 function stockSplitRefusal(scope: ScopeOfCheckRow): string | null {
-  if (scope.includeRestrictedUse !== 'X') {
-    return 'The scope does not include unrestricted-use stock, and the stock/requirements list counts it as part of one opening element. A per-type stock split is not stored or computed here.';
+  if (scope.includeRestrictedUse === 'X') {
+    return 'The scope includes restricted-use batches, and the stock/requirements list has no such element: it draws unrestricted-use and quality-inspection stock as one opening element and counts no restricted-use stock. A per-type stock split is not stored or computed here.';
   }
   if (scope.includeQualityStock !== 'X') {
     return 'The scope excludes quality-inspection stock, and the stock/requirements list counts it as part of one opening element. A per-type stock split is not stored or computed here.';
@@ -450,8 +706,19 @@ export async function checkOrderAvailability(input: {
     let orderNoCheck = false;
     let orderLevelRefusal: string | null = null;
     let orderLevelRemedy: string | null = null;
+    let statusRefusal: string | null = null;
+    let statusRefusalRemedy: string | null = null;
 
-    if (orderType === null) {
+    // A technically complete order is finished: the stock/requirements list keeps its own demand
+    // and its dependent requirements out of the balance (that is the list's rule, not a
+    // simplification here), so the elements left on the material's list cannot be read against the
+    // order that no longer draws on them. Answering a shortfall from those rows would publish a
+    // figure for demand the plant stopped carrying, so the order's state is refused before any
+    // configuration is consulted and before any element is counted.
+    if (status === 'TECHNICALLY_COMPLETED') {
+      statusRefusal = `The production order ${orderNumber} is technically complete. The stock/requirements list counts neither its order receipt nor its dated component demand for a completed order - a completed order is not an open receipt there, by that query's own rule - while a dependent requirement that still stands open on it is read, because completion does not maintain it. No picture on this ledger is the one this order was planned against, so no quantity is answered for a finished order, and no element list is shown.`;
+      statusRefusalRemedy = 'Revoke the technical completion on the order-change screen to have this order checked again, or read the material in the stock/requirements list for its own picture. A completion is a decision about the order, not an availability result.';
+    } else if (orderType === null) {
       orderLevelRefusal = `The order carries no order type, so no checking control can be resolved for it.`;
       orderLevelRemedy = 'Maintain the order type on the order. A check does not pick a rule because no control row was found.';
     } else {
@@ -510,13 +777,16 @@ export async function checkOrderAvailability(input: {
         warnings: [],
       };
 
-      if (orderLevelRefusal || orderNoCheck) {
+      if (orderNoCheck || orderLevelRefusal || statusRefusal) {
         entries.push({
           base: {
             ...base,
             outcome: orderNoCheck ? 'NOT_CHECKED' : 'UNSUPPORTED',
-            message: orderNoCheck ? orderMessage : orderLevelRefusal,
-            remedy: orderNoCheck ? orderRemedy : orderLevelRemedy,
+            message: orderNoCheck ? orderMessage : (orderLevelRefusal ?? statusRefusal),
+            remedy: orderNoCheck ? orderRemedy : (orderLevelRemedy ?? statusRefusalRemedy),
+            warnings: statusRefusal
+              ? ['This line is refused because the order it belongs to is technically complete. The refusal covers every line of the order; no element list of the material was read for it.']
+              : base.warnings,
           },
           scope: null,
         });
@@ -587,12 +857,32 @@ export async function checkOrderAvailability(input: {
         continue;
       }
 
+      // The horizon end bounds the stock/requirements search; it is not the date the answer is
+      // given for, which is the requirement date. When the horizon stops before that date, the
+      // elements that decide the balance at the date are outside the search, and the cumulated
+      // figure would be a partial ledger printed as a verdict at a date it cannot reach. The list
+      // accepts such a horizon - it only refuses one in the past - so the refusal is made here,
+      // per line, before the list is asked.
+      const needBy = (component.requirementDate ?? '').trim();
+      if (horizonEnd !== '' && needBy !== '' && horizonEnd >= today && horizonEnd < needBy) {
+        entries.push({
+          base: {
+            ...base,
+            outcome: 'UNSUPPORTED',
+            message: `The planning horizon ends ${horizonEnd}, before this component's requirement date ${needBy}. Elements dated after the horizon are not read, so the cumulated balance at ${needBy} cannot be computed and no figure is answered for that date.`,
+            remedy: `End the horizon on or after ${needBy}, or leave it empty to use the horizon the stock/requirements list applies itself. A total taken from rows that stop short of the date is not an answer for that date.`,
+          },
+          scope: null,
+        });
+        continue;
+      }
+
       if (master?.baseUnit && component.unitOfMeasure !== master.baseUnit) {
         entries.push({
           base: {
             ...base,
             outcome: 'UNSUPPORTED',
-            message: `The requirement is in ${component.unitOfMeasure} while the stock/requirements list counts ${master.baseUnit}, the material's base unit. No conversion is applied, so the two quantities cannot be compared honestly.`,
+            message: `The requirement is in ${component.unitOfMeasure} while the stock/requirements list counts ${master.baseUnit}, the material's base unit. Counted supplies are brought into that unit by the conversion the material carries; the requirement being checked is not converted, because a quantity you entered on the order is the quantity this line has to cover, and a converted requirement would answer a different question from the one the order holds.`,
             remedy: 'Keep the component requirement in the base unit, or maintain the unit-of-measure conversion the component needs. An unconverted comparison is not reported as an availability result.',
           },
           scope: null,
@@ -655,6 +945,27 @@ export async function checkOrderAvailability(input: {
       }
       base.scopeKey = `${scope.checkingGroup}/${scope.checkingRule}`;
 
+      // The component's plant is where its own planning happens, and it is a caller-set
+      // field on the order's snapshot (`production-orders.ts` copies `component.plant ||
+      // plant`), so it is not guaranteed to be the order's plant. The configuration above
+      // is read at the component's plant; the stock/requirements list, the message and the
+      // drill-down are all at the order's plant. Answering across the two would publish a
+      // quantity drawn from one plant under a heading that names another, so the line is
+      // refused instead of substituted — neither plant is quietly used for the other.
+      const componentPlant = (component.plant ?? '').trim();
+      if (componentPlant !== '' && componentPlant !== order.plant.trim()) {
+        entries.push({
+          base: {
+            ...base,
+            outcome: 'UNSUPPORTED',
+            message: `The component line stands in plant ${componentPlant} while the production order stands in plant ${order.plant}. Cross-plant component availability is not this screen: the checking scope is resolved at ${componentPlant} and the stock/requirements list is run at ${order.plant}, and no quantity is answered from one plant for a line of the other.`,
+            remedy: `Maintain the component in the order's own plant ${order.plant}, or check it in ${componentPlant} where its planning belongs. This slice does not substitute one plant for the other.`,
+          },
+          scope: null,
+        });
+        continue;
+      }
+
       const stockRefusal = stockSplitRefusal(scope);
       if (stockRefusal) {
         entries.push({
@@ -683,6 +994,8 @@ export async function checkOrderAvailability(input: {
       orderRemedy,
       orderLevelRefusal,
       orderLevelRemedy,
+      statusRefusal,
+      statusRefusalRemedy,
       entries,
     };
   });
@@ -735,17 +1048,42 @@ export async function checkOrderAvailability(input: {
     const elements: AvailabilityElementRow[] = [];
     const context = await scopeDocumentStates(client, list.rows, entry.scope, today);
     const droppedPastReceipts: string[] = [];
+    // The unit each counted row stands in, read from that row's own table. A row already in the
+    // material's base unit is added as it stands; a row in another unit is brought into it by the
+    // conversion the material carries; a row that can be brought in neither way refuses the line,
+    // so no figure below is the sum of two units and no row is dropped to make the units agree.
+    const scopeOfEntry = entry.scope; // already narrowed to non-null; a closure would lose that
+    const countedRows = list.rows.filter((row) => elementCounts(scopeOfEntry, row, {
+      orderNumber,
+      plannedOrderNumber: order.plannedOrderNumber,
+      componentItem: base.itemNumber,
+    }, context).counted);
+    const unitResolution = await resolveElementUnits({
+      client,
+      // The same plant the element list was read at, just above: a component of another plant is
+      // refused before this point, and the rows below came from `order.plant` in any case.
+      plant: order.plant,
+      materialNumber: base.materialNumber,
+      baseUnit: base.baseUnit,
+      rows: countedRows,
+    });
     let cumulative = 0;
     let unsupportedNote: string | null = null;
     for (const row of list.rows) {
-      const decision = elementCounts(entry.scope, row, { orderNumber, plannedOrderNumber: order.plannedOrderNumber }, context);
+      const decision = elementCounts(entry.scope, row, {
+        orderNumber,
+        plannedOrderNumber: order.plannedOrderNumber,
+        componentItem: base.itemNumber,
+      }, context);
       if (decision.pastReceipt) droppedPastReceipts.push(`${row.elementType} ${row.documentNumber}/${row.documentItem} (${row.date})`);
       if (decision.unsupported) {
         unsupportedNote = decision.unsupported;
         break;
       }
       if (!decision.counted) continue;
-      cumulative = round(cumulative + (row.direction === 'RECEIPT' ? row.quantity : -row.quantity));
+      const asBase = unitResolution.quantities.get(elementUnitKey(row));
+      const quantity = asBase?.quantity ?? row.quantity;
+      cumulative = round(cumulative + (row.direction === 'RECEIPT' ? quantity : -quantity));
       elements.push({
         date: row.date,
         elementType: row.elementType,
@@ -753,14 +1091,36 @@ export async function checkOrderAvailability(input: {
         direction: row.direction,
         documentNumber: row.documentNumber,
         documentItem: row.documentItem,
-        quantity: row.quantity,
+        quantity,
+        unit: base.baseUnit,
+        convertedFrom: asBase?.convertedFrom ?? null,
         cumulated: cumulative,
         ownDemand: decision.ownDemand,
       });
     }
 
+    if (unitResolution.blockers.length > 0) {
+      rows.push({
+        ...base,
+        outcome: 'UNSUPPORTED',
+        message: `The counted elements of this component are not all in ${base.baseUnit ?? 'one unit'}, and the material\'s own conversions cannot bring them there: ${unitResolution.blockers.join('; ')}. No availability figure is answered for a balance that would add those rows to the rest, and none of them is left out to make the units agree.`,
+        remedy: `Maintain the conversion this material lacks (Define Unit-of-Measure Conversion, ${UOM_CAPABILITY}) or bring the document\'s quantity into ${base.baseUnit ?? 'the material\'s base unit'}. A netted receipt — a requisition or an order already reduced by what stands against it — has to be in the base unit on its own, because the subtraction was taken across two. This check never assumes a factor of 1.`,
+        warnings: [`This line is refused before any figure: ${unitResolution.blockers.length} counted element(s) cannot be expressed in ${base.baseUnit ?? 'the material\'s base unit'}. Its element list is not published, because a total of those rows would be arithmetic on mixed units.`],
+      });
+      continue;
+    }
+
     if (droppedPastReceipts.length > 0) {
       componentWarnings.push(`The scope of check counts future receipts only (receipts in the past = B), so ${droppedPastReceipts.length} element(s) dated before ${today} are not coverage: ${droppedPastReceipts.join(', ')}.`);
+    }
+
+    const broughtIn = elements
+      .filter((element) => element.convertedFrom !== null)
+      .map((element) => `${element.elementType} ${element.documentNumber}/${element.documentItem} (${element.date}) `
+        + `${element.convertedFrom!.quantity.toFixed(3)} ${element.convertedFrom!.unit} at ${element.convertedFrom!.factor}`
+        + ` = ${element.quantity.toFixed(3)} ${base.baseUnit}`);
+    if (broughtIn.length > 0) {
+      componentWarnings.push(`${broughtIn.length} counted element(s) were brought into the base unit ${base.baseUnit} by the conversion the material carries, before cumulation: ${broughtIn.join('; ')}. A row the material cannot convert refuses this line instead of being left out, so the figures below are one unit throughout.`);
     }
 
     if (unsupportedNote) {
@@ -789,22 +1149,32 @@ export async function checkOrderAvailability(input: {
     }
 
     // The answer the requirement date decides: every element the scope counts up to and
-    // including that date, with one exception — the component's own demand, which is the
-    // demand being checked and so can never cover itself. A requirement that another
-    // document puts on the same day is counted against this line: the list has no order
-    // within a day, so the check does not guess who is first in line. That is the
-    // conservative reading, and the element list shows the competing row.
+    // including that date, with one exception — this line's own demand row, which is the
+    // demand being checked and so can never cover itself. Every other requirement on that
+    // date is counted against the line, including a sibling component line of the same
+    // order: the list has no order within a day, so the check does not guess who is first
+    // in line. That is the conservative reading, and the element list shows each
+    // competing row.
     const requirementDate = base.requirementDate as string;
     const through = (row: AvailabilityElementRow) => row.ownDemand ? false : row.date <= requirementDate;
     const sameDayDemand = elements.filter((row) => !row.ownDemand && row.date === requirementDate && row.direction === 'REQUIREMENT');
     if (sameDayDemand.length > 0) {
-      componentWarnings.push(`${sameDayDemand.length} requirement(s) of other documents are dated ${requirementDate}, the same day as this component, and are counted against it: ${sameDayDemand.map((row) => `${row.elementType} ${row.documentNumber}/${row.documentItem}`).join(', ')}. The stock/requirements list has no order within a day, so which line would be served first is not answered here.`);
+      componentWarnings.push(`${sameDayDemand.length} requirement(s) other than the line being checked are dated ${requirementDate}, the same day as this component, and are counted against it: ${sameDayDemand.map((row) => `${row.elementType} ${row.documentNumber}/${row.documentItem}`).join(', ')}. They may be other component lines of this order or demand from another document; the stock/requirements list has no order within a day, so which line would be served first is not answered here.`);
     }
     let cumulatedOnDate = 0;
     for (const row of elements) if (through(row)) cumulatedOnDate = round(cumulatedOnDate + (row.direction === 'RECEIPT' ? row.quantity : -row.quantity));
 
     const covered = round(Math.max(0, Math.min(base.requiredQuantity, cumulatedOnDate)));
     const shortage = round(Math.max(0, base.requiredQuantity - cumulatedOnDate));
+
+    // A shortfall larger than the requirement is the cumulated reading, not an arithmetic slip:
+    // the balance in front of this line is already negative, so the line needs that hole filled
+    // as well as its own quantity. The figure stands; the sentence says what it is made of, so it
+    // cannot be read as this line's unmet quantity - which is at most the requirement.
+    const exceedsRequirement = shortage > base.requiredQuantity;
+    const madeOf = exceedsRequirement
+      ? ` The requirement of this line is ${base.requiredQuantity.toFixed(3)} ${base.unit} of that; the remaining ${round(shortage - base.requiredQuantity).toFixed(3)} ${base.unit} is the deficit the demand dated before it already left in the cumulated balance. The figure is the supply this line needs on top of that deficit, not the part of the line that stands unmet, and it is not a claim on the stock of any other document.`
+      : '';
 
     let earliest: string | null = null;
     if (shortage <= 0) {
@@ -827,8 +1197,8 @@ export async function checkOrderAvailability(input: {
       earliestFullCoverageDate: earliest,
       message: shortage > 0
         ? earliest === null
-          ? `Short by ${shortage.toFixed(3)} ${base.unit} at ${requirementDate}. Nothing in the counted elements covers the remainder within the elements shown.`
-          : `Short by ${shortage.toFixed(3)} ${base.unit} at ${requirementDate}; the counted elements cover the requirement from ${earliest}.`
+          ? `Short by ${shortage.toFixed(3)} ${base.unit} at ${requirementDate}.${madeOf} Nothing in the counted elements covers the remainder within the elements shown.`
+          : `Short by ${shortage.toFixed(3)} ${base.unit} at ${requirementDate}; the counted elements cover the requirement from ${earliest}.${madeOf}`
         : `Covered at ${requirementDate}: ${covered.toFixed(3)} ${base.unit} of ${base.requiredQuantity.toFixed(3)} stands in the scope's elements.`,
       remedy: shortage > 0
         ? 'Bring in supply the scope counts, move the requirement to a date the supply precedes, or reduce the quantity. This check commits nothing, so none of those is done here.'
@@ -841,21 +1211,26 @@ export async function checkOrderAvailability(input: {
   const checkedCount = rows.filter((row) => row.outcome === 'AVAILABLE' || row.outcome === 'SHORT' || row.outcome === 'NO_ELEMENTS').length;
   const excludedCount = rows.filter((row) => row.outcome === 'EXCLUDED').length;
   const refusedCount = rows.length - checkedCount - excludedCount;
-  const status: OrderAvailabilityStatus = plan.orderNoCheck
+  // A check that answered nothing is not a partial check, whatever the reason is. The gap in the
+  // configuration stays a separate fact, so the workbench can say whose record needs maintaining.
+  const configurationGap = plan.orderLevelRefusal !== null;
+  const nothingAnswered = rows.length > 0 && checkedCount === 0;
+  const status: OrderAvailabilityStatus = (plan.orderNoCheck || nothingAnswered)
     ? 'NOT_CHECKED'
     : refusedCount > 0 || checkedCount < rows.length ? 'PARTIALLY_CHECKED' : 'CHECKED';
 
   const warnings: string[] = [];
   if (plan.orderNoCheck) warnings.unshift(plan.orderMessage ?? '');
   else if (plan.orderLevelRefusal) warnings.unshift(plan.orderLevelRefusal);
+  else if (plan.statusRefusal) warnings.unshift(plan.statusRefusal);
   warnings.push('Nothing is committed, reserved, posted or stored. A second check returns the same figures because no quantity was taken.');
   warnings.push('The requirement dates and quantities are the order\'s own snapshot. A bill of material changed after the order was made is not re-read for its demand; only the phantom, bulk and deletion flags are read from it, because no other record keeps them.');
   if (excludedCount > 0) {
     warnings.push(`${excludedCount} component line(s) are not checked because the bill-of-material item marks them phantom, bulk or flagged for deletion. That is the rule, not a gap in the data.`);
   }
   warnings.push('Committed quantity is shown as not stored on every line. This ERP keeps no commitment, so two checks of one order agree, and neither reduces what the next order can take.');
-  if (order.status === 'TECHNICALLY_COMPLETED') {
-    warnings.push('The order is technically complete. The release-time checking control is what answered for it; no completion decision is made here.');
+  if (nothingAnswered && !plan.orderNoCheck) {
+    warnings.push(`No component of this order was answered with a figure: ${refusedCount} line(s) are refused and ${excludedCount} are excluded by the bill of material. NOT_CHECKED says no answer was given; it does not say the supply is short.`);
   }
 
   return {
@@ -874,8 +1249,9 @@ export async function checkOrderAvailability(input: {
     checkedCount,
     refusedCount,
     excludedCount,
-    message: plan.orderNoCheck ? plan.orderMessage : plan.orderLevelRefusal,
-    remedy: plan.orderNoCheck ? plan.orderRemedy : plan.orderLevelRemedy,
+    configurationGap,
+    message: plan.orderNoCheck ? plan.orderMessage : (plan.orderLevelRefusal ?? plan.statusRefusal),
+    remedy: plan.orderNoCheck ? plan.orderRemedy : (plan.orderLevelRemedy ?? plan.statusRefusalRemedy),
     warnings,
     calculatedAt: new Date().toISOString(),
   };
