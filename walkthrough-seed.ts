@@ -102,7 +102,7 @@ async function main() {
   const changedBy = process.env.CAIRN_SEED_CHANGED_BY ?? DEFAULT_CHANGED_BY;
 
   // Validate the target before any mutation. Protected databases are refused.
-  const validated = await validateTarget(database);
+  const validated = await validateTarget(database, undefined, process.env.DATABASE_URL);
   if (validated.protected) {
     throw new Error(
       `walkthrough-seed: "${database}" is a protected database. ` +
