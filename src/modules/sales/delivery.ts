@@ -388,6 +388,7 @@ export async function listDeliveries(
 ): Promise<Array<{
   deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
   deliveryDate: string; status: string; materialDocumentNumber: string | null; value: string; version: number;
+  blockedForCredit: boolean;
 }>> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(delivery).where(and(
@@ -396,9 +397,24 @@ export async function listDeliveries(
       filter.deliveryNumber ? eq(delivery.deliveryNumber, filter.deliveryNumber) : undefined,
       filter.status ? eq(delivery.status, filter.status) : undefined,
     )).orderBy(asc(delivery.deliveryNumber)).limit(200);
+    const blocked = new Set<string>();
+    if (rows.length) {
+      const determinations = await tx.execute(sql`
+        select d.sales_document from credit_determination d
+        join lateral (
+          select status, created_at from credit_determination c
+           where c.client = ${client} and c.sales_document = d.sales_document
+           order by created_at desc, determination_id desc limit 1
+        ) cur on true
+        where d.client = ${client} and cur.status = 'BLOCKED'
+        group by d.sales_document, cur.status
+      `);
+      for (const row of determinations as unknown as Array<{ sales_document: string }>) blocked.add(row.sales_document);
+    }
     const out: Array<{
       deliveryNumber: string; orderNumber: string; customerNumber: string; plant: string;
       deliveryDate: string; status: string; materialDocumentNumber: string | null; value: string; version: number;
+      blockedForCredit: boolean;
     }> = [];
     for (const row of rows) {
       out.push({
@@ -411,6 +427,7 @@ export async function listDeliveries(
         materialDocumentNumber: row.materialDocumentNumber,
         value: await deliveryValue(tx, client, row.deliveryNumber),
         version: row.version,
+        blockedForCredit: blocked.has(row.deliveryNumber),
       });
     }
     return out;

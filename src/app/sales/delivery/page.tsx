@@ -10,7 +10,7 @@ import {
   listDeliverableOrderLines,
   listDeliveries,
 } from '@/modules/sales/delivery';
-import { salesOrderChoices } from '@/modules/sales/sales-order';
+import { SALES_ORDER_RELEASE_CAPABILITY, salesOrderChoices } from '@/modules/sales/sales-order';
 import Delivery from './Delivery';
 
 export const dynamic = 'force-dynamic';
@@ -66,6 +66,7 @@ export default async function SalesDeliveryPage({ searchParams }: {
         canCreate={can(session, DELIVERY_CAPABILITY)}
         canPick={can(session, DELIVERY_PICK_CAPABILITY)}
         canPost={can(session, DELIVERY_GOODS_ISSUE_CAPABILITY)}
+        canRelease={can(session, SALES_ORDER_RELEASE_CAPABILITY)}
       />
     </div>
   );

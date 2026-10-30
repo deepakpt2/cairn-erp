@@ -9,6 +9,7 @@ import {
   confirmPicksAction,
   createDeliveryAction,
   postGoodsIssueAction,
+  releaseDeliveryCreditAction,
   type DeliveryActionState,
 } from './actions';
 
@@ -24,10 +25,15 @@ interface Props {
   canCreate: boolean;
   canPick: boolean;
   canPost: boolean;
+  canRelease: boolean;
 }
 
 function quantity(value: string): string {
   return Number(value).toFixed(3);
+}
+
+function money(value: string, currency: string): string {
+  return `${Number(value).toFixed(2)} ${currency.trim()}`;
 }
 
 function Notice({ state, label }: { state: DeliveryActionState; label?: string }) {
@@ -131,11 +137,12 @@ function CreateDelivery({
 }
 
 function SelectedDelivery({
-  selected, plants, canPick, canPost,
-}: { selected: DeliveryView; plants: Props['plants']; canPick: boolean; canPost: boolean }) {
+  selected, plants, canPick, canPost, canRelease,
+}: { selected: DeliveryView; plants: Props['plants']; canPick: boolean; canPost: boolean; canRelease: boolean }) {
   const [pickState, pickAction, pickPending] = useActionState(confirmPicksAction, EMPTY);
   const [issueState, issueAction, issuePending] = useActionState(postGoodsIssueAction, EMPTY);
   const [cancelState, cancelAction, cancelPending] = useActionState(cancelDeliveryAction, EMPTY);
+  const [releaseState, releaseAction] = useActionState(releaseDeliveryCreditAction, EMPTY);
   const id = useId();
   const today = new Date().toISOString().slice(0, 10);
   const blocked = selected.credit?.status === 'BLOCKED';
@@ -163,13 +170,32 @@ function SelectedDelivery({
           </>
         ) : null}
       </p>
-      {blocked ? (
-        <div className="panel panel-danger mt-3 p-3 text-sm" role="status">
-          <p className="font-medium">The credit check blocked this delivery: {selected.credit?.reason}.</p>
-          <p className="mt-1 text-ink-soft">
-            The goods issue is refused until a release stands. Release it at /finance/credit-release, where the
-            release records the user, the reason and the amount.
+      {selected.credit ? (
+        <div className={blocked ? 'panel panel-danger mt-3 p-3 text-sm' : 'panel mt-3 p-3 text-sm'}>
+          <p className="font-medium">
+            Credit determination: {selected.credit.status} — {selected.credit.reason}
           </p>
+          <p className="mt-1 text-ink-soft">
+            Delivery value {money(String(selected.credit.orderValue), selected.credit.orderCurrency)}, exposure at check{' '}
+            {Number(selected.credit.exposureAtCheck).toFixed(2)}
+            {selected.credit.limitAtCheck === null ? ', no limit on record' : `, limit ${Number(selected.credit.limitAtCheck).toFixed(2)}`}.
+          </p>
+          {blocked && canRelease ? (
+            <form action={releaseAction} className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input type="hidden" name="deliveryNumber" value={selected.deliveryNumber} />
+              <input type="hidden" name="expectedVersion" value={String(selected.version)} />
+              <input className="input" name="releaseJustification" placeholder="Why the block is released" />
+              <input className="input" name="releaseApprovalRef" placeholder="Approval reference" />
+              <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">Release for credit</button>
+            </form>
+          ) : null}
+          {blocked && !canRelease ? (
+            <p className="mt-2 text-ink-soft">
+              A blocked delivery is released by SALES.ORDER.RELEASE or at{' '}
+              <Link className="link" href="/finance/credit-release">credit release</Link>.
+            </p>
+          ) : null}
+          <Notice state={releaseState} />
         </div>
       ) : null}
 
@@ -319,7 +345,7 @@ export default function Delivery(props: Props) {
             <thead>
               <tr className="text-left text-xs text-ink-faint">
                 <th className="py-1">Delivery</th><th>Order</th><th>Customer</th><th>Plant</th>
-                <th>Date</th><th className="text-right">Value</th><th>Material document</th><th>Status</th>
+                <th>Date</th><th className="text-right">Value</th><th>Material document</th><th>Status</th><th>Credit</th>
               </tr>
             </thead>
             <tbody>
@@ -335,6 +361,7 @@ export default function Delivery(props: Props) {
                   <td className="text-right">{Number(row.value).toFixed(2)}</td>
                   <td>{row.materialDocumentNumber ?? '—'}</td>
                   <td>{row.status}</td>
+                  <td>{row.blockedForCredit ? 'blocked' : 'clear'}</td>
                 </tr>
               ))}
             </tbody>
@@ -347,6 +374,7 @@ export default function Delivery(props: Props) {
           plants={props.plants}
           canPick={props.canPick}
           canPost={props.canPost}
+          canRelease={props.canRelease}
         />
       ) : null}
     </div>

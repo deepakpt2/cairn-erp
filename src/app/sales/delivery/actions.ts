@@ -5,6 +5,10 @@ import { revalidatePath } from 'next/cache';
 import { can, requireSession } from '@/platform/auth/current';
 import { SalesOrderError } from '@/modules/sales/sales-order';
 import {
+  SALES_ORDER_RELEASE_CAPABILITY,
+  releaseSalesOrderCredit,
+} from '@/modules/sales/sales-order';
+import {
   DELIVERY_CAPABILITY,
   DELIVERY_GOODS_ISSUE_CAPABILITY,
   DELIVERY_PICK_CAPABILITY,
@@ -225,5 +229,47 @@ export async function cancelDeliveryAction(
     };
   } catch (error) {
     return refuse(error);
+  }
+}
+
+/**
+ * Release the credit block that stands against a delivery. The capability is the sales order release code —
+ * releasing a delivery is an act of sales, not of credit maintenance — and the judgement is the credit
+ * engine's, so the screen cannot release what the engine would refuse.
+ */
+export async function releaseDeliveryCreditAction(
+  _previous: DeliveryActionState,
+  form: FormData,
+): Promise<DeliveryActionState> {
+  const session = await requireSession(ROUTE);
+  if (!can(session, SALES_ORDER_RELEASE_CAPABILITY)) {
+    return {
+      ok: false,
+      message: 'You do not hold the sales order release capability.',
+      remedy: 'Ask for SALES.ORDER.RELEASE, or release the document at /finance/credit-release.',
+    };
+  }
+  const deliveryNumber = text(form, 'deliveryNumber');
+  try {
+    const outcome = await releaseSalesOrderCredit({
+      client: session.user.client,
+      changedBy: session.user.username,
+      orderNumber: deliveryNumber,
+      justification: optional(form, 'releaseJustification'),
+      approvalRef: optional(form, 'releaseApprovalRef'),
+      canOverride: can(session, 'FIN.CREDIT.OVERRIDE'),
+    });
+    revalidatePath(ROUTE);
+    return {
+      ok: outcome.ok,
+      deliveryNumber,
+      message: outcome.ok
+        ? `Delivery ${deliveryNumber} released for credit.`
+        : outcome.message ?? `Delivery ${deliveryNumber} was not released.`,
+      remedy: outcome.ok ? undefined : 'A release needs a justification, and only a blocked document can be released.',
+    };
+  } catch (error) {
+    if (error instanceof SalesOrderError) return { ok: false, message: error.message, remedy: error.remedy };
+    throw error;
   }
 }
