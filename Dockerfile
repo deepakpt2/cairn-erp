@@ -8,6 +8,8 @@ RUN npm ci
 # One-shot administrative tools: direct DB access; never the web runtime role.
 FROM dependencies AS operations
 COPY . .
+# Explicitly ensure the walkthrough seed is available at /app for one-off runs.
+COPY walkthrough-seed.ts /app/walkthrough-seed.ts
 ENV CAIRN_ENV=production
 CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run seed && npm run seed:reference"]
 
