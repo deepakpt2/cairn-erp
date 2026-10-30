@@ -103,12 +103,13 @@ function verifyCredentials(connectionString?: string): {
   port: number;
 } {
   if (connectionString) {
-    // Use the supplied connection string's host/port but app-role credentials.
-    // Never use owner credentials for verification.
+    // Use the supplied connection string's credentials — host, port, user,
+    // and password all come from the connection string. Never use owner
+    // credentials for verification.
     const url = new URL(connectionString);
     return {
-      user: process.env.CAIRN_DB_USER ?? 'cairn_app',
-      password: process.env.CAIRN_DB_PASSWORD ?? 'cairn_app_dev',
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
       host: url.hostname,
       port: Number(url.port ?? 5432),
     };
