@@ -71,7 +71,8 @@ async function standingReceipt(quantity = 10) {
   const doc = await postGoodsReceipt({
     client: tenant.client, changedBy: ACTOR, orderNumber: order.orderNumber,
     documentDate: '2026-10-18', postingDate: '2026-10-18',
-    requestKey: key('gr'), lines: [{ itemNumber: 10, quantity, storageLocation: STORE }],
+    requestKey: key('gr'), stockType: 'QUALITY',
+    lines: [{ itemNumber: 10, quantity, storageLocation: STORE }],
   });
   return { orderNumber: order.orderNumber, materialDocumentNumber: doc.materialDocumentNumber };
 }
@@ -131,6 +132,15 @@ describe('QM usage decision (QE51N) and quality stock', () => {
         on conflict (client, movement_type) do nothing
       `);
       await tx.execute(sql`
+        insert into movement_type (client, movement_type, description, direction, reference_category,
+          movement_kind, source_stock_type, destination_stock_type, plant_rule, location_rule,
+          valuation_relevant, account_assignment, created_by)
+        values (${tenant.client}, 'TRANSFER_STYPE_BLOCK', 'Quality inspection to blocked stock', 'TRANSFER',
+          'MATERIAL_DOCUMENT', 'STOCK_TYPE', 'QUALITY', 'BLOCKED', 'SAME', 'SAME',
+          false, 'NONE', ${ACTOR})
+        on conflict (client, movement_type) do nothing
+      `);
+      await tx.execute(sql`
         insert into material_valuation (
           client, material_number, valuation_area, valuation_class, price_control,
           standard_price, moving_average_price, price_unit, currency, created_by
@@ -176,29 +186,8 @@ describe('QM usage decision (QE51N) and quality stock', () => {
   });
 
   it('accepts a lot and moves quality stock to unrestricted', async () => {
-    // Goods receipt posts to UNRESTRICTED; move stock to QUALITY first so the
-    // usage decision can move QUALITY → UNRESTRICTED on accept.
-    await withTenant(tenant.client, async (tx) => {
-      const [u] = await tx.execute(sql`
-        select quantity::text as qty from stock_quantity
-         where client = ${tenant.client} and material_number = ${MATERIAL} and plant = ${PLANT}
-         and storage_location = ${STORE} and stock_type = 'UNRESTRICTED'
-      `) as unknown as Array<{ qty: string }>;
-      const qty = Number(u?.qty ?? '0');
-      await tx.execute(sql`
-        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
-        values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${STORE}, 'QUALITY', '', ${qty}, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
-        do update set quantity = stock_quantity.quantity + excluded.quantity, changed_by = ${ACTOR}, changed_at = now()
-      `);
-      await tx.execute(sql`
-        insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
-        values (${tenant.client}, ${MATERIAL}, ${PLANT}, ${STORE}, 'UNRESTRICTED', '', ${-qty}, ${ACTOR})
-        on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
-        do update set quantity = stock_quantity.quantity + excluded.quantity, changed_by = ${ACTOR}, changed_at = now()
-      `);
-    });
-
+    // The goods receipt already posted to QUALITY stock (stockType: 'QUALITY').
+    // The lot references that receipt line, so its standing stock is in QUALITY.
     const before = await withTenant(tenant.client, async (tx) => {
       const [q] = await tx.execute(sql`
         select quantity::text as qty from stock_quantity
@@ -214,18 +203,6 @@ describe('QM usage decision (QE51N) and quality stock', () => {
     });
 
     await recordAllCharacteristics(lot);
-    // The goods receipt line carries stock_type = UNRESTRICTED; for QM the lot's
-    // standing stock is in QUALITY. Point the document line at QUALITY so the
-    // usage decision moves QUALITY → UNRESTRICTED on accept.
-    await withTenant(tenant.client, async (tx) => {
-      await tx.execute(sql`
-        update material_document_line
-         set stock_type = 'QUALITY'
-         where client = ${tenant.client}
-           and material_document_number = ${document}
-           and line_number = 1
-      `);
-    });
     const decided = await postUsageDecisionWithStock({
       client: tenant.client, changedBy: ACTOR,
       lotNumber: lot,

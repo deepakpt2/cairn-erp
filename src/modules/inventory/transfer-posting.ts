@@ -81,6 +81,7 @@ const MOVEMENT_ALIASES: Record<string, string> = {
   '311': 'TRANSFER_SLOC',
   '301': 'TRANSFER_PLANT',
   '321': 'TRANSFER_STYPE',
+  '323': 'TRANSFER_STYPE_BLOCK',
 };
 
 /** The counters, so a hand-entered counter is refused with its own movement named. */

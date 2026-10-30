@@ -267,6 +267,8 @@ export interface PostGoodsReceiptInput {
   postingDate: string;
   headerText?: string;
   requestKey: string;
+  /** Stock type the receipt posts into. Defaults to UNRESTRICTED; quality-inspection receipts use QUALITY. */
+  stockType?: string;
   lines: Array<{ itemNumber: number; quantity: number; storageLocation?: string; batch?: string }>;
 }
 
@@ -601,7 +603,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
         client: input.client, materialDocumentNumber: number, lineNumber,
         movementType: movement.movementType,
         materialNumber: p.item.materialNumber!, plant: p.item.plant,
-        storageLocation: p.storageLocation || null, stockType: 'UNRESTRICTED',
+        storageLocation: p.storageLocation || null, stockType: input.stockType ?? 'UNRESTRICTED',
         batchNumber: p.batch,
         entryQuantity: String(p.quantity), entryUnit: p.item.unit,
         baseQuantity: String(p.baseQuantity), baseUnit: p.baseUnit,
@@ -612,7 +614,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       });
       await tx.insert(stockQuantity).values({
         client: input.client, materialNumber: p.item.materialNumber!, plant: p.item.plant,
-        storageLocation: p.storageLocation, stockType: 'UNRESTRICTED', batchNumber: p.batch,
+        storageLocation: p.storageLocation, stockType: input.stockType ?? 'UNRESTRICTED', batchNumber: p.batch,
         quantity: String(p.baseQuantity), createdBy: input.changedBy,
       }).onConflictDoUpdate({
         target: [stockQuantity.client, stockQuantity.materialNumber, stockQuantity.plant, stockQuantity.storageLocation, stockQuantity.stockType, stockQuantity.batchNumber],

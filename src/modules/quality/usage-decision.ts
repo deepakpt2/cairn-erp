@@ -422,58 +422,28 @@ async function postQualityStockMovementInTx(
     };
   }
 
-  // For quality->blocked or other stock type changes, post directly to stock_quantity
-  // as a transfer posting with no journal (valuation_relevant = false).
-  const { materialDocument, materialDocumentLine } = await import('../inventory/schema');
-  const drawn = await allocateNumber(tx, {
-    client: input.client, objectCode: 'MATDOC', companyCode: '*',
-    subObject: '*', allocatedBy: input.changedBy,
+  // For quality->blocked or other stock type changes, use postTransfer
+  // with the TRANSFER_STYPE_BLOCK movement (QUALITY -> BLOCKED), keeping
+  // the movement inside the inventory posting/document mechanism.
+  const result = await postTransfer({
+    client: input.client, changedBy: input.changedBy,
+    movementTypeCode: '323',
+    materialNumber: input.materialNumber,
+    quantity: input.quantity,
+    issuingPlant: input.plant,
+    issuingStorageLocation: input.storageLocation,
+    receivingPlant: input.plant,
+    receivingStorageLocation: input.storageLocation,
+    stockType: input.sourceStockType,
+    postingDate: new Date().toISOString().slice(0, 10),
+    documentDate: new Date().toISOString().slice(0, 10),
+    requestKey,
+    batch: input.batchNumber || undefined,
   });
-  const documentNumber = drawn.display;
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  await tx.insert(materialDocument).values({
-    client: input.client, materialDocumentNumber: documentNumber,
-    documentYear: Number(today.slice(0, 4)), documentDate: today, postingDate: today,
-    status: 'POSTED', createdBy: input.changedBy,
-  });
-
-  await tx.insert(materialDocumentLine).values({
-    client: input.client, materialDocumentNumber: documentNumber, lineNumber: 1,
-    movementType: 'TRANSFER_STYPE', materialNumber: input.materialNumber,
-    plant: input.plant, storageLocation: input.storageLocation,
-    stockType: input.sourceStockType, batchNumber: input.batchNumber,
-    lineDirection: 'ISSUE', entryQuantity: String(input.quantity.toFixed(3)),
-    entryUnit: input.unit, baseQuantity: String(input.quantity.toFixed(3)),
-    baseUnit: input.unit, createdBy: input.changedBy,
-  });
-
-  await tx.insert(materialDocumentLine).values({
-    client: input.client, materialDocumentNumber: documentNumber, lineNumber: 2,
-    movementType: 'TRANSFER_STYPE', materialNumber: input.materialNumber,
-    plant: input.plant, storageLocation: input.storageLocation,
-    stockType: input.destinationStockType, batchNumber: input.batchNumber,
-    lineDirection: 'RECEIPT', entryQuantity: String(input.quantity.toFixed(3)),
-    entryUnit: input.unit, baseQuantity: String(input.quantity.toFixed(3)),
-    baseUnit: input.unit, createdBy: input.changedBy,
-  });
-
-  await tx.execute(sql`
-    insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
-    values (${input.client}, ${input.materialNumber}, ${input.plant}, ${input.storageLocation}, ${input.sourceStockType}, ${input.batchNumber}, ${-input.quantity}, ${input.changedBy})
-    on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
-    do update set quantity = stock_quantity.quantity + excluded.quantity, changed_by = ${input.changedBy}, changed_at = now()
-  `);
-
-  await tx.execute(sql`
-    insert into stock_quantity (client, material_number, plant, storage_location, stock_type, batch_number, quantity, created_by)
-    values (${input.client}, ${input.materialNumber}, ${input.plant}, ${input.storageLocation}, ${input.destinationStockType}, ${input.batchNumber}, ${input.quantity}, ${input.changedBy})
-    on conflict (client, material_number, plant, storage_location, stock_type, batch_number)
-    do update set quantity = stock_quantity.quantity + excluded.quantity, changed_by = ${input.changedBy}, changed_at = now()
-  `);
-
-  return { documentNumber, lineNumber: 2 };
+  return {
+    documentNumber: result.materialDocumentNumber,
+    lineNumber: 2,
+  };
 }
 
 export async function getUsageDecisionView(
