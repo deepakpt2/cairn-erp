@@ -1,7 +1,7 @@
 /** Align the managed runtime role with deployment configuration. No business-table writes. */
 import postgres from 'postgres';
 import { pathToFileURL } from 'node:url';
-import { validateTarget } from '../src/platform/db/target-guard';
+import { isProtected } from '../src/platform/db/target-guard';
 
 export class CredentialConfigError extends Error {}
 export function credentialSettings(applicationURL?: string, ownerURL?: string) {
@@ -21,13 +21,15 @@ export function credentialSettings(applicationURL?: string, ownerURL?: string) {
 export async function synchronizeApplicationRole(applicationURL?: string, ownerURL?: string) {
   const settings = credentialSettings(applicationURL, ownerURL);
 
-  // Validate both targets through the guard before connecting. Both URLs must
-  // name the same database (already checked by credentialSettings), and neither
-  // may be a protected database without authorization.
+  // Both URLs name the same database (already checked by credentialSettings).
+  // Validate targets without connecting as the app role — this script creates
+  // the app role, so it cannot verify database identity through app credentials
+  // before the role exists. Use isProtected() to refuse protected databases.
   const appDbName = new URL(settings.applicationURL).pathname.replace(/^\//, '');
   const ownerDbName = new URL(settings.ownerURL).pathname.replace(/^\//, '');
-  await validateTarget(appDbName);
-  await validateTarget(ownerDbName);
+  if (isProtected(appDbName) || isProtected(ownerDbName)) {
+    throw new CredentialConfigError(`Database "${appDbName}" is protected and cannot be targeted by credential synchronization.`);
+  }
 
   const owner = postgres(settings.ownerURL, { max: 1, prepare: false, connect_timeout: 10, onnotice: () => {} });
   try {
