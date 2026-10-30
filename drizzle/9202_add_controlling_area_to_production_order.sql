@@ -11,7 +11,14 @@ alter table public.production_order
 alter table public.production_order
   add column if not exists currency char(3);
 
-alter table public.production_order
-  add constraint if not exists production_order_controlling_area_fk
-    foreign key (client, controlling_area)
-    references public.controlling_area (client, controlling_area);
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'production_order_controlling_area_fk'
+  ) then
+    alter table public.production_order
+      add constraint production_order_controlling_area_fk
+      foreign key (client, controlling_area)
+      references public.controlling_area (client, controlling_area);
+  end if;
+end $$;
