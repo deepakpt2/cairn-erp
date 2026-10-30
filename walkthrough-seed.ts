@@ -174,7 +174,7 @@ async function main() {
           password: 'Wk2026Seed',
         },
         creationType: 'standard',
-        changedBy,
+        createdBy: changedBy,
       });
       summary.created = true;
       console.log(`  created tenant ${tenant}`);
