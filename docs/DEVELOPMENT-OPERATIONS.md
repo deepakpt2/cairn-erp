@@ -284,7 +284,48 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 | Wrong database targeted | Verify `DATABASE_URL`/`MIGRATION_DATABASE_URL` explicitly target `cairn_acceptance` before running. |
 | Protected database refused | Use `cairn_acceptance` (authorized) not `cairn_b210` (prohibited). |
 
-## 6. Verified State (As of 2026-10-30)
+## 7. Walkthrough Seed (manual, owner-invoked)
+
+### Purpose
+Deterministic seed that builds an interconnected business scenario (purchase-to-pay and order-to-cash, including DI-020 credit memo) inside an existing tenant. Runs only when explicitly invoked by the owner.
+
+### Source and container location
+- Source file: `walkthrough-seed.ts` (repository root)
+- Container path: `/app/walkthrough-seed.ts`
+- Application container/service: `app` (image `cairn-app:local`)
+- Also mounted read-only into the `migrate` service at `/app/walkthrough-seed.ts`
+
+### Safety properties
+- Never executes during Docker build, container creation/startup, application startup, migrations, or restarts.
+- Requires explicit `CAIRN_SEED_DATABASE` target; validated through `validateTarget`; refuses protected databases (`cairn_b210`, `cairn_hr_accept`, `cairn_demo`, `cairn_acceptance`).
+- Never deletes, overwrites, or silently changes existing data.
+- Idempotent: safe to repeat; existing business documents are left alone.
+
+### Prerequisites
+1. Owner has pulled the latest `development` branch.
+2. Complete Docker stack is deployed (`docker compose up -d`).
+3. PostgreSQL is healthy (`db` service healthcheck passes).
+4. Application is ready (`app` service healthcheck passes).
+5. Schema migrations have completed (`migrate` service ran successfully).
+
+### Manual execution
+```bash
+docker exec -it cairn-app tsx /app/walkthrough-seed.ts
+```
+
+### Required environment variables (set in the `app` service environment)
+| Variable | Purpose |
+|----------|---------|
+| `CAIRN_SEED_DATABASE` | Database name (explicit; never guessed) |
+| `CAIRN_SEED_TENANT` | Tenant/client key (default: `WK01`) |
+| `CAIRN_SEED_CHANGED_BY` | Actor for audit fields (default: `WALKTHROUGH_SEED`) |
+| `DATABASE_URL` | Application database connection (set by deployment) |
+| `MIGRATION_DATABASE_URL` | Migration database connection (set by deployment) |
+
+### Inspecting results
+The seed prints a concise execution summary to stdout: tenant, company code, record counts per business area (materials, business partners, POs, GRs, sales orders, deliveries, billing documents, customer invoices, credit memos), and journal line count. Any skipped steps are listed as notes.
+
+## 8. Verified State (As of 2026-10-30)
 
 | Item | Value |
 |------|-------|
