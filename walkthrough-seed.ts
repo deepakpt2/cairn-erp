@@ -249,19 +249,19 @@ async function main() {
     // Customer company code data
     await client.unsafe(
       `insert into customer_company_code
-         (client, partner_number, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, created_by, changed_by)
-       values ($1,$2,$3,$4,$5,'NET30',$6,$6)
+         (client, partner_number, role_code, company_code, chart_of_accounts, reconciliation_account, payment_terms_code, company_status, created_by, changed_by)
+       values ($1,$2,'CUSTOMER',$3,$4,$5,'NET30','MAINTAINED',$6,$6)
        on conflict (client, partner_number, company_code) do nothing`,
       [tenant, customerNumber, COMPANY_CODE, CHART, GL_RECONCILIATION, changedBy],
     );
 
-    // Supplier purchasing org data
+    // Supplier purchasing org data (no company_code/plant columns — those are on the supplier master)
     await client.unsafe(
       `insert into supplier_purchasing_org
-         (client, partner_number, purchasing_org, purchasing_group, company_code, plant, created_by, changed_by)
-       values ($1,$2,$3,$4,$5,$6,$7,$7)
+         (client, partner_number, role_code, purchasing_org, purchasing_group, order_currency, payment_terms_code, purchasing_status, created_by, changed_by)
+       values ($1,$2,'SUPPLIER',$3,$4,'USD','NET30','MAINTAINED',$7,$7)
        on conflict (client, partner_number, purchasing_org) do nothing`,
-      [tenant, supplierNumber, PURCHASING_ORG, PURCHASING_GROUP, COMPANY_CODE, PLANT, changedBy],
+      [tenant, supplierNumber, PURCHASING_ORG, PURCHASING_GROUP, changedBy],
     );
 
     // Tax code (10% output tax)
