@@ -608,6 +608,16 @@ export const productionOrder = pgTable('production_order', {
    */
   orderType: varchar('order_type', { length: 4 }),
   /**
+   * Controlling area the order is charged to. Derived from the plant's company
+   * code via the controlling area–company assignment at order creation. Null
+   * when the company code has no controlling area assignment.
+   */
+  controllingArea: varchar('controlling_area', { length: 4 }),
+  /** Company code derived from the plant (MB03 ruling). Not stored before this column existed. */
+  companyCode: varchar('company_code', { length: 4 }),
+  /** Order currency, inherited from the controlling area of the company code. */
+  currency: char('currency', { length: 3 }),
+  /**
    * Production version that selected the component snapshot. Null when the
    * components were supplied independently and no version was selected. Set
    * when creation or conversion derived the snapshot from a selected version.

@@ -219,7 +219,7 @@ the screen prints beside its capability, or the one its registry description nam
 | `PROD.ORDER.DISPLAY` Display a production order | CO03 | Transaction | `/production/production-order-display` · `/production/order-availability` |
 | `PROD.ORDER.GI` Issue components to a production order | MIGO | Transaction | `/inventory/migo` — 261 is offered there alone, and `MB1A` refuses it by name |
 | `PROD.ORDER.GR` Receive finished goods from a production order | MIGO | Transaction | `/inventory/migo` — movement 101 with R08, `production-receipt.ts` |
-| `PROD.ORDER.SETTLE` Settle a production order | — | Registered, no screen | — — see the note below: it settles nothing |
+| `PROD.ORDER.SETTLE` Settle a production order | KO88 | Transaction | `/production/order-settlement` · KO88 alias: settles actual costs to configured receivers; WIP (DV-003) and variance categories (DV-004) deferred |
 | `PROD.ORDER.INFO` List production and planned orders | COOIS | Transaction | `/production/order-information` |
 | `PROD.CONFIRM.ENTER` Enter a time ticket | CO11N | Transaction | `/production/time-ticket` · `/production/order-information` |
 | `PROD.CONFIRM.ORDER` Confirm at header level | CO15 | Transaction | `/production/order-confirmation` · `/production/order-information` |
@@ -251,13 +251,12 @@ the screen prints beside its capability, or the one its registry description nam
 | `PROD.VERSION.LOCK` Lock or unlock a version | — | Action | `/production/production-versions` |
 | `PROD.VERSION.DELETE` Delete or flag an unused version | — | Action | `/production/production-versions` |
 
-Two lines carry a decision rather than a screen. `PROD.ORDER.SETTLE` is granted by the registry and implements
-nothing for a production order: no cost basis stands on the order to settle, so there is no variance, no WIP and
-no settlement to read, `CO88` is not wired, and the acceptance criteria live in DI-012 of
-`docs/DEFERRED_ISSUES.md`. `docs/production-tcode-order.md` and the header of
-`src/modules/inventory/production-orders.ts` say the same thing. And the two goods movements of an order are not
-new transactions: they are the 261 issue and the 101 + R08 receipt on MIGO, which is why `MB1A` refuses a 261 by
-name and names the screen that posts it.
+Two lines carry a decision rather than a screen. `PROD.ORDER.SETTLE` (alias KO88) settles actual costs collected
+on a production order to configured receivers at `/production/order-settlement`. A settlement rule must be stored
+first; no receiver or percentage is assumed. Cost estimates, WIP calculation (DV-003), and variance categorization
+(DV-004) remain deferred under `docs/DEFERRED_ISSUES.md` DI-012. The two goods movements of an order are not new
+transactions: they are the 261 issue and the 101 + R08 receipt on MIGO, which is why `MB1A` refuses a 261 by name
+and names the screen that posts it.
 
 ## Sales (8)
 

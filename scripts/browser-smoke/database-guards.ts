@@ -212,4 +212,8 @@ export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, Browser
   'people-organization': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9194 scratch acceptance' },
   'people-assignments': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9194 scratch acceptance' },
   'people-pay-components': { database: 'cairn_hr_accept', port: '5432', batch: 'HR9195 scratch acceptance' },
+  // cairn_acceptance is the owner-authorized persistent acceptance database for migration and
+  // integration acceptance testing (P0-GAP-01 production order settlement). Focused test runs
+  // (individual files) are allowed against it; whole-suite runs are refused.
+  'production-order-settlement-acceptance': { database: 'cairn_acceptance', port: '5432', batch: 'P0-GAP-01 acceptance' },
 };

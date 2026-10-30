@@ -1,9 +1,9 @@
 /** Total planning — SCR-166 / MD01. A run is evidence. It is not stock and not a requisition. */
-import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, smallint, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
-import { factoryCalendar, plant, storageLocation } from '../foundation/schema';
+import { factoryCalendar, plant, storageLocation, settlementProfile } from '../foundation/schema';
 import { material, materialPlant, productionOrder } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
@@ -1305,4 +1305,65 @@ export const productionCheckingControl = pgTable('production_checking_control', 
   check('production_checking_control_type_ck', sql`${t.orderType} ~ '^[A-Z0-9]{4}$'`),
   check('production_checking_control_plant_ck', sql`char_length(${t.plant}) between 1 and 10`),
   check('production_checking_control_version_ck', sql`${t.version} > 0`),
+]);
+
+/**
+ * Production order type -> settlement profile mapping. Mirrors
+ * internal_order_type_settlement_profile for production orders. The profile
+ * assignment, the allocation assignment and the distribution rule are one
+ * condition: a settlement posts only when all three agree on where the
+ * balance goes.
+ */
+export const productionOrderTypeSettlementProfile = pgTable('production_order_type_settlement_profile', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderType: varchar('order_type', { length: 4 }).notNull(),
+  profileCode: varchar('profile_code', { length: 6 }).notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderType] }),
+  foreignKey({
+    columns: [t.client, t.orderType],
+    foreignColumns: [productionOrderType.client, productionOrderType.orderType],
+    name: 'production_order_type_settlement_profile_type_fk',
+  }),
+  foreignKey({
+    columns: [t.client, t.profileCode],
+    foreignColumns: [settlementProfile.client, settlementProfile.profileCode],
+    name: 'production_order_type_settlement_profile_profile_fk',
+  }),
+]);
+
+/**
+ * Distribution rule for one production order. A receiver is stored here,
+ * never assumed. Mirrors settlement_distribution_rule but keys on
+ * production_order instead of internal_order.
+ */
+export const productionOrderSetttlementDistributionRule = pgTable('production_order_settlement_distribution_rule', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  ruleNumber: smallint('rule_number').notNull(),
+  receiverCategory: varchar('receiver_category', { length: 16 }).notNull(),
+  receiver: varchar('receiver', { length: 20 }).notNull(),
+  percentage: numeric('percentage', { precision: 7, scale: 4 }),
+  equivalence: numeric('equivalence', { precision: 10, scale: 0 }),
+  amount: numeric('amount', { precision: 23, scale: 4 }),
+  settlementType: varchar('settlement_type', { length: 3 }).notNull(),
+  validFromYear: integer('valid_from_year').notNull(),
+  validFromPeriod: smallint('valid_from_period').notNull(),
+  validToYear: integer('valid_to_year').notNull(),
+  validToPeriod: smallint('valid_to_period').notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.orderNumber, t.ruleNumber] }),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_order_settlement_distribution_rule_order_fk',
+  }),
+  check('production_order_settlement_distribution_rule_category_ck', sql`${t.receiverCategory} in ('COST_CENTER', 'INTERNAL_ORDER', 'GL_ACCOUNT')`),
+  check('production_order_settlement_distribution_rule_type_ck', sql`${t.settlementType} in ('PER', 'FUL')`),
+  check('production_order_settlement_distribution_rule_share_ck', sql`num_nonnulls(${t.percentage}, ${t.equivalence}, ${t.amount}) = 1`),
+  check('production_order_settlement_distribution_rule_percentage_ck', sql`${t.percentage} is null or (${t.percentage} > 0 and ${t.percentage} <= 100)`),
+  check('production_order_settlement_distribution_rule_equivalence_ck', sql`${t.equivalence} is null or ${t.equivalence} > 0`),
+  check('production_order_settlement_distribution_rule_amount_ck', sql`${t.amount} is null or ${t.amount} > 0`),
 ]);

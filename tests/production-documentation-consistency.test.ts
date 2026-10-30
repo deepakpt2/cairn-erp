@@ -68,12 +68,11 @@ describe('the order module defers what is deferred and not what is delivered', (
     expect(orderChange).toContain("'TECO'");
   });
 
-  it('records the receipt as delivered without claiming a settlement', () => {
+  it('records the receipt as delivered and names the settlement that now runs', () => {
     expect(flat(orderMaster)).not.toContain('the finished-goods receipt (PROD.ORDER.GR), settlement');
     expect(orderReceipt).toContain("PRODUCTION_RECEIPT_CAPABILITY = 'PROD.ORDER.GR'");
-    // Settlement is the opposite case: registered, inert, and still written as such.
     expect(flat(orderMaster)).toContain('PROD.ORDER.SETTLE');
-    expect(flat(orderMaster)).toContain('settles nothing');
+    expect(flat(orderMaster)).toContain('order-settlement.ts');
     expect(seed).toContain("{ code: 'PROD.ORDER.SETTLE'");
     expect(flat(orderMaster)).toContain('DI-012');
   });
@@ -103,8 +102,9 @@ describe('the wiring doc describes the application that exists', () => {
     expect(flat(wiring)).toContain('a batch is not');
   });
 
-  it('keeps step 12 unstarted, and sends the reason to the ledger', () => {
-    expect(flat(wiring)).toMatch(/`CO88` — settle the production order\. \*\*Not started\.\*\*/);
+  it('describes step 12 as implemented, and sends the reason to the ledger', () => {
+    expect(flat(wiring)).toMatch(/`CO88` — settle the production order\. \*\*Implemented\*\*/);
+    expect(flat(wiring)).toContain('/production/order-settlement');
     expect(flat(wiring)).toContain('DI-012');
   });
 
@@ -143,8 +143,9 @@ describe('the function table lists every production screen', () => {
   it('does not offer a route for the function that has no screen', () => {
     const row = functions.split('\n').find((line) => line.includes('`PROD.ORDER.SETTLE`'));
     expect(row).toBeDefined();
-    expect(row).toContain('Registered, no screen');
-    expect(functions).not.toMatch(/`PROD\.ORDER\.SETTLE`[^|]*\|[^|]*\|[^|]*\| `\/production/);
+    expect(row).toContain('KO88');
+    expect(row).toContain('/production/order-settlement');
+    expect(functions).toMatch(/`PROD\.ORDER\.SETTLE`[^|]*\|[^|]*\|[^|]*\| `\/production\/order-settlement/);
   });
 });
 

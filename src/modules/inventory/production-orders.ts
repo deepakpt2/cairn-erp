@@ -34,10 +34,12 @@
  * and no reservation, which is its stated contract, not an omission).
  *
  * Still refused by name here, and nowhere else: order closure, a deletion flag on the
- * order, settlement of a production order (`PROD.ORDER.SETTLE` is granted by the
- * registry and settles nothing, because no cost basis stands on the order to settle —
- * `docs/DEFERRED_ISSUES.md` DI-012), collective manufacturing orders, and external
- * order numbering. A finished-good batch may be named when that batch already stands.
+ * order, collective manufacturing orders, and external order numbering. Settlement of a
+ * production order (`PROD.ORDER.SETTLE`, alias KO88) is implemented in
+ * `src/modules/production/order-settlement.ts` and settles actual costs collected on
+ * the order to configured receivers; WIP calculation (DV-003) and variance
+ * categorization (DV-004) remain deferred under `docs/DEFERRED_ISSUES.md` DI-012. A
+ * finished-good batch may be named when that batch already stands.
  * A new batch is created only when the scheduling profile snapshotted at create says
  * so. OPKP is not this screen.
  */
@@ -46,7 +48,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { withTenant } from '../../platform/db/client';
 import { allocateNumber } from '../../platform/numbering';
 import { recordChange } from '../../platform/change';
-import { plant as plantTable } from '../foundation/schema';
+import { plant as plantTable, controllingAreaCompany, controllingArea } from '../foundation/schema';
 import { material, materialPlant } from './schema';
 import { resolveStorageLocation, StorageLocationError } from './storage-location';
 import { productionOrder, productionOrderComponent } from './schema';
@@ -431,6 +433,23 @@ export async function createProductionOrder(
         'Assign the plant to a company code, then create the order.',
       );
     }
+    /** Derive the controlling area and currency from the plant's company code
+     *  via the controlling area–company assignment (the MB03 ruling). */
+    const [areaInfo] = await tx.select({
+      controllingArea: controllingAreaCompany.controllingArea,
+      currency: controllingArea.currency,
+    })
+      .from(controllingAreaCompany)
+      .innerJoin(controllingArea, and(
+        eq(controllingArea.client, controllingAreaCompany.client),
+        eq(controllingArea.controllingArea, controllingAreaCompany.controllingArea),
+      ))
+      .where(and(
+        eq(controllingAreaCompany.client, input.client),
+        eq(controllingAreaCompany.companyCode, plantRow.companyCode),
+      ));
+    const orderControllingArea = areaInfo?.controllingArea ?? null;
+    const orderCurrency = areaInfo?.currency ?? null;
 
     const [extended] = await tx.select().from(materialPlant).where(and(
       eq(materialPlant.client, input.client),
@@ -637,6 +656,9 @@ export async function createProductionOrder(
       productionVersion: derived?.productionVersion ?? null,
       bomUsage: derived?.bomUsage ?? null,
       bomAlternative: derived?.bomAlternative ?? null,
+      companyCode: plantRow.companyCode,
+      controllingArea: orderControllingArea,
+      currency: orderCurrency,
       createdBy: input.createdBy,
     }).returning();
 

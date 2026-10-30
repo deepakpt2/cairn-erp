@@ -85,11 +85,11 @@ The steps are kept in this order, and each carries what was delivered against it
     second goods-receipt transaction was added. What is still not wired is named on the confirmation screen —
     scrap is not grossed into a component quantity, no order type switches a receipt on or off, a batch is not
     determined, and a reservation is not cleared by an issue.
-12. `CO88` — settle the production order. **Not started.** It is not a missing screen. The thing this step was
-    held behind is now built — an order can be technically completed and revoked — but no cost basis stands on the
-    order to settle, so `PROD.ORDER.SETTLE` is granted by the registry and settles nothing, and a cost estimate has
-    no transaction in this application and none is assigned here. `docs/DEFERRED_ISSUES.md` DI-012 holds the
-    acceptance criteria, and they need an owner decision about the money basis before any code.
+12. `CO88` — settle the production order. Implemented at `/production/order-settlement` (PROD.ORDER.SETTLE). The run
+    settles actual costs collected on the order — journal lines that cite it — to configured receivers through
+    `postJournalEntry`. A settlement rule must be stored first (`/production/settlement-rules`); no receiver or
+    percentage is assumed. Cost estimates, WIP calculation (DV-003), and variance categorization (DV-004) remain
+    deferred under `docs/DEFERRED_ISSUES.md` DI-012.
 
 ## Not in this sequence
 
