@@ -192,6 +192,15 @@ async function main() {
       ['USD', 'KWD'],
     );
 
+    // ── 2b. Country reference (required before central_address FK) ──────
+    console.log('\n▸ Country reference');
+    await client.unsafe(
+      `insert into country (code, name, default_currency, is_tax_relevant)
+       values ($1,'Kuwait','KWD',true)
+       on conflict (code) do nothing`,
+      ['KW'],
+    );
+
     // ── 2. Standard enterprise structure (no-op if already present) ──────
     console.log('\n▸ Enterprise structure');
     const structure = await applyStandardStructure({
