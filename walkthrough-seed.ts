@@ -201,6 +201,16 @@ async function main() {
       ['KW'],
     );
 
+    // ── 2c. Unit of measure reference (required before material masters) ──
+    console.log('\n▸ Unit of measure reference');
+    await client.unsafe(
+      `insert into unit_of_measure (code, name, dimension, decimal_places, is_base_unit)
+       values ($1,'Kilogram','MASS',3,true),
+              ($2,'Piece','COUNT',0,true)
+       on conflict (code) do nothing`,
+      ['KG', 'PC'],
+    );
+
     // ── 2. Standard enterprise structure (no-op if already present) ──────
     console.log('\n▸ Enterprise structure');
     const structure = await applyStandardStructure({
