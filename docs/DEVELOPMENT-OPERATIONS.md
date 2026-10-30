@@ -289,12 +289,12 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 | Item | Value |
 |------|-------|
 | Local branch | `development` |
-| Local commit | `9788bff` |
+| Local commit | `34ef031` |
 | Remote branch | `origin/development` |
-| Remote commit | `9788bff` |
+| Remote commit | `34ef031` (synchronized with local) |
 | Test server branch | `development` |
-| Test server commit | `9788bff` |
-| Test server upstream | `development -> origin/development` |
-| Acceptance database | `cairn_acceptance` (324 migrations applied) |
-| P0-GAP-01 tests | 6 passed, 0 failed |
-| Both workspaces synchronized | YES |
+| Test server commit | `ce9c650` (2 commits behind — test server checkout needs `git fetch && git checkout development` to sync) |
+| Acceptance database | `cairn_acceptance` |
+| DI-020 tests | 9 passed, 0 failed |
+| DI-020 TypeScript | Clean (`tsc --noEmit`) |
+| Both workspaces synchronized | YES (local and origin/development) |
