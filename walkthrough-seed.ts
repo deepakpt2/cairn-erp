@@ -182,6 +182,16 @@ async function main() {
       console.log(`  tenant ${tenant} already exists — leaving it unchanged`);
     }
 
+    // ── 2a. Currency reference (required before controlling_area FK) ──────
+    console.log('\n▸ Currency reference');
+    await client.unsafe(
+      `insert into currency (code, name, decimal_places, symbol, is_active)
+       values ($1,'US Dollar',2,'$',true),
+              ($2,'Kuwaiti Dinar',3,'KD',true)
+       on conflict (code) do nothing`,
+      ['USD', 'KWD'],
+    );
+
     // ── 2. Standard enterprise structure (no-op if already present) ──────
     console.log('\n▸ Enterprise structure');
     const structure = await applyStandardStructure({
