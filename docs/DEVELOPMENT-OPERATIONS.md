@@ -289,9 +289,9 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 | Item | Value |
 |------|-------|
 | Local branch | `development` |
-| Local commit | `34ef031` |
+| Local commit | `12b707d` |
 | Remote branch | `origin/development` |
-| Remote commit | `34ef031` (synchronized with local) |
+| Remote commit | `12b707d` (synchronized with local) |
 | Test server branch | `development` |
 | Test server commit | `ce9c650` (2 commits behind — test server checkout needs `git fetch && git checkout development` to sync) |
 | Acceptance database | `cairn_acceptance` |
