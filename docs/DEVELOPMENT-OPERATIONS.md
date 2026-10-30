@@ -289,11 +289,11 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 | Item | Value |
 |------|-------|
 | Local branch | `development` |
-| Local commit | `05a0590` |
+| Local commit | `0260347` |
 | Remote branch | `origin/development` |
-| Remote commit | `05a0590` |
+| Remote commit | `0260347` |
 | Test server branch | `development` |
-| Test server commit | `05a0590` |
+| Test server commit | `0260347` |
 | Test server upstream | `development -> origin/development` |
 | Acceptance database | `cairn_acceptance` (324 migrations applied) |
 | P0-GAP-01 tests | 6 passed, 0 failed |
