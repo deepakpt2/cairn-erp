@@ -703,7 +703,7 @@ async function main() {
   // protected databases without authorization and confirms the actual connected
   // database identity matches the requested target.
   await validateTarget(
-    new URL(connectionString).pathname.replace(/^\/, ''),
+    new URL(connectionString).pathname.replace(/^\//, ''),
     undefined,
     process.env.DATABASE_URL,
   )

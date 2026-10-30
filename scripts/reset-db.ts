@@ -26,7 +26,7 @@ async function main() {
     'postgresql://cairn:cairn_dev@127.0.0.1:5432/cairn';
 
   await validateTarget(
-    new URL(connectionString).pathname.replace(/^\/, ''),
+    new URL(connectionString).pathname.replace(/^\//, ''),
     undefined,
     process.env.DATABASE_URL,
   )
