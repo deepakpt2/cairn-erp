@@ -330,12 +330,13 @@ The seed prints a concise execution summary to stdout: tenant, company code, rec
 | Item | Value |
 |------|-------|
 | Local branch | `development` |
-| Local commit | `12b707d` |
+| Local commit | `43cff87` |
 | Remote branch | `origin/development` |
-| Remote commit | `12b707d` (synchronized with local) |
+| Remote commit | `43cff87` (synchronized with local) |
 | Test server branch | `development` |
-| Test server commit | `ce9c650` (2 commits behind — test server checkout needs `git fetch && git checkout development` to sync) |
+| Test server commit | `ce9c650` (needs `git fetch && git checkout development` to sync) |
 | Acceptance database | `cairn_acceptance` |
 | DI-020 tests | 9 passed, 0 failed |
 | DI-020 TypeScript | Clean (`tsc --noEmit`) |
+| Walkthrough seed | Committed at `walkthrough-seed.ts`; TypeScript-parsed; not yet executed against a database |
 | Both workspaces synchronized | YES (local and origin/development) |
