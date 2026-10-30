@@ -400,7 +400,8 @@ export async function cancelCustomerInvoice(input: {
       paymentTerms: original.paymentTerms, baselineDate: original.baselineDate,
       dueDate: original.dueDate, headerText: `Cancellation of ${original.invoiceNumber}`,
       status: 'POSTED', journalDocumentNumber: reversal.documentNumber,
-      cancellationOf: original.invoiceNumber, requestKey: input.requestKey,
+      cancellationOf: original.invoiceNumber, creditOf: original.creditOf,
+      requestKey: input.requestKey,
       createdBy: input.changedBy,
     });
     let lineNumber = 0;

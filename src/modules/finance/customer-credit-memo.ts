@@ -6,25 +6,27 @@
  * against. Partial credits are permitted, and all credits against an original
  * may never exceed its gross. A posted memo is never edited or deleted;
  * cancellation is the invoice's own linked mirror. The receivable posts through
- * the existing accounting-invoice service (`postCustomerInvoice`) so the journal,
- * the reconciliation account and the due date all come from the same engine that
- * raises the original invoice.
+ * the posting engine (`postJournalEntry`) with the credit-memo direction — the
+ * customer is credited (receivable reduced) and revenue/tax are debited — the
+ * mirror image of a customer invoice.
  */
 import { and, eq, sql } from 'drizzle-orm';
 
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
+import { allocateNumber } from '../../platform/numbering';
 import { derivePosition, getCompanyCode } from '../../platform/periods';
-import { PostingError } from '../../platform/posting';
+import { postJournalEntry, PostingError } from '../../platform/posting';
 import { accountDetermination, profitCenter, taxCode as taxCodeTable } from '../foundation/schema';
 import { customerCompany } from '../foundation/customer-company-schema';
 import { paymentTerms } from '../foundation/payment-terms-schema';
 import { customerInvoice, customerInvoiceLine } from '../purchasing/schema';
 import { billingDocument } from '../sales/schema';
-import { postCustomerInvoice, type CustomerInvoiceView } from './customer-invoice';
 
 export const CUSTOMER_CREDIT_MEMO_CAPABILITY = 'FIN.AR.CREDITMEMO.POST';
+const JOURNAL_DOCUMENT_TYPE = 'DR';
 const INVOICE_CLASS = 'customer_invoice';
+const NUMBER_OBJECT = 'CUSTINV';
 
 export class CustomerCreditMemoError extends Error {
   remedy?: string;
@@ -270,6 +272,7 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
     }
 
     // The credit cap: all posted credits against an original may never exceed its gross.
+    // Cancelled memos (those carrying cancellationOf) are excluded from the running total.
     if (originalInvoice) {
       if (originalInvoice.currency !== input.currency) {
         throw new CustomerCreditMemoError(
@@ -379,37 +382,92 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
       due = d.toISOString().slice(0, 10);
     }
 
-    const invoice = await postCustomerInvoice({
+    const position = await derivePosition(tx, input.client, company.fiscalYearVariant, input.postingDate);
+
+    // Allocate the CUSTINV number before posting so the journal's origin key
+    // names the invoice document it creates, giving complete document flow.
+    const allocated = await allocateNumber(tx, {
+      client: input.client, objectCode: NUMBER_OBJECT, allocatedBy: input.changedBy,
+    });
+    const number = allocated.display;
+
+    // Credit memo journal direction — mirror image of a customer invoice:
+    //   Credit (H) the customer reconciliation account at gross — receivable reduces.
+    //   Debit (S) each revenue line at net — revenue reduces.
+    //   Debit (S) the tax account at tax — output tax reduces.
+    const journalLines: Array<{
+      glAccount: string; debitCredit: 'S' | 'H'; amount: string;
+      businessPartner?: string; taxCode?: string; profitCenter?: string;
+    }> = [{
+      glAccount: customer.reconciliationAccount, debitCredit: 'H',
+      amount: round2(input.grossAmount).toFixed(2), businessPartner: input.customerNumber,
+    }];
+    for (const p of prepared) {
+      journalLines.push({
+        glAccount: p.glAccount, debitCredit: 'S', amount: p.net.toFixed(2),
+        ...(p.profitCenter ? { profitCenter: p.profitCenter } : {}),
+      });
+    }
+    const taxByCode = new Map<string, number>();
+    for (const p of prepared) {
+      if (p.tax > 0 && p.taxCode) taxByCode.set(p.taxCode, round2((taxByCode.get(p.taxCode) ?? 0) + p.tax));
+    }
+    if (taxByCode.size > 0) {
+      const account = await taxAccount(tx, input.client, chart);
+      for (const [code, amount] of taxByCode) {
+        journalLines.push({ glAccount: account, debitCredit: 'S', amount: amount.toFixed(2), taxCode: code });
+      }
+    }
+
+    const journal = await postJournalEntry(tx, {
       client: input.client,
-      changedBy: input.changedBy,
-      customerNumber: input.customerNumber,
       companyCode: input.companyCode,
+      documentType: JOURNAL_DOCUMENT_TYPE,
       documentDate: input.documentDate,
       postingDate: input.postingDate,
+      fiscalYear: position.fiscalYear,
+      postingPeriod: position.period,
+      currency: input.currency.toUpperCase(),
+      localCurrency: company.currency,
       reference: input.reference,
-      currency: input.currency,
-      grossAmount: input.grossAmount,
-      category: 'CREDIT_MEMO',
-      creditOf: originalInvoice?.invoiceNumber ?? null,
       headerText: input.headerText,
-      requestKey: input.requestKey,
-      lines: prepared.map((p) => ({
-        glAccount: p.glAccount, netAmount: p.net,
-        taxCode: p.taxCode || undefined,
-        profitCenter: p.profitCenter || undefined,
-        lineText: p.lineText,
-      })),
+      lines: journalLines,
+      origin: { documentClass: INVOICE_CLASS, documentKey: number },
+      postedBy: input.changedBy,
+      transactionCode: CUSTOMER_CREDIT_MEMO_CAPABILITY,
     }).catch((error: unknown) => {
       if (error instanceof PostingError) throw new CustomerCreditMemoError(error.message, error.remedy);
       throw error;
     });
 
+    await tx.insert(customerInvoice).values({
+      client: input.client, invoiceNumber: number, fiscalYear: position.fiscalYear,
+      category: 'CREDIT_MEMO', customerNumber: input.customerNumber, companyCode: input.companyCode,
+      documentDate: input.documentDate, postingDate: input.postingDate,
+      reference: input.reference, currency: input.currency.toUpperCase(),
+      grossAmount: String(round2(input.grossAmount)), taxAmount: String(taxTotal),
+      paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
+      headerText: input.headerText ?? null, status: 'POSTED',
+      journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      creditOf: originalInvoice?.invoiceNumber ?? null,
+      createdBy: input.changedBy,
+    });
+    let lineNumber = 0;
+    for (const p of prepared) {
+      lineNumber += 1;
+      await tx.insert(customerInvoiceLine).values({
+        client: input.client, invoiceNumber: number, lineNumber,
+        glAccount: p.glAccount, netAmount: String(p.net), taxCode: p.taxCode,
+        taxAmount: String(p.tax), profitCenter: p.profitCenter, lineText: p.lineText,
+        createdBy: input.changedBy,
+      });
+    }
     await recordChange(tx, {
-      client: input.client, objectClass: INVOICE_CLASS, objectKey: invoice.invoiceNumber,
+      client: input.client, objectClass: INVOICE_CLASS, objectKey: number,
       changeType: 'CREATE', changedBy: input.changedBy, transactionCode: CUSTOMER_CREDIT_MEMO_CAPABILITY,
       after: {
         customer: input.customerNumber, gross: round2(input.grossAmount), tax: taxTotal,
-        journal: invoice.journalDocumentNumber, creditOf: originalInvoice?.invoiceNumber ?? null,
+        journal: journal.documentNumber, creditOf: originalInvoice?.invoiceNumber ?? null,
       },
     });
     return (await byRequestKey(tx, input.client, input.requestKey))!;

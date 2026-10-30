@@ -519,6 +519,7 @@ export const supplierInvoice = pgTable('supplier_invoice', {
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
   cancelledBy: varchar('cancelled_by', { length: 20 }),
   cancellationOf: varchar('cancellation_of', { length: 20 }),
+  creditOf: varchar('credit_of', { length: 20 }),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
@@ -570,6 +571,7 @@ export const customerInvoice = pgTable('customer_invoice', {
   journalDocumentNumber: varchar('journal_document_number', { length: 40 }),
   cancelledBy: varchar('cancelled_by', { length: 20 }),
   cancellationOf: varchar('cancellation_of', { length: 20 }),
+  creditOf: varchar('credit_of', { length: 20 }),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,
 }, (t) => [
