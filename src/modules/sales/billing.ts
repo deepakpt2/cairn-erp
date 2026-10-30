@@ -101,6 +101,7 @@ export interface BillingView {
   grossValue: string;
   customerInvoiceNumber: string | null;
   journalDocumentNumber: string | null;
+  creditOf: string | null;
   version: number;
   createdBy: string;
   lines: Array<{
@@ -140,6 +141,7 @@ function mapHeader(row: typeof billingDocument.$inferSelect): Omit<BillingView, 
     grossValue: row.grossValue,
     customerInvoiceNumber: row.customerInvoiceNumber,
     journalDocumentNumber: row.journalDocumentNumber,
+    creditOf: row.creditOf,
     version: row.version,
     createdBy: row.createdBy,
   };
@@ -237,6 +239,7 @@ export async function listBillings(
 ): Promise<Array<{
   billingNumber: string; deliveryNumber: string; orderNumber: string; customerNumber: string;
   billingDate: string; status: string; grossValue: string; customerInvoiceNumber: string | null; version: number;
+  creditOf: string | null;
 }>> {
   return withTenant(client, async (tx) => {
     const rows = await tx.select().from(billingDocument).where(and(
@@ -254,6 +257,7 @@ export async function listBillings(
       status: row.status,
       grossValue: row.grossValue,
       customerInvoiceNumber: row.customerInvoiceNumber,
+      creditOf: row.creditOf,
       version: row.version,
     }));
   });

@@ -2137,6 +2137,13 @@ const en: Catalogue = {
     'reconciliation account so the payable reduces. A partial credit ' +
     'may stand against an original invoice. A posted memo is corrected ' +
     'by cancellation or reversal, never deleted.',
+  'customerCreditMemo.title': 'Enter Customer Credit Memo',
+  'customerCreditMemo.subtitle':
+    'A credit against a customer: revenue lines with their output tax ' +
+    'reversed, the customer credited at the gross credit on its ' +
+    'reconciliation account so the receivable reduces. A partial credit ' +
+    'may stand against an original billing document. A posted memo is ' +
+    'corrected by cancellation or reversal, never deleted.',
   'vendorInvoice.title': 'Enter Vendor Invoice',
   'vendorInvoice.subtitle':
     'A direct vendor invoice: expense lines with their input tax, the ' +

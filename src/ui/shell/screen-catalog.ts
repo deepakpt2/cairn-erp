@@ -1480,6 +1480,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: ["companyCode", "invoice"],
   },
   {
+    id: "/sales/credit-memo",
+    path: "/sales/credit-memo",
+    query: {},
+    code: "FIN.AR.CREDITMEMO.POST",
+    title: "Enter customer credit memo",
+    area: "sales",
+    family: "sales-billing",
+    accepts: ["billing", "customer", "invoice"],
+  },
+  {
     id: "/finance/vendor-down-payment",
     path: "/finance/vendor-down-payment",
     query: {},

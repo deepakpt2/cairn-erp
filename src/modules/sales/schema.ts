@@ -265,6 +265,8 @@ export const billingDocument = pgTable('billing_document', {
   customerInvoiceNumber: varchar('customer_invoice_number', { length: 20 }),
   journalDocumentNumber: varchar('journal_document_number', { length: 20 }),
   referenceDocumentText: varchar('reference_document_text', { length: 100 }),
+  /** Optional link to the original billing document this credit memo or replacement billing stands against. */
+  creditOf: varchar('credit_of', { length: 20 }),
   version: integer('version').notNull().default(1),
   requestKey: varchar('request_key', { length: 64 }),
   ...auditColumns,

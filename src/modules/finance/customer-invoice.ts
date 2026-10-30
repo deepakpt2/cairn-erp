@@ -42,6 +42,7 @@ export interface CustomerInvoiceView {
   invoiceNumber: string;
   fiscalYear: number;
   category: string;
+  creditOf: string | null;
   customerNumber: string;
   companyCode: string;
   documentDate: string;
@@ -69,7 +70,8 @@ function toView(
 ): CustomerInvoiceView {
   return {
     invoiceNumber: header.invoiceNumber, fiscalYear: header.fiscalYear,
-    category: header.category, customerNumber: header.customerNumber,
+    category: header.category, creditOf: header.creditOf,
+    customerNumber: header.customerNumber,
     companyCode: header.companyCode, documentDate: header.documentDate,
     postingDate: header.postingDate, reference: header.reference,
     currency: header.currency, grossAmount: header.grossAmount, taxAmount: header.taxAmount,
@@ -141,6 +143,10 @@ export interface PostCustomerInvoiceInput {
   reference: string; currency: string;
   paymentTermsCode?: string;
   grossAmount: number;
+  /** INVOICE | CREDIT_MEMO — defaults to INVOICE. */
+  category?: string;
+  /** Optional link to the original customer invoice this document stands against. */
+  creditOf?: string;
   headerText?: string;
   requestKey: string;
   lines: Array<{
@@ -317,13 +323,14 @@ export async function postCustomerInvoice(input: PostCustomerInvoiceInput): Prom
 
     await tx.insert(customerInvoice).values({
       client: input.client, invoiceNumber: number, fiscalYear: position.fiscalYear,
-      category: 'INVOICE', customerNumber: input.customerNumber, companyCode: input.companyCode,
+      category: input.category ?? 'INVOICE', customerNumber: input.customerNumber, companyCode: input.companyCode,
       documentDate: input.documentDate, postingDate: input.postingDate,
       reference: input.reference, currency: input.currency.toUpperCase(),
       grossAmount: String(round2(input.grossAmount)), taxAmount: String(taxTotal),
       paymentTerms: termsCode ?? null, baselineDate: baseline, dueDate: due,
       headerText: input.headerText ?? null, status: 'POSTED',
       journalDocumentNumber: journal.documentNumber, requestKey: input.requestKey,
+      creditOf: input.creditOf ?? null,
       createdBy: input.changedBy,
     });
     let lineNumber = 0;
