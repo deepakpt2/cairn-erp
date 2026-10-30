@@ -702,7 +702,11 @@ async function main() {
   // Validate the explicit database target before connecting. The guard refuses
   // protected databases without authorization and confirms the actual connected
   // database identity matches the requested target.
-  await validateTarget(new URL(connectionString).pathname.replace(/^\//, ''));
+  await validateTarget(
+    new URL(connectionString).pathname.replace(/^\/, ''),
+    undefined,
+    process.env.DATABASE_URL,
+  )
 
   const client = postgres(connectionString, { max: 1, prepare: false, onnotice: () => {} });
 
