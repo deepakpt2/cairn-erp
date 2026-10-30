@@ -3,7 +3,8 @@ import { withTenant } from '../../platform/db/client';
 import { applyMaterialDefaults } from './standard-config';
 import { getMaterialDetail, saveMaterialView } from './materials';
 
-export async function seedDevelopmentMaterials(client: string) {
+export async function seedDevelopmentMaterials() {
+  const client = '0100';
   await withTenant(client, (tx) => applyMaterialDefaults(tx, client, 'DEV_SEED'));
   const samples = [
     { number: 'RAW-STEEL', description: 'Carbon steel sheet', type: 'RAW', group: 'RAW', unit: 'KG', procurement: 'BUY' as const, priceControl: 'MOVING_AVERAGE' as const, valuationClass: 'RAW_INVENTORY', price: '5.0000' },

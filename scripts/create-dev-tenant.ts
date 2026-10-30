@@ -29,7 +29,7 @@ async function main() {
   if (alreadyThere) {
     console.log(`Development tenant 0100 already exists (${alreadyThere.name}).`);
     await ensureDevelopmentInterval();
-    await seedDevelopmentMaterials('0100');
+    await seedDevelopmentMaterials();
     await closeDb();
     return;
   }
@@ -67,7 +67,7 @@ async function main() {
   });
 
   await ensureDevelopmentInterval();
-  await seedDevelopmentMaterials('0100');
+  await seedDevelopmentMaterials();
   console.log('Development tenant created:');
   console.log(`  Tenant key        ${result.client}`);
   console.log('  Company code      1000 (built by the standard structure builder)');
