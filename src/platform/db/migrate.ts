@@ -33,7 +33,11 @@ export async function runMigrations(): Promise<MigrationResult> {
   // connected database identity matches the requested target and refuses
   // protected databases without explicit authorization.
   const targetDbName = new URL(connectionString).pathname.replace(/^\//, '');
-  await validateTarget(targetDbName);
+  // DATABASE_URL carries the application-role credentials and the correct
+  // host (e.g. cairn-postgres:5432 in Docker). Use it solely for the
+  // read-only identity verification inside validateTarget — never for
+  // mutations. Migrations always run through directSql with the owner URL.
+  await validateTarget(targetDbName, undefined, process.env.DATABASE_URL);
 
   const client = directSql(connectionString);
   const applied: string[] = [];

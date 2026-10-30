@@ -96,12 +96,23 @@ export interface ValidatedTarget {
 }
 
 /** Database connection credentials for identity verification (app role). Never printed. */
-function verifyCredentials(): {
+function verifyCredentials(connectionString?: string): {
   user: string;
   password: string;
   host: string;
   port: number;
 } {
+  if (connectionString) {
+    // Use the supplied connection string's host/port but app-role credentials.
+    // Never use owner credentials for verification.
+    const url = new URL(connectionString);
+    return {
+      user: process.env.CAIRN_DB_USER ?? 'cairn_app',
+      password: process.env.CAIRN_DB_PASSWORD ?? 'cairn_app_dev',
+      host: url.hostname,
+      port: Number(url.port ?? 5432),
+    };
+  }
   return {
     user: process.env.CAIRN_DB_USER ?? 'cairn_app',
     password: process.env.CAIRN_DB_PASSWORD ?? 'cairn_app_dev',
@@ -111,8 +122,11 @@ function verifyCredentials(): {
 }
 
 /** Build a verification connection string for a database name. */
-function verificationConnectionStringFor(database: string): string {
-  const { user, password, host, port } = verifyCredentials();
+function verificationConnectionStringFor(
+  database: string,
+  connectionString?: string,
+): string {
+  const { user, password, host, port } = verifyCredentials(connectionString);
   return `postgresql://${user}:${password}@${host}:${port}/${database}`;
 }
 
@@ -168,6 +182,7 @@ function authorize(
 export async function validateTarget(
   target: string | undefined,
   authorization?: DbAuthorization,
+  verificationConnectionString?: string,
 ): Promise<ValidatedTarget> {
   if (!target || typeof target !== 'string' || target.trim().length === 0) {
     throw new Error(
@@ -190,7 +205,7 @@ export async function validateTarget(
 
   // Connect using application credentials solely to verify database identity.
   // Never read DATABASE_URL here — that is the defect this guard prevents.
-  const connectionString = verificationConnectionStringFor(database);
+  const connectionString = verificationConnectionStringFor(database, verificationConnectionString);
   let sql: ReturnType<typeof postgres> | null = null;
   try {
     sql = postgres(connectionString, {
