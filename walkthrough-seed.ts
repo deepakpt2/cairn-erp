@@ -227,7 +227,7 @@ async function main() {
     await client.unsafe(
       `insert into bp_role
          (client, partner_number, role_code, is_active, created_by, changed_by)
-       values ($1,$2,'CUSTOMER',true,$6,$6)
+       values ($1,$2,'CUSTOMER',true,$3,$3)
        on conflict (client, partner_number, role_code) do nothing`,
       [tenant, customerNumber, changedBy],
     );
@@ -241,7 +241,7 @@ async function main() {
     await client.unsafe(
       `insert into bp_role
          (client, partner_number, role_code, is_active, created_by, changed_by)
-       values ($1,$2,'SUPPLIER',true,$6,$6)
+       values ($1,$2,'SUPPLIER',true,$3,$3)
        on conflict (client, partner_number, role_code) do nothing`,
       [tenant, supplierNumber, changedBy],
     );
@@ -259,7 +259,7 @@ async function main() {
     await client.unsafe(
       `insert into supplier_purchasing_org
          (client, partner_number, role_code, purchasing_org, purchasing_group, order_currency, payment_terms_code, purchasing_status, created_by, changed_by)
-       values ($1,$2,'SUPPLIER',$3,$4,'USD','NET30','MAINTAINED',$7,$7)
+       values ($1,$2,'SUPPLIER',$3,$4,'USD','NET30','MAINTAINED',$5,$5)
        on conflict (client, partner_number, purchasing_org) do nothing`,
       [tenant, supplierNumber, PURCHASING_ORG, PURCHASING_GROUP, changedBy],
     );
