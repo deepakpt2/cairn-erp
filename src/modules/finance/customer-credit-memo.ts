@@ -274,6 +274,10 @@ export async function postCustomerCreditMemo(input: PostCustomerCreditMemoInput)
     // The credit cap: all posted credits against an original may never exceed its gross.
     // Cancelled memos (those carrying cancellationOf) are excluded from the running total.
     if (originalInvoice) {
+      // Serialize concurrent credit-cap checks against the same original invoice so
+      // two concurrent partial-credit attempts cannot both pass the cap check.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${input.client}), hashtext(${originalInvoice.invoiceNumber}))`);
+
       if (originalInvoice.currency !== input.currency) {
         throw new CustomerCreditMemoError(
           `Original invoice ${originalInvoice.invoiceNumber} is in currency ${originalInvoice.currency}, not ${input.currency}.`,
