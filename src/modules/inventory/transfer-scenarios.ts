@@ -88,22 +88,34 @@ export const COUNTER_CODES: Record<string, [string, string]> = {
  * tenant and then authoritative from the table. SCR-146 moved the rules above from being read out
  * of this file at posting time to being read out of `movement_type`; what remains here is the seed.
  */
-export const DELIVERED_TRANSFER_MOVEMENTS = TRANSFER_SCENARIOS.flatMap((s) => [
+export const DELIVERED_TRANSFER_MOVEMENTS = [
+  ...TRANSFER_SCENARIOS.flatMap((s) => [
+    {
+      movementType: s.movementType, description: `${s.description} (${s.code})`,
+      direction: 'TRANSFER', referenceCategory: 'MATERIAL_DOCUMENT',
+      reversalMovementType: s.reversalMovementType,
+      movementKind: s.kind, sourceStockType: s.fromStockType, destinationStockType: s.toStockType,
+      plantRule: s.plantRule, locationRule: s.locationRule, isTwoStep: s.isTwoStep,
+      valuationRelevant: s.valuationRelevant, negativeStockPolicy: s.negativeStockPolicy,
+    },
+    {
+      movementType: s.reversalMovementType, description: `Reversal of ${s.description} (${Number(s.code) + 1})`,
+      direction: 'TRANSFER', referenceCategory: 'MATERIAL_DOCUMENT',
+      reversalMovementType: null,
+      movementKind: s.kind, sourceStockType: s.toStockType, destinationStockType: s.fromStockType,
+      plantRule: s.plantRule, locationRule: s.locationRule, isTwoStep: false,
+      valuationRelevant: false, negativeStockPolicy: 'LOCATION',
+    },
+  ]),
+  // TRANSFER_STYPE_BLOCK (323) is a one-way quality-to-blocked stock type transfer
+  // used by QM usage decisions. It has no reversal movement.
   {
-    movementType: s.movementType, description: `${s.description} (${s.code})`,
-    direction: 'TRANSFER', referenceCategory: 'MATERIAL_DOCUMENT',
-    reversalMovementType: s.reversalMovementType,
-    movementKind: s.kind, sourceStockType: s.fromStockType, destinationStockType: s.toStockType,
-    plantRule: s.plantRule, locationRule: s.locationRule, isTwoStep: s.isTwoStep,
-    valuationRelevant: s.valuationRelevant, negativeStockPolicy: s.negativeStockPolicy,
-  },
-  {
-    movementType: s.reversalMovementType, description: `Reversal of ${s.description} (${Number(s.code) + 1})`,
+    movementType: 'TRANSFER_STYPE_BLOCK', description: 'Quality inspection to blocked stock (323)',
     direction: 'TRANSFER', referenceCategory: 'MATERIAL_DOCUMENT',
     reversalMovementType: null,
-    movementKind: s.kind, sourceStockType: s.toStockType, destinationStockType: s.fromStockType,
-    plantRule: s.plantRule, locationRule: s.locationRule, isTwoStep: false,
+    movementKind: 'STOCK_TYPE', sourceStockType: 'QUALITY', destinationStockType: 'BLOCKED',
+    plantRule: 'SAME', locationRule: 'SAME', isTwoStep: false,
     valuationRelevant: false, negativeStockPolicy: 'LOCATION',
   },
-]);
+];
 
