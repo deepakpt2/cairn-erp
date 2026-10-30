@@ -202,7 +202,7 @@ async function main() {
 
     // ── 3. Materials (development fixtures) ──────────────────────────────
     console.log('\n▸ Materials');
-    await seedDevelopmentMaterials();
+    await seedDevelopmentMaterials(tenant);
     const [matCount] = await client.unsafe<Array<{ n: number }>>(
       `select count(*)::int as n from material where client = $1`,
       [tenant],
