@@ -22,9 +22,11 @@
 import { and, asc, count, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
-import { recordField, recordType, employeeRecord, RECORD_TYPE_OBJECT_CLASS } from './schema';
+import { recordField, recordType, employeeRecord, RECORD_TYPE_CAPABILITY, RECORD_TYPE_OBJECT_CLASS } from './schema';
 
 // The screen contract lives in `schema.ts`; re-exported because a config screen reaches it through this service.
 export { RECORD_TYPE_CAPABILITY, RECORD_TYPE_ROUTE } from './schema';
@@ -33,6 +35,17 @@ const CODE_MAX = 6;
 const FIELD_CODE_MAX = 30;
 const LABEL_MAX = 60;
 const FIELDS_MAX = 40;
+
+/** Refuse a write when the caller holds none of the required authority. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actor: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actor);
+  }
+}
 
 const code = z.string().transform((s) => s.trim().toUpperCase());
 const text = (max: number) => z.string().transform((s) => s.trim()).refine((s) => s.length > 0 && s.length <= max, { message: 'REQUIRED_TEXT' });
@@ -225,8 +238,12 @@ function fieldRow(input: {
  * Define a record type with the fields it asks for. A repeat of the same `requestKey` is not an error and not
  * a second definition: it returns the type that stands, which is how a submitted form that timed out is read.
  */
-export async function defineRecordType(input: unknown): Promise<RecordTypeDefinition> {
+export async function defineRecordType(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<RecordTypeDefinition> {
   const parsed = parse(defineInput, input);
+  assertCapability(capabilities, RECORD_TYPE_CAPABILITY, parsed.changedBy);
 
   const seen = new Set<string>();
   for (const field of parsed.fields) {
@@ -330,8 +347,12 @@ export async function listRecordTypes(clientInput: string): Promise<RecordTypeDe
  * Change what a type is called, or retire it. `isValid: false` stops new records of this type and keeps every
  * standing record readable — deletion is not offered, by `9193` and by the database's own foreign key.
  */
-export async function changeRecordType(input: unknown): Promise<RecordTypeDefinition> {
+export async function changeRecordType(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<RecordTypeDefinition> {
   const parsed = parse(changeInput, input);
+  assertCapability(capabilities, RECORD_TYPE_CAPABILITY, parsed.changedBy);
   const patch: { name?: string; description?: string | null; isValid?: boolean } = {};
   if (parsed.name) patch.name = parsed.name;
   if (parsed.description !== undefined) patch.description = parsed.description || null;
@@ -366,8 +387,12 @@ export async function changeRecordType(input: unknown): Promise<RecordTypeDefini
 }
 
 /** Add one field to a type that is already defined. */
-export async function addRecordField(input: unknown): Promise<RecordTypeDefinition> {
+export async function addRecordField(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<RecordTypeDefinition> {
   const parsed = parse(addFieldInput, input);
+  assertCapability(capabilities, RECORD_TYPE_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     if (!await typeRow(tx, parsed.client, parsed.recordType)) refusal('TYPE_UNKNOWN', parsed.recordType);
     const [existing] = await tx.select({ code: recordField.code }).from(recordField).where(and(
@@ -400,8 +425,12 @@ export async function addRecordField(input: unknown): Promise<RecordTypeDefiniti
 }
 
 /** Correct a field. A kind change is refused while values of the old kind answer it. */
-export async function changeRecordField(input: unknown): Promise<RecordTypeDefinition> {
+export async function changeRecordField(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<RecordTypeDefinition> {
   const parsed = parse(changeFieldInput, input);
+  assertCapability(capabilities, RECORD_TYPE_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx.select().from(recordField).where(and(
       eq(recordField.client, parsed.client),

@@ -31,11 +31,15 @@
 import { and, asc, desc, eq, gt, gte, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import {
+  EMPLOYEE_CAPABILITY,
   EMPLOYEE_OBJECT_CLASS,
   EMPLOYEE_RECORD_OBJECT_CLASS,
+  RECORD_CAPABILITY,
   employee,
   employeeRecord,
   recordField,
@@ -51,6 +55,19 @@ const PERSONNEL_MIN = 2;
 const PERSONNEL_MAX = 20;
 const NAME_MAX = 60;
 const TEXT_MAX = 500;
+
+/** Refuse a write when the caller holds none of the required authority. Mirrors the pattern used by
+ * inventory and user-admin services: the service is the last line of defence, so it checks too —
+ * a direct API call that bypasses the server action is stopped here. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actor: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actor);
+  }
+}
 /** The largest number `numeric(15,2)` holds: thirteen digits before the decimal point. */
 const NUMBER_PATTERN = /^-?\d{1,13}(\.\d{1,2})?$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -403,9 +420,16 @@ function viewOf(master: typeof employee.$inferSelect, records: EmployeeRecordVie
 /**
  * Create an employee, or read back the one a repeat of the same `requestKey` already created. Nothing else is
  * carried here but the name and whether the number is in use: what is known about the person is a record.
+ *
+ * `capabilities` is the session's authority patterns, passed by the server action. A direct API call that
+ * omits it is refused here — the service does not trust the caller, only the session's grants.
  */
-export async function createEmployee(input: unknown): Promise<EmployeeView> {
+export async function createEmployee(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<EmployeeView> {
   const parsed = parse(createEmployeeInput, input);
+  assertCapability(capabilities, EMPLOYEE_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const standing = await employeeRow(tx, parsed.client, parsed.personnelNumber);
     if (standing) {
@@ -444,8 +468,12 @@ export async function createEmployee(input: unknown): Promise<EmployeeView> {
  * Change the master — the name, or whether the number is in use. Employment data is never changed here: that
  * is a new dated record, because §8.10 does not let a history row be overwritten.
  */
-export async function changeEmployee(input: unknown): Promise<EmployeeView> {
+export async function changeEmployee(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<EmployeeView> {
   const parsed = parse(changeEmployeeInput, input);
+  assertCapability(capabilities, EMPLOYEE_CAPABILITY, parsed.changedBy);
   const patch: { fullName?: string; isActive?: boolean } = {};
   if (parsed.fullName) patch.fullName = parsed.fullName;
   if (parsed.isActive !== undefined) patch.isActive = parsed.isActive;
@@ -520,8 +548,12 @@ export async function listEmployees(clientInput: string, query?: string): Promis
  * clerks dating records of the same type for the same person in the same moment would otherwise both find the
  * span free; the primary key on the from-date is the backstop, not the message.
  */
-export async function createRecord(input: unknown): Promise<EmployeeRecordView> {
+export async function createRecord(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<EmployeeRecordView> {
   const parsed = parse(createRecordInput, input);
+  assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
@@ -620,8 +652,12 @@ export async function createRecord(input: unknown): Promise<EmployeeRecordView> 
  * End a record: write its last day, once. Only the open record of a type can be ended, and the day has to be
  * later than the one it started on — a record that never applied is not a record.
  */
-export async function delimitRecord(input: unknown): Promise<EmployeeRecordView> {
+export async function delimitRecord(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<EmployeeRecordView> {
   const parsed = parse(delimitInput, input);
+  assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
   const to = dayOf(parsed.validTo);
 
@@ -679,8 +715,12 @@ export async function delimitRecord(input: unknown): Promise<EmployeeRecordView>
  * rule tolerates, and only while the record is current: once a newer record of the same type stands, the
  * correction has to be a new record, or the history two clerks read would change under them.
  */
-export async function changeRecordValues(input: unknown): Promise<EmployeeRecordView> {
+export async function changeRecordValues(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<EmployeeRecordView> {
   const parsed = parse(changeValuesInput, input);
+  assertCapability(capabilities, RECORD_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {

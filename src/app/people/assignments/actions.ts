@@ -1,9 +1,13 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import { sql } from 'drizzle-orm';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { auditAccessLog } from '@/platform/tables/security';
 import {
   ASSIGNMENT_CAPABILITY,
   ASSIGNMENT_ROUTE,
@@ -50,16 +54,30 @@ function done(personnelNumber: string, message: string): AssignmentActionState {
  * The session is read once for both answers a write needs: whose tenant, and who is writing. The tenant is
  * never taken from the form, and the capability named here is the one §10.8 registers for this screen (PA30).
  */
-async function guard(doing: string): Promise<{ client: string; actor: string } | AssignmentActionState> {
+/** Write a capability denial to the audit log, then return the refusal the screen shows. */
+async function denied(session: SessionContext, doing: string): Promise<AssignmentActionState> {
+  await withTenant(session.user.client, async (tx) => {
+    await tx.execute(sql`
+      insert into audit_access_log
+        (id, client, user_id, username, event_type, transaction_code, detail)
+      values (
+        ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
+        'CAPABILITY_DENIED', ${ASSIGNMENT_CAPABILITY},
+        `Direct API or screen action refused: session holds none of ${ASSIGNMENT_CAPABILITY}.`
+      )
+    `);
+  });
+  return {
+    ok: false,
+    message: `${doing} needs ${ASSIGNMENT_CAPABILITY}, which this session does not hold.`,
+    remedy: `Ask an administrator to add ${ASSIGNMENT_CAPABILITY} to one of your roles.`,
+  };
+}
+
+async function guard(doing: string): Promise<{ client: string; actor: string; capabilities: string[] } | AssignmentActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, ASSIGNMENT_CAPABILITY)) {
-    return {
-      ok: false,
-      message: `${doing} needs ${ASSIGNMENT_CAPABILITY}, which this session does not hold.`,
-      remedy: `Assignments are maintained by whoever the tenant authorizes for personnel org data; until then this screen reads.`,
-    };
-  }
-  return { client: session.user.client, actor: session.user.username };
+  if (!can(session, ASSIGNMENT_CAPABILITY)) return denied(session, doing);
+  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
 }
 
 export async function assignAction(
@@ -68,16 +86,19 @@ export async function assignAction(
   const access = await guard('Assigning a position');
   if (!('actor' in access)) return access;
   try {
-    const view = await assignPosition({
-      client: access.client,
-      personnelNumber: text(formData, 'personnelNumber'),
-      positionCode: text(formData, 'positionCode'),
-      controllingArea: text(formData, 'controllingArea'),
-      costCenter: text(formData, 'costCenter'),
-      validFrom: text(formData, 'validFrom'),
-      changedBy: access.actor,
-      requestKey: optional(formData, 'requestKey'),
-    });
+    const view = await assignPosition(
+      {
+        client: access.client,
+        personnelNumber: text(formData, 'personnelNumber'),
+        positionCode: text(formData, 'positionCode'),
+        controllingArea: text(formData, 'controllingArea'),
+        costCenter: text(formData, 'costCenter'),
+        validFrom: text(formData, 'validFrom'),
+        changedBy: access.actor,
+        requestKey: optional(formData, 'requestKey'),
+      },
+      access.capabilities,
+    );
     return done(view.personnelNumber, `Assignment written for ${view.personnelNumber}: ${view.positionCode} on ${view.costCenter} from ${view.validFrom}.`);
   } catch (error) {
     return refuse(error);
@@ -91,13 +112,16 @@ export async function delimitAction(
   if (!('actor' in access)) return access;
   let view;
   try {
-    view = await delimitAssignment({
-      client: access.client,
-      personnelNumber: text(formData, 'personnelNumber'),
-      validFrom: text(formData, 'validFrom'),
-      validTo: text(formData, 'validTo'),
-      changedBy: access.actor,
-    });
+    view = await delimitAssignment(
+      {
+        client: access.client,
+        personnelNumber: text(formData, 'personnelNumber'),
+        validFrom: text(formData, 'validFrom'),
+        validTo: text(formData, 'validTo'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
   } catch (error) {
     return refuse(error);
   }
@@ -124,15 +148,18 @@ export async function changeAssignmentAction(
   const access = await guard('Correcting an assignment');
   if (!('actor' in access)) return access;
   try {
-    const view = await changeAssignment({
-      client: access.client,
-      personnelNumber: text(formData, 'personnelNumber'),
-      validFrom: text(formData, 'validFrom'),
-      positionCode: optional(formData, 'positionCode'),
-      controllingArea: optional(formData, 'controllingArea'),
-      costCenter: optional(formData, 'costCenter'),
-      changedBy: access.actor,
-    });
+    const view = await changeAssignment(
+      {
+        client: access.client,
+        personnelNumber: text(formData, 'personnelNumber'),
+        validFrom: text(formData, 'validFrom'),
+        positionCode: optional(formData, 'positionCode'),
+        controllingArea: optional(formData, 'controllingArea'),
+        costCenter: optional(formData, 'costCenter'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(view.personnelNumber, `Open assignment for ${view.personnelNumber} corrected: ${view.positionCode} on ${view.costCenter}. The dates were left as they were written.`);
   } catch (error) {
     return refuse(error);

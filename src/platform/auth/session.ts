@@ -601,6 +601,44 @@ export async function loadCapabilities(
 }
 
 /**
+ * The organisational restrictions a user holds: company codes, plants, and other
+ * scopes they may touch within a capability. Loaded alongside capabilities so a
+ * service can answer "may this user act on this company code or plant?"
+ *
+ * CAIRN.md §23 — "capability plus organisation". A user with no restrictions is
+ * unrestricted; a user with restrictions may only touch the listed values.
+ */
+export interface OrgRestriction {
+  scopeType: 'COMPANY_CODE' | 'PLANT' | 'STORAGE_LOCATION' | 'PURCHASING_ORG' | 'SALES_ORG' | 'COST_CENTER';
+  scopeValue: string;
+}
+
+export async function loadOrgRestrictions(
+  tx: Tx,
+  client: string,
+  userId: string,
+): Promise<OrgRestriction[]> {
+  const rows = (await tx.execute(sql`
+    select scope_type as scopeType, scope_value as scopeValue
+      from auth_org_restriction
+     where client = ${client} and user_id = ${userId}
+     order by scope_type, scope_value
+  `)) as unknown as Array<{ scopeType: string; scopeValue: string }>;
+
+  return rows.map((r) => ({ scopeType: r.scopeType as OrgRestriction['scopeType'], scopeValue: r.scopeValue }));
+}
+
+/** Does one held restriction allow this scope value? An empty list means unrestricted. */
+export function hasOrgAccess(
+  restrictions: readonly OrgRestriction[] | undefined | null,
+  scopeType: OrgRestriction['scopeType'],
+  scopeValue: string,
+): boolean {
+  if (!restrictions || restrictions.length === 0) return true;
+  return restrictions.some((r) => r.scopeType === scopeType && r.scopeValue === scopeValue);
+}
+
+/**
  * Does the user hold this authority?
  *
  * Matching is on whole dot-separated segments: `PROC.*` grants `PROC.PO.CREATE`,

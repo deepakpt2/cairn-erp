@@ -34,9 +34,11 @@
 import { and, desc, eq, gte, isNull, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
-import { ASSIGNMENT_OBJECT_CLASS, position, positionAssignment } from './schema';
+import { ASSIGNMENT_CAPABILITY, ASSIGNMENT_OBJECT_CLASS, position, positionAssignment } from './schema';
 
 // The screen contract lives in `schema.ts`, beside the tables it names; re-exported here because a service is
 // where a reader looks for what its screens may do.
@@ -50,6 +52,17 @@ const areaCode = upper.pipe(z.string().regex(/^[A-Z0-9]{4}$/, { message: 'AREA_F
 const costCenterCode = upper.pipe(z.string().regex(/^[A-Z0-9]{1,10}$/, { message: 'COST_CENTER_FORMAT' }));
 const actor = z.string().transform((s) => s.trim()).refine((s) => s.length > 0 && s.length <= 60, { message: 'REQUIRED_TEXT' });
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Refuse a write when the caller holds none of the required authority. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actorName: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actorName);
+  }
+}
 
 const assignInput = z.object({
   client: clientField,
@@ -304,8 +317,12 @@ const READ = sql`
  * dating the same person's org record in the same moment would otherwise both find the day free — the primary
  * key is the backstop, not the message (the same reason `employee-master.ts` takes the lock).
  */
-export async function assignPosition(input: unknown): Promise<AssignmentView> {
+export async function assignPosition(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AssignmentView> {
   const parsed = parse(assignInput, input);
+  assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
@@ -396,8 +413,12 @@ export async function assignPosition(input: unknown): Promise<AssignmentView> {
  * carry it. The dates are not correctable — a span that was wrong on its first day is a span that should not
  * have started there, and the record for that is a new dated assignment. A closed one is out of reach.
  */
-export async function changeAssignment(input: unknown): Promise<AssignmentView> {
+export async function changeAssignment(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AssignmentView> {
   const parsed = parse(changeAssignmentInput, input);
+  assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
@@ -456,8 +477,12 @@ export async function changeAssignment(input: unknown): Promise<AssignmentView> 
 }
 
 /** End an assignment: the one write to `valid_to` a dated record ever takes. */
-export async function delimitAssignment(input: unknown): Promise<AssignmentView> {
+export async function delimitAssignment(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AssignmentView> {
   const parsed = parse(delimitInput, input);
+  assertCapability(capabilities, ASSIGNMENT_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
   const to = dayOf(parsed.validTo);
   if (to < from) refusal('SPAN_ORDER');

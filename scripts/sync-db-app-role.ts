@@ -13,7 +13,7 @@ export function credentialSettings(applicationURL?: string, ownerURL?: string) {
   if (decodeURIComponent(app.username) !== 'cairn_app') throw new CredentialConfigError('The managed application role must be cairn_app.');
   if (decodeURIComponent(owner.username) === 'cairn_app') throw new CredentialConfigError('Use a separate owner connection for credential synchronization.');
   const password = decodeURIComponent(app.password);
-  if (!password) throw new CredentialConfigError('The managed application password must not be empty.');
+  if (!password) throw new CredentialConfigError('The managed application password must not be empty. Set CAIRN_APP_DB_PASSWORD or ensure DATABASE_URL contains a non-empty password.');
   if (!app.pathname || app.pathname === '/' || app.pathname !== owner.pathname) throw new CredentialConfigError('Application and owner URLs must name the same database.');
   return { applicationURL, ownerURL, password };
 }
@@ -33,7 +33,7 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
   try {
     await owner.begin(async (tx) => {
       const [admin] = await tx<{ manage: boolean }[]>`select (rolsuper or rolcreaterole) as manage from pg_roles where rolname = current_user`;
-      if (!admin?.manage) throw new CredentialConfigError('The owner connection must be allowed to manage the application role.');
+      if (!admin?.manage) throw new CredentialConfigError('The owner connection must be allowed to manage the application role. Check MIGRATION_DATABASE_URL credentials.');
       const existing = await tx`select 1 from pg_roles where rolname = 'cairn_app'`;
       const command = `${existing.length ? 'ALTER' : 'CREATE'} ROLE cairn_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L`;
       // PostgreSQL formats/escapes the literal. DDL cannot bind a password parameter directly.
@@ -44,7 +44,7 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
   const app = postgres(settings.applicationURL, { max: 1, prepare: false, connect_timeout: 10, onnotice: () => {} });
   try {
     const [role] = await app<{ elevated: boolean }[]>`select (rolsuper or rolbypassrls) as elevated from pg_roles where rolname = current_user`;
-    if (!role || role.elevated) throw new CredentialConfigError('The runtime connection must be restricted: NOSUPERUSER NOBYPASSRLS.');
+    if (!role || role.elevated) throw new CredentialConfigError('The runtime connection must be restricted: NOSUPERUSER NOBYPASSRLS. Check DATABASE_URL credentials.');
   } finally { await app.end({ timeout: 5 }); }
 }
 

@@ -1,8 +1,12 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { sql } from 'drizzle-orm';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { auditAccessLog } from '@/platform/tables/security';
 import {
   EMPLOYEE_CAPABILITY,
   EMPLOYEE_ROUTE,
@@ -66,26 +70,43 @@ function done(personnelNumber: string, message: string): EmployeeActionState {
   return { ok: true, message, personnelNumber };
 }
 
+/** Write a capability denial to the audit log, then return the refusal the screen shows. */
+async function denied(session: SessionContext, capability: string): Promise<EmployeeActionState> {
+  await withTenant(session.user.client, async (tx) => {
+    await tx.execute(sql`
+      insert into audit_access_log
+        (id, client, user_id, username, event_type, transaction_code, detail)
+      values (
+        ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
+        'CAPABILITY_DENIED', ${capability},
+        `Direct API or screen action refused: session holds none of ${capability}.`
+      )
+    `);
+  });
+  return {
+    ok: false,
+    message: `This action needs ${capability}, which this session does not hold.`,
+    remedy: `Ask an administrator to add ${capability} to one of your roles.`,
+  };
+}
+
 export async function createEmployeeAction(
   _previous: EmployeeActionState, formData: FormData,
 ): Promise<EmployeeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, EMPLOYEE_CAPABILITY)) {
-    return {
-      ok: false,
-      message: `Creating an employee needs ${EMPLOYEE_CAPABILITY}, which this session does not hold.`,
-      remedy: `The master is written by whoever the tenant authorizes for personnel data; until then the screen reads.`,
-    };
-  }
+  if (!can(session, EMPLOYEE_CAPABILITY)) return denied(session, EMPLOYEE_CAPABILITY);
   try {
-    const view = await createEmployee({
-      client: session.user.client,
-      personnelNumber: text(formData, 'personnelNumber'),
-      fullName: text(formData, 'fullName'),
-      isActive: true,
-      changedBy: session.user.username,
-      requestKey: optional(formData, 'requestKey'),
-    });
+    const view = await createEmployee(
+      {
+        client: session.user.client,
+        personnelNumber: text(formData, 'personnelNumber'),
+        fullName: text(formData, 'fullName'),
+        isActive: true,
+        changedBy: session.user.username,
+        requestKey: optional(formData, 'requestKey'),
+      },
+      session.user.capabilities,
+    );
     return done(view.personnelNumber, `Employee ${view.personnelNumber} — ${view.fullName} — created with no record yet.`);
   } catch (error) {
     return refuse(error);
@@ -96,20 +117,21 @@ export async function changeEmployeeAction(
   _previous: EmployeeActionState, formData: FormData,
 ): Promise<EmployeeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, EMPLOYEE_CAPABILITY)) {
-    return { ok: false, message: `Changing the master needs ${EMPLOYEE_CAPABILITY}.`, remedy: `Read the employee; the name and activity are written by an authorized session.` };
-  }
+  if (!can(session, EMPLOYEE_CAPABILITY)) return denied(session, EMPLOYEE_CAPABILITY);
   const personnelNumber = text(formData, 'personnelNumber');
   try {
-    const view = await changeEmployee({
-      client: session.user.client,
-      personnelNumber,
-      fullName: optional(formData, 'fullName'),
-      // The box is present only while the employee is in use, so an absent box means "stop using the number".
-      isActive: formData.get('isActive') === null ? false : true,
-      // A submitted form always carries the state it wants: a ticked box is in use, an unticked one is not.
-      changedBy: session.user.username,
-    });
+    const view = await changeEmployee(
+      {
+        client: session.user.client,
+        personnelNumber,
+        fullName: optional(formData, 'fullName'),
+        // The box is present only while the employee is in use, so an absent box means "stop using the number".
+        isActive: formData.get('isActive') === null ? false : true,
+        // A submitted form always carries the state it wants: a ticked box is in use, an unticked one is not.
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(view.personnelNumber, `Employee ${view.personnelNumber}: ${view.fullName}, ${view.isActive ? 'in use' : 'not in use'}.`);
   } catch (error) {
     return refuse(error);
@@ -120,24 +142,21 @@ export async function createRecordAction(
   _previous: EmployeeActionState, formData: FormData,
 ): Promise<EmployeeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_CAPABILITY)) {
-    return {
-      ok: false,
-      message: `Writing a dated record needs ${RECORD_CAPABILITY}, which this session does not hold.`,
-      remedy: `A record says what was true about a person from a date onward; the tenant hands that to whoever maintains personnel data.`,
-    };
-  }
+  if (!can(session, RECORD_CAPABILITY)) return denied(session, RECORD_CAPABILITY);
   const personnelNumber = text(formData, 'personnelNumber');
   try {
-    const record = await createRecord({
-      client: session.user.client,
-      personnelNumber,
-      recordType: text(formData, 'recordType'),
-      validFrom: text(formData, 'validFrom'),
-      values: answersOf(formData),
-      changedBy: session.user.username,
-      requestKey: optional(formData, 'requestKey'),
-    });
+    const record = await createRecord(
+      {
+        client: session.user.client,
+        personnelNumber,
+        recordType: text(formData, 'recordType'),
+        validFrom: text(formData, 'validFrom'),
+        values: answersOf(formData),
+        changedBy: session.user.username,
+        requestKey: optional(formData, 'requestKey'),
+      },
+      session.user.capabilities,
+    );
     return done(personnelNumber, `Record of ${record.recordType} written from ${record.validFrom}.`);
   } catch (error) {
     return refuse(error);
@@ -148,19 +167,20 @@ export async function delimitRecordAction(
   _previous: EmployeeActionState, formData: FormData,
 ): Promise<EmployeeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_CAPABILITY)) {
-    return { ok: false, message: `Ending a record needs ${RECORD_CAPABILITY}.`, remedy: `Delimiting writes the last day a record applied; nothing else closes it.` };
-  }
+  if (!can(session, RECORD_CAPABILITY)) return denied(session, RECORD_CAPABILITY);
   const personnelNumber = text(formData, 'personnelNumber');
   try {
-    const record = await delimitRecord({
-      client: session.user.client,
-      personnelNumber,
-      recordType: text(formData, 'recordType'),
-      validFrom: text(formData, 'validFrom'),
-      validTo: text(formData, 'validTo'),
-      changedBy: session.user.username,
-    });
+    const record = await delimitRecord(
+      {
+        client: session.user.client,
+        personnelNumber,
+        recordType: text(formData, 'recordType'),
+        validFrom: text(formData, 'validFrom'),
+        validTo: text(formData, 'validTo'),
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(personnelNumber, `Record of ${record.recordType} from ${record.validFrom} now ends on ${record.validTo}.`);
   } catch (error) {
     return refuse(error);
@@ -171,20 +191,21 @@ export async function changeRecordValuesAction(
   _previous: EmployeeActionState, formData: FormData,
 ): Promise<EmployeeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_CAPABILITY)) {
-    return { ok: false, message: `Correcting a record needs ${RECORD_CAPABILITY}.`, remedy: `Only the newest open record of a type may be corrected; older ones are history.` };
-  }
+  if (!can(session, RECORD_CAPABILITY)) return denied(session, RECORD_CAPABILITY);
   const personnelNumber = text(formData, 'personnelNumber');
   try {
-    const record = await changeRecordValues({
-      client: session.user.client,
-      personnelNumber,
-      recordType: text(formData, 'recordType'),
-      validFrom: text(formData, 'validFrom'),
-      // An empty input is a field left alone, not an answer withdrawn: a slot has to hold a value.
-      values: answersOf(formData),
-      changedBy: session.user.username,
-    });
+    const record = await changeRecordValues(
+      {
+        client: session.user.client,
+        personnelNumber,
+        recordType: text(formData, 'recordType'),
+        validFrom: text(formData, 'validFrom'),
+        // An empty input is a field left alone, not an answer withdrawn: a slot has to hold a value.
+        values: answersOf(formData),
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(personnelNumber, `Record of ${record.recordType} from ${record.validFrom} corrected — ${record.values.length} field${record.values.length === 1 ? '' : 's'} now stand answered.`);
   } catch (error) {
     return refuse(error);

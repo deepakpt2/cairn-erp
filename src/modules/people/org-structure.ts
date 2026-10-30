@@ -32,12 +32,16 @@
 import { and, asc, eq, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
   JOB_OBJECT_CLASS,
   MAX_ORG_DEPTH,
+  ORG_UNIT_CAPABILITY,
   ORG_UNIT_OBJECT_CLASS,
+  POSITION_CAPABILITY,
   POSITION_OBJECT_CLASS,
   job,
   orgHierarchy,
@@ -59,6 +63,17 @@ export {
 
 const NAME_MAX = 60;
 const DESC_MAX = 200;
+
+/** Refuse a write when the caller holds none of the required authority. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actor: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actor);
+  }
+}
 
 const upper = z.string().transform((s) => s.trim().toUpperCase());
 const orgCode = upper.pipe(z.string().regex(/^([A-Z][A-Z0-9]{1,9})$/, { message: 'ORG_CODE_FORMAT' }));
@@ -433,8 +448,12 @@ async function unitCounts(tx: Tx, client: string): Promise<Map<string, { positio
 }
 
 /** Define a unit, optionally under one that already stands. */
-export async function defineOrgUnit(input: unknown): Promise<OrgUnitDetail> {
+export async function defineOrgUnit(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<OrgUnitDetail> {
   const parsed = parse(defineUnitInput, input);
+  assertCapability(capabilities, ORG_UNIT_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     if (await unitRow(tx, parsed.client, parsed.code)) refusal('UNIT_EXISTS', parsed.code);
     await tx.insert(orgUnit).values({
@@ -469,8 +488,12 @@ export async function defineOrgUnit(input: unknown): Promise<OrgUnitDetail> {
 }
 
 /** Change a unit's name, its description, its validity, or where it hangs. */
-export async function changeOrgUnit(input: unknown): Promise<OrgUnitDetail> {
+export async function changeOrgUnit(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<OrgUnitDetail> {
   const parsed = parse(changeUnitInput, input);
+  assertCapability(capabilities, ORG_UNIT_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const standing = await unitRow(tx, parsed.client, parsed.code);
     if (!standing) refusal('UNIT_UNKNOWN', parsed.code);
@@ -645,8 +668,12 @@ export async function listOrgUnits(clientInput: string, query?: string): Promise
 }
 
 /** Define a job. §10.8 has no code of its own for jobs, so this is position-maintenance authority (§8.10). */
-export async function defineJob(input: unknown): Promise<JobView> {
+export async function defineJob(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<JobView> {
   const parsed = parse(defineJobInput, input);
+  assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx.select().from(job)
       .where(and(eq(job.client, parsed.client), eq(job.code, parsed.code))).limit(1);
@@ -672,8 +699,12 @@ export async function defineJob(input: unknown): Promise<JobView> {
   return getJob(parsed.client, parsed.code);
 }
 
-export async function changeJob(input: unknown): Promise<JobView> {
+export async function changeJob(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<JobView> {
   const parsed = parse(changeJobInput, input);
+  assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx.select().from(job)
       .where(and(eq(job.client, parsed.client), eq(job.code, parsed.code))).limit(1);
@@ -757,8 +788,12 @@ export async function listJobs(clientInput: string, query?: string): Promise<Job
 }
 
 /** Define a position in the unit it belongs to, with the position it reports to if one is decided now. */
-export async function definePosition(input: unknown): Promise<PositionView> {
+export async function definePosition(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<PositionView> {
   const parsed = parse(definePositionInput, input);
+  assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     if (await positionRow(tx, parsed.client, parsed.code)) refusal('POSITION_EXISTS', parsed.code);
     const unit = await unitRow(tx, parsed.client, parsed.orgUnitCode);
@@ -824,8 +859,12 @@ export async function definePosition(input: unknown): Promise<PositionView> {
  * position it reports to. `superiorCode: null` removes the reporting line; a unit is never removed, because
  * a position without one is not a position this structure can report.
  */
-export async function changePosition(input: unknown): Promise<PositionView> {
+export async function changePosition(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<PositionView> {
   const parsed = parse(changePositionInput, input);
+  assertCapability(capabilities, POSITION_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const standing = await positionRow(tx, parsed.client, parsed.code);
     if (!standing) refusal('POSITION_UNKNOWN', parsed.code);

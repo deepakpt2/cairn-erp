@@ -1,8 +1,12 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { sql } from 'drizzle-orm';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { auditAccessLog } from '@/platform/tables/security';
 import {
   RECORD_TYPE_CAPABILITY,
   RECORD_TYPE_ROUTE,
@@ -63,11 +67,23 @@ function done(code: string, message: string): RecordTypeActionState {
   return { ok: true, message, code };
 }
 
-function denied(): RecordTypeActionState {
+/** Write a capability denial to the audit log, then return the refusal the screen shows. */
+async function denied(session: SessionContext): Promise<RecordTypeActionState> {
+  await withTenant(session.user.client, async (tx) => {
+    await tx.execute(sql`
+      insert into audit_access_log
+        (id, client, user_id, username, event_type, transaction_code, detail)
+      values (
+        ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
+        'CAPABILITY_DENIED', ${RECORD_TYPE_CAPABILITY},
+        `Direct API or screen action refused: session holds none of ${RECORD_TYPE_CAPABILITY}.`
+      )
+    `);
+  });
   return {
     ok: false,
     message: `Defining a record type needs ${RECORD_TYPE_CAPABILITY}, which this session does not hold.`,
-    remedy: `The activity is held by the roles that define the organisation a record points at; an administrator's star covers it, and a People role model is a decision still to be taken.`,
+    remedy: `Ask an administrator to add ${RECORD_TYPE_CAPABILITY} to one of your roles.`,
   };
 }
 
@@ -87,7 +103,7 @@ export async function defineRecordTypeAction(
   _previous: RecordTypeActionState, formData: FormData,
 ): Promise<RecordTypeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied(session);
   try {
     const fields = fieldsOf(formData);
     if (fields.length === 0) {
@@ -97,14 +113,17 @@ export async function defineRecordTypeAction(
         remedy: `Give the first field's code and label below; the rest can be added once the type stands.`,
       };
     }
-    const type = await defineRecordType({
-      client: session.user.client,
-      code: text(formData, 'code'),
-      name: text(formData, 'name'),
-      description: optional(formData, 'description'),
-      fields,
-      changedBy: session.user.username,
-    });
+    const type = await defineRecordType(
+      {
+        client: session.user.client,
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+        description: optional(formData, 'description'),
+        fields,
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(type.code, `Record type ${type.code} — ${type.name} — defined with ${type.fields.length} field${type.fields.length === 1 ? '' : 's'}.`);
   } catch (error) {
     return refuse(error);
@@ -115,18 +134,21 @@ export async function changeRecordTypeAction(
   _previous: RecordTypeActionState, formData: FormData,
 ): Promise<RecordTypeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied(session);
   const code = text(formData, 'code');
   try {
-    const type = await changeRecordType({
-      client: session.user.client,
-      code,
-      name: optional(formData, 'name'),
-      description: formData.get('description') === null ? undefined : text(formData, 'description') || null,
-      // Retiring is the act this screen offers in place of deletion: history keeps standing, no record is lost.
-      isValid: formData.get('retire') !== null ? false : (formData.get('restore') !== null ? true : undefined),
-      changedBy: session.user.username,
-    });
+    const type = await changeRecordType(
+      {
+        client: session.user.client,
+        code,
+        name: optional(formData, 'name'),
+        description: formData.get('description') === null ? undefined : text(formData, 'description') || null,
+        // Retiring is the act this screen offers in place of deletion: history keeps standing, no record is lost.
+        isValid: formData.get('retire') !== null ? false : (formData.get('restore') !== null ? true : undefined),
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(type.code, `Record type ${type.code}: ${type.name}, ${type.isValid ? 'open for new records' : 'retired — no new record, every standing one readable'}.`);
   } catch (error) {
     return refuse(error);
@@ -137,19 +159,22 @@ export async function addRecordFieldAction(
   _previous: RecordTypeActionState, formData: FormData,
 ): Promise<RecordTypeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied(session);
   const recordType = text(formData, 'recordType');
   try {
     const fields = fieldsOf(formData);
     if (fields.length === 0) {
       return { ok: false, message: `A field needs a code of its own.`, remedy: `Use the name the payroll provider uses, uppercased: STKLD, FAMGT, ZABGR.` };
     }
-    const type = await addRecordField({
-      client: session.user.client,
-      recordType,
-      ...fields[0],
-      changedBy: session.user.username,
-    });
+    const type = await addRecordField(
+      {
+        client: session.user.client,
+        recordType,
+        ...fields[0],
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(type.code, `${fields[0].code} added to ${type.code} — ${type.fields.length} fields now.`);
   } catch (error) {
     return refuse(error);
@@ -160,18 +185,21 @@ export async function changeRecordFieldAction(
   _previous: RecordTypeActionState, formData: FormData,
 ): Promise<RecordTypeActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied();
+  if (!can(session, RECORD_TYPE_CAPABILITY)) return denied(session);
   const recordType = text(formData, 'recordType');
   const code = text(formData, 'code');
   try {
-    const type = await changeRecordField({
-      client: session.user.client,
-      recordType,
-      code,
-      label: optional(formData, 'label'),
-      isRequired: flag(formData, 'required'),
-      changedBy: session.user.username,
-    });
+    const type = await changeRecordField(
+      {
+        client: session.user.client,
+        recordType,
+        code,
+        label: optional(formData, 'label'),
+        isRequired: flag(formData, 'required'),
+        changedBy: session.user.username,
+      },
+      session.user.capabilities,
+    );
     return done(type.code, `${code} on ${recordType}: ${flag(formData, 'required') ? 'required' : 'optional'}.`);
   } catch (error) {
     return refuse(error);

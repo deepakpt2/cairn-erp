@@ -238,7 +238,83 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 - Never run `npm run db:reset` against `cairn_acceptance`.
 - Use `scripts/test-db.ts` for scratch databases only (refuses guarded databases).
 
-## 5. Troubleshooting
+## 5. Docker Credential Initialization
+
+### Credential Lifecycle on Fresh Deployment
+
+1. The `db` service starts PostgreSQL. On an empty data volume, `/docker-entrypoint-initdb.d/10-app-role.sh` runs once.
+2. `10-app-role.sh` creates the `cairn_app` application role with `CAIRN_APP_DB_PASSWORD`, restricted to `NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`.
+3. `CAIRN_APP_DB_PASSWORD` is embedded in `DATABASE_URL` by Docker Compose, so it **must be URL-safe** (hexadecimal is recommended).
+4. `POSTGRES_PASSWORD` is the PostgreSQL superuser password. It is never placed in an application URL and is not URL-validated.
+5. The `migrate` service runs `scripts/sync-db-app-role.ts`, which reads `DATABASE_URL` and `MIGRATION_DATABASE_URL`, validates both targets, and synchronizes the `cairn_app` password to match `DATABASE_URL`.
+6. The `app` service connects using `DATABASE_URL` as `cairn_app`.
+
+### Required Environment Variables (`.env`)
+
+| Variable | Purpose | Example generation |
+|----------|---------|-------------------|
+| `CAIRN_OWNER_DB_PASSWORD` | PostgreSQL superuser password (`POSTGRES_PASSWORD`) | `openssl rand -hex 32` |
+| `CAIRN_APP_DB_PASSWORD` | Application role password, embedded in `DATABASE_URL` | `openssl rand -hex 32` |
+
+### Password Rules
+
+- `CAIRN_APP_DB_PASSWORD` **must be URL-safe**: only `A-Za-z0-9_-`. Hexadecimal (`0-9a-f`) is recommended and never requires URL-encoding.
+- `POSTGRES_PASSWORD` / `CAIRN_OWNER_DB_PASSWORD` may contain any characters; it is not placed in a URL.
+- Never reuse the same value for both passwords.
+- Never print, log, or commit password values.
+
+### Fresh Deployment Commands
+
+```bash
+# 1. Generate passwords (do not print them to shared output)
+openssl rand -hex 32   # CAIRN_OWNER_DB_PASSWORD
+openssl rand -hex 32   # CAIRN_APP_DB_PASSWORD
+
+# 2. Copy the Docker env template and set the values
+cp .env.docker.example .env
+chmod 600 .env
+# Edit .env: set CAIRN_OWNER_DB_PASSWORD and CAIRN_APP_DB_PASSWORD to the generated values
+
+# 3. Deploy
+docker compose up -d --build
+
+# 4. Verify PostgreSQL is healthy
+docker compose logs db | grep -i "database system is ready"
+
+# 5. Verify migration completed
+docker compose logs migrate | grep -i "credentials synchronized"
+
+# 6. Verify app is healthy
+docker compose ps app
+```
+
+### Existing-Volume Repair
+
+If a volume already exists with data and the `cairn_app` role credentials are out of sync:
+
+1. **Do not drop, reset, or reseed the volume.** The repair procedure is in-place only.
+2. Execute `sync-credentials.sh` inside the `db` container:
+   ```bash
+   docker compose exec db /docker-entrypoint-initdb.d/../sync-credentials.sh
+   # or, if mounted at a different path:
+   docker compose exec db sh -c 'CAIRN_APP_DB_PASSWORD=${CAIRN_APP_DB_PASSWORD} POSTGRES_PASSWORD=${POSTGRES_PASSWORD} sh /path/to/sync-credentials.sh'
+   ```
+3. The script updates `cairn_app` and the owner role passwords without touching schema or business data.
+4. Restart the `migrate` and `app` services if needed:
+   ```bash
+   docker compose restart migrate app
+   ```
+
+### Troubleshooting
+
+| Symptom | Likely cause | Verified fix |
+|---------|-------------|--------------|
+| `Use URL-safe database passwords (hex is recommended).` from `10-app-role.sh` | `CAIRN_APP_DB_PASSWORD` contains characters outside `A-Za-z0-9_-` | Set `CAIRN_APP_DB_PASSWORD` to a hex value (`openssl rand -hex 32`) in `.env`. `POSTGRES_PASSWORD` is not URL-validated. |
+| `Database credential synchronization failed.` from `sync-db-app-role.ts` | `DATABASE_URL` or `MIGRATION_DATABASE_URL` cannot be parsed, or the owner connection lacks role-management rights | Verify `DATABASE_URL` and `MIGRATION_DATABASE_URL` name the same database. Confirm `CAIRN_OWNER_DB_PASSWORD` allows the owner to `CREATE`/`ALTER` roles. |
+| `10-app-role.sh` exits on fresh volume | `CAIRN_APP_DB_PASSWORD` not set and auto-generation unavailable | Set `CAIRN_APP_DB_PASSWORD` in `.env` before `docker compose up`. |
+| Password works on first deploy but breaks on restart | Credentials were silently changed | Credentials are never silently changed. Check whether `.env` was overwritten between deployments. Existing volumes keep their passwords. |
+
+## 6. Troubleshooting
 
 ### SSH Connection Problems
 

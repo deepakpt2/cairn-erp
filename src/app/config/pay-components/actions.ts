@@ -1,8 +1,12 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { sql } from 'drizzle-orm';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { auditAccessLog } from '@/platform/tables/security';
 import {
   PAY_COMPONENT_CAPABILITY,
   PAY_COMPONENT_ROUTE,
@@ -69,17 +73,30 @@ function done(message: string, links: { component?: string; chart?: string }): P
  * takes a tenant from a form field. On a refusal the guard's own state is what the form shows, and
  * `'actor' in access` is how the callers tell the two apart.
  */
-async function guard(doing: string): Promise<{ client: string; actor: string } | PayActionState> {
+/** Write a capability denial to the audit log, then return the refusal the screen shows. */
+async function denied(session: SessionContext, doing: string): Promise<PayActionState> {
+  await withTenant(session.user.client, async (tx) => {
+    await tx.execute(sql`
+      insert into audit_access_log
+        (id, client, user_id, username, event_type, transaction_code, detail)
+      values (
+        ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
+        'CAPABILITY_DENIED', ${PAY_COMPONENT_CAPABILITY},
+        `Direct API or screen action refused: session holds none of ${PAY_COMPONENT_CAPABILITY}.`
+      )
+    `);
+  });
+  return {
+    ok: false,
+    message: `${doing} needs ${PAY_COMPONENT_CAPABILITY}, which this session does not hold.`,
+    remedy: `Ask an administrator to add ${PAY_COMPONENT_CAPABILITY} to one of your roles.`,
+  };
+}
+
+async function guard(doing: string): Promise<{ client: string; actor: string; capabilities: string[] } | PayActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, PAY_COMPONENT_CAPABILITY)) {
-    return {
-      ok: false,
-      message: `${doing} needs ${PAY_COMPONENT_CAPABILITY}, which this session does not hold.`,
-      remedy:
-        'The pay structure is written by whoever the tenant authorizes for it; until then this screen reads. Paying anyone is a payroll question, and payroll is not built.',
-    };
-  }
-  return { client: session.user.client, actor: session.user.username };
+  if (!can(session, PAY_COMPONENT_CAPABILITY)) return denied(session, doing);
+  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
 }
 
 export async function defineComponentAction(
@@ -89,14 +106,17 @@ export async function defineComponentAction(
   const access = await guard('Defining a pay component');
   if (!('actor' in access)) return access;
   try {
-    const view = await definePayComponent({
-      client: access.client,
-      code: text(formData, 'code'),
-      name: text(formData, 'name'),
-      componentKind: text(formData, 'componentKind'),
-      description: text(formData, 'description') || null,
-      changedBy: access.actor,
-    });
+    const view = await definePayComponent(
+      {
+        client: access.client,
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+        componentKind: text(formData, 'componentKind'),
+        description: text(formData, 'description') || null,
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Component ${view.code} — ${view.name} — defined as ${article(label(view.componentKind))} ${label(view.componentKind)}.`, {
       component: view.code,
     });
@@ -112,14 +132,17 @@ export async function changeComponentAction(
   const access = await guard('Changing a pay component');
   if (!('actor' in access)) return access;
   try {
-    const view = await changePayComponent({
-      client: access.client,
-      code: text(formData, 'code'),
-      name: text(formData, 'name') || undefined,
-      description: formData.has('description') ? text(formData, 'description') || null : undefined,
-      isValid: validity(formData, 'isValid'),
-      changedBy: access.actor,
-    });
+    const view = await changePayComponent(
+      {
+        client: access.client,
+        code: text(formData, 'code'),
+        name: text(formData, 'name') || undefined,
+        description: formData.has('description') ? text(formData, 'description') || null : undefined,
+        isValid: validity(formData, 'isValid'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(
       `Component ${view.code} updated — ${view.name}, ${view.mappings.length} mapping${
         view.mappings.length === 1 ? '' : 's'
@@ -137,14 +160,15 @@ export async function changeComponentAction(
  * screen left visible while the choice says otherwise is a half-written mapping, and the service would refuse
  * it, so the action refuses to send it.
  */
-function mappingFields(access: { client: string; actor: string }, formData: FormData): Record<string, unknown> {
-  const fields: Record<string, unknown> = {
+function mappingFields(access: { client: string; actor: string; capabilities: string[] }, formData: FormData): Record<string, unknown> & { capabilities?: string[] } {
+  const fields: Record<string, unknown> & { capabilities?: string[] } = {
     client: access.client,
     componentCode: text(formData, 'componentCode'),
     chartOfAccounts: text(formData, 'chart'),
     debitAccount: account(formData, 'debitAccount'),
     creditAccount: account(formData, 'creditAccount'),
     changedBy: access.actor,
+    capabilities: access.capabilities,
   };
   // The centre and its area arrive as one choice, because a centre named without the area that owns it is a
   // mapping nobody could charge. Saying nothing about the receiver leaves the pair as it stands; saying
@@ -171,7 +195,11 @@ export async function defineMappingAction(
   const access = await guard('Mapping a pay component');
   if (!('actor' in access)) return access;
   try {
-    const view = await savePayComponentMapping(mappingFields(access, formData), 'CREATE');
+    const view = await savePayComponentMapping(
+      mappingFields(access, formData),
+      'CREATE',
+      access.capabilities,
+    );
     return done(`Mapping for ${text(formData, 'componentCode')} in ${view.chartOfAccounts} defined: ${describe(view)}.`, {
       component: text(formData, 'componentCode'),
       chart: view.chartOfAccounts,
@@ -188,7 +216,11 @@ export async function changeMappingAction(
   const access = await guard('Correcting a pay component mapping');
   if (!('actor' in access)) return access;
   try {
-    const view = await savePayComponentMapping(mappingFields(access, formData), 'CHANGE');
+    const view = await savePayComponentMapping(
+      mappingFields(access, formData),
+      'CHANGE',
+      access.capabilities,
+    );
     return done(`Mapping for ${text(formData, 'componentCode')} in ${view.chartOfAccounts} corrected: ${describe(view)}.`, {
       component: text(formData, 'componentCode'),
       chart: view.chartOfAccounts,

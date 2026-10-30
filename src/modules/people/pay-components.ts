@@ -42,6 +42,8 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
@@ -297,6 +299,17 @@ function parse<T extends z.ZodTypeAny>(schema: T, input: unknown): z.infer<T> {
   return parsed.data;
 }
 
+/** Refuse a write when the caller holds none of the required authority. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actor: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actor);
+  }
+}
+
 /** The sides §15.2 gives each kind. Kept in one place so the screen and the write cannot disagree. */
 const SIDES: Record<PayComponentKind, { debit: boolean; credit: boolean }> = {
   EARNING: { debit: true, credit: false },
@@ -351,8 +364,12 @@ async function centreStandingToday(tx: Tx, client: string, area: string, centre:
 }
 
 /** Define a pay component. The kind is chosen here and never again: it decides the mapping's sides. */
-export async function definePayComponent(input: unknown): Promise<PayComponentView> {
+export async function definePayComponent(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<PayComponentView> {
   const parsed = parse(defineComponentInput, input);
+  assertCapability(capabilities, PAY_COMPONENT_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx
       .select()
@@ -385,8 +402,12 @@ export async function definePayComponent(input: unknown): Promise<PayComponentVi
 }
 
 /** Rename, re-describe or retire a component. Nothing here changes its kind, and no row is removed. */
-export async function changePayComponent(input: unknown): Promise<PayComponentView> {
+export async function changePayComponent(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<PayComponentView> {
   const parsed = parse(changeComponentInput, input);
+  assertCapability(capabilities, PAY_COMPONENT_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx
       .select()
@@ -422,8 +443,13 @@ export async function changePayComponent(input: unknown): Promise<PayComponentVi
  * account's own master decides whether it may be used at all, and `requires_cost_object` decides whether a
  * debit has to say where it goes.
  */
-export async function savePayComponentMapping(input: unknown, mode: 'CREATE' | 'CHANGE'): Promise<PayComponentMappingView> {
+export async function savePayComponentMapping(
+  input: unknown,
+  mode: 'CREATE' | 'CHANGE',
+  capabilities?: readonly string[],
+): Promise<PayComponentMappingView> {
   const parsed = parse(mode === 'CREATE' ? mappingInput : changeMappingInput, input);
+  assertCapability(capabilities, PAY_COMPONENT_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [component] = await tx
       .select()

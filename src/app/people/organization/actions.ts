@@ -1,8 +1,12 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
+import { sql } from 'drizzle-orm';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { withTenant } from '@/platform/db/client';
+import { auditAccessLog } from '@/platform/tables/security';
 import {
   ORG_ROUTE,
   ORG_UNIT_CAPABILITY,
@@ -71,16 +75,30 @@ function done(message: string, links: { unit?: string; position?: string; job?: 
  * action never takes the tenant from a form field. On a refusal the guard's own state is what the form shows;
  * `'actor' in access` is how the callers tell the two apart.
  */
-async function guard(capability: string, doing: string): Promise<{ client: string; actor: string } | OrgActionState> {
+/** Write a capability denial to the audit log, then return the refusal the screen shows. */
+async function denied(session: SessionContext, capability: string, doing: string): Promise<OrgActionState> {
+  await withTenant(session.user.client, async (tx) => {
+    await tx.execute(sql`
+      insert into audit_access_log
+        (id, client, user_id, username, event_type, transaction_code, detail)
+      values (
+        ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
+        'CAPABILITY_DENIED', ${capability},
+        `Direct API or screen action refused: session holds none of ${capability}.`
+      )
+    `);
+  });
+  return {
+    ok: false,
+    message: `${doing} needs ${capability}, which this session does not hold.`,
+    remedy: `Ask an administrator to add ${capability} to one of your roles.`,
+  };
+}
+
+async function guard(capability: string, doing: string): Promise<{ client: string; actor: string; capabilities: string[] } | OrgActionState> {
   const session = await requireSession(ROUTE);
-  if (!can(session, capability)) {
-    return {
-      ok: false,
-      message: `${doing} needs ${capability}, which this session does not hold.`,
-      remedy: `The structure is written by whoever the tenant authorizes for it; until then this screen reads.`,
-    };
-  }
-  return { client: session.user.client, actor: session.user.username };
+  if (!can(session, capability)) return denied(session, capability, doing);
+  return { client: session.user.client, actor: session.user.username, capabilities: session.user.capabilities };
 }
 
 export async function defineOrgUnitAction(
@@ -89,14 +107,17 @@ export async function defineOrgUnitAction(
   const access = await guard(ORG_UNIT_CAPABILITY, 'Defining an organisational unit');
   if (!('actor' in access)) return access;
   try {
-    const view = await defineOrgUnit({
-      client: access.client,
-      code: text(formData, 'code'),
-      name: text(formData, 'name'),
-      description: optional(formData, 'description'),
-      parentCode: optional(formData, 'parentCode'),
-      changedBy: access.actor,
-    });
+    const view = await defineOrgUnit(
+      {
+        client: access.client,
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+        description: optional(formData, 'description'),
+        parentCode: optional(formData, 'parentCode'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Unit ${view.code} — ${view.name} — defined at level ${view.level}.`, { unit: view.code });
   } catch (error) {
     return refuse(error);
@@ -110,15 +131,18 @@ export async function changeOrgUnitAction(
   if (!('actor' in access)) return access;
   const parent = optional(formData, 'parentCode');
   try {
-    const view = await changeOrgUnit({
-      client: access.client,
-      code: text(formData, 'unitCode'),
-      name: optional(formData, 'name'),
-      description: formData.has('description') ? text(formData, 'description') || null : undefined,
-      isValid: validity(formData, 'isValid'),
-      parentCode: parent === ROOT ? null : parent,
-      changedBy: access.actor,
-    });
+    const view = await changeOrgUnit(
+      {
+        client: access.client,
+        code: text(formData, 'unitCode'),
+        name: optional(formData, 'name'),
+        description: formData.has('description') ? text(formData, 'description') || null : undefined,
+        isValid: validity(formData, 'isValid'),
+        parentCode: parent === ROOT ? null : parent,
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Unit ${view.code} updated — ${view.parentCode ? `under ${view.parentCode}` : 'a root'}, validity ${view.isValid ? 'on' : 'retired'}.`, { unit: view.code });
   } catch (error) {
     return refuse(error);
@@ -131,13 +155,16 @@ export async function defineJobAction(
   const access = await guard(POSITION_CAPABILITY, 'Defining a job');
   if (!('actor' in access)) return access;
   try {
-    const view = await defineJob({
-      client: access.client,
-      code: text(formData, 'code'),
-      name: text(formData, 'name'),
-      description: optional(formData, 'description'),
-      changedBy: access.actor,
-    });
+    const view = await defineJob(
+      {
+        client: access.client,
+        code: text(formData, 'code'),
+        name: text(formData, 'name'),
+        description: optional(formData, 'description'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Job ${view.code} — ${view.name} — defined.`, { job: view.code });
   } catch (error) {
     return refuse(error);
@@ -150,14 +177,17 @@ export async function changeJobAction(
   const access = await guard(POSITION_CAPABILITY, 'Changing a job');
   if (!('actor' in access)) return access;
   try {
-    const view = await changeJob({
-      client: access.client,
-      code: text(formData, 'jobCode'),
-      name: optional(formData, 'name'),
-      description: formData.has('description') ? text(formData, 'description') || null : undefined,
-      isValid: validity(formData, 'isValid'),
-      changedBy: access.actor,
-    });
+    const view = await changeJob(
+      {
+        client: access.client,
+        code: text(formData, 'jobCode'),
+        name: optional(formData, 'name'),
+        description: formData.has('description') ? text(formData, 'description') || null : undefined,
+        isValid: validity(formData, 'isValid'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Job ${view.code} updated; ${view.positions} position${view.positions === 1 ? '' : 's'} still describe themselves by it.`, { job: view.code });
   } catch (error) {
     return refuse(error);
@@ -170,16 +200,19 @@ export async function definePositionAction(
   const access = await guard(POSITION_CAPABILITY, 'Defining a position');
   if (!('actor' in access)) return access;
   try {
-    const view = await definePosition({
-      client: access.client,
-      code: text(formData, 'code'),
-      title: text(formData, 'title'),
-      jobCode: optional(formData, 'jobCode'),
-      orgUnitCode: text(formData, 'orgUnitCode'),
-      superiorCode: optional(formData, 'superiorCode'),
-      description: optional(formData, 'description'),
-      changedBy: access.actor,
-    });
+    const view = await definePosition(
+      {
+        client: access.client,
+        code: text(formData, 'code'),
+        title: text(formData, 'title'),
+        jobCode: optional(formData, 'jobCode'),
+        orgUnitCode: text(formData, 'orgUnitCode'),
+        superiorCode: optional(formData, 'superiorCode'),
+        description: optional(formData, 'description'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Position ${view.code} — ${view.title} — created in ${view.orgUnitCode}.`, { position: view.code });
   } catch (error) {
     return refuse(error);
@@ -194,17 +227,20 @@ export async function changePositionAction(
   const superior = optional(formData, 'superiorCode');
   const job = optional(formData, 'jobCode');
   try {
-    const view = await changePosition({
-      client: access.client,
-      code: text(formData, 'positionCode'),
-      title: optional(formData, 'title'),
-      jobCode: job === NONE ? null : job,
-      orgUnitCode: optional(formData, 'orgUnitCode'),
-      superiorCode: superior === NONE ? null : superior,
-      description: formData.has('description') ? text(formData, 'description') || null : undefined,
-      isValid: validity(formData, 'isValid'),
-      changedBy: access.actor,
-    });
+    const view = await changePosition(
+      {
+        client: access.client,
+        code: text(formData, 'positionCode'),
+        title: optional(formData, 'title'),
+        jobCode: job === NONE ? null : job,
+        orgUnitCode: optional(formData, 'orgUnitCode'),
+        superiorCode: superior === NONE ? null : superior,
+        description: formData.has('description') ? text(formData, 'description') || null : undefined,
+        isValid: validity(formData, 'isValid'),
+        changedBy: access.actor,
+      },
+      access.capabilities,
+    );
     return done(`Position ${view.code} updated — in ${view.orgUnitCode ?? 'no unit'}, reporting to ${view.superiorCode ?? 'nothing'}, ${view.incumbents} span${view.incumbents === 1 ? '' : 's'} not yet ended.`, { position: view.code });
   } catch (error) {
     return refuse(error);

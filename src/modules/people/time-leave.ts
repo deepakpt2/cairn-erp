@@ -37,6 +37,8 @@
 import { and, asc, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
+import { AuthzError } from '../../platform/auth/current';
+import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
@@ -44,6 +46,7 @@ import {
   leaveQuota,
   timeRecording,
   timeType,
+  TIME_ENTER_CAPABILITY,
   TIME_TYPE_KINDS,
   type TimeTypeKind,
 } from './schema';
@@ -62,6 +65,17 @@ export const TIME_RECORDING_OBJECT_CLASS = 'time_recording';
 /** The absence status lifecycle. REQUESTED is the only status a write can set; APPROVED/REJECTED/CANCELLED follow. */
 export const ABSENCE_STATUSES = ['REQUESTED', 'APPROVED', 'REJECTED', 'CANCELLED'] as const;
 export type AbsenceStatus = (typeof ABSENCE_STATUSES)[number];
+
+/** Refuse a write when the caller holds none of the required authority. */
+function assertCapability(
+  capabilities: readonly string[] | undefined,
+  required: string,
+  actor: string,
+): void {
+  if (!capabilities || !hasCapability([...capabilities], required)) {
+    throw new AuthzError(required, actor);
+  }
+}
 
 const upper = z.string().transform((s) => s.trim().toUpperCase());
 const clientField = upper.pipe(z.string().regex(/^[A-Z0-9]{2,4}$/, { message: 'CLIENT_FORMAT' }));
@@ -350,8 +364,12 @@ function yearOf(day: string): number {
 }
 
 /** Define a time type. The kind is chosen here and never again. */
-export async function defineTimeType(input: unknown): Promise<TimeTypeView> {
+export async function defineTimeType(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<TimeTypeView> {
   const parsed = parse(defineTimeTypeInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx.select().from(timeType).where(and(
       eq(timeType.client, parsed.client),
@@ -382,8 +400,12 @@ export async function defineTimeType(input: unknown): Promise<TimeTypeView> {
 }
 
 /** Rename, re-describe or retire a time type. The kind never changes; nothing is removed. */
-export async function changeTimeType(input: unknown): Promise<TimeTypeView> {
+export async function changeTimeType(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<TimeTypeView> {
   const parsed = parse(changeTimeTypeInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   await withTenant(parsed.client, async (tx) => {
     const [standing] = await tx.select().from(timeType).where(and(
       eq(timeType.client, parsed.client),
@@ -418,8 +440,12 @@ export async function changeTimeType(input: unknown): Promise<TimeTypeView> {
  * because two clerks dating the same person's leave in the same moment would
  * otherwise both find the day free.
  */
-export async function requestAbsence(input: unknown): Promise<AbsenceView> {
+export async function requestAbsence(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AbsenceView> {
   const parsed = parse(requestAbsenceInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
   const to = parsed.validTo ? dayOf(parsed.validTo) : null;
   if (to && to < from) refusal('SPAN_ORDER');
@@ -509,8 +535,12 @@ export async function requestAbsence(input: unknown): Promise<AbsenceView> {
  * Approve or reject a requested absence. Approving reduces the leave quota for
  * the type's year; rejecting leaves it untouched. Only REQUESTED can be decided.
  */
-export async function decideAbsence(input: unknown): Promise<AbsenceView> {
+export async function decideAbsence(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AbsenceView> {
   const parsed = parse(decideAbsenceInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const from = dayOf(parsed.validFrom);
 
   await withTenant(parsed.client, async (tx) => {
@@ -580,16 +610,23 @@ export async function decideAbsence(input: unknown): Promise<AbsenceView> {
 }
 
 /** Cancel an absence: REQUESTED → CANCELLED. Only a request can be cancelled. */
-export async function cancelAbsence(input: unknown): Promise<AbsenceView> {
-  return decideAbsence({ ...input, status: 'CANCELLED' as const });
+export async function cancelAbsence(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<AbsenceView> {
+  return decideAbsence({ ...input, status: 'CANCELLED' as const }, capabilities);
 }
 
 /**
  * Record hours an employee worked on a day, of one type. Overwrites the day's
  * entry — a time record is a measurement, not history.
  */
-export async function recordTime(input: unknown): Promise<TimeRecordingView> {
+export async function recordTime(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<TimeRecordingView> {
   const parsed = parse(recordTimeInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const day = dayOf(parsed.recordingDate);
 
   await withTenant(parsed.client, async (tx) => {
@@ -653,8 +690,12 @@ export async function recordTime(input: unknown): Promise<TimeRecordingView> {
 }
 
 /** Configure a leave quota: entitlement per employee, per type, per year. */
-export async function setLeaveQuota(input: unknown): Promise<LeaveQuotaView> {
+export async function setLeaveQuota(
+  input: unknown,
+  capabilities?: readonly string[],
+): Promise<LeaveQuotaView> {
   const parsed = parse(setLeaveQuotaInput, input);
+  assertCapability(capabilities, TIME_ENTER_CAPABILITY, parsed.changedBy);
   const year = Number(parsed.year);
 
   await withTenant(parsed.client, async (tx) => {
