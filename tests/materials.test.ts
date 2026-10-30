@@ -1,6 +1,8 @@
 /** Material views: staged entry, scope, precision, stale-write refusal and history. */
 import { beforeEach, afterEach, afterAll, describe, it, expect } from 'vitest';
 import { sql } from 'drizzle-orm';
+import { db } from '@/platform/db/client';
+import { plant as foundationPlant } from '@/modules/foundation/schema';
 import { createTenant, destroyTenant, withTenant, closeDb, type TestTenant } from './helpers';
 import { saveMaterialView, getMaterialDetail, listMaterials, materialChoices, requireUsableMaterial, type MaterialInput } from '@/modules/inventory/materials';
 
@@ -199,6 +201,40 @@ describe('material master', () => {
     expect(usable.plantData?.orderUnit).toBe('KG');
     await saveMaterialView(basic({ expectedVersion: 2, isBlocked: true, reason: 'Operational hold' }));
     await expect(withTenant(tenant.client, (tx) => requireUsableMaterial(tx, tenant.client, number, 'PURCHASING', '1000'))).rejects.toThrow('blocked');
+  });
+
+  it('sets tenant context for material saves and fails closed for missing or foreign plant context', async () => {
+    const right = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select current_setting('cairn.client', true) as client
+    `));
+    expect((right as unknown as Array<{ client: string }>)[0].client).toBe(tenant.client);
+
+    // A direct read has no transaction-local tenant setting; the existing RLS
+    // policy must return no tenant rows rather than exposing a Plant.
+    const unscoped = await db().execute(sql`
+      select client, plant from plant where client = ${tenant.client} and plant = '1000'
+    `);
+    expect((unscoped as unknown as unknown[])).toHaveLength(0);
+
+    const other = await createTenant(`material-plant-context-${serial}`);
+    try {
+      const foreign = await withTenant(other.client, (tx) => tx.execute(sql`
+        select client, plant from plant where client = ${tenant.client} and plant = '1000'
+      `));
+      expect((foreign as unknown as unknown[])).toHaveLength(0);
+      await withTenant(other.client, (tx) => tx.insert(foundationPlant).values({
+        client: other.client, plant: 'FOREIGN', name: 'Foreign-only plant',
+        companyCode: other.companyCode, country: 'KW', createdBy: 'TEST',
+      }));
+
+      // The intended client's context remains valid for the whole save operation,
+      // but a plant that exists only in another client is not usable here.
+      await saveMaterialView(basic());
+      expect((await saveMaterialView(mrp())).status).toBe('CREATED');
+      await expect(saveMaterialView(mrp({ plant: 'FOREIGN' }))).rejects.toThrow('Plant FOREIGN');
+    } finally {
+      await destroyTenant(other.client);
+    }
   });
 
   it('refuses a foreign or unknown plant and requires a basic record first', async () => {

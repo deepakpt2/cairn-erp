@@ -5,13 +5,15 @@
  * wiki page nobody reads:
  *
  *   1 migrate   — schema, policies, admin functions
- *   2 seed      — global definitions: capabilities, config activities, messages, registry
- *   3 reference — countries, currencies, units of measure
+ *   2 reference — currencies, countries, units of measure, approved bank profiles
+ *   3 seed      — global definitions: capabilities, config activities, messages, registry
  *   4 tenant    — create the development tenant, activating the standard package
  *
- * Step 2 must precede step 4: the onboarding flow marks configuration activities
- * complete, and those activities have to exist first. Getting this order wrong
- * produces a tenant whose workbench checklist is silently empty.
+ * The reference catalogue is initialized before the global seed because those
+ * definitions can carry currency, country, or unit references. Step 3 must also
+ * precede step 4: the onboarding flow marks configuration activities complete,
+ * and those activities have to exist first. Getting this order wrong produces a
+ * tenant whose workbench checklist is silently empty.
  */
 import { execFileSync } from 'node:child_process';
 import postgres from 'postgres';
@@ -19,8 +21,8 @@ import { validateTarget } from '../src/platform/db/target-guard';
 
 const STEPS = [
   { name: 'Migrate schema', script: 'src/platform/db/migrate.ts' },
+  { name: 'Initialize standard reference data', script: 'scripts/seed-reference.ts' },
   { name: 'Seed global definitions', script: 'scripts/seed.ts' },
-  { name: 'Seed reference data', script: 'scripts/seed-reference.ts' },
   { name: 'Create development tenant', script: 'scripts/create-dev-tenant.ts' },
 ];
 

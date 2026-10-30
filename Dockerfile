@@ -8,8 +8,9 @@ RUN npm ci
 # One-shot administrative tools: direct DB access; never the web runtime role.
 FROM dependencies AS operations
 COPY . .
+COPY walkthrough-seed.ts /app/walkthrough-seed.ts
 ENV CAIRN_ENV=production
-CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run seed && npm run seed:reference"]
+CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:init-reference && npm run seed"]
 
 FROM dependencies AS builder
 COPY . .
@@ -27,6 +28,7 @@ RUN groupadd --system --gid 1001 cairn && useradd --system --uid 1001 --gid cair
 COPY --from=builder --chown=cairn:cairn /app/.next/standalone ./
 COPY --from=builder --chown=cairn:cairn /app/.next/static ./.next/static
 COPY --from=builder --chown=cairn:cairn /app/public ./public
+COPY --chown=cairn:cairn walkthrough-seed.ts /app/walkthrough-seed.ts
 USER cairn
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

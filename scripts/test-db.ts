@@ -13,8 +13,8 @@
  *
  *   1. create the database when it does not exist;
  *   2. `src/platform/db/migrate.ts`   — schema, policies, admin functions;
- *   3. `scripts/seed.ts`              — global definitions: capabilities, activities, messages, registry;
- *   4. `scripts/seed-reference.ts`   — countries, currencies, units of measure.
+ *   3. `scripts/seed-reference.ts`   — currencies, countries, units, approved bank profiles;
+ *   4. `scripts/seed.ts`              — global definitions: capabilities, activities, messages, registry.
  *
  * The development tenant is deliberately NOT created: `tests/global-setup.ts` says the tenant `0100` is never
  * touched, and a suite run has no business writing into it. `npm run bootstrap` remains the command that
@@ -167,8 +167,8 @@ async function main() {
   const steps = [
     { name: 'Migrate schema', script: 'src/platform/db/migrate.ts' },
     ...(argv.includes('--no-seed') ? [] : [
+      { name: 'Initialize standard reference data', script: 'scripts/seed-reference.ts' },
       { name: 'Seed global definitions', script: 'scripts/seed.ts' },
-      { name: 'Seed reference data', script: 'scripts/seed-reference.ts' },
     ]),
   ];
   for (const step of steps) {

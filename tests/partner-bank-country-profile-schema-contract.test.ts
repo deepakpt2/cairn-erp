@@ -7,7 +7,7 @@ import { PARTNER_BANK_PROFILE_POLICIES } from '../src/platform/security/partner-
 const profileConfig = getTableConfig(partnerBankCountryProfile);
 const tableMigration = readFileSync('drizzle/0015_partner_bank_country_profile.sql', 'utf8');
 const accessMigration = readFileSync('drizzle/9017_partner_bank_country_profile_policies.sql', 'utf8');
-const referenceSeed = readFileSync('scripts/seed-reference.ts', 'utf8');
+const referenceSeed = readFileSync('scripts/standard-reference-data.ts', 'utf8');
 
 describe('global partner-bank profile registry contract', () => {
   it('registers a global country-keyed readiness table, not a tenant table', () => {
@@ -39,8 +39,9 @@ describe('global partner-bank profile registry contract', () => {
       { country: 'JP', policyRevision: 'D-066' },
     ]);
     expect(referenceSeed).toContain("values ($1, $2, 'NOT_READY', 'SYSTEM')");
-    expect(referenceSeed).toMatch(/readiness_status = 'NOT_READY'[\s\S]*?policy_revision is distinct from excluded\.policy_revision/i);
-    expect(referenceSeed).toMatch(/version = partner_bank_country_profile\.version \+ 1/i);
+    expect(referenceSeed).toMatch(/on conflict \(country_code\) do nothing/i);
+    expect(referenceSeed).not.toMatch(/readiness_status\s*=\s*'NOT_READY'[\s\S]*?do update/i);
+    expect(referenceSeed).not.toMatch(/version = partner_bank_country_profile\.version \+ 1/i);
   });
 
   it('grants the runtime read-only access to the shared registry', () => {

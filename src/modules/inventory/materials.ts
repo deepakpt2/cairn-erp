@@ -184,7 +184,7 @@ export async function saveMaterialView(raw: MaterialInput): Promise<MaterialResu
       return { materialNumber, view, status, version, changed: true };
     }
     if (!base) throw new MaterialError(`Material ${materialNumber} does not exist.`, 'Create its basic view first.');
-    const [site] = await tx.select().from(plant).where(eq(plant.plant, input.plant));
+    const [site] = await tx.select().from(plant).where(and(eq(plant.client, client), eq(plant.plant, input.plant)));
     if (!site?.isActive) throw new MaterialError(`Plant ${input.plant} does not exist or is inactive.`);
     const assignedCompanyCode = site.companyCode;
     if (!assignedCompanyCode) throw new MaterialError('The plant is not assigned to a company code.', 'Assign it through CFG.ORG.PLANT.ASSIGN_COMPANY before maintaining this view.');

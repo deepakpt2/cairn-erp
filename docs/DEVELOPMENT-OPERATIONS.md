@@ -247,7 +247,8 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 3. `CAIRN_APP_DB_PASSWORD` is embedded in `DATABASE_URL` by Docker Compose, so it **must be URL-safe** (hexadecimal is recommended).
 4. `POSTGRES_PASSWORD` is the PostgreSQL superuser password. It is never placed in an application URL and is not URL-validated.
 5. The `migrate` service runs `scripts/sync-db-app-role.ts`, which reads `DATABASE_URL` and `MIGRATION_DATABASE_URL`, validates both targets, and synchronizes the `cairn_app` password to match `DATABASE_URL`.
-6. The `app` service connects using `DATABASE_URL` as `cairn_app`.
+6. Before the legacy tenant/foundation seed runs, the one-shot `migrate` provisioning service runs `npm run db:init-reference` after migrations. It atomically inserts the project-defined standard currencies, countries, units of measure, and approved partner-bank country profiles with `ON CONFLICT DO NOTHING`. This creates missing defaults without replacing customer-maintained or customised rows. It is part of provisioning, not the web application startup path.
+7. The `app` service connects using `DATABASE_URL` as `cairn_app`.
 
 ### Required Environment Variables (`.env`)
 
@@ -275,18 +276,27 @@ cp .env.docker.example .env
 chmod 600 .env
 # Edit .env: set CAIRN_OWNER_DB_PASSWORD and CAIRN_APP_DB_PASSWORD to the generated values
 
-# 3. Deploy
+# 3. Deploy. The one-shot migrate service applies schema migrations, then
+#    initializes standard global reference rows atomically, then runs the
+#    existing tenant/foundation seed. Reference initialization is repeatable
+#    and preserves any existing row with the same key.
 docker compose up -d --build
 
 # 4. Verify PostgreSQL is healthy
 docker compose logs db | grep -i "database system is ready"
 
-# 5. Verify migration completed
-docker compose logs migrate | grep -i "credentials synchronized"
+# 5. Verify migration and reference initialization completed
+docker compose logs migrate | grep -E "credentials synchronized|Standard reference data initialized"
 
 # 6. Verify app is healthy
 docker compose ps app
+
+# 7. Build the app image and verify its packaged manual walkthrough script
+docker compose build app
+docker run --rm --entrypoint sh cairn-app:local -c 'test -s /app/walkthrough-seed.ts'
 ```
+
+For a separately provisioned database, after migrations have completed and before tenant/foundation seeding, run `npm run db:init-reference` with both `MIGRATION_DATABASE_URL` and `DATABASE_URL` explicitly set to the same verified, authorized database. The command has no fallback target and refuses protected databases through `validateTarget`.
 
 ### Existing-Volume Repair
 
@@ -351,7 +361,7 @@ If a volume already exists with data and the `cairn_app` role credentials are ou
 |---------|-------------------|
 | Build killed by timeout | Single CPU limitation; not a code defect. Run build with longer timeout. |
 | Test failures on controlling area | Verify `production_order` table has `controlling_area`, `company_code`, `currency` columns (migration 9202). |
-| Test failures on currency FK | Seed reference data: `npx tsx scripts/seed-reference.ts` |
+| Test or fresh-provisioning failures on currency/country/UOM FK | Confirm the one-shot `migrate` service completed `db:init-reference`; for a separate verified scratch database run `npm run db:init-reference` after migrations. It inserts only missing project defaults. |
 
 ### Database Target-Selection Failures
 
@@ -368,8 +378,8 @@ Deterministic seed that builds an interconnected business scenario (purchase-to-
 ### Source and container location
 - Source file: `walkthrough-seed.ts` (repository root)
 - Container path: `/app/walkthrough-seed.ts`
-- Application container/service: `app` (image `cairn-app:local`)
-- Also mounted read-only into the `migrate` service at `/app/walkthrough-seed.ts`
+- Application container/service: `app` (image `cairn-app:local`); Dockerfile explicitly copies the script into this image.
+- Also explicitly included in the operations image and mounted read-only into the `migrate` service at `/app/walkthrough-seed.ts`.
 
 ### Safety properties
 - Never executes during Docker build, container creation/startup, application startup, migrations, or restarts.
