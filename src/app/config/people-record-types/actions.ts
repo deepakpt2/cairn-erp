@@ -69,14 +69,14 @@ function done(code: string, message: string): RecordTypeActionState {
 
 /** Write a capability denial to the audit log, then return the refusal the screen shows. */
 async function denied(session: SessionContext): Promise<RecordTypeActionState> {
+  const detail = `Direct API or screen action refused: session holds none of ${RECORD_TYPE_CAPABILITY}.`;
   await withTenant(session.user.client, async (tx) => {
     await tx.execute(sql`
       insert into audit_access_log
         (id, client, user_id, username, event_type, transaction_code, detail)
       values (
         ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
-        'CAPABILITY_DENIED', ${RECORD_TYPE_CAPABILITY},
-        `Direct API or screen action refused: session holds none of ${RECORD_TYPE_CAPABILITY}.`
+        'CAPABILITY_DENIED', ${RECORD_TYPE_CAPABILITY}, ${detail}
       )
     `);
   });

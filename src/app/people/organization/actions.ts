@@ -77,14 +77,14 @@ function done(message: string, links: { unit?: string; position?: string; job?: 
  */
 /** Write a capability denial to the audit log, then return the refusal the screen shows. */
 async function denied(session: SessionContext, capability: string, doing: string): Promise<OrgActionState> {
+  const detail = `Direct API or screen action refused: session holds none of ${capability}.`;
   await withTenant(session.user.client, async (tx) => {
     await tx.execute(sql`
       insert into audit_access_log
         (id, client, user_id, username, event_type, transaction_code, detail)
       values (
         ${randomUUID()}, ${session.user.client}, ${session.user.userId}, ${session.user.username},
-        'CAPABILITY_DENIED', ${capability},
-        `Direct API or screen action refused: session holds none of ${capability}.`
+        'CAPABILITY_DENIED', ${capability}, ${detail}
       )
     `);
   });
