@@ -6,7 +6,8 @@ import { defineRange } from '../src/platform/numbering';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { lockStockScope } from '../src/modules/inventory/physical-inventory';
-import { postGoodsReceipt, reverseGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
@@ -17,6 +18,7 @@ const MATERIAL = 'ATOMIC-MAT';
 describe('atomic inventory posting', () => {
   let client = '';
   let currency = 'USD';
+  let firstReceiptOrderNumber = '';
 
   afterAll(async () => {
     if (client) await destroyTenant(client);
@@ -115,6 +117,7 @@ describe('atomic inventory posting', () => {
       client: c, changedBy: ACTOR, ...header(),
       items: [item(4, 10), item(3, 20)],
     });
+    firstReceiptOrderNumber = order.orderNumber;
     const doc = await postGoodsReceipt({
       client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
       requestKey: 'atomic-two-lines',
@@ -144,7 +147,7 @@ describe('atomic inventory posting', () => {
     const c = await standing();
     const before = await balances(c);
     await expect(postGoodsReceipt({
-      client: c, changedBy: ACTOR, orderNumber: 'unused', ...POSTING,
+      client: c, changedBy: ACTOR, orderNumber: firstReceiptOrderNumber, ...POSTING,
       requestKey: 'atomic-two-lines',
       lines: [{ itemNumber: 10, quantity: 1 }],
     })).rejects.toThrow(/different posting/);

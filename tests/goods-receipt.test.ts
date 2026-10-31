@@ -1,15 +1,33 @@
 import { sql } from 'drizzle-orm';
-import { afterAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+
+const requestContext = vi.hoisted(() => ({ cookie: undefined as string | undefined }));
+vi.mock('next/headers', () => ({
+  cookies: async () => ({ get: () => requestContext.cookie ? { value: requestContext.cookie } : undefined }),
+}));
+vi.mock('next/navigation', () => ({
+  redirect: (path: string): never => { throw new Error(`REDIRECT:${path}`); },
+}));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createOrder, getOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import {
-  getMaterialDocument, getReceiptOrder, postGoodsReceipt, reverseGoodsReceipt,
+  getMaterialDocument, getReceiptOrder, postGoodsReceipt as postGoodsReceiptRaw,
+  reverseGoodsReceipt as reverseGoodsReceiptRaw,
 } from '../src/modules/inventory/goods-receipt';
+import { postGoodsReceipt, reverseGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { defineUomConversion, removeUomConversion } from '../src/modules/inventory/unit-conversion';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import {
+  appUser, authOrgRestriction, capability, role, roleCapability, userRole,
+} from '../src/platform/tables/security';
+import { createSession, encodeSessionCookie } from '../src/platform/auth/session';
+import { hashPassword } from '../src/platform/auth/password';
+import { postGoodsReceiptAction, reverseGoodsReceiptAction } from '../src/app/inventory/goods-receipt/actions';
 
 const ACTOR = 'SCR061_MIGO_TEST';
 const POSTING = { documentDate: '2026-10-18', postingDate: '2026-10-18' };
@@ -23,9 +41,17 @@ const POSTING = { documentDate: '2026-10-18', postingDate: '2026-10-18' };
  */
 describe('SCR-061 goods receipt (MIGO)', () => {
   let client = '';
+  let foreignClient = '';
+  type TestActor = { userId: string; sessionId: string; token: string };
+  let authorisedActor: TestActor = { userId: '', sessionId: '', token: '' };
+  let noPlantActor: TestActor = { userId: '', sessionId: '', token: '' };
+  let noCompanyActor: TestActor = { userId: '', sessionId: '', token: '' };
+  let noCapabilityActor: TestActor = { userId: '', sessionId: '', token: '' };
 
   afterAll(async () => {
+    requestContext.cookie = undefined;
     if (client) await destroyTenant(client);
+    if (foreignClient) await destroyTenant(foreignClient);
   });
 
   async function standingClient(): Promise<string> {
@@ -113,7 +139,89 @@ describe('SCR-061 goods receipt (MIGO)', () => {
         `);
       });
       await initializeMaterialPeriodControl({
-        client, changedBy: ACTOR, companyCode: '1000', fiscalYear: 2026, period: 10, reason: 'Stage 5 acceptance',
+        client, changedBy: ACTOR, companyCode: '1000', fiscalYear: 2026, period: 10, reason: 'Goods receipt organisation authorisation',
+      });
+      await withTenant(client, async (tx) => {
+        await tx.execute(sql`
+          insert into company_code (
+            client, company_code, name, chart_of_accounts, fiscal_year_variant,
+            posting_period_variant, currency, country, created_by
+          )
+          select client, 'GR2000', 'Other goods receipt company', chart_of_accounts,
+                 fiscal_year_variant, posting_period_variant, currency, country, ${ACTOR}
+            from company_code where client = ${client} and company_code = '1000'
+          on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into plant (client, plant, name, company_code, country, created_by) values
+            (${client}, 'GR-SAME', 'Same-company unassigned plant', '1000', 'KW', ${ACTOR}),
+            (${client}, 'GR-OTHER', 'Other-company plant', 'GR2000', 'KW', ${ACTOR}),
+            (${client}, 'GR-NOCO', 'Plant without company assignment', null, 'KW', ${ACTOR})
+          on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into purchase_order (
+            client, order_number, supplier_number, purchasing_org, purchasing_group,
+            company_code, currency, document_date, created_by
+          ) values
+            (${client}, 'GR-SAME-PO', 'V10000', '1000', '001', '1000', 'USD', '2026-10-18', ${ACTOR}),
+            (${client}, 'GR-OTHER-PO', 'V10000', '1000', '001', 'GR2000', 'USD', '2026-10-18', ${ACTOR}),
+            (${client}, 'GR-NOCO-PO', 'V10000', '1000', '001', '1000', 'USD', '2026-10-18', ${ACTOR}),
+            (${client}, 'GR-MISMATCH-PO', 'V10000', '1000', '001', '1000', 'USD', '2026-10-18', ${ACTOR})
+          on conflict do nothing
+        `);
+        await tx.execute(sql`
+          insert into purchase_order_item (
+            client, order_number, item_number, material_number, short_text, quantity, unit,
+            net_price, price_unit, net_value, plant, created_by
+          ) values
+            (${client}, 'GR-SAME-PO', 10, 'MAT-10001', 'Unauthorised same-company item', 1, 'PC', 100, 1, 100, 'GR-SAME', ${ACTOR}),
+            (${client}, 'GR-OTHER-PO', 10, 'MAT-10001', 'Unauthorised other-company item', 1, 'PC', 100, 1, 100, 'GR-OTHER', ${ACTOR}),
+            (${client}, 'GR-NOCO-PO', 10, 'MAT-10001', 'Plant ownership missing', 1, 'PC', 100, 1, 100, 'GR-NOCO', ${ACTOR}),
+            (${client}, 'GR-MISMATCH-PO', 10, 'MAT-10001', 'Order and plant company mismatch', 1, 'PC', 100, 1, 100, 'GR-OTHER', ${ACTOR})
+          on conflict do nothing
+        `);
+        await tx.insert(capability).values({
+          code: 'INV.GR.POST', module: 'INV', description: 'Post goods receipt', action: 'POST',
+        }).onConflictDoNothing();
+        await tx.insert(role).values({
+          client, code: 'TEST_GR_ORG', name: 'Goods receipt organisation test',
+          description: 'Temporary goods receipt test authority', isSystemRole: false, isReadOnly: false,
+          createdBy: ACTOR,
+        }).onConflictDoNothing();
+        await tx.insert(roleCapability).values({
+          client, roleCode: 'TEST_GR_ORG', capabilityCode: 'INV.GR.POST', createdBy: ACTOR,
+        }).onConflictDoNothing();
+        await tx.insert(role).values({
+          client, code: 'TEST_GR_NO_CAP', name: 'Goods receipt no-capability test',
+          description: 'Temporary user role with no goods receipt capability', isSystemRole: false, isReadOnly: false,
+          createdBy: ACTOR,
+        }).onConflictDoNothing();
+        const createActor = async (
+          username: string, companies: string[], plants: string[], roleCode = 'TEST_GR_ORG',
+        ) => {
+          const userId = randomUUID();
+          await tx.insert(appUser).values({
+            id: userId, client, username, fullName: username,
+            passwordHash: await hashPassword('GoodsReceiptAuthTest123!'), isActive: true, createdBy: ACTOR,
+          });
+          await tx.insert(userRole).values({ client, userId, roleCode, createdBy: ACTOR });
+          const restrictions = [
+            ...companies.map((scopeValue) => ({ id: randomUUID(), client, userId, scopeType: 'COMPANY_CODE', scopeValue, createdBy: ACTOR })),
+            ...plants.map((scopeValue) => ({ id: randomUUID(), client, userId, scopeType: 'PLANT', scopeValue, createdBy: ACTOR })),
+          ];
+          if (restrictions.length) await tx.insert(authOrgRestriction).values(restrictions);
+          const session = await createSession(tx, { client, userId });
+          const sessions = await tx.execute(sql`
+            select id from user_session where client = ${client} and user_id = ${userId}
+            order by issued_at desc limit 1
+          `) as unknown as Array<{ id: string }>;
+          return { userId, sessionId: sessions[0].id, token: session.token };
+        };
+        authorisedActor = await createActor('scr061.goods-receipt.authorised', ['1000'], ['1000']);
+        noPlantActor = await createActor('scr061.goods-receipt.no-plant', ['1000'], []);
+        noCompanyActor = await createActor('scr061.goods-receipt.no-company', [], ['1000']);
+        noCapabilityActor = await createActor('scr061.goods-receipt.no-capability', ['1000'], ['1000'], 'TEST_GR_NO_CAP');
       });
     }
     return client;
@@ -145,6 +253,42 @@ describe('SCR-061 goods receipt (MIGO)', () => {
         valuation: (valuation as unknown as Array<Record<string, string>>)[0],
       };
     });
+  }
+
+  async function postingSnapshot(targetClient = client) {
+    return withTenant(targetClient, async (tx) => {
+      const rows = await tx.execute(sql`
+        select
+          (select count(*)::text from material_document where client = ${targetClient}) as documents,
+          (select count(*)::text from material_document_line where client = ${targetClient}) as lines,
+          (select count(*)::text from journal_entry where client = ${targetClient}) as journals,
+          (select count(*)::text from journal_entry_line where client = ${targetClient}) as journal_lines,
+          (select count(*)::text from change_document where client = ${targetClient}) as changes,
+          (select count(*)::text from document_flow_link where client = ${targetClient}) as document_links,
+          (select count(*)::text from document_status_history where client = ${targetClient}) as status_history,
+          (select count(*)::text from output_message where client = ${targetClient}) as outputs,
+          (select count(*)::text from stock_quantity where client = ${targetClient}) as stock_rows,
+          (select coalesce(sum(quantity), 0)::text from stock_quantity where client = ${targetClient}) as stock_quantity,
+          (select count(*)::text from material_valuation where client = ${targetClient}) as valuation_rows,
+          (select coalesce(sum(total_stock_quantity), 0)::text from material_valuation where client = ${targetClient}) as valuation_quantity,
+          (select coalesce(sum(stock_value), 0)::text from material_valuation where client = ${targetClient}) as valuation_value
+      `) as unknown as Array<Record<string, string>>;
+      return rows[0];
+    });
+  }
+
+  function setSession(actor: TestActor | undefined) {
+    requestContext.cookie = actor ? encodeSessionCookie(client, actor.token) : undefined;
+  }
+
+  function receiptForm(orderNumber: string, requestKey: string, extras: Record<string, string> = {}) {
+    const form = new FormData();
+    const values = {
+      orderNumber, requestKey, documentDate: '2026-10-18', postingDate: '2026-10-18',
+      headerText: 'GR auth test', 'qty-10': '1', ...extras,
+    };
+    for (const [name, value] of Object.entries(values)) form.set(name, value);
+    return form;
   }
 
   // ── the unit a receipt is spoken in, and the unit stock is kept in ──────────────
@@ -367,5 +511,142 @@ describe('SCR-061 goods receipt (MIGO)', () => {
       client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
       requestKey: 'req-flag-1', lines: [{ itemNumber: 10, quantity: 1 }],
     })).rejects.toThrow('flagged for deletion');
+  });
+
+  it('posts and reverses through the real actions using the session identity, not forged form ownership fields', async () => {
+    const c = await standingClient();
+    await withTenant(c, (tx) => tx.execute(sql`
+      update material_plant set marked_for_deletion = false
+       where client = ${c} and material_number = 'MAT-10001' and plant = '1000'
+    `));
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item(2, 50)] });
+    setSession(authorisedActor);
+    const postKey = 'gr-authorised-action';
+    const posted = await postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, postKey, {
+      client: 'ZZZZ', changedBy: 'FORGED_USER', userId: 'forged-user-id',
+      companyCode: 'GR2000', plant: 'GR-OTHER',
+    }));
+    expect(posted.ok, `Action denial: ${posted.message} ${posted.remedy ?? ''}`).toBe(true);
+    const documentNumber = posted.documentNumber!;
+    const doc = await getMaterialDocument(c, documentNumber);
+    expect(doc?.lines[0]).toMatchObject({ plant: '1000', purchaseOrderNumber: order.orderNumber });
+    const creator = await withTenant(c, async (tx) => tx.execute(sql`
+      select created_by from material_document
+       where client = ${c} and material_document_number = ${documentNumber}
+    `)) as unknown as Array<{ created_by: string }>;
+    expect(creator[0].created_by).toBe('scr061.goods-receipt.authorised');
+
+    setSession(noPlantActor);
+    const beforeReplayDenial = await postingSnapshot(c);
+    const replayDenial = await postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, postKey));
+    expect(replayDenial.ok).toBe(false);
+    expect(replayDenial.message).toBe('You are not authorised to post this goods receipt.');
+    expect(await postingSnapshot(c)).toEqual(beforeReplayDenial);
+
+    const beforeReverseDenial = await postingSnapshot(c);
+    const reverseDeniedForm = new FormData();
+    reverseDeniedForm.set('materialDocumentNumber', documentNumber);
+    reverseDeniedForm.set('documentDate', POSTING.documentDate);
+    reverseDeniedForm.set('postingDate', POSTING.postingDate);
+    reverseDeniedForm.set('requestKey', 'gr-unauthorised-reversal');
+    const reverseDenied = await reverseGoodsReceiptAction({ ok: false, message: '' }, reverseDeniedForm);
+    // The document identity is a target only; authority still comes from the session.
+    expect(reverseDenied.ok).toBe(false);
+    expect(reverseDenied.message).toBe('You are not authorised to post this goods receipt.');
+    expect(await postingSnapshot(c)).toEqual(beforeReverseDenial);
+    expect((await getMaterialDocument(c, documentNumber))?.status).toBe('POSTED');
+
+    setSession(authorisedActor);
+    const reverseForm = new FormData();
+    reverseForm.set('materialDocumentNumber', documentNumber);
+    reverseForm.set('documentDate', POSTING.documentDate);
+    reverseForm.set('postingDate', POSTING.postingDate);
+    reverseForm.set('requestKey', 'gr-authorised-reversal');
+    const reversed = await reverseGoodsReceiptAction({ ok: false, message: '' }, reverseForm);
+    expect(reversed.ok).toBe(true);
+    expect((await getMaterialDocument(c, documentNumber))?.status).toBe('REVERSED');
+  });
+
+  it('denies a same-company plant, a different company, missing plant ownership, and a PO/plant company mismatch without writes', async () => {
+    const c = await standingClient();
+    setSession(authorisedActor);
+    const before = await postingSnapshot(c);
+    for (const [orderNumber, requestKey] of [
+      ['GR-SAME-PO', 'gr-deny-same-plant'],
+      ['GR-OTHER-PO', 'gr-deny-other-company'],
+      ['GR-NOCO-PO', 'gr-deny-missing-plant-company'],
+      ['GR-MISMATCH-PO', 'gr-deny-order-plant-mismatch'],
+    ]) {
+      const result = await postGoodsReceiptAction(
+        { ok: false, message: '' }, receiptForm(orderNumber, requestKey),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.message).toBe('You are not authorised to post this goods receipt.');
+      expect(await postingSnapshot(c)).toEqual(before);
+    }
+  });
+
+  it('fails closed for missing authority, invalid sessions, missing assignments, inactive users, forged identities, and cross-client context', async () => {
+    const c = await standingClient();
+    const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item(2, 50)] });
+    const before = await postingSnapshot(c);
+    const target = (requestKey: string) => ({
+      client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
+      requestKey, lines: [{ itemNumber: 10, quantity: 1 }],
+    });
+    await expect(postGoodsReceiptRaw(target('gr-invalid-session'), {
+      authorization: { userId: authorisedActor.userId, sessionId: randomUUID() },
+    })).rejects.toMatchObject({ message: 'You are not authorised to post this goods receipt.' });
+    await expect(postGoodsReceiptRaw(target('gr-no-capability'), {
+      authorization: { userId: noCapabilityActor.userId, sessionId: noCapabilityActor.sessionId },
+    })).rejects.toMatchObject({ message: 'You are not authorised to post this goods receipt.' });
+    expect(await postingSnapshot(c)).toEqual(before);
+
+    setSession(undefined);
+    await expect(postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, 'gr-unauthenticated')))
+      .rejects.toThrow(/REDIRECT:\/signin/);
+    expect(await postingSnapshot(c)).toEqual(before);
+
+    setSession(noPlantActor);
+    const forged = await postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, 'gr-forged-identity', {
+      client: 'ZZZZ', changedBy: 'SCR061.goods-receipt.authorised',
+      userId: authorisedActor.userId, sessionId: authorisedActor.sessionId,
+      companyCode: '1000', plant: '1000',
+    }));
+    expect(forged.ok).toBe(false);
+    expect(forged.message).toBe('You are not authorised to post this goods receipt.');
+    setSession(noCompanyActor);
+    const noCompany = await postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, 'gr-missing-company'));
+    expect(noCompany.ok).toBe(false);
+    expect(noCompany.message).toBe('You are not authorised to post this goods receipt.');
+    expect(await postingSnapshot(c)).toEqual(before);
+
+    setSession(authorisedActor);
+    await withTenant(c, (tx) => tx.execute(sql`
+      update app_user set is_active = false where client = ${c} and id = ${authorisedActor.userId}
+    `));
+    await expect(postGoodsReceiptRaw(target('gr-inactive-action'), {
+      authorization: { userId: authorisedActor.userId, sessionId: authorisedActor.sessionId },
+    })).rejects.toMatchObject({ message: 'You are not authorised to post this goods receipt.' });
+    await expect(reverseGoodsReceiptRaw({
+      client: c, changedBy: ACTOR, materialDocumentNumber: 'missing-document', ...POSTING,
+      requestKey: 'gr-inactive-reverse',
+    }, { authorization: { userId: authorisedActor.userId, sessionId: authorisedActor.sessionId } }))
+      .rejects.toMatchObject({ message: 'You are not authorised to post this goods receipt.' });
+    await expect(postGoodsReceiptAction({ ok: false, message: '' }, receiptForm(order.orderNumber, 'gr-inactive-cookie')))
+      .rejects.toThrow(/REDIRECT:\/signin/);
+    await withTenant(c, (tx) => tx.execute(sql`
+      update app_user set is_active = true where client = ${c} and id = ${authorisedActor.userId}
+    `));
+    expect(await postingSnapshot(c)).toEqual(before);
+
+    const foreign = await createTenant('gr-auth-cross-client');
+    foreignClient = foreign.client;
+    const foreignBefore = await postingSnapshot(foreignClient);
+    await expect(postGoodsReceiptRaw({ ...target('gr-cross-client'), client: foreignClient }, {
+      authorization: { userId: authorisedActor.userId, sessionId: authorisedActor.sessionId },
+    })).rejects.toMatchObject({ message: 'You are not authorised to post this goods receipt.' });
+    expect(await postingSnapshot(foreignClient)).toEqual(foreignBefore);
+    expect(await postingSnapshot(c)).toEqual(before);
   });
 });

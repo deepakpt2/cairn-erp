@@ -4,7 +4,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { checkPostingAllowed, derivePosition, getCompanyCode } from '../src/platform/periods';
-import { postGoodsReceipt, reverseGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';

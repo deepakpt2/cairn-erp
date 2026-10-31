@@ -5,7 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { postGoodsReceipt, reverseGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { stockOverview } from '../src/modules/inventory/stock-overview';

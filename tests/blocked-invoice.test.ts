@@ -5,7 +5,8 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { checkPostingAllowed, derivePosition, getCompanyCode } from '../src/platform/periods';
 import { createOrder } from '../src/modules/purchasing/orders';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import {

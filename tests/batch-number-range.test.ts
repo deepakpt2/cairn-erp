@@ -17,7 +17,8 @@ import {
 } from '../src/modules/inventory/batch-number-range';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { closeDb, createTenant, defineTestRanges, destroyTenant } from './helpers';
 

@@ -3,7 +3,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { cancelSupplierInvoice, postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import {

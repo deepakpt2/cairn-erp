@@ -8,9 +8,8 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import {
   createOrder,
 } from '../src/modules/purchasing/orders';
-import {
-  postGoodsReceipt,
-} from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import {
   InspectionLotError,
   openLot,

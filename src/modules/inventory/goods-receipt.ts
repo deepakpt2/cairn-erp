@@ -12,6 +12,10 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 
+import { AuthzError } from '../../platform/auth/current';
+import {
+  hasCapability, hasOrgAccess, loadCapabilities, loadOrgRestrictions,
+} from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
 import { type Tx, withTenant } from '../../platform/db/client';
 import { linkDocuments } from '../../platform/document';
@@ -44,6 +48,24 @@ import {
 export const GR_POST_CAPABILITY = 'INV.GR.POST';
 const JOURNAL_DOCUMENT_TYPE = 'WE';
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
+
+/** Identity resolved by requireSession; it is never accepted from receipt form fields. */
+export interface GoodsReceiptAuthorizationContext {
+  userId: string;
+  sessionId: string;
+}
+
+/** One generic denial for invalid session, capability, or company/plant assignment. */
+class GoodsReceiptAuthorizationError extends AuthzError {
+  constructor(username = 'authenticated user') {
+    super(GR_POST_CAPABILITY, username);
+    this.message = 'You are not authorised to post this goods receipt.';
+  }
+
+  override get remedy(): string {
+    return 'Ask an administrator to review your goods-receipt authority and company/plant assignments.';
+  }
+}
 
 export class GoodsReceiptError extends Error {
   remedy?: string;
@@ -335,6 +357,158 @@ async function existingByRequestKey(tx: Tx, client: string, requestKey: string) 
   return toView(header, lines);
 }
 
+async function requireGoodsReceiptAuthorityInTx(
+  tx: Tx,
+  client: string,
+  authorization: GoodsReceiptAuthorizationContext | undefined,
+) {
+  if (!authorization?.userId || !authorization.sessionId) {
+    throw new GoodsReceiptAuthorizationError();
+  }
+
+  // Revalidate the action's session and account at the authoritative service
+  // boundary, holding both rows until commit so revocation/deactivation cannot race.
+  const sessions = (await tx.execute(sql`
+    select u.username
+      from user_session s
+      join app_user u on u.client = s.client and u.id = s.user_id
+     where s.client = ${client}
+       and s.id = ${authorization.sessionId}
+       and s.user_id = ${authorization.userId}
+       and s.revoked_at is null
+       and s.expires_at > now()
+       and u.is_active = true
+       and u.is_locked = false
+     for share of s, u
+  `)) as unknown as Array<{ username: string }>;
+  const actor = sessions[0];
+  if (!actor) throw new GoodsReceiptAuthorizationError();
+
+  await tx.execute(sql`
+    select code from capability where code = ${GR_POST_CAPABILITY} for share
+  `);
+  await tx.execute(sql`
+    select ur.role_code, rc.capability_code
+      from user_role ur
+      join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
+     where ur.client = ${client}
+       and ur.user_id = ${authorization.userId}
+       and (ur.valid_from is null or ur.valid_from <= now())
+       and (ur.valid_to is null or ur.valid_to >= now())
+     for share of ur, rc
+  `);
+  const capabilities = await loadCapabilities(tx, client, authorization.userId);
+  if (!hasCapability(capabilities, GR_POST_CAPABILITY)) {
+    throw new GoodsReceiptAuthorizationError(actor.username);
+  }
+
+  await tx.execute(sql`
+    select id from auth_org_restriction
+     where client = ${client} and user_id = ${authorization.userId}
+     for share
+  `);
+  const restrictions = await loadOrgRestrictions(tx, client, authorization.userId);
+  const hasCompanyScope = restrictions.some((r) => r.scopeType === 'COMPANY_CODE' && r.scopeValue.trim());
+  const hasPlantScope = restrictions.some((r) => r.scopeType === 'PLANT' && r.scopeValue.trim());
+  if (!hasCompanyScope || !hasPlantScope) {
+    throw new GoodsReceiptAuthorizationError(actor.username);
+  }
+  return { username: actor.username, restrictions };
+}
+
+async function requireReceiptPlantAuthorityInTx(
+  tx: Tx,
+  client: string,
+  plantCode: string,
+  orderCompanyCode: string | null,
+  restrictions: Awaited<ReturnType<typeof loadOrgRestrictions>>,
+  username: string,
+): Promise<{ plant: string; companyCode: string }> {
+  const rows = (await tx.execute(sql`
+    select plant, company_code as "companyCode"
+      from plant
+     where client = ${client} and plant = ${plantCode}
+     for share
+  `)) as unknown as Array<{ plant: string; companyCode: string | null }>;
+  const plantRow = rows[0];
+  if (!plantRow?.companyCode
+    || (orderCompanyCode !== null && plantRow.companyCode !== orderCompanyCode)
+    || !hasOrgAccess(restrictions, 'COMPANY_CODE', plantRow.companyCode)
+    || !hasOrgAccess(restrictions, 'PLANT', plantRow.plant)) {
+    throw new GoodsReceiptAuthorizationError(username);
+  }
+  return { plant: plantRow.plant, companyCode: plantRow.companyCode };
+}
+
+async function authorizeReceiptOrderInTx(
+  tx: Tx,
+  client: string,
+  orderNumber: string,
+  lines: readonly PostGoodsReceiptInput['lines'][number][],
+  authorization: GoodsReceiptAuthorizationContext | undefined,
+): Promise<Map<number, { plant: string; companyCode: string }>> {
+  const { username, restrictions } = await requireGoodsReceiptAuthorityInTx(tx, client, authorization);
+  const orderRows = (await tx.execute(sql`
+    select company_code as "companyCode"
+      from purchase_order
+     where client = ${client} and order_number = ${orderNumber}
+     for share
+  `)) as unknown as Array<{ companyCode: string }>;
+  const order = orderRows[0];
+  if (!order) throw new GoodsReceiptError(`Purchase order ${orderNumber} does not exist.`);
+
+  const itemRows = (await tx.execute(sql`
+    select item_number as "itemNumber", plant
+      from purchase_order_item
+     where client = ${client} and order_number = ${orderNumber}
+     order by item_number
+     for share
+  `)) as unknown as Array<{ itemNumber: number; plant: string }>;
+  const byNumber = new Map(itemRows.map((item) => [item.itemNumber, item]));
+  // An empty request still has to be authorised before replay; using all persisted
+  // order-item plants means an empty or replay-shaped request cannot skip the scope check.
+  const targetNumbers = lines.length
+    ? [...new Set(lines.map((line) => line.itemNumber))]
+    : itemRows.map((item) => item.itemNumber);
+  const authorised = new Map<number, { plant: string; companyCode: string }>();
+  for (const itemNumber of targetNumbers) {
+    const item = byNumber.get(itemNumber);
+    if (!item) throw new GoodsReceiptAuthorizationError(username);
+    authorised.set(itemNumber, await requireReceiptPlantAuthorityInTx(
+      tx, client, item.plant, order.companyCode, restrictions, username,
+    ));
+  }
+  return authorised;
+}
+
+async function authorizeReceiptReversalInTx(
+  tx: Tx,
+  client: string,
+  materialDocumentNumber: string,
+  authorization: GoodsReceiptAuthorizationContext | undefined,
+): Promise<void> {
+  const { username, restrictions } = await requireGoodsReceiptAuthorityInTx(tx, client, authorization);
+  const documents = (await tx.execute(sql`
+    select material_document_number
+      from material_document
+     where client = ${client} and material_document_number = ${materialDocumentNumber}
+     for share
+  `)) as unknown as Array<{ material_document_number: string }>;
+  if (!documents[0]) throw new GoodsReceiptError(`Material document ${materialDocumentNumber} does not exist.`);
+
+  const lines = (await tx.execute(sql`
+    select line_number, plant
+      from material_document_line
+     where client = ${client} and material_document_number = ${materialDocumentNumber}
+     order by line_number
+     for share
+  `)) as unknown as Array<{ line_number: number; plant: string }>;
+  if (lines.length === 0) throw new GoodsReceiptError('The document carries no lines.');
+  for (const plantCode of new Set(lines.map((line) => line.plant))) {
+    await requireReceiptPlantAuthorityInTx(tx, client, plantCode, null, restrictions, username);
+  }
+}
+
 async function resolveAccount(
   tx: Tx, client: string, chart: string, event: string, valuationClass: string,
 ): Promise<string> {
@@ -354,7 +528,10 @@ async function resolveAccount(
   return row.glAccount;
 }
 
-export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<MaterialDocumentView> {
+export async function postGoodsReceipt(
+  input: PostGoodsReceiptInput,
+  options?: { authorization?: GoodsReceiptAuthorizationContext },
+): Promise<MaterialDocumentView> {
   const fingerprint = postingFingerprint([
     'GR', input.orderNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
     ...[...input.lines]
@@ -362,6 +539,7 @@ export async function postGoodsReceipt(input: PostGoodsReceiptInput): Promise<Ma
       .sort(),
   ]);
   return withTenant(input.client, async (tx) => {
+    await authorizeReceiptOrderInTx(tx, input.client, input.orderNumber, input.lines, options?.authorization);
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
     if (replay) {
@@ -729,14 +907,19 @@ export interface ReverseGoodsReceiptInput {
   materialDocumentNumber: string;
   documentDate: string;
   postingDate: string;
+  headerText?: string;
   requestKey: string;
 }
 
-export async function reverseGoodsReceipt(input: ReverseGoodsReceiptInput): Promise<MaterialDocumentView> {
+export async function reverseGoodsReceipt(
+  input: ReverseGoodsReceiptInput,
+  options?: { authorization?: GoodsReceiptAuthorizationContext },
+): Promise<MaterialDocumentView> {
   const fingerprint = postingFingerprint([
-    'GR-REV', input.materialDocumentNumber.trim(), input.postingDate, input.documentDate, input.headerText ?? '',
+    'GR-REV', input.materialDocumentNumber.trim(), input.postingDate, input.documentDate,
   ]);
   return withTenant(input.client, async (tx) => {
+    await authorizeReceiptReversalInTx(tx, input.client, input.materialDocumentNumber, options?.authorization);
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
     if (replay) {

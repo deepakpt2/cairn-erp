@@ -4,14 +4,9 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import {
-  ACTIVITY,
-  ALIAS,
-  BatchClassificationError,
-  NOT_EXECUTED,
-  listBatchClassification,
-  saveBatchClassification,
-} from '../src/modules/inventory/batch-classification';
-import { GoodsReceiptError, postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+  ACTIVITY, ALIAS, BatchClassificationError, NOT_EXECUTED, listBatchClassification, saveBatchClassification, } from '../src/modules/inventory/batch-classification';
+import { GoodsReceiptError } from '../src/modules/inventory/goods-receipt';
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
 import { saveMovementType } from '../src/modules/inventory/movement-type-configuration';
 import { closeDb, createTenant, destroyTenant } from './helpers';

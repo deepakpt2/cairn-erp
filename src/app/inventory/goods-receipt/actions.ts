@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { AuthzError, can, requireSession } from '@/platform/auth/current';
 import {
   GR_POST_CAPABILITY,
   GoodsReceiptError,
@@ -32,7 +32,10 @@ export async function postGoodsReceiptAction(
   if (!can(session, GR_POST_CAPABILITY)) {
     return { ok: false, message: 'You do not hold the goods receipt posting capability.' };
   }
-  const lines: Array<{ itemNumber: number; quantity: number; storageLocation?: string }> = [];
+  if (!session.sessionId) {
+    return { ok: false, message: 'You are not authorised to post this goods receipt.' };
+  }
+  const lines: Array<{ itemNumber: number; quantity: number; storageLocation?: string; batch?: string }> = [];
   for (const [key, value] of form.entries()) {
     if (!key.startsWith('qty-')) continue;
     const quantity = Number(value);
@@ -56,7 +59,7 @@ export async function postGoodsReceiptAction(
       headerText: text(form, 'headerText') || undefined,
       requestKey: text(form, 'requestKey'),
       lines,
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId } });
     revalidatePath(ROUTE);
     return {
       ok: true,
@@ -64,6 +67,7 @@ export async function postGoodsReceiptAction(
       documentNumber: doc.materialDocumentNumber,
     };
   } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
     if (error instanceof GoodsReceiptError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
@@ -77,6 +81,9 @@ export async function reverseGoodsReceiptAction(
   if (!can(session, GR_POST_CAPABILITY)) {
     return { ok: false, message: 'You do not hold the goods receipt posting capability.' };
   }
+  if (!session.sessionId) {
+    return { ok: false, message: 'You are not authorised to post this goods receipt.' };
+  }
   try {
     const doc = await reverseGoodsReceipt({
       client: session.user.client,
@@ -85,7 +92,7 @@ export async function reverseGoodsReceiptAction(
       documentDate: text(form, 'documentDate'),
       postingDate: text(form, 'postingDate'),
       requestKey: text(form, 'requestKey'),
-    });
+    }, { authorization: { userId: session.user.userId, sessionId: session.sessionId } });
     revalidatePath(ROUTE);
     return {
       ok: true,
@@ -93,6 +100,7 @@ export async function reverseGoodsReceiptAction(
       documentNumber: doc.materialDocumentNumber,
     };
   } catch (error) {
+    if (error instanceof AuthzError) return { ok: false, message: error.message, remedy: error.remedy };
     if (error instanceof GoodsReceiptError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }

@@ -8,7 +8,8 @@ import { releaseDocument } from '../src/modules/purchasing/release';
 import { createRequestForQuotation, getRequestForQuotation } from '../src/modules/purchasing/rfq';
 import { createQuotation, getQuotation } from '../src/modules/purchasing/quotation';
 import { createPurchasingInfoRecord } from '../src/modules/purchasing/info-record';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 import { defineTestRanges } from './helpers';

@@ -6,7 +6,8 @@ import { defineRange } from '../src/platform/numbering';
 import { createOrder } from '../src/modules/purchasing/orders';
 import { displayPurchaseOrder } from '../src/modules/purchasing/purchase-order-display';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
-import { postGoodsReceipt } from '../src/modules/inventory/goods-receipt';
+
+import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { postTransfer } from '../src/modules/inventory/transfer-posting';
