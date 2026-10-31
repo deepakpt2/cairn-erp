@@ -34,6 +34,7 @@
  */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { sql } from 'drizzle-orm';
+import { EXPLICIT_GRANT_ONLY_CAPABILITIES } from './capability-policy';
 import { withTenant, type Tx } from '../db/client';
 import { verifyPassword } from './password';
 
@@ -648,6 +649,10 @@ export function hasOrgAccess(
  * authorisation check into a decoration.
  */
 export function hasCapability(capabilities: string[], required: string): boolean {
+  // The administrator/configurator role patterns are intentionally broad. For a restricted authority,
+  // those patterns must not turn registration in the catalogue into an effective grant; an exact role
+  // capability assignment is the only grant recognized here.
+  if (EXPLICIT_GRANT_ONLY_CAPABILITIES.has(required)) return capabilities.includes(required);
   const requiredParts = required.split('.');
   return capabilities.some((held) => patternGrants(held.split('.'), requiredParts));
 }

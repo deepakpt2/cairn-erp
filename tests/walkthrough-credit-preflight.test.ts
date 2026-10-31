@@ -18,10 +18,10 @@ describe('walkthrough credit read-only prerequisite preflight', () => {
     expect(walkthroughCreditPrerequisiteError({ ...base, company: null })).toBeNull();
   });
 
-  it('stops when an existing company code has no supported CCA master-maintenance path', () => {
+  it('stops when an existing company code lacks the explicitly authorized initial CCA setup', () => {
     const message = walkthroughCreditPrerequisiteError({ ...base, area: null });
     expect(message).toContain('active credit control area 0001 is missing');
-    expect(message).toContain('no supported CCA master-maintenance activity');
+    expect(message).toContain('exact-grant-only authority remains unassigned by default');
     expect(message).toContain('Do not create it through SQL');
   });
 
