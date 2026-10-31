@@ -8,7 +8,7 @@ import { initializeMaterialPeriodControl } from '../src/modules/inventory/materi
 import { lockStockScope } from '../src/modules/inventory/physical-inventory';
 
 import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'ATOMIC_POSTING';

@@ -7,7 +7,7 @@ import { createOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { createTenant, defineTestRanges, destroyTenant } from './helpers';
 
 const ACTOR = 'SLOC_POSTING_TEST';

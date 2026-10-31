@@ -7,7 +7,10 @@ import {
   ACTIVITY, ALIAS, BatchClassificationError, NOT_EXECUTED, listBatchClassification, saveBatchClassification, } from '../src/modules/inventory/batch-classification';
 import { GoodsReceiptError } from '../src/modules/inventory/goods-receipt';
 import { postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { defineRange } from '../src/platform/numbering';
+import { createOrder } from '../src/modules/purchasing/orders';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { saveMovementType } from '../src/modules/inventory/movement-type-configuration';
 import { closeDb, createTenant, destroyTenant } from './helpers';
 
@@ -45,6 +48,41 @@ async function ensureIssue(client: string) {
     )
     on conflict (client, movement_type) do nothing
   `));
+}
+
+async function ensureClassificationOrder(client: string) {
+  await withTenant(client, async (tx) => {
+    await defineRange(tx, {
+      client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR,
+    });
+    await tx.execute(sql`
+      insert into purchasing_org (client, purchasing_org, name, company_code, created_by)
+      values (${client}, '1000', 'Batch classification test purchasing organization', '1000', ${ACTOR})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into business_partner (client, partner_number, category, name, created_by)
+      values (${client}, 'V10000', 'ORGANIZATION', 'Batch classification test supplier', ${ACTOR})
+      on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into bp_role (client, partner_number, role_code, created_by)
+      values (${client}, 'V10000', 'SUPPLIER', ${ACTOR}) on conflict do nothing
+    `);
+    await tx.execute(sql`
+      insert into supplier_purchasing_org (client, partner_number, role_code, purchasing_org, order_currency, created_by)
+      values (${client}, 'V10000', 'SUPPLIER', '1000', 'USD', ${ACTOR}) on conflict do nothing
+    `);
+  });
+  return createOrder({
+    client, changedBy: ACTOR, supplierNumber: 'V10000', purchasingOrg: '1000',
+    purchasingGroup: '001', companyCode: '1000', currency: '',
+    items: [{
+      shortText: 'Batch classification gate', quantity: 1, unit: 'PC', netPrice: 1, priceUnit: 1,
+      taxCode: '', plant: '1000', storageLocation: '', markedForDeletion: false,
+      scheduleLines: [{ deliveryDate: '2026-11-15', quantity: 1 }], assignments: [],
+    }],
+  });
 }
 
 async function stored(client: string, key: string) {
@@ -167,6 +205,7 @@ describe('OMCV batch classification for goods movements', () => {
   it('refuses a non-blank code before stock or a journal, and a blank code does not', async () => {
     const client = await tenant('omcv-post');
     await ensureReceipt(client);
+    const order = await ensureClassificationOrder(client);
     const posted = counts(client);
     await expect(postGoodsReceipt({
       client, changedBy: ACTOR, orderNumber: 'PO-NONE', documentDate: '2026-10-23', postingDate: '2026-10-23',
@@ -178,7 +217,7 @@ describe('OMCV batch classification for goods movements', () => {
       const current = (await stored(client, 'GOODS_RECEIPT_PO'))?.batch_classification ?? ' ';
       await save(client, 'GOODS_RECEIPT_PO', code, current);
       await expect(postGoodsReceipt({
-        client, changedBy: ACTOR, orderNumber: 'PO-NONE', documentDate: '2026-10-23', postingDate: '2026-10-23',
+        client, changedBy: ACTOR, orderNumber: order.orderNumber, documentDate: '2026-10-23', postingDate: '2026-10-23',
         requestKey: `omcv-post-${code}`, lines: [{ itemNumber: 10, quantity: 1 }],
       })).rejects.toThrow(new RegExp(`GOODS_RECEIPT_PO asks for batch classification ${code}`));
       expect(await counts(client)).toEqual(await posted);

@@ -7,7 +7,7 @@ import { createOrder } from '../src/modules/purchasing/orders';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
 
 import { reverseGoodsReceipt, postGoodsReceipt } from './helpers/goods-receipt-authorized';
-import { postGoodsIssue } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { postTransfer, reverseTransfer } from '../src/modules/inventory/transfer-posting';
 import { stockOverview } from '../src/modules/inventory/stock-overview';
 import { listWarehouseStocks } from '../src/modules/inventory/warehouse-stocks';
