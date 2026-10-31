@@ -79,5 +79,3 @@ export async function revokeUserRoleAction(_previous: RoleAdminActionState, form
   const targetUserId = text(form, 'userId'); const roleCode = text(form, 'roleCode');
   return run((session) => revokeRoleFromUser({ client: session.user.client, actor: actor(session), targetUserId, roleCode }), `Revoked ${roleCode} from the selected user.`);
 }
-
-export { EMPTY as EMPTY_ROLE_ADMIN_STATE };
