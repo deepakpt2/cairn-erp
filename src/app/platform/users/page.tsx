@@ -52,6 +52,11 @@ export default async function UsersPage() {
                 Reset password
               </Link>
             )}
+            {can(session, MAINTAIN) && (
+              <Link href="/platform/users/access" className="btn btn-default">
+                Business access
+              </Link>
+            )}
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">
               Launchpad
             </Link>
