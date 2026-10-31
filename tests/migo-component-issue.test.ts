@@ -1,11 +1,18 @@
 import { sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
+import {
+  appUser, authOrgRestriction, capability, role, roleCapability, userRole,
+} from '../src/platform/tables/security';
+import { createSession } from '../src/platform/auth/session';
+import { hashPassword } from '../src/platform/auth/password';
 import { defineRange } from '../src/platform/numbering';
 import {
   MB1A_SCENARIOS,
   MIGO_ISSUE_SCENARIOS,
+  GOODS_ISSUE_CAPABILITY,
   GoodsIssueError,
   postGoodsIssue,
   type PostGoodsIssueInput,
@@ -36,6 +43,9 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
   let fx: TestTenant;
   let client = '';
   let orderNumber = '';
+  let authorisedUserId = '';
+  let authorisedSessionId = '';
+  const authorization = () => ({ userId: authorisedUserId, sessionId: authorisedSessionId });
 
   const input = (overrides: Partial<PostGoodsIssueInput> = {}): PostGoodsIssueInput => ({
     client, changedBy: ACTOR, movementTypeCode: '261',
@@ -143,6 +153,46 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
     });
     orderNumber = order.orderNumber;
     await releaseProductionOrder({ client, orderNumber, releasedBy: ACTOR });
+    await withTenant(client, async (tx) => {
+      await tx.insert(capability).values({
+        code: GOODS_ISSUE_CAPABILITY, module: 'INV', description: 'Test goods issue posting', action: 'POST',
+      }).onConflictDoNothing();
+      await tx.insert(role).values({
+        client, code: 'TEST_MIGO_MB1A', name: 'MIGO fixture MB1A authorisation',
+        description: 'Authorises MB1A compatibility assertions', isSystemRole: false, isReadOnly: false,
+        createdBy: ACTOR,
+      }).onConflictDoNothing();
+      await tx.insert(roleCapability).values({
+        client, roleCode: 'TEST_MIGO_MB1A', capabilityCode: GOODS_ISSUE_CAPABILITY, createdBy: ACTOR,
+      }).onConflictDoNothing();
+      const rows = await tx.execute(sql`
+        select company_code as "companyCode" from plant where client = ${client} and plant = ${PLANT}
+      `) as unknown as Array<{ companyCode: string }>;
+      authorisedUserId = randomUUID();
+      await tx.insert(appUser).values({
+        id: authorisedUserId, client, username: 'migo.mb1a.authorised', fullName: 'MIGO MB1A fixture',
+        passwordHash: await hashPassword('MigoFixturePassword123!'), isActive: true, createdBy: ACTOR,
+      });
+      await tx.insert(userRole).values({
+        client, userId: authorisedUserId, roleCode: 'TEST_MIGO_MB1A', createdBy: ACTOR,
+      });
+      await tx.insert(authOrgRestriction).values([
+        {
+          id: randomUUID(), client, userId: authorisedUserId, scopeType: 'COMPANY_CODE',
+          scopeValue: rows[0].companyCode, createdBy: ACTOR,
+        },
+        {
+          id: randomUUID(), client, userId: authorisedUserId, scopeType: 'PLANT',
+          scopeValue: PLANT, createdBy: ACTOR,
+        },
+      ]);
+      await createSession(tx, { client, userId: authorisedUserId });
+      const sessionRows = await tx.execute(sql`
+        select id from user_session where client = ${client} and user_id = ${authorisedUserId}
+        order by issued_at desc limit 1
+      `) as unknown as Array<{ id: string }>;
+      authorisedSessionId = sessionRows[0].id;
+    });
   }, 180_000);
 
   afterAll(async () => {
@@ -257,12 +307,13 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
     const orderOn201 = await postGoodsIssue(input({ movementTypeCode: '201', lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, quantity: 1, costCenter: '',
       productionOrderNumber: orderNumber,
-    }] })).catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MB1A', { authorization: authorization() }).catch((e: unknown) => e as GoodsIssueError);
     expect(orderOn201.message).toMatch(/consumes for no production order/);
   });
 
   it('refuses 261 posted from the MB1A screen', async () => {
-    const error = await postGoodsIssue(input()).catch((e: unknown) => e as GoodsIssueError);
+    const error = await postGoodsIssue(input(), 'MB1A', { authorization: authorization() })
+      .catch((e: unknown) => e as GoodsIssueError);
     expect(error.message).toMatch(/Movement 261 is posted from MIGO/);
   });
 

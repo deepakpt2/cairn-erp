@@ -24,6 +24,10 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 
+import { AuthzError } from '../../platform/auth/current';
+import {
+  hasCapability, hasOrgAccess, loadCapabilities, loadOrgRestrictions,
+} from '../../platform/auth/session';
 import { withTenant, type Tx } from '../../platform/db/client';
 import { recordChange } from '../../platform/change';
 import { allocateNumber } from '../../platform/numbering';
@@ -63,6 +67,18 @@ export class GoodsIssueError extends Error {
 
 const MATERIAL_DOCUMENT_CLASS = 'material_document';
 const JOURNAL_DOCUMENT_TYPE = 'WA';
+
+/** Generic, non-enumerating denial for a missing session or company/plant assignment. */
+class GoodsIssueAuthorizationError extends AuthzError {
+  constructor(username = 'authenticated user') {
+    super(GOODS_ISSUE_CAPABILITY, username);
+    this.message = 'You are not authorised to post this goods issue.';
+  }
+
+  override get remedy(): string {
+    return 'Ask an administrator to review your goods-issue authority and company/plant assignments.';
+  }
+}
 
 export interface GoodsIssueScenario {
   /** The three-digit movement type the user enters — an input alias, never a stored code. */
@@ -150,6 +166,12 @@ export interface GoodsIssueLineInput {
   entryUnit?: string;
   /** Required when the material is batch-managed. The batch must already stand. */
   batch?: string;
+}
+
+export interface GoodsIssueAuthorizationContext {
+  /** User and session IDs resolved by requireSession, never read from form fields. */
+  userId: string;
+  sessionId: string;
 }
 
 export interface PostGoodsIssueInput {
@@ -333,6 +355,86 @@ async function toView(
   };
 }
 
+async function authorizeMb1aPlantsInTx(
+  tx: Tx,
+  client: string,
+  lines: readonly GoodsIssueLineInput[],
+  authorization: GoodsIssueAuthorizationContext | undefined,
+): Promise<Map<string, { plant: string; companyCode: string }>> {
+  if (!authorization?.userId || !authorization.sessionId) {
+    throw new GoodsIssueAuthorizationError();
+  }
+
+  // Revalidate and hold the live session and account rows until the posting
+  // transaction commits. The Server Action supplies these IDs from requireSession;
+  // a form field cannot choose either identity.
+  const sessionRows = (await tx.execute(sql`
+    select u.username
+      from user_session s
+      join app_user u on u.client = s.client and u.id = s.user_id
+     where s.client = ${client}
+       and s.id = ${authorization.sessionId}
+       and s.user_id = ${authorization.userId}
+       and s.revoked_at is null
+       and s.expires_at > now()
+       and u.is_active = true
+       and u.is_locked = false
+     for share of s, u
+  `)) as unknown as Array<{ username: string }>;
+  const actor = sessionRows[0];
+  if (!actor) throw new GoodsIssueAuthorizationError();
+
+  // Prevent a concurrent role/capability removal from racing the check. The
+  // capability list is resolved from the same transaction and current tenant.
+  await tx.execute(sql`
+    select ur.role_code, rc.capability_code
+      from user_role ur
+      join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
+     where ur.client = ${client}
+       and ur.user_id = ${authorization.userId}
+       and (ur.valid_from is null or ur.valid_from <= now())
+       and (ur.valid_to is null or ur.valid_to >= now())
+     for share of ur, rc
+  `);
+  const capabilities = await loadCapabilities(tx, client, authorization.userId);
+  if (!hasCapability(capabilities, GOODS_ISSUE_CAPABILITY)) {
+    throw new AuthzError(GOODS_ISSUE_CAPABILITY, actor.username);
+  }
+
+  // Hold existing assignments through commit; absent company or plant grants fail
+  // closed for this posting path, even though hasOrgAccess keeps its documented
+  // empty-list-means-unrestricted behavior for other consumers.
+  await tx.execute(sql`
+    select id from auth_org_restriction
+     where client = ${client} and user_id = ${authorization.userId}
+     for share
+  `);
+  const restrictions = await loadOrgRestrictions(tx, client, authorization.userId);
+  const hasCompanyScope = restrictions.some((r) => r.scopeType === 'COMPANY_CODE' && r.scopeValue.trim());
+  const hasPlantScope = restrictions.some((r) => r.scopeType === 'PLANT' && r.scopeValue.trim());
+  if (!hasCompanyScope || !hasPlantScope) throw new GoodsIssueAuthorizationError(actor.username);
+
+  const trustedPlants = new Map<string, { plant: string; companyCode: string }>();
+  for (const line of lines) {
+    const requestedPlant = line.plant.trim();
+    if (!requestedPlant) throw new GoodsIssueAuthorizationError(actor.username);
+    const rows = (await tx.execute(sql`
+      select plant, company_code as "companyCode"
+        from plant
+       where client = ${client} and plant = ${requestedPlant}
+       for share
+    `)) as unknown as Array<{ plant: string; companyCode: string | null }>;
+    const plantRow = rows[0];
+    if (!plantRow?.companyCode
+      || !hasOrgAccess(restrictions, 'COMPANY_CODE', plantRow.companyCode)
+      || !hasOrgAccess(restrictions, 'PLANT', plantRow.plant)) {
+      throw new GoodsIssueAuthorizationError(actor.username);
+    }
+    trustedPlants.set(line.plant, { plant: plantRow.plant, companyCode: plantRow.companyCode });
+  }
+  return trustedPlants;
+}
+
 /**
  * Post a goods issue. One transaction: the stock, the valuation, the journal, the
  * material document, the reservation's withdrawn quantity and the document's
@@ -348,7 +450,7 @@ async function toView(
 export async function postGoodsIssue(
   input: PostGoodsIssueInput,
   screen: 'MB1A' | 'MIGO' | 'SALES' = 'MB1A',
-  options?: { tx?: Tx },
+  options?: { tx?: Tx; authorization?: GoodsIssueAuthorizationContext },
 ): Promise<GoodsIssueView> {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
@@ -371,6 +473,11 @@ export async function postGoodsIssue(
   ]);
 
   const run = async (tx: Tx): Promise<GoodsIssueView> => {
+    // MB1A's direct goods issue is a session-bound business action. Resolve and
+    // authorise trusted plant/company rows before replay lookup as well as writes.
+    const authorisedPlants = screen === 'MB1A'
+      ? await authorizeMb1aPlantsInTx(tx, input.client, input.lines, options?.authorization)
+      : null;
     await lockRequestKey(tx, input.client, input.requestKey);
     const replay = await existingByRequestKey(tx, input.client, input.requestKey);
     if (replay) {
@@ -397,6 +504,12 @@ export async function postGoodsIssue(
           `Line ${line.materialNumber}: the issue quantity must be positive.`,
           'Enter a quantity greater than zero.',
         );
+      }
+      if (screen === 'MB1A') {
+        const trustedPlant = authorisedPlants?.get(line.plant);
+        if (!trustedPlant) throw new GoodsIssueAuthorizationError();
+        companies.add(trustedPlant.companyCode);
+        continue;
       }
       const [plantRow] = await tx.select().from(plantTable).where(and(
         eq(plantTable.client, input.client), eq(plantTable.plant, line.plant),

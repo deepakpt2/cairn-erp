@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { can, requireSession } from '@/platform/auth/current';
+import { AuthzError, can, requireSession } from '@/platform/auth/current';
 import {
   GOODS_ISSUE_CAPABILITY,
   GOODS_ISSUE_ROUTE,
@@ -30,6 +30,9 @@ export async function postGoodsIssueAction(
   const session = await requireSession(GOODS_ISSUE_ROUTE);
   if (!can(session, GOODS_ISSUE_CAPABILITY)) {
     return { ok: false, message: 'You do not hold the goods issue capability.' };
+  }
+  if (!session.sessionId) {
+    return { ok: false, message: 'The session is missing.' };
   }
   const lines: Array<{
     materialNumber: string; plant: string; storageLocation?: string; quantity: number;
@@ -61,6 +64,8 @@ export async function postGoodsIssueAction(
       headerText: text(form, 'headerText') || undefined,
       requestKey: text(form, 'requestKey'),
       lines,
+    }, 'MB1A', {
+      authorization: { userId: session.user.userId, sessionId: session.sessionId },
     });
     revalidatePath(GOODS_ISSUE_ROUTE);
     return {
@@ -69,6 +74,9 @@ export async function postGoodsIssueAction(
       document,
     };
   } catch (error) {
+    if (error instanceof AuthzError) {
+      return { ok: false, message: error.message, remedy: error.remedy, document: null };
+    }
     if (error instanceof GoodsIssueError) return { ok: false, message: error.message, remedy: error.remedy };
     throw error;
   }
