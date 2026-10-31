@@ -74,20 +74,56 @@ function matches(pattern: RegExp, text: string): string[] {
   return out;
 }
 
+/**
+ * Tables named by a PL/pgSQL FOREACH loop whose body applies a per-table
+ * privilege with `format(... public.%I ..., target)`. The table list and the
+ * identifier placeholder must be in the same loop, and the formatted statement
+ * must name cairn_app; an unrelated dynamic grant elsewhere in a migration is
+ * not evidence for every table it creates.
+ */
+function loopDeclaredTables(text: string, effect: 'grant' | 'revoke'): string[] {
+  const body = stripComments(text);
+  const found: string[] = [];
+  const loops = /\bforeach\s+([a-z_][a-z0-9_]*)\s+in\s+array\s+array\s*\[([\s\S]*?)\]\s+loop([\s\S]*?)\bend\s+loop\b/gi;
+  let loop: RegExpExecArray | null;
+  while ((loop = loops.exec(body)) !== null) {
+    const target = loop[1]!;
+    const tableList = loop[2]!;
+    const statements = loop[3]!;
+    const direction = effect === 'grant' ? 'to' : 'from';
+    const declaration = new RegExp(
+      `\\bexecute\\s+format\\s*\\(\\s*'\\s*${effect}\\b[^']*?` +
+        `\\bon\\s+(?:table\\s+)?(?:public\\.)?%I\\s+${direction}\\s+cairn_app\\s*'\\s*,\\s*${target}\\s*\\)`,
+      'i',
+    );
+    if (!declaration.test(statements)) continue;
+    const literals = /'([a-z_][a-z0-9_]*)'/gi;
+    let literal: RegExpExecArray | null;
+    while ((literal = literals.exec(tableList)) !== null) found.push(literal[1]!.toLowerCase());
+  }
+  return found;
+}
+
 /** Tables a file revokes from the runtime role — an immutability declaration. */
 export function revokedTables(text: string): string[] {
-  return matches(
-    /\brevoke\s+(?:grant\s+)?[^;]*?\bon\s+(?:table\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s+from\s+cairn_app/gi,
-    stripComments(text),
-  );
+  return [
+    ...matches(
+      /\brevoke\s+(?:grant\s+)?[^;]*?\bon\s+(?:table\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s+from\s+cairn_app/gi,
+      stripComments(text),
+    ),
+    ...loopDeclaredTables(text, 'revoke'),
+  ];
 }
 
 /** Tables a file grants to the runtime role — a mutability declaration. */
 export function grantedTables(text: string): string[] {
-  return matches(
-    /\bgrant\s+[^;]*?\bon\s+(?:table\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s+to\s+cairn_app/gi,
-    stripComments(text),
-  );
+  return [
+    ...matches(
+      /\bgrant\s+[^;]*?\bon\s+(?:table\s+)?(?:public\.)?([a-z_][a-z0-9_]*)\s+to\s+cairn_app/gi,
+      stripComments(text),
+    ),
+    ...loopDeclaredTables(text, 'grant'),
+  ];
 }
 
 /** Tables a file creates, with or without a schema qualifier. */
@@ -456,6 +492,28 @@ grant update, delete on table public.widget_counter to cairn_app;`;
 -- A later migration may grant update, delete on table public.widget_ledger to cairn_app.`;
     expect(auditMigrationGrantPolicy(commentOnly)).toEqual([
       expect.stringContaining('no cairn_app privilege declaration'),
+    ]);
+  });
+
+  it('recognizes explicit table grants applied by a bounded dynamic migration loop', () => {
+    const migration = `
+create table public.widget_profile (id integer primary key);
+create table public.widget_rule (id integer primary key);
+do $$
+declare
+  target text;
+begin
+  foreach target in array array['widget_profile', 'widget_rule'] loop
+    execute format('grant select, insert, update, delete on public.%I to cairn_app', target);
+  end loop;
+end $$;
+`;
+    expect(grantedTables(migration).sort()).toEqual(['widget_profile', 'widget_rule']);
+    expect(auditMigrationGrantPolicy(migration)).toEqual([]);
+
+    const uncovered = `${migration}\ncreate table public.widget_unlisted (id integer primary key);`;
+    expect(auditMigrationGrantPolicy(uncovered)).toEqual([
+      expect.stringContaining('widget_unlisted: created with no cairn_app privilege declaration'),
     ]);
   });
 
