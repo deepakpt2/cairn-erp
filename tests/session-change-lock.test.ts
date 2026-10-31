@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 
-import { closeDb, withTenant } from '@/platform/db/client';
+import { closeDb, directSql, withTenant } from '@/platform/db/client';
 import { hashPassword } from '@/platform/auth/password';
 import {
   createSession,
@@ -320,9 +320,22 @@ describe('a session that is not live never reaches change', () => {
 
     // A deleted session row cannot be resolved by its old token either.
     const real = await liveSession('scl.editor');
-    await withTenant(tenant.client, (tx) =>
-      tx.execute(sql`delete from user_session where token_hash = ${tokenHash(real.token)}`),
-    );
+    // Removing a session row is fixture construction, not a runtime operation:
+    // cairn_app intentionally has no DELETE grant on user_session. Use the
+    // separately configured migration connection only for this test mutation.
+    const ownerUrl = process.env.MIGRATION_DATABASE_URL;
+    if (!ownerUrl) throw new Error('MIGRATION_DATABASE_URL is required for the deleted-session fixture.');
+    const owner = directSql(ownerUrl);
+    try {
+      const [identity] = await owner.unsafe<Array<{ current_user: string }>>('select current_user');
+      if (identity?.current_user !== 'cairn') throw new Error('Deleted-session fixture requires the migration role.');
+      await owner.unsafe(
+        'delete from user_session where client = $1 and token_hash = $2',
+        [tenant.client, tokenHash(real.token)],
+      );
+    } finally {
+      await owner.end({ timeout: 5 });
+    }
     const afterDelete = await withTenant(tenant.client, (tx) =>
       resolveSession(tx, { client: tenant.client, token: real.token }),
     );

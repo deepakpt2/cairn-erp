@@ -556,6 +556,12 @@ export async function requestPasswordReset(
   const { client, username, ipAddress } = parsed.data;
 
   return withTenant(client, async (tx) => {
+    // Serialize requests for this (client, normalized username) through the
+    // count-and-insert transaction. Without the transaction-scoped advisory
+    // lock, simultaneous requests can all observe the same count and exceed
+    // the per-hour limit before any of them inserts its token.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${client}), hashtext(${username.toUpperCase()}))`);
+
     // Rate limit: count requests for this username in the last hour.
     const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
     const recent = await tx

@@ -619,7 +619,7 @@ export async function loadOrgRestrictions(
   userId: string,
 ): Promise<OrgRestriction[]> {
   const rows = (await tx.execute(sql`
-    select scope_type as scopeType, scope_value as scopeValue
+    select scope_type as "scopeType", scope_value as "scopeValue"
       from auth_org_restriction
      where client = ${client} and user_id = ${userId}
      order by scope_type, scope_value

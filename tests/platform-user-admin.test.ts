@@ -14,7 +14,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { withTenant, closeDb } from '@/platform/db/client';
-import { appUser, userSession, passwordResetToken, role, roleCapability, userRole, capability } from '@/platform/tables/security';
+import { appUser, userSession, passwordResetToken, role, roleCapability, userRole, capability, authOrgRestriction } from '@/platform/tables/security';
 import { createUser, changeUser, initiatePasswordReset, requestPasswordReset, completePasswordReset, type CreateUserInput } from '@/modules/platform/user-admin';
 import { hashPassword } from '@/platform/auth/password';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -53,7 +53,6 @@ beforeAll(async () => {
           module: 'PLT',
           description: `Test capability ${code}`,
           action: 'CONFIGURE',
-          createdBy: ACTOR,
         });
       }
     }
@@ -213,7 +212,6 @@ describe('user administration — authorization', () => {
       fullName: 'Updated Target User',
       email: 'updated@example.com',
       changedBy: adminUserId,
-      sessionCapabilities: ADMIN_CAPS,
     }, ADMIN_CAPS);
 
     expect(view.fullName).toBe('Updated Target User');
@@ -226,6 +224,30 @@ describe('user administration — authorization', () => {
     expect(row[0].email).toBe('updated@example.com');
   });
 
+  it('keeps central account administration client-level despite company and plant restrictions', async () => {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.insert(authOrgRestriction).values([
+        {
+          id: randomUUID(), client: tenant.client, userId: adminUserId,
+          scopeType: 'COMPANY_CODE', scopeValue: '1000', createdBy: ACTOR,
+        },
+        {
+          id: randomUUID(), client: tenant.client, userId: adminUserId,
+          scopeType: 'PLANT', scopeValue: 'P001', createdBy: ACTOR,
+        },
+      ]);
+    });
+
+    const changed = await changeUser({
+      client: tenant.client,
+      userId: targetUserId,
+      fullName: 'Maintained at client scope',
+      changedBy: adminUserId,
+    }, ADMIN_CAPS);
+    expect(changed.fullName).toBe('Maintained at client scope');
+    expect(changed.client).toBe(tenant.client);
+  });
+
   it('denies change without CFG.PLT.USER.MAINTAIN capability', async () => {
     await expect(
       changeUser({
@@ -233,7 +255,6 @@ describe('user administration — authorization', () => {
         userId: targetUserId,
         fullName: 'Should Not Change',
         changedBy: noCapsUserId,
-        sessionCapabilities: EMPTY_CAPS,
       }, EMPTY_CAPS),
     ).rejects.toThrow(MSG_CAP_MISSING);
   });
@@ -321,7 +342,6 @@ describe('user administration — authorization', () => {
       userId: targetUserId,
       fullName: 'Still Target User',
       changedBy: adminUserId,
-      sessionCapabilities: ADMIN_CAPS,
     }, ADMIN_CAPS);
 
     const afterRoles = await withTenant(tenant.client, (tx) =>
@@ -392,6 +412,35 @@ describe('password recovery — self-service request', () => {
       username: 'stage4.reset.active',
     });
     expect(result.accepted).toBe(true);
+  });
+
+  it('enforces the per-hour reset-request limit under concurrent calls', async () => {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.insert(appUser).values({
+        id: 'stage4-reset-rate-race',
+        client: tenant.client,
+        username: 'stage4.reset.rate.race',
+        fullName: 'Rate Limit Race',
+        passwordHash: await hashPassword(PASSWORD),
+        isActive: true,
+        createdBy: ACTOR,
+      });
+    });
+
+    const outcomes = await Promise.all(Array.from({ length: 8 }, () =>
+      requestPasswordReset({ client: tenant.client, username: 'stage4.reset.rate.race' }),
+    ));
+    expect(outcomes.every((outcome) => outcome.accepted)).toBe(true);
+
+    const rows = await withTenant(tenant.client, (tx) =>
+      tx.select({ id: passwordResetToken.id })
+        .from(passwordResetToken)
+        .where(and(
+          eq(passwordResetToken.client, tenant.client),
+          eq(passwordResetToken.userId, 'stage4-reset-rate-race'),
+        )),
+    );
+    expect(rows).toHaveLength(3);
   });
 
   it('returns accepted=true for nonexistent user (no enumeration)', async () => {

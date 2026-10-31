@@ -246,9 +246,10 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 2. `10-app-role.sh` creates the `cairn_app` application role with `CAIRN_APP_DB_PASSWORD`, restricted to `NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT`.
 3. `CAIRN_APP_DB_PASSWORD` is embedded in `DATABASE_URL` by Docker Compose, so it **must be URL-safe** (hexadecimal is recommended).
 4. `POSTGRES_PASSWORD` is the PostgreSQL superuser password. It is never placed in an application URL and is not URL-validated.
-5. The `migrate` service runs `scripts/sync-db-app-role.ts`, which reads `DATABASE_URL` and `MIGRATION_DATABASE_URL`, validates both targets, and synchronizes the `cairn_app` password to match `DATABASE_URL`.
-6. Before the legacy tenant/foundation seed runs, the one-shot `migrate` provisioning service runs `npm run db:init-reference` after migrations. It atomically inserts the project-defined standard currencies, countries, units of measure, and approved partner-bank country profiles with `ON CONFLICT DO NOTHING`. This creates missing defaults without replacing customer-maintained or customised rows. It is part of provisioning, not the web application startup path.
-7. The `app` service connects using `DATABASE_URL` as `cairn_app`.
+5. The one-shot `migrate` service runs `scripts/sync-db-app-role.ts` before migrations to ensure the restricted `cairn_app` login exists, runs migrations, then runs role synchronization again. The post-migration pass repairs and verifies the exact central-auth table ACLs in place; it does not use superuser credentials at runtime or grant blanket table privileges. It also checks the runtime connection is `NOSUPERUSER NOBYPASSRLS`, has no role memberships, has `USAGE` but not `CREATE` on `public`, and has only `SELECT, INSERT, UPDATE` on `app_user`, `user_session`, and `password_reset_token`.
+6. Migration `9207_central_user_auth_least_privilege.sql` removes surplus table rights on those three authentication tables, restores only the required read/insert/update rights, and forces RLS on `password_reset_token`. The role-sync pass repeats this idempotently, so a missing or drifted grant on an existing volume is repaired without resetting data.
+7. Before the legacy tenant/foundation seed runs, the one-shot `migrate` provisioning service runs `npm run db:init-reference` after migrations and ACL reconciliation. It atomically inserts standard currencies, countries, units of measure, and approved partner-bank country profiles with `ON CONFLICT DO NOTHING`. This creates missing defaults without replacing customer-maintained or customised rows. It is part of provisioning, not the web application startup path.
+8. The `app` service connects using `DATABASE_URL` as `cairn_app`.
 
 ### Required Environment Variables (`.env`)
 
@@ -286,7 +287,7 @@ docker compose up -d --build
 docker compose logs db | grep -i "database system is ready"
 
 # 5. Verify migration and reference initialization completed
-docker compose logs migrate | grep -E "credentials synchronized|Standard reference data initialized"
+docker compose logs migrate | grep -E "credentials, central-auth table grants|Standard reference data initialized"
 
 # 6. Verify app is healthy
 docker compose ps app
@@ -309,11 +310,13 @@ If a volume already exists with data and the `cairn_app` role credentials are ou
    # or, if mounted at a different path:
    docker compose exec db sh -c 'CAIRN_APP_DB_PASSWORD=${CAIRN_APP_DB_PASSWORD} POSTGRES_PASSWORD=${POSTGRES_PASSWORD} sh /path/to/sync-credentials.sh'
    ```
-3. The script updates `cairn_app` and the owner role passwords without touching schema or business data.
-4. Restart the `migrate` and `app` services if needed:
+3. `sync-credentials.sh` updates role passwords and flags without touching schema or business data; by itself it does not restore table ACLs.
+4. Recreate the one-shot operations service and app so migrations run, then the post-migration role-sync pass reconciles the three central-auth table grants. This is in-place and does not reset the volume:
    ```bash
-   docker compose restart migrate app
+   docker compose up -d --build --force-recreate migrate app
+   docker compose logs migrate | grep -E "credentials, central-auth table grants|Applied .*9207"
    ```
+   The operations service fails closed if the actual `cairn_app` connection is elevated or the effective auth-table ACLs are not exactly `SELECT, INSERT, UPDATE`.
 
 ### Troubleshooting
 

@@ -166,6 +166,30 @@ describe('employee-to-user linking', () => {
     expect(person!.appUserId).toBe(configuratorUserId);
   });
 
+  it('linking an employee does not grant roles, capabilities, or login authority', async () => {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.insert(employee).values({
+        client: tenant.client,
+        personnelNumber: 'ELINKNOAUTH',
+        fullName: 'Linked User Without Roles',
+        isActive: true,
+        appUserId: noPeopleUserId,
+        createdBy: ACTOR,
+      });
+    });
+
+    const capabilities = await withTenant(tenant.client, (tx) =>
+      loadCapabilities(tx, tenant.client, noPeopleUserId),
+    );
+    expect(capabilities).toEqual([]);
+    const signedIn = await signIn({
+      client: tenant.client,
+      username: 'ppl.nople',
+      password: 'Password1',
+    });
+    expect(signedIn.capabilities).toEqual([]);
+  });
+
   it('refuses a second link from another employee to the same user', async () => {
     await expect(
       withTenant(tenant.client, async (tx) => {

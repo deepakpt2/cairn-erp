@@ -6,11 +6,13 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # One-shot administrative tools: direct DB access; never the web runtime role.
+# Sync once before migrations to ensure the login exists, then again afterwards
+# to reconcile central-auth table grants on fresh and existing volumes.
 FROM dependencies AS operations
 COPY . .
 COPY walkthrough-seed.ts /app/walkthrough-seed.ts
 ENV CAIRN_ENV=production
-CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:init-reference && npm run seed"]
+CMD ["sh", "-c", "npm run db:sync-role && npm run db:migrate && npm run db:sync-role && npm run db:init-reference && npm run seed"]
 
 FROM dependencies AS builder
 COPY . .

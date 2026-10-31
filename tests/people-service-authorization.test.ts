@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 
 import { withTenant, closeDb } from '../src/platform/db/client';
-import { appUser, role, roleCapability, userRole } from '../src/platform/tables/security';
+import { appUser, role, roleCapability, userRole, authOrgRestriction } from '../src/platform/tables/security';
 import { employee } from '../src/modules/people/schema';
 import {
   loadCapabilities,
@@ -107,10 +108,16 @@ beforeAll(async () => {
     });
 
     // Scope the configurator to one company code to exercise org restrictions.
-    await tx.execute(sql`
-      insert into auth_org_restriction (id, client, user_id, scope_type, scope_value, created_by)
-      values (gen_random_uuid(), ${tenant.client}, ${configuratorUserId}, 'COMPANY_CODE', '1000', ${ACTOR})
-    `);
+    await tx.insert(authOrgRestriction).values([
+      {
+        id: randomUUID(), client: tenant.client, userId: configuratorUserId,
+        scopeType: 'COMPANY_CODE', scopeValue: '1000', createdBy: ACTOR,
+      },
+      {
+        id: randomUUID(), client: tenant.client, userId: configuratorUserId,
+        scopeType: 'PLANT', scopeValue: 'P001', createdBy: ACTOR,
+      },
+    ]);
   });
 });
 
@@ -220,6 +227,7 @@ describe('organisational restrictions', () => {
     );
     expect(restrictions.length).toBeGreaterThan(0);
     expect(restrictions.find((r) => r.scopeType === 'COMPANY_CODE' && r.scopeValue === '1000')).toBeDefined();
+    expect(restrictions.find((r) => r.scopeType === 'PLANT' && r.scopeValue === 'P001')).toBeDefined();
   });
 
   it('hasOrgAccess returns true when unrestricted (empty restrictions)', async () => {
@@ -234,6 +242,8 @@ describe('organisational restrictions', () => {
     );
     expect(hasOrgAccess(restrictions, 'COMPANY_CODE', '9999')).toBe(false);
     expect(hasOrgAccess(restrictions, 'COMPANY_CODE', '1000')).toBe(true);
+    expect(hasOrgAccess(restrictions, 'PLANT', 'P999')).toBe(false);
+    expect(hasOrgAccess(restrictions, 'PLANT', 'P001')).toBe(true);
   });
 
   it('a user with no restrictions holds no company/plant limits', async () => {

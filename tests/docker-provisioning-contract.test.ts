@@ -24,6 +24,17 @@ describe('Docker provisioning and walkthrough packaging contract', () => {
     expect(testSteps.indexOf("script: 'scripts/seed-reference.ts'")).toBeLessThan(testSteps.indexOf("script: 'scripts/seed.ts'"));
   });
 
+  it('synchronizes the restricted role both before and after migrations', () => {
+    const command = dockerfile.match(/CMD \["sh", "-c", "([^"]+)"\]/)?.[1] ?? '';
+    const firstSync = command.indexOf('npm run db:sync-role');
+    const migrate = command.indexOf('npm run db:migrate');
+    const secondSync = command.indexOf('npm run db:sync-role', firstSync + 1);
+    expect(firstSync).toBeGreaterThanOrEqual(0);
+    expect(firstSync).toBeLessThan(migrate);
+    expect(migrate).toBeLessThan(secondSync);
+    expect(secondSync).toBeGreaterThanOrEqual(0);
+  });
+
   it('keeps walkthrough execution manual-only while initializing references during provisioning', () => {
     const command = dockerfile.match(/CMD \["sh", "-c", "([^"]+)"\]/)?.[1] ?? '';
     expect(command).toContain('npm run db:init-reference');
