@@ -19,6 +19,8 @@ export interface PurchasingOrgCompanyCodeAssignmentState {
   remedy?: string;
   purchasingOrg?: string;
   companyCode?: string;
+  /** True only when the action's persisted-session lock assertion refused the save. */
+  lockFailure?: boolean;
 }
 
 function read(form: FormData, key: string) {
@@ -63,7 +65,7 @@ export async function assignPurchasingOrgCompanyCodeAction(
     };
   } catch (error) {
     if (error instanceof EnqueueError) {
-      return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: purchasingOrgCode };
+      return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: purchasingOrgCode, lockFailure: true };
     }
     if (error instanceof PurchasingOrgCompanyCodeAssignmentError || error instanceof AuthzError) {
       return { ok: false, message: error.message, remedy: error.remedy, purchasingOrg: purchasingOrgCode };

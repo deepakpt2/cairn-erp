@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect, useReducer } from 'react';
-
+import { useEffect, useReducer, useRef } from 'react';
 
 import {
   heartbeatEnqueueAction,
@@ -19,6 +18,7 @@ import {
   projectClaim,
   type ChangeLockClaim,
 } from './claim';
+import { observeChangeLockClaim } from './claim-lifecycle';
 
 /**
  * The answer of a claim, and the one action that can restart it.
@@ -73,6 +73,7 @@ export function useChangeLockClaim(
   enabled: boolean,
 ): ChangeLockClaimHandle {
   const [claim, dispatch] = useReducer(changeLockClaim, IDLE_CLAIM);
+  const cleanupChain = useRef<Promise<void>>(Promise.resolve());
   const key = claimKey(lockObject, argument, transactionCode);
   const open = enabled && Boolean(argument);
 
@@ -82,25 +83,22 @@ export function useChangeLockClaim(
       return undefined;
     }
     dispatch({ type: 'begin', key });
-    // The effect's own teardown is what makes a superseded claim unable to answer: the row that
-    // changed hands, or left the screen, cannot land its grant on the row that replaced it. A rejected
-    // action is answered here rather than left unhandled, and it lands as `failed`, not as a refusal.
-    let settled = false;
-    void openChangeLockAction(lockObject, argument, transactionCode).then(
-      (state) => {
-        if (!settled) dispatch({ type: 'resolve', key, state });
-      },
-      (error: unknown) => {
-        if (!settled) dispatch({ type: 'reject', key, error: failureText(error) });
-      },
+    // A replacement attempt waits for the previous attempt's owner-checked release. If this screen
+    // leaves while open is in flight, its cleanup is appended to the same chain, so a late grant cannot
+    // be stranded and an older cleanup cannot release a newer opening for this hook.
+    const request = cleanupChain.current.then(() => openChangeLockAction(lockObject, argument, transactionCode));
+    const lifecycle = observeChangeLockClaim(
+      request,
+      (state) => dispatch({ type: 'resolve', key, state }),
+      (error: unknown) => dispatch({ type: 'reject', key, error: failureText(error) }),
+      () => releaseEnqueueAction(lockObject, argument),
     );
     const beat = window.setInterval(() => {
       quietly(heartbeatEnqueueAction(lockObject, argument));
     }, 20_000);
     return () => {
-      settled = true;
       window.clearInterval(beat);
-      quietly(releaseEnqueueAction(lockObject, argument));
+      cleanupChain.current = lifecycle.cancel();
     };
   }, [key, open, argument, lockObject, transactionCode, claim.attempt]);
 

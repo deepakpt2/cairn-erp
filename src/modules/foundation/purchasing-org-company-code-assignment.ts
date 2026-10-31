@@ -36,6 +36,21 @@ export class PurchasingOrgCompanyCodeAssignmentError extends Error {
   }
 }
 
+/** Read the current tenant-scoped assignment without changing configuration or audit state. */
+export async function readPurchasingOrgCompanyCodeAssignment(client: string, purchasingOrgCode: string) {
+  return withTenant(client, async (tx) => {
+    const [row] = await tx.select({
+      purchasingOrg: purchasingOrg.purchasingOrg,
+      companyCode: purchasingOrg.companyCode,
+      isActive: purchasingOrg.isActive,
+    }).from(purchasingOrg).where(and(
+      eq(purchasingOrg.client, client),
+      eq(purchasingOrg.purchasingOrg, purchasingOrgCode),
+    )).limit(1);
+    return row ?? null;
+  });
+}
+
 /**
  * Assigns one active tenant Company Code to a pending Purchasing Organisation.
  * Repeating that same assignment is idempotent. Replacement and unassignment

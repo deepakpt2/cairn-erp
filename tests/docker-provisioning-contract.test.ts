@@ -8,10 +8,13 @@ const bootstrap = readFileSync('scripts/bootstrap.ts', 'utf8');
 const testDb = readFileSync('scripts/test-db.ts', 'utf8');
 
 describe('Docker provisioning and walkthrough packaging contract', () => {
-  it('explicitly packages the walkthrough seed in operations and app images', () => {
-    expect(dockerfile.match(/COPY walkthrough-seed\.ts \/app\/walkthrough-seed\.ts/g)).toHaveLength(1);
-    expect(dockerfile).toMatch(/COPY --chown=cairn:cairn walkthrough-seed\.ts \/app\/walkthrough-seed\.ts/);
+  it('packages the manually invoked seed in the operations image only', () => {
+    const operations = dockerfile.slice(dockerfile.indexOf('FROM dependencies AS operations'), dockerfile.indexOf('FROM dependencies AS builder'));
+    const app = dockerfile.slice(dockerfile.indexOf('FROM node:22-bookworm-slim AS app'));
+    expect(operations).toContain('COPY walkthrough-seed.ts /app/walkthrough-seed.ts');
+    expect(app).not.toContain('walkthrough-seed.ts');
     expect(compose).toContain('./walkthrough-seed.ts:/app/walkthrough-seed.ts:ro');
+    expect(packageJson).toContain('"walkthrough:seed": "tsx walkthrough-seed.ts"');
   });
 
   it('initializes references after migrations and before global seeding in every bootstrap path', () => {
@@ -40,8 +43,8 @@ describe('Docker provisioning and walkthrough packaging contract', () => {
     expect(command).toContain('npm run db:init-reference');
     expect(command.indexOf('npm run db:migrate')).toBeLessThan(command.indexOf('npm run db:init-reference'));
     expect(command.indexOf('npm run db:init-reference')).toBeLessThan(command.indexOf('npm run seed'));
-    expect(command).not.toContain('walkthrough-seed');
     expect(packageJson).toContain('"db:init-reference": "tsx scripts/seed-reference.ts"');
+    expect(command).not.toContain('walkthrough-seed');
     expect(compose).not.toMatch(/command:\s*.*walkthrough-seed/);
   });
 });

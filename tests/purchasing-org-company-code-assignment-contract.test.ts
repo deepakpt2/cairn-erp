@@ -19,6 +19,16 @@ describe('SCR-018 initial Purchasing Organisation -> Company Code assignment', (
     expect(service).toContain("securityRelevantFields: ['companyCode']");
   });
 
+  it('provides a tenant-scoped readback without writing or auditing', () => {
+    const read = service.slice(service.indexOf('export async function readPurchasingOrgCompanyCodeAssignment'), service.indexOf('export async function assignPurchasingOrgCompanyCode'));
+    expect(read).toContain('withTenant(client');
+    expect(read).toContain('eq(purchasingOrg.client, client)');
+    expect(read).toContain('eq(purchasingOrg.purchasingOrg, purchasingOrgCode)');
+    expect(read).not.toContain('.insert(');
+    expect(read).not.toContain('.update(');
+    expect(read).not.toContain('recordChange');
+  });
+
   it('derives tenant and actor from session and checks the exact assignment capability', () => {
     expect(action).toContain("const ACTIVITY = 'CFG.PROC.PURORG.ASSIGN_COMPANY'");
     expect(action).toContain('requireSession(ROUTE)');

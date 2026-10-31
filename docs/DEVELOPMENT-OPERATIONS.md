@@ -373,46 +373,54 @@ If a volume already exists with data and the `cairn_app` role credentials are ou
 | Wrong database targeted | Verify `DATABASE_URL`/`MIGRATION_DATABASE_URL` explicitly target `cairn_acceptance` before running. |
 | Protected database refused | Use `cairn_acceptance` (authorized) not `cairn_b210` (prohibited). |
 
-## 7. Walkthrough Seed (manual, owner-invoked)
+## 7. Walkthrough Seed (manual, development-only)
 
-### Purpose
-Deterministic seed that builds an interconnected business scenario (purchase-to-pay and order-to-cash, including DI-020 credit memo) inside an existing tenant. Runs only when explicitly invoked by the owner.
+### Purpose and scope
+`walkthrough-seed.ts` creates a linked purchase-to-pay, production, order-to-cash and finance walkthrough, including the DI-020 credit memo. It exercises the audited setup and ordinary document services; it is not a tenant-provisioning path and is hard-limited to `CAIRN_ENV=development` plus a tenant marked `isDevelopment=true`. It refuses tenant `0100`, protected database names, mismatching existing setup, ambiguous purchase orders, and pending PO approval. It does not approve a release strategy on the operator's behalf.
 
-### Source and container location
-- Source file: `walkthrough-seed.ts` (repository root)
-- Container path: `/app/walkthrough-seed.ts`
-- Application container/service: `app` (image `cairn-app:local`); Dockerfile explicitly copies the script into this image.
-- Also explicitly included in the operations image and mounted read-only into the `migrate` service at `/app/walkthrough-seed.ts`.
+This scenario leaves vendor AP and customer AR open so the reconciliation screens can be inspected. It does not fabricate HR/payroll, QM inspection, fixed-asset, project, maintenance, or payment-run records; MRP/planned-order execution is also not represented. Those are outside this walkthrough, not claimed as verified by it.
 
-### Safety properties
-- Never executes during Docker build, container creation/startup, application startup, migrations, or restarts.
-- Requires explicit `CAIRN_SEED_DATABASE` target; validated through `validateTarget`; refuses protected databases (`cairn_b210`, `cairn_hr_accept`, `cairn_demo`, `cairn_acceptance`).
-- Never deletes, overwrites, or silently changes existing data.
-- Idempotent: safe to repeat; existing business documents are left alone.
+### Packaging and actual manual service
+- Source: repository-root `walkthrough-seed.ts`; package command: `npm run walkthrough:seed`.
+- It is packaged in the one-shot `operations` image, **not** the web `app` image. Compose bind-mounts the source read-only into the `migrate` service.
+- Invoke the `migrate` service as a one-off container only after the isolated development stack is already running and its migrations/reference/global seed are complete. `--no-deps` prevents this manual run from starting the migration bootstrap or changing other services.
 
-### Prerequisites
-1. Owner has pulled the latest `development` branch.
-2. Complete Docker stack is deployed (`docker compose up -d`).
-3. PostgreSQL is healthy (`db` service healthcheck passes).
-4. Application is ready (`app` service healthcheck passes).
-5. Schema migrations have completed (`migrate` service ran successfully).
+The checked-in Compose file defaults `CAIRN_ENV=production` and uses database `cairn`; use this command **only from an isolated disposable development Compose project/volume**. Do not point it at the owner/personal server or any protected/acceptance database. The seed additionally verifies `current_user=cairn_app` and the `cairn.client` tenant context before writes.
 
-### Manual execution
 ```bash
-docker exec -it cairn-app tsx /app/walkthrough-seed.ts
+docker compose run --rm --no-deps \
+  -e CAIRN_ENV=development \
+  -e CAIRN_SEED_DATABASE=cairn \
+  -e CAIRN_SEED_TENANT=WK01 \
+  -e CAIRN_SEED_DATE=2026-11-02 \
+  migrate npm run walkthrough:seed
 ```
 
-### Required environment variables (set in the `app` service environment)
-| Variable | Purpose |
-|----------|---------|
-| `CAIRN_SEED_DATABASE` | Database name (explicit; never guessed) |
-| `CAIRN_SEED_TENANT` | Tenant/client key (default: `WK01`) |
-| `CAIRN_SEED_CHANGED_BY` | Actor for audit fields (default: `WALKTHROUGH_SEED`) |
-| `DATABASE_URL` | Application database connection (set by deployment) |
-| `MIGRATION_DATABASE_URL` | Migration database connection (set by deployment) |
+If the isolated Compose project uses a different database name, set `CAIRN_SEED_DATABASE` to that exact name. The invocation overrides only the one-off container's environment; it does not change the persistent `app` or `migrate` service configuration.
 
-### Inspecting results
-The seed prints a concise execution summary to stdout: tenant, company code, record counts per business area (materials, business partners, POs, GRs, sales orders, deliveries, billing documents, customer invoices, credit memos), and journal line count. Any skipped steps are listed as notes.
+### Prerequisites and exact walkthrough configuration
+1. Start with a new isolated disposable development database. Run the documented fresh-provision procedure (role synchronization, full migrations, reference initialization and global seed) using its normal owner/application-role separation. Do not use or reset an existing business database.
+2. Through the normal development onboarding/provisioning UI, create an active tenant **before** the seed: key `WK01`, name `Walkthrough Company`, legal name `Walkthrough Company LLC`, country `AE`, currency `AED`, time zone `Asia/Dubai`, `isDevelopment=true`. Create the administrator with username `walkthrough.admin`; the owner sets and retains the password. The seed never creates a tenant, user, or password.
+3. The seed applies/validates standard structure: chart `CA01`; company code `1000`; plant `1000`; storage location `0001`; purchasing org/group `1000`/`001`; sales org/channel/division `1000`/`01`/`01`; fiscal variant `K4` (calendar year, January–December, not an April–March year); posting-period variant `C001`. It derives the fiscal period from the supplied date and initializes material-period control only if absent. It refuses a conflicting existing period; it never shifts one.
+4. Global reference data must already include `AE`/`AED` and units `KG`/`PC`; this is provided by `npm run db:init-reference`, not by owner-role SQL in the walkthrough.
+5. Set `CAIRN_SEED_DATE` to a valid date in an open posting period whose following eight days stay in the same fiscal period. Use the same date for every rerun. `2026-11-02` is the current example. Posting dates span that date through day eight.
+6. The one-off operations container's `DATABASE_URL` must resolve to the application role `cairn_app`; the seed does not use `MIGRATION_DATABASE_URL`. Keep the regular deployment migration URL/secret out of any manually constructed application URL.
+
+### Safe reruns and operator checks
+- Required inputs: `CAIRN_SEED_DATABASE`, `CAIRN_SEED_TENANT`, and `CAIRN_SEED_DATE`; `DATABASE_URL` must be configured for `cairn_app`. No default tenant/date or password is guessed.
+- Re-run with the exact same database, tenant and date. Existing setup is validated and skipped when equal; a mismatch causes a clear refusal. Business documents use stable request keys except the PO, whose service has no request-key/header-reference support. For the PO, the seed searches by its dedicated actor/company, compares the complete header/items/schedules, and fails on ambiguity or mismatch rather than creating a duplicate.
+- Each successful run prints created/skipped/updated/failed totals plus checks for stock-ledger/projection equality, material quantity/value equality, inventory G/L tie-out, balanced journals, zero GR/IR, and customer/vendor subledger reconciliation. `updated` is always zero by design; the seed fails instead of overwriting a differing record.
+- Sign in at `/signin` as `walkthrough.admin` using the owner-set password. Read-only sample pages include `/inventory/materials`, `/purchasing/orders`, `/production/orders`, `/sales/orders`, `/sales/delivery`, `/sales/billing`, `/finance/journal`, and `/finance/subledger-tie-out`. Use the actual authorized application role/session for any posting or protected action.
+- No cleanup is required by the seed. Do not run `docker compose down -v` against a persistent/owner stack; disposal of the isolated scratch environment is a separate, explicitly destructive owner operation.
+
+### Verification status, current blockers, and Docker limitation
+On 2026-10-31, the authorized test host provisioned a new scratch database from empty: all 331 migrations through `9208`, reference data (30 countries, 26 currencies, 21 units, 5 bank-country profiles), and global definitions completed. Tenant `WK01` was created through the same `createTenant()` service used by onboarding, with a separate `WK02` fixture for an application-role RLS read check. Static Docker/seed contracts pass **9/9**.
+
+The walkthrough itself is **not verified**. The first execution exposed an invalid BOM usage enum; the seed was corrected to the UI/service-supported `+`, `.`, `-` representation and a contract assertion was added. The next execution created the production configuration and a purchase order, then stopped before goods receipt with `You are not authorised to post this goods receipt.` This is the fail-closed service result: `src/modules/inventory/goods-receipt.ts` requires a live `GoodsReceiptAuthorizationContext` (`userId` and `sessionId`) and persisted company-code and plant scopes; the CLI seed calls `postGoodsReceipt()` without that context. `postGoodsIssue()` has the analogous service-boundary authorization. New-tenant onboarding creates the administrator role/user but no `auth_org_restriction` rows; no supported user/company/plant-scope maintenance service or UI was found. No fake session, direct authorization-table write, weakened guard, or application-code edit was used. Owner-approved work is needed to provide a normal, auditable scope-assignment path and an authenticated seed/posting flow before end-to-end execution can continue.
+
+The actual cluster-wide `cairn_app` role was inspected read-only: it is not superuser or `BYPASSRLS`, has no role memberships, lacks `CREATEDB`/`CREATEROLE`, and has no `public CREATE`; central-auth tables had only `SELECT, INSERT, UPDATE` (no `DELETE`), and RLS was enabled and forced on `client`, `app_user`, `user_session`, and `password_reset_token`. With tenant context `WK01`, the app role read `WK01` and could not read `WK02`. However, the role has `INHERIT` enabled, contrary to the runbook’s required `NOINHERIT`. The role synchronization helper changes this cluster-wide role/password, so it was intentionally not run against the shared test-host cluster; exact least-privilege role setup remains unverified pending an isolated PostgreSQL cluster or explicit authorization to synchronize the shared role.
+
+Docker is unavailable in the currently authorized agent environments, so the image was not built or run. The actual image contents and manual-container execution remain unverified. The scratch database currently contains a **partial failed walkthrough** and must not be represented as a completed example or reused as an empty verification target. No cleanup, commit, or push was performed.
 
 ## 8. Verified State (As of 2026-10-30)
 
@@ -429,6 +437,7 @@ The seed prints a concise execution summary to stdout: tenant, company code, rec
 | DI-020 TypeScript | Clean (`tsc --noEmit`) |
 | Walkthrough seed | Committed at `walkthrough-seed.ts`; TypeScript-parsed; not yet executed against a database |
 | Both workspaces synchronized | YES (local and origin/development) |
+
 ## 9. One-time tenant-local platform-admin bootstrap
 
 Role and user-role mutations require a separate, deployment-owner-bootstrapped `PLATFORM_ADMIN` role. Tenant wildcard `ADMINISTRATOR` and `CFG.PLT.USER.MAINTAIN` are not substitutes. This is tenant-local authority, not a deployment-wide identity.

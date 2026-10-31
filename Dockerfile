@@ -30,7 +30,6 @@ RUN groupadd --system --gid 1001 cairn && useradd --system --uid 1001 --gid cair
 COPY --from=builder --chown=cairn:cairn /app/.next/standalone ./
 COPY --from=builder --chown=cairn:cairn /app/.next/static ./.next/static
 COPY --from=builder --chown=cairn:cairn /app/public ./public
-COPY --chown=cairn:cairn walkthrough-seed.ts /app/walkthrough-seed.ts
 USER cairn
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
