@@ -60,6 +60,16 @@ export const SCREENS: readonly ScreenLink[] = [
     accepts: [],
   },
   {
+    id: "/platform/roles",
+    path: "/platform/roles",
+    query: {},
+    code: "CFG.PLT.ROLE.MAINTAIN",
+    title: "Roles and capabilities",
+    area: "platform",
+    family: "roles",
+    accepts: [],
+  },
+  {
     id: "/config",
     path: "/config",
     query: {},

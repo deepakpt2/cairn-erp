@@ -111,12 +111,13 @@ async function requireAdministrator(tx: Tx, client: string, actor: OrganisationS
   await tx.execute(sql`
     select ur.role_code, rc.capability_code
       from user_role ur
+      join role r on r.client = ur.client and r.code = ur.role_code and r.is_active = true
       join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
      where ur.client = ${client}
        and ur.user_id = ${actor.userId}
        and (ur.valid_from is null or ur.valid_from <= now())
        and (ur.valid_to is null or ur.valid_to >= now())
-     for share of ur, rc
+     for share of ur, r, rc
   `);
   const capabilities = await loadCapabilities(tx, client, actor.userId);
   if (!hasCapability(capabilities, ORGANISATION_SCOPE_ADMIN_CAPABILITY)) {

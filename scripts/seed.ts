@@ -292,6 +292,7 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'FIN.AR.DOWNPAYMENT.REQUEST', module: 'FIN', action: 'POST', posting: true, description: 'Post a customer down payment request as a noted item' },
   { code: 'FIN.AP.DOWNPAYMENT.REQUEST', module: 'FIN', action: 'POST', posting: true, description: 'Post a vendor down payment request as a noted item' },
   { code: 'FIN.AR.CLEAR', module: 'FIN', action: 'POST', posting: true, description: 'Clear customer open items against each other under a clearing journal' },
+  { code: 'FIN.AR.CREDITMEMO.POST', module: 'FIN', action: 'POST', posting: true, description: 'Post a customer credit memo and its balanced receivables journal' },
   { code: 'FIN.GL.CLEAR', module: 'FIN', action: 'POST', posting: true, description: 'Clear G/L open items of an open-item-managed account against each other under a clearing journal' },
   { code: 'FIN.RPT.CONSOLIDATE', module: 'FIN', action: 'CONFIGURE', posting: false, description: 'Configure consolidation areas, data basis, units, mappings, methods and task hierarchies in the consolidation workbench' },
   { code: 'FIN.CONSOLIDATE', module: 'FIN', action: 'EXECUTE', posting: false, description: 'Monitor and execute configured consolidation tasks with separate test, update, log and period-control authorities' },
@@ -411,6 +412,8 @@ const CAPABILITIES: Array<{ code: string; module: string; action: string; postin
   { code: 'AUDIT.TRAIL.VIEW', module: 'AUDIT', action: 'DISPLAY', posting: false, description: 'View change history and document trail' },
   { code: 'CFG.PLT.USER.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Maintain application users: change details, activate and deactivate accounts. Does not touch HR-owned employee data.' },
   { code: 'CFG.PLT.USER.PASSWORD_RESET', module: 'PLT', action: 'EXECUTE', posting: false, description: 'Administrator-initiated password reset for application users, including users without an employee link. Revokes all sessions and requires a new password at next sign-in.' },
+  { code: 'CFG.PLT.ROLE.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Create and maintain tenant roles and assign registered capabilities; protected roles and central authorities remain immutable.' },
+  { code: 'CFG.PLT.USER.ROLE.MAINTAIN', module: 'PLT', action: 'CONFIGURE', posting: false, description: 'Assign or revoke ordinary tenant roles for other users; protected platform authority is excluded.' },
 ];
 
 

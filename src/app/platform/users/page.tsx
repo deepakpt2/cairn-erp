@@ -13,6 +13,7 @@ import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
 import { CREATE, MAINTAIN, PASSWORD_RESET } from './constants';
+import { ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import { listUsersAction } from './actions';
 import Users from './Users';
 
@@ -55,6 +56,11 @@ export default async function UsersPage() {
             {can(session, MAINTAIN) && (
               <Link href="/platform/users/access" className="btn btn-default">
                 Business access
+              </Link>
+            )}
+            {session.user.capabilities.includes(ROLE_MAINTAIN_CAPABILITY) && (
+              <Link href="/platform/roles" className="btn btn-default">
+                Roles and capabilities
               </Link>
             )}
             <Link href="/" className="btn btn-default min-h-11 sm:min-h-8">

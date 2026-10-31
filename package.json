@@ -24,6 +24,7 @@
     "seed:reference": "tsx scripts/seed-reference.ts",
     "db:init-reference": "tsx scripts/seed-reference.ts",
     "dev:tenant": "tsx scripts/create-dev-tenant.ts",
+    "platform-admin:bootstrap": "tsx scripts/bootstrap-platform-admin.ts",
     "smoke": "tsx scripts/smoke-test.ts",
     "smoke:posting": "tsx scripts/smoke-posting.ts",
     "smoke:browser": "tsx scripts/browser-smoke.ts",

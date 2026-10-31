@@ -589,6 +589,7 @@ export async function loadCapabilities(
   const rows = (await tx.execute(sql`
     select distinct rc.capability_code
       from user_role ur
+      join role r on r.client = ur.client and r.code = ur.role_code and r.is_active = true
       join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
      where ur.client = ${client}
        and ur.user_id = ${userId}

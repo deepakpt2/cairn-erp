@@ -60,6 +60,8 @@ export const role = pgTable(
     isSystemRole: boolean('is_system_role').notNull().default(false),
     /** AUDITOR role cannot hold a posting capability — §16.1 */
     isReadOnly: boolean('is_read_only').notNull().default(false),
+    /** Deactivation preserves history and assignments while removing authority immediately. */
+    isActive: boolean('is_active').notNull().default(true),
     ...auditColumns,
   },
   (t) => [

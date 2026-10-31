@@ -429,3 +429,23 @@ The seed prints a concise execution summary to stdout: tenant, company code, rec
 | DI-020 TypeScript | Clean (`tsc --noEmit`) |
 | Walkthrough seed | Committed at `walkthrough-seed.ts`; TypeScript-parsed; not yet executed against a database |
 | Both workspaces synchronized | YES (local and origin/development) |
+## 9. One-time tenant-local platform-admin bootstrap
+
+Role and user-role mutations require a separate, deployment-owner-bootstrapped `PLATFORM_ADMIN` role. Tenant wildcard `ADMINISTRATOR` and `CFG.PLT.USER.MAINTAIN` are not substitutes. This is tenant-local authority, not a deployment-wide identity.
+
+### Preconditions and trust boundary
+- Apply migration `9209_platform_role_capability_administration.sql` to the intended authorized database first.
+- A deployment owner nominates an **existing active, unlocked account in that tenant that currently has a live persisted session**; its username must differ from the operator identifier, so the out-of-band bootstrap is not self-grant. The bootstrap does not create tenants/users or assign business scopes.
+- Configure a separate high-entropy `CAIRN_PLATFORM_BOOTSTRAP_TOKEN` (at least 32 characters) through the deployment secret manager. Do not reuse `CAIRN_PROVISIONING_TOKEN`, put the token in a shell command/argument, or print it.
+- The operator identifier, tenant key, and existing user ID are supplied as `CAIRN_PLATFORM_BOOTSTRAP_ACTOR`, `CAIRN_PLATFORM_BOOTSTRAP_TENANT`, and `CAIRN_PLATFORM_BOOTSTRAP_USER_ID`. The interactive CLI prompts for the configured token with input echo disabled.
+- The bootstrap runs once per tenant, uses the restricted runtime `DATABASE_URL`/`cairn_app` connection under tenant RLS, refuses protected database targets, and records a Cairn change document plus `audit_access_log` entry. It creates the protected system role with exactly `CFG.PLT.ROLE.MAINTAIN` and `CFG.PLT.USER.ROLE.MAINTAIN`; routine user-role administration cannot grant/revoke this protected role.
+- This is an operator-only bootstrap, not an HTTP endpoint, application seed, or test bypass. After it completes, the nominated account must sign out and back in; all subsequent reads/mutations revalidate a live persisted session and the dedicated role in their transaction.
+
+### Invocation
+Set the four variables through the deployment owner's secure environment (never place token material in a command line), then run from the repository:
+
+```bash
+npm run platform-admin:bootstrap
+```
+
+The command refuses if the nominated account lacks a live session, the tenant already has a bootstrap record or `PLATFORM_ADMIN` role, or any authorization/target check fails. It does not provision a tenant or user, alter company/plant scopes, execute the walkthrough seed, or modify `CAIRN_SEED_*`. Never use tenant `0100` or an owner/personal database for this procedure.
