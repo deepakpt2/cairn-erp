@@ -16,6 +16,10 @@
  *   3. `scripts/seed-reference.ts`   — currencies, countries, units, approved bank profiles;
  *   4. `scripts/seed.ts`              — global definitions: capabilities, activities, messages, registry.
  *
+ * `--no-seed` skips step 4 only. Standard reference rows are always initialized,
+ * because business fixtures depend on the same currency/country/unit catalogue
+ * whether or not the optional global definitions are requested.
+ *
  * The development tenant is deliberately NOT created: `tests/global-setup.ts` says the tenant `0100` is never
  * touched, and a suite run has no business writing into it. `npm run bootstrap` remains the command that
  * produces a usable application database.
@@ -74,6 +78,7 @@ async function main() {
   if (argv.includes('--help')) {
     console.log(
       'usage: npm run test:db -- [--database <name>] [--fresh --yes] [--no-seed]\n'
+      + '       --no-seed skips global definitions; standard reference data is always initialized.\n'
       + `       the scratch test database defaults to "${DEFAULT_TEST_DATABASE}"; set CAIRN_TEST_DB_NAME to change it.`,
     );
     return;
@@ -166,8 +171,8 @@ async function main() {
   };
   const steps = [
     { name: 'Migrate schema', script: 'src/platform/db/migrate.ts' },
+    { name: 'Initialize standard reference data', script: 'scripts/seed-reference.ts' },
     ...(argv.includes('--no-seed') ? [] : [
-      { name: 'Initialize standard reference data', script: 'scripts/seed-reference.ts' },
       { name: 'Seed global definitions', script: 'scripts/seed.ts' },
     ]),
   ];
