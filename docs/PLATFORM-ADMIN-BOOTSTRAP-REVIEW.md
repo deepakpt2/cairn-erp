@@ -7,9 +7,9 @@
 Before any future bootstrap, the owner must:
 
 1. **Name one existing, dedicated WK01 account by its verified user ID.** Do not create a user, reset a password, or change an account to make it eligible. It must be active, unlocked, and distinct from both the onboarding administrator and walkthrough operator by ID and username.
-2. **Run the read-only authorization inspection in §3.** The nominee must have no unapproved direct role, no unapproved effective capability or wildcard, and no unexplained business scope. The owner must understand the result before assigning `PLATFORM_ADMIN`. If roles, capability patterns, scopes, identity history, or the onboarding/operator distinction are ambiguous, stop.
+2. **Run the read-only authorization inspection in §3.** The nominee must have no unapproved direct role, no unapproved effective capability or wildcard, no unexplained business scope, and a currently live persisted application session established through normal sign-in. The owner must understand the result before assigning `PLATFORM_ADMIN`. Compare exact user IDs and usernames to the owner-verified onboarding administrator and walkthrough operator; also compare the nominee with the actual operator identity and the planned `CAIRN_PLATFORM_BOOTSTRAP_ACTOR` value. The CLI only compares target username with that actor string. If roles, capability patterns, scopes, live-session state, identity history, or any identity distinction is ambiguous, stop.
 3. **Use the exact authorized database and app role.** The previously verified target is `cairn_stage2_walkthrough_20261031`, `cairn_app`, loopback port `55432`, tenant `WK01`; migration 9209 is already present there with checksum `6510da81`. Recheck identity before the read-only procedure and before any later operation. Do not use the migration URL or `cairn_acceptance`.
-4. **Resolve the token’s same-user exposure before execution.** The CLI’s hidden prompt prevents terminal echo; it does not make an environment variable private from same-UID processes. On this host, `ptrace_scope=0`, the app listener runs as `cairn`, and the current operator account is also `cairn`; same-UID access to `/proc/<pid>/environ` is available. Use a trusted secret channel/process boundary that prevents untrusted same-UID reads, or have the owner explicitly accept that exposure after reviewing the concurrent processes. If neither is acceptable, stop.
+4. **Use the owner-approved one-time hidden TTY method for one invocation only.** On 2026-11-01 the owner explicitly accepted the temporary same-UID process-environment exposure for that interactive invocation instead of a deployment secret manager. Generate an independent high-entropy token of 32–256 characters; never reuse `CAIRN_PROVISIONING_TOKEN`. The token is still exposed to same-UID processes while in the shell/CLI environment (`ptrace_scope=0`; operator and app use `cairn`). Enter it without echo into the parent shell and again at the CLI confirmation prompt, never in command text/arguments, history, a command file, `.env.local`, logs, or browser storage. Immediately `unset` it as soon as the CLI exits and close the shell. No token has been generated or entered in this preparation. Do not proceed without a separately approved specific nominee and completion of §3.
 5. Keep the dirty original checkout untouched. Any reviewed source or CLI invocation belongs in the separate clean checkout of the exact approved `origin/development` commit; do not pull, reset, clean, stash, or install in `/home/cairn/cairn-erp`.
 
 ## 2. Source findings: actual schema, authorization, RLS, and identities
@@ -37,17 +37,18 @@ The Drizzle definitions are in `src/platform/tables/security.ts` and the schema 
 
 `9000_policies.sql` initially grants `SELECT, INSERT, UPDATE, DELETE` on public tables to `cairn_app`. `9207_central_user_auth_least_privilege.sql` narrows only `app_user`, `user_session`, and `password_reset_token`; `scripts/sync-db-app-role.ts` likewise limits its central-auth ACL reconciliation to those three tables. It does not revoke `SELECT` from `role`, `role_capability`, `user_role`, or `auth_org_restriction`. `capability` is a global catalogue table. No privilege changes are part of this checklist.
 
-A read-only runtime probe was run only after confirming the live identity was `cairn_stage2_walkthrough_20261031` / `cairn_app` / port `55432`. Under transaction-local context `WK01`, it confirmed `SELECT=true` for `app_user`, `role`, `role_capability`, `user_role`, `auth_org_restriction`, and `capability`; the first five had `relrowsecurity=true`, `relforcerowsecurity=true`, and `tenant_isolation` policies. `capability` has no RLS, consistent with its global schema. `cairn_app` was not superuser and did not have `BYPASSRLS`. This was catalog/privilege inspection only; no user rows or role assignments were queried in that probe.
+A read-only runtime catalog/privilege probe was run only after confirming the live identity was `cairn_stage2_walkthrough_20261031` / `cairn_app` / port `55432`. It confirmed `SELECT=true` for `app_user`, `role`, `role_capability`, `user_role`, `auth_org_restriction`, `user_session`, and `capability`; the six tenant tables had `relrowsecurity=true`, `relforcerowsecurity=true`, and `tenant_isolation` policies. `capability` has no RLS, consistent with its global schema. `cairn_app` was not superuser and did not have `BYPASSRLS`. This was catalog/privilege inspection only; no user rows, sessions, or role assignments were queried in that probe.
 
 ### Distinguishing the two excluded identities
 
 - `createTenant()` in `src/platform/tenancy/index.ts` takes an owner-provided `administrator.username`, creates that user, and assigns `ADMINISTRATOR`. The seeded `ADMINISTRATOR` role has capability pattern `*`. The username is an input, so role name alone does not prove which account was the onboarding administrator. Identify that account by the tenant provisioning record/owner’s original onboarding input, then compare its exact `app_user.id` with the nominee.
 - `docs/DEVELOPMENT-OPERATIONS.md` names `walkthrough.admin` as the walkthrough tenant’s onboarding administrator. The previous WK01 Stage 2 evidence in `CAIRN-7.md` §30 row 2.851 identifies the separate `WALKTHROUGH.OPERATOR`: it signed in through the ordinary `/api/auth/signin` flow, was checked for the walkthrough’s 20 registered capabilities and `COMPANY_CODE:1000`/`PLANT:1000` scopes, and was signed out. The seed source actually takes `CAIRN_SEED_USERNAME`; it does not create a user or permanently hard-code the operator name. Therefore verify the actual seed/run record as well as the documented username. Do not infer the operator solely from a role code or capability pattern.
 - If the owner cannot establish both identities and their current user IDs from those records plus the read-only report, stop. A nominee matching either ID or username is disqualified.
+- Separately identify the deployment operator by exact WK01 user ID/username if the operator has an application account, and record the exact `CAIRN_PLATFORM_BOOTSTRAP_ACTOR` identifier planned for the CLI. The nominee must differ from the operator by ID and username; the CLI only checks target username against the actor string, not target ID. If the operator has no WK01 account, record that explicitly rather than guessing.
 
 ## 3. Exact read-only nominee inspection
 
-Run only after the source/permission review above, in a trusted terminal on the clean approved checkout, with the runtime `DATABASE_URL` already configured for `cairn_app`. Do not source or print `.env.local`; do not use `MIGRATION_DATABASE_URL`. Obtain the nominee ID from the owner-visible user list, not from a guessed value or a query for credentials. `/platform/users` displays username/status but omits the ID; if the already-authorized viewing account can maintain users, clicking **Change** renders a hidden `userId` input. Read that field in the DOM/Elements inspector and immediately click **Cancel**—do not submit Save/Create/reset. This only changes client-side form state. If Change is unavailable or the field cannot be confirmed, stop; there is no visible ID display in that page. Set non-secret identifiers locally (the onboarding username should be the actual value in the provisioning record; current documented values are shown):
+Run only after the source/permission review above, in a trusted terminal on the clean approved checkout, with the runtime `DATABASE_URL` already configured for `cairn_app`. Do not source or print `.env.local`; do not use `MIGRATION_DATABASE_URL`. Obtain the nominee ID from the owner-visible user list, not from a guessed value or a query for credentials. `/platform/users` displays username/status but omits the ID; if the already-authorized viewing account can maintain users, clicking **Change** renders a hidden `userId` input. Read that field in the DOM/Elements inspector and immediately click **Cancel**—do not submit Save/Create/reset. This only changes client-side form state. If Change is unavailable or the field cannot be confirmed, stop; there is no visible ID display in that page. Separately record the operator’s actual WK01 user ID/username (or owner-confirm `NO_WK01_USER`) and the exact planned `CAIRN_PLATFORM_BOOTSTRAP_ACTOR` identifier; compare them to the nominee by both ID and username. Keep these owner identity records local. Set non-secret identifiers locally (the onboarding username should be the actual value in the provisioning record; current documented values are shown):
 
 ```bash
 read -r -p 'Verified nominee WK01 user ID: ' CAIRN_READONLY_NOMINEE_USER_ID
@@ -58,7 +59,7 @@ export CAIRN_READONLY_WALKTHROUGH_USERNAME='WALKTHROUGH.OPERATOR'
 
 If those names do not match the owner’s provisioning and seed/run records, set the actual names before proceeding. These variables contain no password, token, cookie, or session material.
 
-The script below is **read-only**. First it checks `current_database()`, `current_user`, server port, and required `SELECT` privileges. Only after the exact identity matches does it open the app transaction using `withTenant('WK01', …)`. It does not select `password_hash`, `token_hash`, or session rows; it does not call any action/mutation service. Its direct-role query uses the verified schema columns and joins:
+The script below is **read-only**. First it checks `current_database()`, `current_user`, server port, and required `SELECT`/RLS metadata. Only after the exact identity matches does it open the app transaction using `withTenant('WK01', …)`. It never selects `password_hash`, `token_hash`, session IDs, IPs, or user-agents; it reads only an `EXISTS` boolean for a live session. It does not call any action/mutation service. Its direct-role query uses the verified schema columns and joins:
 
 - `user_role ur` → `role r` on `(client, role_code)`;
 - `role_capability rc` on `(client, role_code)`;
@@ -96,14 +97,16 @@ const WALKTHROUGH_USERNAME = process.env.CAIRN_READONLY_WALKTHROUGH_USERNAME;
 
     const relations = await raw`select c.relname, c.relrowsecurity as rls,
       c.relforcerowsecurity as force_rls,
-      has_table_privilege(current_user,c.oid,'SELECT') as can_select
+      has_table_privilege(current_user,c.oid,'SELECT') as can_select,
+      exists(select 1 from pg_policies p where p.schemaname='public'
+        and p.tablename=c.relname and p.policyname='tenant_isolation') as tenant_policy
       from pg_class c join pg_namespace n on n.oid=c.relnamespace
       where n.nspname='public'
-        and c.relname = any(${['app_user','role','role_capability','user_role','auth_org_restriction','capability']})
+        and c.relname = any(${['app_user','role','role_capability','user_role','auth_org_restriction','user_session','capability']})
         and c.relkind in ('r','p') order by c.relname`;
     console.log('READ_ACCESS ' + JSON.stringify(relations));
-    if (relations.length !== 6 || relations.some(r => !r.can_select) ||
-        relations.filter(r => r.relname !== 'capability').some(r => !r.rls || !r.force_rls) ||
+    if (relations.length !== 7 || relations.some(r => !r.can_select) ||
+        relations.filter(r => r.relname !== 'capability').some(r => !r.rls || !r.force_rls || !r.tenant_policy) ||
         relations.find(r => r.relname === 'capability')?.rls) {
       throw new Error('required read privilege or expected RLS state is missing');
     }
@@ -123,6 +126,15 @@ const WALKTHROUGH_USERNAME = process.env.CAIRN_READONLY_WALKTHROUGH_USERNAME;
         isLocked: appUser.isLocked, mustChangePassword: appUser.mustChangePassword,
       }).from(appUser).where(and(eq(appUser.client, TENANT), eq(appUser.id, NOMINEE_ID)));
       if (!user) throw new Error('nominee not found in WK01');
+
+      // Boolean only: expose no session id, token hash, IP, or user-agent.
+      const sessionState = await tx.execute(sql`
+        select exists (
+          select 1 from user_session s
+           where s.client=${TENANT} and s.user_id=${user.id}
+             and s.revoked_at is null and s.expires_at > now()
+        ) as has_live_session
+      `);
 
       const assignments = await tx.execute(sql`
         select ur.role_code, r.name as role_name,
@@ -168,6 +180,7 @@ const WALKTHROUGH_USERNAME = process.env.CAIRN_READONLY_WALKTHROUGH_USERNAME;
       return {
         tenantContext: TENANT,
         nominee: user,
+        livePersistedSession: sessionState[0]?.has_live_session === true,
         roleHierarchy: 'none in schema; user_role rows are direct assignments',
         directAssignments: assignments,
         effectiveGrantPatterns: grantPatterns,
@@ -192,15 +205,15 @@ JS
 
 ### Expected report and interpretation
 
-- The first output must identify only the verified WK01 database, `cairn_app`, port `55432`, with `superuser=false` and `bypassrls=false`; all six tables must be selectable. RLS must be enabled/forced for the five tenant tables; the global `capability` catalogue is expected not to have RLS.
-- The tenant service must run with `tenantContext: WK01`. The nominee row must match the owner-verified ID and be active/unlocked. `mustChangePassword=true` is not accepted for a bootstrap nominee; resolve through a separately approved normal credential process, not this procedure.
+- The first output must identify only the verified WK01 database, `cairn_app`, port `55432`, with `superuser=false` and `bypassrls=false`; all seven tables must be selectable. RLS must be enabled/forced with `tenant_isolation` for the six tenant tables, including `user_session`; the global `capability` catalogue is expected not to have RLS.
+- The tenant service must run with `tenantContext: WK01`. The nominee row must match the owner-verified ID and be active/unlocked, and `livePersistedSession` must be `true`. The session result is an `EXISTS` boolean only; no session row, ID, token hash, IP, or user-agent is returned. The nominee must have signed in through the ordinary flow; this procedure never creates or refreshes a session. `mustChangePassword=true` is not accepted for a bootstrap nominee; resolve through a separately approved normal credential process, not this procedure.
 - `directAssignments` includes each direct `user_role` row, role status, validity interval and every stored `role_capability.capability_code`. Historical/expired assignments remain visible here but do not contribute to `effectiveGrantPatterns`.
 - `effectiveGrantPatterns` is the source helper’s union across currently valid assignments to active roles. `wildcardPatterns` must be empty unless an explicitly reviewed non-wildcard pattern is approved; for the dedicated bootstrap account, any `*`-containing grant is a stop. `effectiveRegisteredCapabilities` expands those patterns against the current global catalogue using the actual `hasCapability()` implementation.
 - `roleHierarchy` must remain “none in schema.” Do not infer a nested role or group membership that is not represented by `user_role`.
-- Check `onboardingIdentityRows` and `walkthroughIdentityRows` against provisioning/seed records. The nominee’s ID and username must match neither. The onboarding row should show its `ADMINISTRATOR` assignment and `*` grant when that identity is the documented `walkthrough.admin`; the documented `WALKTHROUGH.OPERATOR` identity should match the prior Stage 2 record and must not be reused.
+- Check `onboardingIdentityRows` and `walkthroughIdentityRows` against provisioning/seed records. The nominee’s ID and username must match neither. The onboarding row should show its `ADMINISTRATOR` assignment and `*` grant when that identity is the documented `walkthrough.admin`; the documented `WALKTHROUGH.OPERATOR` identity should match the prior Stage 2 record and must not be reused. Also compare the nominee’s exact ID/username against the owner-verified operator account (if any) and ensure its username differs from the exact planned `CAIRN_PLATFORM_BOOTSTRAP_ACTOR`; do not rely only on the CLI’s username guard.
 - `scopeRestrictions` must be reviewed in full. `COMPANY_CODE`, `PLANT`, `STORAGE_LOCATION`, `PURCHASING_ORG`, `SALES_ORG`, and `COST_CENTER` may occur; treat any unknown type as a stop. **An empty list is unrestricted, not “no access.”** Scope restrictions do not grant roles or capabilities.
 
-This read path does not inspect password hashes or session token hashes and does not create/revoke sessions. It uses the exact app-role read privileges and tenant RLS, but it is not an owner-facing HTTP route; it is a carefully bounded pre-bootstrap diagnostic because the supported role overview is circularly gated. Do not convert it into a write script or add grants to make it pass.
+This read path never selects password hashes, session token hashes, session IDs, IP addresses, or user-agents; it checks only an `EXISTS` boolean for a live persisted session and does not create/revoke/refresh sessions. It uses the exact app-role read privileges and tenant RLS, but it is not an owner-facing HTTP route; it is a carefully bounded pre-bootstrap diagnostic because the supported role overview is circularly gated. Do not convert it into a write script or add grants to make it pass.
 
 ## 4. Hidden TTY token: source-confirmed behavior and limit
 
@@ -208,7 +221,7 @@ This read path does not inspect password hashes or session token hashes and does
 
 **Important exposure:** the parent shell and child process environment contain the configured token while the command runs. On this host, Yama `ptrace_scope` is `0`; the app process and operator run as the same `cairn` UID, and same-UID `/proc/<pid>/environ` reads are possible. Therefore a concurrent same-UID process could read the token. Hidden input protects against terminal echo, not this process boundary. The CLI retains its environment value until process exit; it does not unset it itself.
 
-If a separately approved one-shot environment method is used, clear it immediately in the **parent shell** after `npm run platform-admin:bootstrap` exits:
+For the now-approved single invocation, enter the independently generated token without echo into the parent shell’s environment using a hidden interactive read (not a literal assignment or command argument); then enter the same token again at the CLI’s own hidden TTY prompt. Do not pipe stdin—the CLI requires a TTY. Do not generate or set the token until the specific nominee’s read-only checks are evidenced and the owner approves that account. Clear it immediately in the **parent shell** after `npm run platform-admin:bootstrap` exits:
 
 ```bash
 unset CAIRN_PLATFORM_BOOTSTRAP_TOKEN
