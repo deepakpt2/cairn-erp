@@ -33,10 +33,11 @@
  * raw, so a database leak does not hand over live sessions.
  */
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { EXPLICIT_GRANT_ONLY_CAPABILITIES } from './capability-policy';
 import { withTenant, type Tx } from '../db/client';
 import { verifyPassword } from './password';
+import { appUser } from '../tables/security';
 
 export const SESSION_COOKIE = 'cairn_session';
 
@@ -365,6 +366,19 @@ export async function createSession(
     ttlMinutes?: number;
   },
 ): Promise<{ token: string; expiresAt: Date }> {
+  // Lock and re-check the account at the point a session is issued. Sign-in
+  // credential verification and cookie/session creation are separate requests;
+  // without this check, a concurrent administrator lock/deactivation could be
+  // followed by a fresh session that survives later reactivation.
+  const [account] = await tx.select({ isActive: appUser.isActive, isLocked: appUser.isLocked })
+    .from(appUser).where(and(eq(appUser.client, input.client), eq(appUser.id, input.userId))).for('update');
+  if (!account || !account.isActive) {
+    throw new AuthError('This account is no longer active.', 'Ask an administrator to review the account.', 'CAIRN_AUTH_INACTIVE');
+  }
+  if (account.isLocked) {
+    throw new AuthError('This account is locked.', 'An administrator must unlock it before you can sign in again.', 'CAIRN_AUTH_LOCKED');
+  }
+
   const raw = randomBytes(32).toString('base64url');
   const ttl = input.ttlMinutes ?? SESSION_TTL_MINUTES;
   const expiresAt = new Date(Date.now() + ttl * 60_000);

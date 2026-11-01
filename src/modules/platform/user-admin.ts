@@ -12,23 +12,56 @@
  * - Reset tokens are single-use, short-lived, tenant-scoped, stored as a hash.
  * - The same message is returned whether the named user exists or not,
  *   so an attacker cannot enumerate usernames through the reset screen.
- * - No email transport exists yet (D-033): the token is recorded, and the
- *   administrator who initiates a reset receives it to deliver out of band.
+ * - No approved email transport exists yet (D-033): the administrative reset
+ *   action is paused instead of minting an undeliverable token, and no browser
+ *   action returns a reset token. Self-service requests remain non-enumerating.
  */
-import { eq, and, sql, gt, isNull } from 'drizzle-orm';
+import { eq, and, sql, gt, isNull, inArray, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { randomBytes, randomUUID, createHash } from 'node:crypto';
 
 import { type Tx, withTenant } from '../../platform/db/client';
-import { appUser, userSession, passwordResetToken } from '../../platform/tables/security';
+import {
+  appUser,
+  userSession,
+  auditAccessLog,
+  passwordResetToken,
+  userRole,
+  role,
+  capability,
+} from '../../platform/tables/security';
+import { employee } from '../people/schema';
 
 import { recordChange } from '../../platform/change';
 import { hashPassword, checkPasswordPolicy } from '../../platform/auth/password';
-import { hasCapability } from '../../platform/auth/session';
+import {
+  hasCapability,
+  loadCapabilities,
+  loadOrgRestrictions,
+  type OrgRestriction,
+} from '../../platform/auth/session';
 
 const TOKEN_TTL_MINUTES = 60;
 const MAX_RESET_REQUESTS_PER_HOUR = 3;
 const PASSWORD_MIN = 10;
+
+export const USER_ADMIN_VIEW_CAPABILITIES = [
+  'CFG.PLT.USER.CREATE',
+  'CFG.PLT.USER.MAINTAIN',
+  'CFG.PLT.USER.PASSWORD_RESET',
+] as const;
+
+export type UserStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'LOCKED' | 'UNLOCKED';
+const userStatusFilter = z.enum(['ALL', 'ACTIVE', 'INACTIVE', 'LOCKED', 'UNLOCKED']);
+
+/** Read access is limited to a session holding an established user-admin authority. */
+export function canViewUserAdministration(sessionCapabilities: string[]): boolean {
+  return USER_ADMIN_VIEW_CAPABILITIES.some((code) => hasCapability(sessionCapabilities, code));
+}
+
+function requireUserAdminView(sessionCapabilities: string[]) {
+  if (!canViewUserAdministration(sessionCapabilities)) refuse('CAPABILITY_MISSING');
+}
 
 /** Input validation shared by create and change. */
 const usernameInput = z
@@ -48,7 +81,7 @@ const createUserInput = z.object({
   client: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}$/, 'CLIENT_FORMAT'),
   username: usernameInput,
   fullName: fullNameInput,
-  email: z.string().trim().email('EMAIL_FORMAT').max(200, 'EMAIL_TOO_LONG').optional().or(z.literal('')),
+  email: z.string().trim().email('EMAIL_FORMAT').max(200, 'EMAIL_TOO_LONG').optional().or(z.literal('')).nullable(),
   password: passwordInput,
   changedBy: z.string().trim().min(1, 'CHANGED_BY_REQUIRED').max(60),
 });
@@ -57,7 +90,7 @@ const changeUserInput = z.object({
   client: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}$/, 'CLIENT_FORMAT'),
   userId: z.string().trim().min(1, 'USER_ID_REQUIRED'),
   fullName: fullNameInput.optional(),
-  email: z.string().trim().email('EMAIL_FORMAT').max(200, 'EMAIL_TOO_LONG').optional().or(z.literal('')),
+  email: z.string().trim().email('EMAIL_FORMAT').max(200, 'EMAIL_TOO_LONG').optional().or(z.literal('')).nullable(),
   isActive: z.boolean().optional(),
   changedBy: z.string().trim().min(1, 'CHANGED_BY_REQUIRED').max(60),
 });
@@ -109,14 +142,18 @@ const REFUSALS: Record<string, [string, string]> = {
   CLIENT_FORMAT: [`A tenant is the two-to-four-character code from the session.`, `Open the screen from the launchpad; the tenant comes from the session.`],
   CHANGED_BY_REQUIRED: [`The change must name the user who made it.`, `Sign in and try again.`],
   USERNAME_REQUIRED: [`A username is required.`, `Enter a username.`],
+  USERNAME_TAKEN: [`That username is already in use in this tenant.`, `Choose a different username.`],
+  USER_FILTER_INVALID: [`The user search or status filter is invalid.`, `Adjust the search or filter and try again.`],
+  SELF_LOCK: [`You cannot lock your own account.`, `Ask another authorized user administrator to lock this account.`],
+  SELF_DEACTIVATE: [`You cannot deactivate your own account.`, `Ask another authorized user administrator to deactivate this account.`],
   TOKEN_REQUIRED: [`A reset token is required.`, `Use the reset link sent to you.`],
   USER_UNKNOWN: [
     `No application user of that name stands in this tenant.`,
     `Check the username or ask an administrator to create the user.`,
   ],
   USER_NOT_FOUND: [
-    `No application user of that id stands in this tenant.`,
-    `Open the user from the list instead of typing an id.`,
+    `No application account matched the request in this tenant.`,
+    `Open the account from the user directory and retry.`,
   ],
   USER_INACTIVE: [
     `This account is not active.`,
@@ -153,8 +190,8 @@ function refuse(code: string): never {
   throw new UserAdminError(message, remedy);
 }
 
-function emailOrNull(value: string | undefined): string | null {
-  if (value === undefined || value === '') return null;
+function emailOrNull(value: string | null | undefined): string | null {
+  if (value == null || value === '') return null;
   return value;
 }
 
@@ -206,13 +243,18 @@ export async function createUser(input: CreateUserInput, sessionCapabilities: st
   if (policy) refuse('PASSWORD_TOO_SHORT');
 
   return withTenant(client, async (tx) => {
+    // Serialize normalized usernames within this tenant. The unique index remains
+    // the final database guard; the advisory lock ensures duplicate concurrent
+    // requests receive the same safe, domain-level refusal before any audit work.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`cairn/user-create/${client}/${username.toUpperCase()}`}, 0))`);
+    const actor = await auditActor(tx, client, changedBy);
     const existing = await tx
       .select({ id: appUser.id })
       .from(appUser)
       .where(and(eq(appUser.client, client), eq(appUser.username, username.toUpperCase())))
       .limit(1);
     if (existing.length > 0) {
-      refuse('USER_UNKNOWN'); // same message as unknown user — no enumeration
+      refuse('USERNAME_TAKEN');
     }
 
     const passwordHash = await hashPassword(password);
@@ -234,23 +276,32 @@ export async function createUser(input: CreateUserInput, sessionCapabilities: st
       objectKey: id,
       changeType: 'CREATE',
       changedBy,
-      after: { username, fullName, email, isActive: true },
-      securityRelevantFields: ['isActive'],
+      after: { username: username.toUpperCase(), fullName, email: emailOrNull(email), isActive: true, isLocked: false, mustChangePassword: false },
+      securityRelevantFields: ['isActive', 'isLocked'],
     });
 
-    await tx.execute(sql`
-      insert into audit_access_log
-        (id, client, user_id, username, event_type, detail)
-      values (${randomUUID()}, ${client}, ${id}, ${username.toUpperCase()}, 'CONFIG_CHANGE',
-        'Application user created')
-    `);
+    await tx.insert(auditAccessLog).values({
+      id: randomUUID(), client, userId: actor.id, username: actor.username,
+      eventType: 'CONFIG_CHANGE', transactionCode: 'CFG.PLT.USER.CREATE',
+      objectType: 'app_user', objectKey: id, detail: 'Application user created',
+    });
 
-    const row = await tx
-      .select()
-      .from(appUser)
-      .where(and(eq(appUser.client, client), eq(appUser.id, id)))
-      .limit(1);
-    return viewOf(row[0]);
+    const [row] = await tx.select({
+      id: appUser.id,
+      client: appUser.client,
+      username: appUser.username,
+      fullName: appUser.fullName,
+      email: appUser.email,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+      mustChangePassword: appUser.mustChangePassword,
+      lastLoginAt: appUser.lastLoginAt,
+      createdBy: appUser.createdBy,
+      createdAt: appUser.createdAt,
+      changedBy: appUser.changedBy,
+      changedAt: appUser.changedAt,
+    }).from(appUser).where(and(eq(appUser.client, client), eq(appUser.id, id))).limit(1);
+    return viewOf(row);
   });
 }
 
@@ -258,34 +309,184 @@ export async function createUser(input: CreateUserInput, sessionCapabilities: st
 // Read / list
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getUser(client: string, userId: string): Promise<UserView | null> {
+export interface UserDirectoryRow extends UserView {
+  /** Current assignments to active roles; historical assignments are shown in detail. */
+  roles: Array<{ code: string; name: string }>;
+  hasEmployeeRecord: boolean;
+}
+
+export interface UserAdminDetail extends UserView {
+  roles: Array<{
+    code: string;
+    name: string;
+    isSystemRole: boolean;
+    isRoleActive: boolean;
+    validFrom: string;
+    validTo: string | null;
+    currentlyEffective: boolean;
+  }>;
+  capabilityPatterns: string[];
+  effectiveCapabilities: Array<{
+    code: string;
+    module: string;
+    action: string;
+    isPostingRelevant: boolean;
+    description: string | null;
+  }>;
+  organizationRestrictions: OrgRestriction[];
+  hasEmployeeRecord: boolean;
+}
+
+/**
+ * Search/filter application accounts in the authenticated tenant. The service
+ * itself enforces the existing user-admin capability family; UI visibility is
+ * not the authorization boundary.
+ */
+export async function listUsers(
+  client: string,
+  sessionCapabilities: string[],
+  query?: string,
+  status: UserStatusFilter = 'ALL',
+): Promise<UserDirectoryRow[]> {
+  requireUserAdminView(sessionCapabilities);
+  const parsedQuery = z.string().trim().max(100).optional().safeParse(query);
+  const parsedStatus = userStatusFilter.safeParse(status);
+  if (!parsedQuery.success || !parsedStatus.success) refuse('USER_FILTER_INVALID');
+  const search = parsedQuery.data?.toLowerCase() ?? '';
+  const filter = parsedStatus.data;
+
   return withTenant(client, async (tx) => {
-    const row = await tx
-      .select()
-      .from(appUser)
-      .where(and(eq(appUser.client, client), eq(appUser.id, userId)))
-      .limit(1);
-    if (row.length === 0) return null;
-    return viewOf(row[0]);
+    const predicates = [eq(appUser.client, client)];
+    if (search) {
+      predicates.push(sql`(
+        position(${search} in lower(${appUser.username})) > 0
+        or position(${search} in lower(${appUser.fullName})) > 0
+        or position(${search} in lower(coalesce(${appUser.email}, ''))) > 0
+      )`);
+    }
+    if (filter === 'ACTIVE') predicates.push(eq(appUser.isActive, true));
+    if (filter === 'INACTIVE') predicates.push(eq(appUser.isActive, false));
+    if (filter === 'LOCKED') predicates.push(eq(appUser.isLocked, true));
+    if (filter === 'UNLOCKED') predicates.push(eq(appUser.isLocked, false));
+
+    const rows = await tx.select({
+      id: appUser.id,
+      client: appUser.client,
+      username: appUser.username,
+      fullName: appUser.fullName,
+      email: appUser.email,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+      mustChangePassword: appUser.mustChangePassword,
+      lastLoginAt: appUser.lastLoginAt,
+      createdBy: appUser.createdBy,
+      createdAt: appUser.createdAt,
+      changedBy: appUser.changedBy,
+      changedAt: appUser.changedAt,
+    }).from(appUser).where(and(...predicates)).orderBy(appUser.username);
+
+    if (rows.length === 0) return [];
+    const ids = rows.map((row) => row.id);
+    const assignments = await tx.select({
+      userId: userRole.userId,
+      code: role.code,
+      name: role.name,
+    }).from(userRole)
+      .innerJoin(role, and(eq(role.client, userRole.client), eq(role.code, userRole.roleCode)))
+      .where(and(
+        eq(userRole.client, client),
+        inArray(userRole.userId, ids),
+        eq(role.isActive, true),
+        sql`${userRole.validFrom} <= now() and (${userRole.validTo} is null or ${userRole.validTo} >= now())`,
+      )).orderBy(userRole.userId, role.code);
+    const employeeRows = await tx.select({ appUserId: employee.appUserId }).from(employee)
+      .where(and(eq(employee.client, client), inArray(employee.appUserId, ids)));
+    const rolesByUser = new Map<string, Array<{ code: string; name: string }>>();
+    for (const assignment of assignments) {
+      const list = rolesByUser.get(assignment.userId) ?? [];
+      list.push({ code: assignment.code, name: assignment.name });
+      rolesByUser.set(assignment.userId, list);
+    }
+    const employeeLinked = new Set(employeeRows.flatMap((row) => row.appUserId ? [row.appUserId] : []));
+    return rows.map((row) => ({
+      ...viewOf(row),
+      roles: rolesByUser.get(row.id) ?? [],
+      hasEmployeeRecord: employeeLinked.has(row.id),
+    }));
   });
 }
 
-export async function listUsers(client: string, query?: string): Promise<UserView[]> {
+/** Full, read-only account inspection without password/session/reset secrets. */
+export async function getUserAdminDetails(
+  client: string,
+  username: string,
+  sessionCapabilities: string[],
+): Promise<UserAdminDetail | null> {
+  requireUserAdminView(sessionCapabilities);
+  const parsedUsername = usernameInput.safeParse(username);
+  if (!parsedUsername.success) refuse('USER_NOT_FOUND');
   return withTenant(client, async (tx) => {
-    const like = query ? `%${query.trim().toUpperCase()}%` : null;
-    const rows = await tx
-      .select()
-      .from(appUser)
-      .where(
-        like
-          ? and(
-              eq(appUser.client, client),
-              sql`${appUser.username} ILIKE ${like} OR ${appUser.fullName} ILIKE ${like} OR ${appUser.email} ILIKE ${like}`,
-            )
-          : eq(appUser.client, client),
-      )
-      .orderBy(appUser.username);
-    return rows.map(viewOf);
+    const [row] = await tx.select({
+      id: appUser.id,
+      client: appUser.client,
+      username: appUser.username,
+      fullName: appUser.fullName,
+      email: appUser.email,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+      mustChangePassword: appUser.mustChangePassword,
+      lastLoginAt: appUser.lastLoginAt,
+      createdBy: appUser.createdBy,
+      createdAt: appUser.createdAt,
+      changedBy: appUser.changedBy,
+      changedAt: appUser.changedAt,
+    }).from(appUser).where(and(eq(appUser.client, client), eq(appUser.username, parsedUsername.data.toUpperCase()))).limit(1);
+    if (!row) return null;
+
+    const now = Date.now();
+    const assignments = await tx.select({
+      code: role.code,
+      name: role.name,
+      isSystemRole: role.isSystemRole,
+      isRoleActive: role.isActive,
+      validFrom: userRole.validFrom,
+      validTo: userRole.validTo,
+    }).from(userRole)
+      .innerJoin(role, and(eq(role.client, userRole.client), eq(role.code, userRole.roleCode)))
+      .where(and(eq(userRole.client, client), eq(userRole.userId, row.id)))
+      .orderBy(role.code);
+    const roles = assignments.map((assignment) => ({
+      ...assignment,
+      validFrom: assignment.validFrom.toISOString(),
+      validTo: assignment.validTo?.toISOString() ?? null,
+      currentlyEffective: assignment.isRoleActive
+        && assignment.validFrom.getTime() <= now
+        && (!assignment.validTo || assignment.validTo.getTime() >= now),
+    }));
+    const capabilityPatterns = await loadCapabilities(tx, client, row.id);
+    const catalogue = await tx.select({
+      code: capability.code,
+      module: capability.module,
+      action: capability.action,
+      isPostingRelevant: capability.isPostingRelevant,
+      description: capability.description,
+    }).from(capability).orderBy(capability.code);
+    const effectiveCapabilities = row.isActive && !row.isLocked
+      ? catalogue.filter((item) => hasCapability(capabilityPatterns, item.code))
+      : [];
+    const organizationRestrictions = await loadOrgRestrictions(tx, client, row.id);
+    const [employeeRow] = await tx.select({ appUserId: employee.appUserId }).from(employee)
+      .where(and(eq(employee.client, client), eq(employee.appUserId, row.id)))
+      .limit(1);
+
+    return {
+      ...viewOf(row),
+      roles,
+      capabilityPatterns,
+      effectiveCapabilities,
+      organizationRestrictions,
+      hasEmployeeRecord: Boolean(employeeRow),
+    };
   });
 }
 
@@ -305,6 +506,14 @@ function viewOf(row: { id: string; client: string; username: string; fullName: s
     changedBy: row.changedBy ?? null,
     changedAt: row.changedAt?.toISOString() ?? null,
   };
+}
+
+/** Resolve an audit actor supplied by a trusted server action by id or username. */
+async function auditActor(tx: Tx, client: string, actor: string): Promise<{ id: string | null; username: string }> {
+  const [row] = await tx.select({ id: appUser.id, username: appUser.username }).from(appUser)
+    .where(and(eq(appUser.client, client), or(eq(appUser.id, actor), sql`upper(${appUser.username}) = upper(${actor})`)))
+    .limit(1);
+  return row ?? { id: null, username: actor.slice(0, 40) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,8 +536,9 @@ export interface ChangeUserInput {
  * employee link) and authentication fields (password hash, lock state) are
  * never touched here — password reset and locking are separate acts.
  *
- * Deactivating an account does not revoke sessions; revocation is the
- * administrator's explicit choice alongside deactivation.
+ * Deactivation revokes every persisted session in the same transaction, so a
+ * later reactivation cannot revive an old session. The employee master record
+ * is never changed.
  */
 export async function changeUser(
   input: ChangeUserInput,
@@ -343,13 +553,30 @@ export async function changeUser(
   }
 
   return withTenant(client, async (tx) => {
-    const row = await tx
-      .select()
-      .from(appUser)
+    const actor = await auditActor(tx, client, changedBy);
+    const row = await tx.select({
+      id: appUser.id,
+      client: appUser.client,
+      username: appUser.username,
+      fullName: appUser.fullName,
+      email: appUser.email,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+      mustChangePassword: appUser.mustChangePassword,
+      lastLoginAt: appUser.lastLoginAt,
+      createdBy: appUser.createdBy,
+      createdAt: appUser.createdAt,
+      changedBy: appUser.changedBy,
+      changedAt: appUser.changedAt,
+    }).from(appUser)
       .where(and(eq(appUser.client, client), eq(appUser.id, userId)))
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (row.length === 0) refuse('USER_NOT_FOUND');
     const current = row[0];
+    if (isActive === false && current.isActive && actor.id === userId) {
+      refuse('SELF_DEACTIVATE');
+    }
 
     const before = {
       fullName: current.fullName,
@@ -377,12 +604,21 @@ export async function changeUser(
       return viewOf(current);
     }
 
-    const setValues: Record<string, unknown> = { ...after, changed_by: changedBy, changed_at: new Date() };
+    const changedAt = new Date();
+    await tx.update(appUser).set({
+      fullName: fullName ?? current.fullName,
+      email: email !== undefined ? emailValue : current.email,
+      isActive: isActive ?? current.isActive,
+      changedBy,
+      changedAt,
+    }).where(and(eq(appUser.client, client), eq(appUser.id, userId)));
 
-    await tx
-      .update(appUser)
-      .set(setValues)
-      .where(and(eq(appUser.client, client), eq(appUser.id, userId)));
+    if (isActive === false && current.isActive) {
+      // Deactivation invalidates the account immediately and revokes old sessions
+      // so a later reactivation cannot revive a previously issued cookie.
+      await tx.update(userSession).set({ revokedAt: new Date() })
+        .where(and(eq(userSession.client, client), eq(userSession.userId, userId), isNull(userSession.revokedAt)));
+    }
 
     await recordChange(tx, {
       client,
@@ -395,19 +631,102 @@ export async function changeUser(
       securityRelevantFields: ['isActive'],
     });
 
-    await tx.execute(sql`
-      insert into audit_access_log
-        (id, client, user_id, username, event_type, detail)
-      values (${randomUUID()}, ${client}, ${userId}, ${current.username}, 'CONFIG_CHANGE',
-        'User details maintained')
-    `);
+    await tx.insert(auditAccessLog).values({
+      id: randomUUID(), client, userId: actor.id, username: actor.username,
+      eventType: 'CONFIG_CHANGE', transactionCode: 'CFG.PLT.USER.MAINTAIN',
+      objectType: 'app_user', objectKey: userId,
+      detail: isActive === false && current.isActive ? 'User deactivated; persisted sessions revoked' : 'User details maintained',
+    });
 
-    const updated = await tx
-      .select()
-      .from(appUser)
-      .where(and(eq(appUser.client, client), eq(appUser.id, userId)))
-      .limit(1);
-    return viewOf(updated[0]);
+    return viewOf({
+      ...current,
+      fullName: fullName ?? current.fullName,
+      email: email !== undefined ? emailValue : current.email,
+      isActive: isActive ?? current.isActive,
+      changedBy,
+      changedAt,
+    });
+  });
+}
+
+export interface SetUserLockInput {
+  client: string;
+  userId: string;
+  isLocked: boolean;
+  changedBy: string;
+}
+
+/** Manually lock/unlock an account using the established USER.MAINTAIN authority. */
+export async function setUserLocked(
+  input: SetUserLockInput,
+  sessionCapabilities: string[],
+): Promise<UserView> {
+  const parsed = z.object({
+    client: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}$/),
+    userId: z.string().trim().min(1).max(36),
+    isLocked: z.boolean(),
+    changedBy: z.string().trim().min(1).max(60),
+  }).safeParse(input);
+  if (!parsed.success) refuse('USER_ID_REQUIRED');
+  const { client, userId, isLocked, changedBy } = parsed.data;
+  if (!hasCapability(sessionCapabilities, 'CFG.PLT.USER.MAINTAIN')) refuse('CAPABILITY_MISSING');
+
+  return withTenant(client, async (tx) => {
+    const actor = await auditActor(tx, client, changedBy);
+    const [current] = await tx.select({
+      id: appUser.id,
+      client: appUser.client,
+      username: appUser.username,
+      fullName: appUser.fullName,
+      email: appUser.email,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+      mustChangePassword: appUser.mustChangePassword,
+      lastLoginAt: appUser.lastLoginAt,
+      createdBy: appUser.createdBy,
+      createdAt: appUser.createdAt,
+      changedBy: appUser.changedBy,
+      changedAt: appUser.changedAt,
+    }).from(appUser).where(and(eq(appUser.client, client), eq(appUser.id, userId))).for('update');
+    if (!current) refuse('USER_NOT_FOUND');
+    if (isLocked && actor.id === userId) refuse('SELF_LOCK');
+    if (current.isLocked === isLocked) return viewOf(current);
+
+    await tx.update(appUser).set({
+      isLocked,
+      ...(!isLocked ? { failedLoginCount: '0' } : {}),
+      changedBy,
+      changedAt: new Date(),
+    }).where(and(eq(appUser.client, client), eq(appUser.id, userId)));
+
+    if (isLocked) {
+      await tx.update(userSession).set({ revokedAt: new Date() })
+        .where(and(eq(userSession.client, client), eq(userSession.userId, userId), isNull(userSession.revokedAt)));
+    }
+
+    await recordChange(tx, {
+      client,
+      objectClass: 'app_user',
+      objectKey: userId,
+      changeType: 'CHANGE',
+      changedBy,
+      before: { isLocked: current.isLocked },
+      after: { isLocked },
+      securityRelevantFields: ['isLocked'],
+    });
+    await tx.insert(auditAccessLog).values({
+      id: randomUUID(),
+      client,
+      userId: actor.id,
+      username: actor.username,
+      eventType: 'CONFIG_CHANGE',
+      transactionCode: 'CFG.PLT.USER.MAINTAIN',
+      objectType: 'app_user',
+      objectKey: userId,
+      detail: isLocked ? 'User account locked; persisted sessions revoked' : 'User account unlocked; failed-login counter reset',
+    });
+
+    return viewOf({ ...current, isLocked, changedBy, changedAt: new Date() });
   });
 }
 
@@ -426,7 +745,7 @@ export interface ResetTokenOutcome {
   userId: string;
   username: string;
   token: string;
-  /** The administrator must deliver this token to the user out of band. */
+  /** Server-internal only; must never be included in a browser response. */
   expiresAt: string;
 }
 
@@ -439,7 +758,9 @@ export interface ResetTokenOutcome {
  * Does NOT activate a disabled account, does NOT assign roles, does NOT change
  * organisational access, does NOT touch HR-owned data.
  *
- * Returns the plaintext token once — the administrator delivers it.
+ * Server-internal service only. The server action intentionally refuses to
+ * call this until an approved delivery channel exists; do not expose this
+ * outcome through a page or client action.
  */
 export async function initiatePasswordReset(
   input: InitiateResetInput,
@@ -454,13 +775,14 @@ export async function initiatePasswordReset(
   }
 
   return withTenant(client, async (tx) => {
-    const row = await tx
-      .select()
-      .from(appUser)
-      .where(and(eq(appUser.client, client), eq(appUser.id, userId)))
-      .limit(1);
-    if (row.length === 0) refuse('USER_NOT_FOUND');
-    const current = row[0];
+    const actor = await auditActor(tx, client, changedBy);
+    const [current] = await tx.select({
+      id: appUser.id,
+      username: appUser.username,
+      isActive: appUser.isActive,
+      isLocked: appUser.isLocked,
+    }).from(appUser).where(and(eq(appUser.client, client), eq(appUser.id, userId))).for('update');
+    if (!current) refuse('USER_NOT_FOUND');
 
     // A locked or inactive account cannot be reset through this path —
     // unlocking and activation are separate administrator acts.
@@ -480,7 +802,7 @@ export async function initiatePasswordReset(
     `);
 
     // Revoke every live session — the old password must not remain usable.
-    const revoked = await tx.execute(sql`
+    await tx.execute(sql`
       update user_session
          set revoked_at = now()
        where client = ${client}
@@ -508,12 +830,12 @@ export async function initiatePasswordReset(
       securityRelevantFields: ['mustChangePassword'],
     });
 
-    await tx.execute(sql`
-      insert into audit_access_log
-        (id, client, user_id, username, event_type, detail, ip_address)
-      values (${randomUUID()}, ${client}, ${userId}, ${current.username}, 'CONFIG_CHANGE',
-        'Administrator-initiated password reset', ${ipAddress ?? null})
-    `);
+    await tx.insert(auditAccessLog).values({
+      id: randomUUID(), client, userId: actor.id, username: actor.username,
+      eventType: 'CONFIG_CHANGE', transactionCode: 'CFG.PLT.USER.PASSWORD_RESET',
+      objectType: 'app_user', objectKey: userId, detail: 'Administrator-initiated password reset',
+      ipAddress: ipAddress ?? null,
+    });
 
     return {
       userId: current.id,
@@ -544,9 +866,10 @@ export interface RequestResetOutcome {
  * may be submitted. The same outcome is returned whether the user exists,
  * so no username enumeration is possible through this screen.
  *
- * When the user exists and is active and unlocked, a reset token is created.
- * Delivery is deferred: with no mail transport configured (D-033), the
- * administrator who sees the audit log can deliver the token out of band.
+ * When the user exists and is active and unlocked, a short-lived token hash is
+ * recorded. D-033 leaves delivery unavailable: the plaintext token is never
+ * written to the audit log or returned to this public caller, so the UI directs
+ * the user to the organization's approved support path.
  */
 export async function requestPasswordReset(
   input: RequestResetInput,

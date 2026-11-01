@@ -17,9 +17,9 @@ import {
   capability,
   role,
   roleCapability,
+  authOrgRestriction,
   sodRule,
   userRole,
-  userSession,
 } from '../../platform/tables/security';
 
 export const PLATFORM_ADMIN_ROLE_CODE = 'PLATFORM_ADMIN';
@@ -56,7 +56,9 @@ export interface RoleAdminUser {
   fullName: string;
   isActive: boolean;
   isLocked: boolean;
-  roles: Array<{ code: string; name: string; validFrom: string; validTo: string | null }>;
+  roles: Array<{ code: string; name: string; validFrom: string; validTo: string | null; currentlyEffective: boolean }>;
+  effectiveCapabilities: string[];
+  organizationRestrictions: Array<{ scopeType: string; scopeValue: string }>;
 }
 
 export interface RoleAdminOverview {
@@ -243,21 +245,42 @@ export async function getRoleAdminOverview(clientArg: string, actorArg: RoleAdmi
       .from(capability).orderBy(capability.code);
     const users = await tx.select({ id: appUser.id, username: appUser.username, fullName: appUser.fullName, isActive: appUser.isActive, isLocked: appUser.isLocked })
       .from(appUser).where(eq(appUser.client, client)).orderBy(appUser.username);
-    const assignments = await tx.select({ userId: userRole.userId, roleCode: userRole.roleCode, validFrom: userRole.validFrom, validTo: userRole.validTo, roleName: role.name })
+    const assignments = await tx.select({ userId: userRole.userId, roleCode: userRole.roleCode, validFrom: userRole.validFrom, validTo: userRole.validTo, roleName: role.name, roleIsActive: role.isActive })
       .from(userRole).innerJoin(role, and(eq(role.client, userRole.client), eq(role.code, userRole.roleCode)))
       .where(eq(userRole.client, client)).orderBy(userRole.userId, userRole.roleCode);
+    const scopeRows = await tx.select({ userId: authOrgRestriction.userId, scopeType: authOrgRestriction.scopeType, scopeValue: authOrgRestriction.scopeValue })
+      .from(authOrgRestriction).where(eq(authOrgRestriction.client, client)).orderBy(authOrgRestriction.userId, authOrgRestriction.scopeType, authOrgRestriction.scopeValue);
+    const currentTime = Date.now();
+    const capabilitiesByRole = new Map<string, string[]>();
+    for (const item of roleCaps) {
+      const list = capabilitiesByRole.get(item.roleCode) ?? [];
+      list.push(item.capabilityCode);
+      capabilitiesByRole.set(item.roleCode, list);
+    }
     return {
-      roles: roles.map((item) => ({ ...item, capabilities: roleCaps.filter((cap) => cap.roleCode === item.code).map((cap) => cap.capabilityCode) })),
+      roles: roles.map((item) => ({ ...item, capabilities: capabilitiesByRole.get(item.code) ?? [] })),
       capabilities: catalogue,
-      users: users.map((user) => ({
-        ...user,
-        roles: assignments.filter((assignment) => assignment.userId === user.id).map((assignment) => ({
-          code: assignment.roleCode,
-          name: assignment.roleName,
-          validFrom: assignment.validFrom.toISOString(),
-          validTo: assignment.validTo?.toISOString() ?? null,
-        })),
-      })),
+      users: users.map((user) => {
+        const userAssignments = assignments.filter((assignment) => assignment.userId === user.id);
+        const effectivePatterns = userAssignments.filter((assignment) => assignment.roleIsActive
+          && assignment.validFrom.getTime() <= currentTime
+          && (!assignment.validTo || assignment.validTo.getTime() >= currentTime))
+          .flatMap((assignment) => capabilitiesByRole.get(assignment.roleCode) ?? []);
+        return {
+          ...user,
+          roles: userAssignments.map((assignment) => ({
+            code: assignment.roleCode,
+            name: assignment.roleName,
+            validFrom: assignment.validFrom.toISOString(),
+            validTo: assignment.validTo?.toISOString() ?? null,
+            currentlyEffective: assignment.roleIsActive
+              && assignment.validFrom.getTime() <= currentTime
+              && (!assignment.validTo || assignment.validTo.getTime() >= currentTime),
+          })),
+          effectiveCapabilities: user.isActive && !user.isLocked ? catalogue.filter((item) => hasCapability(effectivePatterns, item.code)).map((item) => item.code) : [],
+          organizationRestrictions: scopeRows.filter((scope) => scope.userId === user.id).map(({ scopeType, scopeValue }) => ({ scopeType, scopeValue })),
+        };
+      }),
     };
   });
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { requireSession } from '@/platform/auth/current';
-import { getRoleAdminOverview, RoleAdminError } from '@/modules/platform/role-admin';
+import { can, requireSession } from '@/platform/auth/current';
+import { getRoleAdminOverview, RoleAdminError, USER_ROLE_MAINTAIN_CAPABILITY } from '@/modules/platform/role-admin';
 import RoleManager from './RoleManager';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export default async function RolesPage() {
         </div>
         <p className="mt-2 max-w-4xl text-sm text-ink-soft">Tenant-local role maintenance. Only registered capabilities may be assigned; custom roles cannot contain wildcards. Company and plant business scopes remain separate under user access.</p>
       </header>
-      {error ? <section className="panel panel-danger p-4 text-sm" role="alert">{error}<p className="mt-2 text-ink-soft">Tenant wildcard ADMINISTRATOR and CFG.PLT.USER.MAINTAIN alone do not authorize this page. Ask the deployment owner to bootstrap a designated active account.</p></section> : overview ? <RoleManager overview={overview} actorUserId={session.user.userId} /> : null}
+      {error ? <section className="panel panel-danger p-4 text-sm" role="alert">{error}<p className="mt-2 text-ink-soft">Tenant wildcard ADMINISTRATOR and CFG.PLT.USER.MAINTAIN alone do not authorize this page. Ask the deployment owner to bootstrap a designated active account.</p></section> : overview ? <RoleManager overview={overview} actorUserId={session.user.userId} canAssignUsers={can(session, USER_ROLE_MAINTAIN_CAPABILITY)} /> : null}
     </main>
   );
 }

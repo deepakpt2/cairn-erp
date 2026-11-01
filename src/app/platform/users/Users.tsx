@@ -1,28 +1,32 @@
 'use client';
 
-import { useActionState, useId, useState } from 'react';
+import { useActionState, useId } from 'react';
 import Link from 'next/link';
 
-import {
-  changeUserAction,
-  createUserAction,
-  initiatePasswordResetAction,
-  type UserActionState,
-} from './actions';
+import { createUserAction, type UserActionState } from './actions';
+import type { UserStatusFilter } from '@/modules/platform/user-admin';
 
 const EMPTY: UserActionState = { ok: false };
 
+interface UserRow {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string | null;
+  isActive: boolean;
+  isLocked: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  roles: Array<{ code: string; name: string }>;
+  hasEmployeeRecord: boolean;
+}
+
 interface Props {
-  users: Array<{
-    id: string;
-    username: string;
-    fullName: string;
-    email: string | null;
-    isActive: boolean;
-    isLocked: boolean;
-    mustChangePassword: boolean;
-    lastLoginAt: string | null;
-  }>;
+  client: string;
+  users: UserRow[];
+  query: string;
+  status: UserStatusFilter;
+  canCreate: boolean;
   canMaintain: boolean;
   canReset: boolean;
 }
@@ -30,188 +34,123 @@ interface Props {
 function Notice({ state }: { state: UserActionState }) {
   if (!state.message) return null;
   return (
-    <div
-      className={
-        state.ok
-          ? 'panel panel-success mt-3 p-3 text-sm'
-          : 'panel panel-danger mt-3 p-3 text-sm'
-      }
-      role="status"
-    >
+    <div className={state.ok ? 'panel panel-success mt-3 p-3 text-sm' : 'panel panel-danger mt-3 p-3 text-sm'} role="status">
       <p className="font-medium">{state.message}</p>
       {state.remedy ? <p className="mt-1 text-ink-soft">{state.remedy}</p> : null}
-      {state.token ? (
-        <p className="mt-2 text-sm text-ink">
-          Reset token (deliver out of band): <b>{state.token}</b>
-        </p>
-      ) : null}
-      {state.ok && state.userId ? (
-        <p className="mt-2">
-          <Link className="link" href={`/platform/users?user=${state.userId}`}>
-            Open {state.username}
-          </Link>
-        </p>
-      ) : null}
     </div>
   );
 }
 
-export default function Users({
-  users,
-  canMaintain,
-  canReset,
-}: Props) {
-  const [createState, createAction] = useActionState(createUserAction, EMPTY);
-  const [changeState, changeAction] = useActionState(changeUserAction, EMPTY);
-  const [resetState, resetAction] = useActionState(initiatePasswordResetAction, EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
+function formatDate(value: string | null) {
+  if (!value) return 'Never';
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf()) ? '—' : `${date.toISOString().slice(0, 19).replace('T', ' ')} UTC`;
+}
+
+export default function Users({ client, users, query, status, canCreate, canMaintain, canReset }: Props) {
+  const [createState, createAction, creating] = useActionState(createUserAction, EMPTY);
+  const prefix = useId();
 
   return (
     <div className="space-y-4">
-      <section className="panel space-y-3 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2">
-          New user
-        </h2>
-        <form action={createAction} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <label className="block text-2xs font-medium uppercase tracking-wide text-ink-soft">
-            Username
-          </label>
-          <input
-            name="username"
-            required
-            maxLength={40}
-            className="w-full border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-          />
-          <label className="block text-2xs font-medium uppercase tracking-wide text-ink-soft">
-            Full name
-          </label>
-          <input
-            name="fullName"
-            required
-            maxLength={120}
-            className="w-full border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-          />
-          <label className="block text-2xs font-medium uppercase tracking-wide text-ink-soft">
-            Email
-          </label>
-          <input
-            name="email"
-            type="email"
-            maxLength={200}
-            className="w-full border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-          />
-          <label className="block text-2xs font-medium uppercase tracking-wide text-ink-soft">
-            Password
-          </label>
-          <input
-            name="password"
-            type="password"
-            required
-            minLength={10}
-            className="w-full border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-          />
-          <button type="submit" disabled={!canMaintain} className="btn">
-            Create user
-          </button>
-        </form>
-        <Notice state={createState} />
-      </section>
+      {canCreate && (
+        <section className="panel space-y-3 p-4" aria-labelledby={`${prefix}-create`}>
+          <div>
+            <h2 id={`${prefix}-create`} className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Create application account</h2>
+            <p className="mt-1 text-sm text-ink-soft">Creation requires {client} tenant context and {`CFG.PLT.USER.CREATE`}. No role or employee record is assigned automatically.</p>
+          </div>
+          <form action={createAction} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="block text-xs font-medium text-ink-soft">Username
+              <input name="username" required minLength={3} maxLength={40} autoComplete="off" className="mt-1 w-full border bg-transparent p-2" />
+            </label>
+            <label className="block text-xs font-medium text-ink-soft">Full name
+              <input name="fullName" required minLength={2} maxLength={120} className="mt-1 w-full border bg-transparent p-2" />
+            </label>
+            <label className="block text-xs font-medium text-ink-soft">Email (optional)
+              <input name="email" type="email" maxLength={200} autoComplete="email" className="mt-1 w-full border bg-transparent p-2" />
+            </label>
+            <label className="block text-xs font-medium text-ink-soft">Initial password
+              <input name="password" type="password" required minLength={10} autoComplete="new-password" className="mt-1 w-full border bg-transparent p-2" />
+            </label>
+            <div className="flex items-end">
+              <button type="submit" disabled={creating} className="btn w-full">{creating ? 'Creating…' : 'Create account'}</button>
+            </div>
+          </form>
+          <Notice state={createState} />
+        </section>
+      )}
 
-      <section className="panel space-y-3 p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2">
-          Users
-        </h2>
-        <div className="overflow-auto border border-line rounded">
-          <table className="w-full text-left text-2xs">
-            <thead>
+      <section className="panel space-y-3 p-4" aria-labelledby={`${prefix}-directory`}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 id={`${prefix}-directory`} className="text-sm font-semibold uppercase tracking-wider text-ink-soft">Application accounts</h2>
+            <p className="mt-1 text-xs text-ink-faint">{users.length} matching account{users.length === 1 ? '' : 's'} · roles shown are currently effective direct assignments.</p>
+          </div>
+          <form method="get" action="/platform/users" className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-ink-soft">Search username, name or email
+              <input name="q" defaultValue={query} maxLength={100} className="mt-1 block min-h-9 border bg-transparent px-2" />
+            </label>
+            <label className="text-xs text-ink-soft">Account status
+              <select name="status" defaultValue={status} className="mt-1 block min-h-9 border bg-transparent px-2">
+                <option value="ALL">All</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="LOCKED">Locked</option>
+                <option value="UNLOCKED">Unlocked</option>
+              </select>
+            </label>
+            <button type="submit" className="btn btn-default min-h-9">Search</button>
+            {(query || status !== 'ALL') && <Link href="/platform/users" className="btn btn-default min-h-9">Clear</Link>}
+          </form>
+        </div>
+
+        <div className="overflow-x-auto rounded border border-line">
+          <table className="w-full min-w-[850px] text-left text-sm">
+            <thead className="border-b border-line bg-row text-xs uppercase text-ink-soft">
               <tr>
-                <th className="pb-2">Username</th>
-                <th className="pb-2">Full name</th>
-                <th className="pb-2">Email</th>
-                <th className="pb-2">Active</th>
-                <th className="pb-2">Locked</th>
-                <th className="pb-2">Must change</th>
-                <th className="pb-2 text-end">Actions</th>
+                <th scope="col" className="p-2">Account</th>
+                <th scope="col" className="p-2">Roles</th>
+                <th scope="col" className="p-2">Employee record</th>
+                <th scope="col" className="p-2">State</th>
+                <th scope="col" className="p-2">Last sign-in</th>
+                <th scope="col" className="p-2 text-right">Details</th>
               </tr>
             </thead>
             <tbody>
               {users.map((row) => (
-                <tr key={row.id} className="border-b border-faint hover:bg-row">
-                  <td className="py-2">{row.username}</td>
-                  <td className="py-2">{row.fullName}</td>
-                  <td className="py-2">{row.email ?? '—'}</td>
-                  <td className="py-2">{row.isActive ? 'Yes' : 'No'}</td>
-                  <td className="py-2">{row.isLocked ? 'Yes' : 'No'}</td>
-                  <td className="py-2">{row.mustChangePassword ? 'Yes' : 'No'}</td>
-                  <td className="py-2 text-end">
-                    {editingId === row.id ? (
-                      <form action={changeAction} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input name="userId" type="hidden" defaultValue={row.id} />
-                        <input
-                          name="fullName"
-                          defaultValue={row.fullName}
-                          className="border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-                        />
-                        <input
-                          name="email"
-                          type="email"
-                          defaultValue={row.email ?? ''}
-                          className="border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-                        />
-                        <input name="isActive" type="checkbox" defaultChecked={row.isActive} />
-                        <input name="changedBy" type="hidden" />
-                        <button type="submit" disabled={!canMaintain} className="btn btn-default min-h-8">
-                          Save
-                        </button>
-                        <button type="button" onClick={() => setEditingId(null)} className="link min-h-8">
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      canMaintain ? (
-                        <button type="button" onClick={() => setEditingId(row.id)} className="link min-h-8">
-                          Change
-                        </button>
-                      ) : (
-                        <span className="text-ink-faint">—</span>
-                      )
-                    )}
+                <tr key={row.id} className="border-b border-faint align-top hover:bg-row">
+                  <td className="p-2">
+                    <div className="font-medium">{row.username}</div>
+                    <div className="text-xs text-ink-soft">{row.fullName}</div>
+                    <div className="text-xs text-ink-faint">{row.email ?? 'No email on file'}</div>
+                  </td>
+                  <td className="p-2">
+                    {row.roles.length ? <ul className="space-y-1">{row.roles.map((role) => <li key={role.code}><span className="code">{role.code}</span><span className="ml-1 text-xs text-ink-soft">{role.name}</span></li>)}</ul> : <span className="text-ink-faint">No current role</span>}
+                  </td>
+                  <td className="p-2">{row.hasEmployeeRecord ? 'Linked separately' : 'No linked employee'}</td>
+                  <td className="p-2">
+                    <div>{row.isActive ? 'Active' : 'Inactive'}</div>
+                    <div className={row.isLocked ? 'text-danger' : 'text-ink-faint'}>{row.isLocked ? 'Locked' : 'Unlocked'}</div>
+                    {row.mustChangePassword && <div className="text-xs text-warn">Password change required</div>}
+                  </td>
+                  <td className="p-2 text-xs">{formatDate(row.lastLoginAt)}</td>
+                  <td className="p-2 text-right">
+                    <Link className="btn btn-default min-h-8" href={`/platform/users/${encodeURIComponent(row.username)}`}>Open</Link>
                   </td>
                 </tr>
               ))}
-              {users.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-4 text-center text-ink-faint">
-                    No users found.
-                  </td>
-                </tr>
-              )}
+              {!users.length && <tr><td colSpan={6} className="p-5 text-center text-ink-faint">No application accounts match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
-        <Notice state={changeState} />
+        {!canMaintain && <p className="text-xs text-ink-faint">Account details and lock controls are read-only in this session.</p>}
       </section>
 
       {canReset && (
-        <section className="panel space-y-3 p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-soft mb-2">
-            Initiate password reset
-          </h2>
-          <form action={resetAction} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="block text-2xs font-medium uppercase tracking-wide text-ink-soft">
-              User id
-            </label>
-            <input
-              name="userId"
-              required
-              className="w-full border bg-transparent p-1 focus:bg-white focus:outline focus:outline-1 focus:outline-[#5b94b7]"
-            />
-            <button type="submit" className="btn btn-default min-h-11 sm:min-h-8">
-              Create reset token
-            </button>
-          </form>
-          <Notice state={resetState} />
-        </section>
+        <aside className="rounded border border-line bg-row p-3 text-sm">
+          <h2 className="font-medium">Password recovery</h2>
+          <p className="mt-1 text-ink-soft">Administrator-issued reset is paused because no approved outbound delivery transport is configured. Reset tokens are not shown in this interface. Use the <Link href="/forgot-password" className="link">public recovery flow</Link> or your organization’s approved support channel.</p>
+        </aside>
       )}
     </div>
   );

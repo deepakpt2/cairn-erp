@@ -8,6 +8,7 @@ const fixture = vi.hoisted(() => ({
   can: vi.fn(),
   createUser: vi.fn(),
   changeUser: vi.fn(),
+  setUserLocked: vi.fn(),
   initiatePasswordReset: vi.fn(),
   listUsers: vi.fn(),
   requestPasswordReset: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/platform/auth/current', () => ({
 vi.mock('@/modules/platform/user-admin', () => ({
   createUser: fixture.createUser,
   changeUser: fixture.changeUser,
+  setUserLocked: fixture.setUserLocked,
   initiatePasswordReset: fixture.initiatePasswordReset,
   listUsers: fixture.listUsers,
   requestPasswordReset: fixture.requestPasswordReset,
@@ -34,6 +36,8 @@ import {
   changeUserAction,
   createUserAction,
   initiatePasswordResetAction,
+  setUserLockAction,
+  listUsersAction,
 } from '@/app/platform/users/actions';
 
 const ADMIN_CAPS = ['CFG.PLT.USER.CREATE', 'CFG.PLT.USER.MAINTAIN', 'CFG.PLT.USER.PASSWORD_RESET'];
@@ -52,6 +56,8 @@ beforeEach(() => {
   );
   fixture.createUser.mockResolvedValue({ id: 'created' });
   fixture.changeUser.mockResolvedValue({ id: 'changed' });
+  fixture.setUserLocked.mockResolvedValue({ id: 'target', isLocked: true });
+  fixture.listUsers.mockResolvedValue([]);
   fixture.initiatePasswordReset.mockResolvedValue({ userId: 'target', username: 'TARGET', token: 'out-of-band', expiresAt: 'later' });
 });
 
@@ -95,6 +101,7 @@ describe('central user-administration server actions', () => {
       client: 'T123',
       changedBy: 'TRUSTED.ADMIN',
       username: 'new.user',
+      password: 'StrongPassword123!',
     }), ADMIN_CAPS);
   });
 
@@ -103,15 +110,34 @@ describe('central user-administration server actions', () => {
     await changeUserAction({ ok: false }, form({
       client: 'EVIL', userId: 'target-user', fullName: 'Target', changedBy: 'FORGED.ACTOR',
     }));
-    await initiatePasswordResetAction({ ok: false }, form({
+    const reset = await initiatePasswordResetAction({ ok: false }, form({
       client: 'EVIL', userId: 'target-user', changedBy: 'FORGED.ACTOR',
     }));
 
     expect(fixture.changeUser).toHaveBeenCalledWith(expect.objectContaining({
       client: 'T123', userId: 'target-user', changedBy: 'TRUSTED.ADMIN',
     }), ADMIN_CAPS);
-    expect(fixture.initiatePasswordReset).toHaveBeenCalledWith(expect.objectContaining({
-      client: 'T123', userId: 'target-user', changedBy: 'TRUSTED.ADMIN',
-    }), ADMIN_CAPS);
+    expect(reset.ok).toBe(false);
+    expect(reset.message).toContain('delivery channel');
+    expect(reset).not.toHaveProperty('token');
+    expect(fixture.initiatePasswordReset).not.toHaveBeenCalled();
+  });
+
+  it('passes lock changes only to the service under the live tenant and capability', async () => {
+    fixture.session.user.capabilities = ADMIN_CAPS;
+    const result = await setUserLockAction({ ok: false }, form({ client: 'EVIL', userId: 'target-user', isLocked: 'true', changedBy: 'FORGED' }));
+    expect(result.ok).toBe(true);
+    expect(fixture.setUserLocked).toHaveBeenCalledWith({ client: 'T123', userId: 'target-user', isLocked: true, changedBy: 'TRUSTED.ADMIN' }, ADMIN_CAPS);
+  });
+
+  it('refuses cross-tenant directory actions and passes filters under the session tenant', async () => {
+    fixture.session.user.capabilities = ADMIN_CAPS;
+    const mismatch = await listUsersAction('EVIL', 'admin', 'LOCKED');
+    expect(mismatch.ok).toBe(false);
+    expect(fixture.listUsers).not.toHaveBeenCalled();
+
+    const result = await listUsersAction('T123', 'admin', 'LOCKED');
+    expect(result.ok).toBe(true);
+    expect(fixture.listUsers).toHaveBeenCalledWith('T123', ADMIN_CAPS, 'admin', 'LOCKED');
   });
 });

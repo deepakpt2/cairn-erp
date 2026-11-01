@@ -31,6 +31,27 @@ describe('central user-administration database-role boundary', () => {
     expect(Number(row?.memberships)).toBe(0);
   });
 
+  it('force-enables tenant RLS on the platform identity, role, scope, session, and audit tables', async () => {
+    const tenantTables = [
+      'app_user', 'role', 'role_capability', 'user_role', 'auth_org_restriction',
+      'user_session', 'password_reset_token', 'audit_access_log',
+    ];
+    const result = await db().execute(sql`
+      select c.relname, c.relrowsecurity, c.relforcerowsecurity
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public'
+         and c.relname in ('app_user', 'role', 'role_capability', 'user_role', 'auth_org_restriction', 'user_session', 'password_reset_token', 'audit_access_log')
+         and c.relkind in ('r', 'p')
+    `);
+    const rows = result as unknown as Array<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>;
+    expect(rows.map((row) => row.relname).sort()).toEqual([...tenantTables].sort());
+    for (const row of rows) {
+      expect(row.relrowsecurity, `${row.relname} RLS`).toBe(true);
+      expect(row.relforcerowsecurity, `${row.relname} FORCE RLS`).toBe(true);
+    }
+  });
+
   it('holds exactly SELECT, INSERT, UPDATE on the three account lifecycle tables', async () => {
     const result = await db().execute(sql`
       select c.relname,

@@ -24,7 +24,7 @@ import {
 } from '@/platform/auth/session';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
-const tenant: TestTenant = await createTenant('auth');
+const tenant: TestTenant = await createTenant('auth', { companyCode: 'AU01', withConfiguration: false });
 const PASSWORD = 'correct-horse-7';
 
 await withTenant(tenant.client, async (tx) => {
@@ -42,7 +42,7 @@ await withTenant(tenant.client, async (tx) => {
 });
 
 /** A second tenant, to prove a token from one is worthless in the other. */
-const other: TestTenant = await createTenant('auth-other');
+const other: TestTenant = await createTenant('auth-other', { companyCode: 'AU02', withConfiguration: false });
 await withTenant(other.client, async (tx) => {
   await tx.execute(sql`
     insert into app_user

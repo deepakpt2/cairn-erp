@@ -14,9 +14,11 @@ import { and, eq, sql } from 'drizzle-orm';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { withTenant, closeDb } from '@/platform/db/client';
-import { appUser, userSession, passwordResetToken, role, roleCapability, userRole, capability, authOrgRestriction } from '@/platform/tables/security';
-import { createUser, changeUser, initiatePasswordReset, requestPasswordReset, completePasswordReset, type CreateUserInput } from '@/modules/platform/user-admin';
+import { appUser, userSession, passwordResetToken, auditAccessLog, role, roleCapability, userRole, capability, authOrgRestriction } from '@/platform/tables/security';
+import { changeHistory } from '@/platform/change';
+import { createUser, changeUser, initiatePasswordReset, requestPasswordReset, completePasswordReset, listUsers, getUserAdminDetails, setUserLocked, type CreateUserInput } from '@/modules/platform/user-admin';
 import { hashPassword } from '@/platform/auth/password';
+import { createSession } from '@/platform/auth/session';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 const ACTOR = 'STAGE4_TEST';
@@ -24,7 +26,7 @@ const PASSWORD = 'Password123!'; // meets policy: 10+ chars, letter, digit
 
 // Human-readable refusal messages (from REFUSALS in user-admin.ts)
 const MSG_CAP_MISSING = 'This session does not hold the needed authority.';
-const MSG_USER_NOT_FOUND = 'No application user of that id stands in this tenant.';
+const MSG_USER_NOT_FOUND = 'No application account matched the request in this tenant.';
 const MSG_USER_INACTIVE = 'This account is not active.';
 const MSG_USER_LOCKED = 'This account is locked.';
 const MSG_TOKEN_UNKNOWN = 'This reset link is not known.';
@@ -37,7 +39,7 @@ let noCapsUserId: string;     // holds no capabilities
 let targetUserId: string;     // a user to operate on
 
 beforeAll(async () => {
-  tenant = await createTenant('stage4-ua', { withConfiguration: true });
+  tenant = await createTenant('stage4-ua', { companyCode: 'UA01', withConfiguration: false });
 
   await withTenant(tenant.client, async (tx) => {
     // Seed capabilities needed for the tests.
@@ -82,7 +84,7 @@ beforeAll(async () => {
       .values({
         id: 'stage4-admin',
         client: tenant.client,
-        username: 'stage4.admin',
+        username: 'STAGE4.ADMIN',
         fullName: 'Stage 4 Admin',
         passwordHash: await hashPassword(PASSWORD),
         isActive: true,
@@ -229,11 +231,11 @@ describe('user administration — authorization', () => {
       await tx.insert(authOrgRestriction).values([
         {
           id: randomUUID(), client: tenant.client, userId: adminUserId,
-          scopeType: 'COMPANY_CODE', scopeValue: '1000', createdBy: ACTOR,
+          scopeType: 'COMPANY_CODE', scopeValue: 'UA01', createdBy: ACTOR,
         },
         {
           id: randomUUID(), client: tenant.client, userId: adminUserId,
-          scopeType: 'PLANT', scopeValue: 'P001', createdBy: ACTOR,
+          scopeType: 'PLANT', scopeValue: 'UP01', createdBy: ACTOR,
         },
       ]);
     });
@@ -357,7 +359,7 @@ describe('user administration — authorization', () => {
   });
 
   it('prevents cross-tenant read — user from tenant A cannot see tenant B users', async () => {
-    const other = await createTenant('stage4-ua-other', { withConfiguration: true });
+    const other = await createTenant('stage4-ua-other', { companyCode: 'UA02', withConfiguration: false });
     try {
       // Create a user in the other tenant.
       await withTenant(other.client, async (tx) => {
@@ -381,6 +383,149 @@ describe('user administration — authorization', () => {
     } finally {
       await destroyTenant(other.client);
     }
+  });
+});
+
+
+describe('application-account directory, detail and lock workflow', () => {
+  it('authorizes directory reads, filters by query/status, and omits credentials and session secrets', async () => {
+    await expect(listUsers(tenant.client, EMPTY_CAPS)).rejects.toThrow(MSG_CAP_MISSING);
+    const matches = await listUsers(tenant.client, ADMIN_CAPS, 'stage4.target', 'ACTIVE');
+    expect(matches.map((user) => user.username)).toContain('stage4.target');
+    expect(matches.every((user) => user.isActive)).toBe(true);
+    expect(matches.every((user) => !('passwordHash' in user) && !('tokenHash' in user))).toBe(true);
+    expect(matches[0]).toHaveProperty('roles');
+    expect(matches[0]).toHaveProperty('hasEmployeeRecord', false);
+    const emailMatch = await listUsers(tenant.client, ADMIN_CAPS, 'updated@example.com');
+    expect(emailMatch.map((user) => user.username)).toContain('stage4.target');
+  });
+
+  it('shows effective capabilities and organization restrictions without employee or auth secrets', async () => {
+    const detail = await getUserAdminDetails(tenant.client, 'stage4.admin', ADMIN_CAPS);
+    expect(detail).not.toBeNull();
+    expect(detail?.effectiveCapabilities.map((item) => item.code)).toEqual(expect.arrayContaining(ADMIN_CAPS));
+    expect(detail?.organizationRestrictions).toEqual(expect.arrayContaining([
+      { scopeType: 'COMPANY_CODE', scopeValue: 'UA01' },
+      { scopeType: 'PLANT', scopeValue: 'UP01' },
+    ]));
+    expect(detail?.hasEmployeeRecord).toBe(false);
+    expect(detail).not.toHaveProperty('passwordHash');
+    expect(detail).not.toHaveProperty('tokenHash');
+    expect(detail).not.toHaveProperty('sessionId');
+  });
+
+  it('locks, revokes sessions, unlocks, resets failed-login count, and records consistent before/after audit', async () => {
+    await withTenant(tenant.client, async (tx) => {
+      await tx.update(appUser).set({ failedLoginCount: '6', isLocked: false }).where(eq(appUser.id, targetUserId));
+      await tx.insert(userSession).values([
+        { id: randomUUID(), client: tenant.client, userId: targetUserId, tokenHash: createHash('sha256').update('lock-session-one').digest('hex'), expiresAt: new Date(Date.now() + 60 * 60_000), ipAddress: null, userAgent: null },
+        { id: randomUUID(), client: tenant.client, userId: targetUserId, tokenHash: createHash('sha256').update('lock-session-two').digest('hex'), expiresAt: new Date(Date.now() + 60 * 60_000), ipAddress: null, userAgent: null },
+      ]);
+    });
+
+    const locked = await setUserLocked({ client: tenant.client, userId: targetUserId, isLocked: true, changedBy: 'stage4.admin' }, ADMIN_CAPS);
+    expect(locked.isLocked).toBe(true);
+    const sessions = await withTenant(tenant.client, (tx) => tx.select({ revokedAt: userSession.revokedAt }).from(userSession).where(and(eq(userSession.client, tenant.client), eq(userSession.userId, targetUserId))));
+    expect(sessions.length).toBe(2);
+    expect(sessions.every((session) => session.revokedAt !== null)).toBe(true);
+
+    const unlocked = await setUserLocked({ client: tenant.client, userId: targetUserId, isLocked: false, changedBy: 'stage4.admin' }, ADMIN_CAPS);
+    expect(unlocked.isLocked).toBe(false);
+    const account = await withTenant(tenant.client, (tx) => tx.select({ isLocked: appUser.isLocked, failedLoginCount: appUser.failedLoginCount }).from(appUser).where(eq(appUser.id, targetUserId)).limit(1));
+    expect(account[0]).toEqual({ isLocked: false, failedLoginCount: '0' });
+
+    const history = await withTenant(tenant.client, (tx) => changeHistory(tx, tenant.client, 'app_user', targetUserId));
+    const lockChanges = history.flatMap((document) => document.items).filter((item) => item.fieldName === 'isLocked');
+    expect(lockChanges.length).toBeGreaterThanOrEqual(2);
+    expect(lockChanges.some((item) => item.oldValue === 'false' && item.newValue === 'true')).toBe(true);
+    expect(lockChanges.some((item) => item.oldValue === 'true' && item.newValue === 'false')).toBe(true);
+    const accessEvents = await withTenant(tenant.client, (tx) => tx.select({ detail: auditAccessLog.detail, objectKey: auditAccessLog.objectKey }).from(auditAccessLog).where(and(eq(auditAccessLog.client, tenant.client), eq(auditAccessLog.userId, adminUserId))));
+    expect(accessEvents.filter((event) => event.detail?.includes('locked')).every((event) => event.objectKey === targetUserId)).toBe(true);
+    expect(accessEvents.some((event) => event.detail?.includes('locked'))).toBe(true);
+    expect(accessEvents.some((event) => event.detail?.includes('unlocked'))).toBe(true);
+  });
+
+  it('refuses self-lock and serializes duplicate concurrent lock requests to one audit transition', async () => {
+    await expect(setUserLocked({ client: tenant.client, userId: targetUserId, isLocked: true, changedBy: 'stage4.target' }, ADMIN_CAPS)).rejects.toThrow(/cannot lock your own account/i);
+    const before = await withTenant(tenant.client, (tx) => changeHistory(tx, tenant.client, 'app_user', targetUserId));
+    const attempts = await Promise.all([
+      setUserLocked({ client: tenant.client, userId: targetUserId, isLocked: true, changedBy: 'stage4.admin' }, ADMIN_CAPS),
+      setUserLocked({ client: tenant.client, userId: targetUserId, isLocked: true, changedBy: 'stage4.admin' }, ADMIN_CAPS),
+    ]);
+    expect(attempts.every((result) => result.isLocked)).toBe(true);
+    const after = await withTenant(tenant.client, (tx) => changeHistory(tx, tenant.client, 'app_user', targetUserId));
+    expect(after.length).toBe(before.length + 1);
+  });
+
+  it('deactivation revokes old sessions transactionally and reactivation cannot revive them', async () => {
+    const userId = 'stage4-deactivate-session';
+    await withTenant(tenant.client, async (tx) => {
+      await tx.insert(appUser).values({ id: userId, client: tenant.client, username: 'stage4.deactivate', fullName: 'Deactivate Session', passwordHash: await hashPassword(PASSWORD), createdBy: ACTOR });
+      await tx.insert(userSession).values({ id: randomUUID(), client: tenant.client, userId, tokenHash: createHash('sha256').update('deactivate-session').digest('hex'), expiresAt: new Date(Date.now() + 60 * 60_000), ipAddress: null, userAgent: null });
+    });
+    const inactive = await changeUser({ client: tenant.client, userId, isActive: false, changedBy: 'stage4.admin' }, ADMIN_CAPS);
+    expect(inactive.isActive).toBe(false);
+    await expect(withTenant(tenant.client, (tx) => createSession(tx, { client: tenant.client, userId }))).rejects.toThrow(/no longer active/);
+    let session = await withTenant(tenant.client, (tx) => tx.select({ revokedAt: userSession.revokedAt }).from(userSession).where(and(eq(userSession.client, tenant.client), eq(userSession.userId, userId))).limit(1));
+    expect(session[0].revokedAt).not.toBeNull();
+    const active = await changeUser({ client: tenant.client, userId, isActive: true, changedBy: 'stage4.admin' }, ADMIN_CAPS);
+    expect(active.isActive).toBe(true);
+    // A fresh session may be issued after reactivation, while the old one stays revoked.
+    const fresh = await withTenant(tenant.client, (tx) => createSession(tx, { client: tenant.client, userId }));
+    expect(fresh.expiresAt).toBeInstanceOf(Date);
+    session = await withTenant(tenant.client, (tx) => tx.select({ revokedAt: userSession.revokedAt }).from(userSession).where(and(eq(userSession.client, tenant.client), eq(userSession.userId, userId))).limit(1));
+    expect(session[0].revokedAt).not.toBeNull();
+  });
+
+  it('serializes session issuance behind deactivation so a racing login cannot survive', async () => {
+    const userId = 'stage4-issue-race';
+    await withTenant(tenant.client, (tx) => tx.insert(appUser).values({
+      id: userId, client: tenant.client, username: 'STAGE4.ISSUE.RACE', fullName: 'Session Issue Race',
+      passwordHash: 'test-only', isActive: true, isLocked: false, createdBy: ACTOR,
+    }));
+
+    let releaseCommit!: () => void;
+    let markUpdated!: () => void;
+    const commitBarrier = new Promise<void>((resolve) => { releaseCommit = resolve; });
+    const accountUpdated = new Promise<void>((resolve) => { markUpdated = resolve; });
+    const deactivation = withTenant(tenant.client, async (tx) => {
+      await tx.update(appUser).set({ isActive: false }).where(and(eq(appUser.client, tenant.client), eq(appUser.id, userId)));
+      markUpdated();
+      await commitBarrier;
+    });
+
+    await accountUpdated;
+    const issuance = withTenant(tenant.client, (tx) => createSession(tx, { client: tenant.client, userId }));
+    try {
+      let waitingOnAccountLock = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const result = await withTenant(tenant.client, (tx) => tx.execute(sql`
+          select count(*)::int as waiting
+            from pg_stat_activity
+           where datname = current_database()
+             and usename = current_user
+             and wait_event_type = 'Lock'
+             and query ilike '%app_user%'
+             and query ilike '%for update%'
+        `));
+        const rows = result as unknown as Array<{ waiting: number | string }>;
+        if (Number(rows[0]?.waiting ?? 0) > 0) {
+          waitingOnAccountLock = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waitingOnAccountLock).toBe(true);
+    } finally {
+      releaseCommit();
+    }
+
+    await deactivation;
+    await expect(issuance).rejects.toThrow(/no longer active/);
+    const sessions = await withTenant(tenant.client, (tx) => tx.select({ id: userSession.id })
+      .from(userSession)
+      .where(and(eq(userSession.client, tenant.client), eq(userSession.userId, userId))));
+    expect(sessions).toHaveLength(0);
   });
 });
 
@@ -504,7 +649,7 @@ describe('password recovery — self-service request', () => {
   });
 
   it('prevents cross-tenant token access — caller cannot read another tenant\'s tokens', async () => {
-    const other = await createTenant('stage4-recovery-other', { withConfiguration: true });
+    const other = await createTenant('stage4-recovery-other', { companyCode: 'UA03', withConfiguration: false });
     try {
       await withTenant(other.client, async (tx) => {
         await tx.insert(appUser).values({

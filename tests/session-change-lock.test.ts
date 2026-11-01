@@ -46,8 +46,8 @@ const PASSWORD = 'change-lock-7';
  * hash free of every other fixture tenant in the suite, so this file cannot be
  * corrupted by a test running in parallel.
  */
-const tenant: TestTenant = await createTenant('session-change-lock-0');
-const other: TestTenant = await createTenant('session-change-lock-1');
+const tenant: TestTenant = await createTenant('session-change-lock-0', { companyCode: 'SL01', withConfiguration: false });
+const other: TestTenant = await createTenant('session-change-lock-1', { companyCode: 'SL02', withConfiguration: false });
 
 const LOCK_OBJECT = 'MATERIAL';
 

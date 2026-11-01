@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { changeHistory } from '@/platform/change';
 import { createSession, resolveSession } from '@/platform/auth/session';
-import { auditAccessLog, appUser, capability, role, roleCapability, sodRule, userRole, userSession } from '@/platform/tables/security';
+import { auditAccessLog, appUser, authOrgRestriction, capability, role, roleCapability, sodRule, userRole, userSession } from '@/platform/tables/security';
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 import {
   createRole,
@@ -93,6 +93,12 @@ describe('tenant-local role and capability administration', () => {
     await createRole({ client: tenant().client, actor: admin.actor, code: 'WALKTHROUGH', name: 'Walkthrough', description: 'Initial description', isReadOnly: false });
     await grantCapabilityToRole({ client: tenant().client, actor: admin.actor, roleCode: 'WALKTHROUGH', capabilityCode: CAP_A });
     await grantRoleToUser({ client: tenant().client, actor: admin.actor, targetUserId: target.id, roleCode: 'WALKTHROUGH' });
+    await withTenant(tenant().client, (tx) => tx.insert(authOrgRestriction).values({
+      id: randomUUID(), client: tenant().client, userId: target.id, scopeType: 'PLANT', scopeValue: 'TEST-PLANT', createdBy: admin.username,
+    }));
+    const overviewWithUserAccess = await getRoleAdminOverview(tenant().client, admin.actor);
+    expect(overviewWithUserAccess.users.find((user) => user.id === target.id)?.effectiveCapabilities).toContain(CAP_A);
+    expect(overviewWithUserAccess.users.find((user) => user.id === target.id)?.organizationRestrictions).toContainEqual({ scopeType: 'PLANT', scopeValue: 'TEST-PLANT' });
     const initiallyAuthorized = await withTenant(tenant().client, (tx) => resolveSession(tx, { client: tenant().client, token: target.token }));
     expect(initiallyAuthorized?.user.capabilities).toContain(CAP_A);
     await updateRoleMetadata({ client: tenant().client, actor: admin.actor, code: 'WALKTHROUGH', name: 'Walkthrough operator', description: 'Least privilege' });
