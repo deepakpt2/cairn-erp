@@ -1,7 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 
 import { defineCompanyCode } from '../src/modules/foundation/company-code-definition';
+import { hashPassword } from '../src/platform/auth/password';
+import { createSession, resolveSession, signIn, type SessionContext } from '../src/platform/auth/session';
+import { hasCapability } from '../src/platform/auth/session';
+import { assertChangeForSession, openChangeForSession, releaseChangeLock } from '../src/platform/lock/enqueue';
+import { appUser } from '../src/platform/tables/security';
+import { CREDIT_CONTROL_AREA_CAPABILITY } from '../src/platform/auth/capability-policy';
 import {
   createCreditControlAreaSetup,
   listCreditControlAreaSetup,
@@ -10,6 +17,7 @@ import {
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 
 let tenant: TestTenant;
+let otherTenant: TestTenant;
 
 beforeAll(async () => {
   // Deliberately do not activate standard configuration: that helper can create CCA 0001.
@@ -17,6 +25,11 @@ beforeAll(async () => {
     withConfiguration: false,
     currency: 'AED',
     companyCode: '9009',
+  });
+  otherTenant = await createTenant('credit-control-area-maintenance-other-tenant', {
+    withConfiguration: false,
+    currency: 'AED',
+    companyCode: '9020',
   });
   await defineCompanyCode({
     client: tenant.client,
@@ -34,12 +47,49 @@ beforeAll(async () => {
     country: 'AE',
     currency: 'USD',
   });
+  await defineCompanyCode({
+    client: tenant.client,
+    changedBy: 'TEST',
+    companyCode: '9011',
+    name: `CCA concurrency company ${tenant.client}`,
+    country: 'AE',
+    currency: 'USD',
+  });
 });
 
 afterAll(async () => {
+  if (otherTenant) await destroyTenant(otherTenant.client);
   if (tenant) await destroyTenant(tenant.client);
   await closeDb();
 });
+
+const LOCK_TEST_PASSWORD = 'CcaLock2026Pass!';
+
+async function liveSession(username: string): Promise<SessionContext> {
+  const id = randomUUID();
+  const passwordHash = await hashPassword(LOCK_TEST_PASSWORD);
+  await withTenant(tenant.client, (tx) => tx.insert(appUser).values({
+    id,
+    client: tenant.client,
+    username,
+    fullName: `CCA lock fixture ${username}`,
+    passwordHash,
+    isActive: true,
+    createdBy: 'TEST',
+  }));
+  const signedIn = await signIn({ client: tenant.client, username, password: LOCK_TEST_PASSWORD });
+  const issued = await withTenant(tenant.client, (tx) => createSession(tx, {
+    client: tenant.client,
+    userId: signedIn.userId,
+  }));
+  return withTenant(tenant.client, (tx) => resolveSession(tx, {
+    client: tenant.client,
+    token: issued.token,
+  })).then((session) => {
+    if (!session) throw new Error('Expected the CCA lock fixture session to resolve.');
+    return session;
+  });
+}
 
 function setup(patch: Partial<CreditControlAreaSetupInput> = {}): CreditControlAreaSetupInput {
   return {
@@ -80,6 +130,38 @@ describe('audited initial credit-control setup', () => {
     }));
   });
 
+  it('keeps the setup read model tenant-isolated', async () => {
+    expect(await listCreditControlAreaSetup(otherTenant.client)).toEqual({
+      areas: [],
+      companies: [],
+      availableCompanies: [],
+    });
+  });
+
+  it('requires session-owned locks on both affected records and gives fixture users no CCA grant', async () => {
+    const owner = await liveSession('cca.lock.owner');
+    const other = await liveSession('cca.lock.other');
+    expect(hasCapability(owner.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(false);
+    expect(hasCapability(other.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(false);
+
+    const locks = [
+      { lockObject: 'CREDIT_CONTROL_AREA', argument: '9001' },
+      { lockObject: 'COMPANY_CODE_CREDIT_AREA', argument: '9009' },
+    ] as const;
+    try {
+      for (const lock of locks) {
+        expect((await openChangeForSession(owner, { ...lock, transactionCode: CREDIT_CONTROL_AREA_CAPABILITY })).mode).toBe('CHANGE');
+        await assertChangeForSession(owner, lock);
+        await expect(assertChangeForSession(other, lock)).rejects.toMatchObject({ code: 'ENQUEUE_HELD' });
+        expect((await openChangeForSession(other, { ...lock, transactionCode: CREDIT_CONTROL_AREA_CAPABILITY })).mode).toBe('DISPLAY');
+      }
+    } finally {
+      for (const lock of locks) {
+        if (owner.sessionId) await releaseChangeLock({ client: tenant.client, sessionId: owner.sessionId, ...lock });
+      }
+    }
+  });
+
   it('records separate audit entries for CCA creation and the Company Code mapping', async () => {
     const rows = await withTenant(tenant.client, (tx) => tx.execute(sql`
       select object_class, object_key, change_type
@@ -116,6 +198,27 @@ describe('audited initial credit-control setup', () => {
     const state = await listCreditControlAreaSetup(tenant.client);
     expect(state.areas.map((area) => area.creditControlArea)).toEqual(['9001']);
     expect(state.companies.find((company) => company.companyCode === '9009')?.creditControlArea).toBe('9001');
+  });
+
+  it('serializes competing initial setups and commits one coherent area/mapping pair', async () => {
+    const attempts = await Promise.allSettled([
+      createCreditControlAreaSetup(setup({
+        creditControlArea: '9004',
+        name: 'Concurrent setup winner A',
+        companyCode: '9011',
+      })),
+      createCreditControlAreaSetup(setup({
+        creditControlArea: '9004',
+        name: 'Concurrent setup winner B',
+        companyCode: '9011',
+      })),
+    ]);
+    expect(attempts.filter((attempt) => attempt.status === 'fulfilled')).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === 'rejected')).toHaveLength(1);
+    const state = await listCreditControlAreaSetup(tenant.client);
+    const area = state.areas.filter((item) => item.creditControlArea === '9004');
+    expect(area).toHaveLength(1);
+    expect(state.companies.find((company) => company.companyCode === '9011')?.creditControlArea).toBe('9004');
   });
 
   it('refuses a currency mismatch when sharing an existing area with a second Company Code', async () => {
