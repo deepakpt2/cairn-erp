@@ -52,6 +52,7 @@ import { createRouting, getRouting, listRoutingConfiguration, saveRoutingControl
 import { createWorkCenter, getWorkCenter, listWorkCenterCategories, saveWorkCenterCategory } from './src/modules/production/work-center';
 import { createProductionVersion, getProductionVersion } from './src/modules/production/production-version';
 import { listProductionOrderTypes, saveProductionOrderType } from './src/modules/production/production-order-type';
+import { listOrderTypeParameters, saveOrderTypeParameter } from './src/modules/production/order-type-parameters';
 import { getProductionOrder, releaseProductionOrder } from './src/modules/inventory/production-orders';
 import { planMaterials, getMrpRun } from './src/modules/production/mrp-run';
 import { getPlannedOrder } from './src/modules/production/planned-order-display';
@@ -64,6 +65,7 @@ import { createSalesOrder, getSalesOrder } from './src/modules/sales/sales-order
 import { confirmDeliveryPicks, createDelivery, getDelivery, postDeliveryGoodsIssue } from './src/modules/sales/delivery';
 import { createBillingFromDelivery } from './src/modules/sales/billing';
 import { postCustomerCreditMemo } from './src/modules/finance/customer-credit-memo';
+import { getCustomerInvoice } from './src/modules/finance/customer-invoice';
 import { getPayables, postOutgoingPayment } from './src/modules/finance/outgoing-payment';
 import { getVendorClearing } from './src/modules/finance/vendor-clearing';
 import { getReceivables, postIncomingPayment } from './src/modules/finance/incoming-payment';
@@ -73,7 +75,7 @@ import { getTransferDocument, postTransfer, reverseTransfer, transferStockAt } f
 const COMPANY = '1000';
 const PLANT = '1000';
 const STORAGE = '0001';
-const TRANSFER_STORAGE = '0002';
+const TRANSFER_STORAGE = '0004';
 const CHART = 'CA01';
 const FYV = 'K4';
 const PPV = 'C001';
@@ -446,7 +448,7 @@ async function ensureProductionMasters(tenant: string, date: string, summary: Wa
   const routingConfig = await listRoutingConfiguration(tenant);
   const taskListType = routingConfig.types.find((row) => row.taskListType === 'N');
   if (taskListType) {
-    if (taskListType.description !== 'Routing' || taskListType.requireControlKey) throw new Error('Routing task-list type N has different settings; refusing to change it.');
+    if (taskListType.description !== 'Routing' || taskListType.requireControlKey !== ' ') throw new Error('Routing task-list type N has different settings; refusing to change it.');
     record(summary, 'routing task-list type N', false);
   } else {
     await saveRoutingTaskListType({ client: tenant, changedBy: ACTOR, taskListType: 'N', description: 'Routing' });
@@ -462,7 +464,7 @@ async function ensureProductionMasters(tenant: string, date: string, summary: Wa
   }
   const controlKey = routingConfig.controlKeys.find((row) => row.controlKey === 'PP01');
   if (controlKey) {
-    if (controlKey.description !== 'Internal processing' || controlKey.scheduling || controlKey.costing || controlKey.confirmation || controlKey.externalProcessing || controlKey.requireWorkCenter) {
+    if (controlKey.description !== 'Internal processing' || controlKey.scheduling !== ' ' || controlKey.costing !== ' ' || controlKey.confirmation !== ' ' || controlKey.externalProcessing !== ' ' || controlKey.requireWorkCenter !== ' ') {
       throw new Error('Routing control key PP01 has different settings; refusing to change it.');
     }
     record(summary, 'routing control key PP01', false);
@@ -493,7 +495,7 @@ async function ensureProductionMasters(tenant: string, date: string, summary: Wa
 
   const routing = await getRouting(tenant, 'N', '50000051', '01', date);
   if (routing) {
-    if (routing.plant !== PLANT || routing.usage !== '1' || routing.baseQuantity !== '1' || routing.baseUnit !== 'PC' || routing.validFrom !== date ||
+    if (routing.plant !== PLANT || routing.usage !== '1' || !moneyEqual(routing.baseQuantity, 1, 0.0005) || routing.baseUnit !== 'PC' || routing.validFrom !== date ||
         routing.assignments.length !== 1 || routing.assignments[0].materialNumber !== 'FG-BRACKET' || routing.operations.length !== 1 ||
         routing.operations[0].operationNumber !== '0010' || routing.operations[0].shortText !== 'Assemble bracket' ||
         routing.operations[0].workCenter !== 'WC01' || routing.operations[0].controlKey !== 'PP01') {
@@ -539,9 +541,23 @@ async function ensureProductionMasters(tenant: string, date: string, summary: Wa
     record(summary, 'production order type PP01', true);
   }
 
+  const parameters = await listOrderTypeParameters(tenant);
+  const orderTypeParameters = parameters.parameters.find((row) => row.plant === PLANT && row.orderType === 'PP01');
+  if (orderTypeParameters) {
+    if (orderTypeParameters.orderCategory !== '10' || orderTypeParameters.taskListType !== 'N' || orderTypeParameters.productionVersionSelection !== '0') {
+      throw new Error('Order-type parameters for plant 1000/PP01 differ from the walkthrough selection; refusing to change them.');
+    }
+    record(summary, 'order-type parameters 1000/PP01', false);
+  } else {
+    await saveOrderTypeParameter({ client: tenant, changedBy: ACTOR, mode: 'CREATE', plant: PLANT,
+      orderType: 'PP01', taskListType: 'N', productionVersionSelection: '0', version: 0,
+      reason: 'Development walkthrough production-version selection.' });
+    record(summary, 'order-type parameters 1000/PP01', true);
+  }
+
   const version = await getProductionVersion(tenant, 'FG-BRACKET', PLANT, '0001');
   if (version) {
-    if (version.description !== 'Walkthrough bracket build' || version.validFrom !== date || version.lotFrom !== '0' || version.lotTo !== '999999' ||
+    if (version.description !== 'Walkthrough bracket build' || version.validFrom !== date || !moneyEqual(version.lotFrom, 0, 0.0005) || !moneyEqual(version.lotTo, 999999, 0.0005) ||
         version.bomUsage !== 'P' || version.bomAlternative !== '01' || version.routingGroup !== '50000051' ||
         version.groupCounter !== '01' || version.lotUnit !== 'PC' || version.receivingStorageLocation !== STORAGE) {
       throw new Error('Production version FG-BRACKET/0001 differs from the walkthrough version; refusing to change it.');
@@ -668,7 +684,7 @@ async function runChecks(tenant: string, fiscalYear: number, summary: Walkthroug
       from material_valuation v
       left join stock_quantity s on s.client = v.client and s.material_number = v.material_number and s.plant = v.valuation_area
      where v.client = ${tenant} and v.valuation_area = ${PLANT}
-       and v.material_number = any(${MATERIALS})
+       and v.material_number in (${sql.join(MATERIALS.map((materialNumber) => sql`${materialNumber}`), sql`, `)})
      group by v.material_number, v.total_stock_quantity, v.stock_value, v.price_control, v.standard_price, v.moving_average_price, v.price_unit, v.valuation_class
      order by v.material_number
   `) as unknown as Array<{ material_number: string; valuation_quantity: string; projected_quantity: string; stock_value: string; expected_value: string; valuation_class: string }>);
@@ -994,7 +1010,7 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     `) as unknown as Promise<Array<{ material_document_number: string }>>);
     if (existingIssue.length) record(summary, `production component issue ${existingIssue[0].material_document_number}`, false);
     const issue = await postGoodsIssue({ client: tenant, changedBy: ACTOR, movementTypeCode: '261', postingDate: dates.issue,
-      documentDate: dates.issue, headerText: 'Walkthrough component issue', requestKey: `${REQUEST_PREFIX}-${tenant.toLowerCase()}-production-issue`,
+      documentDate: dates.issue, headerText: 'Walkthrough prod issue', requestKey: `${REQUEST_PREFIX}-${tenant.toLowerCase()}-production-issue`,
       lines: production.components.map((component) => ({ materialNumber: component.materialNumber, plant: component.plant,
         storageLocation: component.storageLocation || STORAGE, quantity: Number(component.requiredQuantity),
         productionOrderNumber: production.orderNumber, productionOrderItem: component.itemNumber })) }, 'MIGO',
@@ -1008,9 +1024,9 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
       select material_document_number from material_document where client = ${tenant} and request_key = ${`${REQUEST_PREFIX}-${tenant.toLowerCase()}-production-receipt`}
     `) as unknown as Promise<Array<{ material_document_number: string }>>);
     const finishedReceipt = await postProductionReceipt({ client: tenant, changedBy: ACTOR, orderNumber: production.orderNumber,
-      postingDate: dates.receipt, documentDate: dates.receipt, headerText: 'Walkthrough output receipt',
+      postingDate: dates.receipt, documentDate: dates.receipt, headerText: 'Walkthrough output GR',
       requestKey: `${REQUEST_PREFIX}-${tenant.toLowerCase()}-production-receipt`, lines: [{ storageLocation: STORAGE, quantity: 5, entryUnit: 'PC' }] });
-    if (finishedReceipt.orderNumber !== production.orderNumber || finishedReceipt.movementType !== '101' || !moneyEqual(finishedReceipt.receivedAfter, 5, 0.0005) ||
+    if (finishedReceipt.orderNumber !== production.orderNumber || finishedReceipt.movementCode !== '101' || !moneyEqual(finishedReceipt.receivedAfter, 5, 0.0005) ||
         await materialDocumentStatus(tenant, `${REQUEST_PREFIX}-${tenant.toLowerCase()}-production-receipt`) !== 'POSTED') {
       throw new Error(`Production receipt ${finishedReceipt.materialDocumentNumber} is incomplete, reversed, or linked to a different order.`);
     }
@@ -1053,12 +1069,15 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
 
     const billing = await createBillingFromDelivery({ client: tenant, changedBy: ACTOR, deliveryNumber: delivery.deliveryNumber,
       billingDate: dates.billing, requestKey: `${REQUEST_PREFIX}-${tenant.toLowerCase()}-billing` });
+    const billingInvoice = billing.invoice ?? (billing.billing.customerInvoiceNumber
+      ? await getCustomerInvoice(tenant, billing.billing.customerInvoiceNumber)
+      : null);
     record(summary, `billing ${billing.billing.billingNumber}`, !billing.replayed);
-    if (!billing.invoice || !billing.posted || billing.heldForCredit || billing.billing.status !== 'POSTED' || billing.invoice.status !== 'POSTED' ||
+    if (!billingInvoice || !billing.posted || billing.heldForCredit || billing.billing.status !== 'POSTED' || billingInvoice.status !== 'POSTED' ||
         billing.billing.deliveryNumber !== delivery.deliveryNumber ||
         billing.billing.customerNumber !== CUSTOMER || billing.billing.companyCode !== COMPANY || billing.billing.currency !== CURRENCY ||
         !moneyEqual(billing.billing.netValue, 800) || !moneyEqual(billing.billing.taxValue, 40) || !moneyEqual(billing.billing.grossValue, 840) ||
-        billing.invoice.customerNumber !== CUSTOMER || !moneyEqual(billing.invoice.grossAmount, 840)) {
+        billingInvoice.customerNumber !== CUSTOMER || !moneyEqual(billingInvoice.grossAmount, 840)) {
       throw new Error(`Billing ${billing.billing.billingNumber} or its accounting invoice does not match the walkthrough sale.`);
     }
 
@@ -1068,10 +1087,10 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     `) as unknown as Array<{ invoice_number: string }>);
     const creditMemo = await postCustomerCreditMemo({ client: tenant, changedBy: ACTOR, customerNumber: CUSTOMER,
       companyCode: COMPANY, documentDate: dates.billing, postingDate: dates.billing, reference: `WT-${tenant}-CM-001`,
-      currency: CURRENCY, grossAmount: 168, creditOfInvoice: billing.invoice.invoiceNumber,
+      currency: CURRENCY, grossAmount: 168, creditOfInvoice: billingInvoice.invoiceNumber,
       creditOfBilling: billing.billing.billingNumber, requestKey: creditMemoKey,
       lines: [{ glAccount: '300000', netAmount: 160, taxCode: VENDOR_TAX }] });
-    if (creditMemo.status !== 'POSTED' || creditMemo.creditOf !== billing.invoice.invoiceNumber || creditMemo.customerNumber !== CUSTOMER ||
+    if (creditMemo.status !== 'POSTED' || creditMemo.creditOf !== billingInvoice.invoiceNumber || creditMemo.customerNumber !== CUSTOMER ||
         creditMemo.companyCode !== COMPANY || creditMemo.documentDate !== dates.billing || creditMemo.postingDate !== dates.billing ||
         creditMemo.reference !== `WT-${tenant}-CM-001` || creditMemo.currency !== CURRENCY || !moneyEqual(creditMemo.grossAmount, 168) ||
         creditMemo.lines.length !== 1 || creditMemo.lines[0].glAccount !== '300000' || !moneyEqual(creditMemo.lines[0].netAmount, 160) ||
@@ -1109,7 +1128,7 @@ async function run(tenant: string, database: string, asOf: string): Promise<Walk
     if (oldArPayment.length === 0 && (receivables.openItems.length !== 1 || !moneyEqual(receivables.openBalance, 840))) {
       throw new Error(`Expected one ${CUSTOMER} receivable for AED 840 before the partial receipt; found ${receivables.openItems.length} item(s), balance ${receivables.openBalance}.`);
     }
-    const arInvoiceRef = await partnerSubledgerLine(tenant, billing.invoice.journalDocumentNumber!, billing.invoice.fiscalYear, CUSTOMER, '110000');
+    const arInvoiceRef = await partnerSubledgerLine(tenant, billingInvoice.journalDocumentNumber!, billingInvoice.fiscalYear, CUSTOMER, '110000');
     const arItems = oldArPayment.length ? [{ ...arInvoiceRef, applied: 672, outcome: 'PARTIAL' as const }]
       : [{ documentNumber: receivables.openItems[0].documentNumber, fiscalYear: receivables.openItems[0].fiscalYear,
           lineNumber: receivables.openItems[0].lineNumber, applied: 672, outcome: 'PARTIAL' as const }];

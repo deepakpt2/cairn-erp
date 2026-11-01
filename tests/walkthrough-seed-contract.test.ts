@@ -69,6 +69,21 @@ describe('manual walkthrough seed safety contract', () => {
     expect(seed.lastIndexOf('confirmDeliveryPicks({')).toBeLessThan(seed.lastIndexOf('postDeliveryGoodsIssue({'));
   });
 
+  it('supports same-date replay through production setup and billing without duplicate writes', () => {
+    expect(seed).toContain('listOrderTypeParameters(tenant)');
+    expect(seed).toContain('saveOrderTypeParameter({');
+    expect(seed).toContain("productionVersionSelection !== '0'");
+    expect(seed).toContain('billing.invoice ?? (billing.billing.customerInvoiceNumber');
+    expect(seed).toContain('getCustomerInvoice(tenant, billing.billing.customerInvoiceNumber)');
+    expect(seed).toContain("finishedReceipt.movementCode !== '101'");
+    expect(seed).toContain("moneyEqual(routing.baseQuantity, 1, 0.0005)");
+    expect(seed).toContain("const TRANSFER_STORAGE = '0004'");
+    expect(seed).toContain("headerText: 'Walkthrough prod issue'");
+    expect(seed).toContain("headerText: 'Walkthrough output GR'");
+    expect(seed).toContain('material_number in (${sql.join(MATERIALS.map');
+    expect(seed).not.toContain('material_number = any(${MATERIALS})');
+  });
+
   it('uses configuration codes accepted by the production BOM maintenance service', () => {
     expect(seed).toContain("productionRelevance: '.', engineeringRelevance: '.', costingRelevance: '.', salesRelevance: '.'");
     expect(seed).not.toContain("productionRelevance: 'X'");
