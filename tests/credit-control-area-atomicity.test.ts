@@ -5,6 +5,8 @@ const { recordChangeMock } = vi.hoisted(() => ({ recordChangeMock: vi.fn() }));
 vi.mock('@/platform/change', () => ({ recordChange: recordChangeMock }));
 
 import { defineCompanyCode } from '../src/modules/foundation/company-code-definition';
+import { type SessionContext } from '../src/platform/auth/session';
+import { createCcaAuthorizedSession } from './helpers/credit-control-area-authorized';
 import {
   createCreditControlAreaSetup,
   listCreditControlAreaSetup,
@@ -12,6 +14,7 @@ import {
 import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } from './helpers';
 
 let tenant: TestTenant;
+let actor: SessionContext;
 
 beforeAll(async () => {
   // No standard package or structure helper: those may create CCA 0001.
@@ -29,6 +32,7 @@ beforeAll(async () => {
     country: 'AE',
     currency: 'AED',
   });
+  actor = await createCcaAuthorizedSession(tenant.client, 'cca.atomicity.operator', ['9030']);
 });
 
 afterAll(async () => {
@@ -42,9 +46,10 @@ describe('credit-control setup transaction atomicity', () => {
     recordChangeMock.mockResolvedValueOnce('cca-create-change-document');
     recordChangeMock.mockRejectedValueOnce(new Error('injected company-mapping audit failure'));
 
+    if (!actor.sessionId) throw new Error('Expected a persisted CCA atomicity test session.');
     await expect(createCreditControlAreaSetup({
       client: tenant.client,
-      changedBy: 'TEST',
+      authorization: { userId: actor.user.userId, sessionId: actor.sessionId },
       creditControlArea: '9031',
       name: 'Atomic rollback test area',
       companyCode: '9030',

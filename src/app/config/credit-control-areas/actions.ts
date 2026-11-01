@@ -44,6 +44,10 @@ export async function createCreditControlAreaAction(
     };
   }
 
+  if (!session.sessionId) {
+    return { ok: false, message: 'A verified live session is required for this setup.' };
+  }
+
   try {
     const areaCode = read(form, 'creditControlArea').toUpperCase();
     const companyCode = read(form, 'companyCode').toUpperCase();
@@ -61,7 +65,7 @@ export async function createCreditControlAreaAction(
 
     const result = await createCreditControlAreaSetup({
       client: session.user.client,
-      changedBy: session.user.username,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId },
       creditControlArea: areaCode,
       name: read(form, 'name'),
       companyCode,

@@ -1,9 +1,12 @@
 import Link from 'next/link';
 
 import { can, requireSession } from '@/platform/auth/current';
+import { loadOrgRestrictions } from '@/platform/auth/session';
+import { withTenant } from '@/platform/db/client';
 import {
   CREDIT_CONTROL_AREA_CAPABILITY,
   CREDIT_CONTROL_AREA_DEFAULTS,
+  filterCreditControlAreaSetupByCompanyScope,
   listCreditControlAreaSetup,
 } from '@/modules/finance/credit-control-area-maintenance';
 import { CreditControlAreaSetup } from './CreditControlAreaSetup';
@@ -14,7 +17,14 @@ const ROUTE = '/config/credit-control-areas';
 
 export default async function CreditControlAreasPage() {
   const session = await requireSession(ROUTE);
-  const data = await listCreditControlAreaSetup(session.user.client);
+  const [allData, restrictions] = await Promise.all([
+    listCreditControlAreaSetup(session.user.client),
+    withTenant(session.user.client, (tx) => loadOrgRestrictions(tx, session.user.client, session.user.userId)),
+  ]);
+  const data = filterCreditControlAreaSetupByCompanyScope(allData, restrictions);
+  const hasCompanyScope = restrictions.some(
+    (restriction) => restriction.scopeType === 'COMPANY_CODE' && restriction.scopeValue.trim().length > 0,
+  );
   const canMaintain = can(session, CREDIT_CONTROL_AREA_CAPABILITY);
 
   return (
@@ -34,6 +44,11 @@ export default async function CreditControlAreasPage() {
           <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
             Read-only. Maintenance requires an explicit exact-code role grant for {CREDIT_CONTROL_AREA_CAPABILITY};
             broad wildcard role patterns do not grant it.
+          </p>
+        )}
+        {canMaintain && !hasCompanyScope && (
+          <p role="status" className="mt-3 border border-line bg-surface p-3 text-sm text-ink-soft">
+            Read-only. CCA maintenance also requires an explicit Company Code scope assigned through user access.
           </p>
         )}
       </header>
@@ -75,7 +90,7 @@ export default async function CreditControlAreasPage() {
         )}
       </section>
 
-      {canMaintain && (
+      {canMaintain && hasCompanyScope && (
         <CreditControlAreaSetup
           companies={data.availableCompanies}
           defaults={CREDIT_CONTROL_AREA_DEFAULTS}

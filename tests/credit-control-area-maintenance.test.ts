@@ -1,13 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 
 import { defineCompanyCode } from '../src/modules/foundation/company-code-definition';
-import { hashPassword } from '../src/platform/auth/password';
-import { createSession, resolveSession, signIn, type SessionContext } from '../src/platform/auth/session';
-import { hasCapability } from '../src/platform/auth/session';
+import { hasCapability, type SessionContext } from '../src/platform/auth/session';
 import { assertChangeForSession, openChangeForSession, releaseChangeLock } from '../src/platform/lock/enqueue';
-import { appUser } from '../src/platform/tables/security';
+import { createCcaAuthorizedSession } from './helpers/credit-control-area-authorized';
 import { CREDIT_CONTROL_AREA_CAPABILITY } from '../src/platform/auth/capability-policy';
 import {
   createCreditControlAreaSetup,
@@ -18,6 +15,9 @@ import { closeDb, createTenant, destroyTenant, withTenant, type TestTenant } fro
 
 let tenant: TestTenant;
 let otherTenant: TestTenant;
+let ownerSession: SessionContext;
+let otherSession: SessionContext;
+let restrictedSession: SessionContext;
 
 beforeAll(async () => {
   // Deliberately do not activate standard configuration: that helper can create CCA 0001.
@@ -55,6 +55,9 @@ beforeAll(async () => {
     country: 'AE',
     currency: 'USD',
   });
+  ownerSession = await createCcaAuthorizedSession(tenant.client, 'cca.lock.owner', ['9009', '9010', '9011']);
+  otherSession = await createCcaAuthorizedSession(tenant.client, 'cca.lock.other', ['9009']);
+  restrictedSession = await createCcaAuthorizedSession(tenant.client, 'cca.scope.restricted', ['9009']);
 });
 
 afterAll(async () => {
@@ -63,38 +66,15 @@ afterAll(async () => {
   await closeDb();
 });
 
-const LOCK_TEST_PASSWORD = 'CcaLock2026Pass!';
-
-async function liveSession(username: string): Promise<SessionContext> {
-  const id = randomUUID();
-  const passwordHash = await hashPassword(LOCK_TEST_PASSWORD);
-  await withTenant(tenant.client, (tx) => tx.insert(appUser).values({
-    id,
-    client: tenant.client,
-    username,
-    fullName: `CCA lock fixture ${username}`,
-    passwordHash,
-    isActive: true,
-    createdBy: 'TEST',
-  }));
-  const signedIn = await signIn({ client: tenant.client, username, password: LOCK_TEST_PASSWORD });
-  const issued = await withTenant(tenant.client, (tx) => createSession(tx, {
-    client: tenant.client,
-    userId: signedIn.userId,
-  }));
-  return withTenant(tenant.client, (tx) => resolveSession(tx, {
-    client: tenant.client,
-    token: issued.token,
-  })).then((session) => {
-    if (!session) throw new Error('Expected the CCA lock fixture session to resolve.');
-    return session;
-  });
+function authorizationFor(session: SessionContext) {
+  if (!session.sessionId) throw new Error('Expected a persisted session id in the CCA fixture.');
+  return { userId: session.user.userId, sessionId: session.sessionId };
 }
 
 function setup(patch: Partial<CreditControlAreaSetupInput> = {}): CreditControlAreaSetupInput {
   return {
     client: tenant.client,
-    changedBy: 'TEST',
+    authorization: authorizationFor(ownerSession),
     creditControlArea: '9001',
     name: 'Isolated test credit area',
     companyCode: '9009',
@@ -138,11 +118,29 @@ describe('audited initial credit-control setup', () => {
     });
   });
 
-  it('requires session-owned locks on both affected records and gives fixture users no CCA grant', async () => {
-    const owner = await liveSession('cca.lock.owner');
-    const other = await liveSession('cca.lock.other');
-    expect(hasCapability(owner.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(false);
-    expect(hasCapability(other.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(false);
+  it('denies an out-of-scope Company Code before creating either setup row or audit record', async () => {
+    await expect(createCreditControlAreaSetup(setup({
+      authorization: authorizationFor(restrictedSession),
+      creditControlArea: '9003',
+      companyCode: '9010',
+    }))).rejects.toThrow('lacks an explicit Company Code scope for 9010');
+
+    const state = await listCreditControlAreaSetup(tenant.client);
+    expect(state.areas.map((area) => area.creditControlArea)).not.toContain('9003');
+    expect(state.companies.find((company) => company.companyCode === '9010')?.creditControlArea).toBeNull();
+    const audits = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select count(*)::int as count from change_document
+       where transaction_code = 'CFG.FIN.CCA.MAINTAIN'
+         and object_key in ('9003', '9010')
+    `));
+    expect(Number((audits as unknown as Array<{ count: number }>)[0].count)).toBe(0);
+  });
+
+  it('requires session-owned locks on both affected records after an exact fixture grant', async () => {
+    const owner = ownerSession;
+    const other = otherSession;
+    expect(hasCapability(owner.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(true);
+    expect(hasCapability(other.user.capabilities, CREDIT_CONTROL_AREA_CAPABILITY)).toBe(true);
 
     const locks = [
       { lockObject: 'CREDIT_CONTROL_AREA', argument: '9001' },

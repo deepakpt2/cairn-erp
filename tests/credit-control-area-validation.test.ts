@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { creditControlAreaSetupValuesSchema } from '../src/modules/finance/credit-control-area-maintenance';
+import {
+  creditControlAreaSetupValuesSchema,
+  filterCreditControlAreaSetupByCompanyScope,
+} from '../src/modules/finance/credit-control-area-maintenance';
 
 describe('credit-control area setup validation', () => {
   const valid = {
@@ -23,6 +26,32 @@ describe('credit-control area setup validation', () => {
       companyCode: 'C009',
       warningThresholdPercent: 90,
       reason: 'Initial setup test',
+    });
+  });
+
+  it('filters the setup read model to explicit Company Code scope', () => {
+    const data = {
+      areas: [
+        { creditControlArea: '9001', name: 'In scope', currency: 'AED', warningThresholdPercent: 90, isActive: true },
+        { creditControlArea: '9002', name: 'Out of scope', currency: 'AED', warningThresholdPercent: 90, isActive: true },
+      ],
+      companies: [
+        { companyCode: '9009', name: 'Scoped company', currency: 'AED', creditControlArea: '9001', isActive: true },
+        { companyCode: '9010', name: 'Other company', currency: 'AED', creditControlArea: '9002', isActive: true },
+      ],
+      availableCompanies: [
+        { companyCode: '9011', name: 'Scoped available', currency: 'AED', creditControlArea: null, isActive: true },
+        { companyCode: '9012', name: 'Other available', currency: 'AED', creditControlArea: null, isActive: true },
+      ],
+    };
+
+    expect(filterCreditControlAreaSetupByCompanyScope(data, [
+      { scopeType: 'COMPANY_CODE', scopeValue: '9009' },
+      { scopeType: 'COMPANY_CODE', scopeValue: '9011' },
+    ])).toEqual({
+      areas: [data.areas[0]],
+      companies: [data.companies[0]],
+      availableCompanies: [data.availableCompanies[0]],
     });
   });
 
