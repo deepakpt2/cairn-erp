@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it } from 'vitest';
 import { and, eq } from 'drizzle-orm';
 
-import { searchRegistry, suggestRegistry } from '@/platform/registry';
+import { resolveTerm, searchRegistry, suggestRegistry } from '@/platform/registry';
 import { closeDb, db, sql } from './helpers';
 import { termAlias, termRegistry } from '@/platform/tables/registry';
 
@@ -58,7 +58,8 @@ describe('CO14 database-backed registry lookup', () => {
     const results = await searchRegistry('CO14');
     expect(results[0]).toMatchObject({
       ourCode: 'PROD.ORDER.DISPLAY',
-      routePath: '/production/production-order-display',
+      title: 'Display production order confirmation',
+      routePath: '/production/confirmation-display',
       matchedOn: 'ALIAS',
       matchedTerm: 'CO14',
     });
@@ -66,9 +67,21 @@ describe('CO14 database-backed registry lookup', () => {
     const suggestions = await suggestRegistry('CO14');
     expect(suggestions[0]).toMatchObject({
       ourCode: 'PROD.ORDER.DISPLAY',
-      routePath: '/production/production-order-display',
+      title: 'Display production order confirmation',
+      routePath: '/production/confirmation-display',
       field: 'ALIAS',
       matchedText: 'CO14',
+    });
+
+    expect(await resolveTerm('CO14')).toMatchObject({
+      ourCode: 'PROD.ORDER.DISPLAY',
+      routePath: '/production/confirmation-display',
+      matchedTerm: 'CO14',
+    });
+    expect(await resolveTerm('CO03')).toMatchObject({
+      ourCode: 'PROD.ORDER.DISPLAY',
+      routePath: '/production/production-order-display',
+      matchedTerm: 'CO03',
     });
 
     const preservedRoutes: Record<string, { ourCode: string; routePath: string }> = {

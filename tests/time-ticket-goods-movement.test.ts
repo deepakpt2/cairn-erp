@@ -15,6 +15,7 @@ import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, save
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { cancelConfirmation } from '../src/modules/production/confirmation-cancel';
 import { enterTimeTicket, loadTimeTicket, previewTimeTicket, rows } from '../src/modules/production/time-ticket';
+import { getProductionConfirmationDisplay } from '../src/modules/production/confirmation-display';
 import { movementConfiguration, movementRequestKey, postedMovements } from '../src/modules/production/confirmation-movements';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
@@ -403,6 +404,16 @@ describe('CO11N confirmation goods movement', () => {
     expect(saved.movementsPosted).toBe(1);
     expect(saved.movements[0]).toMatchObject({ posted: true, standing: true, materialDocumentNumber: expect.any(String) });
     expect(saved.movementNote).toMatch(/material document .* was posted with this confirmation/);
+    const displayed = await getProductionConfirmationDisplay(client, saved.confirmationNumber);
+    expect(displayed?.materialDocuments).toHaveLength(1);
+    expect(displayed?.materialDocuments[0]).toMatchObject({
+      materialDocumentNumber: saved.movements[0]?.materialDocumentNumber,
+      movementType: '261',
+      materialNumber: 'MV-RM',
+      plant: PLANT,
+      storageLocation: LOCATION,
+      status: 'POSTED',
+    });
     expect(await componentStock()).toBe(92);
     // The order's own requirement is untouched: the documents are the record of an issue.
     const [component] = await withTenant(client, (tx) => rows(tx, sql`

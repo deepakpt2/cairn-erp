@@ -8,6 +8,7 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
@@ -265,6 +266,20 @@ describe('CO15 order confirmation', () => {
     expect(posted.effects).toHaveLength(1);
     expect(posted.skipped.map((row) => row.operationNumber)).toEqual(['0020']);
     expect(await getTimeTicket(tenant.client, posted.confirmationNumber)).toBeNull();
+    const displayed = await getProductionConfirmationDisplay(tenant.client, posted.confirmationNumber);
+    expect(displayed).toMatchObject({
+      confirmationNumber: posted.confirmationNumber,
+      confirmationLevel: 'HEADER',
+      confirmationType: 'PARTIAL',
+      productionOrder: released,
+      yieldQuantity: '4.000',
+      scrapQuantity: '1.000',
+      cancelled: false,
+    });
+    expect(displayed?.effects).toHaveLength(1);
+    expect(displayed?.effects[0]).toMatchObject({ operationNumber: '0010', quantityBasis: 'ORDER_QUANTITY' });
+    const operationFiltered = await searchProductionConfirmations(tenant.client, { productionOrder: released, operation: '0010' });
+    expect(operationFiltered.rows.map((row) => row.confirmationNumber)).toContain(posted.confirmationNumber);
     const again = await enterOrderConfirmation(tenant.client, {
       requestedBy: ACTOR, requestKey, orderNumber: released,
       confirmationType: 'PARTIAL', yieldQuantity: '4', scrapQuantity: '1', postingDate: '2026-10-24', expectedVersion: version,

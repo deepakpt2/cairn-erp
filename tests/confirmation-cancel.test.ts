@@ -16,6 +16,7 @@ import {
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
@@ -347,6 +348,23 @@ describe('CO13 cancel confirmation', () => {
     expect(cancelled.replayed).toBe(false);
     expect(cancelled.movementsPosted).toBe(0);
     expect(cancelled.orderStatus).toBe('RELEASED');
+    const displayed = await getProductionConfirmationDisplay(tenant.client, number?.confirmation_number ?? '');
+    expect(displayed).toMatchObject({
+      confirmationNumber: number?.confirmation_number,
+      confirmationLevel: 'OPERATION',
+      cancelled: true,
+      cancellationNumber: cancelled.cancellationNumber,
+      cancellationReason: 'Wrong shift',
+      yieldQuantity: number?.yield,
+      recordedBy: number?.created_by,
+    });
+    expect(displayed?.activities.length).toBeGreaterThan(0);
+    const cancellationList = await searchProductionConfirmations(tenant.client, { confirmationNumber: number?.confirmation_number ?? '' });
+    expect(cancellationList.rows[0]).toMatchObject({
+      confirmationNumber: number?.confirmation_number,
+      cancelled: true,
+      cancellationNumber: cancelled.cancellationNumber,
+    });
     const again = await cancelConfirmation(tenant.client, {
       requestKey, confirmationNumber: number?.confirmation_number ?? '',
       reason: 'Wrong shift', confirmed: true,

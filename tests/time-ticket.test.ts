@@ -8,6 +8,7 @@ import { createProductionOrder, releaseProductionOrder } from '../src/modules/in
 import { createMaterialBom, saveBomItemCategory, saveBomUsage } from '../src/modules/production/material-bom';
 import { changeProductionOrder, technicallyCompleteProductionOrder } from '../src/modules/production/production-order-change';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
+import { getProductionConfirmationDisplay, searchProductionConfirmations } from '../src/modules/production/confirmation-display';
 import { saveOrderTypeParameter } from '../src/modules/production/order-type-parameters';
 import { checkProductionVersion, createProductionVersion } from '../src/modules/production/production-version';
 import { createRouting, saveRoutingControlKey, saveRoutingStandardValueKey, saveRoutingTaskListType, saveRoutingUsage } from '../src/modules/production/routing';
@@ -199,6 +200,37 @@ describe('CO11N time ticket', () => {
     expect(Number(posted.activities[0]?.quantity)).toBe(2);
     expect(Number(posted.activities[0]?.suggested)).toBe(1);
     expect(posted.executionFinish).toBe('2026-10-25 01:15:00');
+    const displayed = await getProductionConfirmationDisplay(tenant.client, posted.confirmationNumber);
+    expect(displayed).toMatchObject({
+      confirmationNumber: posted.confirmationNumber,
+      confirmationLevel: 'OPERATION',
+      confirmationType: 'PARTIAL',
+      productionOrder: released,
+      operationNumber: '0010',
+      yieldQuantity: '4.000',
+      scrapQuantity: '1.000',
+      executionStart: '2026-10-24 22:30:00',
+      executionFinish: '2026-10-25 01:15:00',
+      recordedBy: ACTOR,
+      cancelled: false,
+    });
+    expect(displayed?.activities[0]).toMatchObject({ parameter: 'LABOR', quantity: '2.000', unit: 'HR' });
+    expect(displayed?.effects[0]).toMatchObject({ operationNumber: '0010', quantityBasis: 'OPERATION_CONFIRMATION' });
+    const listed = await searchProductionConfirmations(tenant.client, {
+      confirmationNumber: posted.confirmationNumber,
+      productionOrder: released,
+      operation: '0010',
+      plant: PLANT,
+      recordedFrom: '2026-10-01',
+      recordedTo: '2026-12-31',
+      postingFrom: '2026-10-24',
+      postingTo: '2026-10-24',
+      sort: 'recorded',
+      direction: 'asc',
+    });
+    expect(listed.total).toBe(1);
+    expect(listed).toMatchObject({ page: 1, pageSize: 25, sort: 'recorded', direction: 'asc' });
+    expect(listed.rows[0]).toMatchObject({ confirmationNumber: posted.confirmationNumber, confirmationLevel: 'OPERATION' });
     const again = await enterTimeTicket(tenant.client, {
       requestedBy: ACTOR, requestKey, orderNumber: released, operationNumber: '0010',
       confirmationType: 'PARTIAL', yieldQuantity: '4', scrapQuantity: '1', postingDate: '2026-10-24', expectedVersion: version,
@@ -232,6 +264,9 @@ describe('CO11N time ticket', () => {
     });
     expect(finalTicket.confirmationType).toBe('FINAL');
     expect(finalTicket.orderStatus).toBe('RELEASED');
+    expect(await getProductionConfirmationDisplay(tenant.client, finalTicket.confirmationNumber)).toMatchObject({
+      confirmationType: 'FINAL', cancelled: false, productionOrder: released,
+    });
     await expect(enterTimeTicket(tenant.client, {
       requestedBy: ACTOR, requestKey: nextKey(), orderNumber: released, operationNumber: '0010',
       confirmationType: 'PARTIAL', yieldQuantity: '1', postingDate: '2026-10-24', expectedVersion: version,

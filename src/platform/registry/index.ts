@@ -88,8 +88,8 @@ export async function suggestRegistry(query: string, limit = 8): Promise<Registr
     id: ranked.item.id,
     ourCode: ranked.item.ourCode,
     ourTable: ranked.item.ourTable,
-    title: ranked.item.title,
-    routePath: ranked.item.routePath,
+    title: titleForRankedHit(ranked),
+    routePath: routePathForRankedHit(ranked),
     field: ranked.field,
     kind: ranked.kind,
     matchedText: ranked.matchedText,
@@ -183,6 +183,23 @@ function toHit(
   };
 }
 
+function isCo14DisplayAlias(ranked: RankedSuggestion<CatalogueTerm>): boolean {
+  return ranked.field === 'ALIAS'
+    && ranked.item.ourCode === 'PROD.ORDER.DISPLAY'
+    && ranked.matchedText.toUpperCase() === 'CO14';
+}
+
+function routePathForRankedHit(ranked: RankedSuggestion<CatalogueTerm>): string | null {
+  // PROD.ORDER.DISPLAY has one canonical CO03 route, while its CO14 alias opens
+  // the dedicated confirmation display. Keep the existing term and alias row;
+  // only an exact CO14 alias match receives this route override.
+  return isCo14DisplayAlias(ranked) ? '/production/confirmation-display' : ranked.item.routePath;
+}
+
+function titleForRankedHit(ranked: RankedSuggestion<CatalogueTerm>): string {
+  return isCo14DisplayAlias(ranked) ? 'Display production order confirmation' : ranked.item.title;
+}
+
 function toRankedHit(ranked: RankedSuggestion<CatalogueTerm>): RegistryHit {
   const matchedOn =
     ranked.field === 'ALIAS'
@@ -197,6 +214,8 @@ function toRankedHit(ranked: RankedSuggestion<CatalogueTerm>): RegistryHit {
               ? 'OUR_CODE'
               : 'TABLE';
   const hit = toHit(ranked.item, matchedOn, ranked.item.aliases);
+  hit.title = titleForRankedHit(ranked);
+  hit.routePath = routePathForRankedHit(ranked);
   hit.matchField = ranked.field;
   hit.matchKind = ranked.kind;
   hit.matchedText = ranked.matchedText;
