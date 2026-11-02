@@ -70,5 +70,20 @@ describe('CO14 database-backed registry lookup', () => {
       field: 'ALIAS',
       matchedText: 'CO14',
     });
+
+    const preservedRoutes: Record<string, { ourCode: string; routePath: string }> = {
+      CO03: { ourCode: 'PROD.ORDER.DISPLAY', routePath: '/production/production-order-display' },
+      CO11N: { ourCode: 'PROD.CONFIRM.ENTER', routePath: '/production/time-ticket' },
+      CO13: { ourCode: 'PROD.CONFIRM.CANCEL', routePath: '/production/confirmation-cancel' },
+      CO15: { ourCode: 'PROD.CONFIRM.ORDER', routePath: '/production/order-confirmation' },
+      COOIS: { ourCode: 'PROD.ORDER.INFO', routePath: '/production/order-information' },
+    };
+    for (const [alias, target] of Object.entries(preservedRoutes)) {
+      expect((await searchRegistry(alias))[0]).toMatchObject({
+        ...target,
+        matchedOn: 'ALIAS',
+        matchedTerm: alias,
+      });
+    }
   });
 });
