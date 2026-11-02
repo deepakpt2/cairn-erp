@@ -516,7 +516,7 @@ const REGISTRY: Array<{
   { ourCode: 'PROD.VERSION.CREATE', termType: 'TRANSACTION', module: 'PROD', title: 'Maintain production version', route: '/production/production-versions', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['C223'], description: 'Maintain a production version. C223 is a search alias. The version names one BOM alternative and one standard routing. A change number is refused. A production order is not rewritten.' },
   { ourCode: 'PROD.VERSION.CHANGE', termType: 'TRANSACTION', module: 'PROD', title: 'Change production version', route: '/production/production-versions', tier: 'TIER_1_BUILT', conformance: 'B', aliases: [], description: 'Change a production version. The material, plant, and version are fixed. A saved production order is not rewritten.' },
   { ourCode: 'PROD.VERSION.DISPLAY', termType: 'TRANSACTION', module: 'PROD', title: 'Display production version', route: '/production/production-version-display', tier: 'TIER_1_BUILT', conformance: 'B', aliases: [], description: 'Display a production version. Display writes nothing and takes no change lock.' },
-  { ourCode: 'PROD.ORDER.DISPLAY', termType: 'TRANSACTION', module: 'PROD', title: 'Display production order', route: '/production/production-order-display', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CO03'], description: 'Display a production order. CO03 is a search alias. The number is the key. Quantity, dates, status, components, and a stored planned-order link are shown as stored. Issued and received quantities are read from material documents. An order type, operations, and sequences are not stored. Display writes nothing.' },
+  { ourCode: 'PROD.ORDER.DISPLAY', termType: 'TRANSACTION', module: 'PROD', title: 'Display production order', route: '/production/production-order-display', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CO03', 'CO14'], description: 'Display a production order. CO03 and CO14 are search aliases. The number is the key. Quantity, dates, status, components, and a stored planned-order link are shown as stored. Issued and received quantities are read from material documents. An order type, operations, and sequences are not stored. Display writes nothing.' },
   { ourCode: 'PROD.ORDER.CHANGE', termType: 'TRANSACTION', module: 'PROD', title: 'Change production order', route: '/production/production-order-change', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CO02'], description: 'Change a production order. CO02 is a search alias. The number, material, plant, unit, and status stay fixed. Quantity, dates, and components can change while no goods movement and no confirmation cite the order. A header quantity change does not rescale components. Operations are not stored. Change does not release the order, does not change a posted confirmation, and posts nothing.' },
   { ourCode: 'PROD.CONFIRM.ENTER', termType: 'TRANSACTION', module: 'PROD', title: 'Enter time ticket', route: '/production/time-ticket', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CO11N'], description: 'Enter a time ticket for one operation of a released production order. CO11N is a search alias. The operation is read from the production version and snapshotted on the confirmation. Partial leaves the operation open. Final blocks another confirmation of that operation and does not change the order status. A check writes nothing. Backflush, automatic goods receipt, a confirmation profile, personnel, and cancellation are refused. CO13, CO14, and CO15 are not this screen. The confirmation posts nothing.' },
   { ourCode: 'PROD.CONFIRM.ORDER', termType: 'TRANSACTION', module: 'PROD', title: 'Enter order confirmation', route: '/production/order-confirmation', tier: 'TIER_1_BUILT', conformance: 'B', aliases: ['CO15'], description: 'Confirm a released production order at header level. CO15 is a search alias. One confirmation number is drawn. Each operation whose control key allows confirmation, and which is not already finally confirmed, receives that quantity as an effect. A separate time-ticket number is not created. An operation that requires an activity is not given a standard value. Automatic final confirmation is refused because no confirmation profile is stored. A check writes nothing. The order status stays created or released. Backflush and automatic goods receipt are not configured. CO11N, CO13, and CO14 are not this screen.' },
@@ -973,6 +973,19 @@ async function main() {
            on conflict (external_system, alias) do nothing`,
           [crypto.randomUUID(), alias, r.ourCode],
         );
+        if (alias === 'CO14') {
+          const [owner] = await client.unsafe<Array<{ our_code: string | null }>>(
+            `select t.our_code
+               from term_alias a
+               join term_registry t on t.id = a.term_id
+              where a.external_system = 'REFERENCE_ERP'
+                and a.alias = $1`,
+            [alias],
+          );
+          if (owner?.our_code !== r.ourCode) {
+            throw new Error('CO14 is already assigned to a different registry term; refusing to misroute the alias');
+          }
+        }
       }
     }
 
