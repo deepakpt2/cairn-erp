@@ -408,7 +408,8 @@ describe('CO11N confirmation goods movement', () => {
     expect(displayed?.materialDocuments).toHaveLength(1);
     expect(displayed?.materialDocuments[0]).toMatchObject({
       materialDocumentNumber: saved.movements[0]?.materialDocumentNumber,
-      movementType: '261',
+      movementType: 'PROD_ISSUE_ORDER',
+      movementTypeDescription: expect.stringContaining('(261)'),
       materialNumber: 'MV-RM',
       plant: PLANT,
       storageLocation: LOCATION,

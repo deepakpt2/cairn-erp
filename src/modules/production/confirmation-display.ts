@@ -107,6 +107,7 @@ export interface ConfirmationDisplayMaterialDocument {
   reversedBy: string | null;
   reversalYear: number | null;
   movementType: string;
+  movementTypeDescription: string | null;
   materialNumber: string;
   plant: string;
   storageLocation: string | null;
@@ -446,13 +447,16 @@ export async function getProductionConfirmationDisplay(
       const movementRows = await rows(tx, sql`
         select d.material_document_number, d.document_year, d.document_date, d.posting_date,
                d.status, d.reversal_of, d.reversed_by, reversal.document_year as reversal_year,
-               l.line_number, l.movement_type, l.material_number, l.plant, l.storage_location,
+               l.line_number, l.movement_type, mt.description as movement_type_description,
+               l.material_number, l.plant, l.storage_location,
                l.entry_quantity::text as entry_quantity, l.entry_unit,
                l.base_quantity::text as base_quantity, l.base_unit, l.production_order_item,
                l.reversal_of_document, l.reversal_of_line
           from material_document d
           join material_document_line l
             on l.client = d.client and l.material_document_number = d.material_document_number
+          join movement_type mt
+            on mt.client = l.client and mt.movement_type = l.movement_type
           left join material_document reversal
             on reversal.client = d.client and reversal.material_document_number = d.reversed_by
          where d.client = ${client}
@@ -470,6 +474,7 @@ export async function getProductionConfirmationDisplay(
         reversedBy: movement.reversed_by == null ? null : String(movement.reversed_by),
         reversalYear: movement.reversal_year == null ? null : Number(movement.reversal_year),
         movementType: String(movement.movement_type),
+        movementTypeDescription: movement.movement_type_description == null ? null : String(movement.movement_type_description),
         materialNumber: String(movement.material_number),
         plant: String(movement.plant),
         storageLocation: movement.storage_location == null ? null : String(movement.storage_location),

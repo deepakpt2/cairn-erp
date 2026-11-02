@@ -238,7 +238,7 @@ function ConfirmationDetail({ detail }: { detail: NonNullable<Awaited<ReturnType
                 <tbody>{detail.materialDocuments.map((document) => (
                   <tr key={`${document.materialDocumentNumber}-${document.lineNumber}`}>
                     <td className="code">{document.materialDocumentNumber} / {document.documentYear} · line {document.lineNumber}</td>
-                    <td>{document.movementType}</td><td>{document.materialNumber}</td>
+                    <td>{document.movementType}<div className="text-2xs text-ink-faint">{document.movementTypeDescription}</div></td><td>{document.materialNumber}</td>
                     <td>{document.plant}{document.storageLocation ? ` / ${document.storageLocation}` : ''}</td>
                     <td className="text-end">{document.entryQuantity} {document.entryUnit} <span className="text-2xs text-ink-faint">({document.baseQuantity} {document.baseUnit})</span></td>
                     <td>{document.postingDate}</td>
