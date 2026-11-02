@@ -44,6 +44,7 @@ export default function ConfirmationCancelWorkbench({
         <p>Posting date {detail.postingDate}. Entered by {detail.createdBy} at {detail.createdAt}. Those values are not changed here.</p>
         <p>Yield {detail.yieldQuantity} {detail.unit}. Scrap {detail.scrapQuantity}. Rework {detail.reworkQuantity}.</p>
         <p>Order status {detail.orderStatus}. Cancellation does not change it.</p>
+        <p>The original confirmation stays unchanged; once cancelled, its quantities no longer count in active production progress.</p>
         <p data-co13-status={cancelled ? 'cancelled' : 'open'} data-co13-original={originalNumber}>
           {cancelled
             ? `Cancelled by ${cancellationNumber}. Original confirmation ${originalNumber}.`
@@ -79,8 +80,8 @@ export default function ConfirmationCancelWorkbench({
         <input type="hidden" name="requestKey" value={requestKey} />
         <input type="hidden" name="confirmationNumber" value={detail.confirmationNumber} />
         <label className="block text-sm">
-          <span className="mb-1 block text-ink-soft">Cancellation reason</span>
-          <input name="reason" maxLength={200} className="input w-full" disabled={blocked} defaultValue={detail.cancellationReason ?? ''} />
+          <span className="mb-1 block text-ink-soft">Cancellation reason (required)</span>
+          <input name="reason" required maxLength={200} className="input w-full" disabled={blocked} defaultValue={detail.cancellationReason ?? ''} />
         </label>
         <label className="mt-3 flex items-start gap-2 text-sm">
           <input

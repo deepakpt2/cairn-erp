@@ -27,12 +27,11 @@ export async function cancelConfirmationAction(
   const session = await requireSession(CONFIRMATION_CANCEL_ROUTE);
   try {
     const result = await cancelConfirmation(session.user.client, {
-      requestedBy: session.user.username,
       requestKey: text(form, 'requestKey'),
       confirmationNumber: text(form, 'confirmationNumber'),
-      reason: text(form, 'reason') || undefined,
+      reason: text(form, 'reason'),
       confirmed: text(form, 'confirmCancel') === 'on',
-      capabilities: session.user.capabilities,
+      authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
     });
     return {
       ok: true,

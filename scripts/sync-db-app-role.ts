@@ -4,11 +4,22 @@
 import postgres from 'postgres';
 import { pathToFileURL } from 'node:url';
 import { isProtected } from '../src/platform/db/target-guard';
+import { validateIntegrationDatabaseConfig } from './integration-db-config';
 
 export class CredentialConfigError extends Error {}
 
 /** These tables are created at different points in the migration sequence. */
 export const CENTRAL_AUTH_TABLES = ['app_user', 'user_session', 'password_reset_token'] as const;
+
+/**
+ * Keep non-grantable security attributes at PostgreSQL's safe defaults. A
+ * CREATEROLE migration user cannot set SUPERUSER or BYPASSRLS (even to false)
+ * on a role created by someone else; verification below fails closed if those
+ * attributes are not already false.
+ */
+export function managedRoleCommand(existing: boolean) {
+  return `${existing ? 'ALTER' : 'CREATE'} ROLE cairn_app LOGIN NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L`;
+}
 
 export function credentialSettings(applicationURL?: string, ownerURL?: string) {
   if (!applicationURL || !ownerURL) throw new CredentialConfigError('DATABASE_URL and MIGRATION_DATABASE_URL must both be set explicitly.');
@@ -33,17 +44,49 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
   // before the role exists. Use isProtected() to refuse protected databases.
   const appDbName = new URL(settings.applicationURL).pathname.replace(/^\//, '');
   const ownerDbName = new URL(settings.ownerURL).pathname.replace(/^\//, '');
+  const integration = appDbName === 'cairn_integration' || process.env.CAIRN_INTEGRATION_MODE
+    ? validateIntegrationDatabaseConfig(process.env)
+    : null;
+  if (integration && (integration.database !== appDbName || integration.database !== ownerDbName)) {
+    throw new CredentialConfigError('Integration configuration and role-synchronization targets differ.');
+  }
   if (isProtected(appDbName) || isProtected(ownerDbName)) {
     throw new CredentialConfigError(`Database "${appDbName}" is protected and cannot be targeted by credential synchronization.`);
   }
 
   const owner = postgres(settings.ownerURL, { max: 1, prepare: false, connect_timeout: 10, onnotice: () => {} });
   try {
+    if (integration?.mode === 'persistent') {
+      const [identity] = await owner<{
+        database: string;
+        role: string;
+        host: string | null;
+        port: number | null;
+        dataDirectory: string;
+        systemIdentifier: string;
+        versionNum: number;
+        inRecovery: boolean;
+      }[]>`
+        select current_database() as database, current_user as role,
+               host(inet_server_addr()) as host, inet_server_port() as port,
+               data_directory as "dataDirectory", system_identifier as "systemIdentifier",
+               current_setting('server_version_num')::int as "versionNum",
+               pg_is_in_recovery() as "inRecovery"
+          from cairn_integration_guard.cluster_identity()
+      `;
+      if (!identity || identity.database !== integration.database || identity.role !== integration.migrationRole
+          || identity.host !== integration.host || Number(identity.port) !== integration.port
+          || identity.dataDirectory !== integration.dataDirectory
+          || identity.systemIdentifier !== integration.systemIdentifier
+          || Math.floor(identity.versionNum / 10_000) !== 17 || identity.inRecovery) {
+        throw new CredentialConfigError('Connected PostgreSQL cluster identity did not match the approved integration target.');
+      }
+    }
     await owner.begin(async (tx) => {
       const [admin] = await tx<{ manage: boolean }[]>`select (rolsuper or rolcreaterole) as manage from pg_roles where rolname = current_user`;
       if (!admin?.manage) throw new CredentialConfigError('The owner connection must be allowed to manage the application role. Check MIGRATION_DATABASE_URL credentials.');
       const existing = await tx`select 1 from pg_roles where rolname = 'cairn_app'`;
-      const command = `${existing.length ? 'ALTER' : 'CREATE'} ROLE cairn_app LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L`;
+      const command = managedRoleCommand(existing.length > 0);
       // PostgreSQL formats/escapes the literal. DDL cannot bind a password parameter directly.
       const [ddl] = await tx<{ statement: string }[]>`select pg_catalog.format(${command}::text, ${settings.password}::text) as statement`;
       await tx.unsafe(ddl.statement);
@@ -96,6 +139,9 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
       database: string;
       superuser: boolean;
       bypassrls: boolean;
+      createdb: boolean;
+      createrole: boolean;
+      login: boolean;
       inherit: boolean;
       connect: boolean;
       schema_usage: boolean;
@@ -103,7 +149,9 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
       memberships: number;
     }[]>`
       select current_user as role, current_database() as database,
-             r.rolsuper as superuser, r.rolbypassrls as bypassrls, r.rolinherit as inherit,
+             r.rolsuper as superuser, r.rolbypassrls as bypassrls,
+             r.rolcreatedb as createdb, r.rolcreaterole as createrole,
+             r.rolcanlogin as login, r.rolinherit as inherit,
              has_database_privilege(current_user, current_database(), 'CONNECT') as connect,
              has_schema_privilege(current_user, 'public', 'USAGE') as schema_usage,
              has_schema_privilege(current_user, 'public', 'CREATE') as schema_create,
@@ -113,7 +161,8 @@ export async function synchronizeApplicationRole(applicationURL?: string, ownerU
         from pg_roles r where r.rolname = current_user
     `;
     if (!role || role.role !== 'cairn_app' || role.database !== appDbName
-        || role.superuser || role.bypassrls || role.inherit || !role.connect
+        || role.superuser || role.bypassrls || role.createdb || role.createrole
+        || !role.login || role.inherit || !role.connect
         || !role.schema_usage || role.schema_create || Number(role.memberships) !== 0) {
       throw new CredentialConfigError('The runtime connection must be restricted to the expected cairn_app login and schema/database rights. Check database role configuration.');
     }

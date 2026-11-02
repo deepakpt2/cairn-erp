@@ -18,6 +18,7 @@ import { enterTimeTicket, loadTimeTicket, previewTimeTicket, rows } from '../src
 import { movementConfiguration, movementRequestKey, postedMovements } from '../src/modules/production/confirmation-movements';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 
 /**
  * CO11N and the goods movements a confirmation causes.
@@ -39,6 +40,7 @@ const LOCATION = 'SG01';
 
 describe('CO11N confirmation goods movement', () => {
   let tenant: TestTenant;
+  let cancellationActor!: ConfirmationCancelTestActor;
   let client = '';
   let orderA = '';
   let orderB = '';
@@ -230,6 +232,9 @@ describe('CO11N confirmation goods movement', () => {
         values (${client}, ${PLANT}, ${LOCATION}, 'Store', true, false, ${ACTOR})
         on conflict do nothing
       `);
+    });
+    cancellationActor = await createConfirmationCancelTestActor(client, {
+      username: 'CO11N_CO13_AUTHORIZED', companyScopes: [COMPANY], plantScopes: [PLANT],
     });
     await saveOrderTypeParameter({
       client, changedBy: ACTOR, mode: 'CREATE', plant: PLANT, orderType: 'PP01',
@@ -586,8 +591,8 @@ describe('CO11N confirmation goods movement', () => {
     const documentNumber = String(document!.number);
 
     await expect(cancelConfirmation(client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber, confirmed: true,
-      reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+      requestKey: nextKey(), confirmationNumber, confirmed: true,
+      reason: 'Wrong quantity', authorization: cancellationActor.authorization,
     })).rejects.toThrow(new RegExp(`posted material document ${documentNumber}`));
 
     // The refusal came before anything was written: no cancellation row stands, and the
@@ -613,8 +618,8 @@ describe('CO11N confirmation goods movement', () => {
     });
 
     const cancellation = await cancelConfirmation(client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber, confirmed: true,
-      reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+      requestKey: nextKey(), confirmationNumber, confirmed: true,
+      reason: 'Wrong quantity', authorization: cancellationActor.authorization,
     });
     expect(cancellation.cancellationNumber).toBeTruthy();
     // The original confirmation stands as it was posted, and its reversed document is not undone.
@@ -845,8 +850,8 @@ describe('CO11N confirmation goods movement', () => {
 
     // A document with a line still in force is a movement in force.
     await expect(cancelConfirmation(client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
-      confirmed: true, reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+      requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
+      confirmed: true, reason: 'Wrong quantity', authorization: cancellationActor.authorization,
     })).rejects.toThrow(new RegExp(`posted material document ${documentNumber}`));
 
     const again = await check(orderI, { yieldQuantity: '5' });
@@ -865,8 +870,8 @@ describe('CO11N confirmation goods movement', () => {
       lines: [Number(first.line_number)],
     });
     const cancelled = await cancelConfirmation(client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
-      confirmed: true, reason: 'Wrong quantity', capabilities: ['PROD.CONFIRM.CANCEL'],
+      requestKey: nextKey(), confirmationNumber: saved.confirmationNumber,
+      confirmed: true, reason: 'Wrong quantity', authorization: cancellationActor.authorization,
     });
     expect(cancelled.cancellationNumber).toBeTruthy();
     const movement = await withTenant(client, (tx) => postedMovements(tx, client, saved.requestKey));

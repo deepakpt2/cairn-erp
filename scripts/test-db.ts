@@ -34,22 +34,22 @@ import { strict as assert } from 'node:assert';
 import postgres from 'postgres';
 
 import { ACCEPTANCE_DATABASE_GUARDS } from './browser-smoke/database-guards';
+import { redactConnectionUrls, validateIntegrationDatabaseConfig } from './integration-db-config';
 
 /** The repository's own default identity for the test database (`src/platform/db/client.ts:25`). */
 const DEFAULT_TEST_DATABASE = 'cairn';
 
 function usageError(detail: string): never {
-  console.error(`test-db: ${detail}`);
-  process.exit(1);
+  throw new Error(detail);
 }
 
 function ownerUrl(): URL {
-  const raw = process.env.MIGRATION_DATABASE_URL ?? process.env.DATABASE_URL;
-  if (!raw) usageError('MIGRATION_DATABASE_URL (or DATABASE_URL) must name the cluster to work against.');
+  const raw = process.env.MIGRATION_DATABASE_URL;
+  if (!raw) usageError('MIGRATION_DATABASE_URL must be set explicitly; no database URL fallback is allowed.');
   try {
-    return new URL(raw as string);
+    return new URL(raw);
   } catch {
-    usageError('the owner connection URL is not a valid PostgreSQL URL.');
+    usageError('MIGRATION_DATABASE_URL is not a valid PostgreSQL URL; value withheld.');
   }
 }
 
@@ -106,46 +106,131 @@ async function main() {
   if (fresh && !argv.includes('--yes')) {
     usageError('--fresh drops schema public in the target database; add --yes once you have read that.');
   }
-  const owner = ownerUrl();
-  if (decodeURIComponent(owner.username) === 'cairn_app') {
-    usageError('the owner connection must not be the restricted application role (`cairn_app`).');
+  if (fresh && database === 'cairn_integration') {
+    usageError('cairn_integration is persistent and can never be reset by test-db.');
   }
-  // The application role is cluster-wide and its password is whatever the deployment gave it — it is NOT the
-  // owner's password in general, so an existing DATABASE_URL for the same host, port and role is copied for its
-  // credential and only that. Guessing here would print a connection line that cannot connect.
-  const existingApplicationUrl = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
-  const appPassword = existingApplicationUrl
-    && decodeURIComponent(existingApplicationUrl.username) === 'cairn_app'
-    && existingApplicationUrl.hostname === owner.hostname
-    && existingApplicationUrl.port === owner.port
-    ? decodeURIComponent(existingApplicationUrl.password)
-    : decodeURIComponent(owner.password);
+  if (fresh && !/^cairn_migration_test_\d{8}_[a-z0-9]{4,12}$/.test(database)) {
+    usageError('--fresh is restricted to uniquely named cairn_migration_test_YYYYMMDD_<run-id> databases.');
+  }
+  const owner = ownerUrl();
+  const applicationRaw = process.env.DATABASE_URL;
+  if (!applicationRaw) usageError('DATABASE_URL must be set explicitly; no runtime URL fallback is allowed.');
+  let applicationBase: URL;
+  try {
+    applicationBase = new URL(applicationRaw);
+  } catch {
+    usageError('DATABASE_URL is not a valid PostgreSQL URL; value withheld.');
+  }
+  if (![owner, applicationBase].every((url) => ['postgres:', 'postgresql:'].includes(url.protocol))) {
+    usageError('MIGRATION_DATABASE_URL and DATABASE_URL must both use PostgreSQL.');
+  }
+  if (decodeURIComponent(owner.username) === 'cairn_app'
+      || decodeURIComponent(applicationBase.username) !== 'cairn_app') {
+    usageError('Use separate migration and restricted cairn_app runtime roles.');
+  }
+  if (!decodeURIComponent(owner.password) || !decodeURIComponent(applicationBase.password)
+      || decodeURIComponent(owner.password) === decodeURIComponent(applicationBase.password)) {
+    usageError('Distinct, non-empty migration and runtime credentials are required; values withheld.');
+  }
+  if (owner.hostname !== applicationBase.hostname || owner.port !== applicationBase.port) {
+    usageError('MIGRATION_DATABASE_URL and DATABASE_URL must address the same approved cluster.');
+  }
+  if (owner.pathname !== `/${database}` || applicationBase.pathname !== `/${database}`) {
+    usageError(`Both database URLs must explicitly name ${database}; URL values are withheld.`);
+  }
+  let integrationConfig: ReturnType<typeof validateIntegrationDatabaseConfig> | null = null;
+  if (process.env.CAIRN_INTEGRATION_MODE || database === 'cairn_integration') {
+    try {
+      integrationConfig = validateIntegrationDatabaseConfig(process.env);
+      if (integrationConfig.database !== database) usageError('Integration environment and provisioning target differ.');
+    } catch (error) {
+      usageError(error instanceof Error ? error.message : 'Integration environment was refused; values withheld.');
+    }
+  }
   const maintenance = new URL(owner.toString());
   maintenance.pathname = '/postgres';
   const migrationUrl = withDatabase(owner, database);
-  const applicationUrl = (() => {
-    const url = new URL(owner.toString());
-    url.pathname = `/${database}`;
-    url.username = 'cairn_app';
-    url.password = appPassword;
-    return url.toString();
-  })();
+  const applicationUrl = new URL(applicationBase.toString());
+  applicationUrl.pathname = `/${database}`;
 
-  const pointed = new URL(owner.toString()).pathname.replace(/^\//, '');
-  console.log(`test-db: target ${owner.hostname}:${owner.port || '5432'} database ${database} (owner role ${owner.username})`);
-  if (pointed !== database) {
-    console.log(`test-db: the connection string names "${pointed}"; every step below is given "${database}" instead,`);
-    console.log('test-db: and the export lines at the end are what the suite itself must be given.');
+  if (database === 'cairn_integration') {
+    if (!integrationConfig) usageError('cairn_integration requires the validated persistent integration configuration.');
+    const identity = postgres(migrationUrl, { max: 1, prepare: false, connect_timeout: 8, onnotice: () => {} });
+    let row: {
+      database: string;
+      role: string;
+      host: string | null;
+      port: number | null;
+      dataDirectory: string;
+      systemIdentifier: string;
+      versionNum: number;
+      inRecovery: boolean;
+    } | undefined;
+    try {
+      [row] = await identity<Array<{
+        database: string;
+        role: string;
+        host: string | null;
+        port: number | null;
+        dataDirectory: string;
+        systemIdentifier: string;
+        versionNum: number;
+        inRecovery: boolean;
+      }>>`
+        select current_database() as database, current_user as role,
+               host(inet_server_addr()) as host, inet_server_port() as port,
+               data_directory as "dataDirectory", system_identifier as "systemIdentifier",
+               current_setting('server_version_num')::int as "versionNum",
+               pg_is_in_recovery() as "inRecovery"
+          from cairn_integration_guard.cluster_identity()
+      `;
+    } catch {
+      usageError('cairn_integration cluster identity could not be verified before provisioning; refusing changes.');
+    } finally {
+      await identity.end({ timeout: 5 });
+    }
+    if (!row || row.database !== integrationConfig.database || row.role !== integrationConfig.migrationRole
+        || row.host !== integrationConfig.host || Number(row.port) !== integrationConfig.port
+        || row.dataDirectory !== integrationConfig.dataDirectory
+        || row.systemIdentifier !== integrationConfig.systemIdentifier
+        || Math.floor(row.versionNum / 10_000) !== 17 || row.inRecovery) {
+      usageError('cairn_integration cluster identity did not match the approved target; refusing changes.');
+    }
   }
 
+  console.log(`test-db: target ${owner.hostname}:${owner.port || '5432'} database ${database}; migration role ${decodeURIComponent(owner.username)}, runtime role cairn_app; credentials withheld.`);
+
   const admin = postgres(maintenance.toString(), { max: 1, prepare: false, onnotice: () => {} });
+  let createdNow = false;
   try {
-    const [exists] = await admin`select 1 from pg_database where datname = ${database}`;
-    if (!exists) {
+    const [existing] = await admin<Array<{
+      owner: string;
+      allow_connections: boolean;
+      encoding: number;
+    }>>`
+      select pg_get_userbyid(datdba) as owner,
+             datallowconn as allow_connections,
+             encoding
+        from pg_database where datname = ${database}
+    `;
+    if (!existing) {
       await admin.unsafe(`create database "${database.replace(/"/g, '""')}"`);
+      createdNow = true;
       console.log(`test-db: created ${database}`);
     } else {
-      console.log(`test-db: ${database} already exists`);
+      const [activity] = await admin<Array<{ active: number }>>`
+        select count(*)::int as active
+          from pg_stat_activity
+         where datname = ${database} and pid <> pg_backend_pid()
+      `;
+      if (existing.owner !== decodeURIComponent(owner.username) || !existing.allow_connections
+          || existing.encoding !== 6 || Number(activity?.active ?? 0) > 0) {
+        usageError(`Existing database ${database} does not match its configured owner or has active dependencies; refusing to reuse it.`);
+      }
+      if (fresh) {
+        usageError(`Fresh target ${database} already exists; test-db will not overwrite an existing database.`);
+      }
+      console.log(`test-db: verified existing ${database} (owner ${existing.owner}, active sessions 0, UTF8=${existing.encoding === 6})`);
     }
   } finally {
     await admin.end({ timeout: 5 });
@@ -154,7 +239,8 @@ async function main() {
   const target = postgres(migrationUrl, { max: 1, prepare: false, onnotice: () => {} });
   try {
     if (fresh) {
-      console.log('test-db: dropping schema public…');
+      if (!createdNow) usageError('Refusing destructive initialization of an existing database.');
+      console.log('test-db: initializing the newly created disposable database…');
       await target.unsafe('drop schema if exists public cascade');
       await target.unsafe('create schema public');
       await target.unsafe('grant usage on schema public to public');
@@ -167,7 +253,7 @@ async function main() {
     ...process.env,
     CAIRN_ENV: 'development',
     MIGRATION_DATABASE_URL: migrationUrl,
-    DATABASE_URL: applicationUrl,
+    DATABASE_URL: applicationUrl.toString(),
   };
   const steps = [
     { name: 'Migrate schema', script: 'src/platform/db/migrate.ts' },
@@ -198,16 +284,15 @@ async function main() {
       `\ntest-db: ${database} stands with ${row.migrations} migrations, ${row.capabilities} capabilities, `
       + `${row.units} units, ${row.countries} countries, ${row.test_tenants} test tenant(s).`,
     );
-    console.log('Run the suite against it with:\n');
-    console.log(`  export DATABASE_URL="${applicationUrl}"`);
-    console.log(`  export MIGRATION_DATABASE_URL="${migrationUrl}"\n`);
-    console.log('  npm test          # or: npx vitest run tests/some.test.ts');
+    console.log(`test-db: ${database} is ready. Connection URLs and credentials were not printed.`);
+    console.log('Load the approved secure environment for this exact database, then use `npm run test:integration` for integration suites.');
   } finally {
     await check.end({ timeout: 5 });
   }
 }
 
 main().catch((error) => {
-  console.error(`test-db: ${error.message ?? error}`);
+  const message = error instanceof Error ? error.message : 'provisioning failed';
+  console.error(`test-db: ${redactConnectionUrls(message)}`);
   process.exit(1);
 });

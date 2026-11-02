@@ -15,7 +15,12 @@
  */
 import { sql } from 'drizzle-orm';
 
-import { hasCapability } from '../../platform/auth/session';
+import {
+  hasCapability,
+  hasOrgAccess,
+  loadCapabilities,
+  loadOrgRestrictions,
+} from '../../platform/auth/session';
 import { parseProductionOrderStatus, type ProductionOrderStatus } from './production-order-status';
 import { recordChange } from '../../platform/change';
 import { withTenant, type Tx } from '../../platform/db/client';
@@ -27,6 +32,12 @@ import { movementStands } from './confirmation-movements';
 export const CONFIRMATION_CANCEL_CAPABILITY = 'PROD.CONFIRM.CANCEL';
 export const CONFIRMATION_CANCEL_ROUTE = '/production/confirmation-cancel';
 export const CONFIRMATION_CANCEL_ALIAS = 'CO13';
+
+export interface ConfirmationCancelAuthorizationContext {
+  /** IDs resolved by requireSession; never accepted from form fields. */
+  userId: string;
+  sessionId: string;
+}
 
 const MOVEMENT_NOTE = 'No goods movement was posted. A material document posted separately is not a confirmation record and was not reversed.';
 
@@ -147,13 +158,107 @@ export function holdsConfirmationCancelAuthority(held: readonly string[]): boole
   return hasCapability([...held], CONFIRMATION_CANCEL_CAPABILITY);
 }
 
-function assertAuthority(held: readonly string[] | undefined): void {
-  if (!holdsConfirmationCancelAuthority(held ?? [])) {
+async function requireCancellationAuthorityInTx(
+  tx: Tx,
+  client: string,
+  authorization: ConfirmationCancelAuthorizationContext | undefined,
+) {
+  if (!authorization?.userId || !authorization.sessionId) {
+    fail('You are not authorised to cancel this production confirmation.', 'Sign in again with an active account.');
+  }
+
+  const sessions = await rows(tx, sql`
+    select u.username
+      from user_session s
+      join app_user u on u.client = s.client and u.id = s.user_id
+     where s.client = ${client}
+       and s.id = ${authorization.sessionId}
+       and s.user_id = ${authorization.userId}
+       and s.revoked_at is null
+       and s.expires_at > now()
+       and u.is_active = true
+       and u.is_locked = false
+     for share of s, u
+  `);
+  const actor = sessions[0];
+  if (!actor) {
+    fail('You are not authorised to cancel this production confirmation.', 'Your session or account is no longer active. Sign in again.');
+  }
+
+  await tx.execute(sql`
+    select code from capability where code = ${CONFIRMATION_CANCEL_CAPABILITY} for share
+  `);
+  await tx.execute(sql`
+    select ur.role_code, rc.capability_code
+      from user_role ur
+      join role r on r.client = ur.client and r.code = ur.role_code and r.is_active = true
+      join role_capability rc on rc.client = ur.client and rc.role_code = ur.role_code
+     where ur.client = ${client}
+       and ur.user_id = ${authorization.userId}
+       and (ur.valid_from is null or ur.valid_from <= now())
+       and (ur.valid_to is null or ur.valid_to >= now())
+     for share of ur, r, rc
+  `);
+  const capabilities = await loadCapabilities(tx, client, authorization.userId);
+  if (!hasCapability(capabilities, CONFIRMATION_CANCEL_CAPABILITY)) {
     fail(
       `You do not hold the authority ${CONFIRMATION_CANCEL_CAPABILITY}.`,
-      'Ask an administrator to add that authority to one of your roles. Hiding the button is not the check.',
+      'Ask an administrator to add that authority to one of your roles.',
     );
   }
+
+  await tx.execute(sql`
+    select id from auth_org_restriction
+     where client = ${client} and user_id = ${authorization.userId}
+     for share
+  `);
+  const restrictions = await loadOrgRestrictions(tx, client, authorization.userId);
+  const hasCompanyScope = restrictions.some((scope) => scope.scopeType === 'COMPANY_CODE' && scope.scopeValue.trim());
+  const hasPlantScope = restrictions.some((scope) => scope.scopeType === 'PLANT' && scope.scopeValue.trim());
+  if (!hasCompanyScope || !hasPlantScope) {
+    fail(
+      'You are not authorised to cancel this production confirmation.',
+      'An explicit Company Code and Plant scope are required.',
+    );
+  }
+  return { username: String(actor.username), restrictions };
+}
+
+async function requireConfirmationOrderScopeInTx(
+  tx: Tx,
+  client: string,
+  orderNumber: string,
+  restrictions: Awaited<ReturnType<typeof loadOrgRestrictions>>,
+) {
+  const orders = await rows(tx, sql`
+    select plant, company_code as company_code
+      from production_order
+     where client = ${client} and order_number = ${orderNumber}
+     for share
+  `);
+  const order = orders[0];
+  if (!order) fail(`Production order ${orderNumber} does not stand.`, 'Choose an order in this tenant.');
+
+  const plants = await rows(tx, sql`
+    select plant, company_code as company_code
+      from plant
+     where client = ${client} and plant = ${String(order.plant)}
+     for share
+  `);
+  const plant = plants[0];
+  const companyCode = plant?.company_code == null ? '' : String(plant.company_code).trim();
+  const storedCompany = order.company_code == null ? '' : String(order.company_code).trim();
+  if (!plant || !companyCode || (storedCompany && storedCompany !== companyCode)) {
+    fail('The production order has no consistent Company Code and Plant assignment.', 'Ask an administrator to review the order and plant configuration.');
+  }
+  if (!hasOrgAccess(restrictions, 'COMPANY_CODE', companyCode)
+    || !hasOrgAccess(restrictions, 'PLANT', String(plant.plant))) {
+    fail(
+      'You are not authorised to access this production order.',
+      'Your Company Code or Plant scope does not cover this order.',
+    );
+  }
+  return { plant: String(plant.plant), companyCode };
 }
 
 function confirmationNumberOf(value: string): string {
@@ -166,7 +271,7 @@ function confirmationNumberOf(value: string): string {
 function reasonOf(value: string | null | undefined): string | null {
   const reason = clean(value);
   if (!reason) return null;
-  if (reason.length > 200) fail('The cancellation reason is too long.', 'Use at most 200 characters. The reason is optional.');
+  if (reason.length > 200) fail('The cancellation reason is too long.', 'Use at most 200 characters.');
   return reason;
 }
 
@@ -294,9 +399,8 @@ function resultOf(detail: ConfirmationCancelDetail, requestKey: string, replayed
 export async function loadConfirmationCancellation(client: string, input: {
   confirmationNumber?: string | null;
   orderNumber?: string | null;
-  capabilities: readonly string[];
+  authorization: ConfirmationCancelAuthorizationContext;
 }): Promise<ConfirmationCancelLoad> {
-  assertAuthority(input.capabilities);
   const confirmationNumber = clean(input.confirmationNumber).toUpperCase();
   const orderNumber = clean(input.orderNumber).toUpperCase();
   if (!confirmationNumber && !orderNumber) {
@@ -305,18 +409,16 @@ export async function loadConfirmationCancellation(client: string, input: {
   if (confirmationNumber.length > 12) fail('The confirmation number is too long.', 'Use the number as it stands.');
   if (orderNumber.length > 12) fail('The production order number is too long.', 'Use the number as it stands.');
   return withTenant(client, async (tx) => {
+    const authority = await requireCancellationAuthorityInTx(tx, client, input.authorization);
     if (!confirmationNumber) {
-      const order = await rows(tx, sql`
-        select order_number from production_order
-         where client = ${client} and order_number = ${orderNumber}
-      `);
-      if (!order[0]) fail(`Production order ${orderNumber} does not stand.`, 'Choose an order that stands in this tenant.');
+      await requireConfirmationOrderScopeInTx(tx, client, orderNumber, authority.restrictions);
       return { detail: null, matches: await listOf(tx, client, orderNumber), warning: null };
     }
     const detail = await detailOf(tx, client, confirmationNumber);
     if (!detail) {
       fail(`Confirmation ${confirmationNumber} does not stand.`, 'Choose a confirmation that stands in this tenant. Nothing was cancelled.');
     }
+    await requireConfirmationOrderScopeInTx(tx, client, detail.orderNumber, authority.restrictions);
     const warning = orderNumber && orderNumber !== detail.orderNumber
       ? `Confirmation ${confirmationNumber} stands on order ${detail.orderNumber}, not ${orderNumber}.`
       : null;
@@ -325,21 +427,22 @@ export async function loadConfirmationCancellation(client: string, input: {
 }
 
 export async function cancelConfirmation(client: string, input: {
-  requestedBy: string;
   requestKey: string;
   confirmationNumber: string;
   reason?: string | null;
   confirmed: boolean;
-  capabilities: readonly string[];
+  authorization: ConfirmationCancelAuthorizationContext;
 }): Promise<ConfirmationCancelResult> {
-  assertAuthority(input.capabilities);
   const requestKey = clean(input.requestKey);
   if (!requestKey || requestKey.length > 64) fail('A request key is required.');
   const confirmationNumber = confirmationNumberOf(input.confirmationNumber);
   const reason = reasonOf(input.reason);
-  const requestedBy = clean(input.requestedBy);
-  if (!requestedBy) fail('The user is required.');
   return withTenant(client, async (tx) => {
+    const authority = await requireCancellationAuthorityInTx(tx, client, input.authorization);
+    // Confirmation records are immutable for the runtime role. The per-order
+    // TIME_TICKET_LOCK acquired below serializes posting/cancellation decisions,
+    // so this identity read needs no row lock (which would require UPDATE on
+    // this insert-only audit table).
     const standing = await rows(tx, sql`
       select order_number, request_key from production_confirmation
        where client = ${client} and confirmation_number = ${confirmationNumber}
@@ -348,8 +451,9 @@ export async function cancelConfirmation(client: string, input: {
       fail(`Confirmation ${confirmationNumber} does not stand.`, 'Choose a confirmation that stands in this tenant. Nothing was cancelled.');
     }
     const orderNumber = String(standing[0].order_number);
+    await requireConfirmationOrderScopeInTx(tx, client, orderNumber, authority.restrictions);
     await acquireLock(tx, { objectCode: TIME_TICKET_LOCK, keys: [client, orderNumber] }, {
-      client, requestedBy, transactionCode: CONFIRMATION_CANCEL_ALIAS,
+      client, requestedBy: authority.username, transactionCode: CONFIRMATION_CANCEL_ALIAS,
     });
     const byRequest = await rows(tx, sql`
       select cancellation_number, confirmation_number, reason
@@ -364,6 +468,8 @@ export async function cancelConfirmation(client: string, input: {
       if (!stored) fail('The earlier cancellation could not be read.');
       return resultOf(stored, requestKey, true);
     }
+    // Legacy NULL reasons are accepted only by the matching request-key replay above.
+    if (!reason) fail('A cancellation reason is required.', 'Enter why this confirmation is being cancelled.');
     const existing = await rows(tx, sql`
       select cancellation_number from production_confirmation_cancellation
        where client = ${client} and confirmation_number = ${confirmationNumber}
@@ -390,14 +496,14 @@ export async function cancelConfirmation(client: string, input: {
     if (input.confirmed !== true) {
       fail('Cancellation was not confirmed. Nothing was saved.', 'Confirm the cancellation. The original confirmation was not changed.');
     }
-    const allocated = await allocateNumber(tx, { client, objectCode: 'PRODCONF', allocatedBy: requestedBy });
+    const allocated = await allocateNumber(tx, { client, objectCode: 'PRODCONF', allocatedBy: authority.username });
     const cancellationNumber = allocated.display;
     try {
       await tx.execute(sql`
         insert into production_confirmation_cancellation (
           client, cancellation_number, confirmation_number, order_number, reason, request_key, created_by
         ) values (
-          ${client}, ${cancellationNumber}, ${confirmationNumber}, ${orderNumber}, ${reason}, ${requestKey}, ${requestedBy}
+          ${client}, ${cancellationNumber}, ${confirmationNumber}, ${orderNumber}, ${reason}, ${requestKey}, ${authority.username}
         )
       `);
     } catch (error) {
@@ -411,9 +517,9 @@ export async function cancelConfirmation(client: string, input: {
       objectClass: 'production_confirmation_cancellation',
       objectKey: cancellationNumber,
       changeType: 'REVERSE',
-      changedBy: requestedBy,
+      changedBy: authority.username,
       transactionCode: CONFIRMATION_CANCEL_ALIAS,
-      reason: reason ?? `Cancellation ${cancellationNumber} of confirmation ${confirmationNumber}`,
+      reason,
       after: {
         cancellationNumber,
         confirmationNumber,

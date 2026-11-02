@@ -193,6 +193,28 @@ git --no-pager rev-parse HEAD  # Record this commit hash with test results
 - Status: Created, migrated (324 migrations applied, last `9201_production_order_settlement.sql`), seeded with reference data (26 currencies).
 - Preservation: Must never be dropped, reset, reseeded, or recreated during routine testing.
 
+### cairn_integration — Persistent General Integration-Test Database (OWNER-APPROVED; PROVISIONED)
+
+- Owner decision (2026-11-02): provision and reuse a separate persistent database for CO13 and similar database-backed integration tests. It is isolated from `cairn_b210` (permanently prohibited browser-acceptance data), `cairn_acceptance` (P0-GAP-01 acceptance), production, and browser-acceptance configuration.
+- Verified PostgreSQL identity: version 17.11; system identifier `7703407688127814566`; database `cairn_integration`; data directory `/home/cairn/.local/share/postgresql/cairn_integration/data`; port `55435`; `listen_addresses=127.0.0.1`. `pg_hba.conf` permits local peer and loopback SCRAM only. No non-loopback listener is configured.
+- Roles: database owner/migration role `cairn_integration_migrator` is NOSUPERUSER with the schema-migration privileges required here (`BYPASSRLS`, `CREATEDB`, `CREATEROLE`, `NOINHERIT`). It has ADMIN OPTION on `cairn_app` with INHERIT and SET disabled, so it can rotate the app role without inheriting or assuming it. Runtime `cairn_app` is NOSUPERUSER, NOBYPASSRLS, NOCREATEDB, NOCREATEROLE, NOINHERIT; `PUBLIC` database privileges are revoked and `cairn_app` has CONNECT. Runtime and migration credentials are distinct, generated, and stored only in the mode-0600 secure environment file `/home/cairn/.config/cairn-erp/cairn_integration.env` on the test host (and its local secure counterpart); neither belongs in Git, reports, or chat.
+- Database state: 333 migrations recorded through `9210_co13_cancellation_reason_required.sql`; reference data verified (30 countries, 26 currencies, 21 units, 5 partner-bank country profiles); global definitions seeded; zero test tenants. The walkthrough tenant was not seeded. The database is about 26 MB and was not reset after provisioning.
+- `CAIRN_INTEGRATION_MODE=persistent`, `CAIRN_TEST_DB_NAME=cairn_integration`, both explicit URLs, and the expected data-directory/system identifier are required. `scripts/test-integration.ts` validates the target before Vitest; `tests/global-setup.ts` verifies both role identities, endpoint, database, PostgreSQL 17/non-recovery state, role restrictions, and the cluster identity. Cluster identity is read through `cairn_integration_guard.cluster_identity()`, a bootstrap-owned SECURITY DEFINER function installed by `scripts/integration-cluster-identity.sql` and executable only by the migration role; do not grant `pg_read_all_settings` to the runtime role. Guarded databases skip automatic stale-fixture deletion; focused test files must clean up their own tenants.
+- For routine focused tests, run on the test host with the secure file loaded (never source `.env.local`):
+  ```bash
+  set -a; . /home/cairn/.config/cairn-erp/cairn_integration.env; set +a
+  npm run test:integration -- tests/confirmation-cancel.test.ts tests/order-confirmation-allocation.test.ts tests/time-ticket-goods-movement.test.ts
+  ```
+  Use `npm run test:db -- --database cairn_integration` only for additive provisioning/reference-data repair; never pass `--fresh` for this persistent database. Do not run `npm run db:verify`, which sources `.env.local` and targets the prohibited `cairn_b210` configuration in this workspace.
+- Fresh-ledger work belongs only in a uniquely named `cairn_migration_test_YYYYMMDD_<run-id>` disposable database. Validate ownership and active sessions before cleanup; drop only task-created disposable databases after the migration/restore dependency checks pass. Never reset, drop, or casually reseed `cairn_integration`.
+- The 9210 migration was rehearsed from a fresh 9209 ledger in a disposable database: an existing null-reason record survived; the constraint remained `NOT VALID`; a valid reason was accepted; new NULL, empty, whitespace-only, and over-200-character reasons were rejected. The disposable database was dropped after verification.
+
+### Integration Backup and Recovery
+
+- WAL archiving is off (`archive_mode=off`, `archive_command=(disabled)`), so this cluster has no point-in-time recovery. A verified on-demand PostgreSQL custom-format backup is created with `python3 scripts/backup-integration-db.py` on the test host. The script revalidates the persistent database, role, endpoint, data directory, system identifier, and migration ledger; it reads the mode-0600 secure environment file without placing credentials in argv; and it verifies `pg_restore --list` before publishing the archive and SHA-256 manifest.
+- Backup directory: `/home/cairn/.local/backups/cairn_integration` (directory mode 0700; archive and manifest mode 0600). The 2026-11-02 archive was `cairn_integration_20261102T040814Z.dump` (1,881,863 bytes; SHA-256 begins `005f0996e05ffb73`). A restore rehearsal into a separate disposable database passed: 333 migrations, 30 countries, 26 currencies, 21 units, zero test tenants, the same cluster identity, and the runtime SELECT/no-UPDATE ACLs were verified; both restore/migration rehearsal databases were dropped after active-session and ownership checks.
+- This backup is on the same host and filesystem as PostgreSQL; it protects against logical mistakes, not host/disk loss. No off-host copy or automated scheduler is configured (the host has no `crontab`). Until an owner-approved off-host destination/schedule is added, the practical RPO is the last successful verified logical backup; PITR is unavailable. Run the backup before sensitive migration work and verify a restore to a task-created disposable database before relying on recovery.
+
 ### Approved Migration Procedure
 
 1. Verify the effective database target before any migration.
@@ -215,9 +237,9 @@ echo "${DATABASE_URL}" | awk -F/ '{print $NF}' | cut -d? -f1
 
 ### Database Protection Guards
 
-- `scripts/browser-smoke/database-guards.ts` — `ACCEPTANCE_DATABASE_GUARDS` maps browser targets to databases.
-- `cairn_acceptance` is registered as `production-order-settlement-acceptance` in the guards.
-- `tests/global-setup.ts` refuses whole-suite runs against guarded databases without `CAIRN_ALLOW_GUARDED_TEST_DATABASE=1`.
+- `scripts/browser-smoke/database-guards.ts` — `ACCEPTANCE_DATABASE_GUARDS` maps browser targets to databases; `cairn_acceptance` is registered as `production-order-settlement-acceptance`.
+- `tests/global-setup.ts` independently treats `cairn_integration` as guarded, requires the full integration identity configuration whenever either URL names it, refuses whole-suite runs unless explicitly permitted, and always skips stale-fixture deletion on guarded targets. Focused integration tests own and remove only their own fixtures.
+- `scripts/test-integration.ts`, `scripts/test-db.ts`, and `scripts/sync-db-app-role.ts` fail closed on missing/mismatched integration configuration; persistent-target changes verify the actual database role, endpoint, server version/state, data directory, and system identifier before mutation.
 - `src/platform/db/target-guard.ts` — `validateTarget()` refuses protected databases without explicit authorization.
 
 ### Test Data Isolation

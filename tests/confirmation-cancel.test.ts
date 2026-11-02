@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
@@ -12,6 +13,7 @@ import {
   holdsConfirmationCancelAuthority,
   loadConfirmationCancellation,
 } from '../src/modules/production/confirmation-cancel';
+import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 import { enterOrderConfirmation } from '../src/modules/production/order-confirmation';
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { insertOrderOperationSnapshot, resolveOrderOperationSnapshot } from '../src/modules/production/order-operation-snapshot';
@@ -22,9 +24,20 @@ import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
+const cancellationAudit = vi.hoisted(() => ({ failNext: false }));
+vi.mock('../src/platform/change', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../src/platform/change')>();
+  return {
+    ...original,
+    recordChange: async (...args: Parameters<typeof original.recordChange>) => {
+      if (cancellationAudit.failNext) return null;
+      return original.recordChange(...args);
+    },
+  };
+});
+
 const ACTOR = 'CO13_CLERK';
 const PLANT = '1000';
-const AUTH = ['PROD.CONFIRM.CANCEL'] as const;
 
 describe('CO13 cancel confirmation', () => {
   let tenant: TestTenant;
@@ -32,6 +45,13 @@ describe('CO13 cancel confirmation', () => {
   let version = 1;
   let orderNumber = '';
   let key = 0;
+  let authorisedActor!: ConfirmationCancelTestActor;
+  let otherActor!: ConfirmationCancelTestActor;
+  let noCapabilityActor!: ConfirmationCancelTestActor;
+  let noCompanyActor!: ConfirmationCancelTestActor;
+  let noPlantActor!: ConfirmationCancelTestActor;
+  let wrongCompanyActor!: ConfirmationCancelTestActor;
+  let wrongPlantActor!: ConfirmationCancelTestActor;
   const nextKey = () => `co13-${++key}`;
 
   async function extend(client: string, materialNumber: string) {
@@ -103,6 +123,13 @@ describe('CO13 cancel confirmation', () => {
   beforeAll(async () => {
     tenant = await createTenant('co13-cancel');
     other = await createTenant('co13-other');
+    authorisedActor = await createConfirmationCancelTestActor(tenant.client, { username: 'CO13_AUTHORIZED' });
+    otherActor = await createConfirmationCancelTestActor(other.client, { username: 'CO13_OTHER_TENANT' });
+    noCapabilityActor = await createConfirmationCancelTestActor(tenant.client, { canCancel: false });
+    noCompanyActor = await createConfirmationCancelTestActor(tenant.client, { companyScopes: [] });
+    noPlantActor = await createConfirmationCancelTestActor(tenant.client, { plantScopes: [] });
+    wrongCompanyActor = await createConfirmationCancelTestActor(tenant.client, { companyScopes: ['9999'], plantScopes: [PLANT] });
+    wrongPlantActor = await createConfirmationCancelTestActor(tenant.client, { companyScopes: ['1000'], plantScopes: ['9999'] });
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
       await tx.execute(sql`
@@ -180,14 +207,40 @@ describe('CO13 cancel confirmation', () => {
       activities: [{ parameter: 'LABOR', quantity: '1', unit: 'HR' }],
     });
     await expect(loadConfirmationCancellation(tenant.client, {
-      confirmationNumber: posted.confirmationNumber, capabilities: ['PROD.CONFIRM.ENTER'],
+      confirmationNumber: posted.confirmationNumber, authorization: noCapabilityActor.authorization,
     })).rejects.toThrow(/PROD\.CONFIRM\.CANCEL/);
     await expect(cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
-      confirmed: true, capabilities: [],
+      requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
+      reason: 'Unauthorized attempt', confirmed: true, authorization: noCapabilityActor.authorization,
     })).rejects.toThrow(/PROD\.CONFIRM\.CANCEL/);
     const after = await counts(orderNumber);
     expect(after?.cancellations).toBe(0);
+  });
+
+  it('rechecks the live session and explicit Company Code and Plant scope before lookup or cancellation', async () => {
+    const number = await withTenant(tenant.client, async (tx) => {
+      const found = await tx.execute(sql`
+        select confirmation_number from production_confirmation
+         where client = ${tenant.client} and order_number = ${orderNumber}
+         order by confirmation_number limit 1
+      `) as unknown as Array<{ confirmation_number: string }>;
+      return found[0]?.confirmation_number ?? '';
+    });
+    expect(number).toBeTruthy();
+    for (const actor of [noCompanyActor, noPlantActor, wrongCompanyActor, wrongPlantActor]) {
+      await expect(loadConfirmationCancellation(tenant.client, {
+        confirmationNumber: number, authorization: actor.authorization,
+      })).rejects.toThrow(/not authorised/);
+    }
+    await expect(loadConfirmationCancellation(tenant.client, {
+      confirmationNumber: number,
+      authorization: { userId: authorisedActor.userId, sessionId: randomUUID() },
+    })).rejects.toThrow(/not authorised/);
+    await expect(cancelConfirmation(tenant.client, {
+      requestKey: nextKey(), confirmationNumber: number, reason: 'Wrong scope', confirmed: true,
+      authorization: wrongPlantActor.authorization,
+    })).rejects.toThrow(/not authorised/);
+    expect((await counts(orderNumber))?.cancellations).toBe(0);
   });
 
   it('loads a confirmation without writing', async () => {
@@ -201,13 +254,15 @@ describe('CO13 cancel confirmation', () => {
       return String(found[0]?.confirmation_number);
     });
     const loaded = await loadConfirmationCancellation(tenant.client, {
-      confirmationNumber: number, capabilities: AUTH,
+      confirmationNumber: number,
+      authorization: authorisedActor.authorization,
     });
     expect(loaded.detail?.confirmationNumber).toBe(number);
     expect(loaded.detail?.eligible).toBe(true);
     expect(loaded.detail?.activities).toHaveLength(1);
     const listed = await loadConfirmationCancellation(tenant.client, {
-      orderNumber, capabilities: ['PROD.CONFIRM.*'],
+      orderNumber,
+      authorization: authorisedActor.authorization,
     });
     expect(listed.matches.map((row) => row.confirmationNumber)).toContain(number);
     expect(await counts(orderNumber)).toEqual(before);
@@ -222,13 +277,16 @@ describe('CO13 cancel confirmation', () => {
       return String(found[0]?.confirmation_number);
     });
     await expect(loadConfirmationCancellation(tenant.client, {
-      confirmationNumber: 'MISSING', capabilities: AUTH,
+      confirmationNumber: 'MISSING',
+      authorization: authorisedActor.authorization,
     })).rejects.toThrow(/does not stand/);
     await expect(loadConfirmationCancellation(other.client, {
-      confirmationNumber: number, capabilities: AUTH,
+      confirmationNumber: number,
+      authorization: otherActor.authorization,
     })).rejects.toThrow(/does not stand/);
     await expect(cancelConfirmation(other.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: number, confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: number, reason: 'Cross-tenant', confirmed: true,
+      authorization: otherActor.authorization,
     })).rejects.toThrow(/does not stand/);
     const leaked = await withTenant(other.client, async (tx) => {
       const found = await tx.execute(sql`select count(*)::int as rows from production_confirmation`) as unknown as Array<{ rows: number }>;
@@ -248,35 +306,63 @@ describe('CO13 cancel confirmation', () => {
     });
     const before = await counts(orderNumber);
     await expect(cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
-      reason: 'x'.repeat(201), confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
+      confirmed: true,
+      authorization: authorisedActor.authorization,
+    })).rejects.toThrow(/reason is required/);
+    await expect(cancelConfirmation(tenant.client, {
+      requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
+      reason: '   ', confirmed: true,
+      authorization: authorisedActor.authorization,
+    })).rejects.toThrow(/reason is required/);
+    await expect(cancelConfirmation(tenant.client, {
+      requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'x'.repeat(201), confirmed: true,
+      authorization: authorisedActor.authorization,
     })).rejects.toThrow(/too long/);
     await expect(cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
-      confirmed: false, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'Wrong shift', confirmed: false,
+      authorization: authorisedActor.authorization,
     })).rejects.toThrow(/not confirmed/);
+    const rollbackKey = nextKey();
+    cancellationAudit.failNext = true;
+    try {
+      await expect(cancelConfirmation(tenant.client, {
+        requestKey: rollbackKey, confirmationNumber: number?.confirmation_number ?? '',
+        reason: 'Audit failure rollback', confirmed: true,
+        authorization: authorisedActor.authorization,
+      })).rejects.toThrow(/The cancellation was not recorded/);
+    } finally {
+      cancellationAudit.failNext = false;
+    }
+    expect(await counts(orderNumber)).toEqual(before);
     const requestKey = nextKey();
     const cancelled = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey, confirmationNumber: number?.confirmation_number ?? '',
-      reason: 'Wrong shift', confirmed: true, capabilities: AUTH,
+      requestKey, confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'Wrong shift', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     expect(cancelled.written).toBe(true);
     expect(cancelled.replayed).toBe(false);
     expect(cancelled.movementsPosted).toBe(0);
     expect(cancelled.orderStatus).toBe('RELEASED');
     const again = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey, confirmationNumber: number?.confirmation_number ?? '',
-      reason: 'Wrong shift', confirmed: true, capabilities: AUTH,
+      requestKey, confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'Wrong shift', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     expect(again.cancellationNumber).toBe(cancelled.cancellationNumber);
     expect(again.replayed).toBe(true);
     await expect(cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey, confirmationNumber: number?.confirmation_number ?? '',
-      reason: 'Different', confirmed: true, capabilities: AUTH,
+      requestKey, confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'Different', confirmed: true,
+      authorization: authorisedActor.authorization,
     })).rejects.toThrow(/different details/);
     await expect(cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
-      confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: number?.confirmation_number ?? '',
+      reason: 'Wrong shift', confirmed: true,
+      authorization: authorisedActor.authorization,
     })).rejects.toThrow(/already cancelled/);
     const afterRow = await withTenant(tenant.client, async (tx) => {
       const found = await tx.execute(sql`
@@ -309,6 +395,14 @@ describe('CO13 cancel confirmation', () => {
       planned: 0,
       status: 'RELEASED',
     });
+    const cancellationRecord = await withTenant(tenant.client, async (tx) => {
+      const found = await tx.execute(sql`
+        select reason, created_by from production_confirmation_cancellation
+         where client = ${tenant.client} and cancellation_number = ${cancelled.cancellationNumber}
+      `) as unknown as Array<{ reason: string; created_by: string }>;
+      return found[0];
+    });
+    expect(cancellationRecord).toEqual({ reason: 'Wrong shift', created_by: authorisedActor.username });
     const audit = await withTenant(tenant.client, async (tx) => {
       const found = await tx.execute(sql`
         select change_type, transaction_code from change_document
@@ -334,8 +428,9 @@ describe('CO13 cancel confirmation', () => {
     const blocked = await loadTimeTicket(tenant.client, { orderNumber, postingDate: '2026-10-24' });
     expect(blocked.operations[0]?.finallyConfirmed).toBe(true);
     const cancelled = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: finalTicket.confirmationNumber,
-      confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: finalTicket.confirmationNumber,
+      reason: 'Correction', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     const opened = await loadTimeTicket(tenant.client, { orderNumber, postingDate: '2026-10-24' });
     expect(opened.operations[0]?.finallyConfirmed).toBe(false);
@@ -374,8 +469,9 @@ describe('CO13 cancel confirmation', () => {
       confirmationType: 'PARTIAL', yieldQuantity: '1', postingDate: '2026-10-24', expectedVersion: header.version,
     })).rejects.toThrow(/No operation can be confirmed/);
     const cancelled = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
-      confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
+      reason: 'Header correction', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     expect(cancelled.orderStatus).toBe('RELEASED');
     const progress = await loadTimeTicket(tenant.client, { orderNumber: header.orderNumber, postingDate: '2026-10-24' });
@@ -408,11 +504,13 @@ describe('CO13 cancel confirmation', () => {
     });
     const results = await Promise.allSettled([
       cancelConfirmation(tenant.client, {
-        requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: posted.confirmationNumber, confirmed: true, capabilities: AUTH,
-      }),
+        requestKey: nextKey(), confirmationNumber: posted.confirmationNumber, reason: 'Race correction', confirmed: true,
+      authorization: authorisedActor.authorization,
+    }),
       cancelConfirmation(tenant.client, {
-        requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: posted.confirmationNumber, confirmed: true, capabilities: AUTH,
-      }),
+        requestKey: nextKey(), confirmationNumber: posted.confirmationNumber, reason: 'Race correction', confirmed: true,
+      authorization: authorisedActor.authorization,
+    }),
     ]);
     expect(results.filter((row) => row.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter((row) => row.status === 'rejected').map((row) => String((row as PromiseRejectedResult).reason))).toEqual([
@@ -438,7 +536,8 @@ describe('CO13 cancel confirmation', () => {
     expect(winners).toHaveLength(1);
     const winner = winners[0]?.status === 'fulfilled' ? winners[0].value.confirmationNumber : '';
     await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: winner, confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: winner, reason: 'Final correction', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     const secondWave = await Promise.allSettled([
       enterTimeTicket(tenant.client, {
@@ -503,7 +602,8 @@ describe('CO13 cancel confirmation', () => {
     const standing = raced[0]?.status === 'fulfilled' ? 'CNFRAW000001' : 'CNFRAW000002';
     await expect(cloneFinal('CNFRAW000003', 'raw-c')).rejects.toThrow(/active final confirmation already stands/);
     await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: standing, confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: standing, reason: 'Raw final correction', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     await cloneFinal('CNFRAW000004', 'raw-d');
     await expect(withTenant(tenant.client, async (tx) => {
@@ -526,8 +626,9 @@ describe('CO13 cancel confirmation', () => {
       expectedVersion: completed.order.version,
     });
     const cancelled = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
-      reason: 'Late completion', confirmed: true, capabilities: AUTH,
+      requestKey: nextKey(), confirmationNumber: posted.confirmationNumber,
+      reason: 'Late completion', confirmed: true,
+      authorization: authorisedActor.authorization,
     });
     expect(cancelled.orderStatus).toBe('TECHNICALLY_COMPLETED');
     expect(cancelled.movementsPosted).toBe(0);

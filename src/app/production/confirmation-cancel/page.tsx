@@ -33,7 +33,7 @@ export default async function ConfirmationCancelPage({
       loaded = await loadConfirmationCancellation(session.user.client, {
         confirmationNumber,
         orderNumber,
-        capabilities: session.user.capabilities,
+        authorization: { userId: session.user.userId, sessionId: session.sessionId ?? '' },
       });
     } catch (error) {
       openError = error instanceof ConfirmationCancelError ? error.message : 'The confirmation could not be read.';

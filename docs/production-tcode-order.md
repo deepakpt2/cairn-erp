@@ -47,6 +47,9 @@ Do not rebuild these.
   through the MIGO services. `CO13` cancels the confirmation and refuses while a document it caused still stands.
   `CO15` confirms the order header and posts no movement. The time ticket is `PROD.CONFIRM.ENTER` at
   `/production/time-ticket`.
+- **Next missing PP confirmation transaction: `CO14` (display one confirmation).** Confirmation values can be
+  found in the order information and ticket flows, but there is no dedicated single-confirmation display route;
+  CO13 is a separate cancellation workflow and must not be duplicated or broadened into CO14.
 - The two marks live on the material's plant view, on the MRP screen. A material carries neither mark by default,
   so a confirmation posts no movement until someone maintains it there. No order type, scheduling profile, or
   confirmation profile overrides that decision.

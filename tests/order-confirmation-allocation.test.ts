@@ -17,10 +17,10 @@ import { changeRouting, createRouting, getRouting, saveRoutingControlKey, saveRo
 import { enterTimeTicket, loadTimeTicket } from '../src/modules/production/time-ticket';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
 
 const ACTOR = 'CO15_ALLOC';
 const PLANT = '1000';
-const AUTH = ['PROD.CONFIRM.CANCEL'] as const;
 
 describe('operation effect allocation', () => {
   it('scales a stored operation quantity without rounding or inventing a split', () => {
@@ -32,11 +32,15 @@ describe('operation effect allocation', () => {
 
 describe('CO15 allocation and progress', () => {
   let tenant: TestTenant;
+  let cancellationActor!: ConfirmationCancelTestActor;
   let key = 0;
   const nextKey = () => `alloc-${++key}`;
 
   beforeAll(async () => {
     tenant = await createTenant('co15-alloc');
+    cancellationActor = await createConfirmationCancelTestActor(tenant.client, {
+      username: 'CO15_CO13_AUTHORIZED', companyScopes: ['1000'], plantScopes: [PLANT],
+    });
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODORDER', subObject: '*', prefix: 'PRD', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client: tenant.client, objectCode: 'PRODCONF', subObject: '*', prefix: 'CNF', numberLength: 7, createdBy: ACTOR });
@@ -287,12 +291,12 @@ describe('CO15 allocation and progress', () => {
     })).rejects.toThrow(/No operation can be confirmed/);
     const cancelKey = nextKey();
     const cancelled = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: cancelKey, confirmationNumber: posted.confirmationNumber,
-      confirmed: true, capabilities: AUTH,
+      requestKey: cancelKey, confirmationNumber: posted.confirmationNumber,
+      reason: 'Wrong header result', confirmed: true, authorization: cancellationActor.authorization,
     });
     const replay = await cancelConfirmation(tenant.client, {
-      requestedBy: ACTOR, requestKey: cancelKey, confirmationNumber: posted.confirmationNumber,
-      confirmed: true, capabilities: AUTH,
+      requestKey: cancelKey, confirmationNumber: posted.confirmationNumber,
+      reason: 'Wrong header result', confirmed: true, authorization: cancellationActor.authorization,
     });
     expect(replay.cancellationNumber).toBe(cancelled.cancellationNumber);
     const after = await getProductionOrderDisplay(tenant.client, order.orderNumber);

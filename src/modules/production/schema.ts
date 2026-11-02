@@ -1017,6 +1017,7 @@ export const productionConfirmationCancellation = pgTable('production_confirmati
     name: 'production_confirmation_cancellation_order_fk',
   }).onDelete('restrict'),
   check('production_confirmation_cancellation_reason_ck', sql`${t.reason} is null or char_length(btrim(${t.reason})) between 1 and 200`),
+  check('production_confirmation_cancellation_reason_required_ck', sql`${t.reason} is not null and ${t.reason} ~ '[^[:space:]]' and char_length(${t.reason}) between 1 and 200`),
   index('production_confirmation_cancellation_order_idx').on(t.client, t.orderNumber),
 ]);
 

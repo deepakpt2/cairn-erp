@@ -10,6 +10,7 @@ describe('CO13 screen and migration contract', () => {
   const service = read('src/modules/production/confirmation-cancel.ts');
   const migration = read('drizzle/9172_co13_confirmation_cancel.sql');
   const guard = read('drizzle/9173_co13_cancellation_guard.sql');
+  const reasonMigration = read('drizzle/9210_co13_cancellation_reason_required.sql');
   const display = read('src/app/production/production-order-display/page.tsx');
   const ticket = read('src/app/production/time-ticket/TimeTicketWorkbench.tsx');
 
@@ -20,7 +21,15 @@ describe('CO13 screen and migration contract', () => {
     expect(page).toContain('data-co13-gaps');
     expect(page).toContain('>Load<');
     expect(form).toContain('name="confirmCancel"');
-    expect(form).toContain('name="reason"');
+    expect(form).toContain('name="reason" required');
+    expect(form).toContain('Cancellation reason (required)');
+    expect(service).toContain('function reasonOf');
+    expect(service).toContain("if (!reason) fail('A cancellation reason is required.'");
+    expect(service).toContain('reason: string | null;');
+    expect(service).toContain('sameReason(byRequest[0].reason == null ? null : String(byRequest[0].reason), reason)');
+    expect(service.indexOf('const byRequest = await rows')).toBeLessThan(
+      service.indexOf("if (!reason) fail('A cancellation reason is required.'"),
+    );
     expect(form).not.toContain('name="yieldQuantity"');
     expect(form).not.toContain('name="postingDate"');
     expect(form).not.toContain('name="orderStatus"');
@@ -30,6 +39,18 @@ describe('CO13 screen and migration contract', () => {
     expect(display).toContain('cancellationNumber');
     expect(display).not.toContain('cancelConfirmationAction');
     expect(ticket).toContain('cancellationNote');
+  });
+
+  it('rechecks the live user, session, capability, and Company Code/Plant scope in the tenant transaction', () => {
+    const actions = read('src/app/production/confirmation-cancel/actions.ts');
+    expect(service).toContain('requireCancellationAuthorityInTx');
+    expect(service).toContain('loadCapabilities(tx, client, authorization.userId)');
+    expect(service).toContain('loadOrgRestrictions(tx, client, authorization.userId)');
+    expect(service).toContain("hasOrgAccess(restrictions, 'COMPANY_CODE', companyCode)");
+    expect(service).toContain("hasOrgAccess(restrictions, 'PLANT', String(plant.plant))");
+    expect(service).toContain('withTenant(client, async (tx)');
+    expect(page).toContain('sessionId: session.sessionId ??');
+    expect(actions).toContain('sessionId: session.sessionId ??');
   });
 
   it('shows a successful cancellation immediately and does not treat a failure as success', () => {
@@ -72,5 +93,10 @@ describe('CO13 screen and migration contract', () => {
     expect(migration).not.toContain('material_document');
     expect(guard).toContain('REVOKE UPDATE, DELETE ON production_confirmation_cancellation FROM cairn_app');
     expect(guard).toContain("IF TG_TABLE_NAME = 'production_confirmation' THEN");
+    expect(reasonMigration).toContain('production_confirmation_cancellation_reason_required_ck');
+    expect(reasonMigration).toContain('NOT VALID');
+    expect(reasonMigration).toContain('reason IS NOT NULL');
+    expect(reasonMigration).toContain("reason ~ '[^[:space:]]'");
+    expect(reasonMigration).toContain('char_length(reason) BETWEEN 1 AND 200');
   });
 });
