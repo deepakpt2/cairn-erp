@@ -155,6 +155,8 @@ export interface GoodsIssueLineInput {
   materialNumber: string;
   plant: string;
   storageLocation?: string;
+  /** EXPLICIT freezes the source document's resolved location; omitted retains screen defaults. */
+  storageLocationMode?: 'EXPLICIT';
   quantity: number;
   costCenter?: string;
   reservationNumber?: string;
@@ -314,7 +316,13 @@ async function existingByRequestKey(tx: Tx, client: string, requestKey: string) 
 
 async function toView(
   tx: Tx, client: string, header: typeof materialDocument.$inferSelect,
-  prepared: Array<{ line?: GoodsIssueLineInput; reservationOpenAfter?: string | null }> = [],
+  prepared: Array<{
+    line?: GoodsIssueLineInput;
+    reservationOpenAfter?: string | null;
+    productionOrderNumber?: string | null;
+    productionOrderItem?: number | null;
+    orderOpenAfter?: string | null;
+  }> = [],
 ): Promise<GoodsIssueView> {
   const lines = await tx.select().from(materialDocumentLine).where(and(
     eq(materialDocumentLine.client, client),
@@ -471,6 +479,9 @@ export async function postGoodsIssue(
       line.productionOrderNumber ?? '', line.productionOrderItem ?? '',
       (line.batch ?? '').trim().toUpperCase(),
     ].join(':')).sort(),
+    // Preserve the historical fingerprint for normal screen defaults. An explicit snapshot
+    // is a distinct posting request even if its current location text happens to match.
+    ...(input.lines.some((line) => line.storageLocationMode === 'EXPLICIT') ? ['EXPLICIT_STORAGE_LOCATION'] : []),
   ]);
 
   const run = async (tx: Tx): Promise<GoodsIssueView> => {
@@ -552,6 +563,8 @@ export async function postGoodsIssue(
       line: GoodsIssueLineInput;
       materialNumber: string;
       storageLocation: string | null;
+      entryQuantity: number;
+      entryUnit: string;
       quantity: number;
       unit: string;
       value: number;
@@ -719,8 +732,8 @@ export async function postGoodsIssue(
           client: input.client,
           plant: line.plant,
           typed: line.storageLocation,
-          documentDefault: documentLocation,
-          applyPlantDefault: true,
+          documentDefault: line.storageLocationMode === 'EXPLICIT' ? undefined : documentLocation,
+          applyPlantDefault: line.storageLocationMode !== 'EXPLICIT',
           required,
           verb: 'Issue from',
         });
@@ -877,7 +890,7 @@ export async function postGoodsIssue(
 
     const journalLines: Array<{
       glAccount: string; debitCredit: 'S' | 'H'; amount: string;
-      costCenter?: string; material?: string; plant?: string;
+      costCenter?: string; productionOrder?: string; material?: string; plant?: string;
     }> = [];
     for (const p of prepared) {
       const cacheKey = `${p.valuation.valuationClass}`;

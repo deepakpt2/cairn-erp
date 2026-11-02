@@ -77,7 +77,11 @@ function requireDate(value: string, what: string) {
 export interface ProductionReceiptLineInput {
   /** The receiving storage location; the plant is the order's own. */
   storageLocation?: string;
+  /** EXPLICIT freezes a source document's resolved location; omitted retains the plant default. */
+  storageLocationMode?: 'EXPLICIT';
   quantity: number;
+  /** Original typed quantity for the material-document line when an entry unit is supplied. */
+  entryQuantity?: number;
   entryUnit?: string;
   /** Required when the material is batch-managed. The batch must already stand. */
   batch?: string;
@@ -92,6 +96,8 @@ export interface PostProductionReceiptInput {
   headerText?: string;
   lines: ProductionReceiptLineInput[];
   requestKey: string;
+  /** Optional source-time batch snapshot. Empty is meaningful and does not inherit a later order batch. */
+  orderBatchNumber?: string;
 }
 
 export interface ProductionReceiptLineView {
@@ -270,6 +276,9 @@ export async function postProductionReceipt(
       const batch = (line.batch ?? '').trim().toUpperCase();
       return batch ? `${token}:${batch}` : token;
     }),
+    // Keep the pre-existing fingerprint unchanged for ordinary MIGO callers.
+    ...(input.lines.some((line) => line.storageLocationMode === 'EXPLICIT') ? ['EXPLICIT_STORAGE_LOCATION'] : []),
+    ...(input.orderBatchNumber !== undefined ? ['SOURCE_ORDER_BATCH', input.orderBatchNumber] : []),
   ]);
 
   const run = async (tx: Tx): Promise<ProductionReceiptView> => {
@@ -318,6 +327,9 @@ export async function postProductionReceipt(
 
     const materialNumber = order.materialNumber;
     const plant = order.plant;
+    // A persisted CO11N intent may supply the source-time order-batch snapshot, including
+    // an intentional blank. Ordinary MIGO calls continue to read the current order value.
+    const orderBatchNumber = input.orderBatchNumber !== undefined ? input.orderBatchNumber : order.batchNumber;
 
     // SCR-144: the order states its unit; a receipt entered in another unit converts to it
     // before the order's expectation is measured. A unit with no conversion is refused by name.
@@ -383,7 +395,7 @@ export async function postProductionReceipt(
         client: input.client,
         plant,
         typed: input.lines[0]?.storageLocation,
-        applyPlantDefault: true,
+        applyPlantDefault: input.lines[0]?.storageLocationMode !== 'EXPLICIT',
         required,
         verb: 'Receive into',
       });
@@ -396,7 +408,7 @@ export async function postProductionReceipt(
     try {
       await assertInventoryCountOpen(tx, input.client, {
         materialNumber, plant, storageLocation: location || null,
-        batch: input.lines.map((line) => (line.batch ?? '').trim()).find(Boolean) || order.batchNumber,
+        batch: input.lines.map((line) => (line.batch ?? '').trim()).find(Boolean) ?? orderBatchNumber,
       });
     } catch (caught) {
       if (caught instanceof PhysicalInventoryError) {
@@ -505,7 +517,7 @@ export async function postProductionReceipt(
     try {
       postingBatch = await resolvePostingBatch(tx, {
         client: input.client, materialNumber, plant,
-        batch: typedBatches[0] || order.batchNumber, postingDate: input.postingDate,
+        batch: typedBatches[0] ?? orderBatchNumber, postingDate: input.postingDate,
       });
     } catch (caught) {
       if (caught instanceof BatchPostingError) throw new ProductionReceiptError(caught.message, caught.remedy);

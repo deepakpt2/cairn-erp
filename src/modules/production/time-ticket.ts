@@ -32,11 +32,7 @@ import { acquireLock } from '../../platform/lock';
 import { allocateNumber } from '../../platform/numbering';
 import { toScaled } from '../../platform/posting/decimal';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
-import { postGoodsIssue } from '../inventory/goods-issue';
-import { postProductionReceipt } from '../inventory/production-receipt';
 import {
-  CONFIRMATION_MOVEMENT_CODES,
-  movementRequestKey,
   movementConfiguration,
   planConfirmationMovements,
   plannedMovements,
@@ -44,6 +40,14 @@ import {
   type ConfirmationMovement,
   type MovementPlan,
 } from './confirmation-movements';
+import {
+  confirmationMovementOutcomes,
+  MovementFailurePersistenceError,
+  persistConfirmationMovementIntents,
+  processPendingConfirmationMovements,
+  waitForConfirmationMovementSettlement,
+  type ProductionGoodsMovementFailureSummary,
+} from './production-goods-movement-failures';
 
 export type { ConfirmationMovement } from './confirmation-movements';
 
@@ -188,6 +192,8 @@ export interface TimeTicketView {
    */
   movementPlan: TimeTicketMovementPlan | null;
   movementsPosted: number;
+  /** Durable CO11N intents and their current outcomes; no COGI route is exposed here. */
+  movementFailures: ProductionGoodsMovementFailureSummary[];
   movementNote: string;
   written: boolean;
   /** True when this request had already been saved. Nothing new was written. */
@@ -738,6 +744,7 @@ function viewOf(number: string, requestKey: string, prepared: Prepared, written:
       note: prepared.movements.note,
     },
     movementsPosted: 0,
+    movementFailures: [],
     movementNote: prepared.movements.note,
     written,
     replayed: false,
@@ -770,6 +777,8 @@ async function storedView(
   const status = parseProductionOrderStatus(header.status);
   if (!status) fail(`Status ${String(header.status)} is not a production-order status.`, 'The stored status is unsupported. It was not treated as created.');
   const movements = await postedMovements(tx, client, String(header.request_key));
+  const movementFailures = (await confirmationMovementOutcomes(tx, client, String(header.confirmation_number)))
+    .filter((failure) => failure.status !== 'POSTED');
   return {
     confirmationNumber: String(header.confirmation_number),
     orderNumber: String(header.order_number),
@@ -798,7 +807,8 @@ async function storedView(
     movements,
     movementPlan: null,
     movementsPosted: movements.filter((row) => row.posted).length,
-    movementNote: movementNoteFor(movements),
+    movementFailures,
+    movementNote: movementNoteFor(movements, movementFailures),
     written: true,
     replayed,
   };
@@ -809,15 +819,35 @@ async function storedView(
  * caused. A document reversed on the goods-movement screen is reported as not standing, so
  * a confirmation read back after that reversal does not claim a movement that is gone.
  */
-function movementNoteFor(movements: ConfirmationMovement[]): string {
+function movementNoteFor(
+  movements: ConfirmationMovement[],
+  failures: ProductionGoodsMovementFailureSummary[] = [],
+): string {
   const posted = movements.filter((row) => row.posted);
-  if (!posted.length) return 'No goods movement was caused by this confirmation.';
   const standing = posted.filter((row) => row.standing);
   const numbers = [...new Set(posted.map((row) => row.materialDocumentNumber))].join(' and ');
   const kinds = [...new Set(posted.map((row) => row.kind === 'ISSUE' ? 'issue' : 'receipt'))].join(' and ');
-  if (!standing.length) return `The ${kinds} material document ${numbers} posted with this confirmation was reversed. Stock is not changed by reading this confirmation.`;
-  const suffix = standing.length === posted.length ? '' : ' A reversal stands among them.';
-  return `The ${kinds} material document ${numbers} was posted with this confirmation.${suffix}`;
+  const postedText = !posted.length
+    ? ''
+    : !standing.length
+      ? `The ${kinds} material document ${numbers} posted with this confirmation was reversed.`
+      : `The ${kinds} material document ${numbers} was posted with this confirmation.${standing.length === posted.length ? '' : ' A reversal stands among them.'}`;
+  if (!failures.length) {
+    if (!postedText) return 'No goods movement was caused by this confirmation.';
+    return `${postedText} Stock is not changed by reading this confirmation.`;
+  }
+
+  const outcomes = failures.map((failure) => {
+    const kind = failure.movementKind === 'ISSUE' ? 'Goods issue' : 'Goods receipt';
+    if (failure.status === 'POSTED') return `${kind} was posted as material document ${failure.materialDocumentNumber}.`;
+    if (failure.status === 'PROCESSING') return `${kind} is being processed under durable recovery ownership.`;
+    if (failure.status === 'PENDING') return `${kind} is durably queued for its first posting attempt.`;
+    const state = failure.status === 'BLOCKED' ? 'blocked' : 'failed';
+    const code = failure.failureCode ? ` (${failure.failureCode})` : '';
+    const detail = failure.errorText ? ` ${failure.errorText}` : '';
+    return `${kind}${code} ${state}; attempt ${failure.attemptCount} is retained for recovery.${detail}`;
+  });
+  return [postedText, ...outcomes].filter(Boolean).join(' ');
 }
 
 function matches(stored: TimeTicketView, prepared: Prepared): boolean {
@@ -889,7 +919,12 @@ export async function enterTimeTicket(client: string, input: {
   const orderNumber = clean(input.orderNumber).toUpperCase();
   const operationNumber = clean(input.operationNumber).toUpperCase();
   if (!/^[A-Z0-9]{4}$/.test(operationNumber)) fail('The operation number is not an operation.', 'Enter the four-character operation from the overview.');
-  return withTenant(client, async (tx) => {
+
+  let confirmationNumber = '';
+  let replayed = false;
+  await withTenant(client, async (tx) => {
+    // This transaction owns only confirmation persistence and its durable movement intents.
+    // No stock, valuation, reservation, journal or material-document posting happens here.
     await acquireLock(tx, { objectCode: TIME_TICKET_LOCK, keys: [client, orderNumber] }, {
       client, requestedBy: input.requestedBy, transactionCode: TIME_TICKET_ALIAS,
     });
@@ -907,12 +942,14 @@ export async function enterTimeTicket(client: string, input: {
       if (!matches(stored, prepared)) {
         fail('This request was already saved with different quantities. The posted confirmation was not changed.', 'Use a new request. Cancellation is not this screen.');
       }
-      return stored;
+      confirmationNumber = stored.confirmationNumber;
+      replayed = true;
+      return;
     }
+
     const prepared = await prepare(tx, client, { ...input, orderNumber, operationNumber, confirmFinal: input.confirmFinal });
     const allocated = await allocateNumber(tx, { client, objectCode: 'PRODCONF', allocatedBy: input.requestedBy });
-    const confirmationNumber = allocated.display;
-    // sequence is the standard-sequence identity 000000. Execution order is not stored on the confirmation.
+    confirmationNumber = allocated.display;
     await tx.execute(sql`
       insert into production_confirmation (
         client, confirmation_number, order_number, operation_number, sequence, task_list_type, routing_group,
@@ -939,52 +976,18 @@ export async function enterTimeTicket(client: string, input: {
         )
       `);
     }
-    // The movements, inside the transaction that inserted the confirmation and before its
-    // change document. Each kind carries its own request key, derived from this one, so the
-    // two documents are distinct, replay finds both, and neither can be posted twice. Every
-    // rule the goods-movement screen enforces — the open amount on the order, the period,
-    // stock, a batch, the component and plant, the order status, a locked inventory count —
-    // applies unchanged, and its refusal aborts the confirmation with it.
-    const documents: string[] = [];
-    // A request key is required above, so a derived key always exists. The guard is the
-    // type's, not a rule: no movement is ever posted under an empty key.
-    const issueKey = movementRequestKey(requestKey, 'ISSUE');
-    if (prepared.movements.issues.length && issueKey) {
-      const issued = await postGoodsIssue({
-        client,
-        changedBy: input.requestedBy,
-        movementTypeCode: CONFIRMATION_MOVEMENT_CODES.issue,
-        postingDate: prepared.postingDate,
-        documentDate: prepared.postingDate,
-        headerText: `CO11N ${confirmationNumber}`.slice(0, 25),
-        requestKey: issueKey,
-        lines: prepared.movements.issues.map((line) => ({
-          materialNumber: line.materialNumber,
-          plant: line.plant,
-          storageLocation: line.storageLocation ?? undefined,
-          // Held in the material's base unit, which is what the service measures an order
-          // line in. No entry unit is claimed, so no conversion is invented here.
-          quantity: Number(line.quantity),
-          productionOrderNumber: orderNumber,
-          productionOrderItem: line.itemNumber,
-        })),
-      }, 'MIGO', { tx });
-      documents.push(issued.materialDocumentNumber);
-    }
-    const receiptKey = movementRequestKey(requestKey, 'RECEIPT');
-    if (prepared.movements.receipt && receiptKey) {
-      const received = await postProductionReceipt({
-        client,
-        changedBy: input.requestedBy,
-        orderNumber,
-        postingDate: prepared.postingDate,
-        documentDate: prepared.postingDate,
-        headerText: `CO11N ${confirmationNumber}`.slice(0, 25),
-        requestKey: receiptKey,
-        lines: [{ quantity: Number(prepared.movements.receipt.quantity) }],
-      }, { tx });
-      documents.push(received.materialDocumentNumber);
-    }
+
+    const movementIntentIds = await persistConfirmationMovementIntents(tx, {
+      client,
+      changedBy: input.requestedBy,
+      confirmationNumber,
+      confirmationRequestKey: requestKey,
+      orderNumber,
+      operationNumber,
+      plant: prepared.header.plant,
+      postingDate: prepared.postingDate,
+      movementPlan: prepared.movements,
+    });
     await recordChange(tx, {
       client,
       objectClass: 'production_confirmation',
@@ -1001,13 +1004,30 @@ export async function enterTimeTicket(client: string, input: {
         scrapQuantity: prepared.scrapQuantity,
         reworkQuantity: prepared.reworkQuantity,
         postingDate: prepared.postingDate,
-        goodsMovementDocuments: documents,
+        goodsMovementIntents: movementIntentIds,
       },
     });
-    const stored = await storedView(tx, client, confirmationNumber);
-    if (!stored) fail('The confirmation was not saved.');
-    return stored;
   });
+
+  if (!confirmationNumber) fail('The confirmation was not saved.');
+  try {
+    // Each intent gets its own transaction. On a posting exception that transaction has
+    // already rolled back before the failure record is updated in a separate transaction.
+    // A replay resumes only durable PENDING/expired work; FAILED records need an explicit
+    // recovery call and are never retried merely because CO11N was submitted twice.
+    await processPendingConfirmationMovements({
+      client,
+      confirmationNumber,
+      attemptedBy: input.requestedBy,
+    });
+    await waitForConfirmationMovementSettlement({ client, confirmationNumber });
+    const stored = await withTenant(client, (tx) => storedView(tx, client, confirmationNumber, replayed));
+    if (!stored) fail('The confirmation was saved but could not be read back.');
+    return stored;
+  } catch (error) {
+    if (error instanceof MovementFailurePersistenceError) throw error;
+    throw new MovementFailurePersistenceError(confirmationNumber, error);
+  }
 }
 
 export async function getTimeTicket(client: string, confirmationNumber: string): Promise<TimeTicketView | null> {

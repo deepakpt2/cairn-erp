@@ -1,10 +1,10 @@
 /** Total planning — SCR-166 / MD01. A run is evidence. It is not stock and not a requisition. */
-import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, smallint, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, smallint, text, jsonb, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { factoryCalendar, plant, storageLocation, settlementProfile } from '../foundation/schema';
-import { material, materialPlant, productionOrder } from '../inventory/schema';
+import { material, materialPlant, materialDocument, productionOrder } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 const quantity = (name: string) => numeric(name, { precision: 23, scale: 3 }).notNull();
@@ -1367,4 +1367,170 @@ export const productionOrderSetttlementDistributionRule = pgTable('production_or
   check('production_order_settlement_distribution_rule_percentage_ck', sql`${t.percentage} is null or (${t.percentage} > 0 and ${t.percentage} <= 100)`),
   check('production_order_settlement_distribution_rule_equivalence_ck', sql`${t.equivalence} is null or ${t.equivalence} > 0`),
   check('production_order_settlement_distribution_rule_amount_ck', sql`${t.amount} is null or ${t.amount} > 0`),
+]);
+
+/**
+ * CO11N automatic goods-movement work item. The row is inserted with the
+ * confirmation, before any movement transaction starts. A successful posting
+ * transitions it to POSTED; a refused posting is rolled back first, then this
+ * row and its attempt are durably marked FAILED. The table is persistence only:
+ * it is not a user-facing COGI transaction.
+ */
+export const productionGoodsMovementFailure = pgTable('production_goods_movement_failure', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  sourceTransaction: varchar('source_transaction', { length: 8 }).notNull().default('CO11N'),
+  sourceDocumentClass: varchar('source_document_class', { length: 48 }).notNull().default('production_confirmation'),
+  sourceDocumentNumber: varchar('source_document_number', { length: 12 }).notNull(),
+  confirmationNumber: varchar('confirmation_number', { length: 12 }).notNull(),
+  confirmationRequestKey: varchar('confirmation_request_key', { length: 64 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  operationNumber: varchar('operation_number', { length: 4 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  movementKind: varchar('movement_kind', { length: 8 }).notNull(),
+  /** Cairn movement type, not SAP's displayed numeric alias. */
+  movementType: varchar('movement_type', { length: 20 }).notNull(),
+  postingDate: date('posting_date', { mode: 'string' }).notNull(),
+  documentDate: date('document_date', { mode: 'string' }).notNull(),
+  headerText: varchar('header_text', { length: 25 }).notNull(),
+  /** The request key passed unchanged to the goods-movement posting service. */
+  originalRequestKey: varchar('original_request_key', { length: 64 }).notNull(),
+  /** SHA-256 of the complete immutable request payload stored below. */
+  idempotencyFingerprint: varchar('idempotency_fingerprint', { length: 64 }).notNull(),
+  originalPayload: jsonb('original_payload').$type<Record<string, unknown>>().notNull(),
+  /** PENDING | PROCESSING | FAILED | BLOCKED | POSTED. */
+  status: varchar('status', { length: 16 }).notNull().default('PENDING'),
+  failureCode: varchar('failure_code', { length: 64 }),
+  errorText: text('error_text'),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  nextRetryAt: timestamp('next_retry_at', { withTimezone: true }),
+  processingToken: varchar('processing_token', { length: 36 }),
+  processingLeaseExpiresAt: timestamp('processing_lease_expires_at', { withTimezone: true }),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }),
+  documentYear: integer('document_year'),
+  ...auditColumns,
+}, (t) => [
+  unique('production_gm_failure_client_id_uq').on(t.client, t.id),
+  unique('production_gm_failure_client_id_plant_uq').on(t.client, t.id, t.plant),
+  unique('production_gm_failure_request_uq').on(t.client, t.originalRequestKey),
+  unique('production_gm_failure_confirmation_kind_uq').on(t.client, t.confirmationNumber, t.movementKind),
+  foreignKey({
+    columns: [t.client, t.sourceDocumentNumber],
+    foreignColumns: [productionConfirmation.client, productionConfirmation.confirmationNumber],
+    name: 'production_gm_failure_source_confirmation_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.confirmationNumber],
+    foreignColumns: [productionConfirmation.client, productionConfirmation.confirmationNumber],
+    name: 'production_gm_failure_confirmation_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_gm_failure_order_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant],
+    foreignColumns: [plant.client, plant.plant],
+    name: 'production_gm_failure_plant_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.materialDocumentNumber],
+    foreignColumns: [materialDocument.client, materialDocument.materialDocumentNumber],
+    name: 'production_gm_failure_document_fk',
+  }).onDelete('restrict'),
+  check('production_gm_failure_source_ck', sql`${t.sourceTransaction} = 'CO11N' and ${t.sourceDocumentClass} = 'production_confirmation'`),
+  check('production_gm_failure_source_key_ck', sql`${t.sourceDocumentNumber} = ${t.confirmationNumber}`),
+  check('production_gm_failure_operation_ck', sql`${t.operationNumber} ~ '^[A-Z0-9]{4}$'`),
+  check('production_gm_failure_movement_ck', sql`(${t.movementKind} = 'ISSUE' and ${t.movementType} = 'PROD_ISSUE_ORDER') or (${t.movementKind} = 'RECEIPT' and ${t.movementType} = 'PROD_RECEIPT_ORDER')`),
+  check('production_gm_failure_status_ck', sql`${t.status} in ('PENDING', 'PROCESSING', 'FAILED', 'BLOCKED', 'POSTED')`),
+  check('production_gm_failure_payload_ck', sql`jsonb_typeof(${t.originalPayload}) = 'object'`),
+  check('production_gm_failure_fingerprint_ck', sql`${t.idempotencyFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check('production_gm_failure_attempt_count_ck', sql`${t.attemptCount} >= 0 and (${t.status} <> 'PROCESSING' or ${t.attemptCount} > 0)`),
+  check('production_gm_failure_lease_ck', sql`(${t.status} = 'PROCESSING' and ${t.processingToken} is not null and ${t.processingLeaseExpiresAt} is not null) or (${t.status} <> 'PROCESSING' and ${t.processingToken} is null and ${t.processingLeaseExpiresAt} is null)`),
+  check('production_gm_failure_posted_ck', sql`(${t.status} = 'POSTED' and ${t.materialDocumentNumber} is not null and ${t.documentYear} is not null) or (${t.status} <> 'POSTED' and ${t.materialDocumentNumber} is null and ${t.documentYear} is null)`),
+  check('production_gm_failure_error_ck', sql`${t.status} not in ('FAILED', 'BLOCKED') or (${t.failureCode} is not null and ${t.errorText} is not null)`),
+  index('production_gm_failure_queue_idx').on(t.client, t.status, t.nextRetryAt, t.createdAt),
+  index('production_gm_failure_order_idx').on(t.client, t.orderNumber, t.createdAt),
+  index('production_gm_failure_plant_idx').on(t.client, t.plant, t.status, t.createdAt),
+]);
+
+/** Immutable original movement lines, kept separately for searchable context. */
+export const productionGoodsMovementFailureLine = pgTable('production_goods_movement_failure_line', {
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  failureId: varchar('failure_id', { length: 36 }).notNull(),
+  lineNumber: integer('line_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  quantity: numeric('quantity', { precision: 23, scale: 3 }).notNull(),
+  unit: varchar('unit', { length: 10 }).notNull(),
+  storageLocation: varchar('storage_location', { length: 10 }),
+  batchNumber: varchar('batch_number', { length: 40 }).notNull().default(''),
+  specialStockType: varchar('special_stock_type', { length: 4 }),
+  specialStockNumber: varchar('special_stock_number', { length: 40 }),
+  productionOrderItem: integer('production_order_item'),
+  reservationNumber: varchar('reservation_number', { length: 20 }),
+  reservationItem: integer('reservation_item'),
+  originalPayload: jsonb('original_payload').$type<Record<string, unknown>>().notNull(),
+  ...auditColumns,
+}, (t) => [
+  primaryKey({ columns: [t.client, t.failureId, t.lineNumber] }),
+  foreignKey({
+    columns: [t.client, t.failureId, t.plant],
+    foreignColumns: [productionGoodsMovementFailure.client, productionGoodsMovementFailure.id, productionGoodsMovementFailure.plant],
+    name: 'production_gm_failure_line_parent_fk',
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.materialNumber, t.plant],
+    foreignColumns: [materialPlant.client, materialPlant.materialNumber, materialPlant.plant],
+    name: 'production_gm_failure_line_material_plant_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.plant, t.storageLocation],
+    foreignColumns: [storageLocation.client, storageLocation.plant, storageLocation.storageLocation],
+    name: 'production_gm_failure_line_storage_location_fk',
+  }).onDelete('restrict'),
+  check('production_gm_failure_line_number_ck', sql`${t.lineNumber} > 0`),
+  check('production_gm_failure_line_qty_ck', sql`${t.quantity} > 0 and char_length(btrim(${t.unit})) > 0`),
+  check('production_gm_failure_line_reservation_ck', sql`(${t.reservationNumber} is null and ${t.reservationItem} is null) or (${t.reservationNumber} is not null and ${t.reservationItem} is not null)`),
+  check('production_gm_failure_line_special_stock_ck', sql`(${t.specialStockType} is null and ${t.specialStockNumber} is null) or (${t.specialStockType} is not null and ${t.specialStockNumber} is not null)`),
+  check('production_gm_failure_line_payload_ck', sql`jsonb_typeof(${t.originalPayload}) = 'object'`),
+  index('production_gm_failure_line_material_idx').on(t.client, t.materialNumber, t.plant),
+]);
+
+/** One durable row per attempt; PROCESSING rows are completed or explicitly abandoned on lease recovery. */
+export const productionGoodsMovementFailureAttempt = pgTable('production_goods_movement_failure_attempt', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  client: varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' }),
+  failureId: varchar('failure_id', { length: 36 }).notNull(),
+  attemptNumber: integer('attempt_number').notNull(),
+  leaseToken: varchar('lease_token', { length: 36 }).notNull(),
+  attemptedBy: varchar('attempted_by', { length: 60 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('PROCESSING'),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp('finished_at', { withTimezone: true }),
+  failureCode: varchar('failure_code', { length: 64 }),
+  errorText: text('error_text'),
+  materialDocumentNumber: varchar('material_document_number', { length: 20 }),
+  documentYear: integer('document_year'),
+  ...auditColumns,
+}, (t) => [
+  unique('production_gm_failure_attempt_number_uq').on(t.client, t.failureId, t.attemptNumber),
+  foreignKey({
+    columns: [t.client, t.failureId],
+    foreignColumns: [productionGoodsMovementFailure.client, productionGoodsMovementFailure.id],
+    name: 'production_gm_failure_attempt_parent_fk',
+  }).onDelete('cascade'),
+  foreignKey({
+    columns: [t.client, t.materialDocumentNumber],
+    foreignColumns: [materialDocument.client, materialDocument.materialDocumentNumber],
+    name: 'production_gm_failure_attempt_document_fk',
+  }).onDelete('restrict'),
+  check('production_gm_failure_attempt_number_ck', sql`${t.attemptNumber} > 0`),
+  check('production_gm_failure_attempt_status_ck', sql`${t.status} in ('PROCESSING', 'FAILED', 'BLOCKED', 'SUCCEEDED', 'ABANDONED')`),
+  check('production_gm_failure_attempt_finish_ck', sql`(${t.status} = 'PROCESSING' and ${t.finishedAt} is null) or (${t.status} <> 'PROCESSING' and ${t.finishedAt} is not null)`),
+  check('production_gm_failure_attempt_error_ck', sql`${t.status} not in ('FAILED', 'BLOCKED', 'ABANDONED') or (${t.failureCode} is not null and ${t.errorText} is not null)`),
+  check('production_gm_failure_attempt_document_ck', sql`(${t.status} = 'SUCCEEDED' and ${t.materialDocumentNumber} is not null and ${t.documentYear} is not null) or (${t.status} <> 'SUCCEEDED' and ${t.materialDocumentNumber} is null and ${t.documentYear} is null)`),
+  index('production_gm_failure_attempt_history_idx').on(t.client, t.failureId, t.attemptNumber),
 ]);

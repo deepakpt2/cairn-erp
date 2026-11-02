@@ -1,13 +1,13 @@
 'use server';
 
 import { can, requireSession } from '@/platform/auth/current';
-import { GoodsIssueError } from '@/modules/inventory/goods-issue';
-import { ProductionReceiptError } from '@/modules/inventory/production-receipt';
+import { MovementFailurePersistenceError } from '@/modules/production/production-goods-movement-failures';
 import {
   TIME_TICKET_CAPABILITY,
   TIME_TICKET_ROUTE,
   TimeTicketError,
   enterTimeTicket,
+  getTimeTicket,
   previewTimeTicket,
   timeTicketRefusal,
   type TimeTicketView,
@@ -98,28 +98,27 @@ export async function enterTimeTicketAction(
         // only place the user is told that nothing was moved yet.
         ? `The check wrote nothing. ${ticket.movementNote}`
         : ticket.replayed
-          ? `Confirmation ${ticket.confirmationNumber} was already saved for this request. The posted confirmation, its goods movements, and the documents were not changed.`
+          ? `Confirmation ${ticket.confirmationNumber} was already saved for this request. ${ticket.movementNote}`
           : failed
             ? 'The confirmation was not saved.'
             : `Confirmation ${ticket.confirmationNumber} stands. The order status is still ${ticket.orderStatus}. ${ticket.movementNote}`,
     };
   } catch (error) {
-    if (error instanceof TimeTicketError) return { ok: false, message: error.message, remedy: error.remedy };
-    // A movement the confirmation caused is refused inside the same unit of work, so the
-    // confirmation is gone with it. The refusal is stated in the words of the service that
-    // made it, with its remedy, and the user is told the save did not stand.
-    if (error instanceof GoodsIssueError || error instanceof ProductionReceiptError) {
+    if (error instanceof MovementFailurePersistenceError) {
+      const ticket = await getTimeTicket(session.user.client, error.confirmationNumber).catch(() => null);
       return {
         ok: false,
-        message: `${error.message} The confirmation was not saved, because the goods movement it causes was refused.`,
-        remedy: error.remedy,
+        ticket,
+        message: error.message,
+        remedy: 'The confirmation is durable. Do not submit a new request; the saved movement intent is available to a recovery run.',
       };
     }
+    if (error instanceof TimeTicketError) return { ok: false, message: error.message, remedy: error.remedy };
     return {
       ok: false,
       message: error instanceof Error
-        ? `${error.message} Nothing was saved: a confirmation and the goods movements it causes stand or fall together.`
-        : 'The confirmation was not saved.',
+        ? `${error.message} The confirmation transaction did not complete.`
+        : 'The confirmation transaction did not complete.',
     };
   }
 }

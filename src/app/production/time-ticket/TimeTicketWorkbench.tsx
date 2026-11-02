@@ -162,20 +162,20 @@ export default function TimeTicketWorkbench({
             <section className="mt-3 border-t border-line pt-3" aria-label="Goods movements caused by this confirmation" data-co11n-movements>
               <p className="text-sm font-medium">
                 {state.ticket.written
-                  ? 'Goods movements posted with this confirmation'
+                  ? 'Goods movements and recovery status for this confirmation'
                   : 'Goods movements this confirmation would cause'}
               </p>
               <p className="mt-1 text-2xs text-ink-soft" role="status">{state.ticket.movementNote}</p>
               {state.ticket.replayed && (
                 <p className="mt-1 text-2xs" data-co11n-replay>
-                  This request was already saved. The confirmation and the documents it caused were not changed and nothing was posted again.
+                  This request was already saved. Existing documents were not duplicated; eligible pending movements may have resumed.
                 </p>
               )}
-              {state.ticket.movements.length === 0 ? (
+              {state.ticket.movements.length === 0 && state.ticket.movementFailures.length === 0 ? (
                 <p className="mt-1 text-2xs text-ink-soft">
                   No goods movement stands behind this confirmation. Stock was not changed.
                 </p>
-              ) : (
+              ) : state.ticket.movements.length > 0 ? (
                 <table className="mt-1 w-full text-sm">
                   <thead>
                     <tr className="text-left text-ink-faint">
@@ -214,6 +214,21 @@ export default function TimeTicketWorkbench({
                     ))}
                   </tbody>
                 </table>
+              ) : null}
+              {state.ticket.movementFailures.length > 0 && (
+                <ul className="mt-2 space-y-1 text-sm text-red-700" data-co11n-movement-recovery>
+                  {state.ticket.movementFailures.map((failure) => (
+                    <li key={failure.id} data-co11n-recovery-id={failure.id}>
+                      {failure.movementKind === 'ISSUE' ? 'Goods issue' : 'Goods receipt'} {failure.status.toLowerCase()}
+                      {failure.failureCode ? ` (${failure.failureCode})` : ''}; attempt {failure.attemptCount}.
+                      {failure.errorText ? ` ${failure.errorText}` : ''}
+                      {failure.status === 'FAILED' && failure.nextRetryAt
+                        ? ` Eligible for recovery after ${failure.nextRetryAt.toLocaleString()}.`
+                        : ''}
+                      {' '}Recovery record {failure.id}.
+                    </li>
+                  ))}
+                </ul>
               )}
               {state.ticket.movementPlan && state.ticket.movementPlan.skipped.length > 0 && (
                 <ul className="mt-1 space-y-1 text-2xs text-ink-soft" data-co11n-movement-skipped>
@@ -248,7 +263,9 @@ export default function TimeTicketWorkbench({
               {' '}Order {state.ticket.orderNumber}
               {' '}still has status {state.ticket.orderStatus}.
               {' '}{state.ticket.movementsPosted === 0
-                ? 'No goods movement was posted with it.'
+                ? state.ticket.movementFailures.length > 0
+                  ? `${state.ticket.movementFailures.length} movement intent${state.ticket.movementFailures.length === 1 ? '' : 's'} remains in durable recovery.`
+                  : 'No goods movement was posted with it.'
                 : `${state.ticket.movementsPosted} goods-movement line${state.ticket.movementsPosted === 1 ? '' : 's'} posted with it.`}
               {' '}<Link href={`/production/confirmation-cancel?confirmation=${encodeURIComponent(state.ticket.confirmationNumber)}`}>Cancel is CO13</Link>
             </p>

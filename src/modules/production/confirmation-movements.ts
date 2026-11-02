@@ -28,7 +28,7 @@
  * "final issue" sweeps the remainder a partial sequence leaves open, and no order type can
  * switch an automatic receipt on or off.
  */
-import { sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import type { Tx } from '../../platform/db/client';
 import { toScaled } from '../../platform/posting/decimal';
@@ -38,6 +38,11 @@ import {
 import { toBaseQuantity } from '../inventory/unit-conversion';
 import { GOODS_ISSUE_SCENARIOS } from '../inventory/goods-issue';
 import { PRODUCTION_RECEIPT_SCENARIO } from '../inventory/production-receipt';
+import {
+  productionConfirmationCancellation,
+  productionGoodsMovementFailure,
+  productionGoodsMovementFailureLine,
+} from './schema';
 
 export type MovementKind = 'ISSUE' | 'RECEIPT';
 
@@ -181,6 +186,37 @@ export async function planConfirmationMovements(
       `${String(row.item_number)}|${String(row.material_number)}`,
       scaled(text(row.issued_quantity)),
     );
+  }
+  // A confirmation commits its intent before its separate posting transaction begins. Another
+  // CO11N transaction may therefore observe a still-pending issue instead of a material
+  // document. Treat that active immutable quantity as provisionally allocated while planning,
+  // unless CO13 has already cancelled its source. FAILED/BLOCKED intents are not allocations:
+  // their posting transaction left no standing document, and recovery revalidates open quantity.
+  const pendingIssues = await tx.select({
+    itemNumber: productionGoodsMovementFailureLine.productionOrderItem,
+    materialNumber: productionGoodsMovementFailureLine.materialNumber,
+    quantity: sql<string>`coalesce(sum(${productionGoodsMovementFailureLine.quantity}), 0)::text`,
+  }).from(productionGoodsMovementFailureLine)
+    .innerJoin(productionGoodsMovementFailure, and(
+      eq(productionGoodsMovementFailure.client, productionGoodsMovementFailureLine.client),
+      eq(productionGoodsMovementFailure.id, productionGoodsMovementFailureLine.failureId),
+    ))
+    .leftJoin(productionConfirmationCancellation, and(
+      eq(productionConfirmationCancellation.client, productionGoodsMovementFailure.client),
+      eq(productionConfirmationCancellation.confirmationNumber, productionGoodsMovementFailure.confirmationNumber),
+    ))
+    .where(and(
+      eq(productionGoodsMovementFailure.client, client),
+      eq(productionGoodsMovementFailure.orderNumber, input.orderNumber),
+      eq(productionGoodsMovementFailure.movementKind, 'ISSUE'),
+      inArray(productionGoodsMovementFailure.status, ['PENDING', 'PROCESSING']),
+      isNull(productionConfirmationCancellation.cancellationNumber),
+      isNotNull(productionGoodsMovementFailureLine.productionOrderItem),
+    ))
+    .groupBy(productionGoodsMovementFailureLine.productionOrderItem, productionGoodsMovementFailureLine.materialNumber);
+  for (const row of pendingIssues) {
+    const key = `${String(row.itemNumber)}|${String(row.materialNumber)}`;
+    issuedByLine.set(key, (issuedByLine.get(key) ?? 0n) + scaled(text(row.quantity)));
   }
 
   // The proportion the confirmation earns: its yield over the order quantity, in the

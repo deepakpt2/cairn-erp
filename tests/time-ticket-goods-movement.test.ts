@@ -17,6 +17,14 @@ import { cancelConfirmation } from '../src/modules/production/confirmation-cance
 import { enterTimeTicket, loadTimeTicket, previewTimeTicket, rows } from '../src/modules/production/time-ticket';
 import { getProductionConfirmationDisplay } from '../src/modules/production/confirmation-display';
 import { movementConfiguration, movementRequestKey, postedMovements } from '../src/modules/production/confirmation-movements';
+import {
+  attemptProductionGoodsMovementFailure,
+  claimProductionGoodsMovementFailure,
+  getProductionGoodsMovementFailure,
+  listProductionGoodsMovementFailures,
+  recoverAbandonedProductionGoodsMovementFailure,
+  releaseProductionGoodsMovementFailure,
+} from '../src/modules/production/production-goods-movement-failures';
 import { createWorkCenter, saveWorkCenterCategory } from '../src/modules/production/work-center';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } from './helpers/confirmation-cancel-actor';
@@ -26,10 +34,10 @@ import { createConfirmationCancelTestActor, type ConfirmationCancelTestActor } f
  *
  * The rule under test is narrow. A confirmation withdraws the share of a backflush-marked
  * component its own yield represents, receives the finished good only on a final confirmation
- * of a marked material, and posts both through the goods-movement services inside the
- * confirmation's own transaction. Nothing counts an issue: what is open is read from the
- * material documents that stand, so a posting made on MIGO is seen at once and so is a
- * reversal.
+ * of a marked material, and persists the confirmation plus immutable movement intents first.
+ * Each movement then posts in its own transaction, so a refusal cannot erase the confirmation
+ * or roll back a successful companion. Nothing counts an issue: what is open is read from the
+ * material documents that stand, so a posting made on MIGO is seen at once and so is a reversal.
  *
  * Every order is ten units; the component requirement is twenty, so one unit of yield owes
  * two units of component. The component starts with 100 units of stock.
@@ -47,6 +55,8 @@ describe('CO11N confirmation goods movement', () => {
   let orderB = '';
   let orderC = '';
   let orderD = '';
+  let orderF = '';
+  let orderG = '';
   let componentItem = 0;
   let key = 0;
   const nextKey = () => `co11n-mv-${++key}`;
@@ -141,11 +151,62 @@ describe('CO11N confirmation goods movement', () => {
     });
   }
 
-  /** A movement carries a journal, so a rolled-back confirmation must not leave one behind. */
+  /** A movement carries a journal, so a rolled-back posting must not leave one behind. */
   async function journals(): Promise<number> {
     return withTenant(client, async (tx) => {
       const [row] = await rows(tx, sql`select count(*)::text as n from journal_entry where client = ${client}`);
       return Number(row?.n ?? '0');
+    });
+  }
+
+  async function materialDocumentCount(): Promise<number> {
+    return withTenant(client, async (tx) => {
+      const [row] = await rows(tx, sql`select count(*)::text as n from material_document where client = ${client}`);
+      return Number(row?.n ?? '0');
+    });
+  }
+
+  async function valuationOf(materialNumber: string): Promise<{ quantity: string; value: string }> {
+    return withTenant(client, async (tx) => {
+      const [row] = await rows(tx, sql`
+        select total_stock_quantity::text as quantity, stock_value::text as value
+          from material_valuation where client = ${client} and material_number = ${materialNumber} and valuation_area = ${PLANT}
+      `);
+      return { quantity: String(row?.quantity ?? '0'), value: String(row?.value ?? '0') };
+    });
+  }
+
+  async function reservationWithdrawnTotal(): Promise<string> {
+    return withTenant(client, async (tx) => {
+      const [row] = await rows(tx, sql`
+        select coalesce(sum(withdrawn_quantity), 0)::text as quantity from reservation_item where client = ${client}
+      `);
+      return String(row?.quantity ?? '0');
+    });
+  }
+
+  async function setComponentStock(quantity: number): Promise<void> {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update stock_quantity set quantity = ${quantity}, changed_by = ${ACTOR}, changed_at = now()
+         where client = ${client} and material_number = 'MV-RM' and plant = ${PLANT}
+           and storage_location = ${LOCATION} and stock_type = 'UNRESTRICTED' and batch_number = ''
+      `);
+      await tx.execute(sql`
+        update material_valuation set total_stock_quantity = ${quantity}, stock_value = ${quantity * 10},
+                                     changed_by = ${ACTOR}, changed_at = now()
+         where client = ${client} and material_number = 'MV-RM' and valuation_area = ${PLANT}
+      `);
+    });
+  }
+
+  async function failureIdOn(confirmationNumber: string, kind: 'ISSUE' | 'RECEIPT'): Promise<string> {
+    return withTenant(client, async (tx) => {
+      const [row] = await rows(tx, sql`
+        select id from production_goods_movement_failure
+         where client = ${client} and confirmation_number = ${confirmationNumber} and movement_kind = ${kind}
+      `);
+      return String(row?.id ?? '');
     });
   }
 
@@ -335,6 +396,8 @@ describe('CO11N confirmation goods movement', () => {
     orderB = await newOrder('co11n-mv-order-b');
     orderC = await newOrder('co11n-mv-order-c');
     orderD = await newOrder('co11n-mv-order-d');
+    orderF = await newOrder('co11n-mv-order-f');
+    orderG = await newOrder('co11n-mv-order-g');
     const [component] = await withTenant(client, (tx) => rows(tx, sql`
       select item_number from production_order_component where client = ${client} and order_number = ${orderA} order by item_number limit 1
     `));
@@ -526,6 +589,13 @@ describe('CO11N confirmation goods movement', () => {
     expect(issue.quantity).toBe('12.000');
     expect(receipt.materialDocumentNumber).not.toBeNull();
     expect(receipt.materialDocumentNumber).not.toBe(issue.materialDocumentNumber);
+    const receiptIntentId = await failureIdOn(final.confirmationNumber, 'RECEIPT');
+    const receiptIntent = await getProductionGoodsMovementFailure(client, receiptIntentId);
+    expect(receiptIntent?.failure.originalPayload).toMatchObject({
+      orderBatchNumber: '',
+      lines: [{ storageLocation: LOCATION, storageLocationMode: 'EXPLICIT' }],
+    });
+    expect(receiptIntent?.lines[0]).toMatchObject({ storageLocation: LOCATION, batchNumber: '' });
     expect(await finishedStock()).toBe(6);
     expect(await componentStock()).toBe(before - 8 - 12);
     expect(final.movementNote).toMatch(/material document/);
@@ -534,48 +604,185 @@ describe('CO11N confirmation goods movement', () => {
     expect(await documentsOn(orderC)).toHaveLength(3);
   });
 
-  it('lets the receipt service refuse an over-receipt, and the confirmation falls with it', async () => {
-    // Eight units were received against this order by hand, so the order still expects two. A
-    // final confirmation of six is refused by the receipt service, and the backflush it also
-    // owed is gone with it: both were one unit of work.
+  it('commits a companion issue while an over-receipt fails atomically and is durably recorded', async () => {
+    // Eight units were received by hand, leaving two. The final confirmation's six-unit
+    // receipt is refused, but its independent component issue commits and the confirmation stands.
     await postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: orderD, postingDate: '2026-10-24', documentDate: '2026-10-24',
       headerText: 'Manual receipt', requestKey: nextKey(),
       lines: [{ storageLocation: LOCATION, quantity: 8 }],
     });
-    expect(await confirmationsOn(orderD)).toBe(0);
-    const documents = await documentsOn(orderD);
-    expect(documents).toHaveLength(1);
-    const stock = await componentStock();
-    const finished = await finishedStock();
-    // The manual receipt left a journal behind, which is what the count below is a witness of:
-    // a refused confirmation had a journal of its own to lose, and lost it.
-    const written = await journals();
-    expect(written).toBeGreaterThan(0);
+    const documentsBefore = await documentsOn(orderD);
+    expect(documentsBefore).toHaveLength(1);
+    const componentBefore = await componentStock();
+    const finishedBefore = await finishedStock();
+    const journalsBefore = await journals();
+    const documentsCountBefore = await materialDocumentCount();
+    const valuationBefore = await valuationOf('MV-FG');
+    const reservationBefore = await reservationWithdrawnTotal();
 
-    await expect(save(orderD, { yieldQuantity: '6', confirmationType: 'FINAL', confirmFinal: true }))
-      .rejects.toThrow(/expects 2|still expects/i);
+    const ticket = await save(orderD, { yieldQuantity: '6', confirmationType: 'FINAL', confirmFinal: true });
+    expect(ticket.written).toBe(true);
+    expect(ticket.movementFailures).toHaveLength(1);
+    expect(ticket.movementFailures[0]).toMatchObject({
+      movementKind: 'RECEIPT', status: 'FAILED', attemptCount: 1, failureCode: 'PRODUCTION_RECEIPT_REFUSED',
+    });
+    expect(ticket.movements.find((row) => row.kind === 'ISSUE')).toMatchObject({ posted: true, standing: true });
+    expect(await confirmationsOn(orderD)).toBe(1);
+    expect(await componentStock()).toBe(componentBefore - 12);
+    expect(await finishedStock()).toBe(finishedBefore);
+    expect(await journals()).toBe(journalsBefore + 1);
+    expect(await materialDocumentCount()).toBe(documentsCountBefore + 1);
+    expect(await valuationOf('MV-FG')).toEqual(valuationBefore);
+    expect(await reservationWithdrawnTotal()).toBe(reservationBefore);
+    expect(await documentsOn(orderD)).toHaveLength(documentsBefore.length + 1);
 
-    expect(await confirmationsOn(orderD)).toBe(0);
-    expect(await componentStock()).toBe(stock);
-    expect(await finishedStock()).toBe(finished);
-    expect(await journals()).toBe(written);
-    // No document was left behind by the half-posted confirmation.
-    expect(await documentsOn(orderD)).toEqual(documents);
+    const failureId = await failureIdOn(ticket.confirmationNumber, 'RECEIPT');
+    const detail = await getProductionGoodsMovementFailure(client, failureId);
+    expect(detail?.failure).toMatchObject({
+      status: 'FAILED', failureCode: 'PRODUCTION_RECEIPT_REFUSED', attemptCount: 1,
+      originalRequestKey: expect.stringContaining('GR'),
+    });
+    expect(detail?.attempts).toHaveLength(1);
+    expect(detail?.attempts[0]).toMatchObject({ status: 'FAILED', failureCode: 'PRODUCTION_RECEIPT_REFUSED' });
+    expect(detail?.failure.errorText).toMatch(/expects 2|still expects/i);
+    // The failed receipt's transaction left no document; the successful companion issue did.
+    expect(await withTenant(client, async (tx) => rows(tx, sql`
+      select count(*)::text as n from material_document where client = ${client} and request_key = ${detail!.failure.originalRequestKey}
+    `))).toMatchObject([{ n: '0' }]);
   });
 
-  it('applies the posting period the movement it causes is subject to', async () => {
+  it('persists a period failure after rollback, then recovers exactly once under concurrent claims', async () => {
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
         update material_period_control set current_period = 12, previous_period = 11, allow_backposting = false
          where client = ${client} and company_code = ${COMPANY}
       `);
     });
-    const confirmations = await confirmationsOn(orderB);
-    const stock = await componentStock();
-    await expect(save(orderB, { yieldQuantity: '2' })).rejects.toThrow(/period/i);
-    expect(await confirmationsOn(orderB)).toBe(confirmations);
-    expect(await componentStock()).toBe(stock);
+    const confirmationCount = await confirmationsOn(orderB);
+    const stockBefore = await componentStock();
+    const journalCount = await journals();
+    const documentCount = await materialDocumentCount();
+    const valuationBefore = await valuationOf('MV-RM');
+    const reservationBefore = await reservationWithdrawnTotal();
+    const requestKey = nextKey();
+    const input = ticket(orderB, await orderVersion(orderB), { requestKey, yieldQuantity: '2' });
+    const failed = await enterTimeTicket(client, input);
+
+    expect(failed.written).toBe(true);
+    expect(failed.movementFailures).toHaveLength(1);
+    expect(failed.movementFailures[0]).toMatchObject({ status: 'FAILED', attemptCount: 1, failureCode: 'GOODS_ISSUE_REFUSED' });
+    expect(await confirmationsOn(orderB)).toBe(confirmationCount + 1);
+    expect(await componentStock()).toBe(stockBefore);
+    expect(await journals()).toBe(journalCount);
+    expect(await materialDocumentCount()).toBe(documentCount);
+    expect(await valuationOf('MV-RM')).toEqual(valuationBefore);
+    expect(await reservationWithdrawnTotal()).toBe(reservationBefore);
+
+    const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
+    const initialDetail = await getProductionGoodsMovementFailure(client, failureId);
+    expect(initialDetail?.attempts).toHaveLength(1);
+    expect(initialDetail?.attempts[0]).toMatchObject({ status: 'FAILED', failureCode: 'GOODS_ISSUE_REFUSED' });
+    expect(initialDetail?.failure.errorText).toMatch(/period/i);
+    expect(initialDetail?.failure.originalPayload).toMatchObject({ requestKey: expect.stringContaining('BF') });
+    const failedReplay = await enterTimeTicket(client, input);
+    expect(failedReplay.replayed).toBe(true);
+    expect(failedReplay.movementFailures[0]).toMatchObject({ status: 'FAILED', attemptCount: 1 });
+    expect((await getProductionGoodsMovementFailure(client, failureId))?.attempts).toHaveLength(1);
+
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 10, previous_period = 9, allow_backposting = true
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+      await tx.execute(sql`
+        update production_goods_movement_failure set next_retry_at = now() - interval '1 second'
+         where client = ${client} and id = ${failureId}
+      `);
+    });
+    const results = await Promise.all([
+      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR }),
+      attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR }),
+    ]);
+    expect(results.filter((result) => result.outcome === 'POSTED')).toHaveLength(1);
+    expect(results.some((result) => result.outcome === 'BUSY' || result.outcome === 'ALREADY_POSTED')).toBe(true);
+    const afterRetry = await getProductionGoodsMovementFailure(client, failureId);
+    expect(afterRetry?.failure).toMatchObject({ status: 'POSTED', attemptCount: 2, failureCode: null });
+    expect(afterRetry?.attempts.map((attempt) => attempt.status)).toEqual(['FAILED', 'SUCCEEDED']);
+    expect(await materialDocumentCount()).toBe(documentCount + 1);
+
+    const [document] = await withTenant(client, async (tx) => rows(tx, sql`
+      select count(*)::text as n from material_document where client = ${client} and request_key = ${afterRetry!.failure.originalRequestKey}
+    `));
+    expect(Number(document?.n ?? '0')).toBe(1);
+    const repeated = await attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR });
+    expect(repeated.outcome).toBe('ALREADY_POSTED');
+    const replay = await enterTimeTicket(client, input);
+    expect(replay.replayed).toBe(true);
+    expect(replay.movementsPosted).toBe(1);
+    expect(replay.movementFailures).toEqual([]);
+    expect((await getProductionGoodsMovementFailure(client, failureId))?.failure).toMatchObject({ status: 'POSTED', attemptCount: 2 });
+    expect(await materialDocumentCount()).toBe(documentCount + 1);
+  });
+
+  it('reclaims an expired owner and lets a worker release a claimed attempt', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 12, previous_period = 11, allow_backposting = false
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+    });
+    const failed = await enterTimeTicket(client, ticket(orderG, await orderVersion(orderG), { yieldQuantity: '4' }));
+    const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
+    await withTenant(client, (tx) => tx.execute(sql`
+      update production_goods_movement_failure set next_retry_at = now() - interval '1 second'
+       where client = ${client} and id = ${failureId}
+    `));
+
+    const claim = await claimProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR, leaseMilliseconds: 1_000 });
+    expect(claim).toMatchObject({ failureId, attemptNumber: 2 });
+    expect(await claimProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR })).toBeNull();
+    const reclaimed = await recoverAbandonedProductionGoodsMovementFailure({
+      client, failureId, changedBy: ACTOR, now: new Date(claim!.leaseExpiresAt.getTime() + 1),
+    });
+    expect(reclaimed).toBe(true);
+    let detail = await getProductionGoodsMovementFailure(client, failureId);
+    expect(detail?.attempts.map((attempt) => attempt.status)).toEqual(['FAILED', 'ABANDONED']);
+    expect(detail?.failure).toMatchObject({ status: 'FAILED', failureCode: 'PROCESSING_LEASE_EXPIRED' });
+
+    await withTenant(client, (tx) => tx.execute(sql`
+      update production_goods_movement_failure set next_retry_at = now() - interval '1 second'
+       where client = ${client} and id = ${failureId}
+    `));
+    const nextClaim = await claimProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR });
+    expect(nextClaim?.attemptNumber).toBe(3);
+    expect(await releaseProductionGoodsMovementFailure({
+      client, failureId, leaseToken: nextClaim!.leaseToken, changedBy: ACTOR,
+      failureCode: 'WORKER_RELEASED', errorText: 'Worker stopped before attempting the movement.',
+    })).toBe(true);
+    detail = await getProductionGoodsMovementFailure(client, failureId);
+    expect(detail?.attempts.map((attempt) => attempt.status)).toEqual(['FAILED', 'ABANDONED', 'FAILED']);
+    expect(detail?.failure).toMatchObject({ status: 'FAILED', failureCode: 'WORKER_RELEASED', attemptCount: 3 });
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 10, previous_period = 9, allow_backposting = true
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+    });
+  });
+
+  it('blocks recovery when CO13 cancels a confirmation whose failed movement left no document', async () => {
+    await withTenant(client, async (tx) => {
+      await tx.execute(sql`
+        update material_period_control set current_period = 12, previous_period = 11, allow_backposting = false
+         where client = ${client} and company_code = ${COMPANY}
+      `);
+    });
+    const requestKey = nextKey();
+    const failed = await enterTimeTicket(client, ticket(orderF, await orderVersion(orderF), { requestKey, yieldQuantity: '4' }));
+    expect(failed.movementFailures[0]).toMatchObject({ status: 'FAILED', failureCode: 'GOODS_ISSUE_REFUSED' });
+    const failureId = await failureIdOn(failed.confirmationNumber, 'ISSUE');
+    expect(await documentsOn(orderF)).toHaveLength(0);
 
     await withTenant(client, async (tx) => {
       await tx.execute(sql`
@@ -583,8 +790,21 @@ describe('CO11N confirmation goods movement', () => {
          where client = ${client} and company_code = ${COMPANY}
       `);
     });
-    const reopened = await save(orderB, { yieldQuantity: '2' });
-    expect(reopened.confirmationNumber).toBeTruthy();
+    await cancelConfirmation(client, {
+      requestKey: nextKey(), confirmationNumber: failed.confirmationNumber, confirmed: true,
+      reason: 'Cancel before the failed automatic movement is recovered', authorization: cancellationActor.authorization,
+    });
+    await withTenant(client, (tx) => tx.execute(sql`
+      update production_goods_movement_failure set next_retry_at = now() - interval '1 second'
+       where client = ${client} and id = ${failureId}
+    `));
+
+    const result = await attemptProductionGoodsMovementFailure({ client, failureId, attemptedBy: ACTOR });
+    expect(result).toMatchObject({ outcome: 'BLOCKED', failureCode: 'SOURCE_CONFIRMATION_CANCELLED' });
+    const detail = await getProductionGoodsMovementFailure(client, failureId);
+    expect(detail?.failure).toMatchObject({ status: 'BLOCKED', failureCode: 'SOURCE_CONFIRMATION_CANCELLED' });
+    expect(detail?.attempts.map((attempt) => attempt.status)).toEqual(['FAILED', 'BLOCKED']);
+    expect(await documentsOn(orderF)).toHaveLength(0);
   });
 
   it('refuses a cancellation while the document it caused still stands, and allows it after a reversal', async () => {
@@ -663,6 +883,16 @@ describe('CO11N confirmation goods movement', () => {
         select count(*)::text as n from material_plant where client = ${other.client} and backflush
       `));
       expect(Number(foreign[0]!.n)).toBe(0);
+      const localFailures = await listProductionGoodsMovementFailures({ client, selection: { limit: 1 } });
+      expect(localFailures.length).toBeGreaterThan(0);
+      expect(await listProductionGoodsMovementFailures({ client: other.client })).toEqual([]);
+      expect(await getProductionGoodsMovementFailure(other.client, localFailures[0]!.id)).toBeNull();
+      expect(await listProductionGoodsMovementFailures({ client, selection: { plant: 'OTHER-PLANT' } })).toEqual([]);
+      // A line cannot be reassigned to another plant within the same tenant.
+      await expect(withTenant(client, (tx) => tx.execute(sql`
+        update production_goods_movement_failure_line set plant = 'ZZ01'
+         where client = ${client} and failure_id = ${localFailures[0]!.id}
+      `))).rejects.toThrow();
       // The other tenant cannot confirm this tenant's order at all.
       await expect(enterTimeTicket(other.client, ticket(orderA, 1))
         ).rejects.toThrow(/does not stand|not stand|does not exist|order/i);
@@ -748,8 +978,8 @@ describe('CO11N confirmation goods movement', () => {
     expect(await confirmationsOn(orderF)).toBe(1);
     expect(await documentsOn(orderF)).toHaveLength(1);
     // Eight of the component, once. A second withdrawal of the same eight is the failure this
-    // key exists to prevent.
-    expect(await componentStock()).toBe(before - 8);
+    // key exists to prevent. Compare at document scale, not IEEE-754 binary precision.
+    expect(await componentStock()).toBeCloseTo(before - 8, 3);
   });
 
   it('will not let two confirmations at once draw more than the order still needs', async () => {
@@ -769,7 +999,13 @@ describe('CO11N confirmation goods movement', () => {
       enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '6' })),
       enterTimeTicket(client, ticket(orderG, version, { yieldQuantity: '4' })),
     ]);
-    expect(both.every((result) => result.movementsPosted === 1)).toBe(true);
+    expect(both.map((result) => ({
+      movementsPosted: result.movementsPosted,
+      movementFailures: result.movementFailures.map((failure) => ({ status: failure.status, failureCode: failure.failureCode })),
+    }))).toEqual([
+      { movementsPosted: 1, movementFailures: [] },
+      { movementsPosted: 1, movementFailures: [] },
+    ]);
 
     const drawn: string[] = [];
     for (const result of both) {
@@ -824,6 +1060,9 @@ describe('CO11N confirmation goods movement', () => {
   });
 
   it('opens again only the component whose line was reversed', async () => {
+    // Earlier cases consume the fixture stock; replenish it here so this independent two-line
+    // transaction tests reversal scope rather than an unrelated stock shortage.
+    await setComponentStock(100);
     // One withdrawal of two components is one document of two lines. Reversing one line leaves
     // the document standing, so the confirmation that caused it is still not cancellable, and
     // only the reversed component is owed again by the next confirmation.
