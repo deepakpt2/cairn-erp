@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { revalidatePath } from 'next/cache';
 import { sql } from 'drizzle-orm';
 
-import { can, requireSession, type SessionContext } from '@/platform/auth/current';
+import { can, requireSession } from '@/platform/auth/current';
+import type { SessionContext } from '@/platform/auth/session';
 import { withTenant } from '@/platform/db/client';
 import { auditAccessLog } from '@/platform/tables/security';
 import {

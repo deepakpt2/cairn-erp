@@ -180,7 +180,7 @@ export default function InspectionWorkbench({
         <section className="panel p-4" aria-label="Maintain characteristics">
           <h3 className="text-sm font-semibold mb-2">Characteristics</h3>
           {charMessage}
-          <form action={charAction} className="grid gap-3 sm:grid-cols-5" disabled={viewOnly}>
+          <form action={charAction}><fieldset disabled={viewOnly} className="grid gap-3 sm:grid-cols-5">
             <input
               className="input"
               placeholder="Code (e.g. DIM01)"
@@ -234,7 +234,7 @@ export default function InspectionWorkbench({
             >
               Save
             </button>
-          </form>
+          </fieldset></form>
 
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
@@ -267,7 +267,7 @@ export default function InspectionWorkbench({
         <section className="panel p-4" aria-label="Record results">
           <h3 className="text-sm font-semibold mb-2">Record results</h3>
           {resultMessage}
-          <form action={resultAction} className="grid gap-3 sm:grid-cols-6" disabled={viewOnly}>
+          <form action={resultAction}><fieldset disabled={viewOnly} className="grid gap-3 sm:grid-cols-6">
             <input type="hidden" name="lotNumber" value={lot.lotNumber} />
             <input type="hidden" name="requestKey" value={`QA32-${Date.now()}`} />
 
@@ -323,7 +323,7 @@ export default function InspectionWorkbench({
             >
               Record result
             </button>
-          </form>
+          </fieldset></form>
 
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
@@ -369,7 +369,7 @@ export default function InspectionWorkbench({
           )}
 
           {!decision && summary && summary.allMandatoryComplete && (
-            <form action={decideActionFn} className="space-y-3" disabled={viewOnly}>
+            <form action={decideActionFn}><fieldset disabled={viewOnly} className="space-y-3">
               <input type="hidden" name="lotNumber" value={lot.lotNumber} />
               <input type="hidden" name="requestKey" value={`QE51N-${Date.now()}`} />
 
@@ -415,7 +415,7 @@ export default function InspectionWorkbench({
                   Rework (stay in quality)
                 </button>
               </div>
-            </form>
+            </fieldset></form>
           )}
 
           {decision && (

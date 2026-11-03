@@ -3,14 +3,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { changeHistory } from '../src/platform/change';
 import { withTenant } from '../src/platform/db/client';
-import { createEmployee } from '../src/modules/people/employee-master';
+import { EMPLOYEE_CAPABILITY, createEmployee as createEmployeeService } from '../src/modules/people/employee-master';
 import {
   ASSIGNMENT_CAPABILITY,
   AssignmentError,
-  assignPosition,
+  assignPosition as assignPositionService,
   assignmentsOf,
-  changeAssignment,
-  delimitAssignment,
+  changeAssignment as changeAssignmentService,
+  delimitAssignment as delimitAssignmentService,
   getAssignment,
   incumbentsOf,
   listAssignments,
@@ -21,12 +21,12 @@ import {
   ORG_UNIT_CAPABILITY,
   POSITION_CAPABILITY,
   OrgStructureError,
-  changeJob,
-  changeOrgUnit,
-  changePosition,
-  defineJob,
-  defineOrgUnit,
-  definePosition,
+  changeJob as changeJobService,
+  changeOrgUnit as changeOrgUnitService,
+  changePosition as changePositionService,
+  defineJob as defineJobService,
+  defineOrgUnit as defineOrgUnitService,
+  definePosition as definePositionService,
   getJob,
   getOrgUnit,
   getPosition,
@@ -61,6 +61,20 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
  * counting closes in 2020, which is in the past for as long as this suite matters.
  */
 const ACTOR = 'PEOPLE_9194_TEST';
+const ORG_UNIT_AUTH = [ORG_UNIT_CAPABILITY] as const;
+const POSITION_AUTH = [POSITION_CAPABILITY] as const;
+const ASSIGNMENT_AUTH = [ASSIGNMENT_CAPABILITY] as const;
+const EMPLOYEE_AUTH = [EMPLOYEE_CAPABILITY] as const;
+const defineOrgUnit = (input: Parameters<typeof defineOrgUnitService>[0]) => defineOrgUnitService(input, ORG_UNIT_AUTH);
+const changeOrgUnit = (input: Parameters<typeof changeOrgUnitService>[0]) => changeOrgUnitService(input, ORG_UNIT_AUTH);
+const defineJob = (input: Parameters<typeof defineJobService>[0]) => defineJobService(input, POSITION_AUTH);
+const changeJob = (input: Parameters<typeof changeJobService>[0]) => changeJobService(input, POSITION_AUTH);
+const definePosition = (input: Parameters<typeof definePositionService>[0]) => definePositionService(input, POSITION_AUTH);
+const changePosition = (input: Parameters<typeof changePositionService>[0]) => changePositionService(input, POSITION_AUTH);
+const createEmployee = (input: Parameters<typeof createEmployeeService>[0]) => createEmployeeService(input, EMPLOYEE_AUTH);
+const assignPosition = (input: Parameters<typeof assignPositionService>[0]) => assignPositionService(input, ASSIGNMENT_AUTH);
+const changeAssignment = (input: Parameters<typeof changeAssignmentService>[0]) => changeAssignmentService(input, ASSIGNMENT_AUTH);
+const delimitAssignment = (input: Parameters<typeof delimitAssignmentService>[0]) => delimitAssignmentService(input, ASSIGNMENT_AUTH);
 const AREA = 'A000';
 const CC = 'CC100';
 const CC_LATER = 'CC300';

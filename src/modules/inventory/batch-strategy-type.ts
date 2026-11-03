@@ -255,6 +255,7 @@ async function sequenceOf(tx: Tx, client: string, value: string | undefined): Pr
 function rowOf(row: {
   strategyType: string;
   description: string;
+  accessSequence: string;
   version: number;
   changedBy: string | null;
   changedAt: Date | null;

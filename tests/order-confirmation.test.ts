@@ -170,7 +170,7 @@ describe('CO15 order confirmation', () => {
     released = happy.orderNumber;
     version = happy.version;
     created = open.orderNumber;
-    createdVersion = open.version ?? 1;
+    createdVersion = open.version;
     const activity = await makeOrder('FG-15A', 'RM-15A', '50000016', [
       {
         operationNumber: '0010', shortText: 'Labor', workCenter: 'WC15', controlKey: 'PP01', standardValueKey: 'SV15',

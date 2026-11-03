@@ -135,6 +135,7 @@ export interface OrderItemRow {
   taxCode: string | null;
   plant: string;
   storageLocation: string | null;
+  batch: string;
   materialGroup: string | null;
   accountAssignmentCategory: string | null;
   markedForDeletion: boolean;

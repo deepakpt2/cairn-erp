@@ -94,8 +94,8 @@ export interface BatchLevelRow {
   name: string;
   uniqueness: string;
   version: number;
-  changedBy: string;
-  changedAt: Date;
+  changedBy: string | null;
+  changedAt: Date | null;
 }
 
 export interface DependentBatchData {
@@ -238,8 +238,8 @@ function meaning(code: BatchLevelCode): BatchLevelMeaning {
 function present(row: {
   batchLevel: string;
   version: number;
-  changedBy: string;
-  changedAt: Date;
+  changedBy: string | null;
+  changedAt: Date | null;
 }): BatchLevelRow {
   const code = levelCode(row.batchLevel);
   const described = meaning(code);

@@ -7,13 +7,13 @@ import {
   PAY_COMPONENT_CAPABILITY,
   PAY_COMPONENT_CONFIG_OBJECT_CLASS,
   PAY_COMPONENT_OBJECT_CLASS,
-  changePayComponent,
-  definePayComponent,
+  changePayComponent as changePayComponentService,
+  definePayComponent as definePayComponentService,
   getPayComponent,
   listAccountsForSide,
   listCostCentresForMapping,
   listPayComponents,
-  savePayComponentMapping,
+  savePayComponentMapping as savePayComponentMappingService,
 } from '../src/modules/people/pay-components';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
@@ -43,6 +43,13 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
  * results and their postings stay unbuilt (D-013, R-11, DV-001).
  */
 const ACTOR = 'pay.admin';
+const PAY_AUTH = [PAY_COMPONENT_CAPABILITY] as const;
+const definePayComponent = (input: Parameters<typeof definePayComponentService>[0]) => definePayComponentService(input, PAY_AUTH);
+const changePayComponent = (input: Parameters<typeof changePayComponentService>[0]) => changePayComponentService(input, PAY_AUTH);
+const savePayComponentMapping = (
+  input: Parameters<typeof savePayComponentMappingService>[0],
+  mode: Parameters<typeof savePayComponentMappingService>[1],
+) => savePayComponentMappingService(input, mode, PAY_AUTH);
 const AREA = 'A000';
 
 const EARNING = 'BASIC';

@@ -85,7 +85,7 @@ export interface PostCustomerCreditMemoInput {
   headerText?: string;
   requestKey: string;
   lines: Array<{
-    glAccount: string; netAmount: number; taxCode?: string;
+    glAccount: string; netAmount: number; taxCode?: string | null;
     profitCenter?: string; lineText?: string;
   }>;
 }

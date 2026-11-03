@@ -38,6 +38,7 @@ export interface StockPostingDateSelection {
   dateFrom?: string;
   dateTo?: string;
   stockType?: string;
+  batch?: string;
   displayZero?: boolean;
   maxHits?: number;
 }

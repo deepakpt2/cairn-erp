@@ -21,7 +21,7 @@ export default function VersionForm({
   /** Whether this session may create a version. A copy is a create, so it stands outside the change lock. */
   canCopy: boolean;
   plants: Array<{ plant: string; name: string }>;
-  materials: Array<{ materialNumber: string; description: string; baseUnit: string }>;
+  materials: Array<{ materialNumber: string; description: string; baseUnit: string | null }>;
   choices: {
     boms: Array<{ usage: string; alternative: string }>;
     routings: Array<{ taskListType: string; routingGroup: string; groupCounter: string }>;
@@ -117,7 +117,7 @@ export default function VersionForm({
           <button className="btn" type="submit" disabled={copyPending}>Copy</button>
         </form>
       )}
-      <datalist id="version-materials">{materials.map((row) => <option key={row.materialNumber} value={row.materialNumber}>{row.description} {row.baseUnit}</option>)}</datalist>
+      <datalist id="version-materials">{materials.map((row) => <option key={row.materialNumber} value={row.materialNumber}>{row.description} {row.baseUnit ?? '—'}</option>)}</datalist>
       <datalist id="version-locations">{choices.storageLocations.map((row) => <option key={row.storageLocation} value={row.storageLocation}>{row.name}</option>)}</datalist>
     </div>
   );

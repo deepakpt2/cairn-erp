@@ -24,8 +24,10 @@ export default async function StockPostingDatePage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const get = (name: string, fallback = '') =>
-    (typeof params[name] === 'string' ? (params[name] as string) : fallback).trim();
+  const get = (name: string, fallback = '') => {
+    const value = params[name];
+    return (typeof value === 'string' ? value : fallback).trim();
+  };
 
   const initialSelection: StockPostingDateSelection = {
     materialFrom: get('materialFrom').toUpperCase(),

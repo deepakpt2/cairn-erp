@@ -347,6 +347,8 @@ export interface PostTransferInput {
   documentDate: string;
   headerText?: string;
   externalReference?: string;
+  /** The entered unit. If different from base, a configured material conversion is required. */
+  entryUnit?: string;
   /** Required when the material is batch-managed. The batch must already stand. */
   batch?: string;
   requestKey: string;
@@ -355,7 +357,7 @@ export interface PostTransferInput {
 interface PreparedPlant {
   plant: string;
   companyCode: string;
-  valuation: typeof materialValuation.$inferSelect;
+  valuation: typeof materialValuation.$inferSelect & { valuationClass: string };
 }
 
 function requireDate(value: string, label: string): void {
@@ -411,17 +413,19 @@ async function loadPlant(
     eq(materialValuation.materialNumber, materialNumber),
     eq(materialValuation.valuationArea, plant),
   ));
-  if (!valuation || !valuation.valuationClass) {
+  const valuationClass = valuation?.valuationClass;
+  if (!valuation || typeof valuationClass !== 'string' || valuationClass.trim() === '') {
     throw new TransferPostingError(
       `Material ${materialNumber} carries no valuation in ${role} plant ${plant}.`,
       'Complete the material valuation data, then post the transfer.',
     );
   }
-  const classRefusal = await postingValuationRefusal(tx, client, materialNumber, valuation.valuationClass);
+  const preparedValuation = { ...valuation, valuationClass };
+  const classRefusal = await postingValuationRefusal(tx, client, materialNumber, valuationClass);
   if (classRefusal) {
     throw new TransferPostingError(classRefusal, 'Maintain a valuation class this material type permits, then post the transfer.');
   }
-  return { plant, companyCode: row.companyCode, valuation };
+  return { plant, companyCode: row.companyCode, valuation: preparedValuation };
 }
 
 async function loadStorageLocation(
@@ -504,12 +508,11 @@ async function moveStock(
 }
 
 async function moveValuation(
-  tx: Tx, client: string, changedBy: string, prepared: PreparedPlant,
+  tx: Tx, client: string, changedBy: string, valuation: typeof materialValuation.$inferSelect,
   quantityDelta: number, valueDelta: number,
 ): Promise<void> {
-  const v = prepared.valuation;
   await applyValuationDelta(
-    tx, client, changedBy, v.materialNumber, v.valuationArea, quantityDelta, valueDelta,
+    tx, client, changedBy, valuation.materialNumber, valuation.valuationArea, quantityDelta, valueDelta,
   );
 }
 
@@ -536,15 +539,28 @@ async function judgePeriod(tx: Tx, client: string, plant: string, postingDate: s
   const [plantRow] = await tx.select().from(plantTable).where(and(
     eq(plantTable.client, client), eq(plantTable.plant, plant),
   ));
-  const company = await getCompanyCode(tx, client, plantRow!.companyCode!);
-  if (!company?.fiscalYearVariant) {
-    throw new TransferPostingError(`Company code ${plantRow!.companyCode} is not configured.`);
+  const companyCode = plantRow?.companyCode?.trim();
+  if (!companyCode) {
+    throw new TransferPostingError(`Plant ${plant} has no company-code assignment.`, 'Assign the plant to a company code, then post the transfer.');
   }
+  const company = await getCompanyCode(tx, client, companyCode);
+  if (!company?.fiscalYearVariant) {
+    throw new TransferPostingError(`Company code ${companyCode} has no fiscal-year variant.`);
+  }
+  const chartOfAccounts = company.chartOfAccounts?.trim();
+  if (!chartOfAccounts) {
+    throw new TransferPostingError(`Company code ${companyCode} has no chart of accounts.`);
+  }
+  const currency = company.currency?.trim();
+  if (!currency) {
+    throw new TransferPostingError(`Company code ${companyCode} has no posting currency.`);
+  }
+  const companyContext = { companyCode, chartOfAccounts, currency };
   const position = await derivePosition(tx, client, company.fiscalYearVariant, postingDate);
   const rows = await tx.execute(sql`
     select current_fiscal_year, current_period, previous_fiscal_year, previous_period,
            allow_backposting, disallow_backposting_after_change
-    from material_period_control where client = ${client} and company_code = ${plantRow!.companyCode}
+    from material_period_control where client = ${client} and company_code = ${companyCode}
   `) as unknown as Array<{
     current_fiscal_year: number; current_period: number;
     previous_fiscal_year: number; previous_period: number;
@@ -552,7 +568,7 @@ async function judgePeriod(tx: Tx, client: string, plant: string, postingDate: s
   }>;
   const record = rows[0]
     ? {
-        companyCode: plantRow!.companyCode!,
+        companyCode,
         currentFiscalYear: Number(rows[0].current_fiscal_year),
         currentPeriod: Number(rows[0].current_period),
         previousFiscalYear: Number(rows[0].previous_fiscal_year),
@@ -563,11 +579,11 @@ async function judgePeriod(tx: Tx, client: string, plant: string, postingDate: s
     : null;
   if (!materialPeriodAllows(record, position.fiscalYear, position.period)) {
     throw new TransferPostingError(
-      `The material posting period ${position.fiscalYear}/${position.period} is closed for company ${plantRow!.companyCode}.`,
+      `The material posting period ${position.fiscalYear}/${position.period} is closed for company ${companyCode}.`,
       'Post into the open material period, or shift the material period first.',
     );
   }
-  return { company, position };
+  return { company: companyContext, position };
 }
 
 function splitJournalKey(key: string): [number, string] {
@@ -579,6 +595,7 @@ function splitJournalKey(key: string): [number, string] {
 export interface TransferPreflight {
   scenario: TransferScenario;
   mat: typeof material.$inferSelect;
+  baseUnit: string;
   entryUnit: string;
   entryQuantity: number;
   quantity: number;
@@ -623,18 +640,19 @@ async function preflight(
   if (mat.markedForDeletion) {
     throw new TransferPostingError(`Material ${materialNumber} is flagged for deletion.`, 'Cancel the deletion flag, then post again.');
   }
-  if (!mat.baseUnit) {
+  const baseUnit = mat.baseUnit;
+  if (!baseUnit) {
     throw new TransferPostingError(
-    `Material ${materialNumber} carries no base unit.`,
-    'Complete the material master, then post the transfer.',
+      `Material ${materialNumber} carries no base unit.`,
+      'Complete the material master, then post the transfer.',
     );
   }
 
   // SCR-144: a quantity entered in an alternative unit becomes the base quantity the ledger
   // records, at the material's own ratio. A unit with no conversion is refused by name.
-  const entryUnit = input.entryUnit ?? mat.baseUnit;
+  const entryUnit = input.entryUnit ?? baseUnit;
   let quantity = input.quantity;
-  if (entryUnit !== mat.baseUnit) {
+  if (entryUnit !== baseUnit) {
     try {
       const conversion = await toBaseQuantity(tx, input.client, {
         materialNumber, quantity: input.quantity, entryUnit,
@@ -766,7 +784,7 @@ async function preflight(
   )) ?? 0;
 
   return {
-    scenario, mat, entryUnit, entryQuantity: input.quantity, quantity, q,
+    scenario, mat, baseUnit, entryUnit, entryQuantity: input.quantity, quantity, q,
     issuing, receiving, issuingLocation, receivingLocation, company, position,
     valueMoves, movedValue, receivingValue, stockOnHand, batch,
   };
@@ -843,7 +861,7 @@ export async function validateTransfer(
         negativeStockPolicy: pre.scenario.negativeStockPolicy,
       },
       entry: { quantity: pre.entryQuantity, unit: pre.entryUnit },
-      base: { quantity: pre.quantity, unit: pre.mat.baseUnit },
+      base: { quantity: pre.quantity, unit: pre.baseUnit },
       from: {
         plant: input.issuingPlant, storageLocation: pre.issuingLocation.storageLocation,
         stockType: pre.scenario.fromStockType,
@@ -869,7 +887,7 @@ export async function validateTransfer(
   });
 }
 
-export async function postTransfer(input: PostTransferInput): Promise<TransferDocumentView> {
+function validatePostTransferInput(input: PostTransferInput): string {
   requireDate(input.postingDate, 'The posting date');
   requireDate(input.documentDate, 'The document date');
   if ((input.headerText ?? '').length > 25) {
@@ -880,147 +898,161 @@ export async function postTransfer(input: PostTransferInput): Promise<TransferDo
   }
   const materialNumber = input.materialNumber.trim();
   if (!materialNumber) throw new TransferPostingError('A material is required.', 'Enter the material being transferred.');
+  return materialNumber;
+}
 
-  return withTenant(input.client, async (tx) => {
-    await lockRequestKey(tx, input.client, input.requestKey);
-    const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprintOf(input));
-    if (replay) return replay;
+export async function postTransfer(input: PostTransferInput): Promise<TransferDocumentView> {
+  validatePostTransferInput(input);
+  return withTenant(input.client, (tx) => postTransferInTx(tx, input));
+}
 
-    const pre = await preflight(tx, input.client, input.changedBy, input, materialNumber);
-    const {
-      scenario, mat, entryUnit, quantity, issuing, receiving,
-      issuingLocation, receivingLocation, company, position,
-      valueMoves, movedValue, receivingValue, q, batch,
-    } = pre;
-    const refused = await batchClassificationRefusal(tx, input.client, scenario.movementType);
-    if (refused) throw new TransferPostingError(refused.message, refused.remedy);
+/** Post a transfer inside an existing tenant transaction so callers can compose atomic workflows. */
+export async function postTransferInTx(tx: Tx, input: PostTransferInput): Promise<TransferDocumentView> {
+  const materialNumber = validatePostTransferInput(input);
+  const [scope] = await tx.execute(sql<{ client: string | null }>`
+    select current_setting('cairn.client', true) as client
+  `);
+  if (scope?.client !== input.client) {
+    throw new TransferPostingError('The transfer transaction is not scoped to the requested tenant.');
+  }
+  await lockRequestKey(tx, input.client, input.requestKey);
+  const replay = await replayOrRefuse(tx, input.client, input.requestKey, fingerprintOf(input));
+  if (replay) return replay;
 
-    const allocated = await allocateNumber(tx, {
-      client: input.client, objectCode: 'MATDOC', allocatedBy: input.changedBy,
-    });
-    const number = allocated.display;
+  const pre = await preflight(tx, input.client, input.changedBy, input, materialNumber);
+  const {
+    scenario, mat, entryUnit, quantity, issuing, receiving,
+    issuingLocation, receivingLocation, company, position,
+    valueMoves, movedValue, receivingValue, q, batch,
+  } = pre;
+  const refused = await batchClassificationRefusal(tx, input.client, scenario.movementType);
+  if (refused) throw new TransferPostingError(refused.message, refused.remedy);
 
-    // A price difference stands only when the movement's configuration says value moves and a
-    // standard-priced receiving plant values the stock differently from what was transferred —
-    // SAP posts no journal otherwise. §11: never assume cross-plant means a valuation change.
-    let journalNumber: string | null = null;
-    if (valueMoves && round2(receivingValue - movedValue) !== 0) {
-      const chart = company.chartOfAccounts as string;
-      const receivingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', receiving.valuation.valuationClass!);
-      const issuingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', issuing.valuation.valuationClass!);
-      const difference = round2(receivingValue - movedValue);
-      const lines = [
-        { glAccount: receivingAccount, debitCredit: 'S' as const, amount: receivingValue.toFixed(2), material: materialNumber, plant: input.receivingPlant },
-        { glAccount: issuingAccount, debitCredit: 'H' as const, amount: movedValue.toFixed(2), material: materialNumber, plant: input.issuingPlant },
-      ];
-      if (difference !== 0) {
-        const pdAccount = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', receiving.valuation.valuationClass!);
-        lines.push({
-          glAccount: pdAccount, debitCredit: difference > 0 ? 'H' : 'S',
-          amount: Math.abs(difference).toFixed(2), material: materialNumber, plant: input.receivingPlant,
-        });
-      }
-      const journal = await postJournalEntry(tx, {
-        client: input.client,
-        companyCode: issuing.companyCode,
-        documentType: JOURNAL_DOCUMENT_TYPE,
-        documentDate: input.documentDate,
-        postingDate: input.postingDate,
-        fiscalYear: position.fiscalYear,
-        postingPeriod: position.period,
-        currency: company.currency as string,
-        localCurrency: company.currency as string,
-        reference: `TRANSFER ${scenario.code}`,
-        headerText: input.headerText,
-        lines,
-        origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
-        postedBy: input.changedBy,
-        transactionCode: TRANSFER_POST_CAPABILITY,
-      }).catch((error: unknown) => {
-        if (error instanceof PostingError) throw new TransferPostingError(error.message, error.remedy);
-        throw error;
-      });
-      journalNumber = journal.documentNumber;
-    }
-
-    await tx.insert(materialDocument).values({
-      client: input.client, materialDocumentNumber: number, documentYear: position.fiscalYear,
-      documentDate: input.documentDate, postingDate: input.postingDate,
-      headerText: input.headerText ?? null, status: 'POSTED',
-      externalReference: input.externalReference?.trim() || null,
-      journalDocumentNumber: journalNumber, requestKey: input.requestKey,
-      requestFingerprint: fingerprintOf(input),
-      createdBy: input.changedBy,
-    });
-
-    const issuingValue = movedValue;
-    const receivingLineValue = receivingValue;
-    const unit = mat.baseUnit;
-
-    const issueLine: typeof materialDocumentLine.$inferInsert = {
-      client: input.client, materialDocumentNumber: number, lineNumber: 1,
-      movementType: scenario.movementType, lineDirection: 'ISSUE',
-      materialNumber, plant: input.issuingPlant,
-      storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType,
-      batchNumber: batch,
-      entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
-      baseQuantity: String(q), baseUnit: unit,
-      unitPrice: scenario.kind === 'PLANT' ? String(round2(issuingValue / q)) : '0',
-      priceUnit: '1', currency: company.currency as string, value: String(issuingValue),
-      itemText: `Transfer ${scenario.code}`,
-      createdBy: input.changedBy,
-    };
-    await tx.insert(materialDocumentLine).values(issueLine);
-    const receiptLine: typeof materialDocumentLine.$inferInsert = {
-      client: input.client, materialDocumentNumber: number, lineNumber: 2,
-      movementType: scenario.movementType, lineDirection: 'RECEIPT',
-      materialNumber, plant: input.receivingPlant,
-      storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
-      batchNumber: batch,
-      entryQuantity: String(input.entryQuantity ?? input.quantity), entryUnit,
-      baseQuantity: String(q), baseUnit: unit,
-      unitPrice: scenario.kind === 'PLANT' ? String(round2(receivingLineValue / q)) : '0',
-      priceUnit: '1', currency: company.currency as string, value: String(receivingLineValue),
-      itemText: `Transfer ${scenario.code}`,
-      createdBy: input.changedBy,
-    };
-    await tx.insert(materialDocumentLine).values(receiptLine);
-
-    await moveStock(tx, input.client, input.changedBy, {
-      materialNumber, plant: input.issuingPlant,
-      storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType, batchNumber: batch,
-    }, -q);
-    await moveStock(tx, input.client, input.changedBy, {
-      materialNumber, plant: input.receivingPlant,
-      storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType, batchNumber: batch,
-    }, q);
-
-    if (valueMoves) {
-      await moveValuation(tx, input.client, input.changedBy, issuing, -q, -movedValue);
-      await moveValuation(tx, input.client, input.changedBy, receiving, q, receivingValue);
-    }
-
-    await recordChange(tx, {
-      client: input.client,
-      objectClass: MATERIAL_DOCUMENT_CLASS,
-      objectKey: number,
-      changeType: 'CREATE',
-      changedBy: input.changedBy,
-      transactionCode: TRANSFER_POST_CAPABILITY,
-      after: {
-        movement: scenario.movementType, transfer: scenario.code, quantity: q,
-        from: `${input.issuingPlant}/${issuingLocation.storageLocation}/${scenario.fromStockType}`,
-        to: `${input.receivingPlant}/${receivingLocation.storageLocation}/${scenario.toStockType}`,
-        journal: journalNumber, status: 'POSTED',
-      },
-    });
-    await noteBatchControlUse(tx, input.client, number, input.changedBy);
-
-    // SCR-135: the document carries its output with it, determined as it posts.
-    await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
-
-    return (await existingByRequestKey(tx, input.client, input.requestKey))!;
+  const allocated = await allocateNumber(tx, {
+    client: input.client, objectCode: 'MATDOC', allocatedBy: input.changedBy,
   });
+  const number = allocated.display;
+
+  // A price difference stands only when the movement's configuration says value moves and a
+  // standard-priced receiving plant values the stock differently from what was transferred —
+  // SAP posts no journal otherwise. §11: never assume cross-plant means a valuation change.
+  let journalNumber: string | null = null;
+  if (valueMoves && round2(receivingValue - movedValue) !== 0) {
+    const chart = company.chartOfAccounts;
+    const receivingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', receiving.valuation.valuationClass);
+    const issuingAccount = await resolveAccount(tx, input.client, chart, 'INVENTORY', issuing.valuation.valuationClass);
+    const difference = round2(receivingValue - movedValue);
+    const lines = [
+      { glAccount: receivingAccount, debitCredit: 'S' as const, amount: receivingValue.toFixed(2), material: materialNumber, plant: input.receivingPlant },
+      { glAccount: issuingAccount, debitCredit: 'H' as const, amount: movedValue.toFixed(2), material: materialNumber, plant: input.issuingPlant },
+    ];
+    if (difference !== 0) {
+      const pdAccount = await resolveAccount(tx, input.client, chart, 'PRICE_DIFFERENCE', receiving.valuation.valuationClass);
+      lines.push({
+        glAccount: pdAccount, debitCredit: difference > 0 ? 'H' : 'S',
+        amount: Math.abs(difference).toFixed(2), material: materialNumber, plant: input.receivingPlant,
+      });
+    }
+    const journal = await postJournalEntry(tx, {
+      client: input.client,
+      companyCode: issuing.companyCode,
+      documentType: JOURNAL_DOCUMENT_TYPE,
+      documentDate: input.documentDate,
+      postingDate: input.postingDate,
+      fiscalYear: position.fiscalYear,
+      postingPeriod: position.period,
+      currency: company.currency,
+      localCurrency: company.currency,
+      reference: `TRANSFER ${scenario.code}`,
+      headerText: input.headerText,
+      lines,
+      origin: { documentClass: MATERIAL_DOCUMENT_CLASS, documentKey: number },
+      postedBy: input.changedBy,
+      transactionCode: TRANSFER_POST_CAPABILITY,
+    }).catch((error: unknown) => {
+      if (error instanceof PostingError) throw new TransferPostingError(error.message, error.remedy);
+      throw error;
+    });
+    journalNumber = journal.documentNumber;
+  }
+
+  await tx.insert(materialDocument).values({
+    client: input.client, materialDocumentNumber: number, documentYear: position.fiscalYear,
+    documentDate: input.documentDate, postingDate: input.postingDate,
+    headerText: input.headerText ?? null, status: 'POSTED',
+    externalReference: input.externalReference?.trim() || null,
+    journalDocumentNumber: journalNumber, requestKey: input.requestKey,
+    requestFingerprint: fingerprintOf(input),
+    createdBy: input.changedBy,
+  });
+
+  const issuingValue = movedValue;
+  const receivingLineValue = receivingValue;
+  const unit = pre.baseUnit;
+
+  const issueLine: typeof materialDocumentLine.$inferInsert = {
+    client: input.client, materialDocumentNumber: number, lineNumber: 1,
+    movementType: scenario.movementType, lineDirection: 'ISSUE',
+    materialNumber, plant: input.issuingPlant,
+    storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType,
+    batchNumber: batch,
+    entryQuantity: String(pre.entryQuantity), entryUnit,
+    baseQuantity: String(q), baseUnit: unit,
+    unitPrice: scenario.kind === 'PLANT' ? String(round2(issuingValue / q)) : '0',
+    priceUnit: '1', currency: company.currency, value: String(issuingValue),
+    itemText: `Transfer ${scenario.code}`,
+    createdBy: input.changedBy,
+  };
+  await tx.insert(materialDocumentLine).values(issueLine);
+  const receiptLine: typeof materialDocumentLine.$inferInsert = {
+    client: input.client, materialDocumentNumber: number, lineNumber: 2,
+    movementType: scenario.movementType, lineDirection: 'RECEIPT',
+    materialNumber, plant: input.receivingPlant,
+    storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType,
+    batchNumber: batch,
+    entryQuantity: String(pre.entryQuantity), entryUnit,
+    baseQuantity: String(q), baseUnit: unit,
+    unitPrice: scenario.kind === 'PLANT' ? String(round2(receivingLineValue / q)) : '0',
+    priceUnit: '1', currency: company.currency, value: String(receivingLineValue),
+    itemText: `Transfer ${scenario.code}`,
+    createdBy: input.changedBy,
+  };
+  await tx.insert(materialDocumentLine).values(receiptLine);
+
+  await moveStock(tx, input.client, input.changedBy, {
+    materialNumber, plant: input.issuingPlant,
+    storageLocation: issuingLocation.storageLocation, stockType: scenario.fromStockType, batchNumber: batch,
+  }, -q);
+  await moveStock(tx, input.client, input.changedBy, {
+    materialNumber, plant: input.receivingPlant,
+    storageLocation: receivingLocation.storageLocation, stockType: scenario.toStockType, batchNumber: batch,
+  }, q);
+
+  if (valueMoves) {
+    await moveValuation(tx, input.client, input.changedBy, issuing.valuation, -q, -movedValue);
+    await moveValuation(tx, input.client, input.changedBy, receiving.valuation, q, receivingValue);
+  }
+
+  await recordChange(tx, {
+    client: input.client,
+    objectClass: MATERIAL_DOCUMENT_CLASS,
+    objectKey: number,
+    changeType: 'CREATE',
+    changedBy: input.changedBy,
+    transactionCode: TRANSFER_POST_CAPABILITY,
+    after: {
+      movement: scenario.movementType, transfer: scenario.code, quantity: q,
+      from: `${input.issuingPlant}/${issuingLocation.storageLocation}/${scenario.fromStockType}`,
+      to: `${input.receivingPlant}/${receivingLocation.storageLocation}/${scenario.toStockType}`,
+      journal: journalNumber, status: 'POSTED',
+    },
+  });
+  await noteBatchControlUse(tx, input.client, number, input.changedBy);
+
+  // SCR-135: the document carries its output with it, determined as it posts.
+  await recordOutputsForPostedDocument(tx, input.client, number, input.changedBy);
+
+  return (await existingByRequestKey(tx, input.client, input.requestKey))!;
 }
 
 export interface ReverseTransferInput {
@@ -1191,9 +1223,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Tran
           eq(materialValuation.valuationArea, plant),
         ));
         if (valuation) {
-          await moveValuation(tx, input.client, input.changedBy, {
-            plant, companyCode: '', valuation,
-          }, quantityDelta, valueDelta);
+          await moveValuation(tx, input.client, input.changedBy, valuation, quantityDelta, valueDelta);
         }
       }
     }

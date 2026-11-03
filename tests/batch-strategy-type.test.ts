@@ -14,8 +14,9 @@ import {
   listBatchStrategyTypes,
   saveBatchStrategyType,
 } from '../src/modules/inventory/batch-strategy-type';
-import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
-import { closeDb, createTenant, destroyTenant } from './helpers';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
+import { closeDb, createTenant, destroyTenant, expectRejectedError } from './helpers';
 
 const ACTOR = 'OMCW_TEST';
 const AUTH = [ACTIVITY];
@@ -120,12 +121,12 @@ describe('OMCW Inventory Management strategy types', () => {
     const client = await tenant('omcw-post');
     await save(client, 'Z001', 'No proposal');
     const before = await counts(client);
-    const result = await postGoodsIssue({
+    const error = await expectRejectedError(postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '201', postingDate: '2026-10-23', documentDate: '2026-10-23',
       requestKey: 'omcw-gi', lines: [{ materialNumber: 'NO-MAT', plant: '1000', quantity: 1, batch: '' }],
-    }).then(() => 'posted').catch((error: unknown) => error);
-    expect(result).toBeInstanceOf(GoodsIssueError);
-    expect((result as Error).message).not.toMatch(/strategy type|batch determination|proposed/i);
+    }));
+    expect(error).toBeInstanceOf(GoodsIssueError);
+    expect(error.message).not.toMatch(/strategy type|batch determination|proposed/i);
     const after = await counts(client);
     expect(after.documents).toBe(before.documents);
     expect(after.stock).toBe(before.stock);

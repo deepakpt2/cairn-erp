@@ -69,6 +69,8 @@ export async function assignSchedulingProfileAction(
   const session = await requireSession(ROUTE);
   try {
     await requireCapability(ACTIVITY, session);
+    const materialNumber = read(form, 'materialNumber').trim();
+    const plant = read(form, 'plant').trim();
     const saved = await assignSchedulingProfile({
       client: session.user.client,
       changedBy: session.user.username,

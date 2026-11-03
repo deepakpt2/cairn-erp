@@ -841,6 +841,7 @@ async function standingLines(tx: Tx, client: string, parkedNumber: string): Prom
   invoiceDate: string;
   postingDate: string;
   grossAmount: string;
+  taxAmount: string;
   headerText: string | null;
   changedAt: Date;
   lines: Map<number, StandingLine>;

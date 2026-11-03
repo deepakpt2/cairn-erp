@@ -136,7 +136,7 @@ export interface StandingItem {
   markedForDeletion: boolean;
 }
 
-interface StandingArrangement {
+export interface StandingArrangement {
   quotaNumber: string;
   materialNumber: string;
   plant: string;

@@ -11,13 +11,12 @@ import {
 } from '../src/modules/inventory/stock-reconcile';
 import {
   UOM_CAPABILITY,
-  UnitConversionError,
   defineUomConversion,
   toBaseQuantity,
 } from '../src/modules/inventory/unit-conversion';
-import { postGoodsIssue, GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 
 /**
  * SCR-144 — the three structural gaps against the MIGO production specification:
@@ -168,9 +167,9 @@ describe('SCR-144 reconcile and unit conversion', () => {
   });
 
   it('refuses an alternative unit the material has no conversion for, by name', async () => {
-    const error = await withTenant(client, (tx) => toBaseQuantity(tx, client, {
+    const error = await expectRejectedError(withTenant(client, (tx) => toBaseQuantity(tx, client, {
       materialNumber: 'UOM-PLAIN', quantity: 1, entryUnit: 'GAL',
-    })).catch((e: unknown) => e as UnitConversionError);
+    })));
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toContain('INV.STOCK.UOM');
   });
@@ -216,11 +215,11 @@ describe('SCR-144 reconcile and unit conversion', () => {
        where client = ${client} and material_number = 'UOM-MAT' and plant = ${PLANT}
          and storage_location = 'SU01' and stock_type = 'UNRESTRICTED'
     `)) as unknown as Array<{ q: string }>;
-    expect(Number(stock.q)).toBe(76, 'the stock fell by the BASE quantity, not the entered one');
+    expect(Number(stock.q), 'the stock fell by the BASE quantity, not the entered one').toBe(76);
   });
 
   it('refuses a goods issue in an unconverted unit, leaving stock untouched', async () => {
-    const error = await postGoodsIssue({
+    const error = await expectRejectedError(postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '551',
       postingDate: '2026-10-20', documentDate: '2026-10-20',
       lines: [{
@@ -228,7 +227,7 @@ describe('SCR-144 reconcile and unit conversion', () => {
         quantity: 1, entryUnit: 'GAL',
       }],
       requestKey: 'uom-issue-2',
-    }).catch((e: unknown) => e as GoodsIssueError);
+    }));
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
 
@@ -237,7 +236,7 @@ describe('SCR-144 reconcile and unit conversion', () => {
        where client = ${client} and material_number = 'UOM-PLAIN' and plant = ${PLANT}
          and storage_location = 'SU01' and stock_type = 'UNRESTRICTED'
     `)) as unknown as Array<{ q: string }>;
-    expect(Number(stock.q)).toBe(100, 'a refused conversion must not move stock');
+    expect(Number(stock.q), 'a refused conversion must not move stock').toBe(100);
   });
 
   it('reconciles the projection against the ledger and calls it balanced', async () => {
@@ -289,7 +288,7 @@ describe('SCR-144 reconcile and unit conversion', () => {
       select count(*)::int as n from stock_quantity
        where client = ${client} and material_number = 'UOM-PLAIN' and stock_type = 'BLOCKED'
     `)) as unknown as Array<{ n: number }>;
-    expect(rows[0].n).toBe(0, 'a dimension the ledger does not know is removed, not zeroed');
+    expect(rows[0].n, 'a dimension the ledger does not know is removed, not zeroed').toBe(0);
   });
 
   it('refuses to rebuild a dimension while a physical inventory count holds it open', async () => {
@@ -297,10 +296,10 @@ describe('SCR-144 reconcile and unit conversion', () => {
       client, createdBy: ACTOR, plant: PLANT, storageLocation: 'SU01',
       plannedCountDate: '2026-10-21', postingBlock: true, materials: ['UOM-MAT'],
     });
-    const error = await rebuildStockDimension({
+    const error = await expectRejectedError(rebuildStockDimension({
       client, changedBy: ACTOR, materialNumber: 'UOM-MAT',
       plant: PLANT, storageLocation: 'SU01', stockType: 'UNRESTRICTED',
-    }).catch((e: unknown) => e as StockReconcileError);
+    }));
     expect(error).toBeInstanceOf(StockReconcileError);
     expect(error.message).toMatch(new RegExp(count.inventoryDocumentNumber));
 

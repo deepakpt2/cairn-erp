@@ -176,7 +176,7 @@ export async function checkRfqAction(
       ok: true,
       wrote: false,
       eventNumber: null,
-      rfqNumbers: preview.requests.map((request) => request.rfqNumber),
+      rfqNumbers: [],
       currency: preview.currency,
       lines: preview.lines,
       requests: preview.requests,

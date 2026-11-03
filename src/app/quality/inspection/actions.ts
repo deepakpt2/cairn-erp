@@ -60,6 +60,9 @@ export async function recordResultAction(
       typeof resultValue !== 'string' || !resultValue) {
     return { ok: false, message: 'Lot, characteristic and result value are required.' };
   }
+  if (resultStatus !== 'RECORDED' && resultStatus !== 'ACCEPTED' && resultStatus !== 'REJECTED') {
+    return { ok: false, message: 'Choose a valid inspection result status.' };
+  }
 
   try {
     await recordInspectionResult({
@@ -69,7 +72,7 @@ export async function recordResultAction(
       characteristicCode: characteristicCode.trim().toUpperCase(),
       resultValue: resultValue.trim(),
       measuredUnit: typeof measuredUnit === 'string' ? measuredUnit.trim().toUpperCase() || undefined : undefined,
-      resultStatus: (typeof resultStatus === 'string' && resultStatus) as any,
+      resultStatus,
       requestKey: typeof requestKey === 'string' ? requestKey.trim() || undefined : undefined,
     });
     revalidatePath(ROUTE);
@@ -101,8 +104,8 @@ export async function saveCharacteristicAction(
 
   if (typeof characteristicCode !== 'string' || !characteristicCode ||
       typeof description !== 'string' || !description ||
-      typeof characteristicType !== 'string') {
-    return { ok: false, message: 'Characteristic code, description and type are required.' };
+      (characteristicType !== 'QUANTITATIVE' && characteristicType !== 'QUALITATIVE')) {
+    return { ok: false, message: 'Characteristic code, description and a valid type are required.' };
   }
 
   try {
@@ -111,7 +114,7 @@ export async function saveCharacteristicAction(
       changedBy: session.user.username,
       characteristicCode: characteristicCode.trim().toUpperCase(),
       description: description.trim(),
-      characteristicType: characteristicType as 'QUANTITATIVE' | 'QUALITATIVE',
+      characteristicType,
       tolerancePlus: typeof tolerancePlus === 'string' && tolerancePlus ? Number(tolerancePlus) : undefined,
       toleranceMinus: typeof toleranceMinus === 'string' && toleranceMinus ? Number(toleranceMinus) : undefined,
       unit: typeof unit === 'string' ? unit.trim().toUpperCase() || undefined : undefined,
@@ -138,8 +141,8 @@ export async function decideAction(
   const requestKey = form.get('requestKey');
 
   if (typeof lotNumber !== 'string' || !lotNumber ||
-      typeof decisionCode !== 'string' || !decisionCode) {
-    return { ok: false, message: 'Lot and decision are required.' };
+      (decisionCode !== 'ACCEPT' && decisionCode !== 'REJECT' && decisionCode !== 'BLOCK' && decisionCode !== 'REWORK')) {
+    return { ok: false, message: 'Lot and a valid usage decision are required.' };
   }
 
   try {
@@ -147,7 +150,7 @@ export async function decideAction(
       client: session.user.client,
       changedBy: session.user.username,
       lotNumber: lotNumber.trim().toUpperCase(),
-      decisionCode: decisionCode as 'ACCEPT' | 'REJECT' | 'BLOCK' | 'REWORK',
+      decisionCode,
       postStock: postStock !== 'false',
       requestKey: typeof requestKey === 'string' ? requestKey.trim() || undefined : undefined,
     });

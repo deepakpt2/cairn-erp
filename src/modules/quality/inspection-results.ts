@@ -51,7 +51,7 @@ export const characteristicInput = z.object({
   validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'a date is required').optional().default('9999-12-31'),
 });
 
-export type CharacteristicInput = z.infer<typeof characteristicInput>;
+export type CharacteristicInput = z.input<typeof characteristicInput>;
 
 export const resultInput = z.object({
   lotNumber: key(20),
@@ -62,7 +62,7 @@ export const resultInput = z.object({
   requestKey: z.string().trim().max(64).optional(),
 });
 
-export type ResultInput = z.infer<typeof resultInput>;
+export type ResultInput = z.input<typeof resultInput>;
 
 export interface CharacteristicRow {
   characteristicCode: string;

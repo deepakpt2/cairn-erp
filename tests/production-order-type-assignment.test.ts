@@ -63,7 +63,7 @@ describe('production order type assignment', () => {
       client: tenant.client, createdBy: ACTOR, requestKey: key,
       materialNumber: 'AUART-FG', plant: PLANT, orderQuantity: 2,
       scheduledStart: '2026-11-02', scheduledFinish: '2026-11-06',
-      orderType,
+      orderType: orderType ?? '',
       components: [{ materialNumber: 'AUART-RM', plant: PLANT, requiredQuantity: 1 }],
     });
   }

@@ -947,8 +947,11 @@ export async function changePurchaseContract(
     const standingNumbers = new Set(standing.map((item) => item.itemNumber));
     let maxItem = Math.max(0, ...standingNumbers);
     for (const item of input.items) {
-      const isNew = item.itemNumber === undefined || !standingNumbers.has(item.itemNumber);
-      const itemNumber = isNew ? (maxItem += type.itemInterval) : item.itemNumber as number;
+      const isNew = item.itemNumber == null || !standingNumbers.has(item.itemNumber);
+      let itemNumber: number;
+      if (isNew) itemNumber = maxItem += type.itemInterval;
+      else if (item.itemNumber != null) itemNumber = item.itemNumber;
+      else throw new PurchaseContractError('An existing contract item lost its item number.');
       const judged = await judgeItem(tx, input.client, {
         companyCode: before.companyCode,
         currency: before.currency,

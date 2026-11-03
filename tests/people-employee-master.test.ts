@@ -5,21 +5,21 @@ import { withTenant } from '../src/platform/db/client';
 import {
   EMPLOYEE_CAPABILITY,
   RECORD_CAPABILITY,
-  changeEmployee,
-  changeRecordValues,
-  createEmployee,
-  createRecord,
-  delimitRecord,
+  changeEmployee as changeEmployeeService,
+  changeRecordValues as changeRecordValuesService,
+  createEmployee as createEmployeeService,
+  createRecord as createRecordService,
+  delimitRecord as delimitRecordService,
   getEmployee,
   listEmployees,
 } from '../src/modules/people/employee-master';
 import {
   RECORD_TYPE_CAPABILITY,
   RecordTypeConfigError,
-  addRecordField,
-  changeRecordField,
-  changeRecordType,
-  defineRecordType,
+  addRecordField as addRecordFieldService,
+  changeRecordField as changeRecordFieldService,
+  changeRecordType as changeRecordTypeService,
+  defineRecordType as defineRecordTypeService,
   getRecordType,
   listRecordTypes,
 } from '../src/modules/people/record-types';
@@ -45,6 +45,18 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
  * the point is that a span is open and has to be ended first.
  */
 const ACTOR = 'PEOPLE_9193_TEST';
+const EMPLOYEE_AUTH = [EMPLOYEE_CAPABILITY] as const;
+const RECORD_AUTH = [RECORD_CAPABILITY] as const;
+const RECORD_TYPE_AUTH = [RECORD_TYPE_CAPABILITY] as const;
+const createEmployee = (input: Parameters<typeof createEmployeeService>[0]) => createEmployeeService(input, EMPLOYEE_AUTH);
+const changeEmployee = (input: Parameters<typeof changeEmployeeService>[0]) => changeEmployeeService(input, EMPLOYEE_AUTH);
+const createRecord = (input: Parameters<typeof createRecordService>[0]) => createRecordService(input, RECORD_AUTH);
+const changeRecordValues = (input: Parameters<typeof changeRecordValuesService>[0]) => changeRecordValuesService(input, RECORD_AUTH);
+const delimitRecord = (input: Parameters<typeof delimitRecordService>[0]) => delimitRecordService(input, RECORD_AUTH);
+const defineRecordType = (input: Parameters<typeof defineRecordTypeService>[0]) => defineRecordTypeService(input, RECORD_TYPE_AUTH);
+const changeRecordType = (input: Parameters<typeof changeRecordTypeService>[0]) => changeRecordTypeService(input, RECORD_TYPE_AUTH);
+const addRecordField = (input: Parameters<typeof addRecordFieldService>[0]) => addRecordFieldService(input, RECORD_TYPE_AUTH);
+const changeRecordField = (input: Parameters<typeof changeRecordFieldService>[0]) => changeRecordFieldService(input, RECORD_TYPE_AUTH);
 // A number the first tenant has never used: `numberFor()` starts at T9000001, so borrowing a number it hands
 // out would prove nothing about isolation.
 const FOREIGN_PERSON = 'T9100001';

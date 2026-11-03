@@ -151,9 +151,8 @@ describe('SCR-148 physical inventory differences', () => {
     await destroyTenant(otherClient);
   });
 
-  const list = (overrides: Parameters<typeof listDifferences>[1] = {
-    plantFrom: PLANT, fiscalYear,
-  }) => listDifferences(client, { plantFrom: PLANT, fiscalYear, ...overrides });
+  const list = (overrides: Partial<Parameters<typeof listDifferences>[1]> = {}) =>
+    listDifferences(client, { plantFrom: PLANT, fiscalYear, ...overrides });
 
   it('shows a shortage and a surplus, and hides a zero and an uncounted item', async () => {
     const result = await list();

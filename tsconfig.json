@@ -19,5 +19,14 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  // These five tracked files are documentation snippets, not independently executable modules.
+  // The runnable walkthrough remains the root walkthrough-seed.ts and stays in the project scope.
+  "exclude": [
+    "node_modules",
+    "notes/walk-a.ts",
+    "notes/walk-b.ts",
+    "notes/walk-c.ts",
+    "notes/walk-d.ts",
+    "notes/walk-e.ts"
+  ]
 }

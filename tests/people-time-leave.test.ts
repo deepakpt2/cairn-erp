@@ -8,10 +8,10 @@ import {
   TIME_TYPE_KINDS,
   TimeLeaveError,
   absencesOf,
-  cancelAbsence,
-  changeTimeType,
-  decideAbsence,
-  defineTimeType,
+  cancelAbsence as cancelAbsenceService,
+  changeTimeType as changeTimeTypeService,
+  decideAbsence as decideAbsenceService,
+  defineTimeType as defineTimeTypeService,
   getAbsence,
   getLeaveQuota,
   getTimeRecording,
@@ -19,11 +19,11 @@ import {
   listAbsences,
   listTimeTypes,
   openAbsenceOn,
-  recordTime,
-  requestAbsence,
-  setLeaveQuota,
+  recordTime as recordTimeService,
+  requestAbsence as requestAbsenceService,
+  setLeaveQuota as setLeaveQuotaService,
 } from '../src/modules/people/time-leave';
-import { createEmployee } from '../src/modules/people/employee-master';
+import { EMPLOYEE_CAPABILITY, createEmployee as createEmployeeService } from '../src/modules/people/employee-master';
 import { createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -50,6 +50,16 @@ import { createTenant, destroyTenant, type TestTenant } from './helpers';
  */
 
 const ACTOR = 'PEOPLE_9197_TEST';
+const TIME_AUTH = [TIME_ENTER_CAPABILITY] as const;
+const EMPLOYEE_AUTH = [EMPLOYEE_CAPABILITY] as const;
+const createEmployee = (input: Parameters<typeof createEmployeeService>[0]) => createEmployeeService(input, EMPLOYEE_AUTH);
+const defineTimeType = (input: Parameters<typeof defineTimeTypeService>[0]) => defineTimeTypeService(input, TIME_AUTH);
+const changeTimeType = (input: Parameters<typeof changeTimeTypeService>[0]) => changeTimeTypeService(input, TIME_AUTH);
+const requestAbsence = (input: Parameters<typeof requestAbsenceService>[0]) => requestAbsenceService(input, TIME_AUTH);
+const decideAbsence = (input: Parameters<typeof decideAbsenceService>[0]) => decideAbsenceService(input, TIME_AUTH);
+const cancelAbsence = (input: Parameters<typeof cancelAbsenceService>[0]) => cancelAbsenceService(input, TIME_AUTH);
+const setLeaveQuota = (input: Parameters<typeof setLeaveQuotaService>[0]) => setLeaveQuotaService(input, TIME_AUTH);
+const recordTime = (input: Parameters<typeof recordTimeService>[0]) => recordTimeService(input, TIME_AUTH);
 const AREA = 'A000';
 const CC = 'CC100';
 

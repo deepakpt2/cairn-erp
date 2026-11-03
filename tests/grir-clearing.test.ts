@@ -202,8 +202,11 @@ describe('SCR-163 maintain GR/IR clearing', () => {
          where client = ${c} and account_type = 'S'
       `);
       const company = await getCompanyCode(tx, c, '1000');
-      const position = await derivePosition(tx, c, company!.fiscalYearVariant, '2026-10-18');
-      const closed = await checkPostingAllowed(tx, c, company!.postingPeriodVariant, 'S', position);
+      if (!company?.fiscalYearVariant || !company.postingPeriodVariant) {
+        throw new Error('The test company is missing its fiscal-year or posting-period variant.');
+      }
+      const position = await derivePosition(tx, c, company.fiscalYearVariant, '2026-10-18');
+      const closed = await checkPostingAllowed(tx, c, company.postingPeriodVariant, 'S', position);
       expect(closed.allowed).toBe(false);
       expect(closed.reason).toContain('closed');
       return rules;

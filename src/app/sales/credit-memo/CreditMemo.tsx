@@ -5,6 +5,7 @@ import { useActionState, useState } from 'react';
 import type { CustomerCreditMemoView } from '@/modules/finance/customer-credit-memo';
 import { cancelCreditMemoAction, postCreditMemoAction, type CreditMemoActionState } from './actions';
 import { ConstrainedField } from '@/ui/fields/ConstrainedField';
+import type { ConstrainedValue } from '@/modules/foundation/constrained-values';
 
 const INITIAL: CreditMemoActionState = { ok: false, message: '' };
 
@@ -34,7 +35,7 @@ export default function CreditMemo({
   const [cancelState, cancelAction, cancelling] = useActionState(cancelCreditMemoAction, INITIAL);
   const [companyCode, setCompanyCode] = useState('');
   const [lines, setLines] = useState<LineState[]>([{ ...EMPTY }]);
-  const [taxRows, setTaxRows] = useState<{ code: string; meta: string }[]>([]);
+  const [taxRows, setTaxRows] = useState<ConstrainedValue[]>([]);
 
   const rateOf = (code: string) => Number(taxRows.find((row) => row.code === code)?.meta ?? taxes.find((row) => row.code === code)?.ratePercent ?? 0);
   const netTotal = lines.reduce((s, l) => s + (Number(l.net) || 0), 0);

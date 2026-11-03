@@ -47,7 +47,7 @@ export const decisionInput = z.object({
   requestKey: z.string().trim().max(64).optional(),
 });
 
-export type DecisionInput = z.infer<typeof decisionInput>;
+export type DecisionInput = z.input<typeof decisionInput>;
 
 export interface DecisionRow {
   lotNumber: string;
@@ -74,6 +74,8 @@ export interface DecisionWithLot {
   decisionDate: string | null;
   decidedBy: string | null;
   stockPosted: boolean;
+  stockDocumentNumber: string | null;
+  stockDocumentLine: number | null;
   results: {
     total: number;
     recorded: number;
@@ -398,11 +400,11 @@ async function postQualityStockMovementInTx(
     requestKey?: string | null;
   },
 ): Promise<{ documentNumber: string; lineNumber: number }> {
-  const { postTransfer } = await import('../../modules/inventory/transfer-posting');
+  const { postTransferInTx } = await import('../../modules/inventory/transfer-posting');
   const requestKey = input.requestKey || `QM-${input.client}-${input.lotNumber}-${Date.now()}`;
 
   if (input.destinationStockType === 'UNRESTRICTED' && input.sourceStockType === 'QUALITY') {
-    const result = await postTransfer({
+    const result = await postTransferInTx(tx, {
       client: input.client, changedBy: input.changedBy,
       movementTypeCode: '321',
       materialNumber: input.materialNumber,
@@ -425,7 +427,7 @@ async function postQualityStockMovementInTx(
   // For quality->blocked or other stock type changes, use postTransfer
   // with the TRANSFER_STYPE_BLOCK movement (QUALITY -> BLOCKED), keeping
   // the movement inside the inventory posting/document mechanism.
-  const result = await postTransfer({
+  const result = await postTransferInTx(tx, {
     client: input.client, changedBy: input.changedBy,
     movementTypeCode: '323',
     materialNumber: input.materialNumber,
@@ -488,6 +490,8 @@ export async function getDecisionWithLot(
       decisionDate: usageDecision.decisionDate,
       decidedBy: usageDecision.decidedBy,
       stockPosted: usageDecision.stockPosted,
+      stockDocumentNumber: usageDecision.stockDocumentNumber,
+      stockDocumentLine: usageDecision.stockDocumentLine,
     }).from(usageDecision).where(and(
       eq(usageDecision.client, client), eq(usageDecision.lotNumber, lotNumber),
     )).limit(1);
@@ -508,6 +512,8 @@ export async function getDecisionWithLot(
       decisionDate: decision?.decisionDate ? String(decision.decisionDate).slice(0, 10) : null,
       decidedBy: decision?.decidedBy ?? null,
       stockPosted: decision?.stockPosted ?? false,
+      stockDocumentNumber: decision?.stockDocumentNumber ?? null,
+      stockDocumentLine: decision?.stockDocumentLine ?? null,
       results: {
         total: summary?.totalCharacteristics ?? 0,
         recorded: summary?.resultsRecorded ?? 0,

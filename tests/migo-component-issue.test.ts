@@ -13,7 +13,6 @@ import {
   MB1A_SCENARIOS,
   MIGO_ISSUE_SCENARIOS,
   GOODS_ISSUE_CAPABILITY,
-  GoodsIssueError,
   postGoodsIssue,
   type PostGoodsIssueInput,
 } from '../src/modules/inventory/goods-issue';
@@ -25,7 +24,7 @@ import { technicallyCompleteProductionOrder } from '../src/modules/production/pr
 import { getProductionOrderDisplay } from '../src/modules/production/production-order-display';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 
 /**
  * SCR-139 / MIGO 261 — the component issue a production order consumes.
@@ -255,10 +254,10 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
 
   it('refuses an over-issue by name, quoting what the component still requires', async () => {
     // 25 required, 15 already issued: ten remain.
-    const error = await postGoodsIssue(input({ lines: [{
+    const error = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 11,
       productionOrderNumber: orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(error.message).toMatch(/still requires 10\.000 PC of MIGO-RM/);
     expect(error.remedy).toMatch(/tolerance master does not stand in canon/);
   });
@@ -271,49 +270,50 @@ describe('SCR-139 MIGO 261 goods issue to a production order', () => {
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'MIGO-RM', plant: PLANT, requiredQuantity: 5 }],
     });
-    const unreleased = await postGoodsIssue(input({ lines: [{
+    const unreleased = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: order.orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(unreleased.message).toMatch(/stands created, and only a released order may be charged/);
 
-    const missing = await postGoodsIssue(input({ lines: [{
+    const missing = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: 'PRD9999999', productionOrderItem: 10,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(missing.message).toMatch(/Production order PRD9999999 does not exist/);
   });
 
   it('refuses a component item the order does not carry, and a material that is not that item', async () => {
-    const wrongItem = await postGoodsIssue(input({ lines: [{
+    const wrongItem = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: orderNumber, productionOrderItem: 99,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(wrongItem.message).toMatch(/carries no component item 99/);
 
-    const wrongMaterial = await postGoodsIssue(input({ lines: [{
+    const wrongMaterial = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-FG', plant: PLANT, storageLocation: 'SM01', quantity: 1,
       productionOrderNumber: orderNumber, productionOrderItem: 10,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(wrongMaterial.message).toMatch(/item 10 requires MIGO-RM in plant/);
   });
 
   it('refuses a 261 line that names no order, and an order on a 201 line', async () => {
-    const noOrder = await postGoodsIssue(input({ lines: [{
+    const noOrder = await expectRejectedError(postGoodsIssue(input({ lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, quantity: 1,
-    }] }), 'MIGO').catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MIGO'));
     expect(noOrder.message).toMatch(/consumes for a production order, and none was named/);
 
-    const orderOn201 = await postGoodsIssue(input({ movementTypeCode: '201', lines: [{
+    const orderOn201 = await expectRejectedError(postGoodsIssue(input({ movementTypeCode: '201', lines: [{
       materialNumber: 'MIGO-RM', plant: PLANT, quantity: 1, costCenter: '',
       productionOrderNumber: orderNumber,
-    }] }), 'MB1A', { authorization: authorization() }).catch((e: unknown) => e as GoodsIssueError);
+    }] }), 'MB1A', { authorization: authorization() }));
     expect(orderOn201.message).toMatch(/consumes for no production order/);
   });
 
   it('refuses 261 posted from the MB1A screen', async () => {
-    const error = await postGoodsIssue(input(), 'MB1A', { authorization: authorization() })
-      .catch((e: unknown) => e as GoodsIssueError);
+    const error = await expectRejectedError(
+      postGoodsIssue(input(), 'MB1A', { authorization: authorization() }),
+    );
     expect(error.message).toMatch(/Movement 261 is posted from MIGO/);
   });
 

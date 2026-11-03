@@ -41,7 +41,7 @@ export const LOCK_OBJECT = 'BATCH_SEARCH_STRATEGY';
 export const USAGE = 'H';
 export const APPLICATION = 'ME';
 
-const TITLES = new Map(ALLOWED_FIELDS.map((item) => [item.field, item.title]));
+const TITLES = new Map<string, string>(ALLOWED_FIELDS.map((item) => [item.field, item.title]));
 
 export const NOT_EXECUTED = [
   {

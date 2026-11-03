@@ -22,7 +22,7 @@ export default function RoutingForm({
   document: RoutingView | null;
   locked: boolean;
   plants: Array<{ plant: string; name: string }>;
-  materials: Array<{ materialNumber: string; description: string; baseUnit: string }>;
+  materials: Array<{ materialNumber: string; description: string; baseUnit: string | null }>;
   types: Array<{ taskListType: string; description: string }>;
   usages: Array<{ usage: string; description: string }>;
   statuses: Array<{ status: string; description: string }>;

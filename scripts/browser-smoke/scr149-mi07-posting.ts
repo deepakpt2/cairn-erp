@@ -256,14 +256,14 @@ export async function scr149Mi07Posting(ctx: Context) {
     { timeout: 15000 },
   ).catch((error: unknown) => error);
   const submitted = await page.evaluate((key) => {
-    const posting = [...document.querySelectorAll('form')].find((form) => form.querySelector('[data-posting-check]'));
+    const posting = [...document.querySelectorAll<HTMLFormElement>('form')].find((form) => form.querySelector('[data-posting-check]'));
     if (!posting) return 'the posting form is not on the page';
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     if (!setter) return 'no value setter';
     const names = ['requestKey', 'postingDate', 'documentDate', 'headerText'];
     const values = [key, '2026-10-21', '2026-10-21', 'Count adj'];
     for (let i = 0; i < names.length; i += 1) {
-      const field = posting.querySelector('input[name="' + names[i] + '"]');
+      const field = posting.querySelector<HTMLInputElement>('input[name="' + names[i] + '"]');
       if (!field) return 'missing ' + names[i];
       setter.call(field, values[i]);
     }
@@ -274,7 +274,7 @@ export async function scr149Mi07Posting(ctx: Context) {
       hidden.value = item;
       posting.appendChild(hidden);
     }
-    const submit = posting.querySelector('button[type="submit"]');
+    const submit = posting.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (!submit) return 'no submit button';
     submit.disabled = false;
     posting.requestSubmit(submit);
@@ -290,7 +290,7 @@ export async function scr149Mi07Posting(ctx: Context) {
 
   const changed = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('physical-inventory-posting'));
   await page.evaluate((key) => {
-    const posting = [...document.querySelectorAll('form')].find((form) => form.querySelector('[data-posting-check]'));
+    const posting = [...document.querySelectorAll<HTMLFormElement>('form')].find((form) => form.querySelector('[data-posting-check]'));
     if (!posting) throw new Error('the posting form is not on the page');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     const keyField = posting.querySelector<HTMLInputElement>('input[name="requestKey"]');
@@ -306,7 +306,7 @@ export async function scr149Mi07Posting(ctx: Context) {
       hidden.value = item;
       posting.appendChild(hidden);
     }
-    const submit = posting.querySelector('button[type="submit"]');
+    const submit = posting.querySelector<HTMLButtonElement>('button[type="submit"]');
     submit?.removeAttribute('disabled');
     posting.requestSubmit(submit);
   }, requestKey);

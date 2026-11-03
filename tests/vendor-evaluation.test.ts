@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import {
+  VendorEvaluationError,
   checkVendorEvaluation,
   listVendorEvaluation,
   saveManualScore,

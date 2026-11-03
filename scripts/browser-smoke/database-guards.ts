@@ -7,7 +7,9 @@ export type BrowserAcceptanceDatabaseGuard = {
 };
 
 /** Each local acceptance target is bound to an explicitly reviewed loopback database and port. */
-export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<BrowserTargetId, BrowserAcceptanceDatabaseGuard>> = {
+type GuardedBrowserTargetId = BrowserTargetId | 'production-order-settlement-acceptance';
+
+export const ACCEPTANCE_DATABASE_GUARDS: Partial<Record<GuardedBrowserTargetId, BrowserAcceptanceDatabaseGuard>> = {
   // R-77 (owner ruling, 2026-10-17): these nine were each bound to a disposable cluster of
   // their own — cairn_b110 to cairn_b153 on ports 55496 to 55530 — which this environment does
   // not provide, so all nine stopped at their guard and could not run at all. They are rebound to

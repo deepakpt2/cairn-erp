@@ -39,7 +39,7 @@ async function guard(formData: FormData) {
 
 function errorState(error: unknown): CloseState {
   if (error instanceof CloseCockpitError || error instanceof AuthzError) {
-    return { ok: false, message: error.message, remedy: (error as { remedy?: string }).remedy };
+    return { ok: false, message: error.message, remedy: error.remedy };
   }
   console.error('Close cockpit action failed', error);
   return { ok: false, message: 'The action failed. Nothing was changed.', remedy: 'Contact an administrator if the problem persists.' };
@@ -64,7 +64,7 @@ export async function createListAction(_previous: CloseState, formData: FormData
 
 async function changeCycle(
   formData: FormData,
-  write: (session: Awaited<ReturnType<typeof guard>>, cycle: CloseCycleKey) => Promise<void>,
+  write: (session: Awaited<ReturnType<typeof guard>>, cycle: CloseCycleKey) => Promise<unknown>,
 ) {
   const session = await guard(formData);
   const cycle = cycleFrom(formData);

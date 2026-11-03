@@ -233,7 +233,7 @@ describe('CO01 production version and BOM snapshot', () => {
     expect(preview.operations.map((row) => row.operationNumber)).toEqual(['0010']);
     expect(await counts()).toEqual(before);
 
-    const view = await createProductionOrder({ orderType: 'PP01', ...orderInput('CO01-FG', 'fg-create'), });
+    const view = await createProductionOrder(orderInput('CO01-FG', 'fg-create'));
     expect(view.status).toBe('CREATED');
     expect(view.productionVersion).toBe('0001');
     expect(view.bomUsage).toBe('P');
@@ -308,7 +308,7 @@ describe('CO01 production version and BOM snapshot', () => {
   it('creates no order when the version or BOM cannot be used', async () => {
     const before = await counts();
     await expect(createProductionOrder(orderInput('CO01-MISS', 'miss'))).rejects.toThrow(/No order was created/);
-    await expect(createProductionOrder({ orderType: 'PP01', ...orderInput('CO01-FG', 'bad-version'), productionVersion: 'ZZZZ' })).rejects.toThrow(/No order was created/);
+    await expect(createProductionOrder({ ...orderInput('CO01-FG', 'bad-version'), productionVersion: 'ZZZZ' })).rejects.toThrow(/No order was created/);
     await expect(createProductionOrder(orderInput('CO01-PH', 'phantom'))).rejects.toThrow(/phantom/);
     await expect(createProductionOrder(orderInput('CO01-BK', 'bulk'))).rejects.toThrow(/bulk/);
     await expect(createProductionOrder(orderInput('CO01-OUT', 'out'))).rejects.toThrow(/no component in effect/);
@@ -317,7 +317,7 @@ describe('CO01 production version and BOM snapshot', () => {
   });
 
   it('uses a named version through the selector and does not accept an alternative bypass', async () => {
-    const named = await createProductionOrder({ orderType: 'PP01', ...orderInput('CO01-AMB', 'amb-named'), productionVersion: '0002' });
+    const named = await createProductionOrder({ ...orderInput('CO01-AMB', 'amb-named'), productionVersion: '0002' });
     expect(named.productionVersion).toBe('0002');
     expect(named.bomAlternative).toBe('02');
     expect(named.components[0]?.requiredQuantity).toBe('40.000');
@@ -350,7 +350,6 @@ describe('CO01 production version and BOM snapshot', () => {
 
   it('keeps a caller-supplied snapshot without recording a production version', async () => {
     const view = await createProductionOrder({
-      orderType: 'PP01',
       ...orderInput('CO01-FG', 'supplied'),
       components: [{ materialNumber: 'CO01-RM1', plant: PLANT, requiredQuantity: 5 }],
     });

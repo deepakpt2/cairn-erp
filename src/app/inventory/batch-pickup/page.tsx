@@ -23,7 +23,10 @@ export default async function BatchPickupPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const get = (name: string) => (typeof params[name] === 'string' ? (params[name] as string) : '').trim();
+  const get = (name: string) => {
+    const value = params[name];
+    return (typeof value === 'string' ? value : '').trim();
+  }
   const selection: BatchPickupSelection = {
     material: get('material').toUpperCase(),
     plant: get('plant').toUpperCase(),
@@ -42,7 +45,7 @@ export default async function BatchPickupPage({
   let reportError: string | null = null;
   if (asked && can(session, BATCH_PICKUP_CAPABILITY)) {
     try {
-      result = await listBatchPickup(session.client, selection);
+      result = await listBatchPickup(session.user.client, selection);
     } catch (caught) {
       reportError = caught instanceof BatchPickupError ? `${caught.message} ${caught.remedy}` : t('mb5c.failed');
     }

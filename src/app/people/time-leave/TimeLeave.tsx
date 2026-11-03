@@ -1,14 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { useActionState } from 'react';
 
 import type {
   AbsenceView,
-  TimeLeaveActionState,
   TimeRecordingView,
   TimeTypeView,
 } from '@/modules/people/time-leave';
+import type { TimeLeaveActionState } from './actions';
 import {
   decideAbsenceAction,
   defineTimeTypeAction,
@@ -49,10 +49,7 @@ function textLabel(kind: string): string {
 
 /** ───────── Time type definition ───────── */
 function TimeTypeForm({ canWrite }: { canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-
-  const [isPending, formAction] = useActionState(defineTimeTypeAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(defineTimeTypeAction, EMPTY, `/people/time-leave`);
 
   return (
     <section className="mt-4 border panel p-3">
@@ -63,7 +60,7 @@ function TimeTypeForm({ canWrite }: { canWrite: boolean }) {
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-3 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="col-span-1 sm:col-span-1">
           <label className="block text-xs text-ink-soft mb-1">Code</label>
           <input name="code" required className="w-full border rounded px-2 py-1 text-sm" placeholder="e.g. LEAVE" />
@@ -101,16 +98,14 @@ function TimeTypeForm({ canWrite }: { canWrite: boolean }) {
             {isPending ? 'Defining…' : 'Define time type'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }
 
 /** ───────── Time type change ───────── */
 function TimeTypeChange({ type, canWrite }: { type: TimeTypeView | null; canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-  const [isPending, formAction] = useActionState(changeTimeTypeAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(changeTimeTypeAction, EMPTY, `/people/time-leave`);
 
   if (!type) return null;
 
@@ -123,7 +118,7 @@ function TimeTypeChange({ type, canWrite }: { type: TimeTypeView | null; canWrit
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-4 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <input name="typeCode" defaultValue={type.code} hidden />
         <div className="col-span-1 sm:col-span-2">
           <label className="block text-xs text-ink-soft mb-1">Name</label>
@@ -150,16 +145,14 @@ function TimeTypeChange({ type, canWrite }: { type: TimeTypeView | null; canWrit
             {isPending ? 'Changing…' : 'Change type'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }
 
 /** ───────── Absence request ───────── */
 function AbsenceRequestForm({ canWrite }: { canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-  const [isPending, formAction] = useActionState(requestAbsenceAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(requestAbsenceAction, EMPTY, `/people/time-leave`);
 
   return (
     <section className="mt-4 border panel p-3">
@@ -170,7 +163,7 @@ function AbsenceRequestForm({ canWrite }: { canWrite: boolean }) {
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-4 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="col-span-1 sm:col-span-1">
           <label className="block text-xs text-ink-soft mb-1">Personnel number</label>
           <input name="personnelNumber" required className="w-full border rounded px-2 py-1 text-sm" />
@@ -203,16 +196,14 @@ function AbsenceRequestForm({ canWrite }: { canWrite: boolean }) {
             {isPending ? 'Requesting…' : 'Request absence'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }
 
 /** ───────── Absence decision ───────── */
 function AbsenceDecisionForm({ absence, canWrite }: { absence: AbsenceView | undefined; canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-  const [isPending, formAction] = useActionState(decideAbsenceAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(decideAbsenceAction, EMPTY, `/people/time-leave`);
 
   if (!absence || absence.status !== 'REQUESTED') return null;
 
@@ -229,7 +220,7 @@ function AbsenceDecisionForm({ absence, canWrite }: { absence: AbsenceView | und
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-4 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <input name="personnelNumber" defaultValue={absence.personnelNumber} hidden />
         <input name="timeTypeCode" defaultValue={absence.timeTypeCode} hidden />
         <input name="validFrom" defaultValue={absence.validFrom} hidden />
@@ -250,16 +241,14 @@ function AbsenceDecisionForm({ absence, canWrite }: { absence: AbsenceView | und
             {isPending ? 'Deciding…' : 'Decide'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }
 
 /** ───────── Time recording ───────── */
 function TimeRecordingForm({ canWrite }: { canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-  const [isPending, formAction] = useActionState(recordTimeAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(recordTimeAction, EMPTY, `/people/time-leave`);
 
   return (
     <section className="mt-4 border panel p-3">
@@ -270,7 +259,7 @@ function TimeRecordingForm({ canWrite }: { canWrite: boolean }) {
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-4 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="col-span-1 sm:col-span-1">
           <label className="block text-xs text-ink-soft mb-1">Personnel number</label>
           <input name="personnelNumber" required className="w-full border rounded px-2 py-1 text-sm" />
@@ -299,16 +288,14 @@ function TimeRecordingForm({ canWrite }: { canWrite: boolean }) {
             {isPending ? 'Recording…' : 'Record time'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }
 
 /** ───────── Leave quota ───────── */
 function LeaveQuotaForm({ canWrite }: { canWrite: boolean }) {
-  const [state, setState] = useState<TimeLeaveActionState>(EMPTY);
-  const [actionState, setActionState] = useState<TimeLeaveActionState>(EMPTY);
-  const [isPending, formAction] = useActionState(setLeaveQuotaAction, actionState, `/people/time-leave`);
+  const [state, formAction, isPending] = useActionState(setLeaveQuotaAction, EMPTY, `/people/time-leave`);
 
   return (
     <section className="mt-4 border panel p-3">
@@ -323,7 +310,7 @@ function LeaveQuotaForm({ canWrite }: { canWrite: boolean }) {
           This session does not hold {`PEOPLE.TIME.ENTER`}. The form is read.
         </p>
       )}
-      <form action={formAction} className="grid grid-cols-1 sm:grid-cols-4 gap-3" disabled={!canWrite}>
+      <form action={formAction}><fieldset disabled={!canWrite} className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <div className="col-span-1 sm:col-span-1">
           <label className="block text-xs text-ink-soft mb-1">Personnel number</label>
           <input name="personnelNumber" required className="w-full border rounded px-2 py-1 text-sm" />
@@ -352,7 +339,7 @@ function LeaveQuotaForm({ canWrite }: { canWrite: boolean }) {
             {isPending ? 'Setting…' : 'Set quota'}
           </button>
         </div>
-      </form>
+      </fieldset></form>
     </section>
   );
 }

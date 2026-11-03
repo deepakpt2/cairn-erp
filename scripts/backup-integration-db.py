@@ -66,6 +66,37 @@ def run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str
     return result
 
 
+def _fsync_directory(directory: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(directory, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def publish_manifest(path: Path, record: dict[str, object]) -> None:
+    """Publish a complete mode-0600 JSON manifest without exposing partial content."""
+    temporary = path.with_name(f".{path.name}.partial")
+    payload = (json.dumps(record, indent=2) + "\n").encode("utf-8")
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        # Hard-link publication is atomic and refuses to overwrite an existing manifest.
+        os.link(temporary, path)
+        _fsync_directory(path.parent)
+    finally:
+        # This temporary was created exclusively above; never remove a pre-existing file.
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    _fsync_directory(path.parent)
+
+
 def main() -> None:
     env_path = Path(os.environ.get(
         "CAIRN_INTEGRATION_ENV_FILE",
@@ -125,7 +156,8 @@ def main() -> None:
     backup = backup_dir / f"{stem}.dump"
     partial = backup_dir / f".{stem}.partial"
     manifest = backup_dir / f"{stem}.json"
-    if backup.exists() or partial.exists() or manifest.exists():
+    manifest_partial = backup_dir / f".{manifest.name}.partial"
+    if backup.exists() or partial.exists() or manifest.exists() or manifest_partial.exists():
         fail("a backup with this timestamp already exists")
 
     dump_args = [
@@ -154,8 +186,7 @@ def main() -> None:
         "verified_by": "pg_restore --list",
         "restore_owner": "cairn superuser or an equivalent administrator; restore roles must already exist",
     }
-    manifest.write_text(json.dumps(record, indent=2) + "\n")
-    manifest.chmod(0o600)
+    publish_manifest(manifest, record)
     print(f"Verified integration backup created: {backup} ({size} bytes, SHA-256 {digest[:16]}…, {migration_count_text} migrations).")
     print("Archive listing and target identity verified; passwords and URLs were not printed.")
 

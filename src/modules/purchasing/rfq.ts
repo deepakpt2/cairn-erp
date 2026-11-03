@@ -544,7 +544,7 @@ export async function writeRequestForQuotation(
         createdBy: input.changedBy,
       });
     }
-    requests.push({ rfqNumber, partnerNumber, lines: prepared.lines });
+    requests.push({ rfqNumber, partnerNumber, changedAt: null, lines: prepared.lines });
     await recordChange(tx, {
       client: input.client,
       objectClass: REQUEST_CLASS,
@@ -826,11 +826,13 @@ async function planChange(tx: Tx, input: RfqChangeInput, lock: boolean): Promise
     nextHeader.purchasingGroup = groupCode;
   }
   if (input.quotationDeadline !== undefined) {
-    assertDate(input.quotationDeadline, 'The quotation deadline');
-    if (input.quotationDeadline < event.rfqDate) {
+    const quotationDeadline = input.quotationDeadline;
+    if (!quotationDeadline) throw new RfqError('A quotation deadline is required.');
+    assertDate(quotationDeadline, 'The quotation deadline');
+    if (quotationDeadline < event.rfqDate) {
       throw new RfqError('The quotation deadline is before the RFQ date.');
     }
-    nextHeader.quotationDeadline = input.quotationDeadline;
+    nextHeader.quotationDeadline = quotationDeadline;
   }
   if (input.collectiveNumber !== undefined) {
     const collective = blank(input.collectiveNumber);

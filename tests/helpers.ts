@@ -343,3 +343,14 @@ export async function destroyTenant(client: string): Promise<void> {
 }
 
 export { db, withTenant, closeDb, and, eq, sql };
+
+/** Await an operation that must reject, returning its Error without casts. */
+export async function expectRejectedError(operation: Promise<unknown>): Promise<Error & { remedy?: string }> {
+  try {
+    await operation;
+  } catch (caught) {
+    if (caught instanceof Error) return caught;
+    throw caught;
+  }
+  throw new Error('Expected the operation to reject, but it resolved.');
+}

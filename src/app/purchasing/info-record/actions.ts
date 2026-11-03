@@ -14,6 +14,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { PartnerError } from '@/modules/foundation/business-partners';
 import { SupplierPurchasingError } from '@/modules/foundation/supplier-purchasing';
 import { UnitConversionError } from '@/modules/inventory/unit-conversion';
+import { EnqueueError, assertChangeForSession } from '@/platform/lock/enqueue';
 import {
   INFO_RECORD_CAPABILITY,
   INFO_RECORD_ROUTE,

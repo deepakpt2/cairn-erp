@@ -40,13 +40,13 @@ import { z } from 'zod';
 import { AuthzError } from '../../platform/auth/current';
 import { hasCapability } from '../../platform/auth/session';
 import { recordChange } from '../../platform/change';
+import { fromScaled, toScaled } from '../../platform/posting/decimal';
 import { type Tx, withTenant } from '../../platform/db/client';
 import {
   absence,
   leaveQuota,
   timeRecording,
   timeType,
-  TIME_ENTER_CAPABILITY,
   TIME_TYPE_KINDS,
   type TimeTypeKind,
 } from './schema';
@@ -130,15 +130,31 @@ const decideAbsenceInput = z.object({
   changedBy: actor,
 });
 
+function fixedDecimalInput(
+  value: string,
+  maximum: bigint,
+  allowZero: boolean,
+): string | typeof z.NEVER {
+  if (!/^(?:0|[1-9]\d{0,2})(?:\.\d{1,2})?$/.test(value)) {
+    return z.NEVER;
+  }
+  const scaled = toScaled(value, 2);
+  if (scaled > maximum || (!allowZero && scaled <= 0n)) return z.NEVER;
+  return fromScaled(scaled, 2);
+}
+
 const recordTimeInput = z.object({
   client: clientField,
   personnelNumber,
   timeTypeCode,
   recordingDate: z.string().trim(),
-  hours: z.string().transform((s) => {
-    const n = Number(s);
-    if (!Number.isFinite(n) || n <= 0 || n > 24) throw new z.ZodError([{ code: 'custom', message: 'HOURS_FORMAT', path: ['hours'] }]);
-    return n;
+  hours: z.string().trim().transform((value, ctx) => {
+    const normalized = fixedDecimalInput(value, 2400n, false);
+    if (normalized === z.NEVER) {
+      ctx.addIssue({ code: 'custom', message: 'HOURS_FORMAT' });
+      return z.NEVER;
+    }
+    return normalized;
   }),
   changedBy: actor,
 });
@@ -149,13 +165,16 @@ const setLeaveQuotaInput = z.object({
   timeTypeCode,
   year: z.string().transform((s) => {
     const n = Number(s);
-    if (!Number.isFinite(n) || n < 1900 || n > 2100) throw new z.ZodError([{ code: 'custom', message: 'YEAR_FORMAT', path: ['year'] }]);
-    return n as unknown as number;
-  }),
-  entitlement: z.string().transform((s) => {
-    const n = Number(s);
-    if (!Number.isFinite(n) || n < 0) throw new z.ZodError([{ code: 'custom', message: 'ENTITLEMENT_FORMAT', path: ['entitlement'] }]);
+    if (!Number.isInteger(n) || n < 1900 || n > 2100) throw new z.ZodError([{ code: 'custom', message: 'YEAR_FORMAT', path: ['year'] }]);
     return n;
+  }),
+  entitlement: z.string().trim().transform((value, ctx) => {
+    const normalized = fixedDecimalInput(value, 99999n, true);
+    if (normalized === z.NEVER) {
+      ctx.addIssue({ code: 'custom', message: 'ENTITLEMENT_FORMAT' });
+      return z.NEVER;
+    }
+    return normalized;
   }),
   changedBy: actor,
 });
@@ -225,6 +244,7 @@ const REFUSALS: Record<string, [string, string]> = {
   HOURS_FORMAT: ['Hours must be a number greater than 0 and no more than 24.', 'Enter the hours the employee recorded that day.'],
   YEAR_FORMAT: ['A year is four digits, 1901 to 2099.', 'Write the calendar year the entitlement belongs to.'],
   ENTITLEMENT_FORMAT: ['Entitlement must be a number of zero or more.', 'Write the days the employee is entitled to that year.'],
+  ENTITLEMENT_BELOW_TAKEN: ['The entitlement cannot be less than days already taken.', 'Correct the entitlement or reconcile the existing leave history before changing it.'],
   TIME_TYPE_CODE_FORMAT: ['A time type code is one to ten characters, starting with a letter.', 'Define the type first, then request against it.'],
   TIME_TYPE_KIND: [
     'A time type is an absence, an attendance, or overtime.',
@@ -496,8 +516,9 @@ export async function requestAbsence(
         eq(leaveQuota.timeTypeCode, parsed.timeTypeCode),
         eq(leaveQuota.year, year),
       )).limit(1);
-      const remaining = quota?.remaining ?? 0;
-      if (remaining < days) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} requested, ${remaining} remaining.`);
+      const remaining = toScaled(quota?.remaining ?? '0', 2);
+      const requested = toScaled(String(days), 2);
+      if (remaining < requested) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} requested, ${fromScaled(remaining, 2)} remaining.`);
     }
 
     await tx.insert(absence).values({
@@ -566,12 +587,13 @@ export async function decideAbsence(
         eq(leaveQuota.timeTypeCode, parsed.timeTypeCode),
         eq(leaveQuota.year, year),
       )).limit(1);
-      const remaining = quota?.remaining ?? 0;
-      if (remaining < days) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} needed, ${remaining} remaining.`);
+      const remaining = toScaled(quota?.remaining ?? '0', 2);
+      const requested = toScaled(String(days), 2);
+      if (remaining < requested) refusal('QUOTA_EXCEEDED', `${days} day${days === 1 ? '' : 's'} needed, ${fromScaled(remaining, 2)} remaining.`);
 
       await tx.update(leaveQuota).set({
-        taken: Number(quota?.taken ?? 0) + days,
-        remaining: Number(quota?.remaining ?? 0) - days,
+        taken: fromScaled(toScaled(quota?.taken ?? '0', 2) + requested, 2),
+        remaining: fromScaled(remaining - requested, 2),
         changedBy: parsed.changedBy,
         changedAt: new Date(),
       }).where(and(
@@ -611,7 +633,7 @@ export async function decideAbsence(
 
 /** Cancel an absence: REQUESTED → CANCELLED. Only a request can be cancelled. */
 export async function cancelAbsence(
-  input: unknown,
+  input: Omit<z.input<typeof decideAbsenceInput>, 'status'>,
   capabilities?: readonly string[],
 ): Promise<AbsenceView> {
   return decideAbsence({ ...input, status: 'CANCELLED' as const }, capabilities);
@@ -713,13 +735,19 @@ export async function setLeaveQuota(
       eq(leaveQuota.year, year),
     )).limit(1);
 
-    const entitlement = Number(parsed.entitlement);
-    const taken = existing?.taken ?? 0;
+    const entitlement = parsed.entitlement;
+    const entitlementScaled = toScaled(entitlement, 2);
+    const taken = existing?.taken ?? '0';
+    const takenScaled = toScaled(taken, 2);
+    if (entitlementScaled < takenScaled) {
+      refusal('ENTITLEMENT_BELOW_TAKEN', `the entitlement ${entitlement} is less than ${fromScaled(takenScaled, 2)} days already taken.`);
+    }
+    const remaining = fromScaled(entitlementScaled - takenScaled, 2);
 
     if (existing) {
       await tx.update(leaveQuota).set({
         entitlement,
-        remaining: entitlement - taken,
+        remaining,
         changedBy: parsed.changedBy,
         changedAt: new Date(),
       }).where(and(
@@ -735,7 +763,7 @@ export async function setLeaveQuota(
         timeTypeCode: parsed.timeTypeCode,
         year,
         entitlement,
-        taken: 0,
+        taken: '0.00',
         remaining: entitlement,
         createdBy: parsed.changedBy,
       });
@@ -747,7 +775,7 @@ export async function setLeaveQuota(
       changeType: existing ? 'CHANGE' : 'CREATE',
       changedBy: parsed.changedBy,
       before: existing ? { entitlement: existing.entitlement, taken: existing.taken, remaining: existing.remaining } : undefined,
-      after: { entitlement, taken, remaining: entitlement - taken },
+      after: { entitlement, taken, remaining },
     });
     return undefined;
   });
@@ -949,9 +977,9 @@ export async function getLeaveQuota(
       time_type_code: string;
       time_type_name: string | null;
       year: number;
-      entitlement: number;
-      taken: number;
-      remaining: number;
+      entitlement: string;
+      taken: string;
+      remaining: string;
     }>;
     const row = rows[0];
     if (!row) refusal('ABSENCE_UNKNOWN', `${number}/${typeCode} year ${year}`);
@@ -1013,7 +1041,7 @@ export async function getTimeRecording(
       time_type_code: string;
       time_type_name: string | null;
       recording_date: string;
-      hours: number;
+      hours: string;
     }>;
     const row = rows[0];
     if (!row) refusal('ABSENCE_UNKNOWN', `${number}/${typeCode} on ${day}`);

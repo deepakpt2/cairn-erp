@@ -239,6 +239,7 @@ async function assertOperational(input: {
   plannedDeliveryDays?: number | null;
   minimumOrderQuantity?: number | null;
   minimumOrderUnit?: string | null;
+  orderUnit?: string | null;
 }, tx: Tx, client: string, materialNumber: string): Promise<void> {
   if (input.plannedDeliveryDays != null && (!Number.isInteger(input.plannedDeliveryDays) || input.plannedDeliveryDays < 0)) {
     throw new InfoRecordError('Planned delivery time is a nonnegative whole number of days, or it is omitted.');

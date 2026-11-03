@@ -11,6 +11,7 @@ import { createOrder } from '../src/modules/purchasing/orders';
 import { postSupplierInvoice } from '../src/modules/purchasing/invoice-verification';
 import {
   ParkedInvoiceError,
+  type ParkedInvoiceLineInput,
   changeParkedInvoice,
   deleteParkedInvoice,
   getParkedInvoice,
@@ -137,7 +138,7 @@ describe('SCR-160 parked supplier invoice', () => {
     return row;
   }
 
-  function line(quantity: number, netAmount: number) {
+  function line(quantity: number, netAmount: number): ParkedInvoiceLineInput {
     return { itemNumber: 10, quantity, netAmount };
   }
 

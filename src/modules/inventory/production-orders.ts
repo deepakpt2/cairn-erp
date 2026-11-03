@@ -112,6 +112,7 @@ export interface ProductionOrderComponentView {
 
 export interface ProductionOrderView {
   orderNumber: string;
+  version: number;
   materialNumber: string;
   materialDescription: string | null;
   plant: string;
@@ -208,6 +209,7 @@ async function toView(tx: Tx, client: string, header: typeof productionOrder.$in
 
   return {
     orderNumber: header.orderNumber,
+    version: header.version,
     materialNumber: header.materialNumber,
     materialDescription: produced?.description ?? null,
     plant: header.plant,
@@ -403,7 +405,7 @@ export async function createProductionOrder(
         eq(productionOrder.client, input.client),
         eq(productionOrder.requestKey, input.requestKey),
       ));
-      if (replay) return toView(tx, input.client, replay);
+      if (replay) return { ...(await toView(tx, input.client, replay)), releaseNote: null };
     }
 
     const [produced] = await tx.select().from(material).where(and(

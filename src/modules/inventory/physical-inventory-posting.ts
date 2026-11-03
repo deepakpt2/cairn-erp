@@ -469,7 +469,7 @@ async function judgeItem(
     return {
       item, movement, stockType, quantity, signed, value: null, currency: null, decimals: null,
       unitPrice: null, priceUnit: null, valuationClass: null, priceControl: null,
-      inventoryAccount: null, offsetAccount: null,
+      inventoryAccount: null, offsetAccount: null, batch: item.batch_number ?? '',
     };
   }
   const classRefusal = await postingValuationRefusal(tx, client, item.material_number, valuation!.valuationClass!);

@@ -15,8 +15,8 @@ import {
 } from '../src/modules/inventory/physical-inventory';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { postTransfer, TransferPostingError } from '../src/modules/inventory/transfer-posting';
-import { postGoodsIssue, GoodsIssueError } from '../src/modules/inventory/goods-issue';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
+import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 
 /**
  * SCR-142 / MI01 — the count document, and the block that has to be real.
@@ -204,25 +204,25 @@ describe('SCR-142 physical inventory document (MI01)', () => {
 
   it('blocks the transfer of a counted material, naming the count', async () => {
     // The document created in the first test still stands, blocking PI-MAT in QP01/SP01.
-    const error = await postTransfer({
+    const error = await expectRejectedError(postTransfer({
       client, changedBy: ACTOR, movementTypeCode: '311',
       materialNumber: 'PI-MAT', quantity: 5,
       issuingPlant: PLANT, issuingStorageLocation: 'SP01',
       receivingPlant: PLANT, receivingStorageLocation: 'SP02',
       postingDate: '2026-10-20', documentDate: '2026-10-20',
       requestKey: 'block-311',
-    }).catch((e: unknown) => e as TransferPostingError);
+    }));
     expect(error).toBeInstanceOf(TransferPostingError);
     expect(error.message).toMatch(/blocks postings for material PI-MAT in plant QP01/);
   });
 
   it('blocks a goods issue of the counted material, and lets another material through', async () => {
-    const blocked = await postGoodsIssue({
+    const blocked = await expectRejectedError(postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '551',
       postingDate: '2026-10-20', documentDate: '2026-10-20',
       lines: [{ materialNumber: 'PI-MAT', plant: PLANT, storageLocation: 'SP01', quantity: 1 }],
       requestKey: 'block-551',
-    }).catch((e: unknown) => e as GoodsIssueError);
+    }));
     expect(blocked.message).toMatch(/blocks postings/);
 
     const allowed = await postGoodsIssue({
@@ -316,12 +316,12 @@ describe('SCR-142 physical inventory document (MI01)', () => {
     });
 
     const count = await create({ materials: ['PI-REV'] });
-    const refusal = await reverseMaterialDocument({
+    const refusal = await expectRejectedError(reverseMaterialDocument({
       client, changedBy: ACTOR,
       materialDocumentNumber: moved.materialDocumentNumber,
       postingDate: '2026-10-20', documentDate: '2026-10-20',
       requestKey: 'blocked-reversal',
-    }).catch((e: unknown) => e as Error);
+    }));
     expect(refusal.message).toMatch(/blocks postings for material PI-REV/);
 
     await cancelPhysicalInventory({

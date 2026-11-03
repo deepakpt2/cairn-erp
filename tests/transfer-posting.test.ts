@@ -10,7 +10,7 @@ import {
   reverseTransfer,
   type PostTransferInput,
 } from '../src/modules/inventory/transfer-posting';
-import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { createTenant, defineTestRanges, destroyTenant, expectRejectedError } from './helpers';
 
 /**
  * SCR-131 / MB1B acceptance for INV.TRANSFER.POST.
@@ -354,8 +354,9 @@ describe('SCR-131 transfer posting (MB1B)', () => {
   });
 
   it('refuses a transfer in a unit the material carries no conversion from, naming it', async () => {
-    const error = await postTransfer(transfer({ quantity: 2, entryUnit: 'GAL' }))
-      .catch((e: unknown) => e as TransferPostingError);
+    const error = await expectRejectedError(
+      postTransfer(transfer({ quantity: 2, entryUnit: 'GAL' })),
+    );
     expect(error).toBeInstanceOf(TransferPostingError);
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);

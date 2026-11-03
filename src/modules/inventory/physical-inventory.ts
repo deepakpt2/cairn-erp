@@ -140,7 +140,7 @@ async function stockAt(
 
 async function toView(tx: Tx, client: string, header: {
   inventoryDocumentNumber: string; fiscalYear: number; plant: string;
-  storageLocation: string | null; plannedCountDate: string; postingBlock: boolean; status: string;
+  storageLocation: string | null; plannedCountDate: string; postingBlock: boolean; status: string; version: number;
 }): Promise<PhysicalInventoryView> {
   const items = await tx.select().from(physicalInventoryItem).where(and(
     eq(physicalInventoryItem.client, client),
@@ -225,7 +225,7 @@ export async function writeInventoryDocument(
   },
 ): Promise<{
   inventoryDocumentNumber: string; fiscalYear: number; plant: string;
-  storageLocation: string | null; plannedCountDate: string; postingBlock: boolean; status: string;
+  storageLocation: string | null; plannedCountDate: string; postingBlock: boolean; status: string; version: number;
 }> {
   const plant = spec.plant;
   const location = spec.storageLocation ?? '';

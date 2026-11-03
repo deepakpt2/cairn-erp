@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 
 import type { TaxCodeChoice, VendorInvoiceView } from '@/modules/finance/vendor-invoice';
+import type { ConstrainedValue } from '@/modules/foundation/constrained-values';
 import {
   cancelMemoAction, postMemoAction, type VendorCreditMemoActionState,
 } from './actions';

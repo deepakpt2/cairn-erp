@@ -84,9 +84,9 @@ export interface ProductionOrderSettlementReceiverResult {
 export interface ProductionOrderSettlementOrderResult {
   orderNumber: string;
   orderType: string | null;
-  controllingArea: string;
-  companyCode: string;
-  currency: string;
+  controllingArea: string | null;
+  companyCode: string | null;
+  currency: string | null;
   outcome: 'NOT_SETTLED' | 'SIMULATED' | 'SETTLED' | 'NOTHING_TO_SETTLE' | 'FAILED';
   reasons: string[];
   amount: string | null;
@@ -314,19 +314,33 @@ async function settleOne(
   mode: 'INDIVIDUAL' | 'COLLECTIVE',
   row: typeof productionOrder.$inferSelect,
 ): Promise<{ order: ProductionOrderSettlementOrderResult; document: ProductionOrderSettlementDocumentRef | null; eligible: boolean }> {
-  if (!run.testRun) {
-    await lockSettlementRuleForProductionOrder(tx, input.client, row.orderNumber);
-  }
-
+  const companyCodeValue = row.companyCode?.trim();
+  const controllingAreaValue = row.controllingArea?.trim();
+  const orderCurrency = row.currency?.trim();
   const base = {
     orderNumber: row.orderNumber,
     orderType: row.orderType,
     controllingArea: row.controllingArea,
     companyCode: row.companyCode,
-    currency: row.currency.trim(),
+    currency: row.currency?.trim() || null,
     amount: null,
     receivers: [] as ProductionOrderSettlementReceiverResult[],
   };
+  const missingContext = [
+    !companyCodeValue ? 'The production order has no company code; settlement cannot select a company ledger.' : null,
+    !controllingAreaValue ? 'The production order has no controlling area; settlement cannot resolve its period or receiver scope.' : null,
+    !orderCurrency ? 'The production order has no currency; settlement cannot determine a posting currency.' : null,
+  ].filter((reason): reason is string => reason !== null);
+  if (!companyCodeValue || !controllingAreaValue || !orderCurrency) {
+    return {
+      eligible: false,
+      document: null,
+      order: { ...base, outcome: 'NOT_SETTLED', reasons: [...missingContext, 'Nothing was posted.'] },
+    };
+  }
+  if (!run.testRun) {
+    await lockSettlementRuleForProductionOrder(tx, input.client, row.orderNumber);
+  }
 
   const header = tx.select({
     status: productionOrder.status,
@@ -460,28 +474,28 @@ async function settleOne(
 
   const [company] = await tx.select().from(companyCode).where(and(
     eq(companyCode.client, input.client),
-    eq(companyCode.companyCode, row.companyCode),
+    eq(companyCode.companyCode, companyCodeValue),
   ));
   if (!company?.chartOfAccounts || !company.fiscalYearVariant) {
     throw new ProductionOrderSettlementError(`Company code ${row.companyCode} is missing its chart or fiscal year variant.`);
   }
-  if (company.currency.trim() !== row.currency.trim()) {
+  if (company.currency.trim() !== orderCurrency) {
     return {
       eligible: false,
       document: null,
       order: {
         ...base,
         outcome: 'NOT_SETTLED',
-        reasons: [`The order currency is ${row.currency.trim()} and the company currency is ${company.currency.trim()}. No exchange rate was assumed.`],
+        reasons: [`The order currency is ${orderCurrency} and the company currency is ${company.currency.trim()}. No exchange rate was assumed.`],
       },
     };
   }
 
   const [area] = await tx.select().from(controllingArea).where(and(
     eq(controllingArea.client, input.client),
-    eq(controllingArea.controllingArea, row.controllingArea),
+    eq(controllingArea.controllingArea, controllingAreaValue),
   ));
-  if (!area) throw new ProductionOrderSettlementError(`Controlling area ${row.controllingArea} does not exist.`);
+  if (!area) throw new ProductionOrderSettlementError(`Controlling area ${controllingAreaValue} does not exist.`);
   const postingDate = await periodEnd(tx, input.client, area.fiscalYearVariant, run.fiscalYear, run.settlementPeriod);
   const position = await derivePosition(tx, input.client, company.fiscalYearVariant, postingDate);
   if (position.fiscalYear !== run.fiscalYear || position.period !== run.settlementPeriod) {
@@ -530,7 +544,7 @@ async function settleOne(
         on j.client = l.client and j.document_number = l.document_number and j.fiscal_year = l.fiscal_year
      where l.client = ${input.client}
        and l.production_order = ${row.orderNumber}
-       and j.company_code = ${row.companyCode}
+       and j.company_code = ${companyCodeValue}
        and j.status in ('POSTED', 'REVERSED')
   `) as unknown as Array<{
     fiscal_year: number;
@@ -542,7 +556,7 @@ async function settleOne(
     currency: string;
   }>;
   for (const line of postedLines) {
-    if (line.currency.trim() !== row.currency.trim()) {
+    if (line.currency.trim() !== orderCurrency) {
       return {
         eligible: true,
         document: null,
@@ -666,9 +680,9 @@ async function settleOne(
       if (rule.receiverCategory === 'COST_CENTER') {
         const centers = await tx.select().from(costCenter).where(and(
           eq(costCenter.client, input.client),
-          eq(costCenter.controllingArea, row.controllingArea),
+          eq(costCenter.controllingArea, controllingAreaValue),
           eq(costCenter.costCenter, rule.receiver),
-          eq(costCenter.companyCode, row.companyCode),
+          eq(costCenter.companyCode, companyCodeValue),
         ));
         const open = centers.find((center) => String(center.validFrom) <= postingDate && String(center.validTo) >= postingDate && !center.isPostingLocked);
         if (!open) {
@@ -725,13 +739,13 @@ async function settleOne(
 
   const posted = await postJournalEntry(tx, {
     client: input.client,
-    companyCode: row.companyCode,
+    companyCode: companyCodeValue,
     documentType: profile.documentType,
     documentDate: postingDate,
     postingDate,
     fiscalYear: run.fiscalYear,
     postingPeriod: run.settlementPeriod,
-    currency: row.currency.trim(),
+    currency: orderCurrency,
     localCurrency: company.currency.trim(),
     headerText: `Settlement ${row.orderNumber}`,
     postedBy: input.changedBy,
@@ -745,7 +759,7 @@ async function settleOne(
     fiscalYear: posted.fiscalYear,
     orderNumber: row.orderNumber,
     settlementPeriod: run.settlementPeriod,
-    currency: row.currency.trim(),
+    currency: orderCurrency,
     amount: fromScaled(settledAmount),
     requestKey: requestKey || null,
     createdBy: input.changedBy,
@@ -815,7 +829,7 @@ async function settleRows(
         orderType: row.orderType,
         controllingArea: row.controllingArea,
         companyCode: row.companyCode,
-        currency: row.currency.trim(),
+        currency: row.currency?.trim() || null,
         outcome: 'FAILED',
         reasons: [message],
         amount: null,
@@ -849,13 +863,14 @@ export async function settleProductionOrder(input: ProductionOrderSettlementInpu
     if (!row) {
       return finish('INDIVIDUAL', run, 'INVALID_SELECTION', [], [], `Production order ${orderNumber} does not exist. Nothing was posted.`, 0);
     }
-    if (requestedArea && row.controllingArea !== requestedArea) {
+    const currentArea = row.controllingArea?.trim();
+    if (requestedArea && currentArea && currentArea !== requestedArea) {
       throw new ProductionOrderSettlementError(
-        `Production order ${row.orderNumber} is in controlling area ${row.controllingArea}, not ${requestedArea}.`,
+        `Production order ${row.orderNumber} is in controlling area ${currentArea}, not ${requestedArea}.`,
         'The order was not settled, and the controlling area was not changed.',
       );
     }
-    await assertAreaPeriod(tx, input.client, row.controllingArea, run.settlementPeriod);
+    if (currentArea) await assertAreaPeriod(tx, input.client, currentArea, run.settlementPeriod);
     return { row };
   }).then(async (found) => {
     if ('outcome' in found) return found;

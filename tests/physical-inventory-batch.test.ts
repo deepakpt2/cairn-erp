@@ -5,11 +5,12 @@ import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
 import { saveBatchLevel } from '../src/modules/inventory/batch-level';
 import { createBatch } from '../src/modules/inventory/batch-master';
-import { postGoodsIssue, GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
 import { submitCounts } from '../src/modules/inventory/physical-inventory-count';
 import { postDifferences } from '../src/modules/inventory/physical-inventory-posting';
 import { createPhysicalInventory } from '../src/modules/inventory/physical-inventory';
-import { closeDb, createTenant, destroyTenant } from './helpers';
+import { closeDb, createTenant, destroyTenant, expectRejectedError } from './helpers';
 
 const ACTOR = 'PI_BATCH_TEST';
 const PLANT = 'QB01';
@@ -170,14 +171,14 @@ describe('physical inventory of a standing batch', () => {
       materials: ['PI-BATCH'], batches: ['00012'],
       requestKey: 'pi-block',
     });
-    const blocked = await postGoodsIssue({
+    const blocked = await expectRejectedError(postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '551',
       postingDate: DAY, documentDate: DAY,
       lines: [{ materialNumber: 'PI-BATCH', plant: PLANT, storageLocation: 'SB01', quantity: 1, batch: '00012' }],
       requestKey: 'pi-block-issue',
-    }).catch((error: unknown) => error as GoodsIssueError);
+    }));
     expect(blocked).toBeInstanceOf(GoodsIssueError);
-    expect((blocked as GoodsIssueError).message).toMatch(/blocks postings/);
+    expect(blocked.message).toMatch(/blocks postings/);
     await postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '551',
       postingDate: DAY, documentDate: DAY,

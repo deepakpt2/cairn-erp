@@ -185,7 +185,7 @@ export async function getReturnableDocument(
       const already = returned.get(line.lineNumber) ?? 0;
       const remaining = round2(Math.max(0, original - already));
       let refusal: string | null = null;
-      if (header.status === 'REVERSED') refusal = `Material document ${header.documentNumber} is reversed in full.`;
+      if (header.status === 'REVERSED') refusal = `Material document ${header.materialDocumentNumber} is reversed in full.`;
       else if (line.reversalOfDocument) refusal = `Line ${line.lineNumber} is itself a reversal; it cannot be returned.`;
       else if ((line.lineDirection) !== 'RECEIPT') refusal = `Line ${line.lineNumber} is an issue, not a receipt.`;
       else if (!line.purchaseOrderNumber) refusal = `Line ${line.lineNumber} carries no purchase order, and a return delivery references one.`;
@@ -271,7 +271,9 @@ async function returnedAgainst(
     ));
 
   const lineOfReturn = new Map<string, number>();
-  for (const row of returns) lineOfReturn.set(`${row.number}/${row.line}`, row.ofLine);
+  for (const row of returns) {
+    if (row.ofLine != null) lineOfReturn.set(`${row.number}/${row.line}`, row.ofLine);
+  }
 
   for (const row of reversals) {
     if (!row.reversalOfDocument || row.reversalOfLine == null) continue;
@@ -529,6 +531,7 @@ export async function postReturnDelivery(input: PostReturnDeliveryInput): Promis
       valuation: typeof materialValuation.$inferSelect;
       poNumber: string;
       poItem: number;
+      postingBatch: string;
     }> = [];
 
     for (const line of input.lines) {

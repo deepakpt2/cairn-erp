@@ -105,9 +105,10 @@ function blank(value: string | undefined): string | null {
 }
 
 function refuseSharedMasterFields(raw: SaveSettlementConfigurationInput): void {
-  const sent = raw as unknown as Record<string, unknown>;
   const present = SHARED_MASTER_FIELDS.filter((field) => {
-    const value = sent[field];
+    const descriptor = Object.getOwnPropertyDescriptor(raw, field);
+    if (!descriptor) return false;
+    const value: unknown = descriptor.value;
     return typeof value === 'boolean' ? true : blank(typeof value === 'string' ? value : undefined) !== null;
   });
   if (present.length === 0) return;
@@ -285,6 +286,14 @@ export async function saveProductionOrderSettlementConfiguration(
       eq(productionOrder.orderNumber, orderNumber),
     ));
     if (!order) throw new SettlementConfigurationError(`Production order ${orderNumber} does not exist.`);
+    const companyCodeValue = order.companyCode?.trim();
+    const controllingAreaValue = order.controllingArea?.trim();
+    if (!companyCodeValue || !controllingAreaValue) {
+      throw new SettlementConfigurationError(
+        `Production order ${orderNumber} has no complete company-code and controlling-area assignment.`,
+        'Complete the order assignments through the authorized order process; this rule was not stored.',
+      );
+    }
     const [settled] = await tx.select({ documentNumber: settlementDocument.documentNumber }).from(settlementDocument).where(and(
       eq(settlementDocument.client, input.client),
       eq(settlementDocument.orderNumber, orderNumber),
@@ -345,7 +354,7 @@ export async function saveProductionOrderSettlementConfiguration(
 
     const [company] = await tx.select().from(companyCode).where(and(
       eq(companyCode.client, input.client),
-      eq(companyCode.companyCode, order.companyCode),
+      eq(companyCode.companyCode, companyCodeValue),
     ));
     if (!company?.chartOfAccounts) {
       throw new SettlementConfigurationError(`Company code ${order.companyCode} has no chart of accounts.`);
@@ -353,9 +362,9 @@ export async function saveProductionOrderSettlementConfiguration(
     if (input.receiverCategory === 'COST_CENTER') {
       const centers = await tx.select().from(costCenter).where(and(
         eq(costCenter.client, input.client),
-        eq(costCenter.controllingArea, order.controllingArea),
+        eq(costCenter.controllingArea, controllingAreaValue),
         eq(costCenter.costCenter, receiver),
-        eq(costCenter.companyCode, order.companyCode),
+        eq(costCenter.companyCode, companyCodeValue),
       ));
       if (centers.length === 0) {
         throw new SettlementConfigurationError(
@@ -370,7 +379,7 @@ export async function saveProductionOrderSettlementConfiguration(
       const [target] = await tx.select().from(productionOrder).where(and(
         eq(productionOrder.client, input.client),
         eq(productionOrder.orderNumber, receiver),
-        eq(productionOrder.controllingArea, order.controllingArea),
+        eq(productionOrder.controllingArea, controllingAreaValue),
       ));
       if (!target) throw new SettlementConfigurationError(`Receiver order ${receiver} does not exist in this controlling area.`);
     } else if (input.receiverCategory === 'GL_ACCOUNT') {

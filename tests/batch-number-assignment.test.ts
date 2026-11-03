@@ -238,8 +238,10 @@ describe('OMCZ internal batch number assignment', () => {
     expect(assignedGoodsReceiptDecision({ internalActive: true, plantPermitted: false, accountAssigned: true }).assign).toBe(false);
     expect(assignedGoodsReceiptDecision({ internalActive: true, plantPermitted: true, accountAssigned: true }).assign).toBe(true);
 
-    const client = await tenant('omcz-pack-golf-1');
-    await defineTestRanges({ client, companyCode: '1000' }, { fiscalYear: 2026 });
+    const golfTenant = await createTenant('omcz-pack-golf-1');
+    clients.push(golfTenant.client);
+    const client = golfTenant.client;
+    await defineTestRanges(golfTenant, { fiscalYear: 2026 });
     await withTenant(client, async (tx) => {
       await defineRange(tx, { client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
       await defineRange(tx, { client, objectCode: 'MATDOC', subObject: '*', prefix: '', numberLength: 10, createdBy: ACTOR });

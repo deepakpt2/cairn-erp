@@ -101,7 +101,7 @@ export default async function TimeLeavePage({
 
       <TimeLeave
         timeTypes={timeTypes}
-        selectedType={selectedType}
+        selectedType={selectedType ?? null}
         absences={absences}
         selectedAbsence={selectedAbsence}
         employee={employee}

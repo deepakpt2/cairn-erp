@@ -262,8 +262,11 @@ describe('SCR-162 release blocked invoices', () => {
          where client = ${c}
       `);
       const company = await getCompanyCode(tx, c, '1000');
-      const position = await derivePosition(tx, c, company!.fiscalYearVariant, '2026-10-18');
-      const closed = await checkPostingAllowed(tx, c, company!.postingPeriodVariant, 'K', position);
+      if (!company?.fiscalYearVariant || !company.postingPeriodVariant) {
+        throw new Error('The test company is missing its fiscal-year or posting-period variant.');
+      }
+      const position = await derivePosition(tx, c, company.fiscalYearVariant, '2026-10-18');
+      const closed = await checkPostingAllowed(tx, c, company.postingPeriodVariant, 'K', position);
       expect(closed.allowed).toBe(false);
       expect(closed.reason).toContain('closed');
       return rules;

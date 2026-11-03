@@ -7,7 +7,6 @@ import { defineRange } from '../src/platform/numbering';
 import {
   PRODUCTION_RECEIPT_CAPABILITY,
   PRODUCTION_RECEIPT_SCENARIO,
-  ProductionReceiptError,
   postProductionReceipt,
   receivedQuantityFor,
 } from '../src/modules/inventory/production-receipt';
@@ -17,7 +16,7 @@ import { getBatchLevel, saveBatchLevel } from '../src/modules/inventory/batch-le
 import { createBatch } from '../src/modules/inventory/batch-master';
 import { reverseMaterialDocument } from '../src/modules/inventory/material-document-reversal';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { createTenant, destroyTenant, expectRejectedError, type TestTenant } from './helpers';
 
 /**
  * SCR-140 / MIGO 101 + R08 — the finished good comes back from the order.
@@ -209,8 +208,8 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
 
   it('refuses an over-receipt quoting what the order still expects', async () => {
     // Seven of ten received: three remain.
-    const error = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 4 }] }))
-      .catch((e: unknown) => e as ProductionReceiptError);
+    const error = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 4 }] }))
+      );
     expect(error.message).toMatch(/still expects 3\.000 PC of GR-FG/);
     expect(error.remedy).toMatch(/over-receipt tolerance/);
   });
@@ -223,22 +222,22 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       scheduledStart: '2026-10-01', scheduledFinish: '2026-10-20',
       components: [{ materialNumber: 'GR-RM', plant: PLANT, requiredQuantity: 5 }],
     });
-    const unreleased = await postProductionReceipt(input({ orderNumber: draft.orderNumber }))
-      .catch((e: unknown) => e as ProductionReceiptError);
+    const unreleased = await expectRejectedError(postProductionReceipt(input({ orderNumber: draft.orderNumber }))
+      );
     expect(unreleased.message).toMatch(/stands created, and only a released order receives output/);
 
-    const missing = await postProductionReceipt(input({ orderNumber: 'PRD9999999' }))
-      .catch((e: unknown) => e as ProductionReceiptError);
+    const missing = await expectRejectedError(postProductionReceipt(input({ orderNumber: 'PRD9999999' }))
+      );
     expect(missing.message).toMatch(/Production order PRD9999999 does not exist/);
   });
 
   it('refuses a storage location of another plant, and an empty receipt', async () => {
-    const wrongLocation = await postProductionReceipt(input({ lines: [{ storageLocation: 'ZZZZ', quantity: 1 }] }))
-      .catch((e: unknown) => e as ProductionReceiptError);
+    const wrongLocation = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'ZZZZ', quantity: 1 }] }))
+      );
     expect(wrongLocation.message).toMatch(/Storage location ZZZZ does not stand in plant QG01/);
 
-    const empty = await postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 0 }] }))
-      .catch((e: unknown) => e as ProductionReceiptError);
+    const empty = await expectRejectedError(postProductionReceipt(input({ lines: [{ storageLocation: 'SG01', quantity: 0 }] }))
+      );
     expect(empty.message).toMatch(/No receipt quantity was entered/);
   });
 
@@ -274,12 +273,12 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       where client = ${client} and event = 'PRODUCTION_OUTPUT' and valuation_class = 'FINISHED_INVENTORY'
     `));
     // The order already received ten of ten, so a second order is needed to reach the check.
-    const error = await postProductionReceipt({
+    const error = await expectRejectedError(postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1 }],
       requestKey: 'gr-same-account',
-    }).catch((e: unknown) => e as ProductionReceiptError);
+    }));
     expect(error.message).toMatch(/would net to nothing/);
     await withTenant(client, (tx) => tx.execute(sql`
       update account_determination set gl_account = '590000'
@@ -321,12 +320,12 @@ describe('SCR-140 production order goods receipt (MIGO 101)', () => {
       components: [{ materialNumber: 'GR-RM', plant: PLANT, storageLocation: 'SG01', requiredQuantity: 20 }],
     });
     await releaseProductionOrder({ client, orderNumber: draft.orderNumber, releasedBy: ACTOR });
-    const error = await postProductionReceipt({
+    const error = await expectRejectedError(postProductionReceipt({
       client, changedBy: ACTOR, orderNumber: draft.orderNumber,
       postingDate: '2026-10-16', documentDate: '2026-10-16',
       lines: [{ storageLocation: 'SG01', quantity: 1, entryQuantity: 1, entryUnit: 'GAL' }],
       requestKey: 'gr-no-unit',
-    }).catch((e: unknown) => e as ProductionReceiptError);
+    }));
     expect(error.message).toMatch(/carries no conversion from GAL to its base unit PC/);
     expect(error.remedy).toMatch(/INV\.STOCK\.UOM/);
   });

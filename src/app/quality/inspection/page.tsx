@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { can, requireSession } from '@/platform/auth/current';
 import { displayOnlyMessage, openChangeForSession } from '@/platform/lock/enqueue';
 import { ChangeLock } from '@/ui/lock/ChangeLock';
-import { USAGE_DECISION_CAPABILITY, INSPECTION_RESULT_CAPABILITY } from '@/modules/quality/inspection-results';
+import { INSPECTION_RESULT_CAPABILITY } from '@/modules/quality/inspection-results';
+import { USAGE_DECISION_CAPABILITY } from '@/modules/quality/usage-decision';
 import { LOT_CAPABILITY } from '@/modules/quality/lot';
 import { loadInspectionWorkbench } from './actions';
 import InspectionWorkbench from './InspectionWorkbench';
@@ -68,8 +69,7 @@ export default async function InspectionPage({ searchParams }: { searchParams: P
               className="input w-56"
               name="lot"
               placeholder="QL-0000001"
-              value={lotNumber}
-              onChange={(e) => { }}
+              defaultValue={lotNumber}
             />
             <button className="btn btn-primary min-h-11 sm:min-h-8" type="submit">
               Open workbench

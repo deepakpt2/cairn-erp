@@ -20,8 +20,9 @@ import {
   saveBatchSearchStrategy,
 } from '../src/modules/inventory/batch-search-strategy';
 import { deleteBatchStrategyType, saveBatchStrategyType } from '../src/modules/inventory/batch-strategy-type';
-import { GoodsIssueError, postGoodsIssue } from '../src/modules/inventory/goods-issue';
-import { closeDb, createTenant, destroyTenant } from './helpers';
+import { GoodsIssueError } from '../src/modules/inventory/goods-issue';
+import { postGoodsIssue } from './helpers/goods-issue-authorized';
+import { closeDb, createTenant, destroyTenant, expectRejectedError } from './helpers';
 
 const ACTOR = 'MBC1_TEST';
 const AUTH = [ACTIVITY];
@@ -202,12 +203,12 @@ describe('MBC1 Inventory Management batch search strategy', () => {
         (select count(*) from stock_quantity where client = ${client})::int as stock,
         (select count(*) from batch_search_strategy where client = ${client})::int as strategies
     `)) as unknown as Array<{ documents: number; stock: number; strategies: number }>;
-    const result = await postGoodsIssue({
+    const error = await expectRejectedError(postGoodsIssue({
       client, changedBy: ACTOR, movementTypeCode: '201', postingDate: '2026-10-23', documentDate: '2026-10-23',
       requestKey: 'mbc1-gi', lines: [{ materialNumber: 'NO-MAT', plant: '1000', quantity: 1, batch: '' }],
-    }).then(() => 'posted').catch((error: unknown) => error);
-    expect(result).toBeInstanceOf(GoodsIssueError);
-    expect((result as Error).message).not.toMatch(/search strategy|proposed|fefo/i);
+    }));
+    expect(error).toBeInstanceOf(GoodsIssueError);
+    expect(error.message).not.toMatch(/search strategy|proposed|fefo/i);
     const after = await withTenant(client, (tx) => tx.execute(sql`
       select
         (select count(*) from material_document where client = ${client})::int as documents,

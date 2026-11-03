@@ -27,10 +27,14 @@ describe('bounded browser target selection', () => {
     // the whole protection: one missing entry silently drops the check for that target.
     const unguarded = TARGETS.filter((target) => !ACCEPTANCE_DATABASE_GUARDS[target.id]).map((target) => target.id);
     expect(unguarded).toEqual([]);
+    const additionalReviewedGuards = new Set(['production-order-settlement-acceptance']);
     const stale = Object.keys(ACCEPTANCE_DATABASE_GUARDS).filter(
-      (id) => !TARGETS.some((target) => target.id === id),
+      (id) => !TARGETS.some((target) => target.id === id) && !additionalReviewedGuards.has(id),
     );
     expect(stale).toEqual([]);
+    expect(ACCEPTANCE_DATABASE_GUARDS['production-order-settlement-acceptance']).toMatchObject({
+      database: 'cairn_acceptance', port: '5432', batch: 'P0-GAP-01 acceptance',
+    });
     for (const target of TARGETS) {
       const guard = ACCEPTANCE_DATABASE_GUARDS[target.id];
       expect(guard?.database, target.id).toMatch(/^cairn/);

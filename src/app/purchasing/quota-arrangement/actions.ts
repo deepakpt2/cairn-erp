@@ -176,6 +176,7 @@ function createInput(form: FormData, client: string, changedBy: string): QuotaCr
 
 function changeInput(form: FormData, client: string, changedBy: string, intent: string): QuotaChangeInput {
   return {
+    ...extras(form),
     client,
     changedBy,
     reason: text(form, 'reason'),
@@ -188,7 +189,6 @@ function changeInput(form: FormData, client: string, changedBy: string, intent: 
     markDeleted: intent === 'deactivate',
     reactivate: intent === 'reactivate',
     items: intent === 'change' ? changeItems(form) : undefined,
-    ...extras(form),
   };
 }
 

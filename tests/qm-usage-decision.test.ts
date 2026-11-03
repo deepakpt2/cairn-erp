@@ -1,10 +1,11 @@
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { defineRange } from '../src/platform/numbering';
-import { createTenant, destroyTenant, defineTestRanges } from './helpers';
+import { createTenant, destroyTenant, defineTestRanges, dateFromToday } from './helpers';
 import { initializeMaterialPeriodControl } from '../src/modules/inventory/material-period-control';
+import { derivePosition } from '../src/platform/periods';
 import {
   createOrder,
 } from '../src/modules/purchasing/orders';
@@ -23,12 +24,15 @@ import {
   postUsageDecisionWithStock,
   getDecisionWithLot,
 } from '../src/modules/quality/usage-decision';
-import { stockQuantity } from '../src/modules/inventory/schema';
+import { materialDocument, stockQuantity } from '../src/modules/inventory/schema';
+import { changeDocument } from '../src/platform/tables/audit-trail';
+import { usageDecision } from '../src/modules/quality/schema';
 
 const ACTOR = 'QM_DECISION_TEST';
 const MATERIAL = 'MAT-QMD01';
 const PLANT = '1000';
 const STORE = '0001';
+const TODAY = new Date().toISOString().slice(0, 10);
 
 let tenant: any;
 let counter = 0;
@@ -63,13 +67,13 @@ async function standingReceipt(quantity = 10) {
       materialNumber: MATERIAL, shortText: 'Inspected plates', quantity, unit: 'PC',
       netPrice: 10, priceUnit: 1, taxCode: '', plant: PLANT, storageLocation: STORE,
       markedForDeletion: false,
-      scheduleLines: [{ deliveryDate: '2026-11-15', quantity }],
+      scheduleLines: [{ deliveryDate: dateFromToday(12), quantity }],
       assignments: [] as never[],
     }],
   });
   const doc = await postGoodsReceipt({
     client: tenant.client, changedBy: ACTOR, orderNumber: order.orderNumber,
-    documentDate: '2026-10-18', postingDate: '2026-10-18',
+    documentDate: TODAY, postingDate: TODAY,
     requestKey: key('gr'), stockType: 'QUALITY',
     lines: [{ itemNumber: 10, quantity, storageLocation: STORE }],
   });
@@ -86,10 +90,14 @@ describe('QM usage decision (QE51N) and quality stock', () => {
 
   beforeAll(async () => {
     tenant = await createTenant('qm-usage-decision');
-    await defineTestRanges(tenant, { fiscalYear: 2026 });
+    await defineTestRanges(tenant);
+    const postingDate = TODAY;
+    const currentPosition = await withTenant(tenant.client, (tx) =>
+      derivePosition(tx, tenant.client, 'K4', postingDate),
+    );
     await initializeMaterialPeriodControl({
       client: tenant.client, changedBy: ACTOR, companyCode: '1000',
-      fiscalYear: 2026, period: 10, reason: 'QM usage decision',
+      fiscalYear: currentPosition.fiscalYear, period: currentPosition.period, reason: 'QM usage decision',
     });
     await withTenant(tenant.client, async (tx) => {
       await defineRange(tx, { client: tenant.client, objectCode: 'PURCHORD', subObject: 'POF', prefix: 'POF', numberLength: 7, createdBy: ACTOR });
@@ -381,6 +389,91 @@ describe('QM usage decision (QE51N) and quality stock', () => {
       lotNumber: lot,
       decisionCode: 'REJECT',
     })).rejects.toThrow(/already has a/);
+  });
+
+  it('rolls back the stock transfer, decision, and audit when the decision write fails', async () => {
+    const postedRollback = await standingReceipt(4);
+    const openedRollback = await openLot({
+      client: tenant.client, changedBy: ACTOR,
+      materialDocumentNumber: postedRollback.materialDocumentNumber, lineNumber: 1,
+      inspectionNote: 'Receipt for atomic decision test', requestKey: key('atomic-lot'),
+    });
+    const rollbackLot = openedRollback.lotNumber;
+    await saveCharacteristic({
+      client: tenant.client, changedBy: ACTOR,
+      characteristicCode: 'DIM-ATOMIC',
+      description: 'Atomic rollback check',
+      characteristicType: 'QUANTITATIVE',
+      nominalValue: 50,
+      tolerancePlus: 1.0,
+      toleranceMinus: -1.0,
+      unit: 'MM',
+    });
+    await recordInspectionResult({
+      client: tenant.client, changedBy: ACTOR,
+      lotNumber: rollbackLot,
+      characteristicCode: 'DIM-ATOMIC',
+      resultValue: '50.2',
+      measuredUnit: 'MM',
+    });
+    await recordAllCharacteristics(rollbackLot);
+
+    const requestKey = key('atomic-transfer');
+    const stockBalances = () => withTenant(tenant.client, async (tx) => {
+      const [quality] = await tx.select({
+        quantity: sql<string>`coalesce(sum(${stockQuantity.quantity}), 0)::text`,
+      }).from(stockQuantity).where(and(
+        eq(stockQuantity.client, tenant.client),
+        eq(stockQuantity.materialNumber, MATERIAL),
+        eq(stockQuantity.plant, PLANT),
+        eq(stockQuantity.storageLocation, STORE),
+        eq(stockQuantity.stockType, 'QUALITY'),
+      ));
+      const [unrestricted] = await tx.select({
+        quantity: sql<string>`coalesce(sum(${stockQuantity.quantity}), 0)::text`,
+      }).from(stockQuantity).where(and(
+        eq(stockQuantity.client, tenant.client),
+        eq(stockQuantity.materialNumber, MATERIAL),
+        eq(stockQuantity.plant, PLANT),
+        eq(stockQuantity.storageLocation, STORE),
+        eq(stockQuantity.stockType, 'UNRESTRICTED'),
+      ));
+      return { quality: quality?.quantity ?? '0', unrestricted: unrestricted?.quantity ?? '0' };
+    });
+    const before = await stockBalances();
+
+    await expect(postUsageDecisionWithStock({
+      client: tenant.client, changedBy: ACTOR,
+      lotNumber: rollbackLot,
+      decisionCode: 'ACCEPT',
+      postStock: true,
+      requestKey,
+      // Valid lexical shape, invalid calendar month: the decision write fails after the stock transfer.
+      decisionDate: '2026-13-01',
+    })).rejects.toThrow();
+
+    expect(await stockBalances()).toEqual(before);
+    const [decision] = await withTenant(tenant.client, (tx) => tx.select({
+      count: sql<number>`count(*)::int`,
+    }).from(usageDecision).where(and(
+      eq(usageDecision.client, tenant.client), eq(usageDecision.lotNumber, rollbackLot),
+    )));
+    const [decisionAudit] = await withTenant(tenant.client, (tx) => tx.select({
+      count: sql<number>`count(*)::int`,
+    }).from(changeDocument).where(and(
+      eq(changeDocument.client, tenant.client),
+      eq(changeDocument.objectClass, 'usage_decision'),
+      eq(changeDocument.objectKey, rollbackLot),
+    )));
+    const transferDocuments = await withTenant(tenant.client, (tx) => tx.select({
+      number: materialDocument.materialDocumentNumber,
+    }).from(materialDocument).where(and(
+      eq(materialDocument.client, tenant.client), eq(materialDocument.requestKey, requestKey),
+    )));
+
+    expect(decision?.count).toBe(0);
+    expect(decisionAudit?.count).toBe(0);
+    expect(transferDocuments).toHaveLength(0);
   });
 
   it('reads back a decision with lot context', async () => {

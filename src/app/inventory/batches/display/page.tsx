@@ -4,6 +4,7 @@ import { can, requireSession } from '@/platform/auth/current';
 import { getBatchLevel } from '@/modules/inventory/batch-level';
 import { ACTIVITY, BatchChangeError, BatchDisplayError, displayBatch } from '@/modules/inventory/batch-display';
 import BatchRelations from '../BatchRelations';
+import DocumentTab from '../DocumentTab';
 
 export const dynamic = 'force-dynamic';
 

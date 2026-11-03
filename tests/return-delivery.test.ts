@@ -17,7 +17,7 @@ import {
   postReturnDelivery,
   resolveReturnMovement,
 } from '../src/modules/inventory/return-delivery';
-import { createTenant, defineTestRanges, destroyTenant } from './helpers';
+import { createTenant, defineTestRanges, destroyTenant, expectRejectedError } from './helpers';
 
 /**
  * SCR-145 / MBRL — a return is not a cancellation.
@@ -214,7 +214,7 @@ describe('SCR-145 return delivery (MBRL)', () => {
     await withTenant(c, (tx) => tx.execute(sql`
       update movement_type set direction = 'RECEIPT' where client = ${c} and movement_type = 'RETURN_TO_VENDOR'
     `));
-    const error = await withTenant(c, (tx) => resolveReturnMovement(tx, c)).catch((e: unknown) => e as ReturnDeliveryError);
+    const error = await expectRejectedError(withTenant(c, (tx) => resolveReturnMovement(tx, c)));
     expect(error).toBeInstanceOf(ReturnDeliveryError);
     expect(error.message).toMatch(/must take stock out/);
     await withTenant(c, (tx) => tx.execute(sql`
@@ -302,10 +302,10 @@ describe('SCR-145 return delivery (MBRL)', () => {
     expect(second.status).toBe('POSTED');
     expect(await received(receiptOrder)).toBe(0);
 
-    const error = await postReturnDelivery({
+    const error = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1 }],
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(error.message).toMatch(/only 0\.000 of the 40\.000 received may still be returned/);
 
     const view = await getReturnableDocument(c, { documentNumber: receiptNumber });
@@ -351,10 +351,10 @@ describe('SCR-145 return delivery (MBRL)', () => {
       ...POSTING, requestKey: nextKey(),
     });
 
-    const error = await postReturnDelivery({
+    const error = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: cancelledReceiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1 }],
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(error.message).toMatch(/is reversed and cannot be returned against/);
   });
 
@@ -366,32 +366,32 @@ describe('SCR-145 return delivery (MBRL)', () => {
       requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 10, storageLocation: '0002' }],
     });
     // Stock moved out of 0001 earlier in this suite; 0002 holds exactly this receipt.
-    const error = await postReturnDelivery({
+    const error = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: doc.materialDocumentNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 10, storageLocation: '0003' }],
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(error.message).toMatch(/is 0\.000, short of the 10\.000 to return/);
   });
 
   it('refuses a unit it cannot convert, and refuses the structures canon does not carry', async () => {
     const c = await standingClient();
-    const unconverted = await postReturnDelivery({
+    const unconverted = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1, entryUnit: 'GAL' }],
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(unconverted.message).toMatch(/carries no conversion from GAL/);
 
     await defineUomConversion({ client: c, changedBy: ACTOR, materialNumber: 'RET-MAT', alternativeUnit: 'BOX', numerator: 12, denominator: 1 });
-    const batched = await postReturnDelivery({
+    const batched = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1 }], batch: 'B-1',
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(batched.message).toMatch(/has no batch/);
 
-    const delivery = await postReturnDelivery({
+    const delivery = await expectRejectedError(postReturnDelivery({
       client: c, changedBy: ACTOR, documentNumber: receiptNumber,
       ...POSTING, requestKey: nextKey(), lines: [{ originalLine: 1, quantity: 1 }], createDelivery: true,
-    }).catch((e: unknown) => e as ReturnDeliveryError);
+    }));
     expect(delivery.message).toMatch(/no logistics module/);
   });
 
@@ -432,12 +432,12 @@ describe('SCR-145 return delivery (MBRL)', () => {
       plannedCountDate: DAY, postingBlock: true, materials: ['RET-MAT'],
     });
     const order = await createOrder({ client: c, changedBy: ACTOR, ...header, items: [item('RET-MAT', 5, 100, '0002')] });
-    const doc = await postGoodsReceipt({
+    const doc = await expectRejectedError(postGoodsReceipt({
       client: c, changedBy: ACTOR, orderNumber: order.orderNumber, ...POSTING,
       requestKey: nextKey(), lines: [{ itemNumber: 10, quantity: 5, storageLocation: '0002' }],
-    }).catch((e: unknown) => e as Error);
+    }));
     // The receipt itself is blocked by the count, which is the guard doing its job.
-    expect((doc as Error).message).toMatch(/blocks postings/);
+    expect(doc.message).toMatch(/blocks postings/);
     void count;
   });
 

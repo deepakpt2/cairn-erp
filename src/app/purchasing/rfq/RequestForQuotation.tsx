@@ -146,10 +146,12 @@ function ChangeRequest({
   opened,
   request,
   canMaintain,
+  lockMessage,
 }: {
   opened: StandingRfqEvent;
   request: StandingRfq;
   canMaintain: boolean;
+  lockMessage?: string | null;
 }) {
   const [plants, setPlants] = useState(request.lines.map((line) => line.plant));
   const [checkState, checkAction, checking] = useActionState(checkChangeRfqAction, INITIAL);
@@ -347,7 +349,7 @@ export default function RequestForQuotation({
       )}
 
       {opened && selected && (
-        <ChangeRequest key={selected.rfqNumber} opened={opened} request={selected} canMaintain={canMaintain} />
+        <ChangeRequest key={selected.rfqNumber} opened={opened} request={selected} canMaintain={canMaintain} lockMessage={lockMessage} />
       )}
 
       <section aria-labelledby="rfq-create" className="rounded-card border border-line bg-surface p-4 shadow-card">

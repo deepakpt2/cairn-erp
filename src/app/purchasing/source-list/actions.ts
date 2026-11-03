@@ -112,6 +112,7 @@ function createInput(form: FormData, client: string, changedBy: string): SourceL
 
 function changeInput(form: FormData, client: string, changedBy: string, intent: string): SourceListChangeInput {
   return {
+    ...extras(form),
     client,
     changedBy,
     reason: text(form, 'reason'),
@@ -130,7 +131,6 @@ function changeInput(form: FormData, client: string, changedBy: string, intent: 
     sourceListRequired: form.has('sourceListRequiredField') ? flag(form, 'sourceListRequired') : undefined,
     markDeleted: intent === 'deactivate',
     reactivate: intent === 'reactivate',
-    ...extras(form),
   };
 }
 
