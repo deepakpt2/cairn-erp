@@ -23,7 +23,7 @@ import { type Tx } from '../../platform/db/client';
 import { material, materialPlant } from '../inventory/schema';
 import { toBaseQuantity, UnitConversionError } from '../inventory/unit-conversion';
 import { componentRequirementQuantity } from './mrp-explosion';
-import { materialBom, materialBomItem } from './schema';
+import { bomItemCategory, materialBom, materialBomItem } from './schema';
 import {
   OrderTypeParameterError,
   productionVersionForSelection,
@@ -56,6 +56,10 @@ export interface OrderBomComponentSnapshot {
   plant: string;
   requiredQuantity: string;
   unit: string;
+  bomItemCategory: string;
+  bomStockRelevant: 'X' | ' ' | null;
+  bomPhantom: 'X' | ' ';
+  bomBulkMaterial: 'X' | ' ';
 }
 
 export interface OrderBomSnapshot {
@@ -173,6 +177,11 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
     fail('NO_COMPONENT', 'The selected bill of material has no component in effect on the finish date. No order was created.', 'Correct the component validity, or choose another finish date. Nothing was saved.');
   }
 
+  const categories = await tx.select({ category: bomItemCategory.category, stockRelevant: bomItemCategory.stockRelevant })
+    .from(bomItemCategory)
+    .where(eq(bomItemCategory.client, input.client));
+  const stockRelevanceByCategory = new Map(categories.map((row) => [row.category, row.stockRelevant]));
+
   const components: OrderBomComponentSnapshot[] = [];
   for (const item of inEffect) {
     if (item.phantom === 'X') {
@@ -220,6 +229,13 @@ export async function resolveOrderBomSnapshot(tx: Tx, input: {
         plant,
         requiredQuantity: Number(base.baseQuantity).toFixed(3),
         unit: base.baseUnit,
+        bomItemCategory: item.itemCategory,
+        bomStockRelevant: (() => {
+          const stockRelevant = stockRelevanceByCategory.get(item.itemCategory);
+          return stockRelevant == null ? null : stockRelevant.trim() === 'X' ? 'X' : ' ';
+        })(),
+        bomPhantom: item.phantom.trim() === 'X' ? 'X' : ' ',
+        bomBulkMaterial: item.bulkMaterial.trim() === 'X' ? 'X' : ' ',
       });
     } catch (caught) {
       fail(

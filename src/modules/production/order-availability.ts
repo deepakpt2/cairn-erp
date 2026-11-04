@@ -1,15 +1,15 @@
 /**
- * CO09 slice 1 — the availability of one production order's components, read-only.
+ * CO09 — the availability of one production order's components, with separate
+ * append-only commit/reset actions implemented in order-availability-commitment.ts.
  *
- * This is *an availability check over the configuration this ERP already maintains*,
- * computed live and written nowhere. It is not the reference product's CO09 and no claim of parity is
- * made here or on the screen: the parts of CO09 that need a stored commitment, a
- * shortage status, a missing-parts log, a reset, or a storage-location and batch
- * section are refused by name below, because this repository stores none of them
- * (`docs/co09-availability-audit.md` §3). What is implemented is the half the data
- * can carry: resolve the checking group and rule, honour the (group × rule) scope of
- * check, reuse the stock/requirements list as the source of dated elements, and
- * cumulate scoped supply against the component's requirement date.
+ * This is *an availability check over the configuration this ERP already maintains*.
+ * It is not the reference product's CO09 and no claim of exact parity is made here or
+ * on the screen. The check resolves the checking group and rule, honours the (group ×
+ * rule) scope of check, reuses the stock/requirements list as the source of dated
+ * elements, and cumulates scoped supply against the component's requirement date.
+ * Commitments are stored separately and reduce later checks without posting or
+ * reserving physical stock; collective worklists, missing-parts logs, and storage-
+ * location and batch sections remain out of scope.
  *
  * Three rules govern every number this file returns.
  *
@@ -20,16 +20,13 @@
  *    the answer, with the transaction that maintains it named as the remedy. That is
  *    the same stance `availability-check.ts` and `checking-control.ts` take.
  * 2. **A committed quantity and a cumulated ATP quantity are different things.**
- *    The reference product writes the committed quantity onto the dependent requirement, so a later
- *    check can only commit what is left. This repository stores no such column and
- *    slice 1 writes nothing, so `committedQuantity` is `null` for every component,
- *    always, and `cumulatedAtp` is labelled as what it is: the balance of the elements
- *    the scope includes, summed to the component's requirement date. The demand being
- *    checked is one *line* of the order, so only that line is left out of its own
- *    balance — another line of the same order and any other document's demand dated the
- *    same day are both counted against it, because the list has no order within a day and
- *    this check does not guess who stands first in line. The gap is shown, not
- *    papered over.
+ *    A component commitment is a separate append-only event; it is not posted stock or
+ *    a physical reservation. The latest event supplies the displayed committed amount,
+ *    and active commitments are counted as demand on later checks when the configured
+ *    stock/requirements scope does not already include that component demand. The line
+ *    being checked is excluded from its own balance so a fresh run can replace its prior
+ *    commitment. Other same-day demand remains conservative: the check does not guess
+ *    who stands first in line.
  * 3. **The elements come from the stock/requirements engine, not from a second one.**
  *    `stockRequirementsList` is called per component; this file only *selects* from the
  *    elements it returned and adds them up, and it honours each switch of the scope of
@@ -50,11 +47,11 @@
  *    line rather than being added in or dropped out. So a cumulated figure here is a total of one
  *    unit, and the conversion that produced each row that needed it is stated beside it.
  *
- * Nothing posts, reserves, commits, changes an order, or writes a row. A check that
- * runs twice returns the same answer, and the reason it can promise that is that it
- * keeps nothing between the two calls.
+ * The check itself writes nothing. Commit/reset actions live in a separate service
+ * and ledger; they do not post a goods movement, reserve physical stock, or change an
+ * order. Exact request-key retries replay the saved result.
  */
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 
 import { hasCapability } from '../../platform/auth/session';
 
@@ -70,7 +67,7 @@ import {
   UnitConversionError,
   toBaseQuantity,
 } from '../inventory/unit-conversion';
-import { materialBomItem, plannedOrder, productionCheckingControl } from './schema';
+import { plannedOrder, productionCheckingControl, productionOrderComponentCommitmentEvent } from './schema';
 import { listAvailabilityCheck, type ScopeOfCheckRow } from './availability-check';
 import { parseProductionOrderStatus } from './production-order-status';
 import { StockRequirementsError, stockRequirementsList, type StockRequirementRow } from './stock-requirements';
@@ -78,13 +75,9 @@ import { StockRequirementsError, stockRequirementsList, type StockRequirementRow
 /**
  * The authority to reach the screen and the authority over the numbers it shows.
  *
- * A dedicated `PROD.ORDER.AVAILABILITY.CHECK` is what the audit's §7 asks for, and it
- * cannot be created here: a capability code that no role can hold until a registry
- * row exists, and registry rows are written by `scripts/seed.ts` (out of bounds) or
- * by a migration (also out of bounds for this slice). So the check demands the two
- * authorities its data already belongs to — the order and the stock/requirements
- * list — which is *narrower* than a new code would be, never wider. Recorded in
- * CAIRN-7 as the one blocker this slice met and did not paper over.
+ * Reading the screen requires the existing order-display and stock/requirements
+ * capabilities. Commit and reset are separate exact-grant-only capabilities enforced
+ * by the commitment service and its migration; neither is implied by a broad grant.
  */
 export const ORDER_AVAILABILITY_ORDER_CAPABILITY = 'PROD.ORDER.DISPLAY';
 export const ORDER_AVAILABILITY_ELEMENTS_CAPABILITY = 'PROD.MRP.STOCKREQ';
@@ -93,7 +86,7 @@ export const ORDER_AVAILABILITY_ALIAS = 'CO09';
 
 /** What is refused by name, rendered on the screen so the limit is not a surprise. */
 export const ORDER_AVAILABILITY_GAPS: readonly string[] = [
-  'No quantity is committed. A check writes nothing, so a second check cannot be reduced by the first, and "committed" is shown as not stored rather than as zero.',
+  'Commitments are a local append-only ledger, not exact SAP CO09 parity. They reduce later CO09 checks but do not reserve physical stock or interact with other ERP checks.',
   'Advanced ATP, product allocation and any checking rule beyond the pair maintained here are not this screen.',
   'Sales requirements, delivery requirements and independent requirements are not counted. The scope of check has no switch for them.',
   'Special stock, stock in transfer and blocked stock are not available as separate elements. A scope that asks to split stock by type is refused, not approximated.',
@@ -101,26 +94,25 @@ export const ORDER_AVAILABILITY_GAPS: readonly string[] = [
   'Subcontracting and dependent reservations are not modelled; a component whose procurement says otherwise is refused.',
   'Replenishment lead time is not a date source. A component without a requirement date is reported undated, not given the order start date.',
   'No shortage status is set and no missing-parts log is stored; the order status is untouched and no release decision is made.',
-  'No reset and no collective check over a worklist. Both need the commitment record that is not part of slice 1.',
+  'No collective check over a worklist: each action addresses one component, and no cross-order top-down worklist redistribution is implemented.',
   'A counted supply is converted by the unit-of-measure conversion the material carries; the requirement being checked is not. A component line in another unit is refused, because converting the demand and measuring it against itself would answer a different question from the one the order holds.',
   'A receipt the list has already netted — a requisition reduced by the orders converted from it, an order reduced by posted movements — is used only in the base unit. A difference taken across two units is not a quantity of either, so it is refused rather than converted afterwards.',
 ];
 
 /**
  * Selection fields that would ask this screen to do something it does not do. A
- * parameter is refused by name rather than accepted and ignored, so a link that
- * promises a commitment or a storage-location split fails loudly instead of
- * quietly returning a plant-level answer that was asked for at a finer level. CO11N set this precedent.
+ * parameter is refused by name rather than accepted and ignored, so a request for a
+ * storage-location split fails loudly instead of returning a plant-level answer. CO11N set this precedent.
  */
 export const ORDER_AVAILABILITY_UNSUPPORTED_PARAMETERS: Readonly<Record<string, string>> = {
   storageLocation: 'A storage-location level check is not this screen. The component requirement carries no location, so a location split would invent one.',
   batch: 'A batch level check is not this screen. Batch and restricted-use stock are not elements here.',
   specialStock: 'A special-stock indicator is not a selection field of this check. The scope of check does not include or exclude it.',
-  commit: 'Committing a quantity is not this screen. A check writes nothing.',
+  commit: 'A query-string flag cannot commit a component. Use the per-component commit action, which requires its exact capability and rechecks availability.',
+  reset: 'A query-string flag cannot reset a commitment. Use the reason-required per-component reset action, which requires its exact capability.',
   reserve: 'Reserving is not this screen. A reservation is maintained on its own screen.',
   post: 'Posting a goods movement is not this screen.',
   release: 'Releasing the order is not this screen. The order\u2019s status is not read as a check result and never written by one.',
-  reset: 'Resetting an availability is not this screen. No check result is stored, so there is nothing to reset.',
   collective: 'A collective check over a worklist is not this screen. One order is checked per run.',
   missingParts: 'A missing-parts list is not this screen. A shortage is reported on the component it belongs to.',
   rule: 'The checking rule is not chosen here. It is what the checking control names for the order\u2019s plant, order type and business function.',
@@ -700,6 +692,23 @@ export async function checkOrderAvailability(input: {
         : 'Leave the item empty to check every component of the order.');
     }
 
+    const materialNumbers = [...new Set(wanted.map((row) => row.materialNumber))];
+    const eventRows = await tx.select().from(productionOrderComponentCommitmentEvent).where(and(
+      eq(productionOrderComponentCommitmentEvent.client, client),
+      inArray(productionOrderComponentCommitmentEvent.materialNumber, materialNumbers),
+      eq(productionOrderComponentCommitmentEvent.plant, order.plant),
+    )).orderBy(desc(productionOrderComponentCommitmentEvent.eventNumber));
+    const latestEvents = new Map<string, typeof eventRows[number]>();
+    for (const event of eventRows) {
+      const key = `${event.orderNumber}/${event.itemNumber}`;
+      if (!latestEvents.has(key)) latestEvents.set(key, event);
+    }
+    const currentOrderEvents = new Map<number, typeof eventRows[number]>();
+    for (const event of latestEvents.values()) {
+      if (event.orderNumber === orderNumber) currentOrderEvents.set(event.itemNumber, event);
+    }
+    const activeCommitments = [...latestEvents.values()].filter((event) => event.eventKind === 'COMMITTED');
+
     let checkingRule: string | null = null;
     let orderMessage: string | null = null;
     let orderRemedy: string | null = null;
@@ -766,7 +775,10 @@ export async function checkOrderAvailability(input: {
         checkingRule,
         scopeKey: null,
         outcome: 'NO_GROUP',
-        committedQuantity: null,
+        committedQuantity: (() => {
+          const event = plan.currentOrderEvents.get(component.itemNumber);
+          return event ? (event.eventKind === 'COMMITTED' ? qty(event.committedQuantity) : 0) : null;
+        })(),
         cumulatedAtp: null,
         coveredQuantity: null,
         shortageQuantity: null,
@@ -798,6 +810,41 @@ export async function checkOrderAvailability(input: {
       // invent a distribution the order does not store.
       if (component.storageLocation !== null && component.storageLocation !== '') {
         base.warnings.push(`The component line carries storage location ${component.storageLocation}. The check is at plant level; the location is shown and not used.`);
+      }
+
+      const missingEligibility = component.bomItemCategory == null
+        || component.bomStockRelevant == null
+        || component.bomPhantom == null
+        || component.bomBulkMaterial == null;
+      if (missingEligibility) {
+        entries.push({
+          base: {
+            ...base,
+            outcome: 'UNSUPPORTED',
+            message: 'This order component does not preserve all eligibility facts from its BOM snapshot (item category, stock relevance, phantom, and bulk state). A legacy or manually supplied line is not assumed to be stock-relevant.',
+            remedy: 'Create a new BOM-derived order after maintaining the item category\'s stock relevance, or use the owning material/planning screen to verify the line. This check does not infer missing facts from today\'s bill of material.',
+          },
+          scope: null,
+        });
+        continue;
+      }
+      if (component.bomStockRelevant !== 'X') {
+        entries.push({
+          base: {
+            ...base,
+            outcome: 'EXCLUDED',
+            message: `BOM item category ${component.bomItemCategory} is not marked stock-relevant, so this component is not checked for availability.`,
+          },
+          scope: null,
+        });
+        continue;
+      }
+      if (component.bomPhantom === 'X' || component.bomBulkMaterial === 'X') {
+        const message = component.bomPhantom === 'X'
+          ? 'The BOM snapshot marks this component as a phantom. A phantom is not checked for availability; its own components are.'
+          : 'The BOM snapshot marks this component as bulk material. Bulk material is not checked here.';
+        entries.push({ base: { ...base, outcome: 'EXCLUDED', message }, scope: null });
+        continue;
       }
 
       const [plantView] = await tx.select({ checkingGroup: materialPlant.checkingGroup }).from(materialPlant).where(and(
@@ -890,46 +937,6 @@ export async function checkOrderAvailability(input: {
         continue;
       }
 
-      // The reference product checks a component only when it is kept in stock, is not a phantom item and
-      // is not a bulk material. This application stores no stock-relevance flag, so the
-      // standing plant view above is what stands in for "kept in stock" — a component
-      // without one is refused as unconfigured — and the phantom and bulk flags are read
-      // from the bill-of-material item the order's snapshot names, the only place the
-      // repository keeps them (audit §5, decision 2).
-      const bomParent = component.sourceMaterial ?? order.materialNumber;
-      let bomFlags: { phantom: string; bulkMaterial: string; deletionFlag: string } | null = null;
-      if (component.bomItem && order.bomUsage && order.bomAlternative) {
-        const [bomItem] = await tx.select({
-          phantom: materialBomItem.phantom,
-          bulkMaterial: materialBomItem.bulkMaterial,
-          deletionFlag: materialBomItem.deletionFlag,
-        }).from(materialBomItem).where(and(
-          eq(materialBomItem.client, client),
-          eq(materialBomItem.materialNumber, bomParent),
-          eq(materialBomItem.plant, order.plant),
-          eq(materialBomItem.usage, order.bomUsage),
-          eq(materialBomItem.alternative, order.bomAlternative),
-          eq(materialBomItem.itemNumber, component.bomItem),
-        ));
-        bomFlags = bomItem ?? null;
-        if (!bomItem) {
-          base.warnings.push(`The bill-of-material item ${component.bomItem} of ${bomParent} no longer stands. The component is checked from the order's snapshot, and its phantom and bulk state is unknown.`);
-        }
-      } else {
-        base.warnings.push('The component line names no bill-of-material item, so its phantom and bulk state cannot be read. It is checked as an ordinary component.');
-      }
-      const excluded = bomFlags?.phantom === 'X'
-        ? 'The component is a phantom item on the order\'s bill of material. A phantom is not checked for availability; its own components are.'
-        : bomFlags?.bulkMaterial === 'X'
-          ? 'The component is a bulk material on the order\'s bill of material. Bulk material is not checked here; it is provided by the goods receipt of the order.'
-          : bomFlags?.deletionFlag === 'X'
-            ? 'The bill-of-material item behind this component is marked for deletion, so it is not checked.'
-            : null;
-      if (excluded) {
-        entries.push({ base: { ...base, outcome: 'EXCLUDED', message: excluded }, scope: null });
-        continue;
-      }
-
       const scope = scopes.get(`${checkingGroup}/${checkingRule}`);
       if (!scope) {
         entries.push({
@@ -997,10 +1004,12 @@ export async function checkOrderAvailability(input: {
       statusRefusal,
       statusRefusalRemedy,
       entries,
+      activeCommitments,
+      currentOrderEvents,
     };
   });
 
-  const { order, entries } = plan;
+  const { order, entries, activeCommitments } = plan;
   const rows: ComponentAvailability[] = [];
   for (const entry of entries) {
     const base = entry.base;
@@ -1099,6 +1108,47 @@ export async function checkOrderAvailability(input: {
       });
     }
 
+    // A stored commitment is itself demand. When the stock/requirements list already
+    // returned that same order component as a counted dependent requirement, do not
+    // count it twice. If that scope omits dependent requirements, add the immutable
+    // commitment event as a virtual demand row so later checks still see the quantity
+    // already promised to another order. The line being checked is excluded above by
+    // key, so a retry can replace its own commitment rather than compete with itself.
+    for (const commitment of activeCommitments) {
+      if (commitment.materialNumber !== base.materialNumber
+        || commitment.plant !== order.plant
+        || commitment.requirementDate === null
+        || (commitment.orderNumber === orderNumber && commitment.itemNumber === Number(base.itemNumber))
+        || (horizonEnd !== '' && commitment.requirementDate > horizonEnd)) continue;
+      const alreadyCounted = list.rows.some((row) => row.documentNumber === commitment.orderNumber
+        && Number(row.documentItem) === commitment.itemNumber
+        && elementCounts(scopeOfEntry, row, {
+          orderNumber,
+          plannedOrderNumber: order.plannedOrderNumber,
+          componentItem: base.itemNumber,
+        }, context).counted);
+      if (alreadyCounted) continue;
+      elements.push({
+        date: commitment.requirementDate,
+        elementType: 'CO09_COMMITMENT',
+        elementLabel: 'Active CO09 commitment',
+        direction: 'REQUIREMENT',
+        documentNumber: commitment.orderNumber,
+        documentItem: String(commitment.itemNumber),
+        quantity: qty(commitment.committedQuantity),
+        unit: base.baseUnit,
+        convertedFrom: null,
+        cumulated: 0,
+        ownDemand: false,
+      });
+    }
+    elements.sort((left, right) => left.date.localeCompare(right.date));
+    cumulative = 0;
+    for (const element of elements) {
+      cumulative = round(cumulative + (element.direction === 'RECEIPT' ? element.quantity : -element.quantity));
+      element.cumulated = cumulative;
+    }
+
     if (unitResolution.blockers.length > 0) {
       rows.push({
         ...base,
@@ -1181,10 +1231,15 @@ export async function checkOrderAvailability(input: {
       earliest = requirementDate;
     } else {
       let running = cumulatedOnDate;
+      const futureByDate = new Map<string, number>();
       for (const row of elements) {
         if (row.ownDemand || row.date <= requirementDate) continue; // already in the balance above
-        running = round(running + (row.direction === 'RECEIPT' ? row.quantity : -row.quantity));
-        if (running >= base.requiredQuantity) { earliest = row.date; break; }
+        const signed = row.direction === 'RECEIPT' ? row.quantity : -row.quantity;
+        futureByDate.set(row.date, round((futureByDate.get(row.date) ?? 0) + signed));
+      }
+      for (const [date, delta] of [...futureByDate].sort(([left], [right]) => left.localeCompare(right))) {
+        running = round(running + delta);
+        if (running >= base.requiredQuantity) { earliest = date; break; }
       }
     }
 
@@ -1223,14 +1278,14 @@ export async function checkOrderAvailability(input: {
   if (plan.orderNoCheck) warnings.unshift(plan.orderMessage ?? '');
   else if (plan.orderLevelRefusal) warnings.unshift(plan.orderLevelRefusal);
   else if (plan.statusRefusal) warnings.unshift(plan.statusRefusal);
-  warnings.push('Nothing is committed, reserved, posted or stored. A second check returns the same figures because no quantity was taken.');
-  warnings.push('The requirement dates and quantities are the order\'s own snapshot. A bill of material changed after the order was made is not re-read for its demand; only the phantom, bulk and deletion flags are read from it, because no other record keeps them.');
+  warnings.push('This check itself writes nothing. A separate commit or reset action appends a CO09 history event; it does not post, reserve physical stock, or change the production order.');
+  warnings.push('The requirement dates, quantities, item category, stock relevance, phantom flag, and bulk flag come from the order\'s own saved component snapshot. The current bill of material is never re-read to prove eligibility; legacy and manual lines without those facts are refused.');
   if (excludedCount > 0) {
-    warnings.push(`${excludedCount} component line(s) are not checked because the bill-of-material item marks them phantom, bulk or flagged for deletion. That is the rule, not a gap in the data.`);
+    warnings.push(`${excludedCount} component line(s) are excluded because their saved snapshot proves they are not stock-relevant, phantom, or bulk. An excluded line is not a shortage.`);
   }
-  warnings.push('Committed quantity is shown as not stored on every line. This ERP keeps no commitment, so two checks of one order agree, and neither reduces what the next order can take.');
+  warnings.push('The latest COMMITTED event shows the full component quantity; RELEASED and RESET events show zero. Active commitments are accounted for by later CO09 checks, but they do not change stock, accounting, order status, or other ERP availability screens.');
   if (nothingAnswered && !plan.orderNoCheck) {
-    warnings.push(`No component of this order was answered with a figure: ${refusedCount} line(s) are refused and ${excludedCount} are excluded by the bill of material. NOT_CHECKED says no answer was given; it does not say the supply is short.`);
+    warnings.push(`No component of this order was answered with a figure: ${refusedCount} line(s) are refused and ${excludedCount} are excluded by saved eligibility facts. NOT_CHECKED says no answer was given; it does not say the supply is short.`);
   }
 
   return {

@@ -513,6 +513,10 @@ export async function createProductionOrder(
         orderItemNumber: component.orderItemNumber,
         bomItem: component.bomItem,
         sourceMaterial: component.sourceMaterial,
+        bomItemCategory: component.bomItemCategory,
+        bomStockRelevant: component.bomStockRelevant,
+        bomPhantom: component.bomPhantom,
+        bomBulkMaterial: component.bomBulkMaterial,
       }))
       : input.components!.map((component) => ({
         materialNumber: component.materialNumber,
@@ -522,6 +526,10 @@ export async function createProductionOrder(
         orderItemNumber: undefined as number | undefined,
         bomItem: null as string | null,
         sourceMaterial: null as string | null,
+        bomItemCategory: null as string | null,
+        bomStockRelevant: null as 'X' | ' ' | null,
+        bomPhantom: null as 'X' | ' ' | null,
+        bomBulkMaterial: null as 'X' | ' ' | null,
       }));
 
     // Every component is judged before the header is drawn or written.
@@ -529,6 +537,8 @@ export async function createProductionOrder(
       materialNumber: string; plant: string; storageLocation: string | null;
       requiredQuantity: number; unit: string;
       orderItemNumber: number; bomItem: string | null; sourceMaterial: string | null;
+      bomItemCategory: string | null; bomStockRelevant: 'X' | ' ' | null;
+      bomPhantom: 'X' | ' ' | null; bomBulkMaterial: 'X' | ' ' | null;
     }> = [];
     for (const [index, component] of lines.entries()) {
       const position = (index + 1) * 10;
@@ -597,6 +607,10 @@ export async function createProductionOrder(
         orderItemNumber: component.orderItemNumber ?? position,
         bomItem: component.bomItem,
         sourceMaterial: component.sourceMaterial,
+        bomItemCategory: component.bomItemCategory,
+        bomStockRelevant: component.bomStockRelevant,
+        bomPhantom: component.bomPhantom,
+        bomBulkMaterial: component.bomBulkMaterial,
       });
     }
 
@@ -679,6 +693,10 @@ export async function createProductionOrder(
         unitOfMeasure: component.unit,
         bomItem: component.bomItem,
         sourceMaterial: component.sourceMaterial,
+        bomItemCategory: component.bomItemCategory,
+        bomStockRelevant: component.bomStockRelevant,
+        bomPhantom: component.bomPhantom,
+        bomBulkMaterial: component.bomBulkMaterial,
         createdBy: input.createdBy,
       });
     }

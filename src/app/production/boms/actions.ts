@@ -78,6 +78,7 @@ export async function saveItemCategoryAction(_previous: BomActionState, formData
       description: String(formData.get('description') ?? ''),
       materialEntry: String(formData.get('materialEntry') ?? ''),
       quantityEntry: String(formData.get('quantityEntry') ?? ''),
+      stockRelevant: String(formData.get('stockRelevant') ?? ' '),
       allowFixedQuantity: String(formData.get('allowFixedQuantity') ?? ' '),
       allowBulk: String(formData.get('allowBulk') ?? ' '),
       allowPhantom: String(formData.get('allowPhantom') ?? ' '),

@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { t } from '@/platform/i18n';
 import type { ComponentAvailability, OrderAvailabilityResult } from '@/modules/production/order-availability';
+import { commitAvailabilityAction, resetAvailabilityAction } from './actions';
 
 /**
  * CO09 slice 1's workbench. It is a client component for one reason: a check has to be
@@ -20,22 +22,34 @@ export default function OrderAvailabilityWorkbench({
   canUse,
   canCheckOrder,
   canReadElements,
+  canCommit,
+  canReset,
   orderNumber,
   itemNumber,
   horizonEnd,
+  today,
   result,
   serviceError,
   serviceErrorKind,
+  actionMessage,
+  actionMessageKind,
+  requestKeys,
 }: {
   canUse: boolean;
   canCheckOrder: boolean;
   canReadElements: boolean;
+  canCommit: boolean;
+  canReset: boolean;
   orderNumber: string;
   itemNumber: string;
   horizonEnd: string;
+  today: string;
   result: OrderAvailabilityResult | null;
   serviceError: string | null;
   serviceErrorKind: 'unsupported' | 'failure';
+  actionMessage: string;
+  actionMessageKind: 'success' | 'error';
+  requestKeys: Record<string, { commit: string; reset: string }>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -120,6 +134,15 @@ export default function OrderAvailabilityWorkbench({
         </div>
       ) : null}
 
+      {actionMessage ? (
+        <p className={actionMessageKind === 'success'
+          ? 'border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+          : 'border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'}
+          role={actionMessageKind === 'error' ? 'alert' : 'status'} data-co09-action-state={actionMessageKind}>
+          {actionMessage}
+        </p>
+      ) : null}
+
       {!serviceError && result === null && !pending ? (
         <p className="panel p-4 text-sm text-ink-soft" role="status" data-co09-state="initial">{t('co09.initial')}</p>
       ) : null}
@@ -155,7 +178,7 @@ export default function OrderAvailabilityWorkbench({
         <section className="panel overflow-x-auto" aria-label={t('co09.components')}>
           <div className="flex items-center justify-between border-b border-line px-3 py-2">
             <h2 className="text-sm font-semibold">{t('co09.components')}</h2>
-            <span className="text-xs text-ink-soft">{t('co09.committedNotStored')}</span>
+            <span className="text-xs text-ink-soft">{t('co09.committedLedger')}</span>
           </div>
           <table className="grid-table min-w-[76rem]">
             <thead>
@@ -174,10 +197,21 @@ export default function OrderAvailabilityWorkbench({
                 <th>{t('co09.earliest')}</th>
                 <th>{t('co09.outcome')}</th>
                 <th>{t('co09.display')}</th>
+                <th>{t('co09.actions')}</th>
               </tr>
             </thead>
             <tbody>
-              {answered.map((row) => <ComponentRow key={`${row.itemNumber}|${row.materialNumber}`} row={row} plant={result.plant} />)}
+              {answered.map((row) => <ComponentRow
+                key={`${row.itemNumber}|${row.materialNumber}`}
+                row={row}
+                plant={result.plant}
+                orderNumber={result.orderNumber}
+                horizonEnd={horizon}
+                today={today}
+                canCommit={canCommit}
+                canReset={canReset}
+                requestKeys={requestKeys[row.itemNumber] ?? { commit: '', reset: '' }}
+              />)}
             </tbody>
           </table>
         </section>
@@ -194,7 +228,16 @@ export default function OrderAvailabilityWorkbench({
   );
 }
 
-function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: string }) {
+function ComponentRow({ row, plant, orderNumber, horizonEnd, today, canCommit, canReset, requestKeys }: {
+  row: ComponentAvailability;
+  plant: string;
+  orderNumber: string;
+  horizonEnd: string;
+  today: string;
+  canCommit: boolean;
+  canReset: boolean;
+  requestKeys: { commit: string; reset: string };
+}) {
   const answeredNumber = row.outcome === 'AVAILABLE' || row.outcome === 'SHORT' || row.outcome === 'NO_ELEMENTS';
   const stateClass = row.outcome === 'AVAILABLE'
     ? 'text-emerald-800 dark:text-emerald-200'
@@ -204,7 +247,7 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
   return (
     <>
       <tr data-co09-component={row.itemNumber} data-co09-outcome={row.outcome}
-        data-co09-material={row.materialNumber} data-co09-committed="not-stored">
+        data-co09-material={row.materialNumber} data-co09-committed={row.committedQuantity === null ? 'none' : row.committedQuantity.toFixed(3)}>
         <td className="text-end">{row.itemNumber}</td>
         <td className="code" title={row.description}>{row.materialNumber}</td>
         <td className="code">{row.checkingGroup ?? '—'}</td>
@@ -212,7 +255,9 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
         <td className="code">{row.scopeKey ?? '—'}</td>
         <td className="text-end">{row.requiredQuantity.toFixed(3)} {row.unit}</td>
         <td className="code">{row.requirementDate ?? t('co09.undated')}</td>
-        <td className="text-end" data-co09-committed-cell>{t('co09.notStored')}</td>
+        <td className="text-end" data-co09-committed-cell data-co09-committed={row.committedQuantity === null ? '' : row.committedQuantity.toFixed(3)}>
+          {row.committedQuantity === null ? '—' : `${row.committedQuantity.toFixed(3)} ${row.unit}`}
+        </td>
         <td className="text-end" data-co09-atp={row.cumulatedAtp === null ? '' : row.cumulatedAtp.toFixed(3)}>
           {row.cumulatedAtp === null ? '—' : row.cumulatedAtp.toFixed(3)}
         </td>
@@ -229,10 +274,34 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
             {t('co09.display')}
           </Link>
         </td>
+        <td className="min-w-48 space-y-2 text-xs">
+          {canCommit && (row.outcome === 'AVAILABLE' || row.outcome === 'SHORT' || row.outcome === 'NO_ELEMENTS') ? (
+            <form action={commitAvailabilityAction} className="flex flex-wrap items-center gap-1" data-co09-commit-form={row.itemNumber}>
+              <input type="hidden" name="requestKey" value={requestKeys.commit} />
+              <input type="hidden" name="orderNumber" value={orderNumber} />
+              <input type="hidden" name="itemNumber" value={row.itemNumber} />
+              <input type="hidden" name="horizonEnd" value={horizonEnd} />
+              <input type="hidden" name="today" value={today} />
+              <ActionSubmit className="btn btn-primary min-h-8">{t('co09.commit')}</ActionSubmit>
+            </form>
+          ) : null}
+          {canReset && row.committedQuantity !== null ? (
+            <form action={resetAvailabilityAction} className="space-y-1" data-co09-reset-form={row.itemNumber}>
+              <input type="hidden" name="requestKey" value={requestKeys.reset} />
+              <input type="hidden" name="orderNumber" value={orderNumber} />
+              <input type="hidden" name="itemNumber" value={row.itemNumber} />
+              <input type="hidden" name="horizonEnd" value={horizonEnd} />
+              <input className="field-input min-h-8 w-full text-xs" name="reason" maxLength={200} required
+                aria-label={`Reset reason for component ${row.itemNumber}`} placeholder={t('co09.resetReason')} />
+              <ActionSubmit className="btn btn-default min-h-8">{t('co09.resetCommitment')}</ActionSubmit>
+            </form>
+          ) : null}
+          {!canCommit && !canReset ? <span className="text-ink-faint">—</span> : null}
+        </td>
       </tr>
       {row.message ? (
         <tr data-co09-message={row.itemNumber}>
-          <td colSpan={14} className="text-xs text-ink-soft">
+          <td colSpan={15} className="text-xs text-ink-soft">
             <span>{row.message}</span>
             {row.remedy ? <span className="ms-2 text-ink-faint">{row.remedy}</span> : null}
           </td>
@@ -240,7 +309,7 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
       ) : null}
       {row.warnings.length > 0 ? (
         <tr data-co09-component-warnings={row.itemNumber}>
-          <td colSpan={14}>
+          <td colSpan={15}>
             <ul className="list-disc space-y-0.5 ps-5 text-xs text-amber-900 dark:text-amber-200">
               {row.warnings.map((warning) => <li key={warning}>{warning}</li>)}
             </ul>
@@ -249,7 +318,7 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
       ) : null}
       {row.elements.length > 0 ? (
         <tr data-co09-elements={row.itemNumber}>
-          <td colSpan={14} className="align-top">
+          <td colSpan={15} className="align-top">
             <p className="mb-1 text-xs font-semibold text-ink-faint">{t('co09.elementCount', { count: row.elements.length })}</p>
             <table className="grid-table min-w-[52rem] text-xs">
               <thead>
@@ -270,7 +339,7 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
                     data-co09-element={element.elementType} data-co09-element-date={element.date}
                     data-co09-element-unit={element.unit ?? ''} data-co09-own={element.ownDemand ? 'yes' : 'no'}>
                     <td className="code">{element.date}</td>
-                    <td title={element.elementLabel}>{element.elementType}</td>
+                    <td title={element.elementLabel}>{element.elementType === 'CO09_COMMITMENT' ? t('co09.commitmentElement') : element.elementType}</td>
                     <td className="code">{element.documentNumber}</td>
                     <td className="text-end">{element.documentItem}</td>
                     <td className="text-end">{element.direction === 'RECEIPT' ? element.quantity.toFixed(3) : ''}</td>
@@ -287,6 +356,15 @@ function ComponentRow({ row, plant }: { row: ComponentAvailability; plant: strin
         </tr>
       ) : null}
     </>
+  );
+}
+
+function ActionSubmit({ children, className }: { children: React.ReactNode; className: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" className={className} disabled={pending} aria-busy={pending || undefined}>
+      {pending ? t('co09.saving') : children}
+    </button>
   );
 }
 

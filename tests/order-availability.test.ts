@@ -1,10 +1,11 @@
-import { sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { withTenant } from '../src/platform/db/client';
 import { saveMaterialView } from '../src/modules/inventory/materials';
 import { createProductionOrder, releaseProductionOrder } from '../src/modules/inventory/production-orders';
 import { mrpController } from '../src/modules/inventory/schema';
+import { productionOrderComponentCommitmentEvent } from '../src/modules/production/schema';
 import { defineRange } from '../src/platform/numbering';
 import {
   assignCheckingGroup,
@@ -26,6 +27,15 @@ import {
   type OrderAvailabilityResult,
 } from '../src/modules/production/order-availability';
 import { stockRequirementsList } from '../src/modules/production/stock-requirements';
+import {
+  PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
+  PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY,
+} from '../src/platform/auth/capability-policy';
+import {
+  commitOrderComponentAvailability,
+  resetOrderComponentAvailability,
+} from '../src/modules/production/order-availability-commitment';
+import { changeProductionOrder } from '../src/modules/production/production-order-change';
 import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
@@ -270,7 +280,7 @@ describe('CO09 slice 1 order availability check', () => {
       client: tenant.client, changedBy: ACTOR, usage: 'P', description: 'Production',
       productionRelevance: '.', engineeringRelevance: '.', costingRelevance: '.', salesRelevance: '.',
     });
-    await saveBomItemCategory({ client: tenant.client, changedBy: ACTOR, category: 'S', description: 'Stock', materialEntry: '+', quantityEntry: '+', allowPhantom: 'X', allowBulk: 'X' });
+    await saveBomItemCategory({ client: tenant.client, changedBy: ACTOR, category: 'S', description: 'Stock', materialEntry: '+', quantityEntry: '+', stockRelevant: 'X', allowPhantom: 'X', allowBulk: 'X' });
     await createMaterialBom({
       client: tenant.client, changedBy: ACTOR, materialNumber: 'FG-CO09', plant: PLANT, usage: 'P',
       alternative: '01', baseQuantity: '1', baseUnit: 'KG', validFrom: '2026-01-01',
@@ -367,8 +377,8 @@ describe('CO09 slice 1 order availability check', () => {
     await releaseProductionOrder({ client: tenant.client, orderNumber: supplyReleased, releasedBy: ACTOR });
 
     await withTenant(tenant.client, async (tx) => {
-      // A bill-of-material item is flagged for deletion by a change of its own, and a
-      // created item is born unflagged: the mark is applied the way the screen applies it.
+      // Change the current BOM after the order has been made. The check must use the
+      // saved eligibility snapshot, not prove it again from these mutable rows.
       await tx.execute(sql`
         update material_bom_item set deletion_flag = 'X'
          where client = ${tenant.client} and material_number = 'FG-CO09' and plant = ${PLANT}
@@ -392,11 +402,18 @@ describe('CO09 slice 1 order availability check', () => {
          where client = ${tenant.client} and order_number = ${orderOne} and material_number = 'C-UOM'
       `);
       await tx.execute(sql`
-        update production_order_component c set bom_item = b.item_number, source_material = 'FG-CO09'
-         from material_bom_item b
-        where c.client = ${tenant.client} and c.order_number = ${orderOne}
-          and c.material_number = b.component_material and b.client = ${tenant.client}
-          and b.material_number = 'FG-CO09' and b.plant = ${PLANT} and b.usage = 'P' and b.alternative = '01'
+        update production_order_component c
+           set bom_item = b.item_number,
+               source_material = 'FG-CO09',
+               bom_item_category = b.item_category,
+               bom_stock_relevant = cat.stock_relevant,
+               bom_phantom = b.phantom,
+               bom_bulk_material = b.bulk_material
+          from material_bom_item b
+          join bom_item_category cat on cat.client = b.client and cat.category = b.item_category
+         where c.client = ${tenant.client} and c.order_number = ${orderOne}
+           and c.material_number = b.component_material and b.client = ${tenant.client}
+           and b.material_number = 'FG-CO09' and b.plant = ${PLANT} and b.usage = 'P' and b.alternative = '01'
       `);
       // The other two orders consume the same component on days of their own, later than the
       // checked line, so the figures each order is answered with do not depend on who inside a
@@ -1004,6 +1021,14 @@ describe('CO09 slice 1 order availability check', () => {
     expect(row.cumulatedAtp).toBeNull();
   });
 
+  it('refuses a manual line whose eligibility facts were never snapshotted', async () => {
+    const result = await run(orderTwo);
+    const row = component(result, '10');
+    expect(row.outcome).toBe('UNSUPPORTED');
+    expect(row.message).toContain('does not preserve all eligibility facts');
+    expect(row.remedy).toContain('does not infer missing facts from today\'s bill of material');
+  });
+
   it('leaves an undated component undated rather than borrowing a date', async () => {
     const row = component(await run(orderOne), '110');
     expect(row.outcome).toBe('UNDATED');
@@ -1012,16 +1037,15 @@ describe('CO09 slice 1 order availability check', () => {
     expect(row.remedy).toContain('The order start, the order finish, today and the bill-of-material date are each rejected');
   });
 
-  it('excludes phantom, bulk and deleted bill-of-material items, and says where the flags came from', async () => {
+  it('uses saved phantom and bulk facts, not a later change to the BOM', async () => {
     const result = await run(orderOne);
     expect(component(result, '20').outcome).toBe('EXCLUDED');
-    expect(component(result, '20').message).toContain('phantom item');
+    expect(component(result, '20').message).toContain('snapshot marks this component as a phantom');
     expect(component(result, '30').outcome).toBe('EXCLUDED');
-    expect(component(result, '30').message).toContain('bulk material');
-    expect(component(result, '40').outcome).toBe('EXCLUDED');
-    expect(component(result, '40').message).toContain('marked for deletion');
-    expect(result.excludedCount).toBe(3);
-    expect(result.warnings.join(' ')).toContain('only the phantom, bulk and deletion flags are read from it');
+    expect(component(result, '30').message).toContain('snapshot marks this component as bulk material');
+    expect(component(result, '40').outcome).not.toBe('EXCLUDED');
+    expect(result.excludedCount).toBe(2);
+    expect(result.warnings.join(' ')).toContain('current bill of material is never re-read to prove eligibility');
     // An excluded line is not a refusal, and it is not a shortage either.
     expect(result.refusedCount).toBe(result.components.filter((row) => row.outcome === 'UNSUPPORTED'
       || row.outcome === 'UNDATED' || row.outcome === 'NO_GROUP' || row.outcome === 'NO_SCOPE' || row.outcome === 'NOT_CHECKED').length);
@@ -1337,10 +1361,11 @@ describe('CO09 slice 1 order availability check', () => {
 
   it('refuses a selection that asks for something the check does not do', () => {
     expect(orderAvailabilityRefusal({})).toBeNull();
-    const refusal = orderAvailabilityRefusal({ commit: '1', storageLocation: 'SL90' });
+    const refusal = orderAvailabilityRefusal({ post: '1', storageLocation: 'SL90' });
     expect(refusal).toContain('The check was not run.');
-    expect(refusal).toContain('Committing a quantity is not this screen');
+    expect(refusal).toContain('Posting a goods movement is not this screen');
     expect(refusal).toContain('A storage-location level check is not this screen');
+    expect(orderAvailabilityRefusal({ commit: '1' })).toContain('Use the per-component commit action');
     expect(orderAvailabilityRefusal({ batch: '', rule: '' })).toBeNull();
   });
 
@@ -1360,5 +1385,103 @@ describe('CO09 slice 1 order availability check', () => {
     await expect(run(orderOne, { item: '7777' })).rejects.toThrow(/no item 7777/);
     await expect(checkOrderAvailability({ client: tenant.client, orderNumber: orderOne, today: 'not-a-date' }))
       .rejects.toThrow(/not a date/);
+  });
+
+  it('stores full-or-zero commitments, replays request keys, reduces later ATP, and resets append-only', async () => {
+    await setScope({ dependentRequirements: ' ' });
+    await withTenant(tenant.client, (tx) => tx.execute(sql`
+      update production_order_component set requirement_date = '2026-06-15'
+       where client = ${tenant.client} and order_number = ${orderOne} and item_number = 110
+    `));
+    const before = component(await run(orderOne, { item: '110' }), '110');
+    expect(before.cumulatedAtp).not.toBeNull();
+
+    const capabilities = [
+      ORDER_AVAILABILITY_ORDER_CAPABILITY,
+      ORDER_AVAILABILITY_ELEMENTS_CAPABILITY,
+      PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
+      PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY,
+    ];
+    const commit = {
+      client: tenant.client,
+      changedBy: ACTOR,
+      capabilities,
+      requestKey: `co09-commit-${++key}`,
+      orderNumber: orderOne,
+      itemNumber: '10',
+      today: TODAY,
+    };
+    const first = await commitOrderComponentAvailability(commit);
+    expect(first.outcome).toBe('COMMITTED');
+    expect(first.committedQuantity).toBe(10);
+    expect(await commitOrderComponentAvailability(commit)).toEqual(first);
+    await expect(commitOrderComponentAvailability({ ...commit, itemNumber: '20' }))
+      .rejects.toThrow(/already used for different CO09 input/);
+
+    const afterCommit = component(await run(orderOne, { item: '110' }), '110');
+    const virtual = afterCommit.elements.find((element) => element.elementType === 'CO09_COMMITMENT');
+    expect(virtual?.quantity).toBe(10);
+    expect(afterCommit.cumulatedAtp).toBe((before.cumulatedAtp ?? 0) - 10);
+
+    const replacement = await commitOrderComponentAvailability({
+      ...commit,
+      requestKey: `co09-commit-${++key}`,
+    });
+    expect(replacement.outcome).toBe('COMMITTED');
+    const [headerBeforeChange] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select version::int as version from production_order
+       where client = ${tenant.client} and order_number = ${orderOne}
+    `)) as unknown as Array<{ version: number }>;
+    await expect(changeProductionOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: orderOne,
+      expectedVersion: headerBeforeChange.version,
+      components: [{ itemNumber: 10, materialNumber: 'C-OK', requiredQuantity: '11', unit: 'KG' }],
+    })).rejects.toThrow(/active CO09 commitment/);
+    const reset = {
+      client: tenant.client,
+      changedBy: ACTOR,
+      capabilities,
+      requestKey: `co09-reset-${++key}`,
+      orderNumber: orderOne,
+      itemNumber: '10',
+      reason: 'Availability no longer needed',
+    };
+    const resetResult = await resetOrderComponentAvailability(reset);
+    expect(resetResult.outcome).toBe('RESET');
+    expect(await resetOrderComponentAvailability(reset)).toEqual(resetResult);
+    expect(component(await run(orderOne, { item: '110' }), '110').cumulatedAtp).toBe(before.cumulatedAtp);
+
+    const changed = await changeProductionOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: orderOne,
+      expectedVersion: headerBeforeChange.version,
+      components: [{ itemNumber: 10, materialNumber: 'C-OK', requiredQuantity: '11', unit: 'KG' }],
+    });
+    expect(changed.changed).toBe(true);
+    const [standing] = await withTenant(tenant.client, (tx) => tx.execute(sql`
+      select required_quantity::text as quantity, requirement_date::text as "requirementDate"
+        from production_order_component
+       where client = ${tenant.client} and order_number = ${orderOne} and item_number = 10
+    `)) as unknown as Array<{ quantity: string; requirementDate: string }>;
+    expect(standing).toEqual({ quantity: '11.000', requirementDate: REQ });
+    await expect(changeProductionOrder({
+      client: tenant.client, changedBy: ACTOR, orderNumber: orderOne,
+      expectedVersion: changed.order.version,
+      components: [{ itemNumber: 10, materialNumber: 'C-OK', requiredQuantity: '11', remove: true }],
+    })).rejects.toThrow(/CO09 commitment history/);
+
+    const history = await withTenant(tenant.client, (tx) => tx.select({
+      eventNumber: productionOrderComponentCommitmentEvent.eventNumber,
+      eventKind: productionOrderComponentCommitmentEvent.eventKind,
+      committedQuantity: productionOrderComponentCommitmentEvent.committedQuantity,
+      supersedesEventNumber: productionOrderComponentCommitmentEvent.supersedesEventNumber,
+    }).from(productionOrderComponentCommitmentEvent).where(and(
+      eq(productionOrderComponentCommitmentEvent.client, tenant.client),
+      eq(productionOrderComponentCommitmentEvent.orderNumber, orderOne),
+      eq(productionOrderComponentCommitmentEvent.itemNumber, 10),
+    )).orderBy(desc(productionOrderComponentCommitmentEvent.eventNumber)));
+    expect(history.map((event) => event.eventKind)).toEqual(['RESET', 'COMMITTED', 'COMMITTED']);
+    expect(history[0]?.supersedesEventNumber).toBe(history[1]?.eventNumber);
+    expect(history[1]?.supersedesEventNumber).toBe(history[2]?.eventNumber);
+    expect(history.map((event) => event.committedQuantity)).toEqual(['0.000', '10.000', '10.000']);
   });
 });

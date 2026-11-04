@@ -3,30 +3,25 @@ import { describe, expect, it } from 'vitest';
 
 import { t } from '../src/platform/i18n';
 
-/**
- * CO09 slice 1's screen contract.
- *
- * The figures are proved in `order-availability.test.ts`. What this file holds the
- * screen to is what a *screen* is allowed to claim about them: every state the check
- * can return has a state of its own; the committed column says it is not stored; the
- * only action is the read itself; and no label promises an availability the slice
- * cannot give. The copy is checked against the catalogue at runtime, so a key that is
- * only present in the screen and not in the locale layer fails here.
- */
-describe('order-availability screen contract (CO09 slice 1)', () => {
+/** CO09 Slice 2 screen contract: read is separate from exact-grant commit/reset actions. */
+describe('order-availability screen contract (CO09 Slice 2)', () => {
   const page = readFileSync('src/app/production/order-availability/page.tsx', 'utf8');
   const shell = readFileSync('src/app/production/order-availability/OrderAvailabilityWorkbench.tsx', 'utf8');
 
-  it('runs the read-only service and refuses before it', () => {
+  it('keeps the check separate from exact-grant commit and reset actions', () => {
     expect(page).toContain('requireSession(ORDER_AVAILABILITY_ROUTE)');
     expect(page).toContain('holdsOrderAvailabilityAuthority(session.user.capabilities)');
     expect(page).toContain('orderAvailabilityRefusal(');
     expect(page).toContain('checkOrderAvailability(');
     expect(page).toContain('OrderAvailabilityError');
-    // A check has no action module: nothing to commit, nothing to replay.
-    expect(page).not.toMatch(/from '\.\/actions'|createServerAction|useActionState/);
-    expect(page).not.toMatch(/recordChange|saveCheckingControl|saveScopeOfCheck|postGoods|releaseProductionOrder/);
+    expect(shell).toContain("from './actions'");
+    const actions = readFileSync('src/app/production/order-availability/actions.ts', 'utf8');
+    expect(actions).toContain('requireCapability(PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY)');
+    expect(actions).toContain('requireCapability(PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY)');
+    expect(actions).toContain('commitOrderComponentAvailability(');
+    expect(actions).toContain('resetOrderComponentAvailability(');
     expect(shell).not.toMatch(/<form[^>]*method=["']post/);
+    expect(page).not.toMatch(/recordChange|saveCheckingControl|saveScopeOfCheck|postGoods|releaseProductionOrder/);
   });
 
   it('shows every state the service can return, by name', () => {
@@ -46,23 +41,24 @@ describe('order-availability screen contract (CO09 slice 1)', () => {
     expect(shell).not.toMatch(/role="status"[^>]*>All components are available/);
   });
 
-  it('keeps a committed quantity visibly separate from the cumulation', () => {
-    expect(shell).toContain('data-co09-committed="not-stored"');
+  it('keeps stored commitment separate from cumulated ATP and exposes component actions', () => {
+    expect(shell).toContain('data-co09-committed={row.committedQuantity === null ?');
     expect(shell).toContain("t('co09.committed')");
     expect(shell).toContain("t('co09.cumulatedAtp')");
-    expect(shell).toContain("t('co09.notStored')");
-    expect(shell).not.toMatch(/data-co09-committed="\d/);
+    expect(shell).toContain('data-co09-commit-form={row.itemNumber}');
+    expect(shell).toContain('data-co09-reset-form={row.itemNumber}');
+    expect(shell).toContain('data-co09-committed-cell');
     expect(shell).not.toMatch(/committedQuantity\s*\?\??\s*0/);
   });
 
-  it('offers no control that could be read as taking a quantity', () => {
+  it('offers explicit per-component commit and reset actions, without posting or reserving', () => {
     const buttons = shell.match(/<button[\s\S]*?<\/button>/g) ?? [];
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]).toContain('type="submit"');
+    expect(buttons).toHaveLength(2);
     expect(buttons[0]).toContain('data-co09-check');
-    expect(shell).not.toMatch(/name=["'](commit|reserve|post|release|reset-availability|missingParts)["']/);
-    expect(shell).not.toMatch(/Save|Reserve|Post goods|Release order|Commit quantity/);
-    // The two ways out of the screen are links to the screens that own the data.
+    expect(shell).toContain('commitAvailabilityAction');
+    expect(shell).toContain('resetAvailabilityAction');
+    expect(shell).toContain('name="reason"');
+    expect(shell).not.toMatch(/Reserve physical|Post goods|Release order|Commit quantity/);
     expect(shell).toContain('/production/stock-requirements?material=');
     expect(shell).toContain('/production/production-order-display');
   });
@@ -77,7 +73,7 @@ describe('order-availability screen contract (CO09 slice 1)', () => {
       expect(source).not.toMatch(/full CO09 parity|equivalent to (the )?(reference|vendor)/i);
     }
     const module = readFileSync('src/modules/production/order-availability.ts', 'utf8');
-    expect(module).toContain('no claim of parity is');
+    expect(module).toContain('no claim of exact parity is');
     expect(module).not.toMatch(/This is full CO09 parity|equivalent to the reference product CO09/);
   });
 

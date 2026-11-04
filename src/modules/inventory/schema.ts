@@ -684,6 +684,11 @@ export const productionOrderComponent = pgTable('production_order_component', {
   bomItem: varchar('bom_item', { length: 4 }),
   /** Material whose BOM the item came from. Null on a supplied snapshot line. */
   sourceMaterial: varchar('source_material', { length: 40 }),
+  /** BOM eligibility facts copied when the order snapshot is created; null means an older or supplied line cannot prove them. */
+  bomItemCategory: char('bom_item_category', { length: 1 }),
+  bomStockRelevant: char('bom_stock_relevant', { length: 1 }),
+  bomPhantom: char('bom_phantom', { length: 1 }),
+  bomBulkMaterial: char('bom_bulk_material', { length: 1 }),
   /**
    * Component requirement date. Null until conversion copies it from a matching
    * dependent requirement. It is not the order start, the order finish, the
@@ -696,6 +701,10 @@ export const productionOrderComponent = pgTable('production_order_component', {
   foreignKey({ columns: [t.client, t.orderNumber], foreignColumns: [productionOrder.client, productionOrder.orderNumber] })
     .onDelete('cascade'),
   check('production_order_component_quantity_ck', sql`${t.requiredQuantity} > 0`),
+  check('production_order_component_bom_category_ck', sql`${t.bomItemCategory} is null or ${t.bomItemCategory} ~ '^[A-Z0-9]$'`),
+  check('production_order_component_bom_stock_relevant_ck', sql`${t.bomStockRelevant} is null or ${t.bomStockRelevant} in ('X', ' ')`),
+  check('production_order_component_bom_phantom_ck', sql`${t.bomPhantom} is null or ${t.bomPhantom} in ('X', ' ')`),
+  check('production_order_component_bom_bulk_ck', sql`${t.bomBulkMaterial} is null or ${t.bomBulkMaterial} in ('X', ' ')`),
 ]);
 
 

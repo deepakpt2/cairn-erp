@@ -1,6 +1,11 @@
 import Link from 'next/link';
+import { randomUUID } from 'node:crypto';
 
 import { can, requireSession } from '@/platform/auth/current';
+import {
+  PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY,
+  PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY,
+} from '@/platform/auth/capability-policy';
 import { t } from '@/platform/i18n';
 import OrderAvailabilityWorkbench from './OrderAvailabilityWorkbench';
 import {
@@ -42,10 +47,15 @@ export default async function OrderAvailabilityPage({
   const orderNumber = one(params.order).toUpperCase();
   const itemNumber = one(params.item);
   const horizonEnd = one(params.horizonEnd);
+  const today = new Date().toISOString().slice(0, 10);
+  const actionMessage = one(params.actionMessage);
+  const actionMessageKind = one(params.actionKind) === 'success' ? 'success' : 'error';
 
   const canCheckOrder = can(session, ORDER_AVAILABILITY_ORDER_CAPABILITY);
   const canReadElements = can(session, ORDER_AVAILABILITY_ELEMENTS_CAPABILITY);
   const canUse = holdsOrderAvailabilityAuthority(session.user.capabilities);
+  const canCommit = canUse && can(session, PRODUCTION_ORDER_AVAILABILITY_COMMIT_CAPABILITY);
+  const canReset = canCheckOrder && can(session, PRODUCTION_ORDER_AVAILABILITY_RESET_CAPABILITY);
   // A selection that asks for more than slice 1 is refused before anything is read.
   const refusal = orderAvailabilityRefusal({
     storageLocation: one(params.storageLocation),
@@ -72,7 +82,7 @@ export default async function OrderAvailabilityPage({
         client: session.user.client,
         orderNumber,
         itemNumber: itemNumber || null,
-        today: new Date().toISOString().slice(0, 10),
+        today,
         horizonEnd: horizonEnd || null,
       });
     } catch (error) {
@@ -81,6 +91,11 @@ export default async function OrderAvailabilityPage({
         : t('co09.serviceError');
     }
   }
+
+  const requestKeys = Object.fromEntries((result?.components ?? []).map((row) => [row.itemNumber, {
+    commit: randomUUID(),
+    reset: randomUUID(),
+  }]));
 
   return (
     <div className="mx-auto max-w-[90rem] space-y-4 p-3 sm:p-4 lg:p-6">
@@ -105,12 +120,18 @@ export default async function OrderAvailabilityPage({
         canUse={canUse}
         canCheckOrder={canCheckOrder}
         canReadElements={canReadElements}
+        canCommit={canCommit}
+        canReset={canReset}
         orderNumber={orderNumber}
         itemNumber={itemNumber}
         horizonEnd={horizonEnd}
+        today={today}
         result={result}
         serviceError={serviceError}
         serviceErrorKind={refusal ? 'unsupported' : 'failure'}
+        actionMessage={actionMessage}
+        actionMessageKind={actionMessageKind}
+        requestKeys={requestKeys}
       />
     </div>
   );

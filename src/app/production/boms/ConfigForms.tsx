@@ -64,7 +64,7 @@ export function ItemCategoryForm() {
   return (
     <form action={action} className="panel space-y-3 p-4">
       <h2 className="text-sm font-semibold">Item category</h2>
-      <p className="text-sm text-ink-soft">Material and quantity entry use + required, . optional, or - not allowed. No category L is delivered.</p>
+      <p className="text-sm text-ink-soft">Material and quantity entry use + required, . optional, or - not allowed. Stock relevance is snapshotted with a new order component; old and manual lines without proof cannot be committed.</p>
       <Note state={state} />
       <div className="grid gap-3 sm:grid-cols-2">
         <input className="input" name="category" maxLength={1} placeholder="Category" required aria-label="Item category" />
@@ -85,6 +85,7 @@ export function ItemCategoryForm() {
         </label>
       </div>
       <div className="flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2"><input type="checkbox" name="stockRelevant" value="X" /> Stock-relevant component</label>
         <label className="flex items-center gap-2"><input type="checkbox" name="allowFixedQuantity" value="X" /> Fixed quantity</label>
         <label className="flex items-center gap-2"><input type="checkbox" name="allowBulk" value="X" /> Bulk</label>
         <label className="flex items-center gap-2"><input type="checkbox" name="allowPhantom" value="X" /> Phantom</label>

@@ -1,10 +1,10 @@
 /** Total planning — SCR-166 / MD01. A run is evidence. It is not stock and not a requisition. */
-import { pgTable, varchar, integer, boolean, char, date, timestamp, numeric, smallint, text, jsonb, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, integer, bigint, bigserial, boolean, char, date, timestamp, numeric, smallint, text, jsonb, primaryKey, foreignKey, unique, uniqueIndex, check, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { client, auditColumns } from '../../platform/tables/tenancy';
 import { unitOfMeasure } from '../../platform/tables/reference';
 import { factoryCalendar, plant, storageLocation, settlementProfile } from '../foundation/schema';
-import { material, materialPlant, materialDocument, productionOrder } from '../inventory/schema';
+import { material, materialPlant, materialDocument, productionOrder, productionOrderComponent } from '../inventory/schema';
 
 const tenant = () => varchar('client', { length: 4 }).notNull().references(() => client.client, { onDelete: 'cascade' });
 const quantity = (name: string) => numeric(name, { precision: 23, scale: 3 }).notNull();
@@ -259,6 +259,7 @@ export const bomItemCategory = pgTable('bom_item_category', {
   description: varchar('description', { length: 40 }).notNull(),
   materialEntry: char('material_entry', { length: 1 }).notNull(),
   quantityEntry: char('quantity_entry', { length: 1 }).notNull(),
+  stockRelevant: char('stock_relevant', { length: 1 }),
   allowFixedQuantity: char('allow_fixed_quantity', { length: 1 }).notNull().default(' '),
   allowBulk: char('allow_bulk', { length: 1 }).notNull().default(' '),
   allowPhantom: char('allow_phantom', { length: 1 }).notNull().default(' '),
@@ -273,6 +274,7 @@ export const bomItemCategory = pgTable('bom_item_category', {
   check('bom_item_category_key_ck', sql`${t.category} ~ '^[A-Z0-9]$'`),
   check('bom_item_category_description_ck', sql`char_length(btrim(${t.description})) between 1 and 40`),
   check('bom_item_category_entry_ck', sql`${t.materialEntry} in ('+', '.', '-') and ${t.quantityEntry} in ('+', '.', '-')`),
+  check('bom_item_category_stock_relevant_ck', sql`${t.stockRelevant} is null or ${t.stockRelevant} in ('X', ' ')`),
   check('bom_item_category_flags_ck', sql`${t.allowFixedQuantity} in ('X', ' ') and ${t.allowBulk} in ('X', ' ') and ${t.allowPhantom} in ('X', ' ') and ${t.allowCoproduct} in ('X', ' ') and ${t.allowFollowUp} in ('X', ' ') and ${t.allowSpecialProcurement} in ('X', ' ') and ${t.allowNegativeQuantity} in ('X', ' ')`),
   check('bom_item_category_version_ck', sql`${t.version} > 0`),
 ]);
@@ -1568,4 +1570,74 @@ export const productionGoodsMovementFailureRevision = pgTable('production_goods_
   check('production_gm_failure_revision_fingerprint_ck', sql`${t.payloadFingerprint} ~ '^[0-9a-f]{64}$'`),
   check('production_gm_failure_revision_reason_ck', sql`char_length(btrim(${t.changeReason})) between 1 and 200`),
   index('production_gm_failure_revision_history_idx').on(t.client, t.failureId, t.revisionNumber),
+]);
+
+/** An immutable CO09 commit/reset request and the exact result that makes its retry idempotent. */
+export const productionOrderAvailabilityRun = pgTable('production_order_availability_run', {
+  client: tenant(),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  action: varchar('action', { length: 12 }).notNull(),
+  requestFingerprint: varchar('request_fingerprint', { length: 64 }).notNull(),
+  resultSnapshot: jsonb('result_snapshot').$type<Record<string, unknown>>().notNull(),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.requestKey] }),
+  foreignKey({
+    columns: [t.client, t.orderNumber],
+    foreignColumns: [productionOrder.client, productionOrder.orderNumber],
+    name: 'production_order_availability_run_order_fk',
+  }).onDelete('restrict'),
+  check('production_order_availability_run_action_ck', sql`${t.action} in ('COMMIT', 'RESET')`),
+  check('production_order_availability_run_request_key_ck', sql`char_length(btrim(${t.requestKey})) between 1 and 64`),
+  check('production_order_availability_run_fingerprint_ck', sql`${t.requestFingerprint} ~ '^[0-9a-f]{64}$'`),
+  check('production_order_availability_run_result_ck', sql`jsonb_typeof(${t.resultSnapshot}) = 'object'`),
+  index('production_order_availability_run_order_idx').on(t.client, t.orderNumber, t.createdAt),
+]);
+
+/** Current component commitments are derived from the latest append-only event for each order line. */
+export const productionOrderComponentCommitmentEvent = pgTable('production_order_component_commitment_event', {
+  client: tenant(),
+  eventNumber: bigserial('event_number', { mode: 'number' }),
+  requestKey: varchar('request_key', { length: 64 }).notNull(),
+  orderNumber: varchar('order_number', { length: 12 }).notNull(),
+  itemNumber: integer('item_number').notNull(),
+  materialNumber: varchar('material_number', { length: 40 }).notNull(),
+  plant: varchar('plant', { length: 10 }).notNull(),
+  eventKind: varchar('event_kind', { length: 12 }).notNull(),
+  committedQuantity: quantity('committed_quantity'),
+  requirementDate: date('requirement_date', { mode: 'string' }),
+  checkingGroup: varchar('checking_group', { length: 12 }),
+  checkingRule: varchar('checking_rule', { length: 2 }),
+  scopeKey: varchar('scope_key', { length: 32 }),
+  supersedesEventNumber: bigint('supersedes_event_number', { mode: 'number' }),
+  reason: varchar('reason', { length: 200 }),
+  createdBy: varchar('created_by', { length: 60 }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.client, t.eventNumber] }),
+  foreignKey({
+    columns: [t.client, t.requestKey],
+    foreignColumns: [productionOrderAvailabilityRun.client, productionOrderAvailabilityRun.requestKey],
+    name: 'production_order_component_commitment_event_run_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.orderNumber, t.itemNumber],
+    foreignColumns: [productionOrderComponent.client, productionOrderComponent.orderNumber, productionOrderComponent.itemNumber],
+    name: 'production_order_component_commitment_event_component_fk',
+  }).onDelete('restrict'),
+  foreignKey({
+    columns: [t.client, t.supersedesEventNumber],
+    foreignColumns: [t.client, t.eventNumber],
+    name: 'production_order_component_commitment_event_supersedes_fk',
+  }).onDelete('restrict'),
+  check('production_order_component_commitment_event_kind_ck', sql`${t.eventKind} in ('COMMITTED', 'RELEASED', 'RESET')`),
+  check('production_order_component_commitment_event_quantity_ck', sql`(${t.eventKind} = 'COMMITTED' and ${t.committedQuantity} > 0 and ${t.requirementDate} is not null) or (${t.eventKind} in ('RELEASED', 'RESET') and ${t.committedQuantity} = 0)`),
+  check('production_order_component_commitment_event_reason_ck', sql`${t.reason} is null or char_length(btrim(${t.reason})) between 1 and 200`),
+  check('production_order_component_commitment_event_reset_reason_ck', sql`${t.eventKind} <> 'RESET' or char_length(btrim(${t.reason})) between 1 and 200`),
+  check('production_order_component_commitment_event_supersedes_ck', sql`${t.supersedesEventNumber} is null or ${t.supersedesEventNumber} < ${t.eventNumber}`),
+  uniqueIndex('production_order_component_commitment_event_run_item_uq').on(t.client, t.requestKey, t.orderNumber, t.itemNumber),
+  index('production_order_component_commitment_event_current_idx').on(t.client, t.orderNumber, t.itemNumber, t.eventNumber),
+  index('production_order_component_commitment_event_material_idx').on(t.client, t.materialNumber, t.plant, t.eventNumber),
 ]);

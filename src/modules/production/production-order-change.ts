@@ -44,6 +44,7 @@ import {
   type ProductionOrderDisplay,
 } from './production-order-display';
 import { parseProductionOrderStatus, priorStatusFromRelease } from './production-order-status';
+import { productionOrderComponentCommitmentEvent } from './schema';
 
 export const PRODUCTION_ORDER_CHANGE_CAPABILITY = 'PROD.ORDER.CHANGE';
 export const PRODUCTION_ORDER_CHANGE_ROUTE = '/production/production-order-change';
@@ -269,6 +270,26 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
        where client = ${input.client} and order_number = ${orderNumber}
        for update
     `);
+    if ((input.components ?? []).length > 0) {
+      const activeCommitments = await rows(tx, sql`
+        select event.item_number
+          from production_order_component_commitment_event event
+         where event.client = ${input.client}
+           and event.order_number = ${orderNumber}
+           and event.event_kind = 'COMMITTED'
+           and not exists (
+             select 1 from production_order_component_commitment_event newer
+              where newer.client = event.client
+                and newer.order_number = event.order_number
+                and newer.item_number = event.item_number
+                and newer.event_number > event.event_number
+           )
+         limit 1
+      `);
+      if (activeCommitments.length > 0) {
+        fail('A component has an active CO09 commitment. Component lines were not changed.', 'Reset the affected component commitment in CO09, then change the production order. The commitment history is retained.');
+      }
+    }
     const standing = await tx.select().from(productionOrderComponent).where(and(
       eq(productionOrderComponent.client, input.client),
       eq(productionOrderComponent.orderNumber, orderNumber),
@@ -291,6 +312,16 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
       const itemNumber = edit.itemNumber == null ? null : Number(edit.itemNumber);
       if (edit.remove) {
         if (itemNumber == null || !components.has(itemNumber)) fail(`Component item ${itemNumber ?? ''} does not stand.`, 'Remove an item the order carries.');
+        const commitmentHistory = await tx.select({ eventNumber: productionOrderComponentCommitmentEvent.eventNumber })
+          .from(productionOrderComponentCommitmentEvent)
+          .where(and(
+            eq(productionOrderComponentCommitmentEvent.client, input.client),
+            eq(productionOrderComponentCommitmentEvent.orderNumber, orderNumber),
+            eq(productionOrderComponentCommitmentEvent.itemNumber, itemNumber),
+          )).limit(1);
+        if (commitmentHistory.length > 0) {
+          fail(`Component item ${itemNumber} has CO09 commitment history and cannot be removed.`, 'The append-only history keeps its order-component link. Reset the commitment if active; retain the component line rather than deleting its audit target.');
+        }
         removed.push(itemNumber);
         components.delete(itemNumber);
         continue;
@@ -447,6 +478,10 @@ export async function changeProductionOrder(input: ProductionOrderChangeInput): 
           unitOfMeasure: component.unit,
           bomItem: null,
           sourceMaterial: null,
+          bomItemCategory: null,
+          bomStockRelevant: null,
+          bomPhantom: null,
+          bomBulkMaterial: null,
           requirementDate: null,
           createdBy: actor,
         });

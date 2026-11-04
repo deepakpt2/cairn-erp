@@ -133,7 +133,7 @@ describe('CO01 production version and BOM snapshot', () => {
     });
     await saveBomItemCategory({
       client, changedBy: ACTOR, category: 'S', description: 'Stock',
-      materialEntry: '+', quantityEntry: '+',
+      materialEntry: '+', quantityEntry: '+', stockRelevant: 'X',
       allowFixedQuantity: 'X', allowBulk: 'X', allowPhantom: 'X', allowCoproduct: 'X',
       allowFollowUp: 'X', allowSpecialProcurement: 'X',
     });
@@ -244,6 +244,18 @@ describe('CO01 production version and BOM snapshot', () => {
       expect.objectContaining({ itemNumber: 30, bomItem: '0030', materialNumber: 'CO01-RM3', requiredQuantity: '11.000', unit: 'KG' }),
     ]);
     expect(view.snapshotWarnings?.join(' ')).toMatch(/does not rewrite this snapshot/i);
+    const storedEligibility = await withTenant(client, (tx) => tx.execute(sql`
+      select item_number as item, bom_item_category as category, bom_stock_relevant as "stockRelevant",
+             bom_phantom as phantom, bom_bulk_material as bulk
+        from production_order_component
+       where client = ${client} and order_number = ${view.orderNumber}
+       order by item_number
+    `)) as unknown as Array<{ item: number; category: string | null; stockRelevant: string | null; phantom: string | null; bulk: string | null }>;
+    expect(storedEligibility).toEqual([
+      { item: 10, category: 'S', stockRelevant: 'X', phantom: ' ', bulk: ' ' },
+      { item: 20, category: 'S', stockRelevant: 'X', phantom: ' ', bulk: ' ' },
+      { item: 30, category: 'S', stockRelevant: 'X', phantom: ' ', bulk: ' ' },
+    ]);
     const footprint = await counts();
     expect(footprint.orders).toBe(before.orders + 1);
     expect(footprint.documents).toBe(0);

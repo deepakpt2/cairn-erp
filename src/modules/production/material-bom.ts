@@ -187,6 +187,7 @@ export interface BomItemCategoryInput {
   description: string;
   materialEntry: string;
   quantityEntry: string;
+  stockRelevant?: string | null;
   allowFixedQuantity?: string | null;
   allowBulk?: string | null;
   allowPhantom?: string | null;
@@ -1077,6 +1078,7 @@ export async function saveBomItemCategory(input: BomItemCategoryInput) {
     description,
     materialEntry: entryOf(input.materialEntry, 'Material entry'),
     quantityEntry: entryOf(input.quantityEntry, 'Quantity entry'),
+    stockRelevant: input.stockRelevant == null ? null : flag(input.stockRelevant, 'Stock relevance'),
     allowFixedQuantity: flag(input.allowFixedQuantity, 'Fixed quantity'),
     allowBulk: flag(input.allowBulk, 'Bulk material'),
     allowPhantom: flag(input.allowPhantom, 'Phantom'),

@@ -1,6 +1,6 @@
 # CO09 — Production Order Component Availability Check: audit and implementation-ready specification
 
-**Status: audit of a delivered slice.** §1–§8 are the audit as written at `a39fa0b` + the Part A/B follow-up, when nothing was implemented; §9 records what slice 1 has since delivered, and what the review of that slice corrected. It changes no schema and claims no parity.
+**Status: Slice 1 delivered; Slice 2 implementation is underway on `development`.** §§1–§9 preserve the original audit and Slice 1 history. Historical statements in those sections (including the old Slice 2 proposal and “still not here” inventory) are superseded by the current implementation record in §10. No exact SAP parity is claimed.
 
 ## 1. What CO09 is, in SAP's own words
 
@@ -91,17 +91,19 @@ Staged exactly as the repository's standing order (UI → DB/schema → backend 
 3. **Status, only after slice 2.** Widening `production_order_status_ck` for `MATERIAL_SHORTAGE` (and a committed marker) is a separate stage with its own migration; the SAP behaviour (status set by the check, cleared by a later check that finds everything) is only honest once commitments exist. Release blocking stays **out**: `no_check`/release control is not stored here and the refusal is on record.
 4. **Deliberately not in this feature:** advanced ATP, product allocation, PP/DS, transport/scheduling integration, sales and delivery requirements, special stock, subcontracting, stock in transfer, independent requirements, batch-level ATP, storage-location-level sections, replenishment lead time as a fallback date source. Each is refused *by name* on the screen, in the same style as CO11N's refusal list.
 
-## 5. Open decisions for the owner (do not guess these)
+## 5. Owner decisions approved for Slice 2
 
-1. **Authoritative requirement date** when the snapshot date was not copied from a dependent requirement (order start vs operation start). Which is honest, and what does the screen say when they differ?
-2. **BOM re-read:** may the check consult `material_bom_item` flags (phantom/bulk/item category) *today*, or must it use only what the order snapshotted? Snapshot-only is consistent with CO11N's "a later routing edit is not read" rule — but then the exclusion of phantoms/bulk may be unrepresentable for orders created before the flags existed.
-3. **Missing `checking_group` / missing scope row:** refuse per component (recommended, matches both config modules' wording) or skip the component silently (never).
-4. **Rule resolution when the order type's control names no rule:** `production_checking_control.checking_rule` is optional. Without a rule there is no scope. Refuse with the remedy "maintain the checking rule on the checking control record" — confirm, because it makes most tenants unable to run the check until configured.
-5. **Does the check post anything to the order** in slice 1 (recommended: no, not even a timestamp — SAP's own "the missing parts list is not stored when you exit" supports a pure display), and if not, is the term registry `coverage_tier` still `TIER_1_BUILT` with a documented gap list?
-6. **Commitment identity:** is the request key per (order, component, check run) or per component alone? The CO11N precedent says one key per document written; a re-check must not double-commit.
-7. **Closed periods and stored commitment dates:** does a supply date in a closed period affect the check, or is that purely a posting-time concern (recommended: posting-time only, stated on screen)?
-8. **Collective check** in COOIS: in scope for the first release or deferred with the missing-parts list? SAP's worklist-order semantics (§1 item 11) make this a real behaviour, not a nicety.
-9. **`check_on_save`** in the order screens: wire it (CO01/CO02 would read the control and run a check, which the config comment currently forbids: *"Saving this record does not run an availability check, create an order, or release one."*) or leave it refused until slice 2 exists.
+The owner has approved the following decisions; they replace the open questions captured when this audit was first written:
+
+1. **Requirement date:** the stored component `requirementDate` is authoritative. Do not substitute the order start/finish, operation date, today, or a current BOM date.
+2. **Eligibility snapshot:** future BOM-derived order components preserve BOM item category, stock-relevance, phantom, and bulk facts. The check never re-reads a possibly changed BOM to prove eligibility. Legacy and manually supplied lines whose eligibility facts are unknown are refused as unproven.
+3. **Commitment identity:** a repeated request key with identical input replays the stored result; reuse with a different fingerprint is refused. A fresh run replaces the active commitment for the addressed order/component.
+4. **Commitment amount:** each component is all-or-nothing: the full required quantity when fully covered, or zero when short. No partial quantity is committed.
+5. **Reset:** reset is append-only, carries a required reason, and never deletes or rewrites the earlier run/event.
+6. **Accounting periods:** there is no accounting-period gate for this non-posting availability check or commitment ledger.
+7. **Scope:** no MIGO/CO15 work; no exact SAP parity claim. Collective worklist allocation, order status changes, and missing-parts logs remain out of scope.
+
+The service uses an exact commit capability and a separate exact reset capability; neither is granted by broad production patterns. These decisions are implemented in the current §10 record below.
 
 ## 6. Tests and fixtures required for correctness
 
@@ -169,4 +171,19 @@ All four — F4, F5, F7's disclosure, F8 — were run against the delivered modu
 
 On the rebuilt box the neighbours were repeated for the baseline alone: `tests/checking-control.test.ts` with `tests/browser-targets.test.ts` → 206 passed, 1 failed, the same single pre-existing guard gap, which is how the new machine is shown to behave like the old one. Neighbours: `tests/stock-requirements.test.ts`, `tests/stock-requirements-ui-contract.test.ts`, `tests/availability-check.test.ts`, `tests/availability-check-ui-contract.test.ts` → 30 passed (the two fixes that reach them are shared-vocabulary only); `tests/checking-control.test.ts` with `tests/browser-targets.test.ts` → 206 passed, 1 failed — the six `scr160`–`scr165` targets that carry no `ACCEPTANCE_DATABASE_GUARDS` entry, a gap that stands at `HEAD` and is not this slice's. Whole-project checks were run because the module is imported by the route: `npx tsc --noEmit` → 161 errors, the baseline count, none in any order-availability file; `npm run lint:ip` → 138 trademark occurrences, the baseline count, none in the changed files; `npm run build` → exit 0, `/production/order-availability` at 3.22 kB in the route table, no compile or type-error line. `npm run db:verify` (13 passed) stands from the first pass and was not repeated: neither pass touched a migration, the seed or the schema. Then the guarded browser target `co09-availability` ran twice, the second time against a build made after the last module edit (the same `md5` on both machines for the module, the workbench and the target's own script): the built server chunks were confirmed to carry the new refusal and unit wording, a loopback server was started on :3111 with `SMOKE_BASE_URL` exported and echoed, and the listening PID's working directory was verified to be the tree under test before the run — 16 groups passed, exit 0, with every figure unchanged (`34.000`, `32.000`, the shortage of 17, the five elements, the seven state counts). Only that process was stopped afterwards; :3111 was free again and the owner's server on :3000 was never driven, restarted or read.
 
-**Still not here, and where it belongs:** any commitment (write to dependent requirements, or a record of its own, plus reset and replay) is slice 2; collective check and the missing-parts list slice 3; storage-location and batch sections, special stock, product allocation and advanced ATP remain refused by name. `docs/production-tcode-order.md`'s deferral note should now point at this file.
+**Historical cutoff note (Slice 1, 2026-10-26):** the sentence above was true at that delivery and is superseded by §10. Collective worklist allocation and a missing-parts log remain out of scope; storage-location and batch sections, special stock, product allocation, advanced ATP, MIGO and CO15 remain excluded from this CO09 implementation.
+
+
+## 10. CO09 Slice 2 — implementation record (2026-11-04)
+
+**State:** implementation underway on branch `development`; the forward migration is `drizzle/9214_co09_requirement_commitments.sql`. It has not been applied to any persistent database. Validation is limited to a newly created disposable database named `cairn_migration_test_YYYYMMDD_<run-id>`; never apply it to `cairn_integration` or `cairn_acceptance` without separate authorization.
+
+The current code implements the approved design as follows:
+
+- `production_order_component` snapshots BOM item category, configured stock relevance, phantom, and bulk flags. The category configuration has an explicit stock-relevance marker. New order snapshots copy these facts; manually added lines store null. Legacy rows stay null. CO09 refuses a line when any eligibility fact is missing and never consults the current BOM to fill the gap.
+- `production_order_availability_run` stores an immutable request fingerprint and result for idempotent replay. `production_order_component_commitment_event` stores `COMMITTED`, `RELEASED`, and `RESET` events; RLS is forced, runtime mutation privileges are revoked, and triggers reject update/delete. Each component action records actor/reason and a change document.
+- Per-component commit re-runs the check under a plant/material advisory lock. A fully covered component appends its full required quantity; a short/no-elements component appends zero and supersedes its previous event. The latest active commitment reduces later CO09 checks when the stock/requirements scope did not already count the same dependent requirement. Reset appends a zero event and required reason. Same-key exact retries replay; key reuse with different input is refused.
+- Commit and reset have separate exact-grant-only capabilities. Commit also requires the existing order-display and stock/requirements authorities to run the check; reset requires order display. These actions do not create a reservation, goods movement, accounting document, order-status transition, or period posting. No accounting-period gate is applied.
+- The UI exposes row-level commit/reset actions, visibly separates commitment quantity from cumulated ATP, and refreshes the result after each action. A new check still reflects saved commitments; no action is exposed for MIGO or CO15.
+
+**Verification status:** no tests have yet run against these Slice 2 edits; the migration has not yet been validated on the required disposable database. Do not describe the implementation as tested or complete until focused tests and disposable-database migration validation pass.
