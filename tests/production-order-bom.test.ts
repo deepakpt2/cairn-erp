@@ -20,7 +20,7 @@ import { saveProductionOrderType } from '../src/modules/production/production-or
 import { savePlantDefinition } from '../src/modules/foundation/plant-maintenance';
 import { createPlannedOrder } from '../src/modules/production/planned-order-create';
 import { convertPlannedOrder } from '../src/modules/production/planned-order-conversion';
-import { createTenant, destroyTenant, type TestTenant } from './helpers';
+import { closeDb, createTenant, destroyTenant, type TestTenant } from './helpers';
 
 /**
  * CO01 reads the production version and stores that BOM as the order snapshot.
@@ -196,6 +196,7 @@ describe('CO01 production version and BOM snapshot', () => {
   afterAll(async () => {
     if (client) await destroyTenant(client);
     if (other) await destroyTenant(other.client);
+    await closeDb();
   }, 180_000);
 
   it('measures the planned quantity against the unit scale, not the padding', async () => {
